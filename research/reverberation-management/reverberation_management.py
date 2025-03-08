@@ -5,6 +5,7 @@ import sys
 import argparse
 import numpy as np
 from scipy import signal
+from scipy.signal.windows import hann
 import matplotlib.pyplot as plt
 sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
 from utils import read_wav, write_wav
@@ -47,7 +48,7 @@ def main():
         n_win = int(fs * t)
         win = np.concatenate([
             np.ones(n_ones),
-            signal.windows.hann(n_win * 2)[n_win:],
+            hann(n_win * 2)[n_win:],
             np.zeros(data.shape[1] - n_ones - n_win)
         ]) - 1.0
         win *= 100  # 100 dB

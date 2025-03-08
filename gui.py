@@ -1,7 +1,7 @@
 import os
 import tkinter
 import re
-from tkinter import *
+from tkinter import Tk, Frame, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, Scrollbar, Text, END, DISABLED, NORMAL, HORIZONTAL, VERTICAL, W, E, N, S
 from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 from tkinter.messagebox import showinfo
 import recorder, impulcifer
@@ -41,7 +41,7 @@ class ToolTip(object):
 		self.tw = Toplevel(self.widget)
 		# Leaves only the label and removes the app window
 		self.tw.wm_overrideredirect(True)
-		self.tw.wm_geometry("+%d+%d" % (x, y))
+		self.tw.wm_geometry(f"+{x}+{y}")
 		label = Label(self.tw, text=self.text, justify='left',
 					  background="#ffffff", relief='solid', borderwidth=1,
 					  wraplength = self.wraplength)

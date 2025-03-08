@@ -3,11 +3,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-from matplotlib.mlab import specgram
+from scipy.signal import spectrogram
 from matplotlib.ticker import LinearLocator, FormatStrFormatter, FuncFormatter
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
+from mpl_toolkits.mplot3d import axes3d
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import signal, stats, ndimage, interpolate
+from scipy.signal.windows import hann
 import nnresample
 from copy import deepcopy
 from autoeq.frequency_response import FrequencyResponse
@@ -338,7 +339,7 @@ class ImpulseResponse:
         half_window = knee_point_index - window_start  # Half Hanning window length, from peak to knee
         window = np.concatenate([  # Adjustment window
             np.ones(window_start),  # Start with ones until peak
-            signal.windows.hann(half_window * 2)[half_window:],  # Slope down to knee point
+            hann(half_window * 2)[half_window:],  # Slope down to knee point
             np.zeros(len(self) - knee_point_index)  # Fill with zeros to full length
         ]) - 1.0  # Slopes down from 0.0 to -1.0
         window *= -window_level  # Scale with adjustment level at knee point
@@ -441,30 +442,34 @@ class ImpulseResponse:
         return fig, ax
 
     def plot_spectrogram(self, fig=None, ax=None, plot_file_path=None, f_res=10, n_segments=200):
-        """Plots spectrogram for a logarithmic sine sweep recording.
+        """Plots spectrogram of the recorded sweep.
 
         Args:
-            fig: Figure instance
-            ax: Axis instance
-            plot_file_path: Path to a file for saving the plot
-            f_res: Frequency resolution (step) in Hertz
-            n_segments: Number of segments in time axis
+            fig: Matplotlib figure. If None, a new figure will be created
+            ax: Matplotlib axis. If None, a new axis will be created
+            plot_file_path: Path to save the plot to
+            f_res: Frequency resolution in Hz
+            n_segments: Number of spectrogram segments
 
         Returns:
-            - Figure
-            - Axis
+            None
         """
-        if self.recording is None or len(np.nonzero(self.recording)[0]) == 0:
+        if self.recording is None:
             return
-        if fig is None:
-            fig, ax = plt.subplots()
+        if fig is None or ax is None:
+            fig, ax = plt.subplots(figsize=(16/2.54, 9/2.54))
 
-        # Window length in samples
-        nfft = int(self.fs / f_res)
-        # Overlapping in samples
+        # Spectrogram parameters
+        nfft = round(self.fs / f_res)
         noverlap = int(nfft - (len(self.recording) - nfft) / n_segments)
         # Get spectrogram data
-        spectrum, freqs, t = specgram(self.recording, Fs=self.fs, NFFT=nfft, noverlap=noverlap, mode='psd')
+        spectrum, freqs, t = spectrogram(
+            self.recording, 
+            fs=self.fs, 
+            nperseg=nfft, 
+            noverlap=noverlap, 
+            mode='psd'
+        )
 
         # Remove zero frequency
         f = freqs[1:]
@@ -683,35 +688,47 @@ class ImpulseResponse:
         return fig, ax
 
     def plot_waterfall(self, fig=None, ax=None):
-        """"""
+        """Plots decay waterfall.
+
+        Args:
+            fig: Figure instance
+            ax: Axis instance
+
+        Returns:
+            - Figure
+            - Axis
+        """
         if fig is None:
-            fig, ax = plt.subplots()
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
 
-        z_min = -100
-
-        # Window
-        window_duration = 0.01  # TODO
-        nfft = min(int(self.fs * window_duration), int(len(self.data) / 10))
-        noverlap = int(nfft * 0.9)  # 90% overlap TODO
-        ascend_ms = 10  # 10 ms ascending window
-        ascend = int(ascend_ms / 1000 * self.fs)
-        plateu = int((nfft - ascend) * 3 / 4)  # 75%
-        descend = nfft - ascend - plateu  # 25%
-        window = np.concatenate([
-            signal.hann(ascend * 2)[:ascend],
-            np.ones(plateu),
-            signal.hann(descend * 2)[descend:]
-        ])
-
-        # Crop from 10ms before peak to start of tail
-        peak_ind, tail_ind, noise_floor, _ = self.decay_params()
-        start = max(int(peak_ind - self.fs * 0.01), 0)
-        # Stop index is greater of 1s after peak or 1 FFT window after tail
-        stop = min(int(round(max(peak_ind + self.fs * 1, tail_ind + nfft))), len(self.data))
-        data = self.data[start:stop]
+        # Logarithmic sine sweep is the input signal
+        window_length = 512
+        window = hann(window_length)
+        # 50% overlap means hop length = window length / 2
+        hop_length = int(window_length / 2)
+        # Copy and pad with zeros to include a few extra frames after the impulse response
+        data = np.copy(self.data)
+        s = np.zeros(hop_length * 5 + window_length)
+        s[0:len(data)] = data
+        data = s
+        # Minimum number of frames
+        n_min = 40
+        # 50% overlap means hop length = window length / 2
+        n_segments = max(int(len(data) / hop_length) - 1, n_min)
+        nfft = window_length
+        noverlap = nfft - hop_length
 
         # Get spectrogram data
-        spectrum, freqs, t = specgram(data, Fs=self.fs, NFFT=nfft, noverlap=noverlap, mode='magnitude', window=window)
+        # Fs 대신 fs 사용, NFFT 대신 nperseg 사용, window 매개변수 업데이트
+        spectrum, freqs, t = spectrogram(
+            data, 
+            fs=self.fs, 
+            nperseg=nfft, 
+            noverlap=noverlap, 
+            mode='magnitude', 
+            window=window
+        )
 
         # Remove 0 Hz component
         spectrum = spectrum[1:, :]
@@ -731,7 +748,7 @@ class ImpulseResponse:
 
         # Normalize and turn to dB scale
         z /= np.max(z)
-        z = np.clip(z, 10**(z_min/20), np.max(z))
+        z = np.clip(z, 10**(-100/20), np.max(z))
         z = 20 * np.log10(z)
 
         # Smoothen
@@ -744,10 +761,10 @@ class ImpulseResponse:
         z = z[1:-1, :-1]
 
         # Surface plot
-        ax.plot_surface(t, f, z, rcount=len(t), ccount=len(f), cmap='magma', antialiased=True, vmin=z_min, vmax=0)
+        ax.plot_surface(t, f, z, rcount=len(t), ccount=len(f), cmap='magma', antialiased=True, vmin=-100, vmax=0)
 
         # Z axis
-        ax.set_zlim([z_min, 0])
+        ax.set_zlim([-100, 0])
         ax.zaxis.set_major_locator(LinearLocator(10))
         ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
 

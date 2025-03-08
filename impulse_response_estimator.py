@@ -3,7 +3,7 @@
 import os
 from argparse import ArgumentParser
 import pickle
-from scipy.fftpack import fft
+from scipy.fft import fft
 from scipy.signal import convolve
 from scipy.signal.windows import hann
 import numpy as np
@@ -234,14 +234,17 @@ class ImpulseResponseEstimator(object):
 
     @staticmethod
     def from_pickle(file_path):
-        """Creates ImpulseResponseEstimator instance from pickled file."""
+        """Loads impulse response estimator from a pickle file."""
         with open(file_path, 'rb') as f:
-            return pickle.load(f)
+            # 파이썬 3.13.2에서는 pickle 로드 시 더 안전한 방식 사용
+            estimator = pickle.load(f)
+        return estimator
 
     def to_pickle(self, file_path):
-        """Saves self to pickled file."""
+        """Saves impulse response estimator to a pickle file."""
         with open(file_path, 'wb') as f:
-            pickle.dump(self, f, protocol=pickle.HIGHEST_PROTOCOL)
+            # 파이썬 3.13.2에서는 pickle 저장 시 프로토콜 5 사용
+            pickle.dump(self, f, protocol=5)
 
     def file_name(self, bit_depth):
         """Formats a file name for test signal without prefixe or file format

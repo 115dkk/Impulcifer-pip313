@@ -63,7 +63,7 @@ def main(test_signal):
     ax.set_ylabel('Amplitude (dB)')
     ax.grid(True, which='major')
     ax.grid(True, which='minor')
-    ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+    ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:.0f}'))
 
     # Room measurement mic
     room = FrequencyResponse(

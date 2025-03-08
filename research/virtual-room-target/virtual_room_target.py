@@ -12,11 +12,11 @@ DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 
 def main():
     # Flat loudspeaker in room respones
-    flat_in_room = FrequencyResponse.read_from_csv(os.path.join(DIR_PATH, 'harman-flat-loudspeaker-in-room.csv'))
+    flat_in_room = FrequencyResponse.read_csv(os.path.join(DIR_PATH, 'harman-flat-loudspeaker-in-room.csv'))
     flat_in_room.interpolate(f_step=1.01, f_min=10, f_max=20000)
 
     # Harman room target
-    room_target = FrequencyResponse.read_from_csv(os.path.join(DIR_PATH, 'harman-room-target-original.csv'))
+    room_target = FrequencyResponse.read_csv(os.path.join(DIR_PATH, 'harman-room-target-original.csv'))
     room_target.interpolate(f_step=1.01, f_min=10, f_max=20000)
     room_target.center()
     room_target.smoothen_fractional_octave(window_size=1/3)
@@ -27,7 +27,7 @@ def main():
     room_target.raw += drop
 
     # Harman 2018 over-ear headphone target
-    over_ear = FrequencyResponse.read_from_csv(os.path.join(DIR_PATH, 'harman-over-ear-2018-without-bass.csv'))
+    over_ear = FrequencyResponse.read_csv(os.path.join(DIR_PATH, 'harman-over-ear-2018-without-bass.csv'))
     over_ear.interpolate(f_step=1.01, f_min=10, f_max=20000)
     over_ear.compensate(flat_in_room)
     over_ear.smoothen_fractional_octave(window_size=1/3)
@@ -43,15 +43,15 @@ def main():
     virtual_room_target_light.raw[virtual_room_target.frequency > 1000] += over_ear.error[over_ear.frequency > 1000]
 
     # Save room targets
-    room_target.write_to_csv(os.path.join(DIR_PATH, 'harman-room-target.csv'))
-    virtual_room_target.write_to_csv(os.path.join(DIR_PATH, 'virtual-room-target.csv'))
-    virtual_room_target_light.write_to_csv(os.path.join(DIR_PATH, 'virtual-room-target-light.csv'))
+    room_target.write_csv(os.path.join(DIR_PATH, 'harman-room-target.csv'))
+    virtual_room_target.write_csv(os.path.join(DIR_PATH, 'virtual-room-target.csv'))
+    virtual_room_target_light.write_csv(os.path.join(DIR_PATH, 'virtual-room-target-light.csv'))
 
     # Plot
-    fig, ax = over_ear.plot_graph(show=False)
-    room_target.plot_graph(fig=fig, ax=ax, show=False, color='#1f77b4')
-    virtual_room_target.plot_graph(fig=fig, ax=ax, show=False, color='#680fb9')
-    virtual_room_target_light.plot_graph(fig=fig, ax=ax, show=False, color='#c17dff')
+    fig, ax = over_ear.plot(show=False)
+    room_target.plot(fig=fig, ax=ax, show=False, color='#1f77b4')
+    virtual_room_target.plot(fig=fig, ax=ax, show=False, color='#680fb9')
+    virtual_room_target_light.plot(fig=fig, ax=ax, show=False, color='#c17dff')
     plt.legend(['Harman flat loudspeaker in room', 'Harman over-ear 2018', 'Difference', 'Harman room target',
                 'Virtual room target', 'Virtual room target light'])
     plt.xlim([10, 20000])

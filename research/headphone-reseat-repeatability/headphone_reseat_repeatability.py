@@ -37,7 +37,7 @@ def main():
             ax.set_ylabel('Amplitude (dB)')
             ax.grid(True, which='major')
             ax.grid(True, which='minor')
-            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:.0f}'))
 
     # Plot
     for name, ir_pair in responses.items():
