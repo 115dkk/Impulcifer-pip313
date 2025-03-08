@@ -4,7 +4,9 @@ import os
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import signal, fftpack
+from scipy import signal
+from scipy.signal.windows import hann
+from scipy.fft import fft, ifft, next_fast_len
 from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response import ImpulseResponse
@@ -231,16 +233,17 @@ class HRIR:
                 pair['left'].data = pair['left'].data[peak_right - delay:]
 
             # Make sure impulse response starts from silence
-            window = signal.hanning(head * 2)[:head]
+            window = hann(head * 2)[:head]
             pair['left'].data[:head] *= window
             pair['right'].data[:head] *= window
 
     def crop_tails(self):
-        """Crops out tails after every impulse response has decayed to noise floor."""
-        if self.fs != self.estimator.fs:
-            raise ValueError('Refusing to crop tails because HRIR\'s sampling rate doesn\'t match impulse response '
-                             'estimator\'s sampling rate.')
-        # Find indices after which there is only noise in each track
+        """Crops tails of all the impulse responses in a way that makes them all equal length but not unnecessarily long
+
+        Returns:
+            Length in samples as integer
+        """
+        # Find tails
         tail_indices = []
         lengths = []
         for speaker, pair in self.irs.items():
@@ -249,11 +252,12 @@ class HRIR:
                 tail_indices.append(tail_ind)
                 lengths.append(len(ir))
 
-        # Crop all tracks by last tail index
-        seconds_per_octave = len(self.estimator) / self.estimator.fs / self.estimator.n_octaves
+        # Crop tails to equal length
+        seconds_per_octave = self.estimator.n_octaves / np.log(self.estimator.high / self.estimator.low)
         fade_out = 2 * int(self.fs * seconds_per_octave * (1 / 24))  # Duration of 1/24 octave in the sweep
-        window = signal.hanning(fade_out)[fade_out // 2:]
-        fft_len = fftpack.next_fast_len(max(tail_indices))
+        window = hann(fade_out)[fade_out // 2:]
+        # next_fast_len 함수 사용
+        fft_len = next_fast_len(max(tail_indices))
         tail_ind = min(np.min(lengths), fft_len)
         for speaker, pair in self.irs.items():
             for ir in pair.values():

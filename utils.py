@@ -3,7 +3,7 @@
 import os
 import numpy as np
 import soundfile as sf
-from scipy.fftpack import fft
+from scipy.fft import fft, rfft
 from PIL import Image
 import matplotlib.ticker as ticker
 
@@ -50,20 +50,20 @@ def magnitude_response(x, fs):
     """Calculates frequency magnitude response
 
     Args:
-        x: Audio data
+        x: Input signal
         fs: Sampling rate
 
     Returns:
-        - **f:** Frequencies
-        - **X:** Magnitudes
+        - Frequency values as numpy array
+        - Frequency magnitudes as numpy array
     """
-    _x = x
-    nfft = len(_x)
-    df = fs / nfft
-    f = np.arange(0, fs - df, df)
-    X = fft(_x)
-    X_mag = 20 * np.log10(np.abs(X))
-    return f[0:int(np.ceil(nfft/2))], X_mag[0:int(np.ceil(nfft/2))]
+    # Use rfft for real-valued signals (more efficient than fft)
+    X = rfft(x)
+    # Magnitude in dB
+    X_mag = 20 * np.log10(np.abs(X) + 1e-10)
+    # Frequencies (positive only)
+    f = np.arange(len(X)) * fs / (2 * len(X))
+    return f, X_mag
 
 
 def sync_axes(axes, sync_x=True, sync_y=True):

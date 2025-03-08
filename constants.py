@@ -5,8 +5,10 @@ from utils import versus_distance
 # https://en.wikipedia.org/wiki/Surround_sound
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
 
+# 파이썬 3.13.2 스타일로 f-string 사용
 SPEAKER_PATTERN = f'({"|".join(SPEAKER_NAMES + ["X"])})'
-SPEAKER_LIST_PATTERN = r'{speaker_pattern}+(,{speaker_pattern})*'.format(speaker_pattern=SPEAKER_PATTERN)
+# format() 대신 f-string 사용
+SPEAKER_LIST_PATTERN = fr'{SPEAKER_PATTERN}+(,{SPEAKER_PATTERN})*'
 
 SPEAKER_ANGLES = {
     'FL': 30,

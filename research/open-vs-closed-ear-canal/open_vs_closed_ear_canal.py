@@ -46,7 +46,7 @@ def main():
             ax.set_title(f'{location} {side}')
             ax.grid(True, which='major')
             ax.grid(True, which='minor')
-            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:.0f}'))
 
             ax.plot(cl.frequency, cl.smoothed, color='#1f77b4')
             ax.plot(op.frequency, op.smoothed, '--', color='#1f77b4')

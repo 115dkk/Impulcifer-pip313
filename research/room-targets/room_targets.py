@@ -13,12 +13,12 @@ DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 
 def main():
     # Open files
-    loudspeaker = FrequencyResponse.read_from_csv(os.path.join(DIR_PATH, 'harman-in-room-loudspeaker-target.csv'))
-    headphone = FrequencyResponse.read_from_csv(os.path.join(DIR_PATH, 'harman-in-room-headphone-target.csv'))
+    loudspeaker = FrequencyResponse.read_csv(os.path.join(DIR_PATH, 'harman-in-room-loudspeaker-target.csv'))
+    headphone = FrequencyResponse.read_csv(os.path.join(DIR_PATH, 'harman-in-room-headphone-target.csv'))
     headphone.raw += headphone.create_target(bass_boost_gain=2.2, bass_boost_fc=105, bass_boost_q=0.76)
 
-    fig, ax = loudspeaker.plot_graph(show=False)
-    headphone.plot_graph(fig=fig, ax=ax, color='blue')
+    fig, ax = loudspeaker.plot(show=False)
+    headphone.plot(fig=fig, ax=ax, color='blue')
     plt.show()
 
     for fr in [loudspeaker, headphone]:
@@ -29,16 +29,16 @@ def main():
         smooth.smoothen_fractional_octave(window_size=1, treble_window_size=1)
         smooth.raw = smooth.smoothed.copy()
         smooth.smoothed = np.array([])
-        smooth.write_to_csv(os.path.join(DIR_PATH, os.pardir, os.pardir, 'data', f'{fr.name}.csv'))
-        smooth.plot_graph()
+        smooth.write_csv(os.path.join(DIR_PATH, os.pardir, os.pardir, 'data', f'{fr.name}.csv'))
+        smooth.plot()
         fr.raw[fr.frequency < 300] = fr.raw[np.argmin(np.abs(fr.frequency - 300))]
         fr.smoothen_fractional_octave(window_size=1, treble_window_size=1)
         fr.raw = fr.smoothed.copy()
         fr.smoothed = np.array([])
         #fr.raw += fr.create_target(bass_boost_gain=6.8, bass_boost_fc=105, bass_boost_q=0.76)
-        fr.write_to_csv(os.path.join(DIR_PATH, os.pardir, os.pardir, 'data', f'{fr.name}-wo-bass.csv'))
-        fig, ax = fr.plot_graph(show=False)
-        #smooth.plot_graph(fig=fig, ax=ax, show=False, color='blue')
+        fr.write_csv(os.path.join(DIR_PATH, os.pardir, os.pardir, 'data', f'{fr.name}-wo-bass.csv'))
+        fig, ax = fr.plot(show=False)
+        #smooth.plot(fig=fig, ax=ax, show=False, color='blue')
         #ax.legend(['Shelf', 'Original'])
         plt.show()
 

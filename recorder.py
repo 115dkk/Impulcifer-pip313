@@ -28,8 +28,10 @@ def record_target(file_path, length, fs, channels=2, append=False):
         None
     """
     recording = sd.rec(length, samplerate=fs, channels=channels, blocking=True)
-    recording = np.transpose(recording)
-    max_gain = 20 * np.log10(np.max(np.abs(recording)))
+    # 최신 numpy에서는 차원이 달라도 자동으로 transpose하지 않으므로 명시적으로 변환
+    if recording.shape[1] == channels:
+        recording = np.transpose(recording)
+    max_gain = 20 * np.log10(np.max(np.abs(recording) + 1e-10))
     if append and os.path.isfile(file_path):
         # Adding to existing file, read the file
         _fs, data = read_wav(file_path, expand=True)
@@ -38,7 +40,7 @@ def record_target(file_path, length, fs, channels=2, append=False):
             n = recording.shape[1] - data.shape[1]
             data = np.pad(data, [(0, 0), (0, n)])
         elif data.shape[1] > recording.shape[1]:
-            recording = np.pad(data, [(0, 0), (0, data.shape[1] - recording.shape[1])])
+            recording = np.pad(recording, [(0, 0), (0, data.shape[1] - recording.shape[1])])
         # Add recording to the end of the existing data
         recording = np.vstack([data, recording])
     write_wav(file_path, fs, recording)

@@ -1,8 +1,9 @@
-matplotlib~=3.3.3
-numpy~=1.19.5
-scipy~=1.5.4
-soundfile~=0.10.2
-sounddevice~=0.3.14
-nnresample~=0.2.4
-tabulate~=0.8.5
-git+https://github.com/jaakkopasanen/autoeq-pkg@1.2.5#autoeq
+matplotlib>=3.8.0
+numpy>=1.26.0
+scipy>=1.12.0
+soundfile>=0.12.1
+sounddevice>=0.4.6
+nnresample>=0.2.4
+tabulate>=0.9.0
+# 로컬에서 수정된 AutoEq 버전을 사용 (상대 경로)
+-e ../AutoEq
