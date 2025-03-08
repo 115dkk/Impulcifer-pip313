@@ -1,13 +1,11 @@
-# Impulcifer
-Impulcifer is a tool for creating binaural room impulse responses (BRIR) for speaker virtualization on headphones.
+# Impulcifer-py313
 
-Normally headphones sound inside your head which is a clear disadvantage for games and movies but also for music
-because basically all material has been created for speakers. Virtual surround technologies for headphones have existed
-for a some time by now but almost all of them fail to fulfill expectations of out of head sound localization and the
-naturalness of speakers. This is because your brains have learned to localize sounds only with your ears and head and
-not with anyone else's. Surround sound on headphones can only be convincing when the surround virtualization technology
-has been tailored for your ears. BRIR is the tailored model for supreme virtual speaker surround on headphones. When
-done right virtualized speakers can be indistinguishable from real speakers.
+이 프로젝트는 [Jaakko Pasanen의 Impulcifer](https://github.com/jaakkopasanen/impulcifer) 프로젝트를 **Python 3.13.2와 호환**되도록 수정한 버전입니다.
+
+## 프로젝트 소개
+Impulcifer는 헤드폰에서 스피커 가상화를 위한 바이노럴 룸 임펄스 응답(BRIR)을 생성하는 도구입니다.
+
+일반적으로 헤드폰은 머리 내부에서 소리가 나는데, 이는 게임과 영화뿐만 아니라 음악에도 명백한 단점입니다. 왜냐하면 기본적으로 모든 음향 자료는 스피커를 위해 만들어졌기 때문입니다. 헤드폰용 가상 서라운드 기술은 꽤 오랫동안 존재해 왔지만, 거의 모든 기술이 머리 밖 소리 지역화와 스피커의 자연스러움에 대한 기대를 충족시키지 못합니다. 이는 여러분의 뇌가 다른 사람의 귀나 머리가 아닌 오직 여러분 자신의 귀와 머리로만 소리를 지역화하는 법을 배웠기 때문입니다. 헤드폰에서의 서라운드 사운드는 서라운드 가상화 기술이 여러분의 귀에 맞게 맞춤화되었을 때만 설득력이 있을 수 있습니다. BRIR은 헤드폰에서 최고의 가상 스피커 서라운드를 위한 맞춤형 모델입니다. 올바르게 수행하면 가상화된 스피커는 실제 스피커와 구별할 수 없게 됩니다.
 
 Watch these videos to get an idea what good BRIRs can do. The method used by Smyth Realizer and Creative Super X-Fi
 demos is the same what Impulcifer uses.
@@ -351,3 +349,36 @@ You can find me in [Reddit](https://www.reddit.com/user/jaakkopasanen) and
 [Head-fi](https://www.head-fi.org/members/jaakkopasanen.491235/) if you just want to say hello.
 
 There is also a [Head-fi thread about Impulcifer](https://www.head-fi.org/threads/recording-impulse-responses-for-speaker-virtualization.890719/).
+
+## Python 3.13.2 호환성 개선 사항
+이 프로젝트는 원본 Impulcifer의 코드를 Python 3.13.2에서 작동하도록 다음과 같은 부분을 수정했습니다:
+
+1. **autoeq-py313 의존성 추가**: Python 3.13.2와 호환되는 AutoEq 버전을 사용하도록 수정
+2. **설치 방법 간소화**: PyPI를 통한 설치 방법 추가
+
+## 라이센스
+이 프로젝트는 원본 Impulcifer와 동일하게 MIT 라이센스를 따릅니다. 원본 저작권은 Jaakko Pasanen에게 있습니다.
+
+```
+MIT License
+
+Copyright (c) 2018-2022 Jaakko Pasanen
+Copyright (c) 2023 Python 3.13.2 호환 버전 제작자
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
