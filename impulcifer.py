@@ -14,7 +14,7 @@ from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from room_correction import room_correction
 from utils import sync_axes, save_fig_as_png
-from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER
+from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path
 
 
 def main(dir_path=None,
@@ -185,17 +185,50 @@ def open_impulse_response_estimator(dir_path, file_path=None):
 
     Args:
         dir_path: Path to directory
-        file_path: Explicitly given (if any) path to impulse response estimator Pickle or test signal WAV file
+        file_path: Explicitly given (if any) path to impulse response estimator Pickle or test signal WAV file,
+                  or a simple name/number for predefined test signals
 
     Returns:
         ImpulseResponseEstimator instance
     """
+    # 테스트 신호가 숫자나 이름으로 지정된 경우
+    if file_path in TEST_SIGNALS:
+        # 패키지 내 데이터 폴더에서 해당 파일 경로 찾기
+        test_signal_name = TEST_SIGNALS[file_path]
+        test_signal_path = os.path.join(get_data_path(), test_signal_name)
+        
+        # 파일이 존재하는지 확인
+        if os.path.isfile(test_signal_path):
+            file_path = test_signal_path
+        else:
+            # 패키지 내 파일을 찾지 못한 경우 로컬 data 폴더에서 시도
+            local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', test_signal_name)
+            if os.path.isfile(local_path):
+                file_path = local_path
+            else:
+                print(f"경고: 테스트 신호 '{file_path}'({test_signal_name})를 찾을 수 없습니다. 로컬 파일을 사용합니다.")
+    
     if file_path is None:
         # Test signal not explicitly given, try Pickle first then WAV
         if os.path.isfile(os.path.join(dir_path, 'test.pkl')):
             file_path = os.path.join(dir_path, 'test.pkl')
         elif os.path.isfile(os.path.join(dir_path, 'test.wav')):
             file_path = os.path.join(dir_path, 'test.wav')
+        else:
+            # 기본 테스트 신호 사용 (패키지 내부 또는 로컬)
+            default_signal_name = TEST_SIGNALS['default']
+            default_signal_path = os.path.join(get_data_path(), default_signal_name)
+            
+            if os.path.isfile(default_signal_path):
+                file_path = default_signal_path
+            else:
+                # 패키지 내 파일을 찾지 못한 경우 로컬 data 폴더에서 시도
+                local_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', default_signal_name)
+                if os.path.isfile(local_path):
+                    file_path = local_path
+                else:
+                    raise FileNotFoundError(f"기본 테스트 신호 파일을 찾을 수 없습니다: {default_signal_name}")
+    
     if re.match(r'^.+\.wav$', file_path, flags=re.IGNORECASE):
         # Test signal is WAV file
         estimator = ImpulseResponseEstimator.from_wav(file_path)
@@ -203,7 +236,8 @@ def open_impulse_response_estimator(dir_path, file_path=None):
         # Test signal is Pickle file
         estimator = ImpulseResponseEstimator.from_pickle(file_path)
     else:
-        raise TypeError(f'Unknown file extension for test signal "{file_path}"')
+        raise TypeError(f'알 수 없는 파일 확장자: "{file_path}"\n유효한 파일 확장자: .wav, .pkl')
+    
     return estimator
 
 
@@ -462,7 +496,10 @@ def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--dir_path', type=str, required=True, help='Path to directory for recordings and outputs.')
     arg_parser.add_argument('--test_signal', type=str, default=argparse.SUPPRESS,
-                            help='Path to sine sweep test signal or pickled impulse response estimator.')
+                            help='Path to sine sweep test signal or pickled impulse response estimator. '
+                                 'You can also use a predefined name or number: '
+                                 '"default"/"1" (.pkl), "sweep"/"2" (.wav), "stereo"/"3" (FL,FR), '
+                                 '"mono-left"/"4" (FL mono), "left"/"5" (FL stereo), "right"/"6" (FR stereo).')
     arg_parser.add_argument('--room_target', type=str, default=argparse.SUPPRESS,
                             help='Path to room target response AutoEQ style CSV file.')
     arg_parser.add_argument('--room_mic_calibration', type=str, default=argparse.SUPPRESS,

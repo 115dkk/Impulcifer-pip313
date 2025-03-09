@@ -232,12 +232,34 @@ class ImpulseResponseEstimator(object):
                              'with the current version of ImpulseResponseEstimator.')
         return ire
 
-    @staticmethod
-    def from_pickle(file_path):
-        """Loads impulse response estimator from a pickle file."""
+    @classmethod
+    def from_pickle(cls, file_path):
+        """Creates impulse response estimator instance from a pickle file
+
+        Args:
+            file_path: Path to pickle file
+
+        Returns:
+            ImpulseResponseEstimator instance
+        """
         with open(file_path, 'rb') as f:
-            # 파이썬 3.13.2에서는 pickle 로드 시 더 안전한 방식 사용
-            estimator = pickle.load(f)
+            try:
+                # Python 3.13.2 호환성 개선: fix_imports=True 추가
+                estimator = pickle.load(f, fix_imports=True, encoding='latin1')
+            except Exception as e:
+                # 호환성 문제 발생 시 다른 방식으로 시도
+                print(f"피클 파일 로드 중 오류 발생: {e}")
+                print("다른 형식으로 다시 시도합니다...")
+                f.seek(0)  # 파일 포인터를 처음으로 되돌림
+                try:
+                    estimator = pickle.load(f, encoding='bytes')
+                except Exception as e2:
+                    print(f"두 번째 시도도 실패: {e2}")
+                    raise ValueError(f"피클 파일 '{file_path}'을 로드할 수 없습니다. 오래된 형식이거나 손상되었을 수 있습니다.")
+            
+        if not isinstance(estimator, cls):
+            raise TypeError(f'Data in {file_path} is not a valid {cls.__name__}! It is {type(estimator)} instead.')
+        
         return estimator
 
     def to_pickle(self, file_path):
