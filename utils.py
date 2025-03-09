@@ -4,8 +4,58 @@ import os
 import numpy as np
 import soundfile as sf
 from scipy.fft import fft, rfft
+from scipy import signal
 from PIL import Image
 import matplotlib.ticker as ticker
+
+
+def to_db(x):
+    """Convert amplitude to dB
+
+    Args:
+        x: Amplitude value
+
+    Returns:
+        Value in dB
+    """
+    return 20 * np.log10(np.abs(x) + 1e-10)
+
+
+def db_to_gain(x):
+    """Convert dB to amplitude gain
+
+    Args:
+        x: Value in dB
+
+    Returns:
+        Amplitude gain
+    """
+    return 10 ** (x / 20)
+
+
+def convolve(x, y):
+    """Convolve two signals
+
+    Args:
+        x: First signal
+        y: Second signal
+
+    Returns:
+        Convolved signal
+    """
+    return signal.convolve(x, y, mode='full')
+
+
+def dB_unweight(x):
+    """Remove dB weighting from a signal
+
+    Args:
+        x: Signal with dB weighting
+
+    Returns:
+        Signal without dB weighting
+    """
+    return 10 ** (x / 20)
 
 
 def read_wav(file_path, expand=False):

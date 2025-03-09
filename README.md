@@ -195,6 +195,23 @@ WAV (`.wav`) file or a Pickle (`.pkl`) file. Test signal is read from a file cal
 used with `recorder.py`. An alternative way of passing the test signal is with a command line argument `--test_signal`
 which takes is a path to the file eg. `--test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl"`.
 
+**Python 3.13.2 호환 버전 새로운 기능**: 이제 간단한 이름이나 숫자만으로 테스트 신호를 지정할 수 있습니다:
+- `--test_signal="default"` 또는 `--test_signal="1"`: Pickle 형식의 기본 테스트 신호 (sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl)
+- `--test_signal="sweep"` 또는 `--test_signal="2"`: WAV 형식의 테스트 신호 (sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav)
+- `--test_signal="stereo"` 또는 `--test_signal="3"`: FL,FR 스테레오 테스트 신호
+- `--test_signal="mono-left"` 또는 `--test_signal="4"`: FL 모노 테스트 신호
+- `--test_signal="left"` 또는 `--test_signal="5"`: FL 스테레오 테스트 신호
+- `--test_signal="right"` 또는 `--test_signal="6"`: FR 스테레오 테스트 신호
+
+이 기능을 사용하면 테스트 신호 파일의 정확한 경로를 기억할 필요 없이 간단하게 사용할 수 있습니다:
+```bash
+# 간단한 이름으로 테스트 신호 지정
+impulcifer --test_signal="stereo" --dir_path="data/my_hrir"
+
+# 숫자로 테스트 신호 지정
+impulcifer --test_signal="3" --dir_path="data/my_hrir"
+```
+
 Sine sweep recordings are read from WAV files which have speaker names separated with commas and `.wav` extension eg.
 `FL,FR.wav`. The individual speakers in the given file must be recorded in the order of the speaker names in the file
 name. There can be multiple files if the recording was done with multiple steps as is the case when recording 7.1 setup

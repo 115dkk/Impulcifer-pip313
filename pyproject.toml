@@ -9,7 +9,7 @@ name = "impulcifer-py313"
 version = "1.0.0"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
-  { name="Python 3.13.2 호환 버전: Anonymous", email="" },
+  { name="Python 3.13.2 호환 버전: 115dkk", email="" },
 ]
 description = "HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템"
 readme = "README.md"
@@ -30,9 +30,12 @@ dependencies = [
     'autoeq-py313>=1.0.0',
 ]
 
+[project.scripts]
+impulcifer = "impulcifer_cli:entry_point"
+
 [project.urls]
 "Homepage" = "https://github.com/jaakkopasanen/impulcifer"
-"Python 3.13.2 호환 버전" = "설정 예정"
+"Python 3.13.2 호환 버전" = "https://github.com/115dkk/Impulcifer-pip313"
 
 [tool.hatch.build]
 include = [
@@ -47,4 +50,8 @@ include = [
 exclude = [
     "research/**/*",
     ".gitignore",
-] 
+]
+
+# data 폴더를 패키지 데이터로 포함
+[tool.hatch.build.targets.wheel.shared-data]
+"data" = "impulcifer_py313/data" 

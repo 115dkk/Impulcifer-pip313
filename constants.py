@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from utils import versus_distance
+import os
+import importlib.resources as pkg_resources
 
 # https://en.wikipedia.org/wiki/Surround_sound
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR']
@@ -57,3 +59,31 @@ HESUVI_TRACK_ORDER = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', '
 HEXADECAGONAL_TRACK_ORDER = ['FL-left', 'FL-right', 'FR-left', 'FR-right', 'FC-left', 'FC-right', 'LFE-left',
                              'LFE-right', 'BL-left', 'BL-right', 'BR-left', 'BR-right', 'SL-left', 'SL-right',
                              'SR-left', 'SR-right']
+
+# 기본 테스트 신호 파일 목록
+TEST_SIGNALS = {
+    'default': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl',
+    'sweep': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    'stereo': 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    'mono-left': 'sweep-seg-FL-mono-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    'left': 'sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    'right': 'sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    '1': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl',
+    '2': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    '3': 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    '4': 'sweep-seg-FL-mono-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    '5': 'sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
+    '6': 'sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'
+}
+
+# 패키지 내 데이터 폴더 경로
+def get_data_path():
+    """패키지 내 데이터 폴더 경로를 반환합니다."""
+    try:
+        # 패키지로 설치된 경우
+        with pkg_resources.path('impulcifer_py313', 'data') as data_path:
+            return data_path
+    except (ImportError, ModuleNotFoundError):
+        # 로컬 개발 환경인 경우
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, 'data')
