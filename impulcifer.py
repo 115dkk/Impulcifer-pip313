@@ -129,7 +129,7 @@ def main(dir_path=None,
                 fr.error -= target.raw
 
                 # Smoothen and equalize
-                fr.smoothen_heavy_light()
+                fr.smoothen(window_size=1/3, treble_window_size=1/5)
                 fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
 
                 # Create FIR filter and equalize
@@ -286,15 +286,15 @@ def equalization(estimator, dir_path):
             # Both are the same, plot only one graph
             fig, ax = plt.subplots()
             fig.set_size_inches(12, 9)
-            left_fr.plot_graph(fig=fig, ax=ax, show=False)
+            left_fr.plot(fig=fig, ax=ax, show_fig=False)
         else:
             # Left and right are different, plot two graphs in the same figure
             fig, ax = plt.subplots(1, 2)
             fig.set_size_inches(22, 9)
             if left_fr is not None:
-                left_fr.plot_graph(fig=fig, ax=ax[0], show=False)
+                left_fr.plot(fig=fig, ax=ax[0], show_fig=False)
             if right_fr is not None:
-                right_fr.plot_graph(fig=fig, ax=ax[1], show=False)
+                right_fr.plot(fig=fig, ax=ax[1], show_fig=False)
         save_fig_as_png(os.path.join(dir_path, 'plots', 'eq.png'), fig)
 
     return left_fr, right_fr
@@ -336,11 +336,11 @@ def headphone_compensation(estimator, dir_path):
 
     # Left
     axl = fig.add_subplot(gs[0, 0])
-    left.plot_graph(fig=fig, ax=axl, show=False)
+    left.plot(fig=fig, ax=axl, show_fig=False)
     axl.set_title('Left')
     # Right
     axr = fig.add_subplot(gs[1, 0])
-    right.plot_graph(fig=fig, ax=axr, show=False)
+    right.plot(fig=fig, ax=axr, show_fig=False)
     axr.set_title('Right')
     # Sync axes
     sync_axes([axl, axr])
