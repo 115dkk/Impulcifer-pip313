@@ -487,10 +487,10 @@ class HRIR:
                 stacks[i].append(ir.data)
         left = ImpulseResponse(np.sum(np.vstack(stacks[0]), axis=0), self.fs)
         left_fr = left.frequency_response()
-        left_fr.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+        left_fr.smoothen(window_size=1/3, treble_window_size=1/5, treble_f_lower=20000, treble_f_upper=23999)
         right = ImpulseResponse(np.sum(np.vstack(stacks[1]), axis=0), self.fs)
         right_fr = right.frequency_response()
-        right_fr.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
+        right_fr.smoothen(window_size=1/3, treble_window_size=1/5, treble_f_lower=20000, treble_f_upper=23999)
 
         fig, ax = plt.subplots()
         fig.set_size_inches(12, 9)

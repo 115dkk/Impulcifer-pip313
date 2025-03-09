@@ -349,7 +349,7 @@ def open_room_target(estimator, dir_path, target=None):
         target = os.path.join(dir_path, 'room-target.csv')
     if os.path.isfile(target):
         # File exists, create frequency response
-        target = FrequencyResponse.read_from_csv(target)
+        target = FrequencyResponse.read_csv(target)
         target.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
         target.center()
     else:
@@ -381,7 +381,7 @@ def open_mic_calibration(estimator, dir_path, mic_calibration=None):
         raise FileNotFoundError(f'Room mic calibration file doesn\'t exist at "{mic_calibration}"')
     if os.path.isfile(mic_calibration):
         # File found, create frequency response
-        mic_calibration = FrequencyResponse.read_from_csv(mic_calibration)
+        mic_calibration = FrequencyResponse.read_csv(mic_calibration)
         mic_calibration.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
         mic_calibration.center()
     else:
