@@ -355,7 +355,9 @@ class ImpulseResponse:
         f, m = self.magnitude_response()
         n = self.fs / 2 / 4  # 4 Hz resolution
         step = int(len(f) / n)
-        fr = FrequencyResponse(name='Frequency response', frequency=f[1::step], raw=m[1::step])
+        # 0Hz 제외 (첫 번째 요소가 0인 경우)
+        start_idx = 1 if f[0] == 0 else 0
+        fr = FrequencyResponse(name='Frequency response', frequency=f[start_idx::step], raw=m[start_idx::step])
         fr.interpolate(f_step=1.01, f_min=10, f_max=self.fs / 2)
         return fr
 
