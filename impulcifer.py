@@ -318,13 +318,29 @@ def headphone_compensation(estimator, dir_path):
     # Frequency responses
     left = hp_irs.irs['FL']['left'].frequency_response()
     right = hp_irs.irs['FR']['right'].frequency_response()
+    
+        # 배열 길이 검증 및 일치시키기
+    if len(left.frequency) != len(right.frequency):
+        # 둘 중 더 작은 길이로 조정
+        min_length = min(len(left.frequency), len(right.frequency))
+        left.frequency = left.frequency[:min_length]
+        left.raw = left.raw[:min_length]
+        right.frequency = right.frequency[:min_length]
+        right.raw = right.raw[:min_length]
 
     # Center by left channel
     gain = left.center([100, 10000])
     right.raw += gain
 
-    # Compensate
-    zero = FrequencyResponse(name='zero', frequency=left.frequency, raw=np.zeros(len(left.frequency)))
+    # 보다 명확한 주파수 범위 설정
+    freq = FrequencyResponse.generate_frequencies(f_min=10, f_max=estimator.fs/2, f_step=1.01)
+    zero = FrequencyResponse(name='zero', frequency=freq, raw=np.zeros(len(freq)))
+
+    # left와 right를 zero의 주파수에 맞게 보간
+    left.interpolate(f=zero.frequency)
+    right.interpolate(f=zero.frequency)
+
+    # 이제 보상 실행
     left.compensate(zero, min_mean_error=False)
     right.compensate(zero, min_mean_error=False)
 

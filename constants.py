@@ -24,10 +24,8 @@ SPEAKER_ANGLES = {
 
 # Speaker delays relative to the nearest speaker
 SPEAKER_DELAYS = {
-    _speaker: versus_distance(angle=abs(SPEAKER_ANGLES[_speaker]), ear='primary')[1] for _speaker in SPEAKER_NAMES
+    _speaker: 0 for _speaker in SPEAKER_NAMES
 }
-for _speaker in SPEAKER_DELAYS.keys():
-    SPEAKER_DELAYS[_speaker] -= min(*SPEAKER_DELAYS.values())
 
 # Each channel, left and right
 IR_ORDER = []
