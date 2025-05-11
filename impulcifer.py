@@ -16,6 +16,27 @@ from room_correction import room_correction
 from utils import sync_axes, save_fig_as_png
 from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path
 
+# 한글 폰트 설정 추가
+import matplotlib.font_manager as fm
+import platform
+
+# 운영체제별 기본 폰트 설정
+system = platform.system()
+if system == 'Windows':
+    # Windows 기본 폰트
+    font_path = 'C:/Windows/Fonts/malgun.ttf'  # 맑은 고딕
+    if os.path.exists(font_path):
+        font_prop = fm.FontProperties(fname=font_path)
+        plt.rcParams['font.family'] = font_prop.get_name()
+    else:
+        # 대체 폰트 시도
+        plt.rcParams['font.family'] = 'Malgun Gothic'
+elif system == 'Darwin':  # macOS
+    plt.rcParams['font.family'] = 'AppleGothic'
+elif system == 'Linux':
+    # Linux 기본 폰트
+    plt.rcParams['font.family'] = 'NanumGothic'
+
 
 def main(dir_path=None,
          test_signal=None,
@@ -103,6 +124,7 @@ def main(dir_path=None,
     # Equalize all
     if do_headphone_compensation or do_room_correction or do_equalization:
         print('Equalizing...')
+        
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
                 fr = FrequencyResponse(
@@ -111,15 +133,18 @@ def main(dir_path=None,
                     raw=0, error=0
                 )
 
+                # 룸 보정 적용
                 if room_frs is not None and speaker in room_frs and side in room_frs[speaker]:
                     # Room correction
                     fr.error += room_frs[speaker][side].error
 
+                # 헤드폰 보정 적용
                 hp_eq = hp_left if side == 'left' else hp_right
                 if hp_eq is not None:
                     # Headphone compensation
                     fr.error += hp_eq.error
 
+                # 추가 EQ 적용
                 eq = eq_left if side == 'left' else eq_right
                 if eq is not None and type(eq) == FrequencyResponse:
                     # Equalization
@@ -128,12 +153,16 @@ def main(dir_path=None,
                 # Remove bass and tilt target from the error
                 fr.error -= target.raw
 
-                # Smoothen and equalize
+                # Smoothen
                 fr.smoothen(window_size=1/3, treble_window_size=1/5)
-                fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
 
+                # Equalize
+                eq_result, _, _, _, _, _, _, _, _, _ = fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
+                
                 # Create FIR filter and equalize
                 fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
+                
+                # 실제 FIR 필터 적용
                 ir.equalize(fir)
 
     # Adjust decay time
@@ -318,17 +347,59 @@ def headphone_compensation(estimator, dir_path):
     # Frequency responses
     left = hp_irs.irs['FL']['left'].frequency_response()
     right = hp_irs.irs['FR']['right'].frequency_response()
+    
+    # 배열 길이 검증 및 일치시키기
+    if len(left.frequency) != len(right.frequency):
+        # 둘 중 더 작은 길이로 조정
+        min_length = min(len(left.frequency), len(right.frequency))
+        left.frequency = left.frequency[:min_length]
+        left.raw = left.raw[:min_length]
+        right.frequency = right.frequency[:min_length]
+        right.raw = right.raw[:min_length]
 
     # Center by left channel
     gain = left.center([100, 10000])
     right.raw += gain
+    
+    # 저주파 롤오프 방지를 위한 타겟 생성
+    freq = FrequencyResponse.generate_frequencies(f_min=10, f_max=estimator.fs/2, f_step=1.01)
+    
+    # 새로운 타겟: 저주파에 6dB 부스트를 적용한 타겟
+    target_raw = np.zeros(len(freq))
+    
+    # 헤드폰 저주파 보상용 타겟 생성 (6dB 부스트로 수정)
+    for i, f in enumerate(freq):
+        if f < 100:
+            # 100Hz 이하에서 로그 스케일로 서서히 증가하는 저주파 부스트 적용
+            # 10Hz에서 최대 6dB 부스트, 100Hz에서 0dB
+            log_ratio = np.log10(f / 10) / np.log10(100 / 10)
+            target_raw[i] = 6 * (1 - log_ratio) # 10dB에서 6dB로 수정
+    
+    # 타겟 응답 객체 생성
+    target = FrequencyResponse(name='headphone_compensation_target', frequency=freq, raw=target_raw)
 
-    # Compensate
-    zero = FrequencyResponse(name='zero', frequency=left.frequency, raw=np.zeros(len(left.frequency)))
-    left.compensate(zero, min_mean_error=False)
-    right.compensate(zero, min_mean_error=False)
+    # left와 right를 타겟의 주파수에 맞게 보간
+    left_orig = left.copy()
+    right_orig = right.copy()
+    
+    left.interpolate(f=target.frequency)
+    right.interpolate(f=target.frequency)
+    
+    # 보상 적용
+    left.compensate(target, min_mean_error=True)
+    right.compensate(target, min_mean_error=True)
+    
+    # 저주파에서 올바른 보상을 유지하기 위한 후처리
+    # 아주 낮은 주파수(20Hz 이하)에서 보상이 지나치게 감소하는 것을 방지
+    for fr in [left, right]:
+        # 주파수별 추가 보정
+        for i, f in enumerate(fr.frequency):
+            if f < 20:  # 20Hz 이하
+                fr.error[i] += 6 * (1 - np.log10(f / 10) / np.log10(20 / 10))
+            elif f < 50:  # 20-50Hz
+                fr.error[i] += 3 * (1 - np.log10(f / 20) / np.log10(50 / 20))
 
-    # Headphone plots
+    # 기존 헤드폰 플롯
     fig = plt.figure()
     gs = fig.add_gridspec(2, 3)
     fig.set_size_inches(22, 10)
@@ -364,7 +435,7 @@ def headphone_compensation(estimator, dir_path):
     ax.set_xlabel('Frequency (Hz)')
     ax.semilogx()
     ax.set_xlim([20, 20000])
-    ax.set_ylabel('Amplitude (dBr)')
+    ax.set_ylabel('Amplitude (dB)')
     ax.grid(True, which='major')
     ax.grid(True, which='minor')
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
@@ -380,23 +451,37 @@ def headphone_compensation(estimator, dir_path):
 
 def create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt):
     """Creates target frequency response with bass boost, tilt and high pass at 20 Hz"""
+    # 타겟 주파수 응답 생성
     target = FrequencyResponse(
         name='bass_and_tilt',
         frequency=FrequencyResponse.generate_frequencies(f_min=10, f_max=estimator.fs / 2, f_step=1.01)
     )
+    
+    # 베이스 부스트와 틸트 적용
+    # 기본 베이스 부스트만 적용 (추가 부스트 제거)
     target.raw = target.create_target(
-        bass_boost_gain=bass_boost_gain,
+        bass_boost_gain=bass_boost_gain,  # +3dB 추가 부스트 제거
         bass_boost_fc=bass_boost_fc,
         bass_boost_q=bass_boost_q,
         tilt=tilt
     )
+    
+    # 수정된 하이패스 필터 적용
+    # 10Hz까지 완만한 롤오프로 수정하여 저주파 응답을 향상
     high_pass = FrequencyResponse(
-        name='high_pass',
-        frequency=[10, 18, 19, 20, 21, 22, 20000],
-        raw=[-80, -5, -1.6, -0.6, -0.2, 0, 0]
+        name='high_pass_modified',
+        frequency=[10, 15, 20, 25, 30, 20000],
+        raw=[-6, -3, -1, -0.5, 0, 0]  # 더 완만한 롤오프
     )
     high_pass.interpolate(f_min=10, f_max=estimator.fs / 2, f_step=1.01)
+    
+    # 하이패스 필터 적용
     target.raw += high_pass.raw
+    
+    # 저주파 영역 베이스 부스트 값 출력 (디버깅용)
+    bass_boost_values = target.raw[:200]  # 저주파 영역만 추출
+    print("저주파 영역 Bass Boost 값:", bass_boost_values)
+    
     return target
 
 
