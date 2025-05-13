@@ -479,8 +479,8 @@ def create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt)
     target.raw += high_pass.raw
     
     # 저주파 영역 베이스 부스트 값 출력 (디버깅용)
-    bass_boost_values = target.raw[:200]  # 저주파 영역만 추출
-    print("저주파 영역 Bass Boost 값:", bass_boost_values)
+    # bass_boost_values = target.raw[:200]  # 저주파 영역만 추출
+    # print("저주파 영역 Bass Boost 값:", bass_boost_values) # 주석 처리
     
     return target
 
