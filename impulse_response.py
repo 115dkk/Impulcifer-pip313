@@ -462,26 +462,109 @@ class ImpulseResponse:
             fig, ax = plt.subplots(figsize=(16/2.54, 9/2.54))
 
         # Spectrogram parameters
-        nfft = round(self.fs / f_res)
-        noverlap = int(nfft - (len(self.recording) - nfft) / n_segments)
+        target_f_res_nfft = round(self.fs / f_res) # 주파수 해상도 목표 nfft
+        min_time_segments = 3 # 최소한 3개의 시간축 세그먼트를 목표
+
+        if len(self.recording) == 0:
+            print(f"  Warning: self.recording is empty. Skipping spectrogram for {self.name if hasattr(self, 'name') else 'current IR'}.")
+            if ax is not None:
+                ax.text(0.5, 0.5, 'Recording data is empty.', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            return fig, ax
+
+        # nfft가 너무 커서 시간축이 안나오는 것을 방지 (min_time_segments 확보 위함)
+        max_nfft_for_segments = (2 * len(self.recording)) // (min_time_segments + 1) if min_time_segments > 0 else len(self.recording)
+        if max_nfft_for_segments <= 0: # 예를 들어 self.recording이 너무 짧으면
+            max_nfft_for_segments = len(self.recording)
+
+        nfft = target_f_res_nfft
+        if nfft > max_nfft_for_segments and max_nfft_for_segments > 0:
+            print(f"  Adjusting nfft from {nfft} to {max_nfft_for_segments} to ensure at least {min_time_segments} time segments (f_res will be higher).")
+            nfft = max_nfft_for_segments
+        
+        if nfft > len(self.recording): # nfft는 녹음 길이보다 클 수 없음
+             nfft = len(self.recording)
+        
+        if nfft == 0: # nfft가 0이 되면 spectrogram 함수에서 오류 발생
+            print(f"  Warning: nfft is 0 after adjustment. Skipping spectrogram for {self.name if hasattr(self, 'name') else 'current IR'}.")
+            if ax is not None:
+                ax.text(0.5, 0.5, 'Spectrogram nfft is 0.', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            return fig, ax
+            
+        # noverlap 계산: n_segments를 사용하여 (len(recording) - nfft) / n_segments 가 step_size가 되도록 시도
+        if n_segments > 0 and (len(self.recording) - nfft) > 0:
+            step_size = (len(self.recording) - nfft) / n_segments
+            if step_size <= 1: # step_size가 너무 작거나 음수면 (n_segments가 너무 크거나, len(rec) <= nfft)
+                               # step_size는 1 이상이어야 noverlap < nfft 가 일반적으로 보장됨 (noverlap = nfft - step_size)
+                noverlap = nfft // 2 # 기본 50% 오버랩으로 후퇴
+                print(f"  Info: Calculated step_size ({step_size:.2f}) for noverlap is too small or invalid. Falling back to 50% overlap.")
+            else:
+                noverlap = int(nfft - step_size)
+                print(f"  Info: Calculated noverlap using n_segments. step_size: {step_size:.2f}")
+        else: 
+            noverlap = nfft // 2 # 기본 50% 오버랩
+            if n_segments <=0:
+                print(f"  Info: n_segments ({n_segments}) is not positive. Using 50% overlap for noverlap calculation.")
+            else: # (len(self.recording) - nfft) <= 0
+                 print(f"  Info: len(self.recording) ({len(self.recording)}) <= nfft ({nfft}). Using 50% overlap.")
+
+        # noverlap 안전 장치
+        if noverlap >= nfft:
+            print(f"  Warning: Calculated noverlap ({noverlap}) was >= nfft ({nfft}). Setting to nfft - 1 (or 0 if nfft is 1).")
+            noverlap = max(0, nfft - 1) 
+        if noverlap < 0:
+            print(f"  Warning: Calculated noverlap ({noverlap}) was < 0. Setting to 0.")
+            noverlap = 0
+        
+        # print(f"Debug plot_spectrogram for {self.name if hasattr(self, 'name') else 'current IR'}:")
+        # print(f"  self.fs: {self.fs}, len(self.recording): {len(self.recording)}")
+        # print(f"  f_res (target): {f_res}, n_segments (for noverlap): {n_segments}")
+        # print(f"  nfft: {nfft}, noverlap: {noverlap}")
+        # print(f"  Input for spectrogram: recording.shape={self.recording.shape}, recording.ndim={self.recording.ndim}") 
+        
         # Get spectrogram data
-        spectrum, freqs, t = spectrogram(
+        window_arg = signal.get_window('hann', nfft) # 명시적으로 Hann 윈도우 사용
+        # 올바른 반환 순서: f, t, Sxx
+        freqs, t, spectrum = spectrogram(
             self.recording, 
             fs=self.fs, 
-            nperseg=nfft, 
+            window=window_arg,
+            nperseg=nfft,  # nfft를 nperseg로 사용
             noverlap=noverlap, 
             mode='psd'
         )
+        # print(f"Debug: freqs.shape={freqs.shape}, t.shape={t.shape}, spectrum.shape={spectrum.shape}") # 디버깅용 추가 출력
+
+        if spectrum.ndim != 2 or spectrum.shape[0] <= 1 or spectrum.shape[1] == 0 : # spectrum이 2D가 아니거나, 주파수 빈이 하나 이하이거나, 시간 축이 없으면
+            # print(f"Warning: Spectrogram data is not suitable for plotting (actual spectrum shape: {spectrum.shape}, nfft: {nfft}, noverlap: {noverlap}, window: {window_arg.shape if hasattr(window_arg, 'shape') else 'default'}). Skipping spectrogram.")
+            if ax is not None:
+                ax.text(0.5, 0.5, f'Spectrogram not available\n(shape: {spectrum.shape})', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            return fig, ax
 
         # Remove zero frequency
         f = freqs[1:]
-        z = spectrum[1:, :]
-        # Logarithmic power
-        z = 10 * np.log10(z)
+        z = spectrum[1:, :] 
+        
+        if z.size == 0:
+            print(f"Warning: Spectrogram data became empty after removing zero frequency for {self.name if hasattr(self, 'name') else 'current IR'}. Skipping spectrogram.")
+            if ax is not None:
+                ax.text(0.5, 0.5, 'Spectrogram data empty.', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            return fig, ax
+
+        z = 10 * np.log10(np.abs(z) + 1e-9) # np.abs() 와 작은 값(1e-9)을 더해 log(0) 방지
 
         # Create spectrogram image
-        t, f = np.meshgrid(t, f)
-        cs = ax.pcolormesh(t, f, z, cmap='gnuplot2', vmin=-150, shading='auto')
+        # t와 f는 1D 배열이고, np.meshgrid를 통해 t_mesh, f_mesh (2D)를 만듭니다.
+        # z는 이미 2D 배열입니다 (spectrum[1:, :]).
+        # z의 shape은 (len(f), len(t)) 여야 합니다.
+        t_mesh, f_mesh = np.meshgrid(t, f)
+
+        if z.shape[0] != len(f) or z.shape[1] != len(t):
+            print(f"Error: Shape mismatch for pcolormesh. z shape: {z.shape}, expected: ({len(f)}, {len(t)}) for {self.name if hasattr(self, 'name') else 'current IR'}.")
+            if ax is not None:
+                ax.text(0.5, 0.5, 'Spectrogram shape error.', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            return fig, ax
+            
+        cs = ax.pcolormesh(t_mesh, f_mesh, z, cmap='gnuplot2', vmin=-150, shading='auto')
 
         divider = make_axes_locatable(ax)
         cax = divider.append_axes('right', size='5%', pad=0.05)
@@ -579,7 +662,7 @@ class ImpulseResponse:
         """
         if fr is None:
             fr = self.frequency_response()
-            fr.smoothen_fractional_octave(window_size=1/3, treble_f_lower=20000, treble_f_upper=23999)
+            fr.smoothen(window_size=1/3, treble_f_lower=20000, treble_f_upper=23999, treble_window_size=1/3)
         if fig is None:
             fig, ax = plt.subplots()
         ax.set_xlabel('Frequency (Hz)')
@@ -712,29 +795,68 @@ class ImpulseResponse:
         # Copy and pad with zeros to include a few extra frames after the impulse response
         data = np.copy(self.data)
         s = np.zeros(hop_length * 5 + window_length)
-        s[0:len(data)] = data
-        data = s
+        
+        # s 배열의 크기를 넘지 않도록 data의 앞부분만 복사
+        copy_len = min(len(data), len(s))
+        s[0:copy_len] = data[0:copy_len]
+        
+        data = s # 이제 data는 s와 동일한 (작아진) 데이터를 참조
         # Minimum number of frames
         n_min = 40
         # 50% overlap means hop length = window length / 2
         n_segments = max(int(len(data) / hop_length) - 1, n_min)
-        nfft = window_length
-        noverlap = nfft - hop_length
+        # n_segments = max(int(len(data) / hop_length) - 1, n_min) # 기존 n_segments 계산
+        # nfft = window_length # 기존 nfft (512)
+        # noverlap = nfft - hop_length # 기존 noverlap (256)
+
+        # waterfall 용 nfft, noverlap 재조정 (len(data)가 짧은 것을 고려)
+        nfft = 256 
+        if nfft > len(data): # 데이터 길이보다 nfft가 클 수 없음
+            nfft = len(data)
+        
+        if nfft == 0:
+            print(f"Warning: Waterfall's nfft is 0. Skipping waterfall plot for {self.name if hasattr(self, 'name') else 'current IR'}.")
+            if ax is not None:
+                ax.text2D(0.5, 0.5, 'Waterfall nfft is 0.', transform=ax.transAxes, ha='center', va='center')
+            return fig, ax
+
+        noverlap = nfft // 2 # 50% overlap
+        if noverlap >= nfft: noverlap = max(0, nfft -1)
+        if noverlap < 0: noverlap = 0
+        
+        window_arg = signal.get_window('hann', nfft) # 명시적으로 Hann 윈도우 사용
+
+        # print(f"Debug plot_waterfall for {self.name if hasattr(self, 'name') else 'current IR'}:")
+        # print(f"  self.fs: {self.fs}, len(data): {len(data)}")
+        # print(f"  nfft (adjusted): {nfft}, noverlap (adjusted): {noverlap}")
+        # print(f"  Input for waterfall spectrogram: data.shape={data.shape}, data.ndim={data.ndim}")
 
         # Get spectrogram data
-        # Fs 대신 fs 사용, NFFT 대신 nperseg 사용, window 매개변수 업데이트
-        spectrum, freqs, t = spectrogram(
+        freqs, t, spectrum = spectrogram(
             data, 
             fs=self.fs, 
+            window=window_arg,
             nperseg=nfft, 
             noverlap=noverlap, 
-            mode='magnitude', 
-            window=window
+            mode='magnitude'
         )
+        # print(f"Debug waterfall: freqs.shape={freqs.shape}, t.shape={t.shape}, spectrum.shape={spectrum.shape}") # 디버깅용 추가 출력
+
+        if spectrum.ndim != 2 or spectrum.shape[0] <= 1 or spectrum.shape[1] == 0:
+            # print(f"Warning: Waterfall's spectrogram data is not suitable for plotting (actual spectrum shape: {spectrum.shape}, nfft: {nfft}, noverlap: {noverlap}). Skipping waterfall plot.")
+            if ax is not None:
+                ax.text2D(0.5, 0.5, 'Waterfall data not available.', transform=ax.transAxes, ha='center', va='center')
+            return fig, ax
 
         # Remove 0 Hz component
         spectrum = spectrum[1:, :]
         freqs = freqs[1:]
+
+        if spectrum.size == 0 or freqs.size == 0:
+            print(f"Warning: Waterfall's spectrogram data became empty after removing zero frequency for {self.name if hasattr(self, 'name') else 'current IR'}. Skipping waterfall plot.")
+            if ax is not None:
+                ax.text2D(0.5, 0.5, 'Waterfall data empty.', transform=ax.transAxes, ha='center', va='center')
+            return fig, ax
 
         # Interpolate to logaritmic frequency scale
         f_max = self.fs / 2
@@ -771,7 +893,10 @@ class ImpulseResponse:
         ax.zaxis.set_major_formatter(FormatStrFormatter('%.02f'))
 
         # X axis
-        ax.set_xlim([0, None])
+        if t.size > 0:
+            ax.set_xlim([0, np.max(t) * 1000]) # t의 최대값을 ms 단위로 사용
+        else:
+            ax.set_xlim([0, 100]) # t가 비어있을 경우 기본값 (예시)
         ax.set_xlabel('Time (ms)')
 
         # Y axis
