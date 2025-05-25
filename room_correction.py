@@ -116,7 +116,7 @@ def room_correction(
                 if plot:
                     file_path = os.path.join(dir_path, 'plots', 'room', f'{speaker}-{side}.png')
                     fr = fr.copy()
-                    fr.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
+                    fr.smoothen(window_size=1/3, treble_window_size=1/3)
                     _, fr_ax = ir.plot_fr(
                         fr=fr,
                         fig=figs[speaker][side],
@@ -247,7 +247,7 @@ def open_generic_room_measurement(estimator,
         raws.append(fr.copy())
         fr.compensate(target, min_mean_error=True)
         if method == 'conservative' and len(irs) > 1:
-            fr.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
+            fr.smoothen(window_size=1/3, treble_window_size=1/3)
             errors.append(fr.error_smoothed)
         else:
             errors.append(fr.error)
@@ -268,17 +268,17 @@ def open_generic_room_measurement(estimator,
             # Maximum value for columns with only negative values (minimum absolute value)
             room_fr.error[negative] = np.max(errors[:, negative], axis=0)
             # Smoothen out kinks
-            room_fr.smoothen_fractional_octave(window_size=1 / 6, treble_window_size=1 / 6)
+            room_fr.smoothen(window_size=1 / 6, treble_window_size=1 / 6)
             room_fr.error = room_fr.error_smoothed.copy()
         elif method == 'average':
             room_fr.error = np.mean(errors, axis=0)
-            room_fr.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
+            room_fr.smoothen(window_size=1/3, treble_window_size=1/3)
         else:
             raise ValueError(
                 f'Invalid value "{method}" for method. Supported values are "conservative" and "average"')
     else:
         room_fr.error = errors[0, :]
-        room_fr.smoothen_fractional_octave(window_size=1 / 3, treble_window_size=1 / 3)
+        room_fr.smoothen(window_size=1 / 3, treble_window_size=1 / 3)
 
     if limit > 0:
         # Zero error above limit
@@ -312,7 +312,7 @@ def open_generic_room_measurement(estimator,
         # Plot target, raw and error
         ax.plot(fr.frequency, fr.target, color=COLORS['lightpurple'], linewidth=5, label='Target')
         for raw in raws:
-            raw.smoothen_fractional_octave(window_size=1/3, treble_window_size=1/3)
+            raw.smoothen(window_size=1/3, treble_window_size=1/3)
             ax.plot(raw.frequency, raw.smoothed, color='grey', linewidth=0.5)
         ax.plot(fr.frequency, fr.raw, color=COLORS['blue'], label='Raw smoothed')
         ax.plot(fr.frequency, fr.error, color=COLORS['red'], label='Error smoothed')
