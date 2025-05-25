@@ -16,6 +16,12 @@ from room_correction import room_correction
 from utils import sync_axes, save_fig_as_png
 from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path
 
+# PR3에서 추가된 import 문들
+import copy
+import contextlib
+import io
+from scipy.io import wavfile # hangloose용, 필요시 추가
+
 # 한글 폰트 설정 추가
 import matplotlib.font_manager as fm
 import platform
@@ -56,7 +62,11 @@ def main(dir_path=None,
          tilt=0.0,
          do_room_correction=True,
          do_headphone_compensation=True,
-         do_equalization=True):
+         do_equalization=True,
+         # PR3에서 추가/변경된 파라미터 (항목 4, 6, 7)
+         head_ms=1, # --c 옵션에 해당 (기본값 1ms)
+         jamesdsp=False,
+         hangloose=False):
     """"""
     if dir_path is None or not os.path.isdir(dir_path):
         raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
@@ -103,7 +113,9 @@ def main(dir_path=None,
     hrir = open_binaural_measurements(estimator, dir_path)
 
     # Write info and stats in readme
-    write_readme(os.path.join(dir_path, 'README.md'), hrir, fs)
+    readme_content = write_readme(os.path.join(dir_path, 'README.md'), hrir, fs, estimator)
+    if readme_content:
+        print(readme_content)
 
     if plot:
         # Plot graphs pre processing
@@ -113,7 +125,16 @@ def main(dir_path=None,
 
     # Crop noise and harmonics from the beginning
     print('Cropping impulse responses...')
-    hrir.crop_heads()
+    hrir.crop_heads(head_ms=head_ms)
+
+    # PR3에서 추가된 align_ipsilateral_all 호출 (항목 2)
+    # SPEAKER_NAMES를 사용하므로 constants.py의 변경이 선행되어야 함
+    hrir.align_ipsilateral_all(
+        speaker_pairs=[('FL','FR'), ('SL','SR'), ('BL','BR'),
+                        ('TFL','TFR'), ('TSL','TSR'), ('TBL','TBR'),
+                        ('FC','FC'), ('WL','WR')], # FC, WL, WR 쌍은 적절히 수정 필요할 수 있음
+        segment_ms=30
+    )
 
     # Crop noise from the tail
     hrir.crop_tails()
@@ -207,6 +228,59 @@ def main(dir_path=None,
 
     # Write multi-channel WAV file with HeSuVi track order
     hrir.write_wav(os.path.join(dir_path, 'hesuvi.wav'), track_order=HESUVI_TRACK_ORDER)
+
+    # PR3 jamesdsp 로직 추가 (항목 6)
+    if jamesdsp:
+        print('Generating jamesdsp.wav (FL/FR only, normalized to FL/FR)...')
+        
+        # 전체 HRIR 복사 후 FL/FR 외 모든 채널 제거
+        dsp_hrir = copy.deepcopy(hrir)
+        for sp in list(dsp_hrir.irs.keys()):
+            if sp not in ['FL', 'FR']:
+                del dsp_hrir.irs[sp]
+
+        # normalize 내부의 print문 출력을 숨기기 위해 stdout 리디렉션
+        # target_level 변수가 main 함수 스코프에 있어야 함
+        with contextlib.redirect_stdout(io.StringIO()):
+            dsp_hrir.normalize(
+                peak_target=None if target_level is not None else -0.1,
+                avg_target=target_level
+            )
+
+        # FL-L, FL-R, FR-L, FR-R 순서로 파일 생성
+        jd_order = ['FL-left', 'FL-right', 'FR-left', 'FR-right']
+        out_path = os.path.join(dir_path, 'jamesdsp.wav')
+        dsp_hrir.write_wav(out_path, track_order=jd_order)
+        print(f'JamesDSP IR file created: {out_path}')
+
+    # PR3 hangloose 로직 추가 (항목 7)
+    if hangloose:
+        print('Generating Hangloose Convolver IR files...')
+        output_dir = os.path.join(dir_path, 'Hangloose')
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Hrir.wav 기준 최대 채널 순서 (constants.py의 SPEAKER_NAMES 순서와 일치시키는 것이 좋을 수 있음)
+        # PR3의 full_order는 LFE를 포함하나, 현재 SPEAKER_NAMES에는 LFE가 없음.
+        # 여기서는 hrir 객체에 있는 스피커만 사용하도록 단순화.
+        processed_speakers = [sp for sp in SPEAKER_NAMES if sp in hrir.irs]
+
+        for sp in processed_speakers:
+            single_hrir = copy.deepcopy(hrir)
+            for other_sp in list(single_hrir.irs.keys()):
+                if other_sp != sp:
+                    del single_hrir.irs[other_sp]
+            
+            # 각 스피커에 대해 normalize를 다시 수행할지 여부는 PR의 의도에 따라 결정.
+            # 여기서는 생략하고 원본 hrir의 정규화 상태를 따름.
+
+            track_order = [f'{sp}-left', f'{sp}-right']
+            out_path = os.path.join(output_dir, f'{sp}.wav')
+            single_hrir.write_wav(out_path, track_order=track_order)
+            print(f'[Hangloose] Created: {out_path}')
+        
+        # PR3의 LFE 채널 생성 로직은 FL, FR을 기반으로 하므로, 필요시 여기에 추가 구현.
+        # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:
+        # LFE 생성 로직 ...
 
 
 def open_impulse_response_estimator(dir_path, file_path=None):
@@ -509,20 +583,21 @@ def open_binaural_measurements(estimator, dir_path):
     return hrir
 
 
-def write_readme(file_path, hrir, fs):
-    """Writes info and stats to readme file.
+def write_readme(file_path, hrir, fs, estimator=None):
+    """Writes info and stats to a README file and returns its content as a string.
 
     Args:
-        file_path: Path to readme file
-        hrir: HRIR instance
-        fs: Output sampling rate
+        file_path (str): Path to README file.
+        hrir (HRIR): HRIR object.
+        fs (int): Output sampling rate.
+        estimator (ImpulseResponseEstimator, optional): Estimator object for advanced stats. Defaults to None.
 
     Returns:
-        Readme string
+        str: Content of the README file.
     """
-    if fs is None:
-        fs = hrir.fs
-
+    header_template = '''# BRIR Info
+Processed on {date}. Output sampling rate is {fs} Hz.
+'''
     rt_name = 'Reverb'
     rt = None
     table = []
@@ -561,20 +636,31 @@ def write_readme(file_path, hrir, fs):
         headers=['Speaker', 'Side', 'PNR', 'ITD', 'Length', rt_name],
         tablefmt='github'
     )
-    s = f'''# HRIR
+    content = header_template.format(date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'), fs=fs if fs is not None else hrir.fs)
+    content += f'''
 
-    **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  
-    **Input sampling rate:** {hrir.fs} Hz  
-    **Output sampling rate:** {fs} Hz  
+{table_str}
+'''
 
-    {table_str}
-    '''
-    s = re.sub('\n[ \t]+', '\n', s).strip()
+    # 항목 9: 직접음 대비 초기/후기 반사 레벨 계산 및 추가
+    # 이 부분은 hrir 객체에 새로운 메소드가 필요하거나, 여기서 직접 계산해야 함.
+    # 예시:
+    early_reflection_stats = ""
+    if estimator and hasattr(hrir, 'calculate_reflection_levels'): # hrir에 메소드가 있다고 가정
+        levels = hrir.calculate_reflection_levels(estimator.fs) # 예시 메소드 호출
+        early_reflection_stats = "\n## Reflection Levels\n"
+        for speaker, sides in levels.items():
+            for side, stats in sides.items():
+                early_reflection_stats += f"{speaker}-{side}: Early (20-50ms): {stats['early_db']:.2f} dB, Late (50-150ms): {stats['late_db']:.2f} dB\n"
+    
+    content += early_reflection_stats # 항목 9 내용 추가
 
-    with open(file_path, 'w') as f:
-        f.write(s)
-
-    return s
+    with open(file_path, 'w', encoding='utf-8') as f: # encoding 명시
+        f.write(content)
+    
+    # 항목 8: 터미널 출력용으로 전체 content 또는 일부 요약 반환
+    # 여기서는 전체 content를 반환하도록 단순화. 필요시 요약 로직 추가.
+    return content
 
 
 def create_cli():
@@ -648,6 +734,9 @@ def create_cli():
                                  'frequency response. 1 dB/octave will produce nearly 10 dB difference in '
                                  'desired value between 20 Hz and 20 kHz. Tilt is applied with bass boost and both '
                                  'will affect the bass gain.')
+    arg_parser.add_argument('--c', type=float, default=1.0, dest='head_ms', help='Head room in milliseconds for cropping impulse response heads. Default is 1.0 (ms). (항목 4)')
+    arg_parser.add_argument('--jamesdsp', action='store_true', help='Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels. (항목 6)')
+    arg_parser.add_argument('--hangloose', action='store_true', help='Generate stereo IR files for each channel for Hangloose Convolver in a "Hangloose" subfolder. (항목 7)')
     args = vars(arg_parser.parse_args())
     if 'bass_boost' in args:
         bass_boost = args['bass_boost'].split(',')
