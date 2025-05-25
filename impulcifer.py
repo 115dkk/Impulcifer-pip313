@@ -615,76 +615,95 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
         key=lambda x: SPEAKER_NAMES.index(x) if x in SPEAKER_NAMES else float('inf')
     )
 
+    final_rt_name = 'Reverb' # 최종적으로 사용될 RTxx 이름, 모든 IR 검토 후 결정
+    rt_values_for_naming = []
+
     for speaker in sorted_speaker_names:
         if speaker not in hrir.irs:
             continue
         pair = hrir.irs[speaker]
         
-        # ITD 계산 (기존 방식 유지 또는 개선)
-        # peak_index()가 None을 반환할 수 있으므로 확인 필요
-        peak_left = pair['left'].peak_index()
-        peak_right = pair['right'].peak_index()
+        peak_left_idx = pair['left'].peak_index()
+        peak_right_idx = pair['right'].peak_index()
         itd = np.nan
-        if peak_left is not None and peak_right is not None:
-            itd = np.abs(peak_right - peak_left) / hrir.fs * 1e6 # us
+        if peak_left_idx is not None and peak_right_idx is not None:
+            itd = np.abs(peak_right_idx - peak_left_idx) / hrir.fs * 1e6 # us
 
         for side, ir_obj in pair.items():
-            # side에 따른 ITD 값 조정
-            # 왼쪽 스피커(FL, SL, BL 등 L로 끝나는)는 오른쪽 귀(right)에 itd 적용
-            # 오른쪽 스피커(FR, SR, BR 등 R로 끝나는)는 왼쪽 귀(left)에 itd 적용
-            # 중앙 스피커(FC, TFC 등)는 양쪽 귀 0
             current_itd = 0.0
             if not np.isnan(itd):
-                if speaker.endswith('L') and side == 'right':
-                    current_itd = itd
-                elif speaker.endswith('R') and side == 'left':
-                    current_itd = itd
-                # TFL, TFR 등도 고려 가능 (현재는 L/R 접미사만 확인)
+                if speaker.endswith('L') and side == 'right': current_itd = itd
+                elif speaker.endswith('R') and side == 'left': current_itd = itd
 
-            # PNR, Length, RTxx 등 계산 (ImpulseResponse.decay_params 사용)
             pnr_val = np.nan
             length_ms = np.nan
             rt_val_ms = np.nan
-            
+            current_ir_rt_name = None
+
             peak_idx_current_ir = ir_obj.peak_index()
-            if peak_idx_current_ir is not None: # peak_index가 유효할 때만 decay_params 호출
-                # decay_params에서 noise_floor (PNR 관련), knee_point_ind (Length 관련), rt (Reverb Time) 추출
-                # 주의: ir_obj.decay_params()의 반환값 형식과 의미를 정확히 알아야 함
-                # 현재 decay_params()는 (slope, decay_time_s, rms_db, tail_ind) 반환
-                # 여기서 rms_db가 noise_floor에 해당하고, decay_time_s가 reverb time일 수 있음
-                # length는 peak부터 knee_point까지로 정의되었었음. tail_ind와 peak_idx_current_ir 사용.
+            if peak_idx_current_ir is not None:
+                # PNR 계산
+                peak_val_linear = np.abs(ir_obj.data[peak_idx_current_ir])
+                # 데이터가 0~1로 정규화되었다고 가정. 그렇지 않다면 최대값으로 나눠야 함.
+                # peak_val_db = 20 * np.log10(peak_val_linear / np.max(np.abs(ir_obj.data)) + 1e-9) # 좀 더 안전한 방식
+                peak_val_db = 20 * np.log10(peak_val_linear + 1e-9) # 피크값의 dBFS (최대값이 1.0이라고 가정)
+                
                 decay_params_tuple = ir_obj.decay_params()
                 if decay_params_tuple:
-                    pnr_val = decay_params_tuple[2] # rms_db (noise floor)
-                    rt_s = decay_params_tuple[1]    # decay_time_s
-                    if rt_s is not None:
-                        rt_val_ms = rt_s * 1000
-                        # RTxx 이름 결정 (가장 긴 유효값 기준, 기존 로직과 유사하게)
-                        # 이 부분은 decay_times() 메소드가 없으므로 단순화 또는 decay_time_s만 사용
-                        # 여기서는 decay_params[1]을 RT30으로 간주 (이전 코드 참고)
-                        rt_name = 'RT30' 
+                    noise_floor_db = decay_params_tuple[2]
+                    if not np.isnan(noise_floor_db) and not np.isnan(peak_val_db):
+                        pnr_val = peak_val_db - noise_floor_db
                     
-                    # Length (peak to tail_ind or knee_point)
-                    # tail_ind가 knee_point_ind와 유사한 역할을 한다고 가정
-                    tail_idx_from_params = decay_params_tuple[3]
-                    if tail_idx_from_params is not None and peak_idx_current_ir is not None:
-                         length_ms = (tail_idx_from_params - peak_idx_current_ir) / ir_obj.fs * 1000
+                    # Length 계산
+                    tail_ind_calc = decay_params_tuple[1] # decay_params의 두 번째 값이 tail index (peak_idx + knee_idx)
+                    if tail_ind_calc is not None and tail_ind_calc > peak_idx_current_ir:
+                        length_ms = (tail_ind_calc - peak_idx_current_ir) / ir_obj.fs * 1000
 
+                # RTxx 계산 (decay_times 사용)
+                # decay_times() 호출 시 peak_ind 등을 전달해야 할 수 있음 (API 확인)
+                # 현재 API는 decay_params() 내부 값들을 사용하므로, decay_params() 호출 후 사용 가능
+                edt, rt20, rt30, rt60 = ir_obj.decay_times(peak_ind=decay_params_tuple[0] if decay_params_tuple else None,
+                                                            knee_point_ind=decay_params_tuple[1] if decay_params_tuple else None,
+                                                            noise_floor=decay_params_tuple[2] if decay_params_tuple else None,
+                                                            window_size=decay_params_tuple[3] if decay_params_tuple else None)
+                
+                # 가장 긴 유효한 RTxx 값 선택
+                if rt60 is not None and not np.isnan(rt60):
+                    rt_val_ms = rt60 * 1000
+                    current_ir_rt_name = 'RT60'
+                elif rt30 is not None and not np.isnan(rt30):
+                    rt_val_ms = rt30 * 1000
+                    current_ir_rt_name = 'RT30'
+                elif rt20 is not None and not np.isnan(rt20):
+                    rt_val_ms = rt20 * 1000
+                    current_ir_rt_name = 'RT20'
+                elif edt is not None and not np.isnan(edt):
+                    rt_val_ms = edt * 1000
+                    current_ir_rt_name = 'EDT'
+                
+                if current_ir_rt_name:
+                    rt_values_for_naming.append(current_ir_rt_name)
 
             table_data.append([
                 speaker,
                 side,
                 f"{pnr_val:.1f} dB" if not np.isnan(pnr_val) else "N/A",
                 f"{current_itd:.1f} us" if not np.isnan(current_itd) else "N/A",
-                f"{length_ms:.1f} ms" if not np.isnan(length_ms) else "N/A",
+                f"{length_ms:.1f} ms" if length_ms is not None and not np.isnan(length_ms) and length_ms >= 0 else "N/A", # 음수 길이 방지
                 f"{rt_val_ms:.1f} ms" if rt_val_ms is not None and not np.isnan(rt_val_ms) else "N/A"
             ])
 
+    # 모든 IR을 살펴본 후 최종 RTxx 이름 결정 (가장 많이 나온 유효한 이름 또는 우선순위)
+    if rt_values_for_naming:
+        # 예: 가장 빈번하게 나타난 RTxx 이름 사용
+        from collections import Counter
+        final_rt_name = Counter(rt_values_for_naming).most_common(1)[0][0]
+    else:
+        final_rt_name = 'RTxx' # 기본값
+
     if table_data:
-        # rt_name이 반복문 안에서 마지막 값으로 고정될 수 있으므로, 모든 IR을 확인 후 최종 rt_name 결정 필요.
-        # 여기서는 'RT30'으로 고정된 것으로 간주하고 진행 (개선 여지 있음)
-        headers = ['Speaker', 'Side', 'PNR', 'ITD', 'Length', rt_name]
-        content += tabulate(table_data, headers=headers, tablefmt='pipe') # 'pipe' 포맷 사용
+        headers = ['Speaker', 'Side', 'PNR', 'ITD', 'Length', final_rt_name]
+        content += tabulate(table_data, headers=headers, tablefmt='pipe')
         content += "\\n\\n"
 
     # 항목 9: 반사음 레벨 추가
