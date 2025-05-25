@@ -106,19 +106,17 @@ def main_gui():
 		var.set(path)
 
 	#pack widget into canvas
-	def pack(widget, samerow=False):
+	def pack(widget, current_pos, current_maxwidth, current_maxheight, samerow=False):
 		if not samerow:
-			pos[1] += widget.winfo_reqheight() + 5
-			pos[0] = 10
-		widget.place(x=pos[0], y=pos[1], anchor=W)
-		widgetpos = (pos[0], pos[1])
-		pos[0] += widget.winfo_reqwidth()
-		global maxwidth
-		maxwidth = max(maxwidth, pos[0])
-		global maxheight
-		maxheight = pos[1] + 20
+			current_pos[1] += widget.winfo_reqheight() + 5
+			current_pos[0] = 10
+		widget.place(x=current_pos[0], y=current_pos[1], anchor=W)
+		widgetpos = (current_pos[0], current_pos[1])
+		current_pos[0] += widget.winfo_reqwidth()
+		current_maxwidth = max(current_maxwidth, current_pos[0])
+		current_maxheight = current_pos[1] + 20
 		root.update()
-		return widgetpos
+		return widgetpos, current_pos, current_maxwidth, current_maxheight
 
 	#RECORDER WINDOW
 	root = Tk()
@@ -178,71 +176,69 @@ def main_gui():
 	#playback device
 	output_device = StringVar()
 	output_device.trace('w', lambda *args: refresh1())
-	pack(Label(canvas1, text='Playback device'))
+	widgetpos, pos, maxwidth, maxheight = pack(Label(canvas1, text='Playback device'), pos, maxwidth, maxheight)
 	output_device_optionmenu = OptionMenu(canvas1, variable=output_device, value=None, command=refresh1)
-	pack(output_device_optionmenu, samerow=True)
+	widgetpos, pos, maxwidth, maxheight = pack(output_device_optionmenu, pos, maxwidth, maxheight, samerow=True)
 
 	#record device
 	input_device = StringVar()
 	input_device.trace('w', lambda *args: refresh1())
-	pack(Label(canvas1, text='Recording device'))
+	widgetpos, pos, maxwidth, maxheight = pack(Label(canvas1, text='Recording device'), pos, maxwidth, maxheight)
 	input_device_optionmenu = OptionMenu(canvas1, variable=input_device, value=None, command=refresh1)
-	pack(input_device_optionmenu, samerow=True)
+	widgetpos, pos, maxwidth, maxheight = pack(input_device_optionmenu, pos, maxwidth, maxheight, samerow=True)
 
 	#host API
-	pack(Label(canvas1, text='Host API'))
+	widgetpos, pos, maxwidth, maxheight = pack(Label(canvas1, text='Host API'), pos, maxwidth, maxheight)
 	host_api = StringVar()
 	host_api.trace('w', lambda *args: refresh1())
 	host_api_optionmenu = OptionMenu(canvas1, host_api, value=None, command=refresh1)
-	pack(host_api_optionmenu, samerow=True)
+	widgetpos, pos, maxwidth, maxheight = pack(host_api_optionmenu, pos, maxwidth, maxheight, samerow=True)
 
 	#sound file to play
-	pack(Label(canvas1, text='File to play'))
+	widgetpos, pos, maxwidth, maxheight = pack(Label(canvas1, text='File to play'), pos, maxwidth, maxheight)
 	play = StringVar(value=os.path.join('data', 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
 	play_entry = Entry(canvas1, textvariable=play, width=70)
-	pack(play_entry)
-	pack(Button(canvas1, text='...', command=lambda: openfile(play, (('Audio files', '*.wav'), ('All files', '*.*')))), samerow=True)
+	widgetpos, pos, maxwidth, maxheight = pack(play_entry, pos, maxwidth, maxheight)
+	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='...', command=lambda: openfile(play, (('Audio files', '*.wav'), ('All files', '*.*')))), pos, maxwidth, maxheight, samerow=True)
 
 	#output file
-	pack(Label(canvas1, text='Record to file'))
+	widgetpos, pos, maxwidth, maxheight = pack(Label(canvas1, text='Record to file'), pos, maxwidth, maxheight)
 	record = StringVar(value=os.path.join('data', 'my_hrir', 'FL,FR.wav'))
 	record_entry = Entry(canvas1, textvariable=record, width=70)
-	pack(record_entry)
-	pack(Button(canvas1, text='...', command=lambda: savefile(record)), samerow=True)
+	widgetpos, pos, maxwidth, maxheight = pack(record_entry, pos, maxwidth, maxheight)
+	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='...', command=lambda: savefile(record)), pos, maxwidth, maxheight, samerow=True)
 
 	#force number of channels
 	channels_check = BooleanVar()
 	channels_checkbutton = Checkbutton(canvas1, text="Force input channels", variable=channels_check, command=refresh1)
-	pack(channels_checkbutton)
+	widgetpos, pos, maxwidth, maxheight = pack(channels_checkbutton, pos, maxwidth, maxheight)
 	ToolTip(channels_checkbutton, 'For room correction: some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that reason record a stereo file. recorder can force the capture to be one channel')
 	channels = IntVar(value=1)
 	channels_entry = Entry(canvas1, textvariable=channels, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	pack(channels_entry, samerow=True)
+	widgetpos, pos, maxwidth, maxheight = pack(channels_entry, pos, maxwidth, maxheight, samerow=True)
 
 	#append
 	append = BooleanVar()
 	append_check = Checkbutton(canvas1, text="Append", variable=append)
 	ToolTip(append_check, 'Add track(s) to existing file. Silence will be added to end of each track to make all equal in length.')
-	pack(append_check)
+	widgetpos, pos, maxwidth, maxheight = pack(append_check, pos, maxwidth, maxheight)
 
 	#record button
 	def recordaction():
 		recorder.play_and_record(play=play_entry.get(), record=record_entry.get(), input_device=input_device.get(), output_device=output_device.get(), host_api=host_api.get(), channels=(channels.get() if channels_check.get() else 2), append=append.get())
 		showinfo('', 'Recorded to ' + record_entry.get())
-	pack(Button(canvas1, text='RECORD', command=recordaction))
+	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='RECORD', command=recordaction), pos, maxwidth, maxheight)
 
 	refresh1(init=True)
 	root.geometry(str(maxwidth) + 'x' + str(maxheight) + '+0+0')
 	canvas1.config(width=maxwidth, height=maxheight)
 	canvas1.pack()
+	canvas1_final_width = maxwidth
 
 	#IMPULCIFER WINDOW
-	maxwidth2 = maxwidth
-	maxheight2 = maxheight
-	maxwidth = 0
-	maxheight = 0
-	pos.clear()
-	pos += [0,0]
+	pos2 = [0, 0]
+	imp_maxwidth = 0
+	imp_maxheight = 0
 	window2 = Toplevel(root)
 	window2.title('Impulcifer')
 	canvas2 = Canvas(window2)
@@ -255,30 +251,24 @@ def main_gui():
 				if len(files) > 100: #don't want to scan a megafolder
 					return
 				s = ';'.join(files)
-				if re.search(r"\\broom(-[A-Z]{2}(,[A-Z]{2})*-(left|right))?\\.wav\\b", s, re.I):
+				if re.search(r"\broom(-[A-Z]{2}(,[A-Z]{2})*-(left|right))?\.wav\b", s, re.I):
 					do_room_correction_msg.set('found room wav')
 					do_room_correction_msg_label.config(foreground='green')
-					# do_room_correction.set(True)
 				else:
 					do_room_correction_msg.set('room wav not found!')
 					do_room_correction_msg_label.config(foreground='red')
-					# do_room_correction.set(False)
-				if re.search(r'\\bheadphones\\.wav\\b', s):
+				if re.search(r'\bheadphones\.wav\b', s, re.I):
 					do_headphone_compensation_msg.set('found headphones wav')
 					do_headphone_compensation_msg_label.config(foreground='green')
-					# do_headphone_compensation.set(True)
 				else:
 					do_headphone_compensation_msg.set('headphones wav not found!')
 					do_headphone_compensation_msg_label.config(foreground='red')
-					# do_headphone_compensation.set(False)
-				if re.search(r"\\beq(-left|-right)?\\.csv\\b", s, re.I):
+				if re.search(r"\beq(-left|-right)?\.csv\b", s, re.I):
 					do_equalization_msg.set('found eq csv')
 					do_equalization_msg_label.config(foreground='green')
-					# do_equalization.set(True)
 				else:
 					do_equalization_msg.set('eq csv not found!')
 					do_equalization_msg_label.config(foreground='red')
-					# do_equalization.set(False)
 
 		if do_room_correction.get():
 			do_room_correction_msg_label.place(x=label_pos[do_room_correction_msg_label][0], y=label_pos[do_room_correction_msg_label][1], anchor=W)
@@ -300,8 +290,6 @@ def main_gui():
 		fr_combination_method_optionmenu.config(state=NORMAL if do_room_correction.get() else DISABLED)
 		fs_optionmenu.config(state=NORMAL if fs_check.get() else DISABLED)
 		decay_entry.config(state=DISABLED if decay_per_channel.get() else NORMAL)
-		# if decay_per_channel.get():
-		# 	decay.set('')
 
 		if show_adv.get():
 			for widget in adv_options_pos:
@@ -327,195 +315,231 @@ def main_gui():
 				widget.place_forget()
 
 	#your recordings
-	pack(Label(canvas2, text='Your recordings'))
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Label(canvas2, text='Your recordings'), pos2, imp_maxwidth, imp_maxheight)
 	dir_path = StringVar(value=os.path.join('data', 'my_hrir'))
 	dir_path.trace('w', lambda *args: refresh2(changedpath=True))
 	dir_path_entry = Entry(canvas2, textvariable=dir_path, width=80)
-	pack(dir_path_entry)
-	pack(Button(canvas2, text='...', command=lambda: opendir(dir_path)), samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(dir_path_entry, pos2, imp_maxwidth, imp_maxheight)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: opendir(dir_path)), pos2, imp_maxwidth, imp_maxheight, samerow=True)
 
 	#test signal used
 	test_signal_label = Label(canvas2, text='Test signal used')
 	ToolTip(test_signal_label, 'Signal used in the measurement.')
-	pack(test_signal_label)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(test_signal_label, pos2, imp_maxwidth, imp_maxheight)
 	test_signal = StringVar(value=os.path.join('data', 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
 	test_signal_entry = Entry(canvas2, textvariable=test_signal, width=80)
-	pack(test_signal_entry)
-	pack(Button(canvas2, text='...', command=lambda: openfile(test_signal, (('Audio files', '*.wav *.pkl'), ('All files', '*.*')))), samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(test_signal_entry, pos2, imp_maxwidth, imp_maxheight)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: openfile(test_signal, (('Audio files', '*.wav *.pkl'), ('All files', '*.*')))), pos2, imp_maxwidth, imp_maxheight, samerow=True)
 
 	#room correction
 	label_pos = {}
 	do_room_correction = BooleanVar()
 	do_room_correction_checkbutton = Checkbutton(canvas2, text="Room correction ", variable=do_room_correction, command=lambda: refresh2(changedpath=True if do_room_correction.get() else False))
 	ToolTip(do_room_correction_checkbutton, "Do room correction from room measurements in format room-<SPEAKERS>-<left|right>.wav located in your folder; e.g. room-FL,FR-left.wav. Generic measurements are named room.wav")
-	pack(do_room_correction_checkbutton)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(do_room_correction_checkbutton, pos2, imp_maxwidth, imp_maxheight)
 	do_room_correction_msg = StringVar()
 	do_room_correction_msg_label = Label(canvas2, textvariable=do_room_correction_msg)
-	label_pos[do_room_correction_msg_label] = pack(do_room_correction_msg_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(do_room_correction_msg_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	label_pos[do_room_correction_msg_label] = widgetpos_temp
 	specific_limit = IntVar(value=20000)
 	specific_limit_label = Label(canvas2, text='Specific Limit (Hz)')
 	ToolTip(specific_limit_label, "Upper limit for room equalization with speaker-ear specific room measurements. Equalization will drop down to 0 dB at this frequency in the leading octave.")
-	pack(specific_limit_label)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(specific_limit_label, pos2, imp_maxwidth, imp_maxheight)
 	specific_limit_entry = Entry(canvas2, textvariable=specific_limit, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	pack(specific_limit_entry, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(specific_limit_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	generic_limit = IntVar(value=1000)
 	genericlimitlabel = Label(canvas2, text='Generic Limit (Hz)')
 	ToolTip(genericlimitlabel, "Upper limit for room equalization with generic room measurements. Equalization will drop down to 0 dB at this frequency in the leading octave.")
-	pack(genericlimitlabel, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(genericlimitlabel, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	generic_limit_entry = Entry(canvas2, textvariable=generic_limit, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	pack(generic_limit_entry, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(generic_limit_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	fr_combination_method_label = Label(canvas2, text='FR combination method')
-	pack(fr_combination_method_label, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(fr_combination_method_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	fr_combination_methods = ['average', 'conservative']
 	fr_combination_method = StringVar(value=fr_combination_methods[0])
 	fr_combination_method_optionmenu = OptionMenu(canvas2, fr_combination_method, *fr_combination_methods)
 	ToolTip(fr_combination_method_label, 'Method for combining frequency responses of generic room measurements if there are more than one tracks in the file. "average" will simply average the frequency responses. "conservative" will take the minimum absolute value for each frequency but only if the values in all the measurements are positive or negative at the same time.')
-	pack(fr_combination_method_optionmenu, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(fr_combination_method_optionmenu, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	room_mic_calibration_label = Label(canvas2, text='Mic calibration')
-	pack(room_mic_calibration_label)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(room_mic_calibration_label, pos2, imp_maxwidth, imp_maxheight)
 	room_mic_calibration = StringVar()
 	room_mic_calibration_entry = Entry(canvas2, textvariable=room_mic_calibration, width=65)
 	ToolTip(room_mic_calibration_label, 'Calibration data is subtracted from the room frequency responses. Uses room-mic-calibration.txt (or csv) by default if it exists.')
-	pack(room_mic_calibration_entry, samerow=True)
-	pack(Button(canvas2, text='...', command=lambda: openfile(room_mic_calibration, (('Text files', '*.csv *.txt'), ('All files', '*.*')))), samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(room_mic_calibration_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: openfile(room_mic_calibration, (('Text files', '*.csv *.txt'), ('All files', '*.*')))), pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	room_target_label = Label(canvas2, text='Target Curve')
-	pack(room_target_label)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(room_target_label, pos2, imp_maxwidth, imp_maxheight)
 	room_target = StringVar()
 	room_target_entry = Entry(canvas2, textvariable=room_target, width=65)
 	ToolTip(room_target_label, 'Head related impulse responses will be equalized with the difference between room response measurements and room response target. Uses room-target.txt (or csv) by default if it exists.')
-	pack(room_target_entry, samerow=True)
-	pack(Button(canvas2, text='...', command=lambda: openfile(room_target, (('Text files', '*.csv *.txt'), ('All files', '*.*')))), samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(room_target_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: openfile(room_target, (('Text files', '*.csv *.txt'), ('All files', '*.*')))), pos2, imp_maxwidth, imp_maxheight, samerow=True)
 
 	#headphone compensation
 	do_headphone_compensation = BooleanVar()
 	do_headphone_compensation_checkbutton = Checkbutton(canvas2, text="Headphone compensation ", variable=do_headphone_compensation, command=lambda: refresh2(changedpath=True if do_headphone_compensation.get() else False))
 	ToolTip(do_headphone_compensation_checkbutton, 'Equalize HRIR tracks with headphone compensation measurement headphones.wav')
-	pack(do_headphone_compensation_checkbutton)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(do_headphone_compensation_checkbutton, pos2, imp_maxwidth, imp_maxheight)
 	do_headphone_compensation_msg = StringVar()
 	do_headphone_compensation_msg_label = Label(canvas2, textvariable=do_headphone_compensation_msg)
-	label_pos[do_headphone_compensation_msg_label] = pack(do_headphone_compensation_msg_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(do_headphone_compensation_msg_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	label_pos[do_headphone_compensation_msg_label] = widgetpos_temp
 
 	#headphone EQ
 	do_equalization = BooleanVar()
 	do_equalization_checkbutton = Checkbutton(canvas2, text="Custom EQ", variable=do_equalization, command=lambda: refresh2(changedpath=True if do_equalization.get() else False))
 	ToolTip(do_equalization_checkbutton, 'Read equalization FIR filter or CSV settings from file called eq.csv in your folder. The eq file must be an AutoEQ produced result CSV file. Separate equalizations are supported with files eq-left.csv and eq-right.csv.')
-	pack(do_equalization_checkbutton)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(do_equalization_checkbutton, pos2, imp_maxwidth, imp_maxheight)
 	do_equalization_msg = StringVar()
 	do_equalization_msg_label = Label(canvas2, textvariable=do_equalization_msg)
-	label_pos[do_equalization_msg_label] = pack(do_equalization_msg_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(do_equalization_msg_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	label_pos[do_equalization_msg_label] = widgetpos_temp
 
 	#plot
 	plot = BooleanVar()
 	plot_checkbutton = Checkbutton(canvas2, text="Plot results", variable=plot, command=refresh2)
 	ToolTip(plot_checkbutton, 'Create graphs in your recordings folder (will increase processing time)')
-	pack(plot_checkbutton)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(plot_checkbutton, pos2, imp_maxwidth, imp_maxheight)
 
 	show_adv = BooleanVar()
-	pack(Checkbutton(canvas2, text='Advanced options', variable=show_adv, command=refresh2))
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Checkbutton(canvas2, text='Advanced options', variable=show_adv, command=refresh2), pos2, imp_maxwidth, imp_maxheight)
 	adv_options_pos = {} #save advanced options widgets' positions to show/hide
 
 	#resample
 	fs_check = BooleanVar()
 	fs_checkbutton = Checkbutton(canvas2, text="Resample to (Hz)", variable=fs_check, command=refresh2)
-	adv_options_pos[fs_checkbutton] = pack(fs_checkbutton)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(fs_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[fs_checkbutton] = widgetpos_temp
 	sample_rates = [44100, 48000, 88200, 96000, 176400, 192000, 352000, 384000]
 	fs = IntVar(value=48000)
 	fs_optionmenu = OptionMenu(canvas2, fs, *sample_rates)
-	adv_options_pos[fs_optionmenu] = pack(fs_optionmenu, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(fs_optionmenu, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[fs_optionmenu] = widgetpos_temp
 
 	#target level
 	target_level_label = Label(canvas2, text='Target level (dB)')
-	adv_options_pos[target_level_label] = pack(target_level_label)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(target_level_label, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[target_level_label] = widgetpos_temp
 	target_level = StringVar()
 	target_level_entry = Entry(canvas2, textvariable=target_level, width=7, validate='key', vcmd=(root.register(validate_double), '%P'))
 	ToolTip(target_level_label, 'Normalize the average output BRIR level to the given numeric value. This makes it possible to compare HRIRs with somewhat similar loudness levels. Typically the desired level is several dB negative such as -12.5')
-	adv_options_pos[target_level_entry] = pack(target_level_entry, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(target_level_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[target_level_entry] = widgetpos_temp
 
 	#bass boost
 	bass_boost_gain_label = Label(canvas2, text='Bass boost (dB)')
 	ToolTip(bass_boost_gain_label, 'Bass boost shelf')
-	adv_options_pos[bass_boost_gain_label] = pack(bass_boost_gain_label)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(bass_boost_gain_label, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[bass_boost_gain_label] = widgetpos_temp
 	bass_boost_gain = DoubleVar()
 	bass_boost_gain_entry = Entry(canvas2, textvariable=bass_boost_gain, width=7, validate='key', vcmd=(root.register(validate_double), '%P'))
 	ToolTip(bass_boost_gain_entry, 'Gain')
-	adv_options_pos[bass_boost_gain_entry] = pack(bass_boost_gain_entry, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(bass_boost_gain_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[bass_boost_gain_entry] = widgetpos_temp
 
 	bass_boost_fc_label = Label(canvas2, text='Fc')
-	adv_options_pos[bass_boost_fc_label] = pack(bass_boost_fc_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(bass_boost_fc_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[bass_boost_fc_label] = widgetpos_temp
 	bass_boost_fc = IntVar(value=105)
 	bass_boost_fc_entry = Entry(canvas2, textvariable=bass_boost_fc, width=7, validate='key', vcmd=(root.register(validate_int), '%P'))
-	adv_options_pos[bass_boost_fc_entry] = pack(bass_boost_fc_entry, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(bass_boost_fc_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[bass_boost_fc_entry] = widgetpos_temp
 	ToolTip(bass_boost_fc_entry, 'Center Freq')
 
 	bass_boost_q_label = Label(canvas2, text='Q')
-	adv_options_pos[bass_boost_q_label] = pack(bass_boost_q_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(bass_boost_q_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[bass_boost_q_label] = widgetpos_temp
 	bass_boost_q = DoubleVar(value=0.76)
 	bass_boost_q_entry = Entry(canvas2, textvariable=bass_boost_q, width=7, validate='key', vcmd=(root.register(validate_double), '%P'))
-	adv_options_pos[bass_boost_q_entry] = pack(bass_boost_q_entry, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(bass_boost_q_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[bass_boost_q_entry] = widgetpos_temp
 	ToolTip(bass_boost_q_entry, 'Quality')
 
 	#tilt
 	tilt_label = Label(canvas2, text='Tilt (dB)')
-	adv_options_pos[tilt_label] = pack(tilt_label)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(tilt_label, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[tilt_label] = widgetpos_temp
 	tilt = DoubleVar()
 	tilt_entry = Entry(canvas2, textvariable=tilt, width=7, validate='key', vcmd=(root.register(validate_double), '%P'))
 	ToolTip(tilt_label, 'Target tilt in dB/octave. Positive value (upwards slope) will result in brighter frequency response and negative value (downwards slope) will result in darker frequency response.')
-	adv_options_pos[tilt_entry] = pack(tilt_entry, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(tilt_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[tilt_entry] = widgetpos_temp
 
 	#Channel Balance
 	channel_balance_label = Label(canvas2, text='Channel Balance')
-	adv_options_pos[channel_balance_label] = pack(channel_balance_label)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(channel_balance_label, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[channel_balance_label] = widgetpos_temp
 	channel_balances = ['none', 'trend', 'mids', 'avg', 'min', 'left', 'right', 'number']
 	channel_balance = StringVar(value=channel_balances[0])
 	channel_balance.trace('w', lambda *args: refresh2())
 	channel_balance_optionmenu = OptionMenu(canvas2, channel_balance, *channel_balances)
-	adv_options_pos[channel_balance_optionmenu] = pack(channel_balance_optionmenu, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(channel_balance_optionmenu, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[channel_balance_optionmenu] = widgetpos_temp
 	ToolTip(channel_balance_label, 'Channel balance correction by equalizing left and right ear results to the same level or frequency response. "trend" equalizes right side by the difference trend of right and left side. "left" equalizes right side to left side fr, "right" equalizes left side to right side fr, "avg" equalizes both to the average fr, "min" equalizes both to the minimum of left and right side frs. Number values will boost or attenuate right side relative to left side by the number of dBs. "mids" is the same as the numerical values but guesses the value automatically from mid frequency levels.')
 	channel_balance_db = IntVar(value=0)
 	channel_balance_db_entry = Entry(canvas2, textvariable=channel_balance_db, width=5, validate='key', vcmd=(root.register(validate_double), '%P'))
-	adv_options_pos[channel_balance_db_entry] = pack(channel_balance_db_entry, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(channel_balance_db_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[channel_balance_db_entry] = widgetpos_temp
 	channel_balance_db_label = Label(canvas2, text='dB')
-	adv_options_pos[channel_balance_db_label] = pack(channel_balance_db_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(channel_balance_db_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[channel_balance_db_label] = widgetpos_temp
 
 	#decay
 	decay_label = Label(canvas2, text='Decay (ms)')
-	adv_options_pos[decay_label] = pack(decay_label)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_label, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[decay_label] = widgetpos_temp
 	decay = StringVar()
 	decay_entry = Entry(canvas2, textvariable=decay, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
 	ToolTip(decay_label, 'Target decay time to reach -60 dB. When natural decay time is longer than the target decay time, a downward slope will be applied to decay tail. Decay cannot be increased with this. Can help reduce ringing in the room without having to do any physical room treatments.')
-	adv_options_pos[decay_entry] = pack(decay_entry, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_entry] = widgetpos_temp
 	decay_per_channel = BooleanVar()
 	decay_per_channel_checkbutton = Checkbutton(canvas2, text="per channel", variable=decay_per_channel, command=refresh2)
-	adv_options_pos[decay_per_channel_checkbutton] = pack(decay_per_channel_checkbutton, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_per_channel_checkbutton, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_per_channel_checkbutton] = widgetpos_temp
 
 	decay_fl_label = Label(canvas2, text='FL')
-	adv_options_pos[decay_fl_label] = pack(decay_fl_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_fl_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_fl_label] = widgetpos_temp
 	decay_fl = Entry(canvas2, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	adv_options_pos[decay_fl] = pack(decay_fl, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_fl, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_fl] = widgetpos_temp
 	decay_fc_label = Label(canvas2, text='FC')
-	adv_options_pos[decay_fc_label] = pack(decay_fc_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_fc_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_fc_label] = widgetpos_temp
 	decay_fc = Entry(canvas2, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	adv_options_pos[decay_fc] = pack(decay_fc, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_fc, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_fc] = widgetpos_temp
 	decay_fr_label = Label(canvas2, text='FR')
-	adv_options_pos[decay_fr_label] = pack(decay_fr_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_fr_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_fr_label] = widgetpos_temp
 	decay_fr = Entry(canvas2, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	adv_options_pos[decay_fr] = pack(decay_fr, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_fr, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_fr] = widgetpos_temp
 	decay_sl_label = Label(canvas2, text='SL')
-	adv_options_pos[decay_sl_label] = pack(decay_sl_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_sl_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_sl_label] = widgetpos_temp
 	decay_sl = Entry(canvas2,  width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	adv_options_pos[decay_sl] = pack(decay_sl, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_sl, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_sl] = widgetpos_temp
 	decay_sr_label = Label(canvas2, text='SR')
-	adv_options_pos[decay_sr_label] = pack(decay_sr_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_sr_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_sr_label] = widgetpos_temp
 	decay_sr = Entry(canvas2, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	adv_options_pos[decay_sr] = pack(decay_sr, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_sr, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_sr] = widgetpos_temp
 	decay_bl_label = Label(canvas2, text='BL')
-	adv_options_pos[decay_bl_label] = pack(decay_bl_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_bl_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_bl_label] = widgetpos_temp
 	decay_bl = Entry(canvas2, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	adv_options_pos[decay_bl] = pack(decay_bl, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_bl, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_bl] = widgetpos_temp
 	decay_br_label = Label(canvas2, text='BR')
-	adv_options_pos[decay_br_label] = pack(decay_br_label, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_br_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_br_label] = widgetpos_temp
 	decay_br = Entry(canvas2, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
-	adv_options_pos[decay_br] = pack(decay_br, samerow=True)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_br, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[decay_br] = widgetpos_temp
 
 	decay_labels = []
 	decay_entries = []
@@ -558,11 +582,11 @@ def main_gui():
 		print(args) #debug args
 		impulcifer.main(**args)
 		showinfo('Done!', 'Generated files, check recordings folder.')
-	pack(Button(canvas2, text='GENERATE', command=impulcify))
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='GENERATE', command=impulcify), pos2, imp_maxwidth, imp_maxheight)
 
-	canvas2.config(width=maxwidth, height=maxheight)
+	canvas2.config(width=imp_maxwidth, height=imp_maxheight)
 	canvas2.pack()
-	window2.geometry(str(maxwidth) + 'x' + str(maxheight) + '+' + str(maxwidth2) + '+0')
+	window2.geometry(str(imp_maxwidth) + 'x' + str(imp_maxheight) + '+' + str(canvas1_final_width) + '+0')
 	window2.resizable(False, False)
 	refresh2(changedpath=True)
 	root.mainloop()
