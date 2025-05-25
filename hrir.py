@@ -617,3 +617,57 @@ class HRIR:
             else:
                 # A is earlier than B or same, pad A from beginning
                 ir_a.data = np.concatenate([np.zeros(np.abs(delay)), ir_a.data])
+
+    def calculate_reflection_levels(self, direct_sound_duration_ms=2, early_ref_start_ms=20, early_ref_end_ms=50, late_ref_start_ms=50, late_ref_end_ms=150, epsilon=1e-12):
+        """Calculates early and late reflection levels relative to direct sound for all IRs.
+
+        Args:
+            direct_sound_duration_ms (float): Duration of direct sound after peak in ms.
+            early_ref_start_ms (float): Start time of early reflections after peak in ms.
+            early_ref_end_ms (float): End time of early reflections after peak in ms.
+            late_ref_start_ms (float): Start time of late reflections after peak in ms.
+            late_ref_end_ms (float): End time of late reflections after peak in ms.
+            epsilon (float): Small value to avoid division by zero in log.
+
+        Returns:
+            dict: A dictionary containing reflection levels for each speaker and side.
+                  Example: {\'FL\': {\'left\': {\'early_db\': -10.5, \'late_db\': -15.2}}}
+        """
+        reflection_data = {}
+        for speaker, pair in self.irs.items():
+            reflection_data[speaker] = {}
+            for side, ir in pair.items():
+                peak_idx = ir.peak_index()
+                if peak_idx is None:
+                    reflection_data[speaker][side] = {'early_db': np.nan, 'late_db': np.nan}
+                    continue
+
+                # Convert ms to samples
+                direct_end_sample = peak_idx + int(direct_sound_duration_ms * self.fs / 1000)
+                early_start_sample = peak_idx + int(early_ref_start_ms * self.fs / 1000)
+                early_end_sample = peak_idx + int(early_ref_end_ms * self.fs / 1000)
+                late_start_sample = peak_idx + int(late_ref_start_ms * self.fs / 1000)
+                late_end_sample = peak_idx + int(late_ref_end_ms * self.fs / 1000)
+
+                # Ensure slices are within bounds
+                data_len = len(ir.data)
+                direct_sound_segment = ir.data[peak_idx : min(direct_end_sample, data_len)]
+                early_ref_segment = ir.data[min(early_start_sample, data_len) : min(early_end_sample, data_len)]
+                late_ref_segment = ir.data[min(late_start_sample, data_len) : min(late_end_sample, data_len)]
+
+                # Calculate RMS, handle potentially empty segments
+                rms_direct = np.sqrt(np.mean(direct_sound_segment**2)) if len(direct_sound_segment) > 0 else epsilon
+                rms_early = np.sqrt(np.mean(early_ref_segment**2)) if len(early_ref_segment) > 0 else 0
+                rms_late = np.sqrt(np.mean(late_ref_segment**2)) if len(late_ref_segment) > 0 else 0
+                
+                # Add epsilon to rms_direct before division to prevent log(0) or division by zero
+                rms_direct = rms_direct if rms_direct > epsilon else epsilon
+
+                db_early = 20 * np.log10(rms_early / rms_direct + epsilon) if rms_direct > 0 else -np.inf
+                db_late = 20 * np.log10(rms_late / rms_direct + epsilon) if rms_direct > 0 else -np.inf
+                
+                reflection_data[speaker][side] = {
+                    'early_db': db_early,
+                    'late_db': db_late
+                }
+        return reflection_data

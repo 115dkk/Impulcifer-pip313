@@ -636,24 +636,28 @@ Processed on {date}. Output sampling rate is {fs} Hz.
         headers=['Speaker', 'Side', 'PNR', 'ITD', 'Length', rt_name],
         tablefmt='github'
     )
+    reflection_levels_str = ""
+    if estimator and hasattr(hrir, 'calculate_reflection_levels'): 
+        levels = hrir.calculate_reflection_levels() # 메소드 호출
+        if levels:
+            reflection_levels_str = "\n\n## Reflection Levels (Direct vs. Early/Late)"
+            # Sort by SPEAKER_NAMES order for consistent output
+            sorted_speakers = sorted(levels.keys(), key=lambda x: SPEAKER_NAMES.index(x) if x in SPEAKER_NAMES else float('inf'))
+            for speaker in sorted_speakers:
+                if speaker in levels:
+                    sides = levels[speaker]
+                    reflection_levels_str += f"\n### {speaker}"
+                    if 'left' in sides:
+                        reflection_levels_str += f"\n- Left Ear: Early (20-50ms): {sides['left']['early_db']:.2f} dB, Late (50-150ms): {sides['left']['late_db']:.2f} dB"
+                    if 'right' in sides:
+                        reflection_levels_str += f"\n- Right Ear: Early (20-50ms): {sides['right']['early_db']:.2f} dB, Late (50-150ms): {sides['right']['late_db']:.2f} dB"
+    
     content = header_template.format(date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'), fs=fs if fs is not None else hrir.fs)
     content += f'''
 
 {table_str}
 '''
-
-    # 항목 9: 직접음 대비 초기/후기 반사 레벨 계산 및 추가
-    # 이 부분은 hrir 객체에 새로운 메소드가 필요하거나, 여기서 직접 계산해야 함.
-    # 예시:
-    early_reflection_stats = ""
-    if estimator and hasattr(hrir, 'calculate_reflection_levels'): # hrir에 메소드가 있다고 가정
-        levels = hrir.calculate_reflection_levels(estimator.fs) # 예시 메소드 호출
-        early_reflection_stats = "\n## Reflection Levels\n"
-        for speaker, sides in levels.items():
-            for side, stats in sides.items():
-                early_reflection_stats += f"{speaker}-{side}: Early (20-50ms): {stats['early_db']:.2f} dB, Late (50-150ms): {stats['late_db']:.2f} dB\n"
-    
-    content += early_reflection_stats # 항목 9 내용 추가
+    content += reflection_levels_str # 항목 9 내용 추가
 
     with open(file_path, 'w', encoding='utf-8') as f: # encoding 명시
         f.write(content)
