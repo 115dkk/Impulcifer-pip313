@@ -145,7 +145,7 @@ class HRIR:
             avg_target: Target gain of the mid frequencies average in dB
 
         Returns:
-            None
+            gain: Applied normalization gain in dB
         """
         # Stack and sum all left and right ear impulse responses separately
         left = []
@@ -182,6 +182,8 @@ class HRIR:
         for speaker, pair in self.irs.items():
             for ir in pair.values():
                 ir.data *= 10 ** (gain / 20)
+        
+        return gain # 적용된 게인 값 반환
 
     def crop_heads(self, head_ms=1):
         """Crops heads of impulse responses
