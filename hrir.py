@@ -175,6 +175,9 @@ class HRIR:
         else:
             raise ValueError('One and only one of the parameters "peak_target" and "avg_target" must be given!')
 
+        # 전체 정규화 gain만 출력 (항목 8)
+        print(f">>>>>>>>> Applied a normalization gain of {gain:.2f} dB to all channels")
+
         # Scale impulse responses
         for speaker, pair in self.irs.items():
             for ir in pair.values():
@@ -200,7 +203,7 @@ class HRIR:
             itd = np.abs(peak_left - peak_right) / self.fs
 
             # Speaker channel delay
-            head = head_ms * self.fs // 1000
+            head = int(head_ms * self.fs / 1000) # PR의 head 계산 방식 (항목 4 연관)
             delay = int(np.round(SPEAKER_DELAYS[speaker] * self.fs)) + head  # Channel delay in samples
 
             if peak_left < peak_right:
@@ -215,8 +218,8 @@ class HRIR:
                                   f'{itd * 1000:.4f} milliseconds.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
-                pair['left'].data = pair['left'].data[peak_left - delay:]
-                pair['right'].data = pair['right'].data[peak_left - delay:]
+                pair['left'].data = pair['left'].data[peak_right - delay:]
+                pair['right'].data = pair['right'].data[peak_right - delay:]
             else:
                 # Delay to right ear is smaller, this is must right side speaker
                 if speaker[1] == 'L':
@@ -229,21 +232,20 @@ class HRIR:
                                   f'{itd * 1000:.4f} milliseconds.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
-                pair['right'].data = pair['right'].data[peak_right - delay:]
-                pair['left'].data = pair['left'].data[peak_right - delay:]
+                pair['right'].data = pair['right'].data[peak_left - delay:]
+                pair['left'].data = pair['left'].data[peak_left - delay:]
 
             # Make sure impulse response starts from silence
-            window = hann(head * 2)[:head]
+            window = hann(head * 2)[:head] # scipy.signal.windows.hann 사용
             pair['left'].data[:head] *= window
             pair['right'].data[:head] *= window
 
     def crop_tails(self):
-        """Crops tails of all the impulse responses in a way that makes them all equal length but not unnecessarily long
-
-        Returns:
-            Length in samples as integer
-        """
-        # Find tails
+        """Crops out tails after every impulse response has decayed to noise floor.""" # PR의 주석 반영
+        if self.fs != self.estimator.fs:
+            raise ValueError('Refusing to crop tails because HRIR\'s sampling rate doesn\'t match impulse response '
+                             'estimator\'s sampling rate.')
+        # Find indices after which there is only noise in each track
         tail_indices = []
         lengths = []
         for speaker, pair in self.irs.items():
@@ -251,18 +253,12 @@ class HRIR:
                 _, tail_ind, _, _ = ir.decay_params()
                 tail_indices.append(tail_ind)
                 lengths.append(len(ir))
-
-        # Crop tails to equal length
-        seconds_per_octave = self.estimator.n_octaves / np.log(self.estimator.high / self.estimator.low)
-        fade_out = 2 * int(self.fs * seconds_per_octave * (1 / 24))  # Duration of 1/24 octave in the sweep
-        window = hann(fade_out)[fade_out // 2:]
-        # next_fast_len 함수 사용
-        fft_len = next_fast_len(max(tail_indices))
-        tail_ind = min(np.min(lengths), fft_len)
-        for speaker, pair in self.irs.items():
-            for ir in pair.values():
-                ir.data = ir.data[:tail_ind]
-                ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
+        # Keep only the longest tail
+        max_len = np.max(lengths)
+        for ir_list in self.irs.values():
+            for ir in ir_list.values():
+                ir.data = ir.data[:max_len]
+        return max_len
 
     def channel_balance_firs(self, left_fr, right_fr, method):
         """Creates FIR filters for correcting channel balance
@@ -558,3 +554,66 @@ class HRIR:
             for side, ir in pair.items():
                 ir.resample(fs)
         self.fs = fs
+
+    def align_ipsilateral_all(self,
+                              speaker_pairs=None,
+                              segment_ms=30):
+        """Aligns ipsilateral ear impulse responses for all speaker pairs to the earliest one.
+
+        Best results are achieved when the impulse responses are already cropped fairly well.
+        This means that there is no silence in the beginning of any of the impulse responses which is longer than
+        the true delay caused by the distance from speaker to ear.
+
+        Args:
+            speaker_pairs: List of speaker pairs to align. Each speaker pair is a list of two speakers, eg. [['FL', 'FR'], ['SL', 'SR']]. Default None aligns all available L/R pairs.
+            segment_ms: Length of the segment from impulse response peak to be used for cross-correlation in milliseconds
+        """
+        if speaker_pairs is None:
+            speaker_pairs = []
+            for i in range(len(SPEAKER_NAMES) // 2):
+                speaker_pairs.append(SPEAKER_NAMES[i*2:i*2+2])
+
+        segment_len = int(self.fs / 1000 * segment_ms)
+
+        for pair_speakers in speaker_pairs:
+            # Skip if either one of the pair is not found
+            if pair_speakers[0] not in self.irs or pair_speakers[1] not in self.irs:
+                continue
+
+            # Left side speakers, left ear
+            # Right side speakers, right ear
+            # Center channel speakers skip (FC)
+            if pair_speakers[0].endswith('L'):
+                # Left side speaker pair
+                ir_a = self.irs[pair_speakers[0]]['left']
+                ir_b = self.irs[pair_speakers[1]]['left']
+            elif pair_speakers[0].endswith('R'):
+                # Right side speaker pair
+                ir_a = self.irs[pair_speakers[0]]['right']
+                ir_b = self.irs[pair_speakers[1]]['right']
+            else:
+                # Must be FC, skip
+                continue
+
+            # Cross correlate selected segments
+            # Peak indices
+            peak_a = ir_a.peak_index()
+            peak_b = ir_b.peak_index()
+            # Segments from peaks
+            segment_a = ir_a.data[peak_a:peak_a + segment_len]
+            segment_b = ir_b.data[peak_b:peak_b + segment_len]
+            # Cross correlation
+            corr = signal.correlate(segment_a, segment_b, mode='full')
+            # Delay from peak b to peak a in samples
+            delay = np.argmax(corr) - (len(segment_b) - 1)  # delay = peak_a - peak_b
+
+            # peak_b + delay = peak_a
+            # Corrected peak_b is at the same position as peak_a
+            # If delay is positive, peak_a is further than peak_b --> shift b forward by delay amount
+            # If delay is negative, peak_a is closer than peak_b --> shift b backward by delay amount
+            if delay > 0:
+                # B is earlier than A, pad B from beginning
+                ir_b.data = np.concatenate([np.zeros(delay), ir_b.data])
+            else:
+                # A is earlier than B or same, pad A from beginning
+                ir_a.data = np.concatenate([np.zeros(np.abs(delay)), ir_a.data])
