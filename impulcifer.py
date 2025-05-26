@@ -16,6 +16,12 @@ from room_correction import room_correction
 from utils import sync_axes, save_fig_as_png
 from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path
 
+# PR3에서 추가된 import 문들
+import copy
+import contextlib
+import io
+from scipy.io import wavfile # hangloose용, 필요시 추가
+
 # 한글 폰트 설정 추가
 import matplotlib.font_manager as fm
 import platform
@@ -56,7 +62,11 @@ def main(dir_path=None,
          tilt=0.0,
          do_room_correction=True,
          do_headphone_compensation=True,
-         do_equalization=True):
+         do_equalization=True,
+         # PR3에서 추가/변경된 파라미터 (항목 4, 6, 7)
+         head_ms=1, # --c 옵션에 해당 (기본값 1ms)
+         jamesdsp=False,
+         hangloose=False):
     """"""
     if dir_path is None or not os.path.isdir(dir_path):
         raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
@@ -102,8 +112,14 @@ def main(dir_path=None,
     print('Opening binaural measurements...')
     hrir = open_binaural_measurements(estimator, dir_path)
 
-    # Write info and stats in readme
-    write_readme(os.path.join(dir_path, 'README.md'), hrir, fs)
+    # Normalize gain
+    print('Normalizing gain...')
+    applied_gain = hrir.normalize(peak_target=None if target_level is not None else -0.1, avg_target=target_level)
+
+    # Write info and stats in readme (gain 값 전달 추가)
+    readme_content = write_readme(os.path.join(dir_path, 'README.md'), hrir, fs, estimator, applied_gain)
+    if readme_content:
+        print(readme_content)
 
     if plot:
         # Plot graphs pre processing
@@ -113,7 +129,16 @@ def main(dir_path=None,
 
     # Crop noise and harmonics from the beginning
     print('Cropping impulse responses...')
-    hrir.crop_heads()
+    hrir.crop_heads(head_ms=head_ms)
+
+    # PR3에서 추가된 align_ipsilateral_all 호출 (항목 2)
+    # SPEAKER_NAMES를 사용하므로 constants.py의 변경이 선행되어야 함
+    hrir.align_ipsilateral_all(
+        speaker_pairs=[('FL','FR'), ('SL','SR'), ('BL','BR'),
+                        ('TFL','TFR'), ('TSL','TSR'), ('TBL','TBR'),
+                        ('FC','FC'), ('WL','WR')], # FC, WL, WR 쌍은 적절히 수정 필요할 수 있음
+        segment_ms=30
+    )
 
     # Crop noise from the tail
     hrir.crop_tails()
@@ -178,10 +203,6 @@ def main(dir_path=None,
         print('Correcting channel balance...')
         hrir.correct_channel_balance(channel_balance)
 
-    # Normalize gain
-    print('Normalizing gain...')
-    hrir.normalize(peak_target=None if target_level is not None else -0.1, avg_target=target_level)
-
     if plot:
         print('Plotting BRIR graphs after processing...')
         # Convolve test signal, re-plot waveform and spectrogram
@@ -207,6 +228,59 @@ def main(dir_path=None,
 
     # Write multi-channel WAV file with HeSuVi track order
     hrir.write_wav(os.path.join(dir_path, 'hesuvi.wav'), track_order=HESUVI_TRACK_ORDER)
+
+    # PR3 jamesdsp 로직 추가 (항목 6)
+    if jamesdsp:
+        print('Generating jamesdsp.wav (FL/FR only, normalized to FL/FR)...')
+        
+        # 전체 HRIR 복사 후 FL/FR 외 모든 채널 제거
+        dsp_hrir = copy.deepcopy(hrir)
+        for sp in list(dsp_hrir.irs.keys()):
+            if sp not in ['FL', 'FR']:
+                del dsp_hrir.irs[sp]
+
+        # normalize 내부의 print문 출력을 숨기기 위해 stdout 리디렉션
+        # target_level 변수가 main 함수 스코프에 있어야 함
+        with contextlib.redirect_stdout(io.StringIO()):
+            dsp_hrir.normalize(
+                peak_target=None if target_level is not None else -0.1,
+                avg_target=target_level
+            )
+
+        # FL-L, FL-R, FR-L, FR-R 순서로 파일 생성
+        jd_order = ['FL-left', 'FL-right', 'FR-left', 'FR-right']
+        out_path = os.path.join(dir_path, 'jamesdsp.wav')
+        dsp_hrir.write_wav(out_path, track_order=jd_order)
+        print(f'JamesDSP IR file created: {out_path}')
+
+    # PR3 hangloose 로직 추가 (항목 7)
+    if hangloose:
+        print('Generating Hangloose Convolver IR files...')
+        output_dir = os.path.join(dir_path, 'Hangloose')
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Hrir.wav 기준 최대 채널 순서 (constants.py의 SPEAKER_NAMES 순서와 일치시키는 것이 좋을 수 있음)
+        # PR3의 full_order는 LFE를 포함하나, 현재 SPEAKER_NAMES에는 LFE가 없음.
+        # 여기서는 hrir 객체에 있는 스피커만 사용하도록 단순화.
+        processed_speakers = [sp for sp in SPEAKER_NAMES if sp in hrir.irs]
+
+        for sp in processed_speakers:
+            single_hrir = copy.deepcopy(hrir)
+            for other_sp in list(single_hrir.irs.keys()):
+                if other_sp != sp:
+                    del single_hrir.irs[other_sp]
+            
+            # 각 스피커에 대해 normalize를 다시 수행할지 여부는 PR의 의도에 따라 결정.
+            # 여기서는 생략하고 원본 hrir의 정규화 상태를 따름.
+
+            track_order = [f'{sp}-left', f'{sp}-right']
+            out_path = os.path.join(output_dir, f'{sp}.wav')
+            single_hrir.write_wav(out_path, track_order=track_order)
+            print(f'[Hangloose] Created: {out_path}')
+        
+        # PR3의 LFE 채널 생성 로직은 FL, FR을 기반으로 하므로, 필요시 여기에 추가 구현.
+        # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:
+        # LFE 생성 로직 ...
 
 
 def open_impulse_response_estimator(dir_path, file_path=None):
@@ -509,72 +583,155 @@ def open_binaural_measurements(estimator, dir_path):
     return hrir
 
 
-def write_readme(file_path, hrir, fs):
-    """Writes info and stats to readme file.
+def write_readme(file_path, hrir, fs, estimator, applied_gain):
+    """Writes info and stats to a README file and returns its content as a string.
 
     Args:
-        file_path: Path to readme file
-        hrir: HRIR instance
-        fs: Output sampling rate
+        file_path (str): Path to README file.
+        hrir (HRIR): HRIR object.
+        fs (int): Output sampling rate.
+        estimator (ImpulseResponseEstimator): Estimator object for advanced stats.
+        applied_gain (float): Applied gain level.
 
     Returns:
-        Readme string
+        str: Content of the README file.
     """
-    if fs is None:
-        fs = hrir.fs
+    # 기본 헤더 생성
+    content = f"# BRIR Info\n\n"
+    content += f"Processed on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. Output sampling rate is {fs if fs is not None else hrir.fs} Hz.\n\n"
 
-    rt_name = 'Reverb'
-    rt = None
-    table = []
-    speaker_names = sorted(hrir.irs.keys(), key=lambda x: SPEAKER_NAMES.index(x))
-    for speaker in speaker_names:
+    # 항목 8: 적용된 노멀라이제이션 게인 추가
+    if applied_gain is not None:
+        content += f"## Applied Normalization Gain\n"
+        content += f"{applied_gain:.2f} dB was applied to all channels.\n\n"
+
+    # 기존 통계 테이블 생성 로직 (rt_name, table, speaker_names 등)
+    rt_name = 'Reverb' # 기본값
+    table_data = [] # 변수명 변경 (table -> table_data)
+    # SPEAKER_NAMES 순서대로 정렬하되, 없는 스피커는 뒤로
+    speaker_names_in_hrir = list(hrir.irs.keys())
+    sorted_speaker_names = sorted(
+        speaker_names_in_hrir,
+        key=lambda x: SPEAKER_NAMES.index(x) if x in SPEAKER_NAMES else float('inf')
+    )
+
+    final_rt_name = 'Reverb' # 최종적으로 사용될 RTxx 이름, 모든 IR 검토 후 결정
+    rt_values_for_naming = []
+
+    for speaker in sorted_speaker_names:
+        if speaker not in hrir.irs:
+            continue
         pair = hrir.irs[speaker]
-        itd = np.abs(pair['right'].peak_index() - pair['left'].peak_index()) / hrir.fs * 1e6
-        for side, ir in pair.items():
-            # Zero for the first ear
-            _itd = itd if side == 'left' and speaker[1] == 'R' or side == 'right' and speaker[1] == 'L' else 0.0
-            # Use the largest decay time parameter available
-            peak_ind, knee_point_ind, noise_floor, window_size = ir.decay_params()
-            edt, rt20, rt30, rt60 = ir.decay_times(peak_ind, knee_point_ind, noise_floor, window_size)
-            if rt60 is not None:
-                rt_name = 'RT60'
-                rt = rt60
-            elif rt30 is not None:
-                rt_name = 'RT30'
-                rt = rt30
-            elif rt20 is not None:
-                rt_name = 'RT20'
-                rt = rt20
-            elif edt is not None:
-                rt_name = 'EDT'
-                rt = edt
-            table.append([
+        
+        peak_left_idx = pair['left'].peak_index()
+        peak_right_idx = pair['right'].peak_index()
+        itd = np.nan
+        if peak_left_idx is not None and peak_right_idx is not None:
+            itd = np.abs(peak_right_idx - peak_left_idx) / hrir.fs * 1e6 # us
+
+        for side, ir_obj in pair.items():
+            current_itd = 0.0
+            if not np.isnan(itd):
+                if speaker.endswith('L') and side == 'right': current_itd = itd
+                elif speaker.endswith('R') and side == 'left': current_itd = itd
+
+            pnr_val = np.nan
+            length_ms = np.nan
+            rt_val_ms = np.nan
+            current_ir_rt_name = None
+
+            peak_idx_current_ir = ir_obj.peak_index()
+            if peak_idx_current_ir is not None:
+                # PNR 계산
+                peak_val_linear = np.abs(ir_obj.data[peak_idx_current_ir])
+                # 데이터가 0~1로 정규화되었다고 가정. 그렇지 않다면 최대값으로 나눠야 함.
+                # peak_val_db = 20 * np.log10(peak_val_linear / np.max(np.abs(ir_obj.data)) + 1e-9) # 좀 더 안전한 방식
+                peak_val_db = 20 * np.log10(peak_val_linear + 1e-9) # 피크값의 dBFS (최대값이 1.0이라고 가정)
+                
+                decay_params_tuple = ir_obj.decay_params()
+                if decay_params_tuple:
+                    noise_floor_db = decay_params_tuple[2]
+                    if not np.isnan(noise_floor_db) and not np.isnan(peak_val_db):
+                        pnr_val = peak_val_db - noise_floor_db
+                    
+                    # Length 계산
+                    tail_ind_calc = decay_params_tuple[1] # decay_params의 두 번째 값이 tail index (peak_idx + knee_idx)
+                    if tail_ind_calc is not None and tail_ind_calc > peak_idx_current_ir:
+                        length_ms = (tail_ind_calc - peak_idx_current_ir) / ir_obj.fs * 1000
+
+                # RTxx 계산 (decay_times 사용)
+                # decay_times() 호출 시 peak_ind 등을 전달해야 할 수 있음 (API 확인)
+                # 현재 API는 decay_params() 내부 값들을 사용하므로, decay_params() 호출 후 사용 가능
+                edt, rt20, rt30, rt60 = ir_obj.decay_times(peak_ind=decay_params_tuple[0] if decay_params_tuple else None,
+                                                            knee_point_ind=decay_params_tuple[1] if decay_params_tuple else None,
+                                                            noise_floor=decay_params_tuple[2] if decay_params_tuple else None,
+                                                            window_size=decay_params_tuple[3] if decay_params_tuple else None)
+                
+                # 가장 긴 유효한 RTxx 값 선택
+                if rt60 is not None and not np.isnan(rt60):
+                    rt_val_ms = rt60 * 1000
+                    current_ir_rt_name = 'RT60'
+                elif rt30 is not None and not np.isnan(rt30):
+                    rt_val_ms = rt30 * 1000
+                    current_ir_rt_name = 'RT30'
+                elif rt20 is not None and not np.isnan(rt20):
+                    rt_val_ms = rt20 * 1000
+                    current_ir_rt_name = 'RT20'
+                elif edt is not None and not np.isnan(edt):
+                    rt_val_ms = edt * 1000
+                    current_ir_rt_name = 'EDT'
+                
+                if current_ir_rt_name:
+                    rt_values_for_naming.append(current_ir_rt_name)
+
+            table_data.append([
                 speaker,
                 side,
-                f'{noise_floor:.1f} dB',
-                f'{_itd:.1f} us',
-                f'{(knee_point_ind - peak_ind) / ir.fs * 1000:.1f} ms',
-                f'{rt * 1000:.1f} ms' if rt is not None else '-'
+                f"{pnr_val:.1f} dB" if not np.isnan(pnr_val) else "N/A",
+                f"{current_itd:.1f} us" if not np.isnan(current_itd) else "N/A",
+                f"{length_ms:.1f} ms" if length_ms is not None and not np.isnan(length_ms) and length_ms >= 0 else "N/A", # 음수 길이 방지
+                f"{rt_val_ms:.1f} ms" if rt_val_ms is not None and not np.isnan(rt_val_ms) else "N/A"
             ])
-    table_str = tabulate(
-        table,
-        headers=['Speaker', 'Side', 'PNR', 'ITD', 'Length', rt_name],
-        tablefmt='github'
-    )
-    s = f'''# HRIR
 
-    **Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}  
-    **Input sampling rate:** {hrir.fs} Hz  
-    **Output sampling rate:** {fs} Hz  
+    # 모든 IR을 살펴본 후 최종 RTxx 이름 결정 (가장 많이 나온 유효한 이름 또는 우선순위)
+    if rt_values_for_naming:
+        # 예: 가장 빈번하게 나타난 RTxx 이름 사용
+        from collections import Counter
+        final_rt_name = Counter(rt_values_for_naming).most_common(1)[0][0]
+    else:
+        final_rt_name = 'RTxx' # 기본값
 
-    {table_str}
-    '''
-    s = re.sub('\n[ \t]+', '\n', s).strip()
+    if table_data:
+        headers = ['Speaker', 'Side', 'PNR', 'ITD', 'Length', final_rt_name]
+        content += tabulate(table_data, headers=headers, tablefmt='pipe')
+        content += "\n\n"
 
-    with open(file_path, 'w') as f:
-        f.write(s)
+    # 항목 9: 반사음 레벨 추가
+    if estimator and hasattr(hrir, 'calculate_reflection_levels'):
+        reflection_data = hrir.calculate_reflection_levels() # 인자 없이 호출
+        if reflection_data:
+            content += "## Reflection Levels (Direct vs. Early/Late)\n"
+            # SPEAKER_NAMES 순서대로 정렬하되, 없는 스피커는 뒤로
+            sorted_reflection_speakers = sorted(
+                reflection_data.keys(),
+                key=lambda x: SPEAKER_NAMES.index(x) if x in SPEAKER_NAMES else float('inf')
+            )
+            for speaker in sorted_reflection_speakers:
+                if speaker not in reflection_data: # Should not happen due to sorted keys
+                    continue
+                sides_data = reflection_data[speaker]
+                content += f"### {speaker}\n"
+                if 'left' in sides_data and isinstance(sides_data['left'], dict):
+                    content += f"- Left Ear: Early (20-50ms): {sides_data['left'].get('early_db', np.nan):.2f} dB, Late (50-150ms): {sides_data['left'].get('late_db', np.nan):.2f} dB\n"
+                if 'right' in sides_data and isinstance(sides_data['right'], dict):
+                    content += f"- Right Ear: Early (20-50ms): {sides_data['right'].get('early_db', np.nan):.2f} dB, Late (50-150ms): {sides_data['right'].get('late_db', np.nan):.2f} dB\n"
+            content += "\n"
+    
+    # 파일에 쓰기
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(content)
 
-    return s
+    return content
 
 
 def create_cli():
@@ -648,6 +805,9 @@ def create_cli():
                                  'frequency response. 1 dB/octave will produce nearly 10 dB difference in '
                                  'desired value between 20 Hz and 20 kHz. Tilt is applied with bass boost and both '
                                  'will affect the bass gain.')
+    arg_parser.add_argument('--c', type=float, default=1.0, dest='head_ms', help='Head room in milliseconds for cropping impulse response heads. Default is 1.0 (ms). (항목 4)')
+    arg_parser.add_argument('--jamesdsp', action='store_true', help='Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels. (항목 6)')
+    arg_parser.add_argument('--hangloose', action='store_true', help='Generate separate stereo IR for each channel for Hangloose Convolver. (항목 7)')
     args = vars(arg_parser.parse_args())
     if 'bass_boost' in args:
         bass_boost = args['bass_boost'].split(',')

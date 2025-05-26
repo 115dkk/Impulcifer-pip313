@@ -95,4 +95,7 @@ jobs:
       - name: Publish release distributions to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
+          verbose: true
+          
