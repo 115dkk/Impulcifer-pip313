@@ -597,13 +597,13 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
         str: Content of the README file.
     """
     # 기본 헤더 생성
-    content = f"# BRIR Info\\n\\n"
-    content += f"Processed on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. Output sampling rate is {fs if fs is not None else hrir.fs} Hz.\\n\\n"
+    content = f"# BRIR Info\n\n"
+    content += f"Processed on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. Output sampling rate is {fs if fs is not None else hrir.fs} Hz.\n\n"
 
     # 항목 8: 적용된 노멀라이제이션 게인 추가
     if applied_gain is not None:
-        content += f"## Applied Normalization Gain\\n"
-        content += f"{applied_gain:.2f} dB was applied to all channels.\\n\\n"
+        content += f"## Applied Normalization Gain\n"
+        content += f"{applied_gain:.2f} dB was applied to all channels.\n\n"
 
     # 기존 통계 테이블 생성 로직 (rt_name, table, speaker_names 등)
     rt_name = 'Reverb' # 기본값
@@ -704,13 +704,13 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
     if table_data:
         headers = ['Speaker', 'Side', 'PNR', 'ITD', 'Length', final_rt_name]
         content += tabulate(table_data, headers=headers, tablefmt='pipe')
-        content += "\\n\\n"
+        content += "\n\n"
 
     # 항목 9: 반사음 레벨 추가
     if estimator and hasattr(hrir, 'calculate_reflection_levels'):
         reflection_data = hrir.calculate_reflection_levels() # 인자 없이 호출
         if reflection_data:
-            content += "## Reflection Levels (Direct vs. Early/Late)\\n"
+            content += "## Reflection Levels (Direct vs. Early/Late)\n"
             # SPEAKER_NAMES 순서대로 정렬하되, 없는 스피커는 뒤로
             sorted_reflection_speakers = sorted(
                 reflection_data.keys(),
@@ -720,17 +720,17 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
                 if speaker not in reflection_data: # Should not happen due to sorted keys
                     continue
                 sides_data = reflection_data[speaker]
-                content += f"### {speaker}\\n"
+                content += f"### {speaker}\n"
                 if 'left' in sides_data and isinstance(sides_data['left'], dict):
-                    content += f"- Left Ear: Early (20-50ms): {sides_data['left'].get('early_db', np.nan):.2f} dB, Late (50-150ms): {sides_data['left'].get('late_db', np.nan):.2f} dB\\n"
+                    content += f"- Left Ear: Early (20-50ms): {sides_data['left'].get('early_db', np.nan):.2f} dB, Late (50-150ms): {sides_data['left'].get('late_db', np.nan):.2f} dB\n"
                 if 'right' in sides_data and isinstance(sides_data['right'], dict):
-                    content += f"- Right Ear: Early (20-50ms): {sides_data['right'].get('early_db', np.nan):.2f} dB, Late (50-150ms): {sides_data['right'].get('late_db', np.nan):.2f} dB\\n"
-            content += "\\n"
+                    content += f"- Right Ear: Early (20-50ms): {sides_data['right'].get('early_db', np.nan):.2f} dB, Late (50-150ms): {sides_data['right'].get('late_db', np.nan):.2f} dB\n"
+            content += "\n"
     
     # 파일에 쓰기
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(content)
-    
+
     return content
 
 
