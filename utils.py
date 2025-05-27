@@ -7,6 +7,9 @@ from scipy.fft import fft, rfft
 from scipy import signal
 from PIL import Image
 import matplotlib.ticker as ticker
+import matplotlib.pyplot as plt
+
+plt.rcParams['axes.unicode_minus'] = False
 
 
 def to_db(x):

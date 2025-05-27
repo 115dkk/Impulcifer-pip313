@@ -23,26 +23,78 @@ import io
 from scipy.io import wavfile # hangloose용, 필요시 추가
 from scipy.interpolate import interp1d # 큐빅 보간을 위해 추가
 
+# Bokeh Tabs/Panel import 추가
+# from bokeh.models import Panel, Tabs # 이전 시도
+from bokeh.models import TabPanel, Tabs # 수정: Panel -> TabPanel
+from bokeh.plotting import output_file as bokeh_output_file, save as bokeh_save # 중복 방지
+
 # 한글 폰트 설정 추가
 import matplotlib.font_manager as fm
 import platform
+import importlib.resources # 패키지 리소스 접근을 위해 추가
 
 # 운영체제별 기본 폰트 설정
-system = platform.system()
-if system == 'Windows':
-    # Windows 기본 폰트
-    font_path = 'C:/Windows/Fonts/malgun.ttf'  # 맑은 고딕
-    if os.path.exists(font_path):
-        font_prop = fm.FontProperties(fname=font_path)
-        plt.rcParams['font.family'] = font_prop.get_name()
-    else:
-        # 대체 폰트 시도
-        plt.rcParams['font.family'] = 'Malgun Gothic'
-elif system == 'Darwin':  # macOS
-    plt.rcParams['font.family'] = 'AppleGothic'
-elif system == 'Linux':
-    # Linux 기본 폰트
-    plt.rcParams['font.family'] = 'NanumGothic'
+def set_matplotlib_font():
+    system = platform.system()
+    font_name_pretendard = "Pretendard"
+    font_loaded_pretendard = False
+
+    plt.rcParams['axes.unicode_minus'] = False # 마이너스 부호 문제 해결
+
+    try:
+        # 패키지 내 Pretendard 폰트 시도
+        # Python 3.9+ 에서는 files() 사용
+        if hasattr(importlib.resources, 'files'):
+            # 수정: 패키지 이름과 그 안의 리소스 경로를 정확히 지정
+            # 'impulcifer_py313' 패키지 내의 'fonts' 디렉토리 안에 있는 'Pretendard-Regular.otf'
+            font_resource = importlib.resources.files('impulcifer_py313').joinpath('fonts').joinpath('Pretendard-Regular.otf')
+            with importlib.resources.as_file(font_resource) as font_path_pretendard_str:
+                # addfont에는 실제 파일 시스템 경로가 필요
+                fm.fontManager.addfont(str(font_path_pretendard_str))
+                prop = fm.FontProperties(fname=str(font_path_pretendard_str))
+                font_name_pretendard = prop.get_name()
+                plt.rcParams['font.family'] = font_name_pretendard
+                font_loaded_pretendard = True
+                print(f"Using bundled Pretendard font: {font_name_pretendard}")
+        # Python 3.7, 3.8 호환 (path 사용)
+        elif hasattr(importlib.resources, 'path'):
+            # 수정: path 사용 시, 패키지와 리소스 이름을 분리하여 전달
+            with importlib.resources.path('impulcifer_py313.fonts', 'Pretendard-Regular.otf') as font_path_pretendard_ctx:
+                # addfont에는 실제 파일 시스템 경로가 필요
+                fm.fontManager.addfont(str(font_path_pretendard_ctx))
+                prop = fm.FontProperties(fname=str(font_path_pretendard_ctx))
+                font_name_pretendard = prop.get_name()
+                plt.rcParams['font.family'] = font_name_pretendard
+                font_loaded_pretendard = True
+                print(f"Using bundled Pretendard font: {font_name_pretendard}")
+
+    except FileNotFoundError:
+        print(f"Bundled Pretendard font file not found. Trying system fonts.")
+        font_loaded_pretendard = False
+    except Exception as e:
+        print(f"Error loading bundled Pretendard font: {e}. Trying system fonts.")
+        font_loaded_pretendard = False # 명시적으로 실패 처리
+
+    if not font_loaded_pretendard:
+        if system == 'Windows':
+            font_path_win = 'C:/Windows/Fonts/malgun.ttf'
+            if os.path.exists(font_path_win):
+                font_prop = fm.FontProperties(fname=font_path_win)
+                plt.rcParams['font.family'] = font_prop.get_name()
+                print(f"Using system font: {font_prop.get_name()}")
+            else:
+                plt.rcParams['font.family'] = 'Malgun Gothic'
+                print("Using system font: Malgun Gothic (fallback)")
+        elif system == 'Darwin':
+            plt.rcParams['font.family'] = 'AppleGothic'
+            print("Using system font: AppleGothic")
+        elif system == 'Linux':
+            plt.rcParams['font.family'] = 'NanumGothic'
+            print("Using system font: NanumGothic")
+        else:
+            print("Unknown system, using Matplotlib default font.")
+
+set_matplotlib_font() # 함수 호출하여 폰트 설정 실행
 
 # 큐빅 스플라인 보간 적용 헬퍼 함수
 def _apply_cubic_interp(fr_obj, target_freqs, fallback_interpolate_method_ref, operation_description=""):
@@ -109,7 +161,8 @@ def main(dir_path=None,
          # PR3에서 추가/변경된 파라미터 (항목 4, 6, 7)
          head_ms=1, # --c 옵션에 해당 (기본값 1ms)
          jamesdsp=False,
-         hangloose=False):
+         hangloose=False,
+         interactive_plots=False):
     """"""
     if plot:
         try:
@@ -279,6 +332,43 @@ def main(dir_path=None,
         hrir.plot_iacc(os.path.join(dir_path, 'plots', 'iacc'))
         print('Plotting ETC...')
         hrir.plot_etc(os.path.join(dir_path, 'plots', 'etc'))
+
+    # 인터랙티브 플롯 생성 (추가)
+    if interactive_plots:
+        print('Generating interactive plots...')
+        interactive_plot_dir = os.path.join(dir_path, 'interactive_plots')
+        os.makedirs(interactive_plot_dir, exist_ok=True)
+        
+        panels = []
+        plot_functions_map = {
+            "Interaural Overlay": hrir.generate_interaural_impulse_overlay_bokeh_layout,
+            "ILD": hrir.generate_ild_bokeh_layout,
+            "IPD": hrir.generate_ipd_bokeh_layout,
+            "IACC": hrir.generate_iacc_bokeh_layout,
+            "ETC": hrir.generate_etc_bokeh_layout,
+            "Result Overview": hrir.generate_result_bokeh_figure
+        }
+
+        for title, func in plot_functions_map.items():
+            try:
+                plot_obj = func()
+                if plot_obj:
+                    # Bokeh 3.x 에서는 Panel이 TabPanel로 이름 변경됨
+                    panel = TabPanel(child=plot_obj, title=title) # 수정: Panel -> TabPanel
+                    panels.append(panel)
+                else:
+                    print(f"Skipping {title} plot as no data was generated.")
+            except Exception as e:
+                print(f"Error generating interactive plot for {title}: {e}")
+
+        if panels:
+            tabs = Tabs(tabs=panels, sizing_mode='stretch_both')
+            output_html_path = os.path.join(interactive_plot_dir, 'interactive_summary.html')
+            bokeh_output_file(output_html_path, title="Interactive Plot Summary") # bokeh_output_file 사용
+            bokeh_save(tabs) # bokeh_save 사용
+            print(f'Interactive plot summary saved to {output_html_path}')
+        else:
+            print("No interactive plots were generated.")
 
     # Re-sample
     if fs is not None and fs != hrir.fs:
@@ -792,6 +882,7 @@ def create_cli():
                             help='Skip equalization.')
     arg_parser.add_argument('--fs', type=int, default=argparse.SUPPRESS, help='Output sampling rate in Hertz.')
     arg_parser.add_argument('--plot', action='store_true', help='Plot graphs for debugging.')
+    arg_parser.add_argument('--interactive_plots', action='store_true', help='Generate interactive Bokeh plots in HTML files.')
     arg_parser.add_argument('--channel_balance', type=str, default=argparse.SUPPRESS,
                             help='Channel balance correction by equalizing left and right ear results to the same '
                                  'level or frequency response. "trend" equalizes right side by the difference trend '
@@ -874,4 +965,6 @@ def create_cli():
 
 
 if __name__ == '__main__':
-    main(**create_cli())
+    cli_args = create_cli()
+    # interactive_plots 인자를 main 함수에 전달
+    main(**cli_args)

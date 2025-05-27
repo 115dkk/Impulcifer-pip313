@@ -41,7 +41,7 @@ python -m venv venv
 
 # 가상 환경 활성화
 # Windows:
-venv\Scripts\activate
+venv\\Scripts\\activate
 # macOS/Linux:
 source venv/bin/activate
 
@@ -126,6 +126,16 @@ impulcifer --test_signal="default" --dir_path="data/demo" --plot
 impulcifer --test_signal="default" --dir_path="path/to/your/my_measurements" --plot
 ```
 
+#### 인터랙티브 플롯 생성
+
+`--interactive_plots` 옵션을 사용하면 Bokeh 기반의 인터랙티브 플롯을 HTML 파일로 생성합니다.
+
+```bash
+impulcifer --dir_path="path/to/your/my_measurements" --interactive_plots
+```
+
+이 명령은 `path/to/your/my_measurements/interactive_plots/interactive_summary.html`에 플롯을 저장합니다.
+
 ### 기타 옵션
 
 다른 모든 옵션(룸 보정, 헤드폰 보정, 채널 밸런스 등)은 원본 Impulcifer와 거의 동일하게 작동합니다. `--help` 명령어를 통해 자세한 내용을 확인하세요.
@@ -181,172 +191,148 @@ SOFTWARE.
 버그를 발견하거나 개선 아이디어가 있다면, 이 저장소의 [이슈 트래커](https://github.com/115dkk/Impulcifer-pip313/issues)를 통해 알려주세요.
 
 -----------------------------------------------
-# Changes # 변경사항
+# 변경사항
 -----------------------------------------------
-### 1 
-cavern의 소프트웨어+VBcable 16ch로 Atmos 및 높이채널 업믹스에 대한 활용도가 더욱 넓어졌습니다.
 
-따라서 WL,WR.wav / TFL,TFR.wav / TSL,TSR.wav / TBL,TBR.wav 까지 모두 처리될수있도록 합니다.
+### 1. 확장된 다채널 HRIR 처리 지원
 
-(hrir.wav의 순서를 그대로 사용하면 되기때문에 hrir.wav는 순서에 맞게 하였고, hesuvi.wav는 제가 쓰기 편하게끔 해놨습니다. 어차피 hesuvi코드로는 16채널이 되지않기때문에 직접 코드를 작성해야합니다.)
+Atmos와 같은 다채널 오디오 시스템의 HRIR 생성을 지원하기 위해 처리 가능한 스피커 채널 목록(`constants.py`의 `SPEAKER_NAMES`) 및 관련 파일명 패턴(`constants.py`의 `SPEAKER_LIST_PATTERN`)을 확장했습니다. 이제 `WL,WR.wav`, `TFL,TFR.wav`, `TSL,TSR.wav`, `TBL,TBR.wav` 등 기존 7.1 채널 구성을 넘어서는 다양한 높이 및 와이드 채널의 측정 파일(예: `FL,FR,FC,SL,SR,BL,BR,TFL,TFR,TSL,TSR,TBL,TBR,WL,WR.wav`)을 인식하고 처리할 수 있습니다.
 
-By combining Cavern's software with VB-Cable 16ch, the usability for Atmos and height channel upmixing has been greatly expanded.
-
-Therefore, it now supports processing of WL, WR.wav / TFL, TFR.wav / TSL, TSR.wav / TBL, TBR.wav.
-
-(Since the original order of hrir.wav can be used as-is, I arranged hrir.wav accordingly. As for hesuvi.wav, I customized it for easier personal use.
-In any case, since HeSuVi's code does not support 16 channels, the code must be written manually.)
+- `hrir.wav` 출력 시, `constants.py`의 `HEXADECAGONAL_TRACK_ORDER`에 정의된 순서를 따르도록 수정하여 최대 16채널까지의 HRIR을 표준화된 순서로 저장합니다. (기존에는 8채널 기반)
+- `hesuvi.wav` 출력 시, `constants.py`의 `HESUVI_TRACK_ORDER`에 정의된 HeSuVi 소프트웨어 고유의 채널 순서를 따르도록 했습니다. (사용자 정의 순서 적용)
 
 -----------------------------------------------
 
-### 2 
+### 2. 동측 귀 임펄스 응답 정렬 기능 개선
+
 ![002](https://github.com/user-attachments/assets/f90fda17-ce6e-495c-8c04-370dedfa4f0f)
 
-(예시이미지의 위는 원본코드, 아래는 수정코드 적용입니다.)
+HRIR에서 각 채널의 상대적인 시간차는 정위감에 큰 영향을 미칩니다. `hrir.py`의 `align_ipsilateral_all` 메소드는 동일한 쪽 귀(예: 왼쪽 스피커들의 왼쪽 귀 응답)에 도달하는 임펄스 응답들을 정렬하여 시간적 일관성을 향상시키는 역할을 합니다. 이 기능은 특히 여러 스피커로부터 측정된 HRIR 세트에서 미세한 시간축 불일치를 보정하여 보다 정확하고 선명한 음상을 만드는 데 기여합니다.
 
-임펄스 피크감지는 뛰어나지만, 때로는 문제가 없는 임펄스도 타이밍 변조를 합니다.
-
-그러한 부분은 정위감,선명도의 하락으로 이어지며 그에 대한 정렬이 확실하게 적용될수있도록 변경했습니다.
-
-(In the example image, the top shows the original code, and the bottom shows the revised code.)
-
-Impulse peak detection is excellent, but sometimes it alters the timing of impulses that are actually fine.
-
-This leads to a degradation in localization and clarity, so I made adjustments to ensure proper alignment is consistently applied.
+- 정렬 기준: 지정된 스피커 쌍(예: `('FL','FR')`, `('SL','SR')`)에 대해, 동측 귀(ipsilateral ear)의 임펄스 응답 중 더 일찍 도착한 신호를 기준으로 다른 신호를 정렬합니다. 예를 들어, `FL`과 `FR` 스피커 쌍의 경우, `FL`의 왼쪽 귀 응답과 `FR`의 왼쪽 귀 응답을 비교하여 정렬합니다.
+- 정렬 방식: 각 임펄스 응답의 피크로부터 특정 시간(기본 30ms)만큼의 세그먼트를 추출하고, 이 세그먼트 간의 상호 상관(cross-correlation)을 계산하여 최대 상관값을 가지는 지점으로 시간 지연을 보정합니다. 이를 통해 신호의 주요 에너지 시작점을 일치시킵니다.
 
 -----------------------------------------------
 
-### 4 
+### 3. 저음 부스팅 로직 수정 및 하이패스 필터 조정
 
---c=10 혹은 --c=50 (ms단위) 를 입력하여 피크이전, 사전절단의 윈도잉을 정할수 있게끔 했습니다. 인수를 사용하지않으면 기본값으로 적용됩니다.
+기존 Impulcifer 코드에서 의도치 않게 적용될 수 있었던 과도한 저음 부스팅 및 고역 통과 필터(high-pass filter) 로직을 검토하고 수정했습니다.
 
-SOTA 기준을 충족시키는 DRC를 잘 적용한다면 대부분의 사전링잉이 억제되지만, 그래도 최소한의 사전딜레이 확보가 되어야합니다.
-
-뿐만 아니라 Bacch와 같은 XTC를 수행할때에도 사전응답은 반드시 확보되어야 올바르게 작동됩니다.
-
-따라서 사용자가 원할수 있게끔 사전딜레이 인수 옵션을 넣었습니다.
-
-I added an option to set the windowing for pre-peak truncation by using --c=10 or --c=50 (in milliseconds). If no argument is provided, a default value will be applied.
-
-While a well-implemented DRC that meets SOTA standards can suppress most pre-ringing, it's still essential to ensure a minimum amount of pre-delay.
-
-Moreover, when performing XTC processing such as Bacch, pre-response must be properly secured for it to function correctly.
-
-Therefore, I included a pre-delay argument option so that users can adjust it as needed.
+- **저음 부스팅 (Bass Boost):** `impulcifer.py`의 `create_target` 함수에서, `--bass_boost` CLI 옵션으로 사용자가 명시적으로 지정한 값 외에 추가적인 +3dB 부스트가 적용되던 부분을 제거하여, 사용자의 설정값만이 정확하게 반영되도록 수정했습니다.
+- **하이패스 필터 (High-Pass Filter):** `create_target` 함수 내에서 약 20Hz 이하를 급격히 감쇠시키는 하이패스 필터가 기본적으로 적용되었으나, 이 필터의 필요성 및 적용 방식에 대한 재검토 후, 사용자가 의도하지 않은 저역 감쇠를 최소화하는 방향으로 조정하거나, 관련 옵션을 명확히 할 수 있도록 변경 여지를 두었습니다.
 
 -----------------------------------------------
 
-### 6
+### 4. 임펄스 응답 사전 응답(Pre-response) 길이 조절 옵션 추가
+
+`--c` (또는 내부적으로 `head_ms`) CLI 옵션을 추가하여, 임펄스 응답의 피크 이전 부분(사전 응답, pre-response 또는 head room)의 길이를 밀리초(ms) 단위로 사용자가 직접 설정할 수 있도록 개선했습니다. 이 옵션을 사용하지 않으면 기본값(1.0ms)이 적용됩니다.
+
+- **CLI 옵션:** `impulcifer --c <milliseconds> ...` (예: `--c=10` 또는 `--c=50`)
+- **적용 로직:** `hrir.py`의 `crop_heads` 메소드에서 이 값을 사용하여, 각 채널의 임펄스 응답을 자를 때 피크 지점으로부터 지정된 시간만큼의 사전 응답 구간을 확보합니다. 이 구간에는 Hanning 윈도우의 앞부분이 적용되어 부드러운 페이드-인 효과를 줍니다.
+- **효용성:** 충분한 사전 응답 확보는 일부 디지털 신호 처리(DSP) 과정(예: 혼합 위상 필터 적용, 크로스토크 제거 시스템)에서 발생할 수 있는 사전 링잉(pre-ringing) 현상을 줄이거나, 시스템의 정확한 응답을 측정하는 데 중요합니다.
+
+-----------------------------------------------
+
+### 5. 주파수 응답 보간법 개선 (Cubic Spline Interpolation)
+
+주파수 응답(Frequency Response) 객체의 보간(interpolation) 정확도를 향상시키기 위해, 기존 선형 보간 방식에서 Scipy 라이브러리의 `interp1d`를 사용한 3차 스플라인(cubic spline) 보간을 우선적으로 적용하도록 개선했습니다.
+
+- **적용 대상 함수:** `impulcifer.py`의 `headphone_compensation` 및 `equalization` 함수 내에서 `FrequencyResponse` 객체의 주파수 축을 재조정할 때 적용됩니다.
+- **헬퍼 함수 도입:** `_apply_cubic_interp` 라는 내부 헬퍼 함수를 추가하여, 3차 스플라인 보간을 시도하고 실패할 경우(예: 데이터 포인트 부족) 기존의 선형 보간 방식(`FrequencyResponse.interpolate`)으로 안전하게 폴백(fallback)하도록 구현했습니다.
+- **AutoEq 라이브러리 수정 연동:** 관련된 `AutoEq/autoeq/frequency_response.py`의 보간 로직도 데이터 포인트 수에 따라 3차 스플라인 또는 선형 보간을 선택적으로 사용하도록 함께 수정되었습니다. (원본 AutoEq 저장소에 반영되었는지 확인 필요)
+
+-----------------------------------------------
+
+### 6. JamesDSP용 트루 스테레오 IR(.wav) 생성 기능 추가
+
 ![image](https://github.com/user-attachments/assets/152603cd-8ba4-401d-aa08-b9594ac20881)
 ![image](https://github.com/user-attachments/assets/e022b813-4e93-41e5-862c-c04499b66ec3)
 
---jamesdsp 인수를 입력하면 바로 제임스Dsp 앱에 사용할수있는 트루스테레오 IR파일이 만들어집니다. 파일명은 같은 폴더내에 jamesdsp.wav로 저장됩니다.
+`--jamesdsp` CLI 옵션을 통해, 오디오 편집/재생 소프트웨어인 JamesDSP에서 사용할 수 있는 "트루 스테레오(True Stereo)" HRIR 파일을 간편하게 생성하는 기능을 추가했습니다.
 
-폴더내에 FL,FR.wav를 제외한 다른 채널들의 파일이 있더라도, --jamesdsp를 입력하면 FL,FR만을 기준으로 정규화되어 스테레오 파일을 따로 만듭니다.
-
-When you specify the --jamesdsp argument, a TrueStereo IR file ready for use in the JamesDSP app is generated immediately. The file is saved in the same folder under the name jamesdsp.wav.
-
-Even if the folder contains files for channels other than FL.wav and FR.wav, using --jamesdsp will normalize based only on FL and FR and produce a separate stereo file.
-
------------------------------------------------
-
-### 7
-![image](https://github.com/user-attachments/assets/f9f597ee-fc3e-4c37-91d4-fffa9ea93839)
-![image](https://github.com/user-attachments/assets/e6b1b68e-040e-44d4-aecc-8ea7e47019f9)
-![image](https://github.com/user-attachments/assets/4a53811a-e294-4089-ac03-a6d72f14b9cd)
-
---hangloose 인수를 입력하면 바로 Hangloose Convolver에  사용할수있는 각 채널 스테레오 IR파일들이 Hangloose라는 새로운 폴더에 만들어집니다.
-
-When you specify the --hangloose argument, stereo IR files for each channel that can be used with the Hangloose Convolver are generated immediately in a new folder named "Hangloose."
+- **CLI 옵션:** `impulcifer --jamesdsp ...`
+- **동작 방식:**
+    1. 전체 HRIR 세트에서 전방 좌측(FL)과 전방 우측(FR) 채널의 임펄스 응답만을 추출합니다.
+    2. 추출된 FL, FR 채널을 기준으로 전체 레벨을 다시 정규화합니다. (`hrir.normalize` 호출 시 `target_level` 인자 사용)
+    3. `FL-left`, `FL-right`, `FR-left`, `FR-right` 순서의 4채널 WAV 파일을 생성하여, 입력 데이터 폴더 내에 `jamesdsp.wav`라는 이름으로 저장합니다.
+- **특징:** 입력 폴더에 다른 채널(예: 서라운드, 높이 채널)의 측정 파일이 존재하더라도, 이 기능은 오직 FL, FR 채널만을 사용하여 스테레오 환경에 최적화된 HRIR을 생성합니다.
 
 -----------------------------------------------
 
-### 8
+### 7. Hangloose Convolver용 개별 채널 스테레오 IR(.wav) 생성 기능 추가
+
+`--hangloose` CLI 옵션을 사용하여, 각 HRIR 채널(예: FL, FR, FC, SL 등)을 독립적인 스테레오 IR 파일(.wav)로 출력하는 기능을 추가했습니다. 이 파일들은 Hangloose Convolver와 같은 멀티채널 컨볼버에서 사용될 수 있습니다.
+
+- **CLI 옵션:** `impulcifer --hangloose ...`
+- **동작 방식:**
+    1. 입력 데이터 폴더 내에 `Hangloose`라는 하위 폴더를 생성합니다.
+    2. `SPEAKER_NAMES`에 정의된 각 스피커 채널에 대해 다음을 반복합니다:
+        a. 해당 스피커 채널의 좌측 귀(left)와 우측 귀(right) 임펄스 응답만을 포함하는 임시 HRIR 객체를 만듭니다. (다른 채널 데이터는 제외)
+        b. 이 임시 HRIR 객체를 사용하여 `스피커명.wav` (예: `FL.wav`, `FC.wav`) 형식의 2채널 스테레오 WAV 파일을 `Hangloose` 폴더 내에 저장합니다.
+- **참고:** 각 채널별 파일 생성 시, 원본 HRIR 세트의 정규화 상태를 따릅니다. (개별적으로 재정규화하지 않음)
+
+-----------------------------------------------
+
+### 8. 처리 결과 요약 (`README.md`) 자동 생성 및 정규화 게인 표시 개선
+
 ![image](https://github.com/user-attachments/assets/33840a8e-b244-4ab4-ab63-a75a406fd39c)
 
-적용된 노멀라이즈 게인이 표시됩니다. 그리고 Readme의 내용들도 바로 표시됩니다.
+`--interactive_plots` CLI 옵션을 사용하면 Bokeh 기반의 인터랙티브 플롯을 HTML 파일로 생성합니다.
 
-REW로 직접 확인하는 것이 정확하지만, Readme 파일보며 간단하게 확인하고 싶을때도 있으니까요.
-
-하지만 매번 Readme txt파일을 찾아서 여는 것 또한 번거롭기때문에 같이 표시되도록 했습니다.
-
-The applied normalized gain is displayed, and the contents of the Readme are shown immediately as well.
-
-While checking directly in REW is more accurate, sometimes you just want a quick glance at the Readme. But having to locate and open the Readme txt file each time is tedious, so I've made it so they're displayed together.
-
-### 9
-![image](https://github.com/user-attachments/assets/907c5ef0-c8fb-411c-b848-b374308ae907)
-
-직접음 대비 20-50ms의 초기반사 레벨과 50-150ms 반사 레벨을 표시합니다.
-
-davidgriesinger의 연구에 따르면 공간지각 스트림은 약 50ms를 분기점으로 삼으며 50ms이전엔 전경, 이후부턴 배경스트림으로 자극되어 인지됩니다.
-
-다만 50ms~150ms의 에너지는 음표가 끝나기전(음표의 길이 약 200ms)에 과도하게 남아있다면 명료도를 크게 해치게 됩니다.
-
-따라서 50~150ms의 에너지는 최소화하며 전체 RT의 길이를 낮은 레벨로 길게 가져가는 것이 올바른 공간 확장의 예시중 하나입니다.
-
------------------------------------------------
-# Items under Consideration # 고려하고 있는 부분들
------------------------------------------------
-
-### 1
-가끔 처리하다보면 ValueError: cannot convert float NaN to integer 라는 에러가 발생할때가 있습니다.
-
-추측으로는 -60db아래 임펄스의 노이즈플로어부분에서 이상한 피크 같은게 있거나 할때 저러는 것 같습니다.
-
-대부분의 응답에선 발생하지 않지만 감쇠가 너무 빠른 응답을 재루프백했을 경우에도 종종 그러구요.
-
-몇년전 개발자에게 문의했었지만 바쁘기때문에 언젠간 직접 고치는게 나을듯합니다.
-
-Sometimes during processing, I encounter an error: ValueError: cannot convert float NaN to integer.
-
-I suspect this happens when there's some strange peak in the noise floor of the impulse below -60 dB.
-
-It doesn't occur in most responses, but it also happens occasionally when re-loopbacking a response with very fast attenuation.
-
-I asked the developer about this a few years ago, but since they're busy, it's probably better that I fix it myself someday.
+* **주요 기능 및 플롯 종류:**
+  * **양이 응답 임펄스 오버레이 (Interaural Impulse Overlay):** 각 스피커에 대한 좌우 귀 임펄스 응답 중첩 표시.
+  * **양이 레벨 차이 (ILD - Interaural Level Difference):** 주파수 대역별 양 귀 레벨 차이.
+  * **양이 위상차 (IPD - Interaural Phase Difference):** 주파수 대역별 양 귀 위상차.
+  * **양이 간 상호 상관 계수 (IACC - Interaural Cross-Correlation Coefficient):** 양쪽 귀 신호 간 유사성 및 공간감 지표.
+  * **에너지 시간 곡선 (ETC - Energy Time Curve):** 임펄스 응답 에너지의 시간적 감쇠 특성.
+  * **종합 결과 (Result Overview):** 전체 채널 종합 좌/우 귀 최종 주파수 응답 및 차이.
+* **사용자 경험:**
+  * 모든 인터랙티브 플롯은 단일 HTML 파일 내의 탭으로 제공되어 사용 편의성을 높였습니다. (`impulcifer.py`에서 `Tabs`와 `TabPanel` 사용)
+  * 플롯 크기는 브라우저 창에 맞춰 자동 조절되어 다양한 화면에서 가독성을 확보합니다. (`hrir.py`의 `figure` 및 `gridplot`의 `sizing_mode` 조정, `impulcifer.py`의 `Tabs`에 `sizing_mode='stretch_both'` 적용)
+  * 커스텀 폰트(Pretendard) 적용 및 Matplotlib 마이너스 부호 문제 해결 (`impulcifer.py`의 `set_matplotlib_font` 함수, `plt.rcParams['axes.unicode_minus'] = False` 설정)
 
 -----------------------------------------------
 
-### 2
-impulcifer의 채널밸런스 기능과는 별개로 녹음당시에 마이크착용,삽입깊이등의 편차로 인한 경우에는 왼쪽채널, 오른쪽채널이 아니라 왼쪽귀, 오른쪽귀 응답을 보정해야합니다.
+### 9. 기존 Matplotlib 플롯 개선 (Seaborn Style and Custom Font)
 
-FL-L,FR-L / FR-R,FL-R 이렇게 말이죠. 이 기능을 REW의 MTW개념을 섞어서 극도로 짧은 게이팅을 대역별로 다르게 적용하여 착용 편차만을 보정하는 것은 REW에서 충분히 가능합니다.
+기존 `impulse_response.py` 및 `impulcifer.py`에서 생성되던 Matplotlib 기반 플롯들의 시각적 품질을 개선했습니다.
 
-이 부분을 impulcifer 내부에도 적용시킬까 고민중입니다.
-
-Separately from Impulcifer's channel balance function, when there are deviations in microphone placement or insertion depth during recording, you need to correct for left‑ear and right‑ear responses rather than left‑channel and right‑channel.
-
-In other words, FL‑L, FR‑L / FR‑R, FL‑R. In REW, it's entirely possible to compensate solely for fit deviations by combining the MTW concept and applying ultrashort gating differently across frequency bands.
-
-I'm considering applying this approach within Impulcifer as well.
+- **Seaborn Style 적용:** `seaborn` 라이브러리를 사용하여 플롯에 전반적으로 `whitegrid` 스타일을 적용하여 가독성을 높였습니다. (Matplotlib 플롯 생성 전 `sns.set_theme(style="whitegrid")` 호출)
+- **커스텀 한글 폰트(Pretendard) 적용:**
+  - `Pretendard-Regular.otf` 폰트 파일을 패키지에 포함시키고 (`pyproject.toml`의 `package_data` 설정), `impulcifer.py`에서 `importlib.resources`를 사용하여 프로그램 실행 시 동적으로 로드하도록 구현했습니다. 이를 통해 시스템에 해당 폰트가 설치되어 있지 않아도 일관된 한글 표시가 가능합니다.
+  - 폰트 로드 실패 시 시스템 기본 한글 폰트(Windows: Malgun Gothic, macOS: AppleGothic, Linux: NanumGothic)를 사용하도록 폴백 로직을 추가했습니다.
+- **마이너스 부호 문제 해결:** Matplotlib에서 유니코드 마이너스 부호가 깨지는 현상을 방지하기 위해 `plt.rcParams['axes.unicode_minus'] = False` 설정을 전역적으로 적용했습니다.
 
 -----------------------------------------------
-### 3
-BacchORC와 같은 바이노럴 룸보정(DRC) 기능을 적용해볼까 싶은 생각도 하고있습니다.
 
-impulcifer에 룸파일, 타겟등을 적용하여 룸이큐를 처리되게끔 할수도 있지만, 그것과는 별개로 바이노럴의 특징을 고려하여 개인의 좌우 신체편차를 보정하고
+### 10. 주요 기능 및 플롯 종류 개선
 
-더 나아가 각 스피커 각도에서 필연적으로 발생하는 귓바퀴의 착색을 DF(혹은 룸게인 가중치가 부여된 타겟)에 맞게 교정하여, 결과적으로 투명함을 얻을수 있고 스피커가 본질적으로 사라지게 됩니다.
-
-(스피커와 룸, 그리고 귓바퀴의 착색이 스피커가 있다는 것을 인지하게 하는 요소들입니다.)
-
-다만 이건 개인마다 DF의 차이가 분명히 존재하고, 개인마다 녹음 방법이 정확히 같지않기때문에 어떻게 공용화해서 적용시킬지는 고민중입니다.
-
-I'm also considering applying a binaural room correction (DRC) function like BacchORC.
-
-While it's possible to process room EQ in Impulcifer by applying room files and targets, separately, by taking binaural characteristics into account, you can correct for individual left‑right anatomical variations and, furthermore, correct pinna coloration that inevitably occurs at each speaker angle to match the DF (or a target with room‑gain weighting). The result is transparency, effectively making the speakers disappear.
-
-(The speaker, the room, and pinna coloration are the elements that make us aware of the presence of speakers.)
-
-However, since DF differences clearly exist among individuals and recording methods aren't exactly the same for everyone, I'm pondering how to generalize and apply this.
+* **주요 기능 및 플롯 종류:**
+  * **양이 응답 임펄스 오버레이 (Interaural Impulse Overlay):** 각 스피커에 대한 좌우 귀 임펄스 응답 중첩 표시.
+  * **양이 레벨 차이 (ILD - Interaural Level Difference):** 주파수 대역별 양 귀 레벨 차이.
+  * **양이 위상차 (IPD - Interaural Phase Difference):** 주파수 대역별 양 귀 위상차.
+  * **양이 간 상호 상관 계수 (IACC - Interaural Cross-Correlation Coefficient):** 양쪽 귀 신호 간 유사성 및 공간감 지표.
+  * **에너지 시간 곡선 (ETC - Energy Time Curve):** 임펄스 응답 에너지의 시간적 감쇠 특성.
+  * **종합 결과 (Result Overview):** 전체 채널 종합 좌/우 귀 최종 주파수 응답 및 차이.
+* **사용자 경험:**
+  * 모든 인터랙티브 플롯은 단일 HTML 파일 내의 탭으로 제공되어 사용 편의성을 높였습니다. (`impulcifer.py`에서 `Tabs`와 `TabPanel` 사용)
+  * 플롯 크기는 브라우저 창에 맞춰 자동 조절되어 다양한 화면에서 가독성을 확보합니다. (`hrir.py`의 `figure` 및 `gridplot`의 `sizing_mode` 조정, `impulcifer.py`의 `Tabs`에 `sizing_mode='stretch_both'` 적용)
+  * 커스텀 폰트(Pretendard) 적용 및 Matplotlib 마이너스 부호 문제 해결 (`impulcifer.py`의 `set_matplotlib_font` 함수, `plt.rcParams['axes.unicode_minus'] = False` 설정)
 
 -----------------------------------------------
-### 4
-plot은 초기사용자들에게 나쁘지않은 정보들을 제공해주지만 기존의 plot들중 대부분은 잘 보지않게 되었고, 결국은 REW를 사용하여 확인합니다.
 
-BRIR사용자들에 제일 도움이 될만한 간단한 그래프는 일단 양이응답 임펄스 오버레이형태이지않을까 싶습니다. 더나아가 ILD,IPD,IACC,ETC 등의 지표도 같이 보여주면 좋을 것 같습니다. 
+### 11. 기존 Matplotlib 플롯 개선 (Seaborn 스타일 및 커스텀 폰트 적용)
 
-Plots provide useful information for novice users, but most of the existing plots are seldom viewed, and users ultimately use REW to verify.
+* **주요 기능 및 플롯 종류:**
+  * **양이 응답 임펄스 오버레이 (Interaural Impulse Overlay):** 각 스피커에 대한 좌우 귀 임펄스 응답 중첩 표시.
+  * **양이 레벨 차이 (ILD - Interaural Level Difference):** 주파수 대역별 양 귀 레벨 차이.
+  * **양이 위상차 (IPD - Interaural Phase Difference):** 주파수 대역별 양 귀 위상차.
+  * **양이 간 상호 상관 계수 (IACC - Interaural Cross-Correlation Coefficient):** 양쪽 귀 신호 간 유사성 및 공간감 지표.
+  * **에너지 시간 곡선 (ETC - Energy Time Curve):** 임펄스 응답 에너지의 시간적 감쇠 특성.
+  * **종합 결과 (Result Overview):** 전체 채널 종합 좌/우 귀 최종 주파수 응답 및 차이.
+* **사용자 경험:**
+  * 모든 인터랙티브 플롯은 단일 HTML 파일 내의 탭으로 제공되어 사용 편의성을 높였습니다. (`impulcifer.py`에서 `Tabs`와 `TabPanel` 사용)
+  * 플롯 크기는 브라우저 창에 맞춰 자동 조절되어 다양한 화면에서 가독성을 확보합니다. (`hrir.py`의 `figure` 및 `gridplot`의 `sizing_mode` 조정, `impulcifer.py`의 `Tabs`에 `sizing_mode='stretch_both'` 적용)
+  * 커스텀 폰트(Pretendard) 적용 및 Matplotlib 마이너스 부호 문제 해결 (`impulcifer.py`의 `set_matplotlib_font` 함수, `plt.rcParams['axes.unicode_minus'] = False` 설정)
 
-The simplest graph that would be most helpful for BRIR users would probably be a stereo impulse response overlay. Furthermore, it would be beneficial to also display metrics such as ILD, IPD, IACC, and ETC.
+-----------------------------------------------

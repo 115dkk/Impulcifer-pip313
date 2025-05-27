@@ -29,6 +29,7 @@ dependencies = [
     'tabulate>=0.9.0',
     'autoeq-py313>=1.2.0',
     'seaborn',
+    'bokeh>=3.0.0',
 ]
 
 [project.scripts]
@@ -66,6 +67,7 @@ include = [
     "README.md",
     "CHANGELOG.md",
     "pyproject.toml",
+    "fonts/Pretendard-Regular.otf",
 ]
 exclude = [
     "research/**/*",
@@ -74,4 +76,5 @@ exclude = [
 
 # data 폴더를 패키지 데이터로 포함
 [tool.hatch.build.targets.wheel.shared-data]
-"data" = "impulcifer_py313/data" 
+"data" = "impulcifer_py313/data"
+"fonts" = "impulcifer_py313/fonts" 
