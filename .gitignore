@@ -108,6 +108,19 @@ venv.bak/
 
 data/my_hrir
 
+# Impulcifer demo data: Ignore all by default
+data/demo/*
+# Then, un-ignore specific files listed in pyproject.toml
+!data/demo/README.md
+!data/demo/headphones.wav
+!data/demo/room-mic-calibration.txt
+!data/demo/room-responses.wav
+!data/demo/room-target.csv
+!data/demo/FC.wav
+!data/demo/FL,FR.wav
+!data/demo/BL,SL.wav
+!data/demo/SR,BR.WAV
+
 research/**/*.csv
 research/**/*.txt
 research/**/*.wav
