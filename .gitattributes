@@ -1,0 +1,6 @@
+data/demo/*.wav filter=lfs diff=lfs merge=lfs -text
+data/demo/*.WAV filter=lfs diff=lfs merge=lfs -text
+data/demo/*.png filter=lfs diff=lfs merge=lfs -text
+data/demo/*.PNG filter=lfs diff=lfs merge=lfs -text
+data/demo/*.HTML filter=lfs diff=lfs merge=lfs -text
+data/demo/*.html filter=lfs diff=lfs merge=lfs -text
