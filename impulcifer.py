@@ -441,14 +441,6 @@ def headphone_compensation(estimator, dir_path):
     # 새로운 타겟: 저주파에 6dB 부스트를 적용한 타겟
     target_raw = np.zeros(len(freq))
     
-    # 헤드폰 저주파 보상용 타겟 생성 (6dB 부스트로 수정)
-    for i, f in enumerate(freq):
-        if f < 100:
-            # 100Hz 이하에서 로그 스케일로 서서히 증가하는 저주파 부스트 적용
-            # 10Hz에서 최대 6dB 부스트, 100Hz에서 0dB
-            log_ratio = np.log10(f / 10) / np.log10(100 / 10)
-            target_raw[i] = 6 * (1 - log_ratio) # 10dB에서 6dB로 수정
-    
     # 타겟 응답 객체 생성
     target = FrequencyResponse(name='headphone_compensation_target', frequency=freq, raw=target_raw)
 
@@ -462,16 +454,6 @@ def headphone_compensation(estimator, dir_path):
     # 보상 적용
     left.compensate(target, min_mean_error=True)
     right.compensate(target, min_mean_error=True)
-    
-    # 저주파에서 올바른 보상을 유지하기 위한 후처리
-    # 아주 낮은 주파수(20Hz 이하)에서 보상이 지나치게 감소하는 것을 방지
-    for fr in [left, right]:
-        # 주파수별 추가 보정
-        for i, f in enumerate(fr.frequency):
-            if f < 20:  # 20Hz 이하
-                fr.error[i] += 6 * (1 - np.log10(f / 10) / np.log10(20 / 10))
-            elif f < 50:  # 20-50Hz
-                fr.error[i] += 3 * (1 - np.log10(f / 20) / np.log10(50 / 20))
 
     # 기존 헤드폰 플롯
     fig = plt.figure()
@@ -539,18 +521,6 @@ def create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt)
         bass_boost_q=bass_boost_q,
         tilt=tilt
     )
-    
-    # 수정된 하이패스 필터 적용
-    # 10Hz까지 완만한 롤오프로 수정하여 저주파 응답을 향상
-    high_pass = FrequencyResponse(
-        name='high_pass_modified',
-        frequency=[10, 15, 20, 25, 30, 20000],
-        raw=[-6, -3, -1, -0.5, 0, 0]  # 더 완만한 롤오프
-    )
-    high_pass.interpolate(f_min=10, f_max=estimator.fs / 2, f_step=1.01)
-    
-    # 하이패스 필터 적용
-    target.raw += high_pass.raw
     
     # 저주파 영역 베이스 부스트 값 출력 (디버깅용)
     # bass_boost_values = target.raw[:200]  # 저주파 영역만 추출
