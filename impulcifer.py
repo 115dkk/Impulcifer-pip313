@@ -21,6 +21,7 @@ import copy
 import contextlib
 import io
 from scipy.io import wavfile # hangloose용, 필요시 추가
+from scipy.interpolate import interp1d # 큐빅 보간을 위해 추가
 
 # 한글 폰트 설정 추가
 import matplotlib.font_manager as fm
@@ -43,6 +44,48 @@ elif system == 'Linux':
     # Linux 기본 폰트
     plt.rcParams['font.family'] = 'NanumGothic'
 
+# 큐빅 스플라인 보간 적용 헬퍼 함수
+def _apply_cubic_interp(fr_obj, target_freqs, fallback_interpolate_method_ref, operation_description=""):
+    """FrequencyResponse 객체에 큐빅 스플라인 보간을 적용합니다.
+    실패 시 제공된 폴백 메소드를 사용합니다.
+    """
+    if fr_obj is None:
+        return
+
+    source_freqs = fr_obj.frequency
+    source_raw = fr_obj.raw
+    fr_name = fr_obj.name if hasattr(fr_obj, 'name') else 'FrequencyResponse object'
+    desc = f" for {fr_name}" if operation_description == "" else f" for {operation_description} of {fr_name}"
+
+    if len(source_freqs) > 3 and len(source_raw) > 3: # interp1d 'cubic'은 최소 4개의 포인트 필요
+        unique_src_freqs, unique_indices = np.unique(source_freqs, return_index=True)
+        unique_src_raw = source_raw[unique_indices]
+
+        if len(unique_src_freqs) > 3:
+            try:
+                # 경계값으로 fill_value를 설정하여 외삽 시 안정성 확보
+                fill_val = (unique_src_raw[0], unique_src_raw[-1])
+                interp_func = interp1d(unique_src_freqs, unique_src_raw, kind='cubic', bounds_error=False, fill_value=fill_val)
+                
+                new_raw = interp_func(target_freqs)
+                fr_obj.raw = new_raw
+                fr_obj.frequency = target_freqs.copy()
+                # print(f"Successfully applied cubic interpolation{desc}.") # 필요시 주석 해제
+                return True # 성공
+            except ValueError as e:
+                print(f"ValueError during cubic interpolation{desc}: {e}. Using original interpolate.")
+        else:
+            print(f"Warning: Not enough unique data points for cubic interpolation{desc}. Using original interpolate.")
+    else:
+        print(f"Warning: Not enough data points for cubic interpolation{desc}. Using original interpolate.")
+    
+    # 큐빅 보간 실패 시 폴백
+    try:
+        fallback_interpolate_method_ref()
+        # print(f"Fallback interpolation applied{desc}.") # 필요시 주석 해제
+    except Exception as e_fallback:
+        print(f"Error in fallback interpolation{desc}: {e_fallback}")
+    return False # 실패 또는 폴백 사용
 
 def main(dir_path=None,
          test_signal=None,
@@ -392,7 +435,9 @@ def equalization(estimator, dir_path):
     elif eq_fr is not None:
         left_fr = eq_fr
     if left_fr is not None:
-        left_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+        # left_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+        new_freqs_left = FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+        _apply_cubic_interp(left_fr, new_freqs_left, lambda: left_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2), "left equalization curve")
 
     # Right
     right_path = os.path.join(dir_path, 'eq-right.csv')
@@ -402,7 +447,9 @@ def equalization(estimator, dir_path):
     elif eq_fr is not None:
         right_fr = eq_fr
     if right_fr is not None and right_fr != left_fr:
-        right_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+        # right_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+        new_freqs_right = FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+        _apply_cubic_interp(right_fr, new_freqs_right, lambda: right_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2), "right equalization curve")
 
     # Plot
     if left_fr is not None or right_fr is not None:
@@ -469,8 +516,8 @@ def headphone_compensation(estimator, dir_path):
     left_orig = left.copy()
     right_orig = right.copy()
     
-    left.interpolate(f=target.frequency)
-    right.interpolate(f=target.frequency)
+    _apply_cubic_interp(left, target.frequency, lambda: left_orig.interpolate(f=target.frequency), "left headphone response")
+    _apply_cubic_interp(right, target.frequency, lambda: right_orig.interpolate(f=target.frequency), "right headphone response")
     
     # 보상 적용
     left.compensate(target, min_mean_error=True)
