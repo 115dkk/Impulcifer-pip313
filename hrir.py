@@ -4,6 +4,7 @@ import os
 import warnings
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from scipy import signal
 from scipy.signal.windows import hann
 from scipy.fft import fft, ifft, next_fast_len
@@ -712,3 +713,453 @@ class HRIR:
                     'late_db': db_late
                 }
         return reflection_data
+
+    def plot_interaural_impulse_overlay(self, dir_path, time_range_ms=(-5, 30)):
+        """Plots interaural impulse response overlay for each speaker.
+
+        Args:
+            dir_path (str): Path to directory for saving the figures.
+            time_range_ms (tuple): Time range for the plot in milliseconds, relative to the peak.
+        """
+        os.makedirs(dir_path, exist_ok=True)
+        sns.set_theme(style="whitegrid") # Seaborn 스타일 적용
+
+        for speaker, pair in self.irs.items():
+            fig, ax = plt.subplots(figsize=(12, 7))
+            
+            ir_left = pair.get('left')
+            ir_right = pair.get('right')
+
+            if not ir_left or not ir_right:
+                plt.close(fig)
+                continue
+
+            # Find the peak of the earlier channel to align
+            peak_idx_left = ir_left.peak_index() if ir_left else None
+            peak_idx_right = ir_right.peak_index() if ir_right else None
+
+            if peak_idx_left is None or peak_idx_right is None:
+                plt.close(fig)
+                continue
+                
+            # 기준 피크 설정 (더 일찍 도달하는 채널의 피크 또는 좌측 채널 피크)
+            # 여기서는 설명을 위해 좌측 채널 피크를 기준으로 하지만, 실제로는 더 복잡한 정렬이 필요할 수 있음
+            # 혹은, 각 채널의 피크를 0으로 맞추고 상대적인 시간차(ITD)를 고려하여 플롯할 수도 있음
+            # 지금은 각 IR의 피크를 중심으로 플롯 범위를 설정합니다.
+            
+            max_val = 0 # Y축 스케일 조정을 위해
+
+            for side, ir_obj in [('left', ir_left), ('right', ir_right)]:
+                if not ir_obj:
+                    continue
+                
+                peak_idx = ir_obj.peak_index()
+                if peak_idx is None:
+                    continue
+
+                start_sample = peak_idx + int(time_range_ms[0] * self.fs / 1000)
+                end_sample = peak_idx + int(time_range_ms[1] * self.fs / 1000)
+
+                start_sample = max(0, start_sample)
+                end_sample = min(len(ir_obj.data), end_sample)
+
+                if start_sample >= end_sample:
+                    continue
+
+                segment = ir_obj.data[start_sample:end_sample]
+                time_axis = np.linspace(time_range_ms[0] + (start_sample - (peak_idx + int(time_range_ms[0] * self.fs / 1000))) * 1000 / self.fs, 
+                                        time_range_ms[0] + (end_sample - (peak_idx + int(time_range_ms[0] * self.fs / 1000)) -1) * 1000 / self.fs, 
+                                        num=len(segment))
+                
+                # Normalize segment for better visualization if desired, or use raw data
+                # segment_normalized = segment / (np.max(np.abs(segment)) + 1e-9)
+                # sns.lineplot(x=time_axis, y=segment_normalized, label=f'{side.capitalize()} Ear')
+                sns.lineplot(x=time_axis, y=segment, label=f'{side.capitalize()} Ear')
+                max_val = max(max_val, np.max(np.abs(segment)))
+
+            ax.set_title(f'{speaker} - Interaural Impulse Response Overlay')
+            ax.set_xlabel('Time relative to peak (ms)')
+            ax.set_ylabel('Amplitude')
+            if max_val > 0:
+                ax.set_ylim(-max_val*1.1, max_val*1.1)
+            ax.legend()
+            ax.grid(True)
+
+            plot_file_path = os.path.join(dir_path, f'{speaker}_interaural_overlay.png')
+            try:
+                fig.savefig(plot_file_path, bbox_inches='tight')
+                im = Image.open(plot_file_path)
+                im = im.convert('P', palette=Image.ADAPTIVE, colors=128) # 색상 수 조정 가능
+                im.save(plot_file_path, optimize=True)
+            except Exception as e:
+                print(f"Error saving/optimizing image {plot_file_path}: {e}")
+            finally:
+                plt.close(fig)
+
+    def plot_ild(self, dir_path, freq_bands=None):
+        """Plots Interaural Level Difference (ILD) for each speaker.
+
+        Args:
+            dir_path (str): Path to directory for saving the figures.
+            freq_bands (list of tuples, optional): List of frequency bands for ILD calculation,
+                                                  e.g., [(100, 500), (500, 2000), (2000, 8000)].
+                                                  Defaults to octave bands if None.
+        """
+        os.makedirs(dir_path, exist_ok=True)
+        sns.set_theme(style="whitegrid")
+
+        if freq_bands is None:
+            # Default to octave bands (approximate centers)
+            octave_centers = [125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+            freq_bands = []
+            for center in octave_centers:
+                lower = center / (2**(1/2))
+                upper = center * (2**(1/2))
+                if upper > self.fs / 2:
+                    upper = self.fs / 2
+                if lower < upper: # Ensure lower is less than upper before adding
+                    freq_bands.append((lower, upper))
+                if upper >= self.fs / 2: # Stop if upper bound reaches Nyquist
+                    break
+        
+        unique_freq_bands_str = [f"{int(fb[0])}-{int(fb[1])}Hz" for fb in freq_bands]
+
+
+        for speaker, pair in self.irs.items():
+            ir_left = pair.get('left')
+            ir_right = pair.get('right')
+
+            if not ir_left or not ir_right:
+                continue
+
+            ild_values = []
+            for f_low, f_high in freq_bands:
+                if f_high > self.fs / 2: 
+                    f_high = self.fs / 2
+                if f_low >= f_high: # If band is invalid after adjustment
+                    ild_values.append(np.nan)
+                    continue
+
+                fft_len = next_fast_len(max(len(ir_left.data), len(ir_right.data)))
+                
+                # Ensure data is 1D for FFT
+                data_left = ir_left.data.squeeze()
+                data_right = ir_right.data.squeeze()
+                if data_left.ndim > 1 or data_right.ndim > 1:
+                    print(f"Warning: Skipping ILD for {speaker} due to unexpected IR data dimensions.")
+                    ild_values.append(np.nan) # Or handle differently
+                    continue
+
+
+                fft_left_full = fft(data_left, n=fft_len)
+                fft_right_full = fft(data_right, n=fft_len)
+                
+                freqs = np.fft.fftfreq(fft_len, d=1/self.fs)
+
+                band_indices = np.where((freqs >= f_low) & (freqs < f_high))[0]
+
+                if len(band_indices) == 0:
+                    ild_values.append(np.nan)
+                    continue
+                    
+                power_left = np.sum(np.abs(fft_left_full[band_indices])**2)
+                power_right = np.sum(np.abs(fft_right_full[band_indices])**2)
+
+                if power_right == 0: 
+                    ild = np.nan if power_left == 0 else np.inf 
+                else:
+                    ild = 10 * np.log10((power_left + 1e-12) / (power_right + 1e-12)) # Epsilon in numerator as well
+                ild_values.append(ild)
+
+            # Skip plot if no valid ILD data
+            if not ild_values or all(np.isnan(v) for v in ild_values): 
+                continue
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+            # Filter out NaN values for plotting if seaborn struggles with them directly in barplot
+            valid_indices = [i for i, v in enumerate(ild_values) if not np.isnan(v)]
+            
+            # valid_indices가 비어있는 경우에 대한 추가 방어 코드
+            if not valid_indices:
+                 plt.close(fig) # fig는 위에서 선언되었으므로 안전하게 호출 가능
+                 continue
+            
+            plot_bands_str = [unique_freq_bands_str[i] for i in valid_indices]
+            plot_ild_values = [ild_values[i] for i in valid_indices]
+
+            sns.barplot(x=plot_bands_str, y=plot_ild_values, ax=ax, palette="vlag")
+            ax.set_title(f'{speaker} - Interaural Level Difference (ILD)')
+            ax.set_xlabel('Frequency Band (Hz)')
+            ax.set_ylabel('ILD (dB, Left/Right)')
+            ax.axhline(0, color='grey', linestyle='--')
+            plt.xticks(rotation=45, ha="right")
+            plt.tight_layout()
+
+            plot_file_path = os.path.join(dir_path, f'{speaker}_ild.png')
+            try:
+                fig.savefig(plot_file_path, bbox_inches='tight')
+                im = Image.open(plot_file_path)
+                im = im.convert('P', palette=Image.ADAPTIVE, colors=128)
+                im.save(plot_file_path, optimize=True)
+            except Exception as e:
+                print(f"Error saving/optimizing image {plot_file_path}: {e}")
+            finally:
+                plt.close(fig)
+
+    def plot_ipd(self, dir_path, freq_bands=None, unwrap_phase=True):
+        """Plots Interaural Phase Difference (IPD) for each speaker.
+
+        Args:
+            dir_path (str): Path to directory for saving the figures.
+            freq_bands (list of tuples, optional): List of frequency bands for IPD calculation.
+                                                  Defaults to octave bands if None.
+            unwrap_phase (bool): Whether to unwrap phase differences to avoid 2*pi jumps.
+        """
+        os.makedirs(dir_path, exist_ok=True)
+        sns.set_theme(style="whitegrid")
+
+        if freq_bands is None:
+            octave_centers = [125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+            freq_bands = []
+            for center in octave_centers:
+                lower = center / (2**(1/2))
+                upper = center * (2**(1/2))
+                if upper > self.fs / 2:
+                    upper = self.fs / 2
+                if lower < upper:
+                    freq_bands.append((lower, upper))
+                if upper >= self.fs / 2:
+                    break
+        
+        unique_freq_bands_str = [f"{int(fb[0])}-{int(fb[1])}Hz" for fb in freq_bands]
+
+        for speaker, pair in self.irs.items():
+            ir_left = pair.get('left')
+            ir_right = pair.get('right')
+
+            if not ir_left or not ir_right:
+                continue
+
+            ipd_values = []
+            for f_low, f_high in freq_bands:
+                if f_high > self.fs / 2:
+                    f_high = self.fs / 2
+                if f_low >= f_high:
+                    ipd_values.append(np.nan)
+                    continue
+
+                fft_len = next_fast_len(max(len(ir_left.data), len(ir_right.data)))
+                data_left = ir_left.data.squeeze()
+                data_right = ir_right.data.squeeze()
+
+                if data_left.ndim > 1 or data_right.ndim > 1:
+                    ipd_values.append(np.nan)
+                    continue
+
+                fft_left_full = fft(data_left, n=fft_len)
+                fft_right_full = fft(data_right, n=fft_len)
+                freqs = np.fft.fftfreq(fft_len, d=1/self.fs)
+                
+                band_indices = np.where((freqs >= f_low) & (freqs < f_high))[0]
+                if not len(band_indices):
+                    ipd_values.append(np.nan)
+                    continue
+                
+                complex_sum_left = np.sum(fft_left_full[band_indices])
+                complex_sum_right = np.sum(fft_right_full[band_indices])
+
+                phase_left = np.angle(complex_sum_left)
+                phase_right = np.angle(complex_sum_right)
+                
+                ipd = phase_left - phase_right
+                
+                if unwrap_phase:
+                    ipd = (ipd + np.pi) % (2 * np.pi) - np.pi 
+
+                ipd_values.append(np.degrees(ipd))
+
+            if not ipd_values or all(np.isnan(v) for v in ipd_values):
+                continue
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+            valid_indices = [i for i, v in enumerate(ipd_values) if not np.isnan(v)]
+            if not valid_indices:
+                plt.close(fig)
+                continue
+            
+            plot_bands_str = [unique_freq_bands_str[i] for i in valid_indices]
+            plot_ipd_values = [ipd_values[i] for i in valid_indices]
+
+            sns.barplot(x=plot_bands_str, y=plot_ipd_values, ax=ax, palette="coolwarm")
+            ax.set_title(f'{speaker} - Interaural Phase Difference (IPD)')
+            ax.set_xlabel('Frequency Band (Hz)')
+            ax.set_ylabel('IPD (Degrees, Left - Right)')
+            ax.axhline(0, color='grey', linestyle='--')
+            ax.set_ylim(-180, 180) 
+            ax.set_yticks(np.arange(-180, 181, 45))
+            plt.xticks(rotation=45, ha="right")
+            plt.tight_layout()
+
+            plot_file_path = os.path.join(dir_path, f'{speaker}_ipd.png')
+            try:
+                fig.savefig(plot_file_path, bbox_inches='tight')
+                im = Image.open(plot_file_path)
+                im = im.convert('P', palette=Image.ADAPTIVE, colors=128)
+                im.save(plot_file_path, optimize=True)
+            except Exception as e:
+                print(f"Error saving/optimizing image {plot_file_path}: {e}")
+            finally:
+                plt.close(fig)
+
+    def plot_iacc(self, dir_path, max_delay_ms=1):
+        """Plots Interaural Cross-Correlation (IACC) function and its maximum value for each speaker.
+
+        Args:
+            dir_path (str): Path to directory for saving the figures.
+            max_delay_ms (float): Maximum interaural delay to consider for cross-correlation in milliseconds.
+                                   Determines the range of the x-axis for the cross-correlation plot.
+        """
+        os.makedirs(dir_path, exist_ok=True)
+        sns.set_theme(style="whitegrid")
+
+        max_delay_samples = int(max_delay_ms * self.fs / 1000)
+
+        for speaker, pair in self.irs.items():
+            ir_left = pair.get('left')
+            ir_right = pair.get('right')
+
+            if not ir_left or not ir_right:
+                continue
+            
+            data_left = ir_left.data.squeeze()
+            data_right = ir_right.data.squeeze()
+
+            if data_left.ndim > 1 or data_right.ndim > 1 or len(data_left) == 0 or len(data_right) == 0:
+                print(f"Warning: Skipping IACC for {speaker} due to unexpected IR data dimensions or empty data.")
+                continue
+            
+            norm_left = data_left / (np.sqrt(np.mean(data_left**2)) + 1e-12)
+            norm_right = data_right / (np.sqrt(np.mean(data_right**2)) + 1e-12)
+            
+            len_diff = len(norm_left) - len(norm_right)
+            if len_diff > 0: 
+                norm_right_padded = np.pad(norm_right, (0, len_diff), 'constant')
+                norm_left_padded = norm_left
+            elif len_diff < 0: 
+                norm_left_padded = np.pad(norm_left, (0, -len_diff), 'constant')
+                norm_right_padded = norm_right
+            else:
+                norm_left_padded = norm_left
+                norm_right_padded = norm_right
+
+            correlation = signal.correlate(norm_left_padded, norm_right_padded, mode='full')
+            
+            center_idx = len(norm_right_padded) - 1 
+            lags = np.arange(-center_idx, len(norm_left_padded))
+
+            start_lag_idx = np.searchsorted(lags, -max_delay_samples)
+            end_lag_idx = np.searchsorted(lags, max_delay_samples, side='right')
+            
+            relevant_lags_samples = lags[start_lag_idx:end_lag_idx]
+            relevant_correlation = correlation[start_lag_idx:end_lag_idx]
+            
+            if len(relevant_correlation) == 0:
+                print(f"Warning: No relevant correlation data for IACC for {speaker} with max_delay_ms={max_delay_ms}.")
+                continue
+
+            max_iacc_val = np.max(relevant_correlation)
+            max_iacc_idx = np.argmax(relevant_correlation)
+            tau_iacc_samples = relevant_lags_samples[max_iacc_idx]
+            tau_iacc_ms = tau_iacc_samples * 1000 / self.fs
+
+            fig, ax = plt.subplots(figsize=(10, 6))
+            relevant_lags_ms = relevant_lags_samples * 1000 / self.fs
+            sns.lineplot(x=relevant_lags_ms, y=relevant_correlation, ax=ax)
+            
+            ax.axvline(tau_iacc_ms, color='r', linestyle='--', label=f'Max IACC: {max_iacc_val:.2f} at {tau_iacc_ms:.2f} ms')
+            ax.set_title(f'{speaker} - Interaural Cross-Correlation (IACC)')
+            ax.set_xlabel('Interaural Delay (ms)')
+            ax.set_ylabel('Cross-Correlation Coefficient')
+            ax.legend()
+            ax.grid(True)
+            
+            ax.set_xlim(-max_delay_ms * 1.1, max_delay_ms * 1.1)
+
+            plot_file_path = os.path.join(dir_path, f'{speaker}_iacc.png')
+            try:
+                fig.savefig(plot_file_path, bbox_inches='tight')
+                im = Image.open(plot_file_path)
+                im = im.convert('P', palette=Image.ADAPTIVE, colors=128)
+                im.save(plot_file_path, optimize=True)
+            except Exception as e:
+                print(f"Error saving/optimizing image {plot_file_path}: {e}")
+            finally:
+                plt.close(fig)
+
+    def plot_etc(self, dir_path, time_range_ms=(0, 200), y_range_db=(-80, 0)):
+        """Plots Energy Time Curve (ETC) for each ear of each speaker.
+
+        Args:
+            dir_path (str): Path to directory for saving the figures.
+            time_range_ms (tuple): Time range for the plot in milliseconds, relative to data start.
+            y_range_db (tuple): Y-axis range in dBFS for the plot.
+        """
+        os.makedirs(dir_path, exist_ok=True)
+        sns.set_theme(style="whitegrid")
+
+        for speaker, pair in self.irs.items():
+            fig, ax = plt.subplots(figsize=(12, 7))
+            has_data_to_plot = False
+
+            for side, ir_obj in pair.items():
+                if not ir_obj or len(ir_obj.data) == 0:
+                    continue
+
+                data = ir_obj.data.squeeze()
+                if data.ndim > 1:
+                    print(f"Warning: Skipping ETC for {speaker}-{side} due to unexpected IR data dimensions.")
+                    continue
+
+                squared_response = data**2
+                energy = np.cumsum(squared_response[::-1])[::-1] 
+                
+                if np.max(energy) > 1e-12: 
+                    etc_db = 10 * np.log10(energy / (np.max(energy) + 1e-12) + 1e-12)
+                else:
+                    etc_db = np.full_like(energy, y_range_db[0]) 
+                
+                time_axis_ms = np.arange(len(etc_db)) * 1000 / self.fs
+
+                start_sample_idx = np.searchsorted(time_axis_ms, time_range_ms[0])
+                end_sample_idx = np.searchsorted(time_axis_ms, time_range_ms[1], side='right')
+
+                if start_sample_idx >= end_sample_idx: 
+                    continue
+                
+                sns.lineplot(x=time_axis_ms[start_sample_idx:end_sample_idx], 
+                             y=etc_db[start_sample_idx:end_sample_idx], 
+                             label=f'{side.capitalize()} Ear')
+                has_data_to_plot = True
+            
+            if not has_data_to_plot:
+                plt.close(fig)
+                continue
+
+            ax.set_title(f'{speaker} - Energy Time Curve (ETC)')
+            ax.set_xlabel('Time (ms)')
+            ax.set_ylabel('Energy (dBFS)')
+            ax.set_xlim(time_range_ms)
+            ax.set_ylim(y_range_db)
+            ax.legend()
+            ax.grid(True)
+
+            plot_file_path = os.path.join(dir_path, f'{speaker}_etc.png')
+            try:
+                fig.savefig(plot_file_path, bbox_inches='tight')
+                im = Image.open(plot_file_path)
+                im = im.convert('P', palette=Image.ADAPTIVE, colors=128)
+                im.save(plot_file_path, optimize=True)
+            except Exception as e:
+                print(f"Error saving/optimizing image {plot_file_path}: {e}")
+            finally:
+                plt.close(fig)

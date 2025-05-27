@@ -68,6 +68,14 @@ def main(dir_path=None,
          jamesdsp=False,
          hangloose=False):
     """"""
+    if plot:
+        try:
+            import seaborn as sns
+            sns.set_theme(style="whitegrid")
+            print("Seaborn style applied to plots.")
+        except ImportError:
+            print("Seaborn not installed, using default matplotlib style.")
+
     if dir_path is None or not os.path.isdir(dir_path):
         raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
 
@@ -215,6 +223,19 @@ def main(dir_path=None,
     # Plot results, always
     print('Plotting results...')
     hrir.plot_result(os.path.join(dir_path, 'plots'))
+
+    # PR4: 양이 응답 임펄스 오버레이 플롯 추가
+    if plot:
+        print('Plotting interaural impulse overlay...')
+        hrir.plot_interaural_impulse_overlay(os.path.join(dir_path, 'plots', 'interaural_overlay'))
+        print('Plotting ILD...')
+        hrir.plot_ild(os.path.join(dir_path, 'plots', 'ild'))
+        print('Plotting IPD...')
+        hrir.plot_ipd(os.path.join(dir_path, 'plots', 'ipd'))
+        print('Plotting IACC...')
+        hrir.plot_iacc(os.path.join(dir_path, 'plots', 'iacc'))
+        print('Plotting ETC...')
+        hrir.plot_etc(os.path.join(dir_path, 'plots', 'etc'))
 
     # Re-sample
     if fs is not None and fs != hrir.fs:

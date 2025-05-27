@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 import matplotlib.ticker as ticker
 from scipy.signal import spectrogram
 from matplotlib.ticker import LinearLocator, FormatStrFormatter, FuncFormatter
