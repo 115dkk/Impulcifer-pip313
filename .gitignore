@@ -127,3 +127,7 @@ research/**/*.wav
 research/**/*.WAV
 research/**/*.pkl
 research/*/**/*.png
+
+# Test output directories
+test_microphone_deviation_output/*
+test_integration_output/*
