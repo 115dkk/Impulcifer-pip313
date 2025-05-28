@@ -290,6 +290,7 @@ def main_gui():
 		fr_combination_method_optionmenu.config(state=NORMAL if do_room_correction.get() else DISABLED)
 		fs_optionmenu.config(state=NORMAL if fs_check.get() else DISABLED)
 		decay_entry.config(state=DISABLED if decay_per_channel.get() else NORMAL)
+		mic_deviation_strength_entry.config(state=NORMAL if microphone_deviation_correction.get() else DISABLED)
 
 		if show_adv.get():
 			for widget in adv_options_pos:
@@ -541,6 +542,53 @@ def main_gui():
 	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(decay_br, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	adv_options_pos[decay_br] = widgetpos_temp
 
+	#Pre-response length (head_ms)
+	pre_response_label = Label(canvas2, text='Pre-response (ms)')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(pre_response_label, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[pre_response_label] = widgetpos_temp
+	pre_response = DoubleVar(value=1.0)
+	pre_response_entry = Entry(canvas2, textvariable=pre_response, width=7, validate='key', vcmd=(root.register(validate_double), '%P'))
+	ToolTip(pre_response_label, 'Head room in milliseconds for cropping impulse response heads. Default is 1.0 ms.')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(pre_response_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[pre_response_entry] = widgetpos_temp
+
+	#JamesDSP
+	jamesdsp = BooleanVar()
+	jamesdsp_checkbutton = Checkbutton(canvas2, text="JamesDSP output", variable=jamesdsp)
+	ToolTip(jamesdsp_checkbutton, 'Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels.')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(jamesdsp_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[jamesdsp_checkbutton] = widgetpos_temp
+
+	#Hangloose
+	hangloose = BooleanVar()
+	hangloose_checkbutton = Checkbutton(canvas2, text="Hangloose output", variable=hangloose)
+	ToolTip(hangloose_checkbutton, 'Generate separate stereo IR for each channel for Hangloose Convolver.')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(hangloose_checkbutton, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[hangloose_checkbutton] = widgetpos_temp
+
+	#Interactive plots
+	interactive_plots = BooleanVar()
+	interactive_plots_checkbutton = Checkbutton(canvas2, text="Interactive plots", variable=interactive_plots)
+	ToolTip(interactive_plots_checkbutton, 'Generate interactive Bokeh plots in HTML files.')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(interactive_plots_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[interactive_plots_checkbutton] = widgetpos_temp
+
+	#Microphone deviation correction
+	microphone_deviation_correction = BooleanVar()
+	microphone_deviation_correction_checkbutton = Checkbutton(canvas2, text="Mic deviation correction", variable=microphone_deviation_correction, command=refresh2)
+	ToolTip(microphone_deviation_correction_checkbutton, 'Enable microphone deviation correction to compensate for microphone placement variations between left and right ears.')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(microphone_deviation_correction_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[microphone_deviation_correction_checkbutton] = widgetpos_temp
+
+	mic_deviation_strength_label = Label(canvas2, text='Strength')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(mic_deviation_strength_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[mic_deviation_strength_label] = widgetpos_temp
+	mic_deviation_strength = DoubleVar(value=0.7)
+	mic_deviation_strength_entry = Entry(canvas2, textvariable=mic_deviation_strength, width=7, validate='key', vcmd=(root.register(validate_double), '%P'))
+	ToolTip(mic_deviation_strength_entry, 'Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction.')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(mic_deviation_strength_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	adv_options_pos[mic_deviation_strength_entry] = widgetpos_temp
+
 	decay_labels = []
 	decay_entries = []
 	decay_labels.append(decay_fl_label)
@@ -579,6 +627,12 @@ def main_gui():
 				args['decay'] = {decay_labels[i].cget('text') : float(decay_entries[i].get()) / 1000 for i in range(7) if decay_entries[i].get()}
 			elif decay.get():
 				args['decay'] = {decay_labels[i].cget('text') : float(decay.get()) / 1000 for i in range(7)}
+			args['head_ms'] = pre_response.get()
+			args['jamesdsp'] = jamesdsp.get()
+			args['hangloose'] = hangloose.get()
+			args['interactive_plots'] = interactive_plots.get()
+			args['microphone_deviation_correction'] = microphone_deviation_correction.get()
+			args['mic_deviation_strength'] = mic_deviation_strength.get()
 		print(args) #debug args
 		impulcifer.main(**args)
 		showinfo('Done!', 'Generated files, check recordings folder.')
