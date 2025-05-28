@@ -457,6 +457,69 @@ class HRIR:
 
         return eqir
 
+    def correct_microphone_deviation(self, correction_strength=0.7, plot_analysis=False, plot_dir=None):
+        """
+        마이크 착용 편차 보정
+        
+        바이노럴 임펄스 응답 측정 시 좌우 귀에 착용된 마이크의 위치/깊이 차이로 인한
+        주파수 응답 편차를 보정합니다. REW의 MTW(Minimum Time Window) 개념을 활용하여
+        직접음 구간만을 분석하고 보정합니다.
+        
+        Args:
+            correction_strength (float): 보정 강도 (0.0~1.0). 0.0은 보정 없음, 1.0은 완전 보정
+            plot_analysis (bool): 분석 결과 플롯 생성 여부
+            plot_dir (str): 플롯 저장 디렉토리 경로
+            
+        Returns:
+            dict: 각 스피커별 분석 결과
+        """
+        from microphone_deviation_correction import apply_microphone_deviation_correction_to_hrir
+        
+        print('마이크 착용 편차 보정 중...')
+        
+        # 플롯 디렉토리 설정
+        if plot_analysis and plot_dir:
+            mic_deviation_plot_dir = os.path.join(plot_dir, 'microphone_deviation')
+            os.makedirs(mic_deviation_plot_dir, exist_ok=True)
+        else:
+            mic_deviation_plot_dir = None
+            
+        # 보정 적용
+        analysis_results = apply_microphone_deviation_correction_to_hrir(
+            self, 
+            correction_strength=correction_strength,
+            plot_analysis=plot_analysis,
+            plot_dir=mic_deviation_plot_dir
+        )
+        
+        # 보정 결과 요약 출력
+        if analysis_results:
+            corrected_speakers = []
+            skipped_speakers = []
+            total_deviations = []
+            
+            for speaker, results in analysis_results.items():
+                if results.get('correction_applied', False):
+                    corrected_speakers.append(speaker)
+                    if 'avg_deviation_db' in results:
+                        total_deviations.append(results['avg_deviation_db'])
+                else:
+                    skipped_speakers.append(speaker)
+                    
+            print(f"마이크 편차 보정 완료:")
+            print(f"  - 보정 적용: {len(corrected_speakers)}개 스피커 ({', '.join(corrected_speakers)})")
+            if skipped_speakers:
+                print(f"  - 보정 건너뜀: {len(skipped_speakers)}개 스피커 ({', '.join(skipped_speakers)}) - 유의미한 편차 없음")
+            
+            if total_deviations:
+                avg_deviation = np.mean(total_deviations)
+                max_deviation = max([results.get('max_deviation_db', 0) for results in analysis_results.values()])
+                print(f"  - 평균 편차: {avg_deviation:.2f} dB, 최대 편차: {max_deviation:.2f} dB")
+        else:
+            print("마이크 편차 보정: 처리된 스피커가 없습니다.")
+            
+        return analysis_results
+
     def plot(self,
              dir_path=None,
              plot_recording=True,
