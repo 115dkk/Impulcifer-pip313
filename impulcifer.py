@@ -162,7 +162,10 @@ def main(dir_path=None,
          head_ms=1, # --c 옵션에 해당 (기본값 1ms)
          jamesdsp=False,
          hangloose=False,
-         interactive_plots=False):
+         interactive_plots=False,
+         # 마이크 편차 보정 파라미터 추가
+         microphone_deviation_correction=False,
+         mic_deviation_strength=0.7):
     """"""
     if plot:
         try:
@@ -246,6 +249,16 @@ def main(dir_path=None,
 
     # Crop noise from the tail
     hrir.crop_tails()
+
+    # 마이크 착용 편차 보정 (새로 추가)
+    if microphone_deviation_correction:
+        print('Correcting microphone deviation...')
+        mic_deviation_plot_dir = os.path.join(dir_path, 'plots') if plot else None
+        hrir.correct_microphone_deviation(
+            correction_strength=mic_deviation_strength,
+            plot_analysis=plot,
+            plot_dir=mic_deviation_plot_dir
+        )
 
     # Write multi-channel WAV file with sine sweeps for debugging
     hrir.write_wav(os.path.join(dir_path, 'responses.wav'))
@@ -937,6 +950,10 @@ def create_cli():
     arg_parser.add_argument('--c', type=float, default=1.0, dest='head_ms', help='Head room in milliseconds for cropping impulse response heads. Default is 1.0 (ms). (항목 4)')
     arg_parser.add_argument('--jamesdsp', action='store_true', help='Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels. (항목 6)')
     arg_parser.add_argument('--hangloose', action='store_true', help='Generate separate stereo IR for each channel for Hangloose Convolver. (항목 7)')
+    arg_parser.add_argument('--microphone_deviation_correction', action='store_true', 
+                            help='Enable microphone deviation correction to compensate for microphone placement variations between left and right ears.')
+    arg_parser.add_argument('--mic_deviation_strength', type=float, default=0.7, 
+                            help='Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction. Default is 0.7.')
     args = vars(arg_parser.parse_args())
     if 'bass_boost' in args:
         bass_boost = args['bass_boost'].split(',')
