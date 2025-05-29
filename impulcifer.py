@@ -143,6 +143,7 @@ def main(dir_path=None,
          test_signal=None,
          room_target=None,
          room_mic_calibration=None,
+         headphone_compensation_file=None,
          fs=None,
          plot=False,
          channel_balance=None,
@@ -203,7 +204,7 @@ def main(dir_path=None,
     hp_left, hp_right = None, None
     if do_headphone_compensation:
         print('Running headphone compensation...')
-        hp_left, hp_right = headphone_compensation(estimator, dir_path)
+        hp_left, hp_right = headphone_compensation(estimator, dir_path, headphone_compensation_file)
 
     # Equalization
     eq_left, eq_right = None, None
@@ -574,19 +575,43 @@ def equalization(estimator, dir_path):
     return left_fr, right_fr
 
 
-def headphone_compensation(estimator, dir_path):
+def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     """Equalizes HRIR tracks with headphone compensation measurement.
 
     Args:
         estimator: ImpulseResponseEstimator instance
         dir_path: Path to output directory
+        headphone_file_path: Optional path to the headphone compensation WAV file.
+                             If None, defaults to 'headphones.wav' in dir_path.
 
     Returns:
         None
     """
     # Read WAV file
     hp_irs = HRIR(estimator)
-    hp_irs.open_recording(os.path.join(dir_path, 'headphones.wav'), speakers=['FL', 'FR'])
+    
+    # Determine the headphone file to use
+    if headphone_file_path:
+        # If a specific path is provided, use it
+        # If it's a relative path, consider it relative to the current working directory or dir_path
+        # For simplicity, we'll assume it's either absolute or relative to dir_path if not absolute
+        if not os.path.isabs(headphone_file_path):
+            actual_hp_file = os.path.join(dir_path, headphone_file_path)
+        else:
+            actual_hp_file = headphone_file_path
+        if not os.path.exists(actual_hp_file):
+            print(f"Warning: Specified headphone compensation file not found: {actual_hp_file}. Trying default 'headphones.wav'.")
+            actual_hp_file = os.path.join(dir_path, 'headphones.wav') # Fallback to default
+    else:
+        # Default to headphones.wav in the dir_path
+        actual_hp_file = os.path.join(dir_path, 'headphones.wav')
+
+    if not os.path.exists(actual_hp_file):
+        print(f"Error: Headphone compensation file not found: {actual_hp_file}")
+        return None, None # Or raise an error
+        
+    print(f"Using headphone compensation file: {actual_hp_file}")
+    hp_irs.open_recording(actual_hp_file, speakers=['FL', 'FR'])
     hp_irs.write_wav(os.path.join(dir_path, 'headphone-responses.wav'))
 
     # Frequency responses
@@ -891,6 +916,8 @@ def create_cli():
                             help='Skip room correction.')
     arg_parser.add_argument('--no_headphone_compensation', action='store_false', dest='do_headphone_compensation',
                             help='Skip headphone compensation.')
+    arg_parser.add_argument('--headphone_compensation_file', type=str, default=None,
+                            help='Path to the headphone compensation WAV file. Defaults to "headphones.wav" in dir_path.')
     arg_parser.add_argument('--no_equalization', action='store_false', dest='do_equalization',
                             help='Skip equalization.')
     arg_parser.add_argument('--fs', type=int, default=argparse.SUPPRESS, help='Output sampling rate in Hertz.')
