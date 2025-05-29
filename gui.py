@@ -2,6 +2,7 @@ def main_gui():
 	import os
 	import tkinter
 	import re
+	import shutil
 	from tkinter import Tk, Frame, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, Scrollbar, Text, END, DISABLED, NORMAL, HORIZONTAL, VERTICAL, W, E, N, S, Canvas
 	from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 	from tkinter.messagebox import showinfo
@@ -257,12 +258,28 @@ def main_gui():
 				else:
 					do_room_correction_msg.set('room wav not found!')
 					do_room_correction_msg_label.config(foreground='red')
-				if re.search(r'\bheadphones\.wav\b', s, re.I):
+				
+				# Check for headphones.wav file or custom file
+				headphone_file_found = False
+				if headphone_compensation_file.get():
+					# Check if custom file exists
+					custom_file_path = headphone_compensation_file.get()
+					if not os.path.isabs(custom_file_path):
+						custom_file_path = os.path.join(dir_path.get(), custom_file_path)
+					if os.path.exists(custom_file_path):
+						headphone_file_found = True
+				else:
+					# Check for default headphones.wav
+					if re.search(r'\bheadphones\.wav\b', s, re.I):
+						headphone_file_found = True
+				
+				if headphone_file_found:
 					do_headphone_compensation_msg.set('found headphones wav')
 					do_headphone_compensation_msg_label.config(foreground='green')
 				else:
 					do_headphone_compensation_msg.set('headphones wav not found!')
 					do_headphone_compensation_msg_label.config(foreground='red')
+				
 				if re.search(r"\beq(-left|-right)?\.csv\b", s, re.I):
 					do_equalization_msg.set('found eq csv')
 					do_equalization_msg_label.config(foreground='green')
@@ -288,6 +305,7 @@ def main_gui():
 		room_target_entry.config(state=NORMAL if do_room_correction.get() else DISABLED)
 		room_mic_calibration_entry.config(state=NORMAL if do_room_correction.get() else DISABLED)
 		fr_combination_method_optionmenu.config(state=NORMAL if do_room_correction.get() else DISABLED)
+		headphone_compensation_file_entry.config(state=NORMAL if do_headphone_compensation.get() else DISABLED)
 		fs_optionmenu.config(state=NORMAL if fs_check.get() else DISABLED)
 		decay_entry.config(state=DISABLED if decay_per_channel.get() else NORMAL)
 		mic_deviation_strength_entry.config(state=NORMAL if microphone_deviation_correction.get() else DISABLED)
@@ -385,6 +403,15 @@ def main_gui():
 	do_headphone_compensation_msg_label = Label(canvas2, textvariable=do_headphone_compensation_msg)
 	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(do_headphone_compensation_msg_label, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	label_pos[do_headphone_compensation_msg_label] = widgetpos_temp
+	
+	headphone_compensation_file_label = Label(canvas2, text='Headphone file')
+	_, pos2, imp_maxwidth, imp_maxheight = pack(headphone_compensation_file_label, pos2, imp_maxwidth, imp_maxheight)
+	headphone_compensation_file = StringVar()
+	headphone_compensation_file.trace('w', lambda *args: refresh2(changedpath=True))
+	headphone_compensation_file_entry = Entry(canvas2, textvariable=headphone_compensation_file, width=65)
+	ToolTip(headphone_compensation_file_label, 'Headphone compensation measurement file. Uses headphones.wav by default if it exists.')
+	_, pos2, imp_maxwidth, imp_maxheight = pack(headphone_compensation_file_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: openfile(headphone_compensation_file, (('Audio files', '*.wav'), ('All files', '*.*')))), pos2, imp_maxwidth, imp_maxheight, samerow=True)
 
 	#headphone EQ
 	do_equalization = BooleanVar()
@@ -615,6 +642,25 @@ def main_gui():
 			args['specific_limit'] = specific_limit.get()
 			args['generic_limit'] = generic_limit.get()
 			args['fr_combination_method'] = fr_combination_method.get()
+		
+		# Headphone compensation 파일 처리
+		if do_headphone_compensation.get() and headphone_compensation_file.get():
+			# 사용자가 지정한 파일을 headphones.wav로 복사
+			source_file = headphone_compensation_file.get()
+			if not os.path.isabs(source_file):
+				source_file = os.path.join(dir_path.get(), source_file)
+			
+			target_file = os.path.join(dir_path.get(), 'headphones.wav')
+			
+			if os.path.exists(source_file):
+				try:
+					shutil.copy2(source_file, target_file)
+					print(f"Copied {source_file} to {target_file}")
+				except Exception as e:
+					print(f"Error copying headphone file: {e}")
+			else:
+				print(f"Warning: Headphone compensation file not found: {source_file}")
+		
 		if show_adv.get():
 			args['fs'] = fs.get() if fs_check.get() else None
 			args['target_level'] = float(target_level.get()) if target_level.get() else None
