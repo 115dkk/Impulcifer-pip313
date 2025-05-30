@@ -35,7 +35,8 @@ jobs:
             echo "Python < 3.11 detected, installing toml package."
             pip install toml
           fi
-          python install_requirements.py # 배치 스크립트의 install_requirements.py 실행
+          echo "Installing project dependencies from requirements.txt..."
+          pip install -r requirements.txt # install_requirements.py 호출을 대체
         shell: bash # pip 및 python 명령어는 bash에서도 잘 작동
 
       - name: Read project version and set APP_VERSION

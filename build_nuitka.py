@@ -112,13 +112,13 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         print(f"경고: {license_file_path} 파일을 찾을 수 없습니다. Inno Setup에서 필요할 수 있습니다.")
 
     # 지정된 README.txt 파일을 빌드 결과물에 README.txt로 포함
-    # 사용자가 제공한 경로: Impulcifer_Distribution/README.txt
-    readme_source_path = "README.txt"
-    if readme_source_path.exists():
-        nuitka_cmd_args.append(f"--include-data-file={readme_source_path}=README.txt")
-        print(f"정보: {readme_source_path} 파일을 README.txt로 빌드에 포함합니다.")
+    # 사용자가 제공한 경로: 프로젝트 루트의 README.txt
+    readme_source_path_str = "README.txt" # 문자열 경로
+    if Path(readme_source_path_str).exists(): # Path 객체로 변환 후 exists() 호출
+        nuitka_cmd_args.append(f"--include-data-file={readme_source_path_str}=README.txt")
+        print(f"정보: {readme_source_path_str} 파일을 README.txt로 빌드에 포함합니다.")
     else:
-        print(f"경고: 소스 README 파일({readme_source_path})을 찾을 수 없습니다. Inno Setup에서 필요할 수 있습니다.")
+        print(f"경고: 소스 README 파일({readme_source_path_str})을 찾을 수 없습니다. Inno Setup에서 필요할 수 있습니다.")
 
     nuitka_cmd_args.extend([
         "--output-filename=ImpulciferGUI",
