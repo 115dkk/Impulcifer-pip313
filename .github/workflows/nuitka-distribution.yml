@@ -57,6 +57,7 @@ jobs:
           # build_nuitka.py 내부에서 빌드 결과 폴더가 'dist/Impulcifer_Distribution/ImpulciferGUI'로 생성된다고 가정합니다.
           # Windows 경로를 bash에서 사용할 때는 슬래시(/)로 변환하는 것이 좋음
           echo "NUITKA_OUTPUT_DIR=dist/Impulcifer_Distribution/ImpulciferGUI" >> $GITHUB_ENV
+          echo "PROJECT_ROOT_FOR_ISS=${{ github.workspace }}" >> $GITHUB_ENV
           echo "Successfully built with Nuitka."
         shell: bash # python 명령어 및 echo는 bash에서 잘 작동
         env:
@@ -84,7 +85,7 @@ jobs:
           # 또는 .iss 파일 내에서 전처리기로 NUITKA_BUILD_DIR을 바로 사용
           
           # ISCC.exe 실행. /D 옵션 값에 공백이 있다면 따옴표로 감싸야 할 수 있음
-          ISCC.exe "/DNUITKA_BUILD_DIR=$NUITKA_OUTPUT_DIR" "/DAPP_VERSION=$APP_VERSION" "$ISS_FILE"
+          ISCC.exe "/DNUITKA_BUILD_DIR=$NUITKA_OUTPUT_DIR" "/DAPP_VERSION=$APP_VERSION" "/DPROJECT_ROOT_FOR_ISS=$PROJECT_ROOT_FOR_ISS" "$ISS_FILE"
           
           # 설치 파일 이름에도 버전을 동적으로 포함
           # .iss 파일의 OutputDir 설정에 따라 경로 조정
