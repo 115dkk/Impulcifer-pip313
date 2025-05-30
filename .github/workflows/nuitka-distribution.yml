@@ -59,6 +59,9 @@ jobs:
           echo "NUITKA_OUTPUT_DIR=dist/Impulcifer_Distribution/ImpulciferGUI" >> $GITHUB_ENV
           echo "Successfully built with Nuitka."
         shell: bash # python 명령어 및 echo는 bash에서 잘 작동
+        env:
+          PYTHONIOENCODING: UTF-8 # 한글 출력 오류 방지
+          APP_VERSION: ${{ env.APP_VERSION }} # 이전 단계에서 설정된 APP_VERSION 사용
 
       - name: Set up Inno Setup
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
