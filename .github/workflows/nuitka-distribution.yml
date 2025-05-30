@@ -1,0 +1,128 @@
+name: Create Release on Master Push
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest # Inno Setup 및 Nuitka (Windows GUI)는 Windows 환경이 유리
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        id: setup_python # id 부여
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install build requirements and project dependencies
+        run: |
+          echo "[1/3] Installing required packages..."
+          python -m pip install --upgrade pip
+          pip install nuitka
+          # Python 3.11 미만일 경우 toml 패키지 설치
+          if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
+            echo "Python 3.11+ detected, tomllib is available."
+          else
+            echo "Python < 3.11 detected, installing toml package."
+            pip install toml
+          fi
+          python install_requirements.py # 배치 스크립트의 install_requirements.py 실행
+        shell: bash # pip 및 python 명령어는 bash에서도 잘 작동
+
+      - name: Read project version and set APP_VERSION
+        id: project_version_setter
+        run: |
+          # get_version.py 스크립트 (아래 내용으로 프로젝트 루트에 생성)
+          # 또는 인라인 Python 스크립트 사용
+          python get_version.py
+        shell: bash # get_version.py 실행 및 GITHUB_ENV에 쓰기
+
+      - name: Run Nuitka build using build_nuitka.py
+        id: nuitka_build
+        run: |
+          echo "[2/3] Starting Nuitka build..."
+          python build_nuitka.py # 배치 스크립트의 build_nuitka.py 실행
+          # build_nuitka.py가 성공적으로 완료되면,
+          # Nuitka 빌드 결과 폴더 경로를 환경 변수로 설정해야 합니다.
+          # build_nuitka.py 내부에서 빌드 결과 폴더가 'dist/Impulcifer_Distribution/ImpulciferGUI'로 생성된다고 가정합니다.
+          # Windows 경로를 bash에서 사용할 때는 슬래시(/)로 변환하는 것이 좋음
+          echo "NUITKA_OUTPUT_DIR=dist/Impulcifer_Distribution/ImpulciferGUI" >> $GITHUB_ENV
+          echo "Successfully built with Nuitka."
+        shell: bash # python 명령어 및 echo는 bash에서 잘 작동
+
+      - name: Set up Inno Setup
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: .github/workflows/Impulcifer install maker.iss
+
+      - name: Compile Inno Setup script
+        id: inno_setup_compile
+        run: |
+          echo "Compiling Inno Setup script for version: $APP_VERSION"
+          # NUITKA_OUTPUT_DIR은 이전 스텝에서 $GITHUB_ENV에 설정됨
+          # APP_VERSION도 이전 스텝에서 $GITHUB_ENV에 설정됨
+          
+          # ISCC.exe는 Windows 프로그램이므로, bash에서 실행 시 경로 및 인자 전달에 주의
+          # Windows 경로를 사용해야 할 수 있음 (예: "C:/Program Files (x86)/Inno Setup 6/ISCC.exe")
+          # Minionguyjpro/Inno-Setup-Action이 ISCC를 PATH에 추가하므로 ISCC.exe로 호출 가능
+          
+          # Nuitka 출력 디렉토리 경로 (bash에서 Windows 경로로 변환 필요 시)
+          # NUITKA_WIN_PATH=$(echo "$NUITKA_OUTPUT_DIR" | sed 's|/|\\|g') # 예시: 슬래시를 백슬래시로
+          # 또는 .iss 파일 내에서 전처리기로 NUITKA_BUILD_DIR을 바로 사용
+          
+          # ISCC.exe 실행. /D 옵션 값에 공백이 있다면 따옴표로 감싸야 할 수 있음
+          ISCC.exe "/DNUITKA_BUILD_DIR=$NUITKA_OUTPUT_DIR" "/DAPP_VERSION=$APP_VERSION" "$ISS_FILE"
+          
+          # 설치 파일 이름에도 버전을 동적으로 포함
+          # .iss 파일의 OutputDir 설정에 따라 경로 조정
+          echo "INSTALLER_PATH=Output/Impulcifer_Setup.exe" >> $GITHUB_ENV
+          echo "Successfully compiled installer with Inno Setup."
+        shell: bash # ISCC.exe 호출 및 환경 변수 사용
+
+      - name: Generate Release Tag and Notes
+        id: release_info
+        run: |
+          TAG_NAME="v$(date +'%Y%m%d%H%M%S')"
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "Generated tag: $TAG_NAME"
+
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          COMMIT_RANGE=""
+          if [ -z "$LAST_TAG" ]; then
+            COMMIT_RANGE="HEAD"
+          else
+            COMMIT_RANGE="$LAST_TAG..HEAD"
+          fi
+
+          CHANGELOG_BODY=$(git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $COMMIT_RANGE)
+          CHANGELOG_BODY="${CHANGELOG_BODY//'%'/'%25'}"
+          CHANGELOG_BODY="${CHANGELOG_BODY//$'\n'/'%0A'}"
+          CHANGELOG_BODY="${CHANGELOG_BODY//$'\r'/'%0D'}"
+
+          echo "RELEASE_NOTES=$CHANGELOG_BODY" >> $GITHUB_ENV
+          echo "Generated release notes."
+        shell: bash
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: Release ${{ env.TAG_NAME }}
+          body: |
+            Automated release for ${{ env.TAG_NAME }}
+
+            **Changes:**
+            ${{ env.RELEASE_NOTES }}
+          files: |
+            ${{ env.INSTALLER_PATH }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
