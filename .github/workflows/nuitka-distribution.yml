@@ -63,7 +63,19 @@ jobs:
         env:
           PYTHONIOENCODING: UTF-8 # 한글 출력 오류 방지
           APP_VERSION: ${{ env.APP_VERSION }} # 이전 단계에서 설정된 APP_VERSION 사용
-
+          
+      - name: Debug environment variables
+        run: |
+          echo "Current environment variables:"
+          echo "APP_VERSION: $APP_VERSION"
+          echo "NUITKA_OUTPUT_DIR: $NUITKA_OUTPUT_DIR"
+          echo "PROJECT_ROOT_FOR_ISS: $PROJECT_ROOT_FOR_ISS"
+          echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
+          echo ""
+          echo "Checking if build output exists:"
+          ls -la "$GITHUB_WORKSPACE/$NUITKA_OUTPUT_DIR" || echo "Nuitka output directory not found"
+        shell: bash
+        
       - name: Set up Inno Setup
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
