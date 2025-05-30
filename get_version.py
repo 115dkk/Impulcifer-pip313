@@ -17,13 +17,17 @@ except ImportError:
 try:
     config = load_toml_config('pyproject.toml')
     app_version = config['project']['version']
-    print(f"Project version read: {app_version}")
+    
+    # 표준 출력으로는 버전 정보만 출력
+    print(app_version)
 
+    # GITHUB_ENV 파일에 APP_VERSION 설정 (기존 로직 유지)
     github_env_file = os.getenv('GITHUB_ENV')
     if github_env_file:
         with open(github_env_file, 'a', encoding='utf-8') as env_f:
             env_f.write(f"APP_VERSION={app_version}\n")
-        print(f"APP_VERSION set to {app_version} in GITHUB_ENV")
+        # 정보성 메시지는 stderr로 출력하거나 로깅 시스템 사용 (또는 제거)
+        print(f"Info: APP_VERSION set to {app_version} in GITHUB_ENV", file=sys.stderr)
     else:
         print("Error: GITHUB_ENV not found.", file=sys.stderr)
         sys.exit(1)
