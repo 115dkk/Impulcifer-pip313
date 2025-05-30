@@ -8,10 +8,17 @@
   #pragma message "NUITKA_BUILD_DIR is defined as: " + NUITKA_BUILD_DIR
 #endif
 
+#ifndef PROJECT_ROOT_FOR_ISS
+  #define PROJECT_ROOT_FOR_ISS "E:\Impulcifer"
+  #pragma message "PROJECT_ROOT_FOR_ISS is not defined, using default: " + PROJECT_ROOT_FOR_ISS
+#else
+  #pragma message "PROJECT_ROOT_FOR_ISS is defined as: " + PROJECT_ROOT_FOR_ISS
+#endif
+
 #define MyAppName "Modern Impulcifer"
 
 #ifndef APP_VERSION
-  #define MyAppVersion "9.9.9-local" ; 로컬 테스트용 기본 버전
+  #define MyAppVersion "1.4.2" ; 로컬 테스트용 기본 버전
   #pragma message "APP_VERSION is not defined, using default: " + MyAppVersion
 #else
   #define MyAppVersion APP_VERSION
@@ -44,8 +51,8 @@ ArchitecturesAllowed=x64compatible
 ; the 64-bit view of the registry.
 ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
-LicenseFile={#NUITKA_BUILD_DIR}\License.txt
-InfoAfterFile={#NUITKA_BUILD_DIR}\README.txt
+LicenseFile={#PROJECT_ROOT_FOR_ISS}\License.txt
+InfoAfterFile={#PROJECT_ROOT_FOR_ISS}\README.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
 OutputBaseFilename=Impulcifer_Setup
