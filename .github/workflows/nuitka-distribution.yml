@@ -80,6 +80,7 @@ jobs:
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
           path: .github/workflows/Impulcifer install maker.iss
+          options: /DNUITKA_BUILD_DIR=$NUITKA_OUTPUT_DIR /DAPP_VERSION=$APP_VERSION /DPROJECT_ROOT_FOR_ISS=$GITHUB_WORKSPACE
 
       - name: Compile Inno Setup script
         id: inno_setup_compile
@@ -105,7 +106,7 @@ jobs:
           # 또는 .iss 파일 내에서 전처리기로 NUITKA_BUILD_DIR을 바로 사용
           
           # ISCC.exe 실행. /D 옵션 값에 공백이 있다면 따옴표로 감싸야 할 수 있음
-          ISCC.exe "/DNUITKA_BUILD_DIR=$NUITKA_WIN_PATH" "/DAPP_VERSION=$APP_VERSION" "/DPROJECT_ROOT_FOR_ISS=$PROJECT_WIN_PATH" "$ISS_FILE"
+          ISCC.exe "$ISS_FILE"
           
           # 설치 파일 이름에도 버전을 동적으로 포함
           # .iss 파일의 OutputDir 설정에 따라 경로 조정
