@@ -68,8 +68,8 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#NUITKA_BUILD_DIR}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#NUITKA_BUILD_DIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#NUITKA_BUILD_DIR}\gui_main.dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#NUITKA_BUILD_DIR}\gui_main.dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
