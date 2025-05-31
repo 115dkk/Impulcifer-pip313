@@ -2,14 +2,14 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #ifndef NUITKA_BUILD_DIR
-  #define NUITKA_BUILD_DIR "E:\Impulcifer\Impulcifer_Distribution\ImpulciferGUI"
+  #define NUITKA_BUILD_DIR "dist\Impulcifer_Distribution\ImpulciferGUI"
   #pragma message "NUITKA_BUILD_DIR is not defined, using default: " + NUITKA_BUILD_DIR
 #else
   #pragma message "NUITKA_BUILD_DIR is defined as: " + NUITKA_BUILD_DIR
 #endif
 
 #ifndef PROJECT_ROOT_FOR_ISS
-  #define PROJECT_ROOT_FOR_ISS "E:\Impulcifer"
+  #define PROJECT_ROOT_FOR_ISS "."
   #pragma message "PROJECT_ROOT_FOR_ISS is not defined, using default: " + PROJECT_ROOT_FOR_ISS
 #else
   #pragma message "PROJECT_ROOT_FOR_ISS is defined as: " + PROJECT_ROOT_FOR_ISS
@@ -18,7 +18,7 @@
 #define MyAppName "Modern Impulcifer"
 
 #ifndef APP_VERSION
-  #define MyAppVersion "1.4.2" ; 로컬 테스트용 기본 버전
+  #define MyAppVersion "1.4.2"
   #pragma message "APP_VERSION is not defined, using default: " + MyAppVersion
 #else
   #define MyAppVersion APP_VERSION
@@ -53,8 +53,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 LicenseFile={#PROJECT_ROOT_FOR_ISS}\LICENSE
 InfoAfterFile={#PROJECT_ROOT_FOR_ISS}\README.txt
-; Uncomment the following line to run in non administrative install mode (install for current user only).
+; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
+OutputDir=Output
 OutputBaseFilename=Impulcifer_Setup
 SolidCompression=yes
 WizardStyle=modern
@@ -77,4 +78,3 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
-
