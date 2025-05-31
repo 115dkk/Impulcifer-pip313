@@ -86,8 +86,27 @@ jobs:
           echo "NUITKA_OUTPUT_DIR: ${{ env.NUITKA_OUTPUT_DIR }}"
           echo "PROJECT_ROOT_FOR_ISS: ${{ env.PROJECT_ROOT_FOR_ISS }}"
           
-          # Inno Setup 컴파일 (이미 위의 Set up Inno Setup 단계에서 처리됨)
-          echo "INSTALLER_PATH=Output/Impulcifer_Setup.exe" >> $GITHUB_ENV
+          # Inno Setup 컴파일 완료 후 결과 확인
+          echo "=== Checking for generated installer ==="
+          if [ -f "Output/Impulcifer_Setup.exe" ]; then
+            echo "✅ Installer found: Output/Impulcifer_Setup.exe"
+            ls -la "Output/Impulcifer_Setup.exe"
+            echo "INSTALLER_PATH=Output/Impulcifer_Setup.exe" >> $GITHUB_ENV
+          else
+            echo "❌ Installer not found in Output/"
+            echo "Available files in current directory:"
+            ls -la
+            if [ -d "Output" ]; then
+              echo "Files in Output directory:"
+              ls -la Output/
+            else
+              echo "Output directory does not exist"
+            fi
+            # 다른 가능한 위치들 검색
+            echo "Searching for .exe files:"
+            find . -name "*.exe" -type f 2>/dev/null || echo "No .exe files found"
+            exit 1
+          fi
           echo "✅ Successfully compiled installer with Inno Setup."
         shell: bash
 
@@ -105,16 +124,34 @@ jobs:
             COMMIT_RANGE="$LAST_TAG..HEAD"
           fi
 
+          # 줄바꿈이 제대로 되도록 수정
           CHANGELOG_BODY=$(git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $COMMIT_RANGE)
-          CHANGELOG_BODY="${CHANGELOG_BODY//'%'/'%25'}"
-          CHANGELOG_BODY="${CHANGELOG_BODY//$'\n'/'%0A'}"
-          CHANGELOG_BODY="${CHANGELOG_BODY//$'\r'/'%0D'}"
-
-          echo "RELEASE_NOTES=$CHANGELOG_BODY" >> $GITHUB_ENV
+          
+          # GitHub Actions에서 멀티라인 환경변수 설정
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG_BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
           echo "Generated release notes."
         shell: bash
 
       - name: Create GitHub Release
+        run: |
+          echo "=== Creating GitHub Release ==="
+          echo "Tag: ${{ env.TAG_NAME }}"
+          echo "Installer path: ${{ env.INSTALLER_PATH }}"
+          
+          # 파일 존재 여부 재확인
+          if [ ! -f "${{ env.INSTALLER_PATH }}" ]; then
+            echo "❌ Installer file not found: ${{ env.INSTALLER_PATH }}"
+            exit 1
+          fi
+          
+          echo "✅ Installer file confirmed: ${{ env.INSTALLER_PATH }}"
+          echo "File size: $(ls -lh '${{ env.INSTALLER_PATH }}' | awk '{print $5}')"
+        shell: bash
+        
+      - name: Upload Release Assets
         uses: softprops/action-gh-release@v2.2.2
         with:
           tag_name: ${{ env.TAG_NAME }}
