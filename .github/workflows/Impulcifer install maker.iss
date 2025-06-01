@@ -62,7 +62,7 @@ LicenseFile={#PROJECT_ROOT_FOR_ISS}\LICENSE
 InfoAfterFile={#PROJECT_ROOT_FOR_ISS}\README.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
-OutputDir=ISS_PATH
+OutputDir={#ISS_PATH}
 OutputBaseFilename=Impulcifer_Setup
 SolidCompression=yes
 WizardStyle=modern
