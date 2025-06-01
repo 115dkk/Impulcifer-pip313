@@ -107,12 +107,14 @@ jobs:
             COMMIT_RANGE="$LAST_TAG..HEAD"
           fi
 
+          # 줄바꿈이 제대로 되도록 수정
           CHANGELOG_BODY=$(git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $COMMIT_RANGE)
-          CHANGELOG_BODY="${CHANGELOG_BODY//'%'/'%25'}"
-          CHANGELOG_BODY="${CHANGELOG_BODY//$'\n'/'%0A'}"
-          CHANGELOG_BODY="${CHANGELOG_BODY//$'\r'/'%0D'}"
-
-          echo "RELEASE_NOTES=$CHANGELOG_BODY" >> $GITHUB_ENV
+          
+          # GitHub Actions에서 멀티라인 환경변수 설정
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG_BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+          
           echo "Generated release notes."
         shell: bash
 
