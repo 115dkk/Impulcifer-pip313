@@ -15,6 +15,13 @@
   #pragma message "PROJECT_ROOT_FOR_ISS is defined as: " + PROJECT_ROOT_FOR_ISS
 #endif
 
+#ifndef ISS_PATH
+  #define ISS_PATH "."
+  #pragma message "ISS_PATH is not defined, using default: " + ISS_PATH
+#else
+  #pragma message "ISS_PATH is defined as: " + ISS_PATH
+#endif
+
 #define MyAppName "Modern Impulcifer"
 
 #ifndef APP_VERSION
@@ -55,7 +62,7 @@ LicenseFile={#PROJECT_ROOT_FOR_ISS}\LICENSE
 InfoAfterFile={#PROJECT_ROOT_FOR_ISS}\README.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only.)
 ;PrivilegesRequired=lowest
-OutputDir=Output
+OutputDir=ISS_PATH
 OutputBaseFilename=Impulcifer_Setup
 SolidCompression=yes
 WizardStyle=modern
