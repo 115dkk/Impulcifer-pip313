@@ -61,6 +61,7 @@ jobs:
           echo "APP_VERSION: ${{ env.APP_VERSION }}"
           echo "NUITKA_OUTPUT_DIR: ${{ env.NUITKA_OUTPUT_DIR }}"
           echo "PROJECT_ROOT_FOR_ISS: ${{ env.PROJECT_ROOT_FOR_ISS }}"
+          echo "ISS_PATH: ${{ env.ISS_PATH }}"
           echo "GITHUB_WORKSPACE: ${{ github.workspace }}"
           echo ""
           echo "=== Checking if build output exists ==="
@@ -83,11 +84,6 @@ jobs:
       - name: Compile Inno Setup script
         run: |
           echo "=== Compiling Inno Setup script ==="
-          echo "APP_VERSION: ${{ env.APP_VERSION }}"
-          echo "NUITKA_OUTPUT_DIR: ${{ env.NUITKA_OUTPUT_DIR }}"
-          echo "PROJECT_ROOT_FOR_ISS: ${{ env.PROJECT_ROOT_FOR_ISS }}"
-
-          echo "ISS_PATH: ${{ env.ISS_PATH }}"
 
           # Inno Setup 컴파일 (이미 위의 Set up Inno Setup 단계에서 처리됨)
           echo "INSTALLER_PATH=${{ env.ISS_PATH }}/Impulcifer_Setup.exe" >> $GITHUB_ENV
