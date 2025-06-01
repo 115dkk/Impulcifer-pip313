@@ -86,7 +86,7 @@ jobs:
           echo "=== Compiling Inno Setup script ==="
 
           # Inno Setup 컴파일 (이미 위의 Set up Inno Setup 단계에서 처리됨)
-          echo "INSTALLER_PATH=${{ env.ISS_PATH }}/Impulcifer_Setup.exe" >> $GITHUB_ENV
+          echo "INSTALLER_PATH=${{ env.ISS_PATH }}\Impulcifer_Setup.exe" >> $GITHUB_ENV
 
           echo "✅ Successfully compiled installer with Inno Setup."
         shell: bash
