@@ -86,10 +86,12 @@ jobs:
           echo "APP_VERSION: ${{ env.APP_VERSION }}"
           echo "NUITKA_OUTPUT_DIR: ${{ env.NUITKA_OUTPUT_DIR }}"
           echo "PROJECT_ROOT_FOR_ISS: ${{ env.PROJECT_ROOT_FOR_ISS }}"
+
           echo "ISS_PATH: ${{ env.ISS_PATH }}"
 
           # Inno Setup 컴파일 (이미 위의 Set up Inno Setup 단계에서 처리됨)
           echo "INSTALLER_PATH=${{ env.ISS_PATH }}/Impulcifer_Setup.exe" >> $GITHUB_ENV
+
           echo "✅ Successfully compiled installer with Inno Setup."
         shell: bash
 
@@ -119,6 +121,22 @@ jobs:
         shell: bash
 
       - name: Create GitHub Release
+        run: |
+          echo "=== Creating GitHub Release ==="
+          echo "Tag: ${{ env.TAG_NAME }}"
+          echo "Installer path: ${{ env.INSTALLER_PATH }}"
+          
+          # 파일 존재 여부 재확인
+          if [ ! -f "${{ env.INSTALLER_PATH }}" ]; then
+            echo "❌ Installer file not found: ${{ env.INSTALLER_PATH }}"
+            exit 1
+          fi
+          
+          echo "✅ Installer file confirmed: ${{ env.INSTALLER_PATH }}"
+          echo "File size: $(ls -lh '${{ env.INSTALLER_PATH }}' | awk '{print $5}')"
+        shell: bash
+        
+      - name: Upload Release Assets
         uses: softprops/action-gh-release@v2.2.2
         with:
           tag_name: ${{ env.TAG_NAME }}
