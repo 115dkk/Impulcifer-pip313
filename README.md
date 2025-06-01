@@ -14,6 +14,12 @@
   ```bash
   pip install impulcifer-py313
   ```
+  
+  또는 요즘 떠오르는 최신 기술인 uv를 이용해서 같은 방식으로 설치하실 수 있습니다.
+
+  ```bash
+  uv pip install impulcifer-py313 --system
+  ```
 
 - **테스트 신호 지정 간소화**: 기존의 파일 경로 직접 지정 방식 외에, 미리 정의된 이름(예: "default", "stereo")이나 숫자(예: "1", "3")로 간편하게 테스트 신호를 선택할 수 있는 기능을 추가했습니다.
 - **지속적인 유지보수**: Python 및 관련 라이브러리 업데이트에 맞춰 지속적으로 호환성을 유지하고 사용자 피드백을 반영할 예정입니다.
@@ -31,6 +37,12 @@
 
 ```bash
 pip install impulcifer-py313
+```
+
+또는
+
+```bash
+uv pip install impulcifer-py313 --system
 ```
 
 가상 환경(virtual environment) 내에 설치하는 것을 권장합니다:
