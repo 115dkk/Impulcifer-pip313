@@ -50,4 +50,4 @@ def ensure_dir_exists(directory):
 
 def file_exists(filepath):
     """파일 존재 여부 확인"""
-    return os.path.exists(filepath) 
+    return os.path.exists(filepath)

@@ -136,4 +136,4 @@ python build_nuitka.py
 - [Python 3.13 호환 버전](https://github.com/115dkk/Impulcifer-pip313)
 
 ### 지원
-문제가 발생하면 GitHub Issues에 문의하세요. 
+문제가 발생하면 GitHub Issues에 문의하세요.

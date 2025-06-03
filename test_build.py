@@ -118,4 +118,4 @@ def main():
         print("3. 바이러스 백신 예외 설정")
 
 if __name__ == "__main__":
-    main() 
+    main()

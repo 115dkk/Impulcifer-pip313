@@ -3,98 +3,58 @@ Nuitka를 사용한 Impulcifer GUI 빌드 스크립트
 Python 3.13 호환 버전
 """
 
-print("build_nuitka.py: Module level - script parsing started.", flush=True)
 import os
 import sys
 import subprocess
 import shutil
 from pathlib import Path
-print("build_nuitka.py: Module level - imports done.", flush=True)
-
-def get_project_version():
-    print("build_nuitka.py: get_project_version() called", flush=True)
-    """get_version.py를 실행하여 프로젝트 버전 가져오기"""
-    try:
-        # get_version.py가 프로젝트 루트에 있다고 가정
-        result = subprocess.run([sys.executable, "get_version.py"], capture_output=True, text=True, check=True, encoding='utf-8')
-        version = result.stdout.strip()
-        if not version:
-            print("경고: get_version.py에서 버전을 가져왔지만 비어있습니다. 기본 버전을 사용합니다.", flush=True)
-            return "0.0.0" # 기본값 또는 오류 처리
-        print(f"✓ get_version.py에서 프로젝트 버전({version})을 성공적으로 가져왔습니다.", flush=True)
-        return version
-    except FileNotFoundError:
-        print("경고: get_version.py 파일을 찾을 수 없습니다. 기본 버전을 사용합니다.", flush=True)
-        return "0.0.0"
-    except subprocess.CalledProcessError as e:
-        print(f"경고: get_version.py 실행 중 오류 발생: {e}. 기본 버전을 사용합니다.", flush=True)
-        print(f"Stderr: {e.stderr}", flush=True)
-        return "0.0.0"
-    except Exception as e:
-        print(f"경고: 버전 정보 로드 중 예기치 않은 오류 발생: {e}. 기본 버전을 사용합니다.", flush=True)
-        return "0.0.0"
 
 def check_nuitka():
-    print("build_nuitka.py: check_nuitka() called", flush=True)
     """Nuitka가 설치되어 있는지 확인"""
     try:
-        subprocess.run([sys.executable, "-m", "nuitka", "--version"], capture_output=True, text=True, check=True)
-        print("✓ Nuitka가 설치되어 있습니다.", flush=True)
+        subprocess.run(["nuitka", "--version"], capture_output=True, check=True)
+        print("✓ Nuitka가 설치되어 있습니다.")
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("✗ Nuitka가 설치되어 있지 않습니다.", flush=True)
-        print("  다음 명령어로 설치하세요: pip install nuitka", flush=True)
+        print("✗ Nuitka가 설치되어 있지 않습니다.")
+        print("  다음 명령어로 설치하세요: pip install nuitka")
         return False
 
-def clean_specific_build_folders():
-    """Nuitka 관련 이전 빌드 폴더 정리 (dist 제외)"""
-    # Nuitka가 생성하는 기본 패턴의 폴더들 및 파일
-    # --output-dir을 사용하면 대부분 해당 디렉토리 내에서 관리됨
-    # --remove-output 옵션을 사용하면 Nuitka가 빌드 시작 시 output-dir을 정리해줌
-    folders_to_clean = ['build', 'impulcifer_gui.build', 'impulcifer_gui.dist', 'ImpulciferGUI.onefile-build']
-    # .spec 파일 등도 생성될 수 있으나, 여기서는 주요 폴더만 대상으로 함
-    # 실행 파일 자체 (ImpulciferGUI.exe)는 --output-dir 내에 생성되므로 여기서 직접 삭제 안함
-
+def clean_build_folders():
+    """이전 빌드 폴더 정리"""
+    folders_to_clean = ['dist', 'build', 'impulcifer_gui.build', 'impulcifer_gui.dist', 'impulcifer_gui.onefile-build']
     for folder in folders_to_clean:
         if os.path.exists(folder):
-            print(f"이전 Nuitka 빌드 관련 폴더 삭제 중: {folder}", flush=True)
+            print(f"이전 빌드 폴더 삭제 중: {folder}")
             shutil.rmtree(folder)
-    # 추가적으로, 이전 빌드의 실행 파일이 루트에 남아있을 수 있다면 정리
-    if os.path.exists("ImpulciferGUI.exe") and not os.path.isdir("ImpulciferGUI.exe"):
-        print("루트의 이전 빌드 실행 파일 삭제 중: ImpulciferGUI.exe", flush=True)
-        os.remove("ImpulciferGUI.exe")
 
-def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
-    print(f"build_nuitka.py: build_impulcifer() called with version={project_version}", flush=True)
-    """Nuitka로 Impulcifer GUI 빌드 (폴더 모드)"""
+def build_impulcifer():
+    """Nuitka로 Impulcifer GUI 빌드"""
     
-    final_output_dir = Path(output_base_dir) / "Impulcifer_Distribution" / "ImpulciferGUI"
-    print(f"최종 빌드 결과물은 다음 폴더에 생성됩니다: {final_output_dir.resolve()}", flush=True)
-
-    nuitka_cmd_base = [sys.executable, "-m", "nuitka"]
-    nuitka_cmd_args = [
-        "--standalone",
-        f"--output-dir={final_output_dir}",
-        "--remove-output",
-        "--windows-console-mode=disable",
-        "--enable-plugin=tk-inter",
-        "--enable-plugin=numpy",
-        "--enable-plugin=matplotlib",
-        "--include-module=sounddevice",
-        "--include-module=soundfile",
-        "--include-module=scipy",
-        "--include-module=scipy.signal",
-        "--include-module=scipy.optimize",
-        "--include-module=scipy.interpolate",
-        "--include-module=scipy.io",
-        "--include-module=scipy.io.wavfile",
-        "--include-module=scipy.fft",
-        "--include-module=nnresample",
-        "--include-module=tabulate",
-        "--include-module=seaborn",
-        "--include-module=bokeh",
-        "--include-module=autoeq",
-        "--include-module=recorder",
+    # Nuitka 명령어 구성
+    nuitka_cmd = [
+        "nuitka",
+        "--standalone",  # 독립 실행 가능한 폴더 생성
+        "--onefile",     # 단일 실행 파일로 생성
+        "--windows-console-mode=disable",  # Windows에서 콘솔 창 숨기기
+        "--enable-plugin=tk-inter",  # Tkinter 플러그인 활성화
+        "--enable-plugin=numpy",     # NumPy 플러그인 활성화
+        "--enable-plugin=matplotlib",  # Matplotlib 플러그인 활성화
+        "--include-module=sounddevice",  # sounddevice 모듈 포함
+        "--include-module=soundfile",    # soundfile 모듈 포함
+        "--include-module=scipy",        # scipy 모듈 포함
+        "--include-module=scipy.signal", # scipy.signal 서브모듈 명시적 포함
+        "--include-module=scipy.optimize",  # scipy.optimize 서브모듈 포함
+        "--include-module=scipy.interpolate",  # scipy.interpolate 서브모듈 포함
+        "--include-module=scipy.io",  # scipy.io 서브모듈 포함
+        "--include-module=scipy.io.wavfile",  # wavfile 서브모듈 포함
+        "--include-module=scipy.fft",  # scipy.fft 서브모듈 포함
+        "--include-module=nnresample",   # nnresample 모듈 포함
+        "--include-module=tabulate",     # tabulate 모듈 포함
+        "--include-module=seaborn",      # seaborn 모듈 포함
+        "--include-module=bokeh",        # bokeh 모듈 포함
+        "--include-module=autoeq",       # autoeq 모듈 포함
+        "--include-module=recorder",     # 로컬 모듈들
         "--include-module=impulcifer",
         "--include-module=hrir",
         "--include-module=impulse_response",
@@ -103,80 +63,104 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--include-module=microphone_deviation_correction",
         "--include-module=utils",
         "--include-module=constants",
-        "--include-data-dir=data=data",
-        "--include-data-dir=font=font",
-        "--include-data-dir=img=img",
-    ]
-
-    # LICENSE 파일을 License.txt로 포함
-    license_file_path = "LICENSE"
-    if os.path.exists(license_file_path):
-        nuitka_cmd_args.append(f"--include-data-file={license_file_path}=License.txt")
-        print(f"정보: {license_file_path} 파일을 License.txt로 빌드에 포함합니다.", flush=True)
-    else:
-        print(f"경고: {license_file_path} 파일을 찾을 수 없습니다. Inno Setup에서 필요할 수 있습니다.", flush=True)
-
-    # 지정된 README.txt 파일을 빌드 결과물에 README.txt로 포함
-    # 사용자가 제공한 경로: 프로젝트 루트의 README.txt
-    readme_source_path_str = "README.txt" # 문자열 경로
-    if Path(readme_source_path_str).exists(): # Path 객체로 변환 후 exists() 호출
-        nuitka_cmd_args.append(f"--include-data-file={readme_source_path_str}=README.txt")
-        print(f"정보: {readme_source_path_str} 파일을 README.txt로 빌드에 포함합니다.", flush=True)
-    else:
-        print(f"경고: 소스 README 파일({readme_source_path_str})을 찾을 수 없습니다. Inno Setup에서 필요할 수 있습니다.", flush=True)
-
-    nuitka_cmd_args.extend([
-        "--output-filename=ImpulciferGUI",
+        "--include-data-dir=data=data",       # data 디렉토리 전체 포함
+        "--include-data-dir=font=font",       # font 디렉토리 전체 포함 
+        "--include-data-dir=img=img",        # img 디렉토리 전체 포함
+        "--output-dir=dist",             # 출력 디렉토리
         "--company-name=115dkk",
         "--product-name=Impulcifer",
-        f"--file-version={project_version}",
-        f"--product-version={project_version}",
+        "--file-version=1.4.1",
+        "--product-version=1.4.1",
         "--file-description=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템",
-        "--assume-yes-for-downloads",
-        "--show-progress",
-        "--show-memory",
-        "gui_main.py"
-    ])
+        "--windows-icon-from-ico=icon.ico" if os.path.exists("icon.ico") else "",  # 아이콘이 있으면 사용
+        "--assume-yes-for-downloads",  # 필요한 파일 자동 다운로드
+        "--show-progress",  # 진행 상황 표시
+        "--show-memory",   # 메모리 사용량 표시
+        "gui_main.py"      # 엔트리 포인트 파일
+    ]
     
-    nuitka_cmd = nuitka_cmd_base + [cmd for cmd in nuitka_cmd_args if cmd]
+    # 빈 문자열 제거 (아이콘이 없는 경우)
+    nuitka_cmd = [cmd for cmd in nuitka_cmd if cmd]
     
-    print("\n빌드 명령어:", flush=True)
-    print(" ".join(nuitka_cmd), flush=True)
-    print("\n빌드를 시작합니다... (시간이 좀 걸릴 수 있습니다)", flush=True)
+    print("\n빌드 명령어:")
+    print(" ".join(nuitka_cmd))
+    print("\n빌드를 시작합니다... (시간이 좀 걸릴 수 있습니다)")
     
     try:
-        result = subprocess.run(nuitka_cmd, check=True, text=True, capture_output=True, encoding='utf-8')
-        print("Nuitka stdout:", flush=True)
-        print(result.stdout, flush=True)
-        if result.stderr:
-            print("Nuitka stderr:", flush=True)
-            print(result.stderr, flush=True)
-        print("\n✓ 빌드가 성공적으로 완료되었습니다!", flush=True)
+        result = subprocess.run(nuitka_cmd, check=True)
+        print("\n✓ 빌드가 성공적으로 완료되었습니다!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"\n✗ 빌드 중 오류가 발생했습니다: {e}", flush=True)
-        print("Nuitka stdout:", flush=True)
-        print(e.stdout, flush=True)
-        print("Nuitka stderr:", flush=True)
-        print(e.stderr, flush=True)
+        print(f"\n✗ 빌드 중 오류가 발생했습니다: {e}")
         return False
 
-def main():
-    print("build_nuitka.py: main() function - entry point.", flush=True)
-    """메인 빌드 프로세스"""
-    print("=== Impulcifer Nuitka 빌드 스크립트 ===\n", flush=True)
+def create_distribution():
+    """배포용 폴더 생성"""
+    dist_folder = "Impulcifer_Distribution"
     
-    if not check_nuitka():
-       sys.exit(1)
+    if os.path.exists(dist_folder):
+        shutil.rmtree(dist_folder)
     
-    # clean_specific_build_folders() # --remove-output 옵션이 output-dir을 정리하므로, 추가 정리 불필요할 수 있음
-                                     # 필요하다면 Nuitka가 생성하는 루트의 임시 파일/폴더만 정리
+    os.makedirs(dist_folder)
     
-    current_version = get_project_version()
-    print(f"빌드에 사용될 버전: {current_version}", flush=True)
+    # 실행 파일 복사
+    exe_files = ["ImpulciferGUI.exe", "impulcifer_gui.exe"]
+    exe_copied = False
+    
+    for exe_file in exe_files:
+        if os.path.exists(exe_file):
+            shutil.copy(exe_file, dist_folder)
+            exe_copied = True
+            print(f"✓ {exe_file}를 배포 폴더로 복사했습니다.")
+            break
+    
+    if not exe_copied:
+        print("✗ 실행 파일을 찾을 수 없습니다.")
+        return False
+    
+    # README 파일 생성
+    readme_content = """# Impulcifer GUI
 
+HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템
+
+## 실행 방법
+ImpulciferGUI.exe를 더블클릭하여 실행하세요.
+
+## 주의사항
+- Windows Defender나 백신 프로그램에서 경고가 나올 수 있습니다.
+  이는 Nuitka로 빌드된 프로그램의 일반적인 현상입니다.
+- 첫 실행 시 시간이 좀 걸릴 수 있습니다.
+
+## 문제 해결
+프로그램이 실행되지 않는 경우:
+1. Windows 10/11 64비트인지 확인하세요
+2. Visual C++ Redistributable이 설치되어 있는지 확인하세요
+3. 바이러스 백신 프로그램에서 예외 처리를 해주세요
+
+원본 프로젝트: https://github.com/jaakkopasanen/impulcifer
+Python 3.13 호환 버전: https://github.com/115dkk/Impulcifer-pip313
+"""
+    
+    with open(os.path.join(dist_folder, "README.txt"), "w", encoding="utf-8") as f:
+        f.write(readme_content)
+    
+    print(f"\n✓ 배포 폴더가 생성되었습니다: {dist_folder}")
+    return True
+
+def main():
+    """메인 빌드 프로세스"""
+    print("=== Impulcifer Nuitka 빌드 스크립트 ===\n")
+    
+    # Nuitka 확인
+    if not check_nuitka():
+        return
+    
+    # 이전 빌드 정리
+    clean_build_folders()
+    
+    # 엔트리 포인트 파일이 없으면 생성
     if not os.path.exists("gui_main.py"):
-        print("\n엔트리 포인트 파일 생성 중...", flush=True)
+        print("\n엔트리 포인트 파일 생성 중...")
         with open("gui_main.py", "w", encoding="utf-8") as f:
             f.write("""#!/usr/bin/env python
 # -*- coding: utf-8 -*-
@@ -187,19 +171,14 @@ if __name__ == "__main__":
     gui.main_gui()
 """)
     
-    if build_impulcifer(project_version=current_version, output_base_dir="dist"):
-        print("\n빌드가 완료되었습니다!", flush=True)
-        final_path = Path('dist/Impulcifer_Distribution/ImpulciferGUI').resolve()
-        print(f"빌드 결과는 {final_path} 폴더에서 찾을 수 있습니다.", flush=True)
-        if final_path.exists() and any(final_path.iterdir()):
-            print("✓ 최종 출력 폴더가 존재하고 비어있지 않습니다.", flush=True)
-        else:
-            print("✗ 최종 출력 폴더가 존재하지 않거나 비어있습니다. 빌드 과정 확인 필요.", flush=True)
-            sys.exit(1)
+    # 빌드 실행
+    if build_impulcifer():
+        # 배포 폴더 생성
+        create_distribution()
+        print("\n빌드가 완료되었습니다!")
+        print("Impulcifer_Distribution 폴더에서 실행 파일을 찾을 수 있습니다.")
     else:
-        print("\n빌드에 실패했습니다.", flush=True)
-        sys.exit(1)
-        
+        print("\n빌드에 실패했습니다.")
+
 if __name__ == "__main__":
-    print("build_nuitka.py: Script is run directly (before main() call).", flush=True)
     main()
