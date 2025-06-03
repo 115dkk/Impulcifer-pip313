@@ -23,23 +23,23 @@ CHANNEL_LAYOUT_MAP = {
     13: TRUEHD_13CH_ORDER
 }
 
-# 자동 생성 가능한 채널 정의
+# 자동 생성 가능한 채널 정의 (FC, TSL, TSR 제거)
 AUTO_GENERATABLE_CHANNELS = {
-    'FC': {
-        'sources': ['FL', 'FR'],
-        'weights': [0.5, 0.5],
-        'description': 'Center from Front Left/Right'
-    },
-    'TSL': {
-        'sources': ['TFL', 'SL'],
-        'weights': [0.6, 0.4],
-        'description': 'Top Side Left from Top Front Left and Side Left'
-    },
-    'TSR': {
-        'sources': ['TFR', 'SR'],
-        'weights': [0.6, 0.4],
-        'description': 'Top Side Right from Top Front Right and Side Right'
-    }
+    # 'FC': {
+    #     'sources': ['FL', 'FR'],
+    #     'weights': [0.5, 0.5],
+    #     'description': 'Center from Front Left/Right'
+    # },
+    # 'TSL': {
+    #     'sources': ['TFL', 'SL'],
+    #     'weights': [0.6, 0.4],
+    #     'description': 'Top Side Left from Top Front Left and Side Left'
+    # },
+    # 'TSR': {
+    #     'sources': ['TFR', 'SR'],
+    #     'weights': [0.6, 0.4],
+    #     'description': 'Top Side Right from Top Front Right and Side Right'
+    # }
 }
 
 SPEAKER_ANGLES = {

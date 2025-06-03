@@ -16,7 +16,8 @@ def generate_missing_channels(hrir, auto_generate_config):
     generated_channels = []
     
     for channel_name, should_generate in auto_generate_config.items():
-        if should_generate and channel_name in AUTO_GENERATABLE_CHANNELS:
+        # FC, TSL, TSR 채널은 강제 생성하지 않도록 조건 추가
+        if should_generate and channel_name in AUTO_GENERATABLE_CHANNELS and channel_name not in ['FC', 'TSL', 'TSR']:
             config = AUTO_GENERATABLE_CHANNELS[channel_name]
             sources = config['sources']
             weights = config['weights']
