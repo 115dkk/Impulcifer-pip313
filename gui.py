@@ -562,9 +562,9 @@ def main_gui():
 					decay_entries[i].place_forget()
 					
 			# TrueHD 관련 옵션들도 표시/숨김 처리
-			auto_generate_fc_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
-			auto_generate_tsl_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
-			auto_generate_tsr_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
+			# auto_generate_fc_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
+			# auto_generate_tsl_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
+			# auto_generate_tsr_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
 		else:
 			for widget in adv_options_pos:
 				widget.place_forget()
@@ -865,32 +865,6 @@ def main_gui():
 	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(output_truehd_layouts_checkbutton, pos2, imp_maxwidth, imp_maxheight)
 	adv_options_pos[output_truehd_layouts_checkbutton] = widgetpos_temp
 	
-	# 자동 채널 생성 섹션
-	channel_generation_frame_label = Label(canvas2, text='Auto Channel Generation:', font=bold_font)
-	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(channel_generation_frame_label, pos2, imp_maxwidth, imp_maxheight)
-	adv_options_pos[channel_generation_frame_label] = widgetpos_temp
-	
-	# FC 자동 생성
-	auto_generate_fc = BooleanVar(value=False)
-	auto_generate_fc_checkbutton = Checkbutton(canvas2, text="Generate FC (Center) from FL+FR", variable=auto_generate_fc)
-	ToolTip(auto_generate_fc_checkbutton, 'Automatically generate center channel from front left and right channels')
-	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_fc_checkbutton, pos2, imp_maxwidth, imp_maxheight)
-	adv_options_pos[auto_generate_fc_checkbutton] = widgetpos_temp
-	
-	# TSL 자동 생성
-	auto_generate_tsl = BooleanVar(value=False)
-	auto_generate_tsl_checkbutton = Checkbutton(canvas2, text="Generate TSL from TFL+SL", variable=auto_generate_tsl)
-	ToolTip(auto_generate_tsl_checkbutton, 'Automatically generate top side left from top front left and side left (60%/40% mix)')
-	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_tsl_checkbutton, pos2, imp_maxwidth, imp_maxheight)
-	adv_options_pos[auto_generate_tsl_checkbutton] = widgetpos_temp
-	
-	# TSR 자동 생성
-	auto_generate_tsr = BooleanVar(value=False)
-	auto_generate_tsr_checkbutton = Checkbutton(canvas2, text="Generate TSR from TFR+SR", variable=auto_generate_tsr)
-	ToolTip(auto_generate_tsr_checkbutton, 'Automatically generate top side right from top front right and side right (60%/40% mix)')
-	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_tsr_checkbutton, pos2, imp_maxwidth, imp_maxheight)
-	adv_options_pos[auto_generate_tsr_checkbutton] = widgetpos_temp
-
 	decay_labels = []
 	decay_entries = []
 	decay_labels.append(decay_fl_label)
@@ -957,12 +931,12 @@ def main_gui():
 			
 			# TrueHD 레이아웃 관련 옵션 추가
 			args['output_truehd_layouts'] = output_truehd_layouts.get()
-			if output_truehd_layouts.get():
-				args['auto_generate_channels'] = {
-					'FC': auto_generate_fc.get(),
-					'TSL': auto_generate_tsl.get(),
-					'TSR': auto_generate_tsr.get()
-				}
+			# if output_truehd_layouts.get():  # 자동 생성 로직 제거
+			# 	args['auto_generate_channels'] = {
+			# 		'FC': auto_generate_fc.get(),
+			# 		'TSL': auto_generate_tsl.get(),
+			# 		'TSR': auto_generate_tsr.get()
+			# 	}
 		print(args) #debug args
 		impulcifer.main(**args)
 		showinfo('Done!', 'Generated files, check recordings folder.')
