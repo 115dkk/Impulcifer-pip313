@@ -12,7 +12,7 @@ from pathlib import Path
 def check_nuitka():
     """Nuitka가 설치되어 있는지 확인"""
     try:
-        subprocess.run(["nuitka", "--version"], capture_output=True, check=True)
+        subprocess.run([sys.executable, "-m", "nuitka", "--version"], capture_output=True, text=True, check=True)
         print("✓ Nuitka가 설치되어 있습니다.")
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -32,8 +32,8 @@ def build_impulcifer():
     """Nuitka로 Impulcifer GUI 빌드"""
     
     # Nuitka 명령어 구성
-    nuitka_cmd = [
-        "nuitka",
+    nuitka_cmd_base = [sys.executable, "-m", "nuitka"]
+    nuitka_cmd_args = [
         "--standalone",  # 독립 실행 가능한 폴더 생성
         "--onefile",     # 단일 실행 파일로 생성
         "--windows-console-mode=disable",  # Windows에서 콘솔 창 숨기기
@@ -76,8 +76,10 @@ def build_impulcifer():
         "--assume-yes-for-downloads",  # 필요한 파일 자동 다운로드
         "--show-progress",  # 진행 상황 표시
         "--show-memory",   # 메모리 사용량 표시
+        "--output-filename=ImpulciferGUI",  # 출력 파일명
         "gui_main.py"      # 엔트리 포인트 파일
     ]
+    nuitka_cmd = nuitka_cmd_base + nuitka_cmd_args
     
     # 빈 문자열 제거 (아이콘이 없는 경우)
     nuitka_cmd = [cmd for cmd in nuitka_cmd if cmd]
@@ -153,7 +155,7 @@ def main():
     
     # Nuitka 확인
     if not check_nuitka():
-        return
+        sys.exit(1) # Nuitka 미설치 시 오류 종료
     
     # 이전 빌드 정리
     clean_build_folders()
@@ -174,11 +176,14 @@ if __name__ == "__main__":
     # 빌드 실행
     if build_impulcifer():
         # 배포 폴더 생성
-        create_distribution()
+        if not create_distribution(): # 배포 폴더 생성 실패 시
+            print("\n✗ 배포 폴더 생성에 실패했습니다.")
+            sys.exit(1)
         print("\n빌드가 완료되었습니다!")
         print("Impulcifer_Distribution 폴더에서 실행 파일을 찾을 수 있습니다.")
     else:
         print("\n빌드에 실패했습니다.")
+        sys.exit(1) # 빌드 실패 시 오류 종료
 
 if __name__ == "__main__":
     main()
