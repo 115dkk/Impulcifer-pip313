@@ -280,8 +280,7 @@ def main(dir_path=None,
          microphone_deviation_correction=False,
          mic_deviation_strength=0.7,
          # TrueHD 레이아웃 관련 파라미터 추가
-         output_truehd_layouts=False,
-         auto_generate_channels=None):
+         output_truehd_layouts=False):
     """"""
     if plot:
         try:
@@ -516,11 +515,11 @@ def main(dir_path=None,
     if output_truehd_layouts:
         print('Generating TrueHD layouts...')
         
-        # 필요한 채널들이 있는지 확인하고 없으면 자동 생성
-        if auto_generate_channels:
-            generated_channels = generate_missing_channels(hrir, auto_generate_channels)
-            if generated_channels:
-                print(f'Generated channels: {generated_channels}')
+        # 필요한 채널들이 있는지 확인하고 없으면 자동 생성하는 로직 제거
+        # if auto_generate_channels:
+        #     generated_channels = generate_missing_channels(hrir, auto_generate_channels)
+        #     if generated_channels:
+        #         print(f'Generated channels: {generated_channels}')
         
         # 11채널 (7.0.4) 레이아웃 생성
         valid_11ch, count_11ch, msg_11ch = validate_channel_requirements(hrir, TRUEHD_11CH_ORDER, min_channels=8)
@@ -1148,7 +1147,6 @@ def create_cli():
     arg_parser.add_argument('--mic_deviation_strength', type=float, default=0.7, 
                             help='Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction. Default is 0.7.')
     arg_parser.add_argument('--output_truehd_layouts', action='store_true', help='Generate TrueHD layouts.')
-    arg_parser.add_argument('--auto_generate_channels', type=str, default=None, help='Comma-separated list of channels to generate TrueHD layouts for.')
     args = vars(arg_parser.parse_args())
     if 'bass_boost' in args:
         bass_boost = args['bass_boost'].split(',')
