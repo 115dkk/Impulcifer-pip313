@@ -69,7 +69,7 @@ include = [
     "README.md",
     "CHANGELOG.md",
     "pyproject.toml",
-    "fonts/Pretendard-Regular.otf",
+    "font/Pretendard-Regular.otf",
 ]
 exclude = [
     "research/**/*",
@@ -79,4 +79,4 @@ exclude = [
 # data 폴더를 패키지 데이터로 포함
 [tool.hatch.build.targets.wheel.shared-data]
 "data" = "impulcifer_py313/data"
-"fonts" = "impulcifer_py313/fonts" 
+"font" = "impulcifer_py313/font" 

@@ -1,6 +1,7 @@
 def main_gui():
 	import os
 	import tkinter
+	import tkinter.font
 	import re
 	import shutil
 	from tkinter import Tk, Frame, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, Scrollbar, Text, END, DISABLED, NORMAL, HORIZONTAL, VERTICAL, W, E, N, S, Canvas, LEFT
@@ -8,6 +9,95 @@ def main_gui():
 	from tkinter.messagebox import showinfo, showerror
 	import recorder, impulcifer
 	import sounddevice
+	import platform
+	import matplotlib.font_manager as fm
+	import importlib.resources
+
+	# GUI용 Pretendard 폰트 설정 함수
+	def setup_gui_font():
+		"""GUI에서 사용할 Pretendard 폰트를 설정합니다."""
+		try:
+			# 1. 패키지 내 폰트 시도
+			font_path = None
+			try:
+				if hasattr(importlib.resources, 'files'):
+					try:
+						font_resource = importlib.resources.files('impulcifer_py313').joinpath('font').joinpath('Pretendard-Regular.otf')
+						with importlib.resources.as_file(font_resource) as font_file_path:
+							font_path = str(font_file_path)
+					except (FileNotFoundError, ModuleNotFoundError):
+						pass
+				
+				elif hasattr(importlib.resources, 'path'):
+					try:
+						with importlib.resources.path('impulcifer_py313.font', 'Pretendard-Regular.otf') as font_file_path:
+							font_path = str(font_file_path)
+					except (FileNotFoundError, ModuleNotFoundError):
+						pass
+			except ImportError:
+				pass
+			
+			# 2. 로컬 개발 환경에서 시도
+			if font_path is None:
+				script_dir = os.path.dirname(os.path.abspath(__file__))
+				local_font_paths = [
+					os.path.join(script_dir, 'font', 'Pretendard-Regular.otf'),
+					os.path.join(script_dir, 'fonts', 'Pretendard-Regular.otf'),
+					os.path.join(script_dir, '..', 'font', 'Pretendard-Regular.otf'),
+					os.path.join(script_dir, '..', 'fonts', 'Pretendard-Regular.otf'),
+				]
+				
+				for local_path in local_font_paths:
+					if os.path.exists(local_path):
+						font_path = local_path
+						break
+			
+			# 폰트를 시스템에 등록하고 설정
+			if font_path and os.path.exists(font_path):
+				try:
+					# matplotlib fontManager에 추가 (혹시 모르니까)
+					fm.fontManager.addfont(font_path)
+					prop = fm.FontProperties(fname=font_path)
+					actual_font_name = prop.get_name()
+					print(f"GUI용 Pretendard 폰트 등록됨: {actual_font_name} ({font_path})")
+					
+					# Pretendard 폰트 사용
+					return (actual_font_name, 9), (actual_font_name, 8), (actual_font_name, 10, 'bold')
+				except Exception as e:
+					print(f"GUI 폰트 등록 실패: {e}")
+			else:
+				print("GUI용 Pretendard 폰트 파일을 찾을 수 없음")
+			
+			# 3. 시스템에 설치된 Pretendard 확인
+			try:
+				available_fonts = [f.name for f in fm.fontManager.ttflist]
+				if 'Pretendard' in available_fonts:
+					print("시스템에 설치된 Pretendard 폰트 사용")
+					return ('Pretendard', 9), ('Pretendard', 8), ('Pretendard', 10, 'bold')
+			except:
+				pass
+			
+			# 시스템 기본 폰트 사용
+			system = platform.system()
+			if system == 'Windows':
+				print("GUI 폰트: 맑은 고딕 사용 (Pretendard를 찾을 수 없음)")
+				return ('Malgun Gothic', 9), ('Malgun Gothic', 8), ('Malgun Gothic', 10, 'bold')
+			elif system == 'Darwin':
+				print("GUI 폰트: AppleGothic 사용 (Pretendard를 찾을 수 없음)")
+				return ('AppleGothic', 9), ('AppleGothic', 8), ('AppleGothic', 10, 'bold')
+			elif system == 'Linux':
+				print("GUI 폰트: NanumGothic 사용 (Pretendard를 찾을 수 없음)")
+				return ('NanumGothic', 9), ('NanumGothic', 8), ('NanumGothic', 10, 'bold')
+			else:
+				print("GUI 폰트: 기본 폰트 사용")
+				return ('TkDefaultFont', 9), ('TkDefaultFont', 8), ('TkDefaultFont', 10, 'bold')
+					
+		except Exception as e:
+			print(f"GUI 폰트 설정 중 오류: {e}")
+			return ('TkDefaultFont', 9), ('TkDefaultFont', 8), ('TkDefaultFont', 10, 'bold')
+	
+	# 폰트 설정 (tkinter 설정은 root 생성 후에 진행)
+	default_font, small_font, bold_font = setup_gui_font()
 
 	#tooltip for widgets
 	class ToolTip(object):
@@ -121,6 +211,16 @@ def main_gui():
 
 	#RECORDER WINDOW
 	root = Tk()
+	
+	# tkinter 기본 폰트 설정 (root window 생성 후)
+	try:
+		tkinter.font.nametofont("TkDefaultFont").configure(family=default_font[0], size=default_font[1])
+		tkinter.font.nametofont("TkTextFont").configure(family=default_font[0], size=default_font[1])
+		tkinter.font.nametofont("TkFixedFont").configure(family=default_font[0], size=default_font[1])
+		tkinter.font.nametofont("TkMenuFont").configure(family=default_font[0], size=default_font[1])
+		print(f"GUI 폰트 설정 완료: {default_font[0]}")
+	except Exception as e:
+		print(f"tkinter 기본 폰트 설정 실패: {e}")
 
 	root.title('Recorder')
 	root.resizable(False, False)
@@ -269,7 +369,7 @@ def main_gui():
 		except:
 			pass  # Ignore update errors during shutdown
 	
-	channel_guidance_label = Label(canvas1, text="Using default 2-channel recording.", wraplength=500, justify=LEFT, font=('TkDefaultFont', 8), fg='blue')
+	channel_guidance_label = Label(canvas1, text="Using default 2-channel recording.", wraplength=500, justify=LEFT, font=small_font, fg='blue')
 	widgetpos, pos, maxwidth, maxheight = pack(channel_guidance_label, pos, maxwidth, maxheight)
 	
 	# Update guidance when checkbox or channel count changes
@@ -766,7 +866,7 @@ def main_gui():
 	adv_options_pos[output_truehd_layouts_checkbutton] = widgetpos_temp
 	
 	# 자동 채널 생성 섹션
-	channel_generation_frame_label = Label(canvas2, text='Auto Channel Generation:', font=('Arial', 9, 'bold'))
+	channel_generation_frame_label = Label(canvas2, text='Auto Channel Generation:', font=bold_font)
 	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(channel_generation_frame_label, pos2, imp_maxwidth, imp_maxheight)
 	adv_options_pos[channel_generation_frame_label] = widgetpos_temp
 	
