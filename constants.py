@@ -5,12 +5,42 @@ import os
 import importlib.resources as pkg_resources
 
 # https://en.wikipedia.org/wiki/Surround_sound
+# TrueHD 지원을 위해 확장된 스피커 이름 목록
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'WL', 'WR', 'TFL', 'TFR', 'TSL', 'TSR', 'TBL', 'TBR']
 
-# 파이썬 3.13.2 스타일로 f-string 사용
+# 파이썬 3.13.2 스타일로 f-string 사용 - FC와 TSL/TSR 같은 3글자 채널 지원
 SPEAKER_PATTERN = f'({"|".join(SPEAKER_NAMES + ["X"])})'
-# format() 대신 f-string 사용
-SPEAKER_LIST_PATTERN = fr'{SPEAKER_PATTERN}+(,{SPEAKER_PATTERN})*'
+# format() 대신 f-string 사용 - 3글자 채널 지원
+SPEAKER_LIST_PATTERN = fr'([A-Z]{{2,3}}(,[A-Z]{{2,3}})*)'
+
+# TrueHD 채널 레이아웃 정의
+TRUEHD_11CH_ORDER = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'TFL', 'TFR', 'TBL', 'TBR']  # 7.0.4
+TRUEHD_13CH_ORDER = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'TFL', 'TFR', 'TSL', 'TSR', 'TBL', 'TBR']  # 7.0.6
+
+# 채널 레이아웃 매핑
+CHANNEL_LAYOUT_MAP = {
+    11: TRUEHD_11CH_ORDER,
+    13: TRUEHD_13CH_ORDER
+}
+
+# 자동 생성 가능한 채널 정의
+AUTO_GENERATABLE_CHANNELS = {
+    'FC': {
+        'sources': ['FL', 'FR'],
+        'weights': [0.5, 0.5],
+        'description': 'Center from Front Left/Right'
+    },
+    'TSL': {
+        'sources': ['TFL', 'SL'],
+        'weights': [0.6, 0.4],
+        'description': 'Top Side Left from Top Front Left and Side Left'
+    },
+    'TSR': {
+        'sources': ['TFR', 'SR'],
+        'weights': [0.6, 0.4],
+        'description': 'Top Side Right from Top Front Right and Side Right'
+    }
+}
 
 SPEAKER_ANGLES = {
     'FL': 30,
@@ -94,9 +124,14 @@ def get_data_path():
     """패키지 내 데이터 폴더 경로를 반환합니다."""
     try:
         # 패키지로 설치된 경우
-        with pkg_resources.path('impulcifer_py313', 'data') as data_path:
-            return data_path
+        if hasattr(importlib.resources, 'files'):
+            return str(importlib.resources.files('impulcifer_py313').joinpath('data'))
+        elif hasattr(importlib.resources, 'path'):
+            with importlib.resources.path('impulcifer_py313', 'data') as data_path:
+                return str(data_path)
     except (ImportError, ModuleNotFoundError):
-        # 로컬 개발 환경인 경우
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        return os.path.join(script_dir, 'data')
+        pass
+    
+    # 폴백: 현재 파일 기준 상대 경로
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(script_dir, 'data')

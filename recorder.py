@@ -3,7 +3,7 @@
 import os
 import re
 import sounddevice as sd
-from utils import read_wav, write_wav
+from utils import read_wav, write_wav, read_audio, is_truehd_file
 import numpy as np
 from threading import Thread
 import argparse
@@ -27,24 +27,62 @@ def record_target(file_path, length, fs, channels=2, append=False):
     Returns:
         None
     """
+    print(f">>>>>>>>> Recording Target Debug Info:")
+    print(f"  File: {file_path}")
+    print(f"  Length: {length} samples ({length/fs:.2f} seconds)")
+    print(f"  Sample rate: {fs} Hz")
+    print(f"  Channels: {channels}")
+    print(f"  Append mode: {append}")
+    
     recording = sd.rec(length, samplerate=fs, channels=channels, blocking=True)
-    # 최신 numpy에서는 차원이 달라도 자동으로 transpose하지 않으므로 명시적으로 변환
-    if recording.shape[1] == channels:
+    print(f"  Raw recording shape: {recording.shape}")
+    
+    # Analyze recording content
+    print(f"  Recording content analysis:")
+    for ch in range(recording.shape[1] if len(recording.shape) > 1 else 1):
+        if len(recording.shape) > 1:
+            ch_data = recording[:, ch]
+        else:
+            ch_data = recording
+        max_val = np.max(np.abs(ch_data))
+        rms_val = np.sqrt(np.mean(ch_data ** 2))
+        print(f"    Channel {ch}: Max={max_val:.6f}, RMS={rms_val:.6f}, {'ACTIVE' if max_val > 1e-6 else 'EMPTY'}")
+    
+    # Transpose to have channels as rows (soundfile expects columns, but our system uses rows)
+    if recording.shape[1] == channels and len(recording.shape) == 2:
         recording = np.transpose(recording)
+        print(f"  After transpose: {recording.shape}")
+    elif len(recording.shape) == 1:
+        # Mono recording, expand dimensions
+        recording = np.expand_dims(recording, axis=0)
+        print(f"  Mono expanded to: {recording.shape}")
+    
     max_gain = 20 * np.log10(np.max(np.abs(recording) + 1e-10))
+    print(f"  Maximum gain: {max_gain:.2f} dB (headroom: {-1.0*max_gain:.1f} dB)")
+    
     if append and os.path.isfile(file_path):
         # Adding to existing file, read the file
+        print(f"  Appending to existing file...")
         _fs, data = read_wav(file_path, expand=True)
+        print(f"  Existing file shape: {data.shape}")
+        
         # Zero pad shorter to the length of the longer
         if recording.shape[1] > data.shape[1]:
             n = recording.shape[1] - data.shape[1]
             data = np.pad(data, [(0, 0), (0, n)])
+            print(f"  Padded existing data by {n} samples")
         elif data.shape[1] > recording.shape[1]:
-            recording = np.pad(recording, [(0, 0), (0, data.shape[1] - recording.shape[1])])
+            padding = data.shape[1] - recording.shape[1]
+            recording = np.pad(recording, [(0, 0), (0, padding)])
+            print(f"  Padded new recording by {padding} samples")
+        
         # Add recording to the end of the existing data
         recording = np.vstack([data, recording])
+        print(f"  Final appended shape: {recording.shape}")
+    
     write_wav(file_path, fs, recording)
-    print(f'Headroom: {-1.0*max_gain:.1f} dB')
+    print(f"  File written successfully")
+    print(f'>>>>>>>>> Headroom: {-1.0*max_gain:.1f} dB')
 
 
 def get_host_api_names():
@@ -178,39 +216,65 @@ def play_and_record(
         channels=2,
         append=False):
     """Plays one file and records another at the same time
-
-    Args:
-        play: File path to playback file
-        record: File path to output recording file
-        input_device: Number of the input device as seen by sounddevice
-        output_device: Number of the output device as seen by sounddevice
-        host_api: Host API name
-        channels: Number of output channels
-        append: Add track(s) to an existing file? Silence will be added to end of each track to make all equal in
-                length
-
-    Returns:
-        None
+    
+    Now supports TrueHD/MLP files in addition to WAV
     """
     # Create output directory
     out_dir, out_file = os.path.split(os.path.abspath(record))
     os.makedirs(out_dir, exist_ok=True)
 
-    # Read playback file
-    fs, data = read_wav(play)
+    # Read playback file (now supports TrueHD)
+    channel_info = None
+    if is_truehd_file(play):
+        print(f"Detected TrueHD/MLP file: {play}")
+        fs, data, channel_info = read_audio(play)
+        if channel_info:
+            print(f"Channel layout ({len(channel_info)} channels): {', '.join(channel_info)}")
+            
+            # 채널 수가 많은 경우 경고
+            if len(channel_info) > 8:
+                print("WARNING: This file contains more than 8 channels.")
+                print("Make sure your audio interface supports this many output channels.")
+    else:
+        # Original WAV reading
+        fs, data = read_wav(play)
+    
     n_channels = data.shape[0]
+    print(f"Audio info: {fs}Hz, {n_channels} channels, {data.shape[1]} samples")
+    print(f"Duration: {data.shape[1] / fs:.2f} seconds")
 
     # Find and set devices as default
-    input_device, output_device = get_devices(
-        input_device=input_device,
-        output_device=output_device,
-        host_api=host_api,
-        min_channels=n_channels
-    )
+    try:
+        input_device, output_device = get_devices(
+            input_device=input_device,
+            output_device=output_device,
+            host_api=host_api,
+            min_channels=n_channels
+        )
+    except DeviceNotFoundError as e:
+        print(f"Error: {e}")
+        if n_channels > 8:
+            print(f"This file requires {n_channels} output channels.")
+            print("Consider using a professional audio interface with sufficient outputs.")
+        raise
+    
     input_device_str, output_device_str = set_default_devices(input_device, output_device)
 
     print(f'Input device:  "{input_device_str}"')
-    print(f'Output device: "{output_device_str}"')
+    print(f'Output device: "{output_device_str}" (max {output_device["max_output_channels"]} channels)')
+
+    # If recording with TrueHD source, save channel info
+    if channel_info and record:
+        info_file = os.path.splitext(record)[0] + '_channels.txt'
+        with open(info_file, 'w') as f:
+            f.write(','.join(channel_info))
+        print(f"Channel info saved to: {info_file}")
+
+    # Check if output device supports required channels
+    if output_device["max_output_channels"] < n_channels:
+        print(f"WARNING: Output device only supports {output_device['max_output_channels']} channels")
+        print(f"but file has {n_channels} channels. Audio will be truncated.")
+        data = data[:output_device["max_output_channels"], :]
 
     recorder = Thread(
         target=record_target,
@@ -218,7 +282,15 @@ def play_and_record(
         kwargs={'channels': channels, 'append': append}
     )
     recorder.start()
-    sd.play(np.transpose(data), samplerate=fs, blocking=True)
+    
+    try:
+        sd.play(np.transpose(data), samplerate=fs, blocking=True)
+    except Exception as e:
+        print(f"Playback error: {e}")
+        raise
+    
+    recorder.join()
+    print("Recording completed.")
 
 
 def create_cli():
@@ -227,8 +299,11 @@ def create_cli():
     Returns:
         Parsed CLI arguments
     """
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--play', type=str, required=True, help='File path to WAV file to play.')
+    arg_parser = argparse.ArgumentParser(
+        description='Play and record audio files simultaneously. Supports WAV and TrueHD/MLP formats.'
+    )
+    arg_parser.add_argument('--play', type=str, required=True, 
+                            help='File path to audio file to play. Supports .wav, .mlp, .thd, .truehd formats.')
     arg_parser.add_argument('--record', type=str, required=True,
                             help='File path to write the recording. This must have ".wav" extension and be either'
                                  '"headphones.wav" or any combination of supported speaker names separated by commas '

@@ -13,8 +13,15 @@ from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from room_correction import room_correction
-from utils import sync_axes, save_fig_as_png
-from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path
+from utils import sync_axes, save_fig_as_png, is_truehd_file, convert_truehd_to_wav, check_ffmpeg_available
+from constants import (
+    SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path,
+    TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER, AUTO_GENERATABLE_CHANNELS, HEXADECAGONAL_TRACK_ORDER
+)
+from channel_generation import (
+    generate_missing_channels, get_available_channels_for_layout, 
+    create_truehd_layout_track_order, validate_channel_requirements
+)
 
 # PR3에서 추가된 import 문들
 import copy
@@ -41,58 +48,163 @@ def set_matplotlib_font():
 
     plt.rcParams['axes.unicode_minus'] = False # 마이너스 부호 문제 해결
 
+    # Pretendard 폰트를 찾을 수 있는 여러 경로 시도
+    font_search_paths = []
+    
     try:
-        # 패키지 내 Pretendard 폰트 시도
-        # Python 3.9+ 에서는 files() 사용
-        if hasattr(importlib.resources, 'files'):
-            # 수정: 패키지 이름과 그 안의 리소스 경로를 정확히 지정
-            # 'impulcifer_py313' 패키지 내의 'fonts' 디렉토리 안에 있는 'Pretendard-Regular.otf'
-            font_resource = importlib.resources.files('impulcifer_py313').joinpath('fonts').joinpath('Pretendard-Regular.otf')
-            with importlib.resources.as_file(font_resource) as font_path_pretendard_str:
-                # addfont에는 실제 파일 시스템 경로가 필요
-                fm.fontManager.addfont(str(font_path_pretendard_str))
-                prop = fm.FontProperties(fname=str(font_path_pretendard_str))
-                font_name_pretendard = prop.get_name()
-                plt.rcParams['font.family'] = font_name_pretendard
-                font_loaded_pretendard = True
-                print(f"Using bundled Pretendard font: {font_name_pretendard}")
-        # Python 3.7, 3.8 호환 (path 사용)
-        elif hasattr(importlib.resources, 'path'):
-            # 수정: path 사용 시, 패키지와 리소스 이름을 분리하여 전달
-            with importlib.resources.path('impulcifer_py313.fonts', 'Pretendard-Regular.otf') as font_path_pretendard_ctx:
-                # addfont에는 실제 파일 시스템 경로가 필요
-                fm.fontManager.addfont(str(font_path_pretendard_ctx))
-                prop = fm.FontProperties(fname=str(font_path_pretendard_ctx))
-                font_name_pretendard = prop.get_name()
-                plt.rcParams['font.family'] = font_name_pretendard
-                font_loaded_pretendard = True
-                print(f"Using bundled Pretendard font: {font_name_pretendard}")
+        # 1. 패키지 내 폰트 시도
+        try:
+            # Python 3.9+ 에서는 files() 사용
+            if hasattr(importlib.resources, 'files'):
+                try:
+                    # 설치된 패키지에서 시도
+                    font_resource = importlib.resources.files('impulcifer_py313').joinpath('font').joinpath('Pretendard-Regular.otf')
+                    font_search_paths.append(('bundled (files)', font_resource))
+                except (FileNotFoundError, ModuleNotFoundError):
+                    pass
+            
+            # Python 3.7, 3.8 호환 (path 사용)
+            elif hasattr(importlib.resources, 'path'):
+                try:
+                    font_resource = importlib.resources.path('impulcifer_py313.font', 'Pretendard-Regular.otf')
+                    font_search_paths.append(('bundled (path)', font_resource))
+                except (FileNotFoundError, ModuleNotFoundError):
+                    pass
+        except ImportError:
+            pass
+        
+        # 2. 로컬 개발 환경에서 시도
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        local_font_paths = [
+            os.path.join(script_dir, 'font', 'Pretendard-Regular.otf'),  # font/
+            os.path.join(script_dir, 'fonts', 'Pretendard-Regular.otf'), # fonts/
+            os.path.join(script_dir, '..', 'font', 'Pretendard-Regular.otf'),  # 상위 디렉토리
+            os.path.join(script_dir, '..', 'fonts', 'Pretendard-Regular.otf'),  # 상위 디렉토리
+        ]
+        
+        for local_path in local_font_paths:
+            if os.path.exists(local_path):
+                font_search_paths.append(('local', local_path))
+                break  # 첫 번째로 찾은 것만 사용
+        
+        # 3. 시스템 전역에서 Pretendard 폰트 찾기
+        try:
+            # matplotlib의 fontManager를 사용해서 시스템에 설치된 Pretendard 찾기
+            available_fonts = [f.name for f in fm.fontManager.ttflist]
+            if 'Pretendard' in available_fonts:
+                font_search_paths.append(('system', 'Pretendard'))
+        except:
+            pass
+        
+        # 폰트 로딩 시도
+        for source_type, font_path in font_search_paths:
+            try:
+                if source_type in ['bundled (files)']:
+                    with importlib.resources.as_file(font_path) as font_file_path:
+                        fm.fontManager.addfont(str(font_file_path))
+                        prop = fm.FontProperties(fname=str(font_file_path))
+                        font_name_pretendard = prop.get_name()
+                        plt.rcParams['font.family'] = font_name_pretendard
+                        font_loaded_pretendard = True
+                        print(f"Pretendard 폰트 로딩 성공 ({source_type}): {font_name_pretendard}")
+                        break
+                elif source_type in ['bundled (path)']:
+                    with font_path as font_file_path:
+                        fm.fontManager.addfont(str(font_file_path))
+                        prop = fm.FontProperties(fname=str(font_file_path))
+                        font_name_pretendard = prop.get_name()
+                        plt.rcParams['font.family'] = font_name_pretendard
+                        font_loaded_pretendard = True
+                        print(f"Pretendard 폰트 로딩 성공 ({source_type}): {font_name_pretendard}")
+                        break
+                elif source_type == 'local':
+                    fm.fontManager.addfont(font_path)
+                    prop = fm.FontProperties(fname=font_path)
+                    font_name_pretendard = prop.get_name()
+                    plt.rcParams['font.family'] = font_name_pretendard
+                    font_loaded_pretendard = True
+                    print(f"Pretendard 폰트 로딩 성공 ({source_type}): {font_path}")
+                    break
+                elif source_type == 'system':
+                    plt.rcParams['font.family'] = 'Pretendard'
+                    font_loaded_pretendard = True
+                    print(f"Pretendard 폰트 로딩 성공 ({source_type}): 시스템 설치된 폰트")
+                    break
+            except Exception as e:
+                print(f"Pretendard 폰트 로딩 실패 ({source_type}): {e}")
+                continue
 
-    except FileNotFoundError:
-        print(f"Bundled Pretendard font file not found. Trying system fonts.")
-        font_loaded_pretendard = False
     except Exception as e:
-        print(f"Error loading bundled Pretendard font: {e}. Trying system fonts.")
-        font_loaded_pretendard = False # 명시적으로 실패 처리
+        print(f"Pretendard 폰트 검색 중 오류: {e}")
 
+    # Pretendard 로딩 실패 시 시스템 기본 폰트 사용
     if not font_loaded_pretendard:
+        print("Pretendard 폰트를 찾을 수 없습니다. 시스템 기본 폰트를 사용합니다.")
         if system == 'Windows':
             font_path_win = 'C:/Windows/Fonts/malgun.ttf'
             if os.path.exists(font_path_win):
                 font_prop = fm.FontProperties(fname=font_path_win)
                 plt.rcParams['font.family'] = font_prop.get_name()
-                print(f"Using system font: {font_prop.get_name()}")
+                print(f"시스템 폰트 사용: {font_prop.get_name()}")
             else:
                 plt.rcParams['font.family'] = 'Malgun Gothic'
-                print("Using system font: Malgun Gothic (fallback)")
+                print("시스템 폰트 사용: Malgun Gothic (fallback)")
         elif system == 'Darwin':
             plt.rcParams['font.family'] = 'AppleGothic'
-            print("Using system font: AppleGothic")
+            print("시스템 폰트 사용: AppleGothic")
         elif system == 'Linux':
             plt.rcParams['font.family'] = 'NanumGothic'
-            print("Using system font: NanumGothic")
+            print("시스템 폰트 사용: NanumGothic")
         else:
-            print("Unknown system, using Matplotlib default font.")
+            print("알 수 없는 시스템, matplotlib 기본 폰트 사용")
+
+def get_pretendard_font_for_gui():
+    """GUI에서 사용할 Pretendard 폰트 경로를 반환합니다."""
+    try:
+        # 1. 패키지 내 폰트 시도
+        try:
+            if hasattr(importlib.resources, 'files'):
+                try:
+                    font_resource = importlib.resources.files('impulcifer_py313').joinpath('font').joinpath('Pretendard-Regular.otf')
+                    with importlib.resources.as_file(font_resource) as font_file_path:
+                        return str(font_file_path)
+                except (FileNotFoundError, ModuleNotFoundError):
+                    pass
+            
+            elif hasattr(importlib.resources, 'path'):
+                try:
+                    with importlib.resources.path('impulcifer_py313.font', 'Pretendard-Regular.otf') as font_file_path:
+                        return str(font_file_path)
+                except (FileNotFoundError, ModuleNotFoundError):
+                    pass
+        except ImportError:
+            pass
+        
+        # 2. 로컬 개발 환경에서 시도
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        local_font_paths = [
+            os.path.join(script_dir, 'font', 'Pretendard-Regular.otf'),
+            os.path.join(script_dir, 'fonts', 'Pretendard-Regular.otf'),
+            os.path.join(script_dir, '..', 'font', 'Pretendard-Regular.otf'),
+            os.path.join(script_dir, '..', 'fonts', 'Pretendard-Regular.otf'),
+        ]
+        
+        for local_path in local_font_paths:
+            if os.path.exists(local_path):
+                return local_path
+        
+        # 3. 시스템에 설치된 Pretendard 사용
+        try:
+            available_fonts = [f.name for f in fm.fontManager.ttflist]
+            if 'Pretendard' in available_fonts:
+                return 'Pretendard'  # 시스템 폰트 이름 반환
+        except:
+            pass
+            
+    except Exception as e:
+        print(f"GUI용 Pretendard 폰트 검색 중 오류: {e}")
+    
+    return None
 
 set_matplotlib_font() # 함수 호출하여 폰트 설정 실행
 
@@ -166,7 +278,10 @@ def main(dir_path=None,
          interactive_plots=False,
          # 마이크 편차 보정 파라미터 추가
          microphone_deviation_correction=False,
-         mic_deviation_strength=0.7):
+         mic_deviation_strength=0.7,
+         # TrueHD 레이아웃 관련 파라미터 추가
+         output_truehd_layouts=False,
+         auto_generate_channels=None):
     """"""
     if plot:
         try:
@@ -397,6 +512,40 @@ def main(dir_path=None,
     # Write multi-channel WAV file with HeSuVi track order
     hrir.write_wav(os.path.join(dir_path, 'hesuvi.wav'), track_order=HESUVI_TRACK_ORDER)
 
+    # TrueHD 레이아웃 출력 (새로 추가)
+    if output_truehd_layouts:
+        print('Generating TrueHD layouts...')
+        
+        # 필요한 채널들이 있는지 확인하고 없으면 자동 생성
+        if auto_generate_channels:
+            generated_channels = generate_missing_channels(hrir, auto_generate_channels)
+            if generated_channels:
+                print(f'Generated channels: {generated_channels}')
+        
+        # 11채널 (7.0.4) 레이아웃 생성
+        valid_11ch, count_11ch, msg_11ch = validate_channel_requirements(hrir, TRUEHD_11CH_ORDER, min_channels=8)
+        if valid_11ch:
+            available_11ch = get_available_channels_for_layout(hrir, TRUEHD_11CH_ORDER)
+            track_order_11ch = create_truehd_layout_track_order(available_11ch)
+            
+            output_path_11ch = os.path.join(dir_path, f'truehd_11ch_{len(available_11ch)}ch.wav')
+            hrir.write_wav(output_path_11ch, track_order=track_order_11ch)
+            print(f'Generated 11-channel TrueHD layout: {output_path_11ch}')
+        else:
+            print(f'Cannot generate 11-channel layout: {msg_11ch}')
+            
+        # 13채널 (7.0.6) 레이아웃 생성
+        valid_13ch, count_13ch, msg_13ch = validate_channel_requirements(hrir, TRUEHD_13CH_ORDER, min_channels=10)
+        if valid_13ch:
+            available_13ch = get_available_channels_for_layout(hrir, TRUEHD_13CH_ORDER)
+            track_order_13ch = create_truehd_layout_track_order(available_13ch)
+            
+            output_path_13ch = os.path.join(dir_path, f'truehd_13ch_{len(available_13ch)}ch.wav')
+            hrir.write_wav(output_path_13ch, track_order=track_order_13ch)
+            print(f'Generated 13-channel TrueHD layout: {output_path_13ch}')
+        else:
+            print(f'Cannot generate 13-channel layout: {msg_13ch}')
+
     # PR3 jamesdsp 로직 추가 (항목 6)
     if jamesdsp:
         print('Generating jamesdsp.wav (FL/FR only, normalized to FL/FR)...')
@@ -506,8 +655,25 @@ def open_impulse_response_estimator(dir_path, file_path=None):
     elif re.match(r'^.+\.pkl$', file_path, flags=re.IGNORECASE):
         # Test signal is Pickle file
         estimator = ImpulseResponseEstimator.from_pickle(file_path)
+    elif re.match(r'^.+\.(mlp|thd|truehd)$', file_path, flags=re.IGNORECASE):
+        # Test signal is TrueHD/MLP file - convert to temporary WAV first
+        if not check_ffmpeg_available():
+            raise RuntimeError("TrueHD/MLP 파일을 처리하기 위해서는 FFmpeg가 필요합니다. FFmpeg를 설치해주세요.")
+        
+        if not is_truehd_file(file_path):
+            raise ValueError(f"파일이 유효한 TrueHD/MLP 형식이 아닙니다: {file_path}")
+        
+        print(f"TrueHD/MLP 파일을 WAV로 변환 중: {file_path}")
+        temp_wav_path, channel_info = convert_truehd_to_wav(file_path)
+        
+        try:
+            estimator = ImpulseResponseEstimator.from_wav(temp_wav_path)
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_wav_path):
+                os.remove(temp_wav_path)
     else:
-        raise TypeError(f'알 수 없는 파일 확장자: "{file_path}"\n유효한 파일 확장자: .wav, .pkl')
+        raise TypeError(f'알 수 없는 파일 확장자: "{file_path}"\n유효한 파일 확장자: .wav, .pkl, .mlp, .thd, .truehd')
     
     return estimator
 
@@ -981,6 +1147,8 @@ def create_cli():
                             help='Enable microphone deviation correction to compensate for microphone placement variations between left and right ears.')
     arg_parser.add_argument('--mic_deviation_strength', type=float, default=0.7, 
                             help='Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction. Default is 0.7.')
+    arg_parser.add_argument('--output_truehd_layouts', action='store_true', help='Generate TrueHD layouts.')
+    arg_parser.add_argument('--auto_generate_channels', type=str, default=None, help='Comma-separated list of channels to generate TrueHD layouts for.')
     args = vars(arg_parser.parse_args())
     if 'bass_boost' in args:
         bass_boost = args['bass_boost'].split(',')

@@ -1,13 +1,103 @@
 def main_gui():
 	import os
 	import tkinter
+	import tkinter.font
 	import re
 	import shutil
-	from tkinter import Tk, Frame, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, Scrollbar, Text, END, DISABLED, NORMAL, HORIZONTAL, VERTICAL, W, E, N, S, Canvas
+	from tkinter import Tk, Frame, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, Scrollbar, Text, END, DISABLED, NORMAL, HORIZONTAL, VERTICAL, W, E, N, S, Canvas, LEFT
 	from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
-	from tkinter.messagebox import showinfo
+	from tkinter.messagebox import showinfo, showerror
 	import recorder, impulcifer
 	import sounddevice
+	import platform
+	import matplotlib.font_manager as fm
+	import importlib.resources
+
+	# GUI용 Pretendard 폰트 설정 함수
+	def setup_gui_font():
+		"""GUI에서 사용할 Pretendard 폰트를 설정합니다."""
+		try:
+			# 1. 패키지 내 폰트 시도
+			font_path = None
+			try:
+				if hasattr(importlib.resources, 'files'):
+					try:
+						font_resource = importlib.resources.files('impulcifer_py313').joinpath('font').joinpath('Pretendard-Regular.otf')
+						with importlib.resources.as_file(font_resource) as font_file_path:
+							font_path = str(font_file_path)
+					except (FileNotFoundError, ModuleNotFoundError):
+						pass
+				
+				elif hasattr(importlib.resources, 'path'):
+					try:
+						with importlib.resources.path('impulcifer_py313.font', 'Pretendard-Regular.otf') as font_file_path:
+							font_path = str(font_file_path)
+					except (FileNotFoundError, ModuleNotFoundError):
+						pass
+			except ImportError:
+				pass
+			
+			# 2. 로컬 개발 환경에서 시도
+			if font_path is None:
+				script_dir = os.path.dirname(os.path.abspath(__file__))
+				local_font_paths = [
+					os.path.join(script_dir, 'font', 'Pretendard-Regular.otf'),
+					os.path.join(script_dir, 'fonts', 'Pretendard-Regular.otf'),
+					os.path.join(script_dir, '..', 'font', 'Pretendard-Regular.otf'),
+					os.path.join(script_dir, '..', 'fonts', 'Pretendard-Regular.otf'),
+				]
+				
+				for local_path in local_font_paths:
+					if os.path.exists(local_path):
+						font_path = local_path
+						break
+			
+			# 폰트를 시스템에 등록하고 설정
+			if font_path and os.path.exists(font_path):
+				try:
+					# matplotlib fontManager에 추가 (혹시 모르니까)
+					fm.fontManager.addfont(font_path)
+					prop = fm.FontProperties(fname=font_path)
+					actual_font_name = prop.get_name()
+					print(f"GUI용 Pretendard 폰트 등록됨: {actual_font_name} ({font_path})")
+					
+					# Pretendard 폰트 사용
+					return (actual_font_name, 9), (actual_font_name, 8), (actual_font_name, 10, 'bold')
+				except Exception as e:
+					print(f"GUI 폰트 등록 실패: {e}")
+			else:
+				print("GUI용 Pretendard 폰트 파일을 찾을 수 없음")
+			
+			# 3. 시스템에 설치된 Pretendard 확인
+			try:
+				available_fonts = [f.name for f in fm.fontManager.ttflist]
+				if 'Pretendard' in available_fonts:
+					print("시스템에 설치된 Pretendard 폰트 사용")
+					return ('Pretendard', 9), ('Pretendard', 8), ('Pretendard', 10, 'bold')
+			except:
+				pass
+			
+			# 시스템 기본 폰트 사용
+			system = platform.system()
+			if system == 'Windows':
+				print("GUI 폰트: 맑은 고딕 사용 (Pretendard를 찾을 수 없음)")
+				return ('Malgun Gothic', 9), ('Malgun Gothic', 8), ('Malgun Gothic', 10, 'bold')
+			elif system == 'Darwin':
+				print("GUI 폰트: AppleGothic 사용 (Pretendard를 찾을 수 없음)")
+				return ('AppleGothic', 9), ('AppleGothic', 8), ('AppleGothic', 10, 'bold')
+			elif system == 'Linux':
+				print("GUI 폰트: NanumGothic 사용 (Pretendard를 찾을 수 없음)")
+				return ('NanumGothic', 9), ('NanumGothic', 8), ('NanumGothic', 10, 'bold')
+			else:
+				print("GUI 폰트: 기본 폰트 사용")
+				return ('TkDefaultFont', 9), ('TkDefaultFont', 8), ('TkDefaultFont', 10, 'bold')
+					
+		except Exception as e:
+			print(f"GUI 폰트 설정 중 오류: {e}")
+			return ('TkDefaultFont', 9), ('TkDefaultFont', 8), ('TkDefaultFont', 10, 'bold')
+	
+	# 폰트 설정 (tkinter 설정은 root 생성 후에 진행)
+	default_font, small_font, bold_font = setup_gui_font()
 
 	#tooltip for widgets
 	class ToolTip(object):
@@ -121,6 +211,16 @@ def main_gui():
 
 	#RECORDER WINDOW
 	root = Tk()
+	
+	# tkinter 기본 폰트 설정 (root window 생성 후)
+	try:
+		tkinter.font.nametofont("TkDefaultFont").configure(family=default_font[0], size=default_font[1])
+		tkinter.font.nametofont("TkTextFont").configure(family=default_font[0], size=default_font[1])
+		tkinter.font.nametofont("TkFixedFont").configure(family=default_font[0], size=default_font[1])
+		tkinter.font.nametofont("TkMenuFont").configure(family=default_font[0], size=default_font[1])
+		print(f"GUI 폰트 설정 완료: {default_font[0]}")
+	except Exception as e:
+		print(f"tkinter 기본 폰트 설정 실패: {e}")
 
 	root.title('Recorder')
 	root.resizable(False, False)
@@ -172,7 +272,23 @@ def main_gui():
 		elif input_device.get() not in input_devices:
 			input_device.set(input_devices[0])
 
-		channels_entry.config(state=NORMAL if channels_check.get() else DISABLED)
+		# Enable/disable channels entry based on checkbox state
+		if channels_check.get():
+			channels_entry.config(state=NORMAL)
+			try:
+				channel_count = channels.get()
+				print(f"Channels entry enabled - Recording will use {channel_count} channels")
+			except:
+				print("Channels entry enabled - Waiting for valid channel input")
+		else:
+			channels_entry.config(state=DISABLED)
+			print("Channels entry disabled - Using default 2-channel recording")
+		
+		# Update guidance text
+		update_channel_guidance()
+		
+		# Force GUI update
+		root.update_idletasks()
 
 	#playback device
 	output_device = StringVar()
@@ -200,7 +316,12 @@ def main_gui():
 	play = StringVar(value=os.path.join('data', 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
 	play_entry = Entry(canvas1, textvariable=play, width=70)
 	widgetpos, pos, maxwidth, maxheight = pack(play_entry, pos, maxwidth, maxheight)
-	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='...', command=lambda: openfile(play, (('Audio files', '*.wav'), ('All files', '*.*')))), pos, maxwidth, maxheight, samerow=True)
+	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='...', command=lambda: openfile(play, (
+		('Audio files', '*.wav *.mlp *.thd *.truehd'), 
+		('WAV files', '*.wav'),
+		('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
+		('All files', '*.*')
+	))), pos, maxwidth, maxheight, samerow=True)
 
 	#output file
 	widgetpos, pos, maxwidth, maxheight = pack(Label(canvas1, text='Record to file'), pos, maxwidth, maxheight)
@@ -211,12 +332,49 @@ def main_gui():
 
 	#force number of channels
 	channels_check = BooleanVar()
-	channels_checkbutton = Checkbutton(canvas1, text="Force input channels", variable=channels_check, command=refresh1)
+	channels_check.trace('w', lambda *args: refresh1())
+	channels_checkbutton = Checkbutton(canvas1, text="Channels", variable=channels_check)
 	widgetpos, pos, maxwidth, maxheight = pack(channels_checkbutton, pos, maxwidth, maxheight)
-	ToolTip(channels_checkbutton, 'For room correction: some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that reason record a stereo file. recorder can force the capture to be one channel')
-	channels = IntVar(value=1)
+	ToolTip(channels_checkbutton, 'For room correction: some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that reason record a stereo file. recorder can force the capture to be one channel. For multi-channel HRIR recording: Check this and set the number of input channels (2 channels per speaker for left/right ears). Common configurations: 14 channels (7 speakers), 22 channels (11 speakers, 7.0.4), 26 channels (13 speakers, 7.0.6).')
+	channels = IntVar(value=14)
+	channels.trace('w', lambda *args: update_channel_guidance())
 	channels_entry = Entry(canvas1, textvariable=channels, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
 	widgetpos, pos, maxwidth, maxheight = pack(channels_entry, pos, maxwidth, maxheight, samerow=True)
+	
+	# Add channel guidance label
+	def update_channel_guidance():
+		try:
+			channel_count = channels.get()
+		except:
+			# Handle case when entry is empty or invalid
+			channel_count = 0
+			
+		if channels_check.get():
+			if channel_count == 14:
+				guidance_text = f"Recording with {channel_count} channels (7 speakers × 2 ears). Speakers: FL,FR,FC,BL,BR,SL,SR.wav"
+			elif channel_count == 22:
+				guidance_text = f"Recording with {channel_count} channels (11 speakers × 2 ears, 7.0.4 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR.wav"
+			elif channel_count == 26:
+				guidance_text = f"Recording with {channel_count} channels (13 speakers × 2 ears, 7.0.6 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR,TSL,TSR.wav"
+			elif channel_count > 0:
+				speakers_count = channel_count // 2
+				guidance_text = f"Recording with {channel_count} channels ({speakers_count} speakers × 2 ears). Make sure your filename matches the speaker configuration."
+			else:
+				guidance_text = "Enter valid channel count (recommended: 14, 22, or 26)"
+		else:
+			guidance_text = "Using default 2-channel recording."
+		channel_guidance_label.config(text=guidance_text)
+		try:
+			root.update()  # Force update to refresh display
+		except:
+			pass  # Ignore update errors during shutdown
+	
+	channel_guidance_label = Label(canvas1, text="Using default 2-channel recording.", wraplength=500, justify=LEFT, font=small_font, fg='blue')
+	widgetpos, pos, maxwidth, maxheight = pack(channel_guidance_label, pos, maxwidth, maxheight)
+	
+	# Update guidance when checkbox or channel count changes
+	channels_check.trace('w', lambda *args: update_channel_guidance())
+	channels.trace('w', lambda *args: update_channel_guidance())
 
 	#append
 	append = BooleanVar()
@@ -226,15 +384,88 @@ def main_gui():
 
 	#record button
 	def recordaction():
-		recorder.play_and_record(play=play_entry.get(), record=record_entry.get(), input_device=input_device.get(), output_device=output_device.get(), host_api=host_api.get(), channels=(channels.get() if channels_check.get() else 2), append=append.get())
-		showinfo('', 'Recorded to ' + record_entry.get())
+		# Validate recording setup
+		play_file = play_entry.get()
+		record_file = record_entry.get()
+		selected_channels = channels.get() if channels_check.get() else 2
+		
+		# Check if files exist/are valid
+		if not os.path.exists(play_file):
+			showerror('Error', f'Play file does not exist: {play_file}')
+			return
+		
+		# Extract expected speakers from record filename
+		try:
+			import re
+			from constants import SPEAKER_LIST_PATTERN
+			filename = os.path.basename(record_file)
+			match = re.search(SPEAKER_LIST_PATTERN, filename)
+			if match:
+				speakers_str = match.group(1)
+				expected_speakers = speakers_str.split(',')
+				expected_channels = len(expected_speakers) * 2  # stereo pairs
+				
+				# Warn about channel mismatch
+				if channels_check.get() and selected_channels != expected_channels:
+					warning_msg = (f"Channel count mismatch detected!\n\n"
+								 f"Recording filename suggests {len(expected_speakers)} speakers ({', '.join(expected_speakers)}) "
+								 f"which requires {expected_channels} channels (stereo pairs).\n\n"
+								 f"But you have selected {selected_channels} input channels.\n\n"
+								 f"Expected speakers: {', '.join(expected_speakers)}\n"
+								 f"Expected channels: {expected_channels}\n"
+								 f"Selected channels: {selected_channels}\n\n"
+								 f"Continue anyway?")
+					
+					from tkinter.messagebox import askyesno
+					if not askyesno('Channel Mismatch Warning', warning_msg):
+						return
+		except Exception as e:
+			print(f"Warning: Could not parse filename for speaker validation: {e}")
+		
+		# Show recording info
+		info_msg = (f"Recording Setup:\n"
+				   f"Play file: {os.path.basename(play_file)}\n"
+				   f"Record file: {os.path.basename(record_file)}\n"
+				   f"Input device: {input_device.get() or 'Default'}\n"
+				   f"Output device: {output_device.get() or 'Default'}\n"
+				   f"Channels: {selected_channels}\n"
+				   f"Host API: {host_api.get() or 'Auto'}\n\n"
+				   f"Make sure:\n"
+				   f"- Your audio interface is properly connected\n"
+				   f"- Input/output devices are correctly selected\n"
+				   f"- Channel count matches your setup\n\n"
+				   f"Ready to start recording?")
+		
+		from tkinter.messagebox import askyesno
+		if not askyesno('Start Recording', info_msg):
+			return
+		
+		try:
+			recorder.play_and_record(
+				play=play_file, 
+				record=record_file, 
+				input_device=input_device.get(), 
+				output_device=output_device.get(), 
+				host_api=host_api.get(), 
+				channels=selected_channels, 
+				append=append.get()
+			)
+			showinfo('Recording Complete', f'Successfully recorded to {record_file}')
+		except Exception as e:
+			showerror('Recording Error', f'Recording failed: {str(e)}')
+			
 	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='RECORD', command=recordaction), pos, maxwidth, maxheight)
 
 	refresh1(init=True)
-	root.geometry(str(maxwidth) + 'x' + str(maxheight) + '+0+0')
-	canvas1.config(width=maxwidth, height=maxheight)
+	
+	# Ensure minimum width for proper text display
+	final_width = max(maxwidth, 600)  # Minimum 600 pixels width
+	final_height = maxheight + 20  # Add some padding
+	
+	root.geometry(str(final_width) + 'x' + str(final_height) + '+0+0')
+	canvas1.config(width=final_width, height=final_height)
 	canvas1.pack()
-	canvas1_final_width = maxwidth
+	canvas1_final_width = final_width
 
 	#IMPULCIFER WINDOW
 	pos2 = [0, 0]
@@ -329,6 +560,11 @@ def main_gui():
 				for i in range(7):
 					decay_labels[i].place_forget()
 					decay_entries[i].place_forget()
+					
+			# TrueHD 관련 옵션들도 표시/숨김 처리
+			auto_generate_fc_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
+			auto_generate_tsl_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
+			auto_generate_tsr_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
 		else:
 			for widget in adv_options_pos:
 				widget.place_forget()
@@ -348,7 +584,13 @@ def main_gui():
 	test_signal = StringVar(value=os.path.join('data', 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
 	test_signal_entry = Entry(canvas2, textvariable=test_signal, width=80)
 	_, pos2, imp_maxwidth, imp_maxheight = pack(test_signal_entry, pos2, imp_maxwidth, imp_maxheight)
-	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: openfile(test_signal, (('Audio files', '*.wav *.pkl'), ('All files', '*.*')))), pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: openfile(test_signal, (
+		('Audio files', '*.wav *.pkl *.mlp *.thd *.truehd'), 
+		('WAV files', '*.wav'),
+		('Pickle files', '*.pkl'),
+		('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
+		('All files', '*.*')
+	))), pos2, imp_maxwidth, imp_maxheight, samerow=True)
 
 	#room correction
 	label_pos = {}
@@ -616,6 +858,39 @@ def main_gui():
 	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(mic_deviation_strength_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	adv_options_pos[mic_deviation_strength_entry] = widgetpos_temp
 
+	# TrueHD 레이아웃 출력 옵션
+	output_truehd_layouts = BooleanVar(value=False)
+	output_truehd_layouts_checkbutton = Checkbutton(canvas2, text="TrueHD layouts (11ch/13ch)", variable=output_truehd_layouts, command=refresh2)
+	ToolTip(output_truehd_layouts_checkbutton, 'Generate 11-channel (7.0.4) and 13-channel (7.0.6) layouts for TrueHD/Atmos content')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(output_truehd_layouts_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[output_truehd_layouts_checkbutton] = widgetpos_temp
+	
+	# 자동 채널 생성 섹션
+	channel_generation_frame_label = Label(canvas2, text='Auto Channel Generation:', font=bold_font)
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(channel_generation_frame_label, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[channel_generation_frame_label] = widgetpos_temp
+	
+	# FC 자동 생성
+	auto_generate_fc = BooleanVar(value=False)
+	auto_generate_fc_checkbutton = Checkbutton(canvas2, text="Generate FC (Center) from FL+FR", variable=auto_generate_fc)
+	ToolTip(auto_generate_fc_checkbutton, 'Automatically generate center channel from front left and right channels')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_fc_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[auto_generate_fc_checkbutton] = widgetpos_temp
+	
+	# TSL 자동 생성
+	auto_generate_tsl = BooleanVar(value=False)
+	auto_generate_tsl_checkbutton = Checkbutton(canvas2, text="Generate TSL from TFL+SL", variable=auto_generate_tsl)
+	ToolTip(auto_generate_tsl_checkbutton, 'Automatically generate top side left from top front left and side left (60%/40% mix)')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_tsl_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[auto_generate_tsl_checkbutton] = widgetpos_temp
+	
+	# TSR 자동 생성
+	auto_generate_tsr = BooleanVar(value=False)
+	auto_generate_tsr_checkbutton = Checkbutton(canvas2, text="Generate TSR from TFR+SR", variable=auto_generate_tsr)
+	ToolTip(auto_generate_tsr_checkbutton, 'Automatically generate top side right from top front right and side right (60%/40% mix)')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_tsr_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[auto_generate_tsr_checkbutton] = widgetpos_temp
+
 	decay_labels = []
 	decay_entries = []
 	decay_labels.append(decay_fl_label)
@@ -679,6 +954,15 @@ def main_gui():
 			args['interactive_plots'] = interactive_plots.get()
 			args['microphone_deviation_correction'] = microphone_deviation_correction.get()
 			args['mic_deviation_strength'] = mic_deviation_strength.get()
+			
+			# TrueHD 레이아웃 관련 옵션 추가
+			args['output_truehd_layouts'] = output_truehd_layouts.get()
+			if output_truehd_layouts.get():
+				args['auto_generate_channels'] = {
+					'FC': auto_generate_fc.get(),
+					'TSL': auto_generate_tsl.get(),
+					'TSR': auto_generate_tsr.get()
+				}
 		print(args) #debug args
 		impulcifer.main(**args)
 		showinfo('Done!', 'Generated files, check recordings folder.')
