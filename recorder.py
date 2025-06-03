@@ -27,24 +27,62 @@ def record_target(file_path, length, fs, channels=2, append=False):
     Returns:
         None
     """
+    print(f">>>>>>>>> Recording Target Debug Info:")
+    print(f"  File: {file_path}")
+    print(f"  Length: {length} samples ({length/fs:.2f} seconds)")
+    print(f"  Sample rate: {fs} Hz")
+    print(f"  Channels: {channels}")
+    print(f"  Append mode: {append}")
+    
     recording = sd.rec(length, samplerate=fs, channels=channels, blocking=True)
-    # 최신 numpy에서는 차원이 달라도 자동으로 transpose하지 않으므로 명시적으로 변환
-    if recording.shape[1] == channels:
+    print(f"  Raw recording shape: {recording.shape}")
+    
+    # Analyze recording content
+    print(f"  Recording content analysis:")
+    for ch in range(recording.shape[1] if len(recording.shape) > 1 else 1):
+        if len(recording.shape) > 1:
+            ch_data = recording[:, ch]
+        else:
+            ch_data = recording
+        max_val = np.max(np.abs(ch_data))
+        rms_val = np.sqrt(np.mean(ch_data ** 2))
+        print(f"    Channel {ch}: Max={max_val:.6f}, RMS={rms_val:.6f}, {'ACTIVE' if max_val > 1e-6 else 'EMPTY'}")
+    
+    # Transpose to have channels as rows (soundfile expects columns, but our system uses rows)
+    if recording.shape[1] == channels and len(recording.shape) == 2:
         recording = np.transpose(recording)
+        print(f"  After transpose: {recording.shape}")
+    elif len(recording.shape) == 1:
+        # Mono recording, expand dimensions
+        recording = np.expand_dims(recording, axis=0)
+        print(f"  Mono expanded to: {recording.shape}")
+    
     max_gain = 20 * np.log10(np.max(np.abs(recording) + 1e-10))
+    print(f"  Maximum gain: {max_gain:.2f} dB (headroom: {-1.0*max_gain:.1f} dB)")
+    
     if append and os.path.isfile(file_path):
         # Adding to existing file, read the file
+        print(f"  Appending to existing file...")
         _fs, data = read_wav(file_path, expand=True)
+        print(f"  Existing file shape: {data.shape}")
+        
         # Zero pad shorter to the length of the longer
         if recording.shape[1] > data.shape[1]:
             n = recording.shape[1] - data.shape[1]
             data = np.pad(data, [(0, 0), (0, n)])
+            print(f"  Padded existing data by {n} samples")
         elif data.shape[1] > recording.shape[1]:
-            recording = np.pad(recording, [(0, 0), (0, data.shape[1] - recording.shape[1])])
+            padding = data.shape[1] - recording.shape[1]
+            recording = np.pad(recording, [(0, 0), (0, padding)])
+            print(f"  Padded new recording by {padding} samples")
+        
         # Add recording to the end of the existing data
         recording = np.vstack([data, recording])
+        print(f"  Final appended shape: {recording.shape}")
+    
     write_wav(file_path, fs, recording)
-    print(f'Headroom: {-1.0*max_gain:.1f} dB')
+    print(f"  File written successfully")
+    print(f'>>>>>>>>> Headroom: {-1.0*max_gain:.1f} dB')
 
 
 def get_host_api_names():

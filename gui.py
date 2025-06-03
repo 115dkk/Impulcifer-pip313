@@ -3,9 +3,9 @@ def main_gui():
 	import tkinter
 	import re
 	import shutil
-	from tkinter import Tk, Frame, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, Scrollbar, Text, END, DISABLED, NORMAL, HORIZONTAL, VERTICAL, W, E, N, S, Canvas
+	from tkinter import Tk, Frame, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, Scrollbar, Text, END, DISABLED, NORMAL, HORIZONTAL, VERTICAL, W, E, N, S, Canvas, LEFT
 	from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
-	from tkinter.messagebox import showinfo
+	from tkinter.messagebox import showinfo, showerror
 	import recorder, impulcifer
 	import sounddevice
 
@@ -172,7 +172,23 @@ def main_gui():
 		elif input_device.get() not in input_devices:
 			input_device.set(input_devices[0])
 
-		channels_entry.config(state=NORMAL if channels_check.get() else DISABLED)
+		# Enable/disable channels entry based on checkbox state
+		if channels_check.get():
+			channels_entry.config(state=NORMAL)
+			try:
+				channel_count = channels.get()
+				print(f"Channels entry enabled - Recording will use {channel_count} channels")
+			except:
+				print("Channels entry enabled - Waiting for valid channel input")
+		else:
+			channels_entry.config(state=DISABLED)
+			print("Channels entry disabled - Using default 2-channel recording")
+		
+		# Update guidance text
+		update_channel_guidance()
+		
+		# Force GUI update
+		root.update_idletasks()
 
 	#playback device
 	output_device = StringVar()
@@ -216,12 +232,49 @@ def main_gui():
 
 	#force number of channels
 	channels_check = BooleanVar()
-	channels_checkbutton = Checkbutton(canvas1, text="Force input channels", variable=channels_check, command=refresh1)
+	channels_check.trace('w', lambda *args: refresh1())
+	channels_checkbutton = Checkbutton(canvas1, text="Channels", variable=channels_check)
 	widgetpos, pos, maxwidth, maxheight = pack(channels_checkbutton, pos, maxwidth, maxheight)
-	ToolTip(channels_checkbutton, 'For room correction: some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that reason record a stereo file. recorder can force the capture to be one channel')
-	channels = IntVar(value=1)
+	ToolTip(channels_checkbutton, 'For room correction: some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that reason record a stereo file. recorder can force the capture to be one channel. For multi-channel HRIR recording: Check this and set the number of input channels (2 channels per speaker for left/right ears). Common configurations: 14 channels (7 speakers), 22 channels (11 speakers, 7.0.4), 26 channels (13 speakers, 7.0.6).')
+	channels = IntVar(value=14)
+	channels.trace('w', lambda *args: update_channel_guidance())
 	channels_entry = Entry(canvas1, textvariable=channels, width=5, validate='key', vcmd=(root.register(validate_int), '%P'))
 	widgetpos, pos, maxwidth, maxheight = pack(channels_entry, pos, maxwidth, maxheight, samerow=True)
+	
+	# Add channel guidance label
+	def update_channel_guidance():
+		try:
+			channel_count = channels.get()
+		except:
+			# Handle case when entry is empty or invalid
+			channel_count = 0
+			
+		if channels_check.get():
+			if channel_count == 14:
+				guidance_text = f"Recording with {channel_count} channels (7 speakers × 2 ears). Speakers: FL,FR,FC,BL,BR,SL,SR.wav"
+			elif channel_count == 22:
+				guidance_text = f"Recording with {channel_count} channels (11 speakers × 2 ears, 7.0.4 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR.wav"
+			elif channel_count == 26:
+				guidance_text = f"Recording with {channel_count} channels (13 speakers × 2 ears, 7.0.6 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR,TSL,TSR.wav"
+			elif channel_count > 0:
+				speakers_count = channel_count // 2
+				guidance_text = f"Recording with {channel_count} channels ({speakers_count} speakers × 2 ears). Make sure your filename matches the speaker configuration."
+			else:
+				guidance_text = "Enter valid channel count (recommended: 14, 22, or 26)"
+		else:
+			guidance_text = "Using default 2-channel recording."
+		channel_guidance_label.config(text=guidance_text)
+		try:
+			root.update()  # Force update to refresh display
+		except:
+			pass  # Ignore update errors during shutdown
+	
+	channel_guidance_label = Label(canvas1, text="Using default 2-channel recording.", wraplength=500, justify=LEFT, font=('TkDefaultFont', 8), fg='blue')
+	widgetpos, pos, maxwidth, maxheight = pack(channel_guidance_label, pos, maxwidth, maxheight)
+	
+	# Update guidance when checkbox or channel count changes
+	channels_check.trace('w', lambda *args: update_channel_guidance())
+	channels.trace('w', lambda *args: update_channel_guidance())
 
 	#append
 	append = BooleanVar()
@@ -231,15 +284,88 @@ def main_gui():
 
 	#record button
 	def recordaction():
-		recorder.play_and_record(play=play_entry.get(), record=record_entry.get(), input_device=input_device.get(), output_device=output_device.get(), host_api=host_api.get(), channels=(channels.get() if channels_check.get() else 2), append=append.get())
-		showinfo('', 'Recorded to ' + record_entry.get())
+		# Validate recording setup
+		play_file = play_entry.get()
+		record_file = record_entry.get()
+		selected_channels = channels.get() if channels_check.get() else 2
+		
+		# Check if files exist/are valid
+		if not os.path.exists(play_file):
+			showerror('Error', f'Play file does not exist: {play_file}')
+			return
+		
+		# Extract expected speakers from record filename
+		try:
+			import re
+			from constants import SPEAKER_LIST_PATTERN
+			filename = os.path.basename(record_file)
+			match = re.search(SPEAKER_LIST_PATTERN, filename)
+			if match:
+				speakers_str = match.group(1)
+				expected_speakers = speakers_str.split(',')
+				expected_channels = len(expected_speakers) * 2  # stereo pairs
+				
+				# Warn about channel mismatch
+				if channels_check.get() and selected_channels != expected_channels:
+					warning_msg = (f"Channel count mismatch detected!\n\n"
+								 f"Recording filename suggests {len(expected_speakers)} speakers ({', '.join(expected_speakers)}) "
+								 f"which requires {expected_channels} channels (stereo pairs).\n\n"
+								 f"But you have selected {selected_channels} input channels.\n\n"
+								 f"Expected speakers: {', '.join(expected_speakers)}\n"
+								 f"Expected channels: {expected_channels}\n"
+								 f"Selected channels: {selected_channels}\n\n"
+								 f"Continue anyway?")
+					
+					from tkinter.messagebox import askyesno
+					if not askyesno('Channel Mismatch Warning', warning_msg):
+						return
+		except Exception as e:
+			print(f"Warning: Could not parse filename for speaker validation: {e}")
+		
+		# Show recording info
+		info_msg = (f"Recording Setup:\n"
+				   f"Play file: {os.path.basename(play_file)}\n"
+				   f"Record file: {os.path.basename(record_file)}\n"
+				   f"Input device: {input_device.get() or 'Default'}\n"
+				   f"Output device: {output_device.get() or 'Default'}\n"
+				   f"Channels: {selected_channels}\n"
+				   f"Host API: {host_api.get() or 'Auto'}\n\n"
+				   f"Make sure:\n"
+				   f"- Your audio interface is properly connected\n"
+				   f"- Input/output devices are correctly selected\n"
+				   f"- Channel count matches your setup\n\n"
+				   f"Ready to start recording?")
+		
+		from tkinter.messagebox import askyesno
+		if not askyesno('Start Recording', info_msg):
+			return
+		
+		try:
+			recorder.play_and_record(
+				play=play_file, 
+				record=record_file, 
+				input_device=input_device.get(), 
+				output_device=output_device.get(), 
+				host_api=host_api.get(), 
+				channels=selected_channels, 
+				append=append.get()
+			)
+			showinfo('Recording Complete', f'Successfully recorded to {record_file}')
+		except Exception as e:
+			showerror('Recording Error', f'Recording failed: {str(e)}')
+			
 	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='RECORD', command=recordaction), pos, maxwidth, maxheight)
 
 	refresh1(init=True)
-	root.geometry(str(maxwidth) + 'x' + str(maxheight) + '+0+0')
-	canvas1.config(width=maxwidth, height=maxheight)
+	
+	# Ensure minimum width for proper text display
+	final_width = max(maxwidth, 600)  # Minimum 600 pixels width
+	final_height = maxheight + 20  # Add some padding
+	
+	root.geometry(str(final_width) + 'x' + str(final_height) + '+0+0')
+	canvas1.config(width=final_width, height=final_height)
 	canvas1.pack()
-	canvas1_final_width = maxwidth
+	canvas1_final_width = final_width
 
 	#IMPULCIFER WINDOW
 	pos2 = [0, 0]
