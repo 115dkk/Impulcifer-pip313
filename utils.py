@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import os
+import subprocess
+import tempfile
+import json
 import numpy as np
 import soundfile as sf
 from scipy.fft import fft, rfft
@@ -10,6 +13,133 @@ import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 
 plt.rcParams['axes.unicode_minus'] = False
+
+# FFmpeg 경로 (필요시 수정)
+FFMPEG_PATH = 'ffmpeg'
+FFPROBE_PATH = 'ffprobe'
+
+def is_truehd_file(file_path):
+    """Check if file is TrueHD/MLP format"""
+    try:
+        result = subprocess.run(
+            [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0', 
+             '-show_entries', 'stream=codec_name', '-of', 'default=noprint_wrappers=1:nokey=1', 
+             file_path],
+            capture_output=True, text=True
+        )
+        codec = result.stdout.strip().lower()
+        return codec in ['truehd', 'mlp']
+    except Exception as e:
+        print(f"Error checking TrueHD file: {e}")
+        return False
+
+def convert_truehd_to_wav(truehd_path, output_path=None):
+    """Convert TrueHD/MLP file to WAV format"""
+    if output_path is None:
+        fd, output_path = tempfile.mkstemp(suffix='.wav')
+        os.close(fd)
+    
+    # Get channel layout info first
+    channel_info = get_truehd_channel_info(truehd_path)
+    
+    # Convert to WAV with proper channel mapping
+    cmd = [
+        FFMPEG_PATH, '-i', truehd_path,
+        '-acodec', 'pcm_f32le',  # 32-bit float PCM
+        '-ar', '48000',  # Sample rate
+        output_path, '-y'
+    ]
+    
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"FFmpeg conversion failed: {result.stderr}")
+    
+    return output_path, channel_info
+
+def get_truehd_channel_info(file_path):
+    """Get channel layout information from TrueHD file"""
+    try:
+        result = subprocess.run(
+            [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
+             '-show_entries', 'stream=channel_layout,channels',
+             '-of', 'json', file_path],
+            capture_output=True, text=True
+        )
+        info = json.loads(result.stdout)
+        stream = info['streams'][0]
+        
+        channels = stream.get('channels', 0)
+        layout = stream.get('channel_layout', '')
+        
+        # Map channel layouts to speaker names
+        from constants import CHANNEL_LAYOUT_MAP
+        
+        if channels in CHANNEL_LAYOUT_MAP:
+            return CHANNEL_LAYOUT_MAP[channels]
+        else:
+            print(f"Unknown channel layout: {channels} channels, layout: {layout}")
+            return None
+    except Exception as e:
+        print(f"Error getting channel info: {e}")
+        return None
+
+def read_audio(file_path, expand=False):
+    """Read audio file (WAV or TrueHD/MLP)
+    
+    Returns:
+        - Sample rate
+        - Audio data (channels x samples)
+        - Channel info (for TrueHD) or None
+    """
+    if is_truehd_file(file_path):
+        # Convert TrueHD to temporary WAV
+        temp_wav, channel_info = convert_truehd_to_wav(file_path)
+        try:
+            data, fs = sf.read(temp_wav)
+            if len(data.shape) > 1:
+                # Soundfile has tracks on columns, we want them on rows
+                data = np.transpose(data)
+            elif expand:
+                data = np.expand_dims(data, axis=0)
+            
+            return fs, data, channel_info
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_wav):
+                os.remove(temp_wav)
+    else:
+        # Original WAV reading logic
+        data, fs = sf.read(file_path)
+        if len(data.shape) > 1:
+            # Soundfile has tracks on columns, we want them on rows
+            data = np.transpose(data)
+        elif expand:
+            data = np.expand_dims(data, axis=0)
+        return fs, data, None
+
+def check_ffmpeg_available():
+    """Check if FFmpeg is available"""
+    try:
+        result = subprocess.run([FFMPEG_PATH, '-version'], 
+                              capture_output=True, text=True)
+        return result.returncode == 0
+    except:
+        return False
+
+def get_supported_audio_formats():
+    """Get list of supported audio formats"""
+    formats = {
+        'wav': 'WAV Audio',
+        'mlp': 'TrueHD/MLP Audio',
+        'thd': 'TrueHD Audio',
+        'truehd': 'Dolby TrueHD'
+    }
+    
+    if not check_ffmpeg_available():
+        # If FFmpeg not available, only support WAV
+        return {'wav': 'WAV Audio'}
+    
+    return formats
 
 
 def to_db(x):
@@ -62,7 +192,7 @@ def dB_unweight(x):
 
 
 def read_wav(file_path, expand=False):
-    """Reads WAV file
+    """Reads WAV file (backward compatibility wrapper)
 
     Args:
         file_path: Path to WAV file as string
@@ -72,14 +202,7 @@ def read_wav(file_path, expand=False):
         - sampling frequency as integer
         - wav data as numpy array with one row per track, samples in range -1..1
     """
-    if not os.path.isfile(file_path):
-        raise FileNotFoundError(f'File in path "{os.path.abspath(file_path)}" does not exist.')
-    data, fs = sf.read(file_path)
-    if len(data.shape) > 1:
-        # Soundfile has tracks on columns, we want them on rows
-        data = np.transpose(data)
-    elif expand:
-        data = np.expand_dims(data, axis=0)
+    fs, data, _ = read_audio(file_path, expand=expand)
     return fs, data
 
 

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "1.4.2"
+version = "1.5.0"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13.2 호환 버전: 115dkk", email="" },
@@ -53,6 +53,8 @@ include = [
     "data/harman-in-room-loudspeaker-target-wo-bass.csv",
     "data/harman-in-room-loudspeaker-target.csv",
     "data/harman-in-room-headphone-target-wo-bass.csv",
+    "data/11cmaster.mlp",
+    "data/13cmaster.mlp",
     "data/demo/README.md",
     "data/demo/headphones.wav",
     "data/demo/room-mic-calibration.txt",

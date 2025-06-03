@@ -200,7 +200,12 @@ def main_gui():
 	play = StringVar(value=os.path.join('data', 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
 	play_entry = Entry(canvas1, textvariable=play, width=70)
 	widgetpos, pos, maxwidth, maxheight = pack(play_entry, pos, maxwidth, maxheight)
-	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='...', command=lambda: openfile(play, (('Audio files', '*.wav'), ('All files', '*.*')))), pos, maxwidth, maxheight, samerow=True)
+	widgetpos, pos, maxwidth, maxheight = pack(Button(canvas1, text='...', command=lambda: openfile(play, (
+		('Audio files', '*.wav *.mlp *.thd *.truehd'), 
+		('WAV files', '*.wav'),
+		('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
+		('All files', '*.*')
+	))), pos, maxwidth, maxheight, samerow=True)
 
 	#output file
 	widgetpos, pos, maxwidth, maxheight = pack(Label(canvas1, text='Record to file'), pos, maxwidth, maxheight)
@@ -329,6 +334,11 @@ def main_gui():
 				for i in range(7):
 					decay_labels[i].place_forget()
 					decay_entries[i].place_forget()
+					
+			# TrueHD 관련 옵션들도 표시/숨김 처리
+			auto_generate_fc_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
+			auto_generate_tsl_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
+			auto_generate_tsr_checkbutton.config(state=NORMAL if output_truehd_layouts.get() else DISABLED)
 		else:
 			for widget in adv_options_pos:
 				widget.place_forget()
@@ -348,7 +358,13 @@ def main_gui():
 	test_signal = StringVar(value=os.path.join('data', 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
 	test_signal_entry = Entry(canvas2, textvariable=test_signal, width=80)
 	_, pos2, imp_maxwidth, imp_maxheight = pack(test_signal_entry, pos2, imp_maxwidth, imp_maxheight)
-	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: openfile(test_signal, (('Audio files', '*.wav *.pkl'), ('All files', '*.*')))), pos2, imp_maxwidth, imp_maxheight, samerow=True)
+	_, pos2, imp_maxwidth, imp_maxheight = pack(Button(canvas2, text='...', command=lambda: openfile(test_signal, (
+		('Audio files', '*.wav *.pkl *.mlp *.thd *.truehd'), 
+		('WAV files', '*.wav'),
+		('Pickle files', '*.pkl'),
+		('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
+		('All files', '*.*')
+	))), pos2, imp_maxwidth, imp_maxheight, samerow=True)
 
 	#room correction
 	label_pos = {}
@@ -616,6 +632,39 @@ def main_gui():
 	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(mic_deviation_strength_entry, pos2, imp_maxwidth, imp_maxheight, samerow=True)
 	adv_options_pos[mic_deviation_strength_entry] = widgetpos_temp
 
+	# TrueHD 레이아웃 출력 옵션
+	output_truehd_layouts = BooleanVar(value=False)
+	output_truehd_layouts_checkbutton = Checkbutton(canvas2, text="TrueHD layouts (11ch/13ch)", variable=output_truehd_layouts, command=refresh2)
+	ToolTip(output_truehd_layouts_checkbutton, 'Generate 11-channel (7.0.4) and 13-channel (7.0.6) layouts for TrueHD/Atmos content')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(output_truehd_layouts_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[output_truehd_layouts_checkbutton] = widgetpos_temp
+	
+	# 자동 채널 생성 섹션
+	channel_generation_frame_label = Label(canvas2, text='Auto Channel Generation:', font=('Arial', 9, 'bold'))
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(channel_generation_frame_label, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[channel_generation_frame_label] = widgetpos_temp
+	
+	# FC 자동 생성
+	auto_generate_fc = BooleanVar(value=False)
+	auto_generate_fc_checkbutton = Checkbutton(canvas2, text="Generate FC (Center) from FL+FR", variable=auto_generate_fc)
+	ToolTip(auto_generate_fc_checkbutton, 'Automatically generate center channel from front left and right channels')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_fc_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[auto_generate_fc_checkbutton] = widgetpos_temp
+	
+	# TSL 자동 생성
+	auto_generate_tsl = BooleanVar(value=False)
+	auto_generate_tsl_checkbutton = Checkbutton(canvas2, text="Generate TSL from TFL+SL", variable=auto_generate_tsl)
+	ToolTip(auto_generate_tsl_checkbutton, 'Automatically generate top side left from top front left and side left (60%/40% mix)')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_tsl_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[auto_generate_tsl_checkbutton] = widgetpos_temp
+	
+	# TSR 자동 생성
+	auto_generate_tsr = BooleanVar(value=False)
+	auto_generate_tsr_checkbutton = Checkbutton(canvas2, text="Generate TSR from TFR+SR", variable=auto_generate_tsr)
+	ToolTip(auto_generate_tsr_checkbutton, 'Automatically generate top side right from top front right and side right (60%/40% mix)')
+	widgetpos_temp, pos2, imp_maxwidth, imp_maxheight = pack(auto_generate_tsr_checkbutton, pos2, imp_maxwidth, imp_maxheight)
+	adv_options_pos[auto_generate_tsr_checkbutton] = widgetpos_temp
+
 	decay_labels = []
 	decay_entries = []
 	decay_labels.append(decay_fl_label)
@@ -679,6 +728,15 @@ def main_gui():
 			args['interactive_plots'] = interactive_plots.get()
 			args['microphone_deviation_correction'] = microphone_deviation_correction.get()
 			args['mic_deviation_strength'] = mic_deviation_strength.get()
+			
+			# TrueHD 레이아웃 관련 옵션 추가
+			args['output_truehd_layouts'] = output_truehd_layouts.get()
+			if output_truehd_layouts.get():
+				args['auto_generate_channels'] = {
+					'FC': auto_generate_fc.get(),
+					'TSL': auto_generate_tsl.get(),
+					'TSR': auto_generate_tsr.get()
+				}
 		print(args) #debug args
 		impulcifer.main(**args)
 		showinfo('Done!', 'Generated files, check recordings folder.')

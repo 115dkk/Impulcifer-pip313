@@ -14,7 +14,14 @@ from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from room_correction import room_correction
 from utils import sync_axes, save_fig_as_png
-from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path
+from constants import (
+    SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path,
+    TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER, AUTO_GENERATABLE_CHANNELS, HEXADECAGONAL_TRACK_ORDER
+)
+from channel_generation import (
+    generate_missing_channels, get_available_channels_for_layout, 
+    create_truehd_layout_track_order, validate_channel_requirements
+)
 
 # PR3에서 추가된 import 문들
 import copy
@@ -166,7 +173,10 @@ def main(dir_path=None,
          interactive_plots=False,
          # 마이크 편차 보정 파라미터 추가
          microphone_deviation_correction=False,
-         mic_deviation_strength=0.7):
+         mic_deviation_strength=0.7,
+         # TrueHD 레이아웃 관련 파라미터 추가
+         output_truehd_layouts=False,
+         auto_generate_channels=None):
     """"""
     if plot:
         try:
@@ -396,6 +406,40 @@ def main(dir_path=None,
 
     # Write multi-channel WAV file with HeSuVi track order
     hrir.write_wav(os.path.join(dir_path, 'hesuvi.wav'), track_order=HESUVI_TRACK_ORDER)
+
+    # TrueHD 레이아웃 출력 (새로 추가)
+    if output_truehd_layouts:
+        print('Generating TrueHD layouts...')
+        
+        # 필요한 채널들이 있는지 확인하고 없으면 자동 생성
+        if auto_generate_channels:
+            generated_channels = generate_missing_channels(hrir, auto_generate_channels)
+            if generated_channels:
+                print(f'Generated channels: {generated_channels}')
+        
+        # 11채널 (7.0.4) 레이아웃 생성
+        valid_11ch, count_11ch, msg_11ch = validate_channel_requirements(hrir, TRUEHD_11CH_ORDER, min_channels=8)
+        if valid_11ch:
+            available_11ch = get_available_channels_for_layout(hrir, TRUEHD_11CH_ORDER)
+            track_order_11ch = create_truehd_layout_track_order(available_11ch)
+            
+            output_path_11ch = os.path.join(dir_path, f'truehd_11ch_{len(available_11ch)}ch.wav')
+            hrir.write_wav(output_path_11ch, track_order=track_order_11ch)
+            print(f'Generated 11-channel TrueHD layout: {output_path_11ch}')
+        else:
+            print(f'Cannot generate 11-channel layout: {msg_11ch}')
+            
+        # 13채널 (7.0.6) 레이아웃 생성
+        valid_13ch, count_13ch, msg_13ch = validate_channel_requirements(hrir, TRUEHD_13CH_ORDER, min_channels=10)
+        if valid_13ch:
+            available_13ch = get_available_channels_for_layout(hrir, TRUEHD_13CH_ORDER)
+            track_order_13ch = create_truehd_layout_track_order(available_13ch)
+            
+            output_path_13ch = os.path.join(dir_path, f'truehd_13ch_{len(available_13ch)}ch.wav')
+            hrir.write_wav(output_path_13ch, track_order=track_order_13ch)
+            print(f'Generated 13-channel TrueHD layout: {output_path_13ch}')
+        else:
+            print(f'Cannot generate 13-channel layout: {msg_13ch}')
 
     # PR3 jamesdsp 로직 추가 (항목 6)
     if jamesdsp:
@@ -981,6 +1025,8 @@ def create_cli():
                             help='Enable microphone deviation correction to compensate for microphone placement variations between left and right ears.')
     arg_parser.add_argument('--mic_deviation_strength', type=float, default=0.7, 
                             help='Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction. Default is 0.7.')
+    arg_parser.add_argument('--output_truehd_layouts', action='store_true', help='Generate TrueHD layouts.')
+    arg_parser.add_argument('--auto_generate_channels', type=str, default=None, help='Comma-separated list of channels to generate TrueHD layouts for.')
     args = vars(arg_parser.parse_args())
     if 'bass_boost' in args:
         bass_boost = args['bass_boost'].split(',')
