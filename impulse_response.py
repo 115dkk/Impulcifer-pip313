@@ -15,6 +15,7 @@ from copy import deepcopy
 from autoeq.frequency_response import FrequencyResponse
 from utils import magnitude_response, get_ylim, running_mean
 from constants import COLORS
+import os
 
 
 class ImpulseResponse:
@@ -43,23 +44,47 @@ class ImpulseResponse:
             peak_height: Minimum peak height. Default is -18 dBFS
 
         Returns:
-            Peak index to impulse response data
+            Peak index to impulse response data, or None if no peak found or data is empty
         """
         if end is None:
             end = len(self.data)
+        
+        # Check for empty data
+        if len(self.data) == 0:
+            return None
+            
         # Peak height threshold, relative to the data maximum value
         # Copy to avoid manipulating the original data here
         data = self.data.copy()
         # Limit search to given range
         data = data[start:end]
+        
+        # Check if the sliced data is empty
+        if len(data) == 0:
+            return None
+            
+        # Check if all data values are zero
+        if np.all(data == 0):
+            return None
+            
         # Normalize to 1.0
-        data /= np.max(np.abs(data))
+        max_abs_val = np.max(np.abs(data))
+        if max_abs_val == 0:
+            return None
+            
+        data /= max_abs_val
+        
         # Find positive peaks
         peaks_pos, properties = signal.find_peaks(data, height=peak_height)
         # Find negative peaks that are at least
         peaks_neg, _ = signal.find_peaks(data * -1.0, height=peak_height)
         # Combine positive and negative peaks
         peaks = np.concatenate([peaks_pos, peaks_neg])
+        
+        # Check if any peaks were found
+        if len(peaks) == 0:
+            return None
+            
         # Add start delta to peak indices
         peaks += start
         # Return the first one
@@ -104,7 +129,25 @@ class ImpulseResponse:
 
         # 3. The decay slope is estimated using linear regression between the time interval containing the response
         # 0 dB peak, and  the  first interval 5–10 dB above the background noise level.
-        slope_end = np.argwhere(windows <= noise_floor + 10)[0, 0] - 1  # Index previous to the first below 10 dB
+        try:
+            slope_end = np.argwhere(windows <= noise_floor + 10)[0, 0] - 1  # Index previous to the first below 10 dB
+        except IndexError:
+            # No windows found below noise_floor + 10, use a fallback approach
+            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+            
+        # Check if slope_end is valid for linear regression
+        if slope_end <= 0:
+            # Not enough data points for slope calculation
+            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        
+        # Ensure we have at least 2 data points for linear regression
+        if slope_end < 2:
+            slope_end = min(2, len(windows) - 1)
+            
+        # Final check to ensure we have valid data for regression
+        if slope_end <= 0 or slope_end >= len(t_windows) or slope_end >= len(windows):
+            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        
         slope, intercept, _, _, _ = stats.linregress(t_windows[:slope_end], windows[:slope_end])
 
         # 4. A preliminary knee point is determined at the intersection of the decay slope and the background noise
@@ -120,7 +163,18 @@ class ImpulseResponse:
         n_windows_per_10dB = 3
         wd = 10 / (abs(slope) * n_windows_per_10dB)
         n = int(len(squared) / self.fs / wd)  # Number of time windows
+        
+        # Check for edge case where n becomes 0 (very short impulse response)
+        if n <= 0:
+            # For very short impulse responses, return simplified parameters
+            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        
         w = int(len(squared) / n)  # Width of a single time window
+        
+        # Ensure w is at least 1 to avoid further issues
+        if w <= 0:
+            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        
         t_windows = np.arange(n) * wd + wd / 2  # Time window center time stamps
 
         # 6. The squared impulse is averaged into the new local time intervals.
@@ -274,7 +328,21 @@ class ImpulseResponse:
             except IndexError as err:
                 # Targets not found on the Schroeder curve
                 continue
-            slope, intercept, _, _, _ = stats.linregress(t[start:end], schroeder[start:end])
+            
+            # Check if we have valid data range for linear regression
+            if start >= end or (end - start) < 2:
+                # Need at least 2 points for linear regression
+                continue
+            
+            # Check if the sliced arrays are not empty
+            t_slice = t[start:end]
+            schroeder_slice = schroeder[start:end]
+            
+            if len(t_slice) == 0 or len(schroeder_slice) == 0:
+                # Empty arrays, skip this decay time calculation
+                continue
+            
+            slope, intercept, _, _, _ = stats.linregress(t_slice, schroeder_slice)
             decay_times[name] = decay_target / slope
 
         return decay_times['EDT'], decay_times['RT20'], decay_times['RT30'], decay_times['RT60']
@@ -410,6 +478,8 @@ class ImpulseResponse:
         if plot_waterfall:
             self.plot_waterfall(fig=fig, ax=ax[1, 2])
         if plot_file_path:
+            # Ensure the directory exists before saving
+            os.makedirs(os.path.dirname(plot_file_path), exist_ok=True)
             fig.savefig(plot_file_path)
         return fig
 
@@ -440,6 +510,8 @@ class ImpulseResponse:
 
         # Save image
         if plot_file_path:
+            # Ensure the directory exists before saving
+            os.makedirs(os.path.dirname(plot_file_path), exist_ok=True)
             fig.savefig(plot_file_path)
 
         return fig, ax
@@ -579,6 +651,8 @@ class ImpulseResponse:
 
         # Save image
         if plot_file_path:
+            # Ensure the directory exists before saving
+            os.makedirs(os.path.dirname(plot_file_path), exist_ok=True)
             fig.savefig(plot_file_path)
 
         return fig, ax
@@ -610,6 +684,8 @@ class ImpulseResponse:
         ax.set_title('Impulse response'.format(ms=int(end * 1000)))
 
         if plot_file_path:
+            # Ensure the directory exists before saving
+            os.makedirs(os.path.dirname(plot_file_path), exist_ok=True)
             fig.savefig(plot_file_path)
 
         return fig, ax
@@ -719,6 +795,8 @@ class ImpulseResponse:
         ax.legend(legend, fontsize=8)
 
         if plot_file_path:
+            # Ensure the directory exists before saving
+            os.makedirs(os.path.dirname(plot_file_path), exist_ok=True)
             fig.savefig(plot_file_path)
 
         return fig, ax
@@ -769,6 +847,8 @@ class ImpulseResponse:
         ax.legend(loc='upper right')
 
         if plot_file_path:
+            # Ensure the directory exists before saving
+            os.makedirs(os.path.dirname(plot_file_path), exist_ok=True)
             fig.savefig(plot_file_path)
 
         return fig, ax

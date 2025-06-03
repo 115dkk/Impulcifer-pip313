@@ -160,6 +160,26 @@ class HRIR:
         for speaker, pair in self.irs.items():
             left.append(pair['left'].data)
             right.append(pair['right'].data)
+        
+        # Filter out empty arrays before stacking
+        left = [arr for arr in left if arr.size > 0]
+        right = [arr for arr in right if arr.size > 0]
+        
+        if not left or not right:
+            raise ValueError("No valid impulse response data found for normalization. All channels appear to be empty.")
+        
+        # Check if all arrays have the same length
+        left_lengths = [len(arr) for arr in left]
+        right_lengths = [len(arr) for arr in right]
+        
+        if len(set(left_lengths)) > 1 or len(set(right_lengths)) > 1:
+            # Arrays have different lengths, pad shorter ones to match the longest
+            max_left_len = max(left_lengths) if left_lengths else 0
+            max_right_len = max(right_lengths) if right_lengths else 0
+            
+            left = [np.pad(arr, (0, max_left_len - len(arr)), 'constant') for arr in left]
+            right = [np.pad(arr, (0, max_right_len - len(arr)), 'constant') for arr in right]
+        
         left = np.sum(np.vstack(left), axis=0)
         right = np.sum(np.vstack(right), axis=0)
 
@@ -209,6 +229,13 @@ class HRIR:
             # Peaks
             peak_left = pair['left'].peak_index()
             peak_right = pair['right'].peak_index()
+            
+            # Handle cases where peak_index returns None (empty arrays)
+            if peak_left is None or peak_right is None:
+                print(f"Warning: Could not find peaks for {speaker}. Skipping crop_heads processing for this speaker.")
+                # Skip this speaker entirely if we can't find peaks
+                continue
+            
             itd = np.abs(peak_left - peak_right) / self.fs
 
             # Speaker channel delay
@@ -227,8 +254,11 @@ class HRIR:
                                   f'{itd * 1000:.4f} milliseconds.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
-                pair['left'].data = pair['left'].data[peak_right - delay:]
-                pair['right'].data = pair['right'].data[peak_right - delay:]
+                
+                # Ensure we don't go negative in array indexing
+                crop_index = max(0, peak_right - delay)
+                pair['left'].data = pair['left'].data[crop_index:]
+                pair['right'].data = pair['right'].data[crop_index:]
             else:
                 # Delay to right ear is smaller, this is must right side speaker
                 if speaker[1] == 'L':
@@ -241,13 +271,18 @@ class HRIR:
                                   f'{itd * 1000:.4f} milliseconds.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
-                pair['right'].data = pair['right'].data[peak_left - delay:]
-                pair['left'].data = pair['left'].data[peak_left - delay:]
+                
+                # Ensure we don't go negative in array indexing
+                crop_index = max(0, peak_left - delay)
+                pair['right'].data = pair['right'].data[crop_index:]
+                pair['left'].data = pair['left'].data[crop_index:]
 
             # Make sure impulse response starts from silence
-            window = hann(head * 2)[:head] # scipy.signal.windows.hann 사용
-            pair['left'].data[:head] *= window
-            pair['right'].data[:head] *= window
+            # Ensure we have enough data for the windowing
+            if len(pair['left'].data) >= head and len(pair['right'].data) >= head:
+                window = hann(head * 2)[:head] # scipy.signal.windows.hann 사용
+                pair['left'].data[:head] *= window
+                pair['right'].data[:head] *= window
 
     def crop_tails(self):
         """Crops tails of all the impulse responses in a way that makes them all equal length.
@@ -610,6 +645,10 @@ class HRIR:
 
         # Save figures
         file_path = os.path.join(dir_path, f'results.png')
+        
+        # Ensure the directory exists before saving
+        os.makedirs(dir_path, exist_ok=True)
+        
         fig.savefig(file_path, bbox_inches='tight')
         plt.close(fig)
         # Optimize file size
@@ -710,9 +749,26 @@ class HRIR:
             # Peak indices
             peak_a = ir_a.peak_index()
             peak_b = ir_b.peak_index()
+            
+            # Handle cases where peak_index returns None (empty arrays)
+            if peak_a is None or peak_b is None:
+                print(f"Warning: Could not find peaks for speaker pair {pair_speakers}. Skipping alignment for this pair.")
+                continue
+            
+            # Ensure peaks are within valid range for segment extraction
+            if peak_a + segment_len > len(ir_a.data) or peak_b + segment_len > len(ir_b.data):
+                print(f"Warning: Not enough data after peak for segment extraction in speaker pair {pair_speakers}. Skipping alignment.")
+                continue
+            
             # Segments from peaks
             segment_a = ir_a.data[peak_a:peak_a + segment_len]
             segment_b = ir_b.data[peak_b:peak_b + segment_len]
+            
+            # Ensure segments are not empty
+            if len(segment_a) == 0 or len(segment_b) == 0:
+                print(f"Warning: Empty segments extracted for speaker pair {pair_speakers}. Skipping alignment.")
+                continue
+                
             # Cross correlation
             corr = signal.correlate(segment_a, segment_b, mode='full')
             # Delay from peak b to peak a in samples
@@ -856,6 +912,9 @@ class HRIR:
 
             plot_file_path = os.path.join(dir_path, f'{speaker}_interaural_overlay.png')
             try:
+                # Ensure the directory exists before saving
+                os.makedirs(dir_path, exist_ok=True)
+                
                 fig.savefig(plot_file_path, bbox_inches='tight')
                 im = Image.open(plot_file_path)
                 im = im.convert('P', palette=Image.ADAPTIVE, colors=128) # 색상 수 조정 가능

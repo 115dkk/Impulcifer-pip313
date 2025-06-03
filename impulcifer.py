@@ -13,7 +13,7 @@ from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
 from hrir import HRIR
 from room_correction import room_correction
-from utils import sync_axes, save_fig_as_png
+from utils import sync_axes, save_fig_as_png, is_truehd_file, convert_truehd_to_wav, check_ffmpeg_available
 from constants import (
     SPEAKER_NAMES, SPEAKER_LIST_PATTERN, HESUVI_TRACK_ORDER, TEST_SIGNALS, get_data_path,
     TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER, AUTO_GENERATABLE_CHANNELS, HEXADECAGONAL_TRACK_ORDER
@@ -550,8 +550,25 @@ def open_impulse_response_estimator(dir_path, file_path=None):
     elif re.match(r'^.+\.pkl$', file_path, flags=re.IGNORECASE):
         # Test signal is Pickle file
         estimator = ImpulseResponseEstimator.from_pickle(file_path)
+    elif re.match(r'^.+\.(mlp|thd|truehd)$', file_path, flags=re.IGNORECASE):
+        # Test signal is TrueHD/MLP file - convert to temporary WAV first
+        if not check_ffmpeg_available():
+            raise RuntimeError("TrueHD/MLP 파일을 처리하기 위해서는 FFmpeg가 필요합니다. FFmpeg를 설치해주세요.")
+        
+        if not is_truehd_file(file_path):
+            raise ValueError(f"파일이 유효한 TrueHD/MLP 형식이 아닙니다: {file_path}")
+        
+        print(f"TrueHD/MLP 파일을 WAV로 변환 중: {file_path}")
+        temp_wav_path, channel_info = convert_truehd_to_wav(file_path)
+        
+        try:
+            estimator = ImpulseResponseEstimator.from_wav(temp_wav_path)
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_wav_path):
+                os.remove(temp_wav_path)
     else:
-        raise TypeError(f'알 수 없는 파일 확장자: "{file_path}"\n유효한 파일 확장자: .wav, .pkl')
+        raise TypeError(f'알 수 없는 파일 확장자: "{file_path}"\n유효한 파일 확장자: .wav, .pkl, .mlp, .thd, .truehd')
     
     return estimator
 
