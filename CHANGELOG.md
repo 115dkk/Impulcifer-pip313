@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.5.2 - 2025-11-12
+### 버그 수정
+- **AutoEQ 훼손 문제 해결**: `headphone_compensation` 함수의 큐빅 스플라인 보간 fallback 로직에서 발생하던 치명적인 버그를 수정했습니다.
+  - 문제: 큐빅 보간이 실패할 때 fallback이 복사본(`left_orig`)을 수정하고 실제 객체(`left`)는 그대로 두어, 잘못된 주파수 그리드로 보상이 이루어졌습니다.
+  - 결과: 헤드폰과 룸의 이도 응답을 합성할 때 FR(Frequency Response) 및 임펄스 응답이 훼손되었습니다.
+  - 해결: Fallback 람다 함수가 실제 객체를 수정하도록 변경하여 주파수 그리드 정렬이 올바르게 이루어지도록 했습니다.
+- 이 수정으로 구버전에서 제대로 작동하던 결과가 복원되었습니다.
+
 ## 1.4.0 - 2024-12-20
 ### GUI에 추가된 기능들
 - **임펄스 응답 사전 응답(Pre-response) 길이 조절 옵션**: 임펄스 응답의 시작 부분을 자르는 길이를 ms 단위로 조절할 수 있습니다. (기본값: 1.0ms)

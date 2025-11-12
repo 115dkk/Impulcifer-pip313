@@ -808,9 +808,9 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     # left와 right를 타겟의 주파수에 맞게 보간
     left_orig = left.copy()
     right_orig = right.copy()
-    
-    _apply_cubic_interp(left, target.frequency, lambda: left_orig.interpolate(f=target.frequency), "left headphone response")
-    _apply_cubic_interp(right, target.frequency, lambda: right_orig.interpolate(f=target.frequency), "right headphone response")
+
+    _apply_cubic_interp(left, target.frequency, lambda: left.interpolate(f=target.frequency), "left headphone response")
+    _apply_cubic_interp(right, target.frequency, lambda: right.interpolate(f=target.frequency), "right headphone response")
     
     # 보상 적용
     left.compensate(target, min_mean_error=True)
