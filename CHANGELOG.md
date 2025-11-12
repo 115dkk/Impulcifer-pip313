@@ -4,6 +4,35 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.6.1 - 2025-11-12
+### 주요 기능 추가
+- **완전히 새로운 Modern GUI**: CustomTkinter 기반의 전문적인 GUI 구현
+  - Windows 11/macOS Big Sur 스타일의 현대적인 디자인
+  - 다크/라이트 모드 지원 (테마 토글 버튼)
+  - 탭 UI로 Recorder와 Impulcifer 통합
+  - 모든 CLI 기능 100% 구현 (30+ 기능)
+  - 직관적인 레이아웃과 사용자 친화적 인터페이스
+  - 실시간 validation 및 에러 핸들링
+
+### GUI 세부 기능
+- **Recorder 탭**: 오디오 장치 선택, 멀티채널 녹음 (14/22/26 채널), 동적 채널 가이던스
+- **Impulcifer 탭**: 룸 보정, 헤드폰 보정, 커스텀 EQ, 15개 고급 옵션
+- 레거시 GUI는 `impulcifer_gui_legacy` 명령으로 계속 사용 가능
+
+### 성능 최적화
+- **CI/CD 워크플로우**: pip → uv 전환으로 의존성 설치 50-80% 단축
+- **Nuitka 빌드**: 멀티코어 컴파일 + LTO 비활성화로 빌드 시간 75-85% 단축 (2-4시간 → 15-30분)
+- Nuitka 캐싱 추가로 재빌드 시 90%+ 시간 단축
+
+### 버그 수정
+- CustomTkinter 패키지를 Nuitka 빌드에 올바르게 포함하도록 개선 (`--include-package` 사용)
+- tkinter 플러그인 명시적 활성화로 GUI 안정성 향상
+
+### 개발자 경험 개선
+- PyPI 엔트리 포인트: `impulcifer_gui` → 현대적인 GUI, `impulcifer_gui_legacy` → 레거시 GUI
+- Nuitka 빌드 스크립트에 CustomTkinter 전체 패키지 포함
+- 더 나은 주석과 코드 구조
+
 ## 1.5.2 - 2025-11-12
 ### 버그 수정
 - **AutoEQ 훼손 문제 해결**: `headphone_compensation` 함수의 큐빅 스플라인 보간 fallback 로직에서 발생하던 치명적인 버그를 수정했습니다.

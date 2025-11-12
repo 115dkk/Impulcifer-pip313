@@ -82,9 +82,14 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--lto=no",  # Disable Link Time Optimization - saves hours of build time
 
         "--windows-console-mode=disable",
-        "--enable-plugin=tk-inter",
+        "--enable-plugin=tk-inter",  # Enable tkinter support (required for CustomTkinter)
         "--enable-plugin=numpy",
         "--enable-plugin=matplotlib",
+
+        # Include packages (better than include-module for packages with resources)
+        "--include-package=customtkinter",  # Modern GUI framework with all assets
+
+        # Include individual modules
         "--include-module=sounddevice",
         "--include-module=soundfile",
         "--include-module=scipy",
@@ -99,7 +104,6 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--include-module=seaborn",
         "--include-module=bokeh",
         "--include-module=autoeq",
-        "--include-module=customtkinter",  # Modern GUI framework
         "--include-module=modern_gui",     # Modern GUI module
         "--include-module=gui",            # Legacy GUI (for compatibility)
         "--include-module=recorder",
