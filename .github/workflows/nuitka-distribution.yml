@@ -27,6 +27,14 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Cache Nuitka compilation
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-nuitka-
+
       - name: Install build requirements and project dependencies
         run: |
           echo "[1/3] Installing required packages with uv (ultra-fast Python package installer)..."
@@ -49,13 +57,18 @@ jobs:
 
       - name: Run Nuitka build using build_nuitka.py
         run: |
-          echo "[2/3] Starting Nuitka build..."
+          echo "[2/3] Starting optimized Nuitka build..."
+          echo "Build optimizations enabled:"
+          echo "  - Multi-core compilation (--jobs=4)"
+          echo "  - LTO disabled for faster builds (--lto=no)"
+          echo "  - Nuitka cache enabled"
+          echo ""
           python build_nuitka.py
           # Windows 경로 형식으로 환경 변수 설정
           echo "NUITKA_OUTPUT_DIR=${{ github.workspace }}\dist\Impulcifer_Distribution\ImpulciferGUI" >> $GITHUB_ENV
           echo "PROJECT_ROOT_FOR_ISS=${{ github.workspace }}" >> $GITHUB_ENV
           echo "ISS_PATH=${{ github.workspace }}\.github\workflows\Output" >> $GITHUB_ENV
-          echo "Successfully built with Nuitka."
+          echo "Successfully built with Nuitka (optimized)."
         shell: bash
         env:
           PYTHONIOENCODING: UTF-8

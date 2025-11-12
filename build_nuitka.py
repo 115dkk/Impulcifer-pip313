@@ -76,6 +76,11 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--standalone",
         f"--output-dir={final_output_dir}",
         "--remove-output",
+
+        # Performance optimizations for faster builds
+        "--jobs=4",  # Use 4 CPU cores for parallel compilation (GitHub Actions standard)
+        "--lto=no",  # Disable Link Time Optimization - saves hours of build time
+
         "--windows-console-mode=disable",
         "--enable-plugin=tk-inter",
         "--enable-plugin=numpy",
@@ -132,6 +137,10 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         f"--file-version={project_version}",
         f"--product-version={project_version}",
         "--file-description=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템",
+
+        # Additional build speed optimizations
+        "--prefer-source-code",  # Prefer source code over bytecode for faster compilation
+
         "--assume-yes-for-downloads",
         "--show-progress",
         "--show-memory",
