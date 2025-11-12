@@ -30,6 +30,7 @@ dependencies = [
     'autoeq-py313>=1.2.0',
     'seaborn',
     'bokeh>=3.0.0',
+    'customtkinter>=5.2.0',
 ]
 
 [project.scripts]
