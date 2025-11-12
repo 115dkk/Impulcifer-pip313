@@ -22,19 +22,24 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Install build requirements and project dependencies
         run: |
-          echo "[1/3] Installing required packages..."
-          python -m pip install --upgrade pip
-          pip install nuitka
+          echo "[1/3] Installing required packages with uv (ultra-fast Python package installer)..."
+          uv pip install --system nuitka
           if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
             echo "Python 3.11+ detected, tomllib is available."
           else
             echo "Python < 3.11 detected, installing toml package."
-            pip install toml
+            uv pip install --system toml
           fi
           echo "Installing project dependencies from requirements.txt..."
-          pip install -r requirements.txt
+          uv pip install --system -r requirements.txt
+          echo "All dependencies installed successfully with uv!"
         shell: bash
 
       - name: Read project version and set APP_VERSION
