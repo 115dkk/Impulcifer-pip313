@@ -99,6 +99,9 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--include-module=seaborn",
         "--include-module=bokeh",
         "--include-module=autoeq",
+        "--include-module=customtkinter",  # Modern GUI framework
+        "--include-module=modern_gui",     # Modern GUI module
+        "--include-module=gui",            # Legacy GUI (for compatibility)
         "--include-module=recorder",
         "--include-module=impulcifer",
         "--include-module=hrir",

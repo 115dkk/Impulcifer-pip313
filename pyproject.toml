@@ -35,7 +35,8 @@ dependencies = [
 
 [project.scripts]
 impulcifer = "impulcifer_cli:entry_point"
-impulcifer_gui = "gui:main_gui"
+impulcifer_gui = "modern_gui:main_gui"
+impulcifer_gui_legacy = "gui:main_gui"
 
 [project.urls]
 "Homepage" = "https://github.com/jaakkopasanen/impulcifer"
