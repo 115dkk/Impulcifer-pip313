@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "1.5.2"
+version = "1.6.1"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13.2 호환 버전: 115dkk", email="" },
@@ -30,11 +30,13 @@ dependencies = [
     'autoeq-py313>=1.2.0',
     'seaborn',
     'bokeh>=3.0.0',
+    'customtkinter>=5.2.0',
 ]
 
 [project.scripts]
 impulcifer = "impulcifer_cli:entry_point"
-impulcifer_gui = "gui:main_gui"
+impulcifer_gui = "modern_gui:main_gui"
+impulcifer_gui_legacy = "gui:main_gui"
 
 [project.urls]
 "Homepage" = "https://github.com/jaakkopasanen/impulcifer"
