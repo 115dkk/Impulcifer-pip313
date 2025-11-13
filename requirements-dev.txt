@@ -3,6 +3,7 @@ pytest>=7.4.0
 pytest-cov>=4.1.0
 pytest-xdist>=3.3.1  # 병렬 테스트 실행
 pytest-timeout>=2.1.0  # 테스트 타임아웃
+tomli>=2.0.0; python_version < "3.11"  # TOML 파서 (Python 3.10 이하)
 
 # 프로덕션 의존성 포함
 -r requirements.txt

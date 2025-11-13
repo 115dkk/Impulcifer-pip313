@@ -81,4 +81,14 @@ exclude = [
 # data 폴더를 패키지 데이터로 포함
 [tool.hatch.build.targets.wheel.shared-data]
 "data" = "impulcifer_py313/data"
-"font" = "impulcifer_py313/font" 
+"font" = "impulcifer_py313/font"
+
+# pytest 설정
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+testpaths = ["test_suite.py"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"] 
