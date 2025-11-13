@@ -4,6 +4,84 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.7.2 - 2025-11-13
+### CI/CD 개선 - 자동화된 테스트 및 품질 보증
+배포 전 자동 테스트로 코드 품질을 보장합니다. TestPyPI와 PyPI 발행 전에 유닛 테스트가 자동으로 실행됩니다.
+
+#### 새로운 기능
+- **포괄적인 유닛 테스트 스위트** (`test_suite.py`):
+  - 마이크 편차 보정 v2.0 테스트
+  - ImpulseResponse 클래스 테스트
+  - 모듈 임포트 테스트
+  - 데이터 파일 존재 확인
+  - 설정 파일 검증
+  - 버전 일관성 테스트
+  - 통합 테스트 (느린 테스트 별도 분류)
+
+- **GitHub Actions 테스트 워크플로우** (`.github/workflows/test.yml`):
+  - Python 3.9-3.13 다중 버전 테스트
+  - pytest 기반 자동 테스트
+  - 코드 커버리지 측정 (Codecov 통합)
+  - 모듈 임포트 검증
+  - 코드 품질 체크 (ruff)
+
+- **PyPI 배포 워크플로우 개선** (`.github/workflows/python-publish.yml`):
+  - **테스트 우선 배포**: 유닛 테스트 통과 후에만 빌드 및 배포
+  - TestPyPI 발행 전 자동 검증
+  - PyPI 발행 전 자동 검증
+  - 테스트 실패 시 배포 자동 중단
+
+#### 개발 환경 개선
+- **requirements-dev.txt** 추가:
+  - pytest >= 7.4.0
+  - pytest-cov >= 4.1.0 (커버리지)
+  - pytest-xdist >= 3.3.1 (병렬 테스트)
+  - pytest-timeout >= 2.1.0 (타임아웃)
+
+#### 워크플로우 구조
+```
+1. 코드 푸시/PR 생성
+   ↓
+2. 테스트 워크플로우 자동 실행
+   - 유닛 테스트 (Python 3.9-3.13)
+   - 임포트 테스트
+   - 코드 품질 체크
+   ↓
+3. 테스트 통과 시에만 빌드
+   ↓
+4. TestPyPI / PyPI 발행
+```
+
+#### 사용법
+```bash
+# 로컬에서 테스트 실행
+python test_suite.py
+
+# pytest로 실행 (더 상세한 출력)
+pytest test_suite.py -v
+
+# 커버리지 포함
+pytest test_suite.py --cov=. --cov-report=term-missing
+
+# 느린 테스트 제외
+pytest test_suite.py -m "not slow"
+
+# 개발 환경 설치
+pip install -r requirements-dev.txt
+```
+
+#### 기술적 개선사항
+- 자동화된 회귀 테스트로 버그 조기 발견
+- 배포 전 자동 검증으로 안정성 향상
+- CI/CD 파이프라인 신뢰도 대폭 개선
+- 다중 Python 버전 호환성 보장
+
+### 사용자 임팩트
+- ✅ **안정성**: 배포 전 자동 테스트로 품질 보증
+- 🚀 **신뢰성**: TestPyPI 발행 전 검증으로 실수 방지
+- 🔍 **투명성**: GitHub Actions에서 테스트 결과 실시간 확인
+- 🛡️ **보호**: 테스트 실패 시 자동으로 배포 중단
+
 ## 1.7.1 - 2025-11-13
 ### GUI 개선 - 마이크 편차 보정 v2.0 완전 지원
 Modern GUI에서 마이크 편차 보정 v2.0의 모든 고급 기능을 사용할 수 있습니다.

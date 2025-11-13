@@ -20,8 +20,38 @@ permissions:
   contents: read
 
 jobs:
+  # 테스트를 먼저 실행 (v1.7.2+)
+  test:
+    name: Run Tests Before Publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install test dependencies
+        run: |
+          uv pip install --system -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: |
+          pytest test_suite.py -v --tb=short
+
+      - name: Test package installation
+        run: |
+          uv pip install --system -e .
+          python -c "import impulcifer; import microphone_deviation_correction"
+
   release-build:
     runs-on: ubuntu-latest
+    needs: test  # 테스트 통과 후에만 빌드
 
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +80,7 @@ jobs:
   pypi-publish:
     runs-on: ubuntu-latest
     needs:
+      - test  # 테스트 통과 확인
       - release-build
     if: github.event_name == 'release' && github.event.action == 'published'
     permissions:
@@ -83,6 +114,7 @@ jobs:
     name: Publish Python 🐍 distribution 📦 to TestPyPI
     runs-on: ubuntu-latest
     needs:
+      - test  # 테스트 통과 확인
       - release-build
     if: github.event_name == 'push'
     permissions:
