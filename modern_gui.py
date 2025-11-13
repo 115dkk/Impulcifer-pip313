@@ -81,8 +81,11 @@ class ModernImpulciferGUI:
             text="🌙 Dark Mode",
             command=self.toggle_theme,
             width=120,
-            fg_color="transparent",
-            border_width=1
+            fg_color=("gray85", "gray20"),
+            hover_color=("gray75", "gray30"),
+            text_color=("gray10", "gray90"),
+            border_width=1,
+            border_color=("gray70", "gray40")
         )
         self.theme_button.grid(row=0, column=2, padx=20, pady=15, sticky="e")
         self.current_theme = "dark"

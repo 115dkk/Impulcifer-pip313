@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.6.2 - 2025-11-13
+### 버그 수정
+- **GUI 레이아웃 문제 해결**: Modern GUI에서 컨텐츠가 창 전체를 사용하지 않고 일부만 사용하던 문제 수정
+  - Recorder와 Impulcifer 탭에 `grid_rowconfigure(0, weight=1)` 추가
+  - 이제 GUI가 창 크기에 맞춰 동적으로 확장됨
+- **Light 모드 가시성 문제 해결**: Light 모드 전환 시 테마 토글 버튼이 배경과 거의 같은 색으로 표시되어 식별 불가능하던 문제 수정
+  - 버튼 색상을 명시적으로 지정 (Light/Dark 모드별)
+  - Light 모드: 회색 배경에 검은색 텍스트
+  - Dark 모드: 어두운 회색 배경에 밝은 텍스트
+
 ## 1.6.1 - 2025-11-12
 ### 주요 기능 추가
 - **완전히 새로운 Modern GUI**: CustomTkinter 기반의 전문적인 GUI 구현
