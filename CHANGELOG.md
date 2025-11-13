@@ -4,6 +4,56 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.7.0 - 2025-11-13
+### 🎯 주요 기능 개선 - 마이크 편차 보정 v2.0
+완전히 재설계된 음향학적 마이크 편차 보정 시스템으로, 측정 품질을 획기적으로 개선합니다.
+
+#### 새로운 기능 (v2.0)
+1. **적응형 비대칭 보정** ⭐⭐⭐
+   - 좌우 응답의 품질을 자동으로 평가 (SNR, smoothness, consistency 기반)
+   - 더 높은 품질의 응답을 참조 기준으로 사용
+   - 기존: 무조건 좌우 대칭 보정 → 개선: 품질 기반 비대칭 보정 (80:20 또는 20:80)
+
+2. **위상 보정 추가** ⭐⭐⭐
+   - ITD (Interaural Time Difference) 정보를 FIR 필터에 반영
+   - 음상 정위(sound localization) 정확도 향상
+   - 기존: 크기(magnitude)만 보정 → 개선: 크기 + 위상 동시 보정
+
+3. **ITD/ILD 해부학적 검증** ⭐⭐
+   - 인간 머리 크기(평균 반지름 8.75cm)에 기반한 ITD 범위 검증 (±0.7ms)
+   - 비정상적인 측정값에 대한 경고 메시지 출력
+   - 마이크 배치 오류 조기 감지 가능
+
+4. **주파수 대역별 보정 전략** ⭐⭐
+   - **저주파 (< 700Hz)**: ITD 중심, 크기 보정 30% 가중치
+   - **중간주파 (700Hz - 4kHz)**: ITD/ILD 혼합, 크기 70%, 위상 60% 가중치
+   - **고주파 (> 4kHz)**: ILD 중심, 크기 100%, 위상 20% 가중치
+   - 음향심리학적 원리에 기반한 과학적 접근
+
+#### CLI 파라미터 추가
+- `--microphone_deviation_correction`: v2.0 활성화 (기본: 비활성화)
+- `--mic_deviation_strength`: 보정 강도 (0.0-1.0, 기본: 0.7)
+- `--no_mic_deviation_phase_correction`: 위상 보정 비활성화 (기본: 활성화)
+- `--no_mic_deviation_adaptive_correction`: 적응형 보정 비활성화 (기본: 활성화)
+- `--no_mic_deviation_anatomical_validation`: 해부학적 검증 비활성화 (기본: 활성화)
+
+#### 개선된 시각화
+- **ILD (Interaural Level Difference)** 플롯: 주파수별 크기 차이
+- **ITD (Interaural Time Difference)** 플롯: 저주파 대역 시간 차이 + 해부학적 범위 표시
+- **보정 효과** 플롯: 보정 전후 좌우 차이 비교
+- 참조 기준(left/right) 및 품질 점수 표시
+
+#### 성능 및 호환성
+- 기존 v1.0 API와 100% 하위 호환
+- 모든 v2.0 기능은 기본값으로 활성화됨
+- 개별 기능을 선택적으로 비활성화 가능
+
+#### 기술적 세부사항
+- `microphone_deviation_correction.py`: 전면 재작성 (~829줄)
+- `hrir.py`: v2.0 파라미터 지원 추가
+- `impulcifer.py`: CLI 파라미터 4개 추가
+- 음향심리학 논문 및 REW MTW 개념 기반 설계
+
 ## 1.6.2 - 2025-11-13
 ### 버그 수정
 - **GUI 레이아웃 문제 해결**: Modern GUI에서 컨텐츠가 창 전체를 사용하지 않고 일부만 사용하던 문제 수정
