@@ -4,6 +4,40 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.7.1 - 2025-11-13
+### GUI 개선 - 마이크 편차 보정 v2.0 완전 지원
+Modern GUI에서 마이크 편차 보정 v2.0의 모든 고급 기능을 사용할 수 있습니다.
+
+#### GUI 변경사항
+- **v2.0 Options 섹션 추가**: Mic Deviation Correction 활성화 시 3개의 고급 옵션 사용 가능
+  - ☑ **Phase Correction**: 위상 보정 (ITD 반영)
+  - ☑ **Adaptive**: 적응형 비대칭 보정 (품질 기반 참조 선택)
+  - ☑ **Anatomical Validation**: ITD/ILD 해부학적 검증
+- 모든 v2.0 옵션은 기본값으로 활성화
+- Mic Deviation Correction 체크박스로 일괄 활성화/비활성화
+
+#### 문서 업데이트
+- **README_microphone_deviation_correction.md**: 완전 재작성 (~567줄)
+  - v2.0 4가지 핵심 개선사항 상세 설명
+  - 음향학적 이론 배경 (Duplex Theory, ITD/ILD, 해부학적 검증)
+  - 수학적 공식 및 알고리즘 흐름도
+  - CLI/API/GUI 사용법 전체 문서화
+  - 주의사항 및 권장 설정 가이드
+  - 참고 문헌 (AES, ITU, psychoacoustics)
+
+#### 기술 파일 변경
+- `modern_gui.py` (lines 643-675, 803-814, 1010-1012):
+  - v2.0 체크박스 3개 추가
+  - `toggle_mic_deviation()` 함수 업데이트 (v2.0 옵션 동기화)
+  - `run_impulcifer()` args에 v2.0 파라미터 3개 전달
+
+### 사용법 (GUI)
+1. Impulcifer 탭 → Advanced Options 섹션
+2. **Mic Deviation Correction** 체크박스 활성화
+3. **Strength** 값 조정 (0.0-1.0, 기본: 0.7)
+4. **v2.0 Options** 세부 조정 (선택사항, 모두 기본 활성화)
+5. Run Impulcifer 버튼 클릭
+
 ## 1.7.0 - 2025-11-13
 ### 🎯 주요 기능 개선 - 마이크 편차 보정 v2.0
 완전히 재설계된 음향학적 마이크 편차 보정 시스템으로, 측정 품질을 획기적으로 개선합니다.

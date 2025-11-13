@@ -640,6 +640,40 @@ class ModernImpulciferGUI:
         self.mic_deviation_strength_entry = ctk.CTkEntry(mic_dev_frame, textvariable=self.mic_deviation_strength_var, width=60, state="disabled")
         self.mic_deviation_strength_entry.pack(side="left", padx=2)
 
+        # Mic deviation v2.0 advanced options
+        mic_dev_v2_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
+        mic_dev_v2_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=2)
+        adv_row += 1
+
+        ctk.CTkLabel(mic_dev_v2_frame, text="  v2.0 Options:", font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=5)
+
+        self.mic_deviation_phase_correction_var = ctk.BooleanVar(value=True)
+        self.mic_dev_phase_check = ctk.CTkCheckBox(
+            mic_dev_v2_frame,
+            text="Phase Correction",
+            variable=self.mic_deviation_phase_correction_var,
+            state="disabled"
+        )
+        self.mic_dev_phase_check.pack(side="left", padx=5)
+
+        self.mic_deviation_adaptive_correction_var = ctk.BooleanVar(value=True)
+        self.mic_dev_adaptive_check = ctk.CTkCheckBox(
+            mic_dev_v2_frame,
+            text="Adaptive",
+            variable=self.mic_deviation_adaptive_correction_var,
+            state="disabled"
+        )
+        self.mic_dev_adaptive_check.pack(side="left", padx=5)
+
+        self.mic_deviation_anatomical_validation_var = ctk.BooleanVar(value=True)
+        self.mic_dev_anatomical_check = ctk.CTkCheckBox(
+            mic_dev_v2_frame,
+            text="Anatomical Validation",
+            variable=self.mic_deviation_anatomical_validation_var,
+            state="disabled"
+        )
+        self.mic_dev_anatomical_check.pack(side="left", padx=5)
+
         # TrueHD layouts
         truehd_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         truehd_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
@@ -767,11 +801,17 @@ class ModernImpulciferGUI:
             self.decay_channels_frame.grid_forget()
 
     def toggle_mic_deviation(self):
-        """Enable/disable mic deviation strength entry"""
+        """Enable/disable mic deviation strength entry and v2.0 options"""
         if self.microphone_deviation_correction_var.get():
             self.mic_deviation_strength_entry.configure(state="normal")
+            self.mic_dev_phase_check.configure(state="normal")
+            self.mic_dev_adaptive_check.configure(state="normal")
+            self.mic_dev_anatomical_check.configure(state="normal")
         else:
             self.mic_deviation_strength_entry.configure(state="disabled")
+            self.mic_dev_phase_check.configure(state="disabled")
+            self.mic_dev_adaptive_check.configure(state="disabled")
+            self.mic_dev_anatomical_check.configure(state="disabled")
 
     def browse_file(self, var, mode, filetypes=None):
         """Browse for file"""
@@ -967,6 +1007,9 @@ class ModernImpulciferGUI:
             args['interactive_plots'] = self.interactive_plots_var.get()
             args['microphone_deviation_correction'] = self.microphone_deviation_correction_var.get()
             args['mic_deviation_strength'] = self.mic_deviation_strength_var.get()
+            args['mic_deviation_phase_correction'] = self.mic_deviation_phase_correction_var.get()
+            args['mic_deviation_adaptive_correction'] = self.mic_deviation_adaptive_correction_var.get()
+            args['mic_deviation_anatomical_validation'] = self.mic_deviation_anatomical_validation_var.get()
             args['output_truehd_layouts'] = self.output_truehd_layouts_var.get()
 
         print("Impulcifer arguments:", args)
