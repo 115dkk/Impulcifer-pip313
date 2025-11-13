@@ -183,8 +183,9 @@ class TestModuleImports:
         try:
             import modern_gui
             import gui
-        except ImportError as e:
-            pytest.skip(f"GUI 모듈 임포트 실패 (선택적): {e}")
+        except (ImportError, OSError) as e:
+            # CI 환경에서는 PortAudio가 없을 수 있음
+            pytest.skip(f"GUI 모듈 임포트 불가 (정상): {e}")
 
 
 class TestDataFiles:
