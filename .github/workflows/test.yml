@@ -75,14 +75,14 @@ jobs:
     - name: Test core imports
       run: |
         python -c "import impulcifer; print('✓ impulcifer')"
-        python -c "import recorder; print('✓ recorder')"
         python -c "import hrir; print('✓ hrir')"
         python -c "import impulse_response; print('✓ impulse_response')"
         python -c "import microphone_deviation_correction; print('✓ microphone_deviation_correction')"
 
-    - name: Test GUI imports (optional)
+    - name: Test audio/GUI imports (optional - requires PortAudio)
       continue-on-error: true
       run: |
+        python -c "import recorder; print('✓ recorder')"
         python -c "import modern_gui; print('✓ modern_gui')"
         python -c "import gui; print('✓ gui (legacy)')"
 
