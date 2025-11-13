@@ -114,6 +114,7 @@ class ModernImpulciferGUI:
         """Create Recorder tab with all recording features"""
         tab = self.tabview.tab("📼 Recorder")
         tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
 
         # Create scrollable frame
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
@@ -280,6 +281,7 @@ class ModernImpulciferGUI:
         """Create Impulcifer tab with all processing features"""
         tab = self.tabview.tab("🎛️ Impulcifer")
         tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
 
         # Create scrollable frame
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
