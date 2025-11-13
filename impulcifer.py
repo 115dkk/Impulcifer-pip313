@@ -276,9 +276,12 @@ def main(dir_path=None,
          jamesdsp=False,
          hangloose=False,
          interactive_plots=False,
-         # 마이크 편차 보정 파라미터 추가
+         # 마이크 편차 보정 파라미터 추가 (v2.0)
          microphone_deviation_correction=False,
          mic_deviation_strength=0.7,
+         mic_deviation_phase_correction=True,
+         mic_deviation_adaptive_correction=True,
+         mic_deviation_anatomical_validation=True,
          # TrueHD 레이아웃 관련 파라미터 추가
          output_truehd_layouts=False):
     """"""
@@ -365,12 +368,15 @@ def main(dir_path=None,
     # Crop noise from the tail
     hrir.crop_tails()
 
-    # 마이크 착용 편차 보정 (새로 추가)
+    # 마이크 착용 편차 보정 v2.0
     if microphone_deviation_correction:
-        print('Correcting microphone deviation...')
+        print('Correcting microphone deviation v2.0...')
         mic_deviation_plot_dir = os.path.join(dir_path, 'plots') if plot else None
         hrir.correct_microphone_deviation(
             correction_strength=mic_deviation_strength,
+            enable_phase_correction=mic_deviation_phase_correction,
+            enable_adaptive_correction=mic_deviation_adaptive_correction,
+            enable_anatomical_validation=mic_deviation_anatomical_validation,
             plot_analysis=plot,
             plot_dir=mic_deviation_plot_dir
         )
@@ -1142,10 +1148,16 @@ def create_cli():
     arg_parser.add_argument('--c', type=float, default=1.0, dest='head_ms', help='Head room in milliseconds for cropping impulse response heads. Default is 1.0 (ms). (항목 4)')
     arg_parser.add_argument('--jamesdsp', action='store_true', help='Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels. (항목 6)')
     arg_parser.add_argument('--hangloose', action='store_true', help='Generate separate stereo IR for each channel for Hangloose Convolver. (항목 7)')
-    arg_parser.add_argument('--microphone_deviation_correction', action='store_true', 
-                            help='Enable microphone deviation correction to compensate for microphone placement variations between left and right ears.')
-    arg_parser.add_argument('--mic_deviation_strength', type=float, default=0.7, 
+    arg_parser.add_argument('--microphone_deviation_correction', action='store_true',
+                            help='Enable microphone deviation correction v2.0 to compensate for microphone placement variations between left and right ears.')
+    arg_parser.add_argument('--mic_deviation_strength', type=float, default=0.7,
                             help='Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction. Default is 0.7.')
+    arg_parser.add_argument('--no_mic_deviation_phase_correction', action='store_false', dest='mic_deviation_phase_correction',
+                            help='Disable phase correction in microphone deviation correction v2.0. (Default: enabled)')
+    arg_parser.add_argument('--no_mic_deviation_adaptive_correction', action='store_false', dest='mic_deviation_adaptive_correction',
+                            help='Disable adaptive asymmetric correction in microphone deviation correction v2.0. (Default: enabled)')
+    arg_parser.add_argument('--no_mic_deviation_anatomical_validation', action='store_false', dest='mic_deviation_anatomical_validation',
+                            help='Disable ITD/ILD anatomical validation in microphone deviation correction v2.0. (Default: enabled)')
     arg_parser.add_argument('--output_truehd_layouts', action='store_true', help='Generate TrueHD layouts.')
     args = vars(arg_parser.parse_args())
     if 'bass_boost' in args:

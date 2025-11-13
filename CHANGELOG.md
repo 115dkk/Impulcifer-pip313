@@ -4,6 +4,168 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.7.2 - 2025-11-13
+### CI/CD 개선 - 자동화된 테스트 및 품질 보증
+배포 전 자동 테스트로 코드 품질을 보장합니다. TestPyPI와 PyPI 발행 전에 유닛 테스트가 자동으로 실행됩니다.
+
+#### 새로운 기능
+- **포괄적인 유닛 테스트 스위트** (`test_suite.py`):
+  - 마이크 편차 보정 v2.0 테스트
+  - ImpulseResponse 클래스 테스트
+  - 모듈 임포트 테스트
+  - 데이터 파일 존재 확인
+  - 설정 파일 검증
+  - 버전 일관성 테스트
+  - 통합 테스트 (느린 테스트 별도 분류)
+
+- **GitHub Actions 테스트 워크플로우** (`.github/workflows/test.yml`):
+  - Python 3.9-3.13 다중 버전 테스트
+  - pytest 기반 자동 테스트
+  - 코드 커버리지 측정 (Codecov 통합)
+  - 모듈 임포트 검증
+  - 코드 품질 체크 (ruff)
+
+- **PyPI 배포 워크플로우 개선** (`.github/workflows/python-publish.yml`):
+  - **테스트 우선 배포**: 유닛 테스트 통과 후에만 빌드 및 배포
+  - TestPyPI 발행 전 자동 검증
+  - PyPI 발행 전 자동 검증
+  - 테스트 실패 시 배포 자동 중단
+
+#### 개발 환경 개선
+- **requirements-dev.txt** 추가:
+  - pytest >= 7.4.0
+  - pytest-cov >= 4.1.0 (커버리지)
+  - pytest-xdist >= 3.3.1 (병렬 테스트)
+  - pytest-timeout >= 2.1.0 (타임아웃)
+
+#### 워크플로우 구조
+```
+1. 코드 푸시/PR 생성
+   ↓
+2. 테스트 워크플로우 자동 실행
+   - 유닛 테스트 (Python 3.9-3.13)
+   - 임포트 테스트
+   - 코드 품질 체크
+   ↓
+3. 테스트 통과 시에만 빌드
+   ↓
+4. TestPyPI / PyPI 발행
+```
+
+#### 사용법
+```bash
+# 로컬에서 테스트 실행
+python test_suite.py
+
+# pytest로 실행 (더 상세한 출력)
+pytest test_suite.py -v
+
+# 커버리지 포함
+pytest test_suite.py --cov=. --cov-report=term-missing
+
+# 느린 테스트 제외
+pytest test_suite.py -m "not slow"
+
+# 개발 환경 설치
+pip install -r requirements-dev.txt
+```
+
+#### 기술적 개선사항
+- 자동화된 회귀 테스트로 버그 조기 발견
+- 배포 전 자동 검증으로 안정성 향상
+- CI/CD 파이프라인 신뢰도 대폭 개선
+- 다중 Python 버전 호환성 보장
+
+### 사용자 임팩트
+- ✅ **안정성**: 배포 전 자동 테스트로 품질 보증
+- 🚀 **신뢰성**: TestPyPI 발행 전 검증으로 실수 방지
+- 🔍 **투명성**: GitHub Actions에서 테스트 결과 실시간 확인
+- 🛡️ **보호**: 테스트 실패 시 자동으로 배포 중단
+
+## 1.7.1 - 2025-11-13
+### GUI 개선 - 마이크 편차 보정 v2.0 완전 지원
+Modern GUI에서 마이크 편차 보정 v2.0의 모든 고급 기능을 사용할 수 있습니다.
+
+#### GUI 변경사항
+- **v2.0 Options 섹션 추가**: Mic Deviation Correction 활성화 시 3개의 고급 옵션 사용 가능
+  - ☑ **Phase Correction**: 위상 보정 (ITD 반영)
+  - ☑ **Adaptive**: 적응형 비대칭 보정 (품질 기반 참조 선택)
+  - ☑ **Anatomical Validation**: ITD/ILD 해부학적 검증
+- 모든 v2.0 옵션은 기본값으로 활성화
+- Mic Deviation Correction 체크박스로 일괄 활성화/비활성화
+
+#### 문서 업데이트
+- **README_microphone_deviation_correction.md**: 완전 재작성 (~567줄)
+  - v2.0 4가지 핵심 개선사항 상세 설명
+  - 음향학적 이론 배경 (Duplex Theory, ITD/ILD, 해부학적 검증)
+  - 수학적 공식 및 알고리즘 흐름도
+  - CLI/API/GUI 사용법 전체 문서화
+  - 주의사항 및 권장 설정 가이드
+  - 참고 문헌 (AES, ITU, psychoacoustics)
+
+#### 기술 파일 변경
+- `modern_gui.py` (lines 643-675, 803-814, 1010-1012):
+  - v2.0 체크박스 3개 추가
+  - `toggle_mic_deviation()` 함수 업데이트 (v2.0 옵션 동기화)
+  - `run_impulcifer()` args에 v2.0 파라미터 3개 전달
+
+### 사용법 (GUI)
+1. Impulcifer 탭 → Advanced Options 섹션
+2. **Mic Deviation Correction** 체크박스 활성화
+3. **Strength** 값 조정 (0.0-1.0, 기본: 0.7)
+4. **v2.0 Options** 세부 조정 (선택사항, 모두 기본 활성화)
+5. Run Impulcifer 버튼 클릭
+
+## 1.7.0 - 2025-11-13
+### 🎯 주요 기능 개선 - 마이크 편차 보정 v2.0
+완전히 재설계된 음향학적 마이크 편차 보정 시스템으로, 측정 품질을 획기적으로 개선합니다.
+
+#### 새로운 기능 (v2.0)
+1. **적응형 비대칭 보정** ⭐⭐⭐
+   - 좌우 응답의 품질을 자동으로 평가 (SNR, smoothness, consistency 기반)
+   - 더 높은 품질의 응답을 참조 기준으로 사용
+   - 기존: 무조건 좌우 대칭 보정 → 개선: 품질 기반 비대칭 보정 (80:20 또는 20:80)
+
+2. **위상 보정 추가** ⭐⭐⭐
+   - ITD (Interaural Time Difference) 정보를 FIR 필터에 반영
+   - 음상 정위(sound localization) 정확도 향상
+   - 기존: 크기(magnitude)만 보정 → 개선: 크기 + 위상 동시 보정
+
+3. **ITD/ILD 해부학적 검증** ⭐⭐
+   - 인간 머리 크기(평균 반지름 8.75cm)에 기반한 ITD 범위 검증 (±0.7ms)
+   - 비정상적인 측정값에 대한 경고 메시지 출력
+   - 마이크 배치 오류 조기 감지 가능
+
+4. **주파수 대역별 보정 전략** ⭐⭐
+   - **저주파 (< 700Hz)**: ITD 중심, 크기 보정 30% 가중치
+   - **중간주파 (700Hz - 4kHz)**: ITD/ILD 혼합, 크기 70%, 위상 60% 가중치
+   - **고주파 (> 4kHz)**: ILD 중심, 크기 100%, 위상 20% 가중치
+   - 음향심리학적 원리에 기반한 과학적 접근
+
+#### CLI 파라미터 추가
+- `--microphone_deviation_correction`: v2.0 활성화 (기본: 비활성화)
+- `--mic_deviation_strength`: 보정 강도 (0.0-1.0, 기본: 0.7)
+- `--no_mic_deviation_phase_correction`: 위상 보정 비활성화 (기본: 활성화)
+- `--no_mic_deviation_adaptive_correction`: 적응형 보정 비활성화 (기본: 활성화)
+- `--no_mic_deviation_anatomical_validation`: 해부학적 검증 비활성화 (기본: 활성화)
+
+#### 개선된 시각화
+- **ILD (Interaural Level Difference)** 플롯: 주파수별 크기 차이
+- **ITD (Interaural Time Difference)** 플롯: 저주파 대역 시간 차이 + 해부학적 범위 표시
+- **보정 효과** 플롯: 보정 전후 좌우 차이 비교
+- 참조 기준(left/right) 및 품질 점수 표시
+
+#### 성능 및 호환성
+- 기존 v1.0 API와 100% 하위 호환
+- 모든 v2.0 기능은 기본값으로 활성화됨
+- 개별 기능을 선택적으로 비활성화 가능
+
+#### 기술적 세부사항
+- `microphone_deviation_correction.py`: 전면 재작성 (~829줄)
+- `hrir.py`: v2.0 파라미터 지원 추가
+- `impulcifer.py`: CLI 파라미터 4개 추가
+- 음향심리학 논문 및 REW MTW 개념 기반 설계
+
 ## 1.6.2 - 2025-11-13
 ### 버그 수정
 - **GUI 레이아웃 문제 해결**: Modern GUI에서 컨텐츠가 창 전체를 사용하지 않고 일부만 사용하던 문제 수정
