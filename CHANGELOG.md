@@ -4,6 +4,55 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.8.3 - 2025-11-14
+### 번역 시스템 버그 수정 및 UI 개선
+v1.8.2에서 발생한 번역 관련 버그들을 수정하고 UI를 개선했습니다.
+
+#### 🐛 버그 수정
+- **번역 라벨 직접 출력 문제 해결**:
+  - logger가 번역 키를 그대로 출력하던 문제 수정
+  - LocalizationManager를 logger에 주입하여 자동 번역 활성화
+  - `cli_*`, `message_*`, `error_*`, `warning_*`, `success_*`, `info_*` 접두사를 가진 메시지 자동 번역
+  - 일반 텍스트는 그대로 출력 (하위 호환성 유지)
+
+- **언어 선택 화면 짤림 현상 해결**:
+  - 대화상자 크기를 400x300에서 400x550으로 확대
+  - 9개 언어 옵션이 모두 정상적으로 표시됨
+  - 스크롤 없이 모든 옵션 확인 가능
+
+#### ⚙️ 기술적 개선
+- **`logger.py` 현지화 지원 추가**:
+  - `set_localization(loc_manager)`: LocalizationManager 주입
+  - `_translate()`: 자동 번역 키 감지 및 변환
+  - 모든 로깅 메서드에 `**kwargs` 추가로 포맷 파라미터 전달 지원
+
+- **`modern_gui.py` 현지화 통합**:
+  - BRIR 생성 시작 전 logger에 localization 설정
+  - ProcessingDialog가 번역된 메시지를 실시간으로 표시
+
+#### 📝 사용법
+```python
+# Logger with translation
+from logger import get_logger
+from localization import LocalizationManager
+
+logger = get_logger()
+loc = LocalizationManager()
+logger.set_localization(loc)
+
+# Translation keys are automatically translated
+logger.info("cli_creating_estimator")  # → "Creating impulse response estimator" (en)
+                                        # → "임펄스 응답 추정기 생성 중" (ko)
+
+# Plain text works as before
+logger.info("This is a plain message")  # → "This is a plain message"
+```
+
+#### ✅ 테스트
+- 모든 pytest 테스트 통과 (15 passed, 2 skipped)
+- 번역 키 자동 감지 및 변환 검증
+- 다국어 전환 테스트 완료
+
 ## 1.8.2 - 2025-11-14
 ### GUI 처리 진행 상황 표시 및 CLI 메시지 통합
 BRIR 생성 프로세스의 진행 상황을 GUI에서 실시간으로 확인할 수 있도록 개선했습니다.

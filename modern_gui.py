@@ -1134,8 +1134,9 @@ class ModernImpulciferGUI:
         # Create processing dialog
         dialog = ProcessingDialog(self.root, self.loc)
 
-        # Setup logger callbacks
+        # Setup logger callbacks and localization
         logger = get_logger()
+        logger.set_localization(self.loc)  # Enable translations
         set_gui_callbacks(
             log_callback=dialog.add_log,
             progress_callback=dialog.update_progress
@@ -1170,15 +1171,15 @@ class ModernImpulciferGUI:
         """Show language selection dialog on first run"""
         dialog = ctk.CTkToplevel(self.root)
         dialog.title(self.loc.get('dialog_select_language_title'))
-        dialog.geometry("400x300")
+        dialog.geometry("400x550")
         dialog.transient(self.root)
         dialog.grab_set()
 
         # Center the dialog
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - (400 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (300 // 2)
-        dialog.geometry(f"400x300+{x}+{y}")
+        y = (dialog.winfo_screenheight() // 2) - (550 // 2)
+        dialog.geometry(f"400x550+{x}+{y}")
 
         # Message
         message = ctk.CTkLabel(
