@@ -140,12 +140,12 @@ class ModernImpulciferGUI:
 
         ctk.CTkLabel(
             devices_frame,
-            text="Audio Devices",
+            text=self.loc.get('section_audio_devices'),
             font=ctk.CTkFont(size=16, weight="bold")
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         # Host API
-        ctk.CTkLabel(devices_frame, text="Host API:").grid(row=1, column=0, sticky="w", padx=15, pady=5)
+        ctk.CTkLabel(devices_frame, text=self.loc.get('label_host_api')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
         self.host_api_var = ctk.StringVar(value="Windows DirectSound" if platform.system() == "Windows" else "")
         self.host_api_menu = ctk.CTkOptionMenu(
             devices_frame,
@@ -156,7 +156,7 @@ class ModernImpulciferGUI:
         self.host_api_menu.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
 
         # Playback device
-        ctk.CTkLabel(devices_frame, text="Playback Device:").grid(row=2, column=0, sticky="w", padx=15, pady=5)
+        ctk.CTkLabel(devices_frame, text=self.loc.get('label_playback_device')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
         self.output_device_var = ctk.StringVar()
         self.output_device_menu = ctk.CTkOptionMenu(
             devices_frame,
@@ -166,7 +166,7 @@ class ModernImpulciferGUI:
         self.output_device_menu.grid(row=2, column=1, sticky="ew", padx=15, pady=5)
 
         # Recording device
-        ctk.CTkLabel(devices_frame, text="Recording Device:").grid(row=3, column=0, sticky="w", padx=15, pady=5)
+        ctk.CTkLabel(devices_frame, text=self.loc.get('label_recording_device')).grid(row=3, column=0, sticky="w", padx=15, pady=5)
         self.input_device_var = ctk.StringVar()
         self.input_device_menu = ctk.CTkOptionMenu(
             devices_frame,
@@ -183,18 +183,18 @@ class ModernImpulciferGUI:
 
         ctk.CTkLabel(
             files_frame,
-            text="Files",
+            text=self.loc.get('section_files'),
             font=ctk.CTkFont(size=16, weight="bold")
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
         # File to play
-        ctk.CTkLabel(files_frame, text="File to Play:").grid(row=1, column=0, sticky="w", padx=15, pady=5)
+        ctk.CTkLabel(files_frame, text=self.loc.get('label_file_to_play')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
         self.play_var = ctk.StringVar(value=os.path.join('data', 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
         self.play_entry = ctk.CTkEntry(files_frame, textvariable=self.play_var)
         self.play_entry.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
         ctk.CTkButton(
             files_frame,
-            text="Browse...",
+            text=self.loc.get('button_browse'),
             command=lambda: self.browse_file(self.play_var, 'open', [
                 ('Audio files', '*.wav *.mlp *.thd *.truehd'),
                 ('WAV files', '*.wav'),
@@ -205,13 +205,13 @@ class ModernImpulciferGUI:
         ).grid(row=1, column=2, padx=15, pady=5)
 
         # Record to file
-        ctk.CTkLabel(files_frame, text="Record to File:").grid(row=2, column=0, sticky="w", padx=15, pady=5)
+        ctk.CTkLabel(files_frame, text=self.loc.get('label_record_to_file')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
         self.record_var = ctk.StringVar(value=os.path.join('data', 'my_hrir', 'FL,FR.wav'))
         self.record_entry = ctk.CTkEntry(files_frame, textvariable=self.record_var)
         self.record_entry.grid(row=2, column=1, sticky="ew", padx=15, pady=5)
         ctk.CTkButton(
             files_frame,
-            text="Browse...",
+            text=self.loc.get('button_browse'),
             command=lambda: self.browse_file(self.record_var, 'save'),
             width=100
         ).grid(row=2, column=2, padx=(15, 15), pady=(5, 15))
@@ -224,7 +224,7 @@ class ModernImpulciferGUI:
 
         ctk.CTkLabel(
             options_frame,
-            text="Recording Options",
+            text=self.loc.get('section_recording_options'),
             font=ctk.CTkFont(size=16, weight="bold")
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
@@ -236,7 +236,7 @@ class ModernImpulciferGUI:
         self.channels_check_var = ctk.BooleanVar(value=False)
         self.channels_check = ctk.CTkCheckBox(
             channels_subframe,
-            text="Force Channels:",
+            text=self.loc.get('label_force_channels'),
             variable=self.channels_check_var,
             command=self.update_channel_guidance
         )
@@ -254,7 +254,7 @@ class ModernImpulciferGUI:
         # Channel guidance label
         self.channel_guidance = ctk.CTkLabel(
             options_frame,
-            text="Using default 2-channel recording.",
+            text=self.loc.get('message_using_default_recording'),
             font=ctk.CTkFont(size=11),
             text_color="gray",
             wraplength=800,
@@ -266,14 +266,14 @@ class ModernImpulciferGUI:
         self.append_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             options_frame,
-            text="Append to existing file (silence will be added to equalize track lengths)",
+            text=self.loc.get('checkbox_append_to_file'),
             variable=self.append_var
         ).grid(row=3, column=0, sticky="w", padx=15, pady=(5, 15))
 
         # === Record Button ===
         self.record_button = ctk.CTkButton(
             scroll,
-            text="🔴 START RECORDING",
+            text=self.loc.get('button_start_recording'),
             command=self.start_recording,
             height=50,
             font=ctk.CTkFont(size=16, weight="bold"),
@@ -307,30 +307,30 @@ class ModernImpulciferGUI:
 
         ctk.CTkLabel(
             input_frame,
-            text="Input Files",
+            text=self.loc.get('section_input_files'),
             font=ctk.CTkFont(size=16, weight="bold")
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
         # Your recordings
-        ctk.CTkLabel(input_frame, text="Your Recordings:").grid(row=1, column=0, sticky="w", padx=15, pady=5)
+        ctk.CTkLabel(input_frame, text=self.loc.get('label_your_recordings')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
         self.dir_path_var = ctk.StringVar(value=os.path.join('data', 'my_hrir'))
         self.dir_path_entry = ctk.CTkEntry(input_frame, textvariable=self.dir_path_var)
         self.dir_path_entry.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
         ctk.CTkButton(
             input_frame,
-            text="Browse...",
+            text=self.loc.get('button_browse'),
             command=lambda: self.browse_directory(self.dir_path_var),
             width=100
         ).grid(row=1, column=2, padx=15, pady=5)
 
         # Test signal
-        ctk.CTkLabel(input_frame, text="Test Signal:").grid(row=2, column=0, sticky="w", padx=15, pady=5)
+        ctk.CTkLabel(input_frame, text=self.loc.get('label_test_signal')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
         self.test_signal_var = ctk.StringVar(value=os.path.join('data', 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
         self.test_signal_entry = ctk.CTkEntry(input_frame, textvariable=self.test_signal_var)
         self.test_signal_entry.grid(row=2, column=1, sticky="ew", padx=15, pady=5)
         ctk.CTkButton(
             input_frame,
-            text="Browse...",
+            text=self.loc.get('button_browse'),
             command=lambda: self.browse_file(self.test_signal_var, 'open', [
                 ('Audio files', '*.wav *.pkl *.mlp *.thd *.truehd'),
                 ('WAV files', '*.wav'),
@@ -349,7 +349,7 @@ class ModernImpulciferGUI:
 
         ctk.CTkLabel(
             processing_frame,
-            text="Processing Options",
+            text=self.loc.get('section_processing_options'),
             font=ctk.CTkFont(size=16, weight="bold")
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
@@ -359,7 +359,7 @@ class ModernImpulciferGUI:
         self.do_room_correction_var = ctk.BooleanVar(value=False)
         self.room_correction_check = ctk.CTkCheckBox(
             processing_frame,
-            text="Room Correction",
+            text=self.loc.get('section_room_correction'),
             variable=self.do_room_correction_var,
             command=self.toggle_room_correction
         )
@@ -375,11 +375,11 @@ class ModernImpulciferGUI:
         limits_frame.grid(row=room_opt_row, column=0, sticky="ew", padx=30, pady=5)
         room_opt_row += 1
 
-        ctk.CTkLabel(limits_frame, text="Specific Limit (Hz):").pack(side="left", padx=5)
+        ctk.CTkLabel(limits_frame, text=self.loc.get('label_specific_limit')).pack(side="left", padx=5)
         self.specific_limit_var = ctk.IntVar(value=20000)
         ctk.CTkEntry(limits_frame, textvariable=self.specific_limit_var, width=80).pack(side="left", padx=5)
 
-        ctk.CTkLabel(limits_frame, text="Generic Limit (Hz):").pack(side="left", padx=(20, 5))
+        ctk.CTkLabel(limits_frame, text=self.loc.get('label_generic_limit')).pack(side="left", padx=(20, 5))
         self.generic_limit_var = ctk.IntVar(value=1000)
         ctk.CTkEntry(limits_frame, textvariable=self.generic_limit_var, width=80).pack(side="left", padx=5)
 
@@ -388,7 +388,7 @@ class ModernImpulciferGUI:
         fr_method_frame.grid(row=room_opt_row, column=0, sticky="ew", padx=30, pady=5)
         room_opt_row += 1
 
-        ctk.CTkLabel(fr_method_frame, text="FR Combination:").pack(side="left", padx=5)
+        ctk.CTkLabel(fr_method_frame, text=self.loc.get('label_fr_combination')).pack(side="left", padx=5)
         self.fr_combination_var = ctk.StringVar(value="average")
         ctk.CTkOptionMenu(
             fr_method_frame,
@@ -403,12 +403,12 @@ class ModernImpulciferGUI:
         mic_frame.grid_columnconfigure(1, weight=1)
         room_opt_row += 1
 
-        ctk.CTkLabel(mic_frame, text="Mic Calibration:").grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(mic_frame, text=self.loc.get('label_mic_calibration')).grid(row=0, column=0, sticky="w", padx=5, pady=2)
         self.room_mic_calibration_var = ctk.StringVar()
         ctk.CTkEntry(mic_frame, textvariable=self.room_mic_calibration_var).grid(row=0, column=1, sticky="ew", padx=5, pady=2)
         ctk.CTkButton(
             mic_frame,
-            text="Browse...",
+            text=self.loc.get('button_browse'),
             command=lambda: self.browse_file(self.room_mic_calibration_var, 'open', [
                 ('Text files', '*.csv *.txt'),
                 ('All files', '*.*')
@@ -417,12 +417,12 @@ class ModernImpulciferGUI:
         ).grid(row=0, column=2, padx=5, pady=2)
 
         # Room target
-        ctk.CTkLabel(mic_frame, text="Target Curve:").grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(mic_frame, text=self.loc.get('label_target_curve')).grid(row=1, column=0, sticky="w", padx=5, pady=2)
         self.room_target_var = ctk.StringVar()
         ctk.CTkEntry(mic_frame, textvariable=self.room_target_var).grid(row=1, column=1, sticky="ew", padx=5, pady=2)
         ctk.CTkButton(
             mic_frame,
-            text="Browse...",
+            text=self.loc.get('button_browse'),
             command=lambda: self.browse_file(self.room_target_var, 'open', [
                 ('Text files', '*.csv *.txt'),
                 ('All files', '*.*')
@@ -434,7 +434,7 @@ class ModernImpulciferGUI:
         self.do_headphone_compensation_var = ctk.BooleanVar(value=False)
         self.headphone_check = ctk.CTkCheckBox(
             processing_frame,
-            text="Headphone Compensation",
+            text=self.loc.get('section_headphone_compensation'),
             variable=self.do_headphone_compensation_var,
             command=self.toggle_headphone_compensation
         )
@@ -448,12 +448,12 @@ class ModernImpulciferGUI:
         hp_frame.grid(row=0, column=0, sticky="ew", padx=30, pady=5)
         hp_frame.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(hp_frame, text="Headphone File:").grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        ctk.CTkLabel(hp_frame, text=self.loc.get('label_headphone_file')).grid(row=0, column=0, sticky="w", padx=5, pady=2)
         self.headphone_compensation_file_var = ctk.StringVar()
         ctk.CTkEntry(hp_frame, textvariable=self.headphone_compensation_file_var).grid(row=0, column=1, sticky="ew", padx=5, pady=2)
         ctk.CTkButton(
             hp_frame,
-            text="Browse...",
+            text=self.loc.get('button_browse'),
             command=lambda: self.browse_file(self.headphone_compensation_file_var, 'open', [
                 ('Audio files', '*.wav'),
                 ('All files', '*.*')
@@ -465,7 +465,7 @@ class ModernImpulciferGUI:
         self.do_equalization_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             processing_frame,
-            text="Custom EQ (from eq.csv / eq-left.csv / eq-right.csv)",
+            text=self.loc.get('checkbox_custom_eq'),
             variable=self.do_equalization_var
         ).grid(row=proc_row, column=0, sticky="w", padx=15, pady=5)
         proc_row += 1
@@ -474,7 +474,7 @@ class ModernImpulciferGUI:
         self.plot_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             processing_frame,
-            text="Plot Results (creates graphs, increases processing time)",
+            text=self.loc.get('checkbox_plot_results'),
             variable=self.plot_var
         ).grid(row=proc_row, column=0, sticky="w", padx=15, pady=(5, 15))
         proc_row += 1
@@ -488,7 +488,7 @@ class ModernImpulciferGUI:
         self.show_advanced_var = ctk.BooleanVar(value=False)
         advanced_toggle = ctk.CTkCheckBox(
             advanced_frame,
-            text="Advanced Options",
+            text=self.loc.get('section_advanced_options'),
             variable=self.show_advanced_var,
             command=self.toggle_advanced_options,
             font=ctk.CTkFont(size=16, weight="bold")
@@ -506,7 +506,7 @@ class ModernImpulciferGUI:
         adv_row += 1
 
         self.fs_check_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(resample_frame, text="Resample to (Hz):", variable=self.fs_check_var).pack(side="left", padx=5)
+        ctk.CTkCheckBox(resample_frame, text=self.loc.get('checkbox_resample_to'), variable=self.fs_check_var).pack(side="left", padx=5)
         self.fs_var = ctk.IntVar(value=48000)
         ctk.CTkOptionMenu(
             resample_frame,
@@ -520,7 +520,7 @@ class ModernImpulciferGUI:
         target_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
 
-        ctk.CTkLabel(target_frame, text="Target Level (dB):").pack(side="left", padx=5)
+        ctk.CTkLabel(target_frame, text=self.loc.get('label_target_level')).pack(side="left", padx=5)
         self.target_level_var = ctk.StringVar()
         ctk.CTkEntry(target_frame, textvariable=self.target_level_var, width=80).pack(side="left", padx=5)
 
@@ -529,16 +529,16 @@ class ModernImpulciferGUI:
         bass_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
 
-        ctk.CTkLabel(bass_frame, text="Bass Boost:").pack(side="left", padx=5)
-        ctk.CTkLabel(bass_frame, text="Gain (dB):").pack(side="left", padx=(10, 2))
+        ctk.CTkLabel(bass_frame, text=self.loc.get('label_bass_boost')).pack(side="left", padx=5)
+        ctk.CTkLabel(bass_frame, text=self.loc.get('label_gain_db')).pack(side="left", padx=(10, 2))
         self.bass_boost_gain_var = ctk.DoubleVar()
         ctk.CTkEntry(bass_frame, textvariable=self.bass_boost_gain_var, width=60).pack(side="left", padx=2)
 
-        ctk.CTkLabel(bass_frame, text="Fc:").pack(side="left", padx=(10, 2))
+        ctk.CTkLabel(bass_frame, text=self.loc.get('label_fc')).pack(side="left", padx=(10, 2))
         self.bass_boost_fc_var = ctk.IntVar(value=105)
         ctk.CTkEntry(bass_frame, textvariable=self.bass_boost_fc_var, width=60).pack(side="left", padx=2)
 
-        ctk.CTkLabel(bass_frame, text="Q:").pack(side="left", padx=(10, 2))
+        ctk.CTkLabel(bass_frame, text=self.loc.get('label_q')).pack(side="left", padx=(10, 2))
         self.bass_boost_q_var = ctk.DoubleVar(value=0.76)
         ctk.CTkEntry(bass_frame, textvariable=self.bass_boost_q_var, width=60).pack(side="left", padx=2)
 
@@ -547,7 +547,7 @@ class ModernImpulciferGUI:
         tilt_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
 
-        ctk.CTkLabel(tilt_frame, text="Tilt (dB/octave):").pack(side="left", padx=5)
+        ctk.CTkLabel(tilt_frame, text=self.loc.get('label_tilt')).pack(side="left", padx=5)
         self.tilt_var = ctk.DoubleVar()
         ctk.CTkEntry(tilt_frame, textvariable=self.tilt_var, width=80).pack(side="left", padx=5)
 
@@ -556,7 +556,7 @@ class ModernImpulciferGUI:
         balance_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
 
-        ctk.CTkLabel(balance_frame, text="Channel Balance:").pack(side="left", padx=5)
+        ctk.CTkLabel(balance_frame, text=self.loc.get('label_balance')).pack(side="left", padx=5)
         self.channel_balance_var = ctk.StringVar(value="none")
         self.channel_balance_menu = ctk.CTkOptionMenu(
             balance_frame,
@@ -567,7 +567,7 @@ class ModernImpulciferGUI:
         )
         self.channel_balance_menu.pack(side="left", padx=5)
 
-        ctk.CTkLabel(balance_frame, text="dB:").pack(side="left", padx=(10, 2))
+        ctk.CTkLabel(balance_frame, text=self.loc.get('label_balance_db')).pack(side="left", padx=(10, 2))
         self.channel_balance_db_var = ctk.IntVar(value=0)
         self.channel_balance_db_entry = ctk.CTkEntry(balance_frame, textvariable=self.channel_balance_db_var, width=60, state="disabled")
         self.channel_balance_db_entry.pack(side="left", padx=2)
@@ -577,7 +577,7 @@ class ModernImpulciferGUI:
         decay_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
 
-        ctk.CTkLabel(decay_frame, text="Decay (ms):").pack(side="left", padx=5)
+        ctk.CTkLabel(decay_frame, text=self.loc.get('label_decay')).pack(side="left", padx=5)
         self.decay_var = ctk.StringVar()
         self.decay_entry = ctk.CTkEntry(decay_frame, textvariable=self.decay_var, width=80)
         self.decay_entry.pack(side="left", padx=5)
@@ -585,7 +585,7 @@ class ModernImpulciferGUI:
         self.decay_per_channel_var = ctk.BooleanVar(value=False)
         self.decay_per_channel_check = ctk.CTkCheckBox(
             decay_frame,
-            text="per channel",
+            text=self.loc.get('checkbox_per_channel'),
             variable=self.decay_per_channel_var,
             command=self.toggle_decay_per_channel
         )
@@ -609,7 +609,7 @@ class ModernImpulciferGUI:
         pre_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
 
-        ctk.CTkLabel(pre_frame, text="Pre-response (ms):").pack(side="left", padx=5)
+        ctk.CTkLabel(pre_frame, text=self.loc.get('label_pre_response')).pack(side="left", padx=5)
         self.pre_response_var = ctk.DoubleVar(value=1.0)
         ctk.CTkEntry(pre_frame, textvariable=self.pre_response_var, width=80).pack(side="left", padx=5)
 
@@ -619,13 +619,13 @@ class ModernImpulciferGUI:
         adv_row += 1
 
         self.jamesdsp_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(output_frame, text="JamesDSP output", variable=self.jamesdsp_var).pack(side="left", padx=5)
+        ctk.CTkCheckBox(output_frame, text=self.loc.get('checkbox_jamesdsp'), variable=self.jamesdsp_var).pack(side="left", padx=5)
 
         self.hangloose_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(output_frame, text="Hangloose output", variable=self.hangloose_var).pack(side="left", padx=10)
+        ctk.CTkCheckBox(output_frame, text=self.loc.get('checkbox_hangloose'), variable=self.hangloose_var).pack(side="left", padx=10)
 
         self.interactive_plots_var = ctk.BooleanVar(value=False)
-        ctk.CTkCheckBox(output_frame, text="Interactive plots", variable=self.interactive_plots_var).pack(side="left", padx=10)
+        ctk.CTkCheckBox(output_frame, text=self.loc.get('checkbox_interactive_plots'), variable=self.interactive_plots_var).pack(side="left", padx=10)
 
         # Mic deviation correction
         mic_dev_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
@@ -635,13 +635,13 @@ class ModernImpulciferGUI:
         self.microphone_deviation_correction_var = ctk.BooleanVar(value=False)
         self.mic_dev_check = ctk.CTkCheckBox(
             mic_dev_frame,
-            text="Mic Deviation Correction",
+            text=self.loc.get('checkbox_enable_mic_deviation'),
             variable=self.microphone_deviation_correction_var,
             command=self.toggle_mic_deviation
         )
         self.mic_dev_check.pack(side="left", padx=5)
 
-        ctk.CTkLabel(mic_dev_frame, text="Strength:").pack(side="left", padx=(10, 2))
+        ctk.CTkLabel(mic_dev_frame, text=self.loc.get('label_strength')).pack(side="left", padx=(10, 2))
         self.mic_deviation_strength_var = ctk.DoubleVar(value=0.7)
         self.mic_deviation_strength_entry = ctk.CTkEntry(mic_dev_frame, textvariable=self.mic_deviation_strength_var, width=60, state="disabled")
         self.mic_deviation_strength_entry.pack(side="left", padx=2)
@@ -651,12 +651,12 @@ class ModernImpulciferGUI:
         mic_dev_v2_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=2)
         adv_row += 1
 
-        ctk.CTkLabel(mic_dev_v2_frame, text="  v2.0 Options:", font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(mic_dev_v2_frame, text=self.loc.get('label_v2_options'), font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=5)
 
         self.mic_deviation_phase_correction_var = ctk.BooleanVar(value=True)
         self.mic_dev_phase_check = ctk.CTkCheckBox(
             mic_dev_v2_frame,
-            text="Phase Correction",
+            text=self.loc.get('checkbox_phase_correction'),
             variable=self.mic_deviation_phase_correction_var,
             state="disabled"
         )
@@ -665,7 +665,7 @@ class ModernImpulciferGUI:
         self.mic_deviation_adaptive_correction_var = ctk.BooleanVar(value=True)
         self.mic_dev_adaptive_check = ctk.CTkCheckBox(
             mic_dev_v2_frame,
-            text="Adaptive",
+            text=self.loc.get('checkbox_adaptive_correction'),
             variable=self.mic_deviation_adaptive_correction_var,
             state="disabled"
         )
@@ -674,7 +674,7 @@ class ModernImpulciferGUI:
         self.mic_deviation_anatomical_validation_var = ctk.BooleanVar(value=True)
         self.mic_dev_anatomical_check = ctk.CTkCheckBox(
             mic_dev_v2_frame,
-            text="Anatomical Validation",
+            text=self.loc.get('checkbox_anatomical_validation'),
             variable=self.mic_deviation_anatomical_validation_var,
             state="disabled"
         )
@@ -688,14 +688,14 @@ class ModernImpulciferGUI:
         self.output_truehd_layouts_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             truehd_frame,
-            text="TrueHD layouts (11ch/13ch)",
+            text=self.loc.get('checkbox_truehd_layouts'),
             variable=self.output_truehd_layouts_var
         ).pack(side="left", padx=5)
 
         # === Generate Button ===
         self.generate_button = ctk.CTkButton(
             scroll,
-            text="⚡ GENERATE BRIR",
+            text=self.loc.get('button_generate_brir'),
             command=self.generate_brir,
             height=50,
             font=ctk.CTkFont(size=16, weight="bold"),
@@ -868,7 +868,7 @@ class ModernImpulciferGUI:
 
         # Validate play file exists
         if not os.path.exists(play_file):
-            messagebox.showerror('Error', f'Play file does not exist: {play_file}')
+            messagebox.showerror(self.loc.get('message_error'), self.loc.get('message_play_file_not_exist', file=play_file))
             return
 
         # Channel mismatch warning
@@ -892,7 +892,7 @@ class ModernImpulciferGUI:
                         f"Continue anyway?"
                     )
 
-                    if not messagebox.askyesno('Channel Mismatch Warning', warning_msg):
+                    if not messagebox.askyesno(self.loc.get('message_channel_mismatch_warning_title'), warning_msg):
                         return
         except Exception as e:
             print(f"Warning: Could not parse filename for speaker validation: {e}")
@@ -913,12 +913,12 @@ class ModernImpulciferGUI:
             f"Ready to start recording?"
         )
 
-        if not messagebox.askyesno('Start Recording', info_msg):
+        if not messagebox.askyesno(self.loc.get('message_start_recording_title'), info_msg):
             return
 
         # Start recording
         try:
-            self.record_button.configure(state="disabled", text="🔴 RECORDING...")
+            self.record_button.configure(state="disabled", text=self.loc.get('button_start_recording_active'))
             self.root.update()
 
             recorder.play_and_record(
@@ -931,11 +931,11 @@ class ModernImpulciferGUI:
                 append=self.append_var.get()
             )
 
-            self.record_button.configure(state="normal", text="🔴 START RECORDING")
-            messagebox.showinfo('Recording Complete', f'Successfully recorded to {record_file}')
+            self.record_button.configure(state="normal", text=self.loc.get('button_start_recording'))
+            messagebox.showinfo(self.loc.get('message_recording_complete_title'), self.loc.get('message_recording_complete', file=record_file))
         except Exception as e:
-            self.record_button.configure(state="normal", text="🔴 START RECORDING")
-            messagebox.showerror('Recording Error', f'Recording failed: {str(e)}')
+            self.record_button.configure(state="normal", text=self.loc.get('button_start_recording'))
+            messagebox.showerror(self.loc.get('message_recording_error_title'), self.loc.get('message_recording_error', error=str(e)))
 
     def generate_brir(self):
         """Generate BRIR using Impulcifer"""
@@ -1021,16 +1021,16 @@ class ModernImpulciferGUI:
         print("Impulcifer arguments:", args)
 
         # Disable button during processing
-        self.generate_button.configure(state="disabled", text="⚡ PROCESSING...")
+        self.generate_button.configure(state="disabled", text=self.loc.get('button_processing'))
         self.root.update()
 
         try:
             impulcifer.main(**args)
-            self.generate_button.configure(state="normal", text="⚡ GENERATE BRIR")
-            messagebox.showinfo('Done!', 'Generated files, check recordings folder.')
+            self.generate_button.configure(state="normal", text=self.loc.get('button_generate_brir'))
+            messagebox.showinfo(self.loc.get('message_done_title'), self.loc.get('message_done'))
         except Exception as e:
-            self.generate_button.configure(state="normal", text="⚡ GENERATE BRIR")
-            messagebox.showerror('Error', f'Processing failed: {str(e)}')
+            self.generate_button.configure(state="normal", text=self.loc.get('button_generate_brir'))
+            messagebox.showerror(self.loc.get('message_error'), self.loc.get('message_processing_failed', error=str(e)))
 
     def show_language_selection_dialog(self):
         """Show language selection dialog on first run"""
