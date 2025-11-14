@@ -1,0 +1,180 @@
+name: Build macOS Distribution
+
+on:
+  push:
+    branches:
+      - master
+      - claude/*
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      artifact-name:
+        description: "Name of the macOS build artifact"
+        value: ${{ jobs.build-macos.outputs.artifact-name }}
+
+jobs:
+  build-macos:
+    name: Build macOS Application
+    runs-on: macos-latest
+    outputs:
+      artifact-name: macos-distribution
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Cache Nuitka compilation
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Nuitka
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-nuitka-
+
+      - name: Install build requirements and project dependencies
+        run: |
+          echo "[1/3] Installing required packages with uv (ultra-fast Python package installer)..."
+          uv pip install --system nuitka ordered-set
+          if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
+            echo "Python 3.11+ detected, tomllib is available."
+          else
+            echo "Python < 3.11 detected, installing toml package."
+            uv pip install --system toml
+          fi
+          echo "Installing project dependencies from requirements.txt..."
+          uv pip install --system -r requirements.txt
+          echo "All dependencies installed successfully with uv!"
+
+      - name: Read project version and set APP_VERSION
+        run: |
+          python get_version.py
+          APP_VERSION=$(python get_version.py)
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "Building version: $APP_VERSION"
+
+      - name: Run Nuitka build for macOS
+        run: |
+          echo "[2/3] Starting optimized Nuitka build for macOS..."
+          echo "Build optimizations enabled:"
+          echo "  - Multi-core compilation (--jobs=4)"
+          echo "  - LTO disabled for faster builds (--lto=no)"
+          echo "  - Nuitka cache enabled"
+          echo ""
+
+          # macOS용 빌드 스크립트 실행
+          python -m nuitka \
+            --standalone \
+            --onefile \
+            --macos-create-app-bundle \
+            --macos-app-name="Impulcifer" \
+            --output-dir=dist/macos \
+            --remove-output \
+            --jobs=4 \
+            --lto=no \
+            --enable-plugin=tk-inter \
+            --enable-plugin=numpy \
+            --enable-plugin=matplotlib \
+            --include-package=customtkinter \
+            --include-module=sounddevice \
+            --include-module=soundfile \
+            --include-module=scipy \
+            --include-module=scipy.signal \
+            --include-module=scipy.optimize \
+            --include-module=scipy.interpolate \
+            --include-module=scipy.io \
+            --include-module=scipy.fft \
+            --include-module=nnresample \
+            --include-module=tabulate \
+            --include-module=seaborn \
+            --include-module=bokeh \
+            --include-module=autoeq \
+            --include-module=modern_gui \
+            --include-module=gui \
+            --include-module=localization \
+            --include-module=logger \
+            --include-module=channel_generation \
+            --include-module=update_checker \
+            --include-module=updater \
+            --include-module=recorder \
+            --include-module=impulcifer \
+            --include-module=hrir \
+            --include-module=impulse_response \
+            --include-module=impulse_response_estimator \
+            --include-module=room_correction \
+            --include-module=microphone_deviation_correction \
+            --include-module=utils \
+            --include-module=constants \
+            --include-data-dir=data=data \
+            --include-data-dir=font=font \
+            --include-data-dir=img=img \
+            --include-data-dir=locales=locales \
+            --include-data-file=LICENSE=License.txt \
+            --include-data-file=README.txt=README.txt \
+            --output-filename=Impulcifer \
+            --company-name=115dkk \
+            --product-name=Impulcifer \
+            --file-version=${{ env.APP_VERSION }} \
+            --product-version=${{ env.APP_VERSION }} \
+            --file-description="HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템" \
+            --prefer-source-code \
+            --assume-yes-for-downloads \
+            --show-progress \
+            --show-memory \
+            gui_main.py
+
+          echo "Successfully built with Nuitka for macOS."
+        env:
+          PYTHONIOENCODING: UTF-8
+
+      - name: Create DMG installer (optional)
+        run: |
+          echo "[3/3] Creating DMG installer..."
+
+          # create-dmg 도구 설치
+          brew install create-dmg || echo "create-dmg already installed"
+
+          # DMG 생성을 위한 준비
+          mkdir -p dist/dmg
+
+          # .app 번들을 dmg 폴더로 복사
+          if [ -d "dist/macos/Impulcifer.app" ]; then
+            cp -R dist/macos/Impulcifer.app dist/dmg/
+          else
+            echo "Warning: Impulcifer.app not found, searching for alternative..."
+            find dist/macos -name "*.app" -exec cp -R {} dist/dmg/ \;
+          fi
+
+          # DMG 파일 생성
+          create-dmg \
+            --volname "Impulcifer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --app-drop-link 600 185 \
+            --hdiutil-quiet \
+            "dist/Impulcifer-${{ env.APP_VERSION }}-macOS.dmg" \
+            "dist/dmg/" || echo "DMG creation failed, will upload .app instead"
+
+          echo "✅ macOS distribution package created."
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-distribution
+          path: |
+            dist/Impulcifer-*.dmg
+            dist/macos/Impulcifer.app
+          retention-days: 30
+          if-no-files-found: warn

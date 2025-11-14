@@ -1,0 +1,256 @@
+name: Build Linux Distribution
+
+on:
+  push:
+    branches:
+      - master
+      - claude/*
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      artifact-name:
+        description: "Name of the Linux build artifact"
+        value: ${{ jobs.build-linux.outputs.artifact-name }}
+
+jobs:
+  build-linux:
+    name: Build Linux Application
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: linux-distribution
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies
+        run: |
+          echo "Installing system dependencies for Linux build..."
+          sudo apt-get update
+          sudo apt-get install -y \
+            patchelf \
+            desktop-file-utils \
+            libfuse2 \
+            portaudio19-dev \
+            python3-tk \
+            python3-dev \
+            libasound2-dev \
+            libportaudio2 \
+            libportmidi-dev \
+            libhdf5-dev \
+            libatlas-base-dev \
+            gfortran \
+            libopenblas-dev
+
+      - name: Cache Nuitka compilation
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Nuitka
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-nuitka-
+
+      - name: Install build requirements and project dependencies
+        run: |
+          echo "[1/4] Installing required packages with uv (ultra-fast Python package installer)..."
+          uv pip install --system nuitka ordered-set patchelf
+          if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
+            echo "Python 3.11+ detected, tomllib is available."
+          else
+            echo "Python < 3.11 detected, installing toml package."
+            uv pip install --system toml
+          fi
+          echo "Installing project dependencies from requirements.txt..."
+          uv pip install --system -r requirements.txt
+          echo "All dependencies installed successfully with uv!"
+
+      - name: Read project version and set APP_VERSION
+        run: |
+          python get_version.py
+          APP_VERSION=$(python get_version.py)
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "Building version: $APP_VERSION"
+
+      - name: Run Nuitka build for Linux
+        run: |
+          echo "[2/4] Starting optimized Nuitka build for Linux..."
+          echo "Build optimizations enabled:"
+          echo "  - Multi-core compilation (--jobs=4)"
+          echo "  - LTO disabled for faster builds (--lto=no)"
+          echo "  - Nuitka cache enabled"
+          echo ""
+
+          # Linux용 빌드 스크립트 실행
+          python -m nuitka \
+            --standalone \
+            --onefile \
+            --linux-icon=img/icon.png \
+            --output-dir=dist/linux \
+            --remove-output \
+            --jobs=4 \
+            --lto=no \
+            --enable-plugin=tk-inter \
+            --enable-plugin=numpy \
+            --enable-plugin=matplotlib \
+            --include-package=customtkinter \
+            --include-module=sounddevice \
+            --include-module=soundfile \
+            --include-module=scipy \
+            --include-module=scipy.signal \
+            --include-module=scipy.optimize \
+            --include-module=scipy.interpolate \
+            --include-module=scipy.io \
+            --include-module=scipy.fft \
+            --include-module=nnresample \
+            --include-module=tabulate \
+            --include-module=seaborn \
+            --include-module=bokeh \
+            --include-module=autoeq \
+            --include-module=modern_gui \
+            --include-module=gui \
+            --include-module=localization \
+            --include-module=logger \
+            --include-module=channel_generation \
+            --include-module=update_checker \
+            --include-module=updater \
+            --include-module=recorder \
+            --include-module=impulcifer \
+            --include-module=hrir \
+            --include-module=impulse_response \
+            --include-module=impulse_response_estimator \
+            --include-module=room_correction \
+            --include-module=microphone_deviation_correction \
+            --include-module=utils \
+            --include-module=constants \
+            --include-data-dir=data=data \
+            --include-data-dir=font=font \
+            --include-data-dir=img=img \
+            --include-data-dir=locales=locales \
+            --include-data-file=LICENSE=License.txt \
+            --include-data-file=README.txt=README.txt \
+            --output-filename=Impulcifer \
+            --company-name=115dkk \
+            --product-name=Impulcifer \
+            --file-version=${{ env.APP_VERSION }} \
+            --product-version=${{ env.APP_VERSION }} \
+            --file-description="HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템" \
+            --prefer-source-code \
+            --assume-yes-for-downloads \
+            --show-progress \
+            --show-memory \
+            gui_main.py
+
+          echo "Successfully built with Nuitka for Linux."
+        env:
+          PYTHONIOENCODING: UTF-8
+
+      - name: Create AppImage
+        run: |
+          echo "[3/4] Creating AppImage..."
+
+          # AppImage 빌드 도구 다운로드
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+          # AppDir 구조 생성
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          # 빌드된 실행 파일 복사
+          if [ -f "dist/linux/Impulcifer.bin" ]; then
+            cp dist/linux/Impulcifer.bin AppDir/usr/bin/impulcifer
+          elif [ -f "dist/linux/Impulcifer" ]; then
+            cp dist/linux/Impulcifer AppDir/usr/bin/impulcifer
+          else
+            echo "Error: Built binary not found"
+            find dist/linux -type f -executable
+            exit 1
+          fi
+
+          # .desktop 파일 생성
+          cat > AppDir/usr/share/applications/impulcifer.desktop <<EOF
+          [Desktop Entry]
+          Type=Application
+          Name=Impulcifer
+          Comment=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템
+          Exec=impulcifer
+          Icon=impulcifer
+          Categories=AudioVideo;Audio;
+          Terminal=false
+          EOF
+
+          # 아이콘 복사 (있는 경우)
+          if [ -f "img/icon.png" ]; then
+            cp img/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/impulcifer.png
+          fi
+
+          # AppImage 생성
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --output appimage \
+            --desktop-file=AppDir/usr/share/applications/impulcifer.desktop \
+            || echo "AppImage creation completed with warnings"
+
+          # 생성된 AppImage 파일 이름 변경
+          if [ -f "Impulcifer-*.AppImage" ]; then
+            mv Impulcifer-*.AppImage "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+          fi
+
+          echo "✅ Linux AppImage created."
+
+      - name: Create tarball distribution
+        run: |
+          echo "[4/4] Creating tarball distribution..."
+
+          # 배포용 디렉토리 생성
+          mkdir -p dist/Impulcifer-linux
+
+          # 실행 파일 복사
+          if [ -f "dist/linux/Impulcifer.bin" ]; then
+            cp dist/linux/Impulcifer.bin dist/Impulcifer-linux/impulcifer
+          elif [ -f "dist/linux/Impulcifer" ]; then
+            cp dist/linux/Impulcifer dist/Impulcifer-linux/impulcifer
+          fi
+
+          # 문서 및 라이선스 복사
+          cp README.txt dist/Impulcifer-linux/ || true
+          cp LICENSE dist/Impulcifer-linux/ || true
+
+          # 실행 스크립트 생성
+          cat > dist/Impulcifer-linux/run.sh <<'EOF'
+          #!/bin/bash
+          SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+          cd "$SCRIPT_DIR"
+          ./impulcifer "$@"
+          EOF
+          chmod +x dist/Impulcifer-linux/run.sh
+
+          # tarball 생성
+          cd dist
+          tar czf "Impulcifer-${{ env.APP_VERSION }}-linux-x86_64.tar.gz" Impulcifer-linux
+          cd ..
+
+          echo "✅ Linux tarball distribution created."
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-distribution
+          path: |
+            Impulcifer-*.AppImage
+            dist/Impulcifer-*.tar.gz
+          retention-days: 30
+          if-no-files-found: warn

@@ -1,6 +1,7 @@
 """
 Nuitka를 사용한 Impulcifer GUI 빌드 스크립트
 Python 3.13 호환 버전
+크로스 플랫폼 지원: Windows, macOS, Linux
 """
 
 print("build_nuitka.py: Module level - script parsing started.", flush=True)
@@ -8,6 +9,7 @@ import os
 import sys
 import subprocess
 import shutil
+import platform
 from pathlib import Path
 print("build_nuitka.py: Module level - imports done.", flush=True)
 
@@ -33,6 +35,18 @@ def get_project_version():
     except Exception as e:
         print(f"경고: 버전 정보 로드 중 예기치 않은 오류 발생: {e}. 기본 버전을 사용합니다.", flush=True)
         return "0.0.0"
+
+def get_platform():
+    """현재 플랫폼 감지"""
+    system = platform.system().lower()
+    if system == "windows":
+        return "windows"
+    elif system == "darwin":
+        return "macos"
+    elif system == "linux":
+        return "linux"
+    else:
+        return "unknown"
 
 def check_nuitka():
     print("build_nuitka.py: check_nuitka() called", flush=True)
@@ -64,107 +78,115 @@ def clean_specific_build_folders():
         print("루트의 이전 빌드 실행 파일 삭제 중: ImpulciferGUI.exe", flush=True)
         os.remove("ImpulciferGUI.exe")
 
-def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
+def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_platform=None):
     print(f"build_nuitka.py: build_impulcifer() called with version={project_version}", flush=True)
-    """Nuitka로 Impulcifer GUI 빌드 (폴더 모드)"""
-    
-    final_output_dir = Path(output_base_dir) / "Impulcifer_Distribution" / "ImpulciferGUI"
+    """Nuitka로 Impulcifer GUI 빌드 (크로스 플랫폼 지원)"""
+
+    # 플랫폼 감지
+    if target_platform is None:
+        target_platform = get_platform()
+
+    print(f"타겟 플랫폼: {target_platform}", flush=True)
+
+    # 플랫폼별 출력 디렉토리 설정
+    if target_platform == "windows":
+        final_output_dir = Path(output_base_dir) / "Impulcifer_Distribution" / "ImpulciferGUI"
+        output_filename = "ImpulciferGUI"
+    elif target_platform == "macos":
+        final_output_dir = Path(output_base_dir) / "macos"
+        output_filename = "Impulcifer"
+    elif target_platform == "linux":
+        final_output_dir = Path(output_base_dir) / "linux"
+        output_filename = "Impulcifer"
+    else:
+        print(f"✗ 지원하지 않는 플랫폼: {target_platform}", flush=True)
+        return False
+
     print(f"최종 빌드 결과물은 다음 폴더에 생성됩니다: {final_output_dir.resolve()}", flush=True)
 
     nuitka_cmd_base = [sys.executable, "-m", "nuitka"]
+
+    # 공통 옵션
     nuitka_cmd_args = [
         "--standalone",
         f"--output-dir={final_output_dir}",
         "--remove-output",
-
-        # Performance optimizations for faster builds
-        "--jobs=4",  # Use 4 CPU cores for parallel compilation (GitHub Actions standard)
-        "--lto=no",  # Disable Link Time Optimization - saves hours of build time
-
-        "--windows-console-mode=disable",
-        "--enable-plugin=tk-inter",  # Enable tkinter support (required for CustomTkinter)
+        "--jobs=4",
+        "--lto=no",
+        "--enable-plugin=tk-inter",
         "--enable-plugin=numpy",
         "--enable-plugin=matplotlib",
-
-        # Include packages (better than include-module for packages with resources)
-        "--include-package=customtkinter",  # Modern GUI framework with all assets
-
-        # Include individual modules
-        "--include-module=sounddevice",
-        "--include-module=soundfile",
-        "--include-module=scipy",
-        "--include-module=scipy.signal",
-        "--include-module=scipy.optimize",
-        "--include-module=scipy.interpolate",
-        "--include-module=scipy.io",
-        "--include-module=scipy.fft",
-        "--include-module=nnresample",
-        "--include-module=tabulate",
-        "--include-module=seaborn",
-        "--include-module=bokeh",
-        "--include-module=autoeq",
-        "--include-module=modern_gui",     # Modern GUI module
-        "--include-module=gui",            # Legacy GUI (for compatibility)
-        "--include-module=localization",   # Localization system (CRITICAL)
-        "--include-module=logger",         # Logging system
-        "--include-module=channel_generation",  # Channel generation
-        "--include-module=update_checker",  # Auto-update system
-        "--include-module=updater",        # Update installer
-        "--include-module=recorder",
-        "--include-module=impulcifer",
-        "--include-module=hrir",
-        "--include-module=impulse_response",
-        "--include-module=impulse_response_estimator",
-        "--include-module=room_correction",
-        "--include-module=microphone_deviation_correction",
-        "--include-module=utils",
-        "--include-module=constants",
-        "--include-data-dir=data=data",
-        "--include-data-dir=font=font",
-        "--include-data-dir=img=img",
-        "--include-data-dir=locales=locales",  # Translation files (CRITICAL)
+        "--include-package=customtkinter",
     ]
 
-    # LICENSE 파일을 License.txt로 포함
-    license_file_path = "LICENSE"
-    if os.path.exists(license_file_path):
-        nuitka_cmd_args.append(f"--include-data-file={license_file_path}=License.txt")
-        print(f"정보: {license_file_path} 파일을 License.txt로 빌드에 포함합니다.", flush=True)
-    else:
-        print(f"경고: {license_file_path} 파일을 찾을 수 없습니다. Inno Setup에서 필요할 수 있습니다.", flush=True)
+    # 플랫폼별 옵션
+    if target_platform == "windows":
+        nuitka_cmd_args.append("--windows-console-mode=disable")
+    elif target_platform == "macos":
+        nuitka_cmd_args.extend([
+            "--onefile",
+            "--macos-create-app-bundle",
+            "--macos-app-name=Impulcifer",
+        ])
+        # macOS 아이콘이 있다면 추가
+        if os.path.exists("img/icon.icns"):
+            nuitka_cmd_args.append("--macos-app-icon=img/icon.icns")
+    elif target_platform == "linux":
+        nuitka_cmd_args.append("--onefile")
+        # Linux 아이콘이 있다면 추가
+        if os.path.exists("img/icon.png"):
+            nuitka_cmd_args.append("--linux-icon=img/icon.png")
 
-    # 지정된 README.txt 파일을 빌드 결과물에 README.txt로 포함
-    # 사용자가 제공한 경로: 프로젝트 루트의 README.txt
-    readme_source_path_str = "README.txt" # 문자열 경로
-    if Path(readme_source_path_str).exists(): # Path 객체로 변환 후 exists() 호출
-        nuitka_cmd_args.append(f"--include-data-file={readme_source_path_str}=README.txt")
-        print(f"정보: {readme_source_path_str} 파일을 README.txt로 빌드에 포함합니다.", flush=True)
-    else:
-        print(f"경고: 소스 README 파일({readme_source_path_str})을 찾을 수 없습니다. Inno Setup에서 필요할 수 있습니다.", flush=True)
+    # 공통 모듈 포함
+    common_modules = [
+        "sounddevice", "soundfile", "scipy", "scipy.signal", "scipy.optimize",
+        "scipy.interpolate", "scipy.io", "scipy.fft", "nnresample", "tabulate",
+        "seaborn", "bokeh", "autoeq", "modern_gui", "gui", "localization",
+        "logger", "channel_generation", "update_checker", "updater", "recorder",
+        "impulcifer", "hrir", "impulse_response", "impulse_response_estimator",
+        "room_correction", "microphone_deviation_correction", "utils", "constants",
+    ]
 
+    for module in common_modules:
+        nuitka_cmd_args.append(f"--include-module={module}")
+
+    # 데이터 디렉토리 포함
+    data_dirs = ["data", "font", "img", "locales"]
+    for data_dir in data_dirs:
+        if os.path.exists(data_dir):
+            nuitka_cmd_args.append(f"--include-data-dir={data_dir}={data_dir}")
+
+    # LICENSE 파일 포함
+    if os.path.exists("LICENSE"):
+        nuitka_cmd_args.append("--include-data-file=LICENSE=License.txt")
+        print("정보: LICENSE 파일을 License.txt로 빌드에 포함합니다.", flush=True)
+
+    # README.txt 파일 포함
+    if os.path.exists("README.txt"):
+        nuitka_cmd_args.append("--include-data-file=README.txt=README.txt")
+        print("정보: README.txt 파일을 빌드에 포함합니다.", flush=True)
+
+    # 메타데이터
     nuitka_cmd_args.extend([
-        "--output-filename=ImpulciferGUI",
+        f"--output-filename={output_filename}",
         "--company-name=115dkk",
         "--product-name=Impulcifer",
         f"--file-version={project_version}",
         f"--product-version={project_version}",
         "--file-description=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템",
-
-        # Additional build speed optimizations
-        "--prefer-source-code",  # Prefer source code over bytecode for faster compilation
-
+        "--prefer-source-code",
         "--assume-yes-for-downloads",
         "--show-progress",
         "--show-memory",
         "gui_main.py"
     ])
-    
+
     nuitka_cmd = nuitka_cmd_base + [cmd for cmd in nuitka_cmd_args if cmd]
-    
+
     print("\n빌드 명령어:", flush=True)
     print(" ".join(nuitka_cmd), flush=True)
-    print("\n빌드를 시작합니다... (시간이 좀 걸릴 수 있습니다)", flush=True)
-    
+    print(f"\n{target_platform} 플랫폼용 빌드를 시작합니다... (시간이 좀 걸릴 수 있습니다)", flush=True)
+
     try:
         result = subprocess.run(nuitka_cmd, check=True, text=True, capture_output=True, encoding='utf-8')
         print("Nuitka stdout:", flush=True)
@@ -172,7 +194,7 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         if result.stderr:
             print("Nuitka stderr:", flush=True)
             print(result.stderr, flush=True)
-        print("\n✓ 빌드가 성공적으로 완료되었습니다!", flush=True)
+        print(f"\n✓ {target_platform} 플랫폼용 빌드가 성공적으로 완료되었습니다!", flush=True)
         return True
     except subprocess.CalledProcessError as e:
         print(f"\n✗ 빌드 중 오류가 발생했습니다: {e}", flush=True)
@@ -185,14 +207,18 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
 def main():
     print("build_nuitka.py: main() function - entry point.", flush=True)
     """메인 빌드 프로세스"""
-    print("=== Impulcifer Nuitka 빌드 스크립트 ===\n", flush=True)
-    
+    print("=== Impulcifer Nuitka 크로스 플랫폼 빌드 스크립트 ===\n", flush=True)
+
+    # 플랫폼 감지 및 표시
+    current_platform = get_platform()
+    print(f"감지된 플랫폼: {current_platform}", flush=True)
+
     if not check_nuitka():
        sys.exit(1)
-    
+
     # clean_specific_build_folders() # --remove-output 옵션이 output-dir을 정리하므로, 추가 정리 불필요할 수 있음
                                      # 필요하다면 Nuitka가 생성하는 루트의 임시 파일/폴더만 정리
-    
+
     current_version = get_project_version()
     print(f"빌드에 사용될 버전: {current_version}", flush=True)
 
@@ -207,10 +233,20 @@ if __name__ == "__main__":
     import modern_gui
     modern_gui.main_gui()
 """)
-    
+
     if build_impulcifer(project_version=current_version, output_base_dir="dist"):
         print("\n빌드가 완료되었습니다!", flush=True)
-        final_path = Path('dist/Impulcifer_Distribution/ImpulciferGUI').resolve()
+
+        # 플랫폼별 출력 경로 확인
+        if current_platform == "windows":
+            final_path = Path('dist/Impulcifer_Distribution/ImpulciferGUI').resolve()
+        elif current_platform == "macos":
+            final_path = Path('dist/macos').resolve()
+        elif current_platform == "linux":
+            final_path = Path('dist/linux').resolve()
+        else:
+            final_path = Path('dist').resolve()
+
         print(f"빌드 결과는 {final_path} 폴더에서 찾을 수 있습니다.", flush=True)
         if final_path.exists() and any(final_path.iterdir()):
             print("✓ 최종 출력 폴더가 존재하고 비어있지 않습니다.", flush=True)

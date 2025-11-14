@@ -1,7 +1,12 @@
-# Impulcifer Nuitka 빌드 가이드
+# Impulcifer Nuitka 크로스 플랫폼 빌드 가이드
 
 ## 개요
-이 가이드는 Impulcifer를 Nuitka를 사용하여 독립 실행 가능한 Windows 프로그램으로 빌드하는 방법을 설명합니다.
+이 가이드는 Impulcifer를 Nuitka를 사용하여 독립 실행 가능한 프로그램으로 빌드하는 방법을 설명합니다.
+
+**지원 플랫폼:**
+- ✅ **Windows** (독립 실행 파일 + Inno Setup 인스톨러)
+- ✅ **macOS** (앱 번들 + DMG 인스톨러)
+- ✅ **Linux** (독립 실행 파일 + AppImage)
 
 ## 사전 요구사항
 
@@ -128,12 +133,174 @@ python build_nuitka.py
 - [ ] README 업데이트
 - [ ] 버전 정보 확인
 
+## 크로스 플랫폼 빌드 (macOS/Linux)
+
+### macOS 빌드
+
+#### 사전 요구사항
+- macOS 11+ (Big Sur 이상)
+- Python 3.9 이상
+- Xcode Command Line Tools
+
+```bash
+# Xcode Command Line Tools 설치
+xcode-select --install
+```
+
+#### 빌드 방법
+```bash
+# 1. 프로젝트 폴더로 이동
+cd /path/to/Impulcifer-pip313
+
+# 2. 필수 패키지 설치
+pip install nuitka ordered-set
+pip install -r requirements.txt
+
+# 3. Nuitka 빌드 실행 (자동으로 macOS 감지)
+python build_nuitka.py
+
+# 4. 빌드 결과 확인
+# dist/macos/Impulcifer.app 생성됨
+```
+
+#### DMG 인스톨러 생성 (선택사항)
+```bash
+# create-dmg 도구 설치
+brew install create-dmg
+
+# DMG 생성
+mkdir -p dist/dmg
+cp -R dist/macos/Impulcifer.app dist/dmg/
+create-dmg \
+  --volname "Impulcifer" \
+  --window-pos 200 120 \
+  --window-size 800 400 \
+  --icon-size 100 \
+  --app-drop-link 600 185 \
+  "dist/Impulcifer-macOS.dmg" \
+  "dist/dmg/"
+```
+
+### Linux 빌드
+
+#### 사전 요구사항
+- Ubuntu 20.04+ / Debian 11+ / Fedora 35+ 또는 호환 배포판
+- Python 3.9 이상
+- 시스템 라이브러리
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y \
+  python3-dev \
+  patchelf \
+  portaudio19-dev \
+  python3-tk \
+  libasound2-dev \
+  libportaudio2
+
+# Fedora/RHEL
+sudo dnf install -y \
+  python3-devel \
+  patchelf \
+  portaudio-devel \
+  python3-tkinter \
+  alsa-lib-devel
+```
+
+#### 빌드 방법
+```bash
+# 1. 프로젝트 폴더로 이동
+cd /path/to/Impulcifer-pip313
+
+# 2. 필수 패키지 설치
+pip install nuitka ordered-set patchelf
+pip install -r requirements.txt
+
+# 3. Nuitka 빌드 실행 (자동으로 Linux 감지)
+python build_nuitka.py
+
+# 4. 빌드 결과 확인
+# dist/linux/Impulcifer 생성됨
+```
+
+#### AppImage 생성 (선택사항)
+```bash
+# linuxdeploy 다운로드
+wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+chmod +x linuxdeploy-x86_64.AppImage
+
+# AppDir 구조 생성
+mkdir -p AppDir/usr/bin
+cp dist/linux/Impulcifer AppDir/usr/bin/impulcifer
+
+# .desktop 파일 생성
+mkdir -p AppDir/usr/share/applications
+cat > AppDir/usr/share/applications/impulcifer.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=Impulcifer
+Exec=impulcifer
+Icon=impulcifer
+Categories=AudioVideo;Audio;
+Terminal=false
+EOF
+
+# AppImage 생성
+./linuxdeploy-x86_64.AppImage \
+  --appdir AppDir \
+  --output appimage \
+  --desktop-file=AppDir/usr/share/applications/impulcifer.desktop
+```
+
+## CI/CD 자동 빌드
+
+프로젝트는 GitHub Actions를 통한 자동 크로스 플랫폼 빌드를 지원합니다.
+
+### 워크플로우 파일
+- `.github/workflows/build-macos.yml` - macOS 빌드
+- `.github/workflows/build-linux.yml` - Linux 빌드
+- `.github/workflows/nuitka-distribution.yml` - Windows 빌드
+- `.github/workflows/release-cross-platform.yml` - 통합 릴리스
+
+### 자동 빌드 트리거
+- `master` 브랜치에 푸시
+- `claude/*` 브랜치에 푸시
+- 수동 실행 (workflow_dispatch)
+
+### 릴리스 아티팩트
+각 플랫폼별 빌드가 완료되면 다음 파일이 생성됩니다:
+
+**Windows:**
+- `Impulcifer_Setup.exe` - Windows 인스톨러
+
+**macOS:**
+- `Impulcifer-{version}-macOS.dmg` - macOS DMG 이미지
+
+**Linux:**
+- `Impulcifer-{version}-x86_64.AppImage` - AppImage
+- `Impulcifer-{version}-linux-x86_64.tar.gz` - Tarball 아카이브
+
 ## 추가 정보
 
 ### 관련 링크
 - [Nuitka 공식 문서](https://nuitka.net/doc/user-manual.html)
 - [Impulcifer 원본](https://github.com/jaakkopasanen/impulcifer)
 - [Python 3.13 호환 버전](https://github.com/115dkk/Impulcifer-pip313)
+
+### 플랫폼별 주의사항
+
+#### Windows
+- Visual Studio Build Tools 필요
+- Inno Setup 설치 시 자동으로 인스톤러 생성
+
+#### macOS
+- Apple Silicon (M1/M2)에서 빌드 시 Intel 버전도 지원
+- 코드 서명 없이 배포 시 보안 경고 발생 가능
+
+#### Linux
+- 다양한 배포판 지원을 위해 AppImage 권장
+- PortAudio 라이브러리 필수 설치
 
 ### 지원
 문제가 발생하면 GitHub Issues에 문의하세요. 
