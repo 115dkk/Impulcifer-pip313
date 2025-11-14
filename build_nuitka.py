@@ -108,6 +108,8 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--include-module=localization",   # Localization system (CRITICAL)
         "--include-module=logger",         # Logging system
         "--include-module=channel_generation",  # Channel generation
+        "--include-module=update_checker",  # Auto-update system
+        "--include-module=updater",        # Update installer
         "--include-module=recorder",
         "--include-module=impulcifer",
         "--include-module=hrir",

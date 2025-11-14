@@ -193,5 +193,20 @@
 
   "cli_error_hp_file_missing": "未找到耳機補償檔案: {file}",
   "cli_info_using_hp_file": "使用耳機補償檔案: {file}",
-  "cli_info_converting_truehd": "正在將TrueHD/MLP檔案轉換為WAV: {file}"
+  "cli_info_converting_truehd": "正在將TrueHD/MLP檔案轉換為WAV: {file}",
+
+  "update_available_title": "更新可用",
+  "update_available_message": "🎉 有新版本可用！",
+  "update_version_info": "目前: {current} → 新: {latest}",
+  "update_release_notes": "發佈說明:",
+  "update_no_notes": "沒有可用的發佈說明。",
+  "update_button_update": "⬇️ 立即更新",
+  "update_button_remind": "⏰ 稍後提醒我",
+  "update_button_skip": "❌ 跳過此版本",
+  "update_downloading": "正在下載更新...",
+  "update_downloading_progress": "下載中: {percent}%",
+  "update_installing": "正在安裝更新...",
+  "update_error_download": "下載更新失敗。請稍後重試。",
+  "update_error_install": "啟動安裝失敗。請手動下載。",
+  "update_error_general": "更新錯誤: {error}"
 }

@@ -193,5 +193,20 @@
 
   "cli_error_hp_file_missing": "Kopfhörerkompensationsdatei nicht gefunden: {file}",
   "cli_info_using_hp_file": "Verwende Kopfhörerkompensationsdatei: {file}",
-  "cli_info_converting_truehd": "Konvertiere TrueHD/MLP-Datei zu WAV: {file}"
+  "cli_info_converting_truehd": "Konvertiere TrueHD/MLP-Datei zu WAV: {file}",
+
+  "update_available_title": "Update verfügbar",
+  "update_available_message": "🎉 Eine neue Version ist verfügbar!",
+  "update_version_info": "Aktuell: {current} → Neu: {latest}",
+  "update_release_notes": "Versionshinweise:",
+  "update_no_notes": "Keine Versionshinweise verfügbar.",
+  "update_button_update": "⬇️ Jetzt aktualisieren",
+  "update_button_remind": "⏰ Später erinnern",
+  "update_button_skip": "❌ Diese Version überspringen",
+  "update_downloading": "Update wird heruntergeladen...",
+  "update_downloading_progress": "Wird heruntergeladen: {percent}%",
+  "update_installing": "Update wird installiert...",
+  "update_error_download": "Download des Updates fehlgeschlagen. Bitte versuchen Sie es später erneut.",
+  "update_error_install": "Installation konnte nicht gestartet werden. Bitte laden Sie manuell herunter.",
+  "update_error_general": "Update-Fehler: {error}"
 }

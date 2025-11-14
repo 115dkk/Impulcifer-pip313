@@ -193,5 +193,20 @@
 
   "cli_error_hp_file_missing": "Fichier de compensation du casque non trouvé: {file}",
   "cli_info_using_hp_file": "Utilisation du fichier de compensation du casque: {file}",
-  "cli_info_converting_truehd": "Conversion du fichier TrueHD/MLP en WAV: {file}"
+  "cli_info_converting_truehd": "Conversion du fichier TrueHD/MLP en WAV: {file}",
+
+  "update_available_title": "Mise à jour disponible",
+  "update_available_message": "🎉 Une nouvelle version est disponible!",
+  "update_version_info": "Actuelle: {current} → Nouvelle: {latest}",
+  "update_release_notes": "Notes de version:",
+  "update_no_notes": "Aucune note de version disponible.",
+  "update_button_update": "⬇️ Mettre à jour maintenant",
+  "update_button_remind": "⏰ Me le rappeler plus tard",
+  "update_button_skip": "❌ Ignorer cette version",
+  "update_downloading": "Téléchargement de la mise à jour...",
+  "update_downloading_progress": "Téléchargement: {percent}%",
+  "update_installing": "Installation de la mise à jour...",
+  "update_error_download": "Échec du téléchargement de la mise à jour. Veuillez réessayer plus tard.",
+  "update_error_install": "Échec du démarrage de l'installation. Veuillez télécharger manuellement.",
+  "update_error_general": "Erreur de mise à jour: {error}"
 }

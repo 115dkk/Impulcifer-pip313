@@ -193,5 +193,20 @@
 
   "cli_error_hp_file_missing": "ヘッドホン補正ファイルが見つかりません: {file}",
   "cli_info_using_hp_file": "ヘッドホン補正ファイルを使用: {file}",
-  "cli_info_converting_truehd": "TrueHD/MLPファイルをWAVに変換中: {file}"
+  "cli_info_converting_truehd": "TrueHD/MLPファイルをWAVに変換中: {file}",
+
+  "update_available_title": "アップデート利用可能",
+  "update_available_message": "🎉 新しいバージョンが利用可能です!",
+  "update_version_info": "現在: {current} → 新: {latest}",
+  "update_release_notes": "リリースノート:",
+  "update_no_notes": "リリースノートはありません。",
+  "update_button_update": "⬇️ 今すぐアップデート",
+  "update_button_remind": "⏰ 後で通知",
+  "update_button_skip": "❌ このバージョンをスキップ",
+  "update_downloading": "アップデートをダウンロード中...",
+  "update_downloading_progress": "ダウンロード中: {percent}%",
+  "update_installing": "アップデートをインストール中...",
+  "update_error_download": "アップデートのダウンロードに失敗しました。後で再試行してください。",
+  "update_error_install": "インストールの開始に失敗しました。手動でダウンロードしてください。",
+  "update_error_general": "アップデートエラー: {error}"
 }
