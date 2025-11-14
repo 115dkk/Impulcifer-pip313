@@ -10,6 +10,7 @@ import sys
 import re
 import shutil
 import platform
+import threading
 from tkinter import filedialog, messagebox
 import customtkinter as ctk
 import sounddevice
@@ -17,9 +18,118 @@ import recorder
 import impulcifer
 from constants import SPEAKER_LIST_PATTERN
 from localization import get_localization_manager, SUPPORTED_LANGUAGES
+from logger import get_logger, set_gui_callbacks
 
 # Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
+
+
+class ProcessingDialog(ctk.CTkToplevel):
+    """Dialog to show processing progress and logs"""
+
+    def __init__(self, parent, loc_manager):
+        super().__init__(parent)
+        self.loc = loc_manager
+        self.title(self.loc.get('dialog_processing_title', default="Processing"))
+        self.geometry("700x500")
+        self.transient(parent)
+        self.grab_set()
+
+        # Center the dialog
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (700 // 2)
+        y = (self.winfo_screenheight() // 2) - (500 // 2)
+        self.geometry(f"700x500+{x}+{y}")
+
+        # Configure grid
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        # Title label
+        title_label = ctk.CTkLabel(
+            self,
+            text=self.loc.get('dialog_processing_message', default="Processing BRIR..."),
+            font=ctk.CTkFont(size=16, weight="bold")
+        )
+        title_label.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
+
+        # Progress bar
+        self.progress_bar = ctk.CTkProgressBar(self, width=660)
+        self.progress_bar.set(0)
+        self.progress_bar.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
+
+        # Progress label
+        self.progress_label = ctk.CTkLabel(
+            self,
+            text="0%",
+            font=ctk.CTkFont(size=12)
+        )
+        self.progress_label.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="w")
+
+        # Log text box
+        self.log_text = ctk.CTkTextbox(self, width=660, height=300)
+        self.log_text.grid(row=3, column=0, padx=20, pady=10, sticky="nsew")
+
+        # Button frame
+        button_frame = ctk.CTkFrame(self)
+        button_frame.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
+
+        # Close button (initially disabled)
+        self.close_button = ctk.CTkButton(
+            button_frame,
+            text=self.loc.get('button_close', default="Close"),
+            command=self.on_close,
+            state="disabled"
+        )
+        self.close_button.pack(side="right", padx=5)
+
+        self.processing_complete = False
+        self.processing_error = False
+
+    def update_progress(self, value: int, message: str = ""):
+        """Update progress bar and label"""
+        try:
+            self.progress_bar.set(value / 100.0)
+            self.progress_label.configure(text=f"{value}% - {message}" if message else f"{value}%")
+            self.update()
+        except:
+            pass
+
+    def add_log(self, level: str, message: str):
+        """Add log message to text box"""
+        try:
+            # Add timestamp and level prefix
+            if level == "ERROR":
+                prefix = "✗ "
+            elif level == "SUCCESS":
+                prefix = "✓ "
+            elif level == "WARNING":
+                prefix = "⚠ "
+            else:
+                prefix = ""
+
+            self.log_text.insert("end", f"{prefix}{message}\n")
+            self.log_text.see("end")
+            self.update()
+        except:
+            pass
+
+    def mark_complete(self, success: bool = True):
+        """Mark processing as complete"""
+        self.processing_complete = True
+        self.processing_error = not success
+        self.close_button.configure(state="normal")
+
+        if success:
+            self.progress_bar.set(1.0)
+            self.progress_label.configure(text="100% - " + self.loc.get('message_processing_complete', default="Complete!"))
+        else:
+            self.progress_label.configure(text=self.loc.get('message_processing_error', default="Error occurred"))
+
+    def on_close(self):
+        """Close dialog"""
+        self.grab_release()
+        self.destroy()
 
 
 class ModernImpulciferGUI:
@@ -938,7 +1048,8 @@ class ModernImpulciferGUI:
             messagebox.showerror(self.loc.get('message_recording_error_title'), self.loc.get('message_recording_error', error=str(e)))
 
     def generate_brir(self):
-        """Generate BRIR using Impulcifer"""
+        """Generate BRIR using Impulcifer with progress dialog"""
+        # Build arguments
         args = {
             'dir_path': self.dir_path_var.get(),
             'test_signal': self.test_signal_var.get(),
@@ -967,7 +1078,6 @@ class ModernImpulciferGUI:
             if os.path.exists(source_file):
                 try:
                     shutil.copy2(source_file, target_file)
-                    print(f"Copied {source_file} to {target_file}")
                 except Exception as e:
                     print(f"Error copying headphone file: {e}")
 
@@ -1018,19 +1128,43 @@ class ModernImpulciferGUI:
             args['mic_deviation_anatomical_validation'] = self.mic_deviation_anatomical_validation_var.get()
             args['output_truehd_layouts'] = self.output_truehd_layouts_var.get()
 
-        print("Impulcifer arguments:", args)
-
         # Disable button during processing
         self.generate_button.configure(state="disabled", text=self.loc.get('button_processing'))
-        self.root.update()
 
-        try:
-            impulcifer.main(**args)
-            self.generate_button.configure(state="normal", text=self.loc.get('button_generate_brir'))
-            messagebox.showinfo(self.loc.get('message_done_title'), self.loc.get('message_done'))
-        except Exception as e:
-            self.generate_button.configure(state="normal", text=self.loc.get('button_generate_brir'))
-            messagebox.showerror(self.loc.get('message_error'), self.loc.get('message_processing_failed', error=str(e)))
+        # Create processing dialog
+        dialog = ProcessingDialog(self.root, self.loc)
+
+        # Setup logger callbacks
+        logger = get_logger()
+        set_gui_callbacks(
+            log_callback=dialog.add_log,
+            progress_callback=dialog.update_progress
+        )
+
+        # Run processing in separate thread
+        def run_processing():
+            try:
+                impulcifer.main(**args)
+                # Mark as complete
+                dialog.mark_complete(success=True)
+                # Re-enable button
+                self.root.after(0, lambda: self.generate_button.configure(
+                    state="normal",
+                    text=self.loc.get('button_generate_brir')
+                ))
+            except Exception as e:
+                # Mark as failed
+                logger.error(f"Processing failed: {str(e)}")
+                dialog.mark_complete(success=False)
+                # Re-enable button
+                self.root.after(0, lambda: self.generate_button.configure(
+                    state="normal",
+                    text=self.loc.get('button_generate_brir')
+                ))
+
+        # Start processing thread
+        thread = threading.Thread(target=run_processing, daemon=True)
+        thread.start()
 
     def show_language_selection_dialog(self):
         """Show language selection dialog on first run"""

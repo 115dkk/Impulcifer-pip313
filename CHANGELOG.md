@@ -4,6 +4,102 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.8.2 - 2025-11-14
+### GUI 처리 진행 상황 표시 및 CLI 메시지 통합
+BRIR 생성 프로세스의 진행 상황을 GUI에서 실시간으로 확인할 수 있도록 개선했습니다.
+
+#### 🎯 새로운 기능
+- **처리 진행 다이얼로그** (`ProcessingDialog`):
+  - 실시간 진행률 표시 (0-100%)
+  - 현재 작업 단계 표시
+  - 모든 처리 로그 실시간 표시
+  - 완료 시 자동으로 닫기 버튼 활성화
+  - 처리 중 다른 작업 방지 (모달 다이얼로그)
+
+- **통합 로깅 시스템** (`logger.py`):
+  - CLI와 GUI 양쪽에서 동작하는 통합 로거
+  - 로그 레벨: DEBUG, INFO, SUCCESS, WARNING, ERROR, PROGRESS
+  - GUI 콜백 지원으로 실시간 메시지 전달
+  - 진행률 자동 계산 (step 기반 추적)
+
+- **CLI 메시지 현지화**:
+  - 모든 처리 단계 메시지에 대한 번역 키 추가
+  - 영어/한국어 번역 완료
+  - GUI에서 처리 메시지가 선택한 언어로 표시됨
+
+#### ⚙️ 기술적 개선
+- **`impulcifer.py` 리팩토링**:
+  - 모든 `print()` 문을 `logger` 호출로 교체
+  - 67개 이상의 print 문 → logger.step/info/success/warning/error
+  - 처리 단계별 진행률 자동 추적
+  - 총 단계 수 자동 계산 (활성화된 옵션 기반)
+
+- **스레드 기반 처리**:
+  - GUI가 멈추지 않도록 별도 스레드에서 BRIR 생성
+  - 실시간 로그 및 진행률 업데이트
+  - 안전한 에러 처리 및 사용자 알림
+
+- **진행률 추적 시스템**:
+  - `logger.set_total_steps()`: 총 단계 설정
+  - `logger.step()`: 단계 실행 및 진행률 자동 증가
+  - `logger.progress()`: 수동 진행률 설정 (0-100%)
+  - 옵션별 동적 단계 계산
+
+#### 📊 처리 단계 가시화
+처리 중 다음과 같은 단계가 실시간으로 표시됩니다:
+1. 임펄스 응답 추정기 생성
+2. 룸 보정 (활성화 시)
+3. 헤드폰 보상 (활성화 시)
+4. 헤드폰 이퀄라이제이션 (활성화 시)
+5. 주파수 응답 목표 생성
+6. 바이노럴 측정값 로드
+7. 게인 정규화
+8. 임펄스 응답 잘라내기
+9. 마이크 편차 보정 (활성화 시)
+10. 이퀄라이제이션 적용
+11. 감쇠 시간 조정 (활성화 시)
+12. 채널 밸런스 보정 (활성화 시)
+13. 그래프 생성 (활성화 시)
+14. BRIR 파일 쓰기
+15. 기타 출력 형식 생성 (TrueHD/JamesDSP/Hangloose)
+
+#### 🌐 번역 추가
+모든 CLI 처리 메시지에 대한 번역 키 추가:
+- `cli_starting_brir_generation`: BRIR 생성 시작
+- `cli_creating_estimator`: 임펄스 응답 추정기 생성 중
+- `cli_running_room_correction`: 룸 보정 실행 중
+- `cli_equalizing`: 이퀄라이제이션 적용 중
+- `cli_writing_brirs`: BRIR 파일 쓰기 중
+- ... 및 기타 25개 이상의 메시지 키
+
+#### 🎨 사용자 경험
+- **투명성**: 무엇이 처리되고 있는지 명확히 표시
+- **신뢰성**: 프로그램이 멈춘 것처럼 보이지 않음
+- **진행 추적**: 얼마나 남았는지 시각적으로 확인 가능
+- **에러 가시성**: 오류 발생 시 즉시 확인 가능
+- **언어 지원**: 선택한 언어로 진행 상황 표시
+
+#### 🔧 파일 변경사항
+- **신규 파일**:
+  - `logger.py`: 통합 로깅 시스템
+
+- **수정 파일**:
+  - `impulcifer.py`: 67개 print 문을 logger 호출로 교체
+  - `modern_gui.py`: ProcessingDialog 클래스 추가, 스레드 기반 처리
+  - `locales/en.json`: 30개 CLI 메시지 번역 키 추가
+  - `locales/ko.json`: 30개 CLI 메시지 한국어 번역 추가
+
+#### 📝 코드 개선
+- 폰트 로딩 메시지 정리 (debug 레벨로 변경, 필요시만 출력)
+- 보간 경고 메시지 정리 (불필요한 출력 제거)
+- 헤드폰 보상 파일 경고 개선 (logger 사용)
+- TrueHD 변환 메시지 개선
+
+#### 🚀 성능
+- 멀티스레딩으로 GUI 응답성 유지
+- 로그 메시지 실시간 전달 (버퍼링 없음)
+- 진행률 계산 최적화
+
 ## 1.8.1 - 2025-11-14
 ### 완전한 GUI 현지화 - 모든 텍스트 번역 완료
 GUI의 **모든 하드코딩된 텍스트**를 번역 키로 교체하여 완전한 다국어 지원을 구현했습니다.
