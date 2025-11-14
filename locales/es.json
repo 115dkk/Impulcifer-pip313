@@ -193,5 +193,20 @@
 
   "cli_error_hp_file_missing": "Archivo de compensación de auriculares no encontrado: {file}",
   "cli_info_using_hp_file": "Usando archivo de compensación de auriculares: {file}",
-  "cli_info_converting_truehd": "Convirtiendo archivo TrueHD/MLP a WAV: {file}"
+  "cli_info_converting_truehd": "Convirtiendo archivo TrueHD/MLP a WAV: {file}",
+
+  "update_available_title": "Actualización disponible",
+  "update_available_message": "🎉 ¡Una nueva versión está disponible!",
+  "update_version_info": "Actual: {current} → Nueva: {latest}",
+  "update_release_notes": "Notas de la versión:",
+  "update_no_notes": "No hay notas de la versión disponibles.",
+  "update_button_update": "⬇️ Actualizar ahora",
+  "update_button_remind": "⏰ Recordármelo más tarde",
+  "update_button_skip": "❌ Omitir esta versión",
+  "update_downloading": "Descargando actualización...",
+  "update_downloading_progress": "Descargando: {percent}%",
+  "update_installing": "Instalando actualización...",
+  "update_error_download": "Error al descargar la actualización. Por favor, inténtelo más tarde.",
+  "update_error_install": "Error al iniciar la instalación. Por favor, descargue manualmente.",
+  "update_error_general": "Error de actualización: {error}"
 }
