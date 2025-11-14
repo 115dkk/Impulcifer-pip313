@@ -19,9 +19,10 @@ from constants import (
     TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER, AUTO_GENERATABLE_CHANNELS, HEXADECAGONAL_TRACK_ORDER
 )
 from channel_generation import (
-    generate_missing_channels, get_available_channels_for_layout, 
+    generate_missing_channels, get_available_channels_for_layout,
     create_truehd_layout_track_order, validate_channel_requirements
 )
+from logger import get_logger
 
 # PR3에서 추가된 import 문들
 import copy
@@ -106,7 +107,8 @@ def set_matplotlib_font():
                         font_name_pretendard = prop.get_name()
                         plt.rcParams['font.family'] = font_name_pretendard
                         font_loaded_pretendard = True
-                        print(f"Pretendard 폰트 로딩 성공 ({source_type}): {font_name_pretendard}")
+                        # Font loading success (debug level, not critical)
+                        pass
                         break
                 elif source_type in ['bundled (path)']:
                     with font_path as font_file_path:
@@ -115,7 +117,8 @@ def set_matplotlib_font():
                         font_name_pretendard = prop.get_name()
                         plt.rcParams['font.family'] = font_name_pretendard
                         font_loaded_pretendard = True
-                        print(f"Pretendard 폰트 로딩 성공 ({source_type}): {font_name_pretendard}")
+                        # Font loading success (debug level, not critical)
+                        pass
                         break
                 elif source_type == 'local':
                     fm.fontManager.addfont(font_path)
@@ -131,32 +134,35 @@ def set_matplotlib_font():
                     print(f"Pretendard 폰트 로딩 성공 ({source_type}): 시스템 설치된 폰트")
                     break
             except Exception as e:
-                print(f"Pretendard 폰트 로딩 실패 ({source_type}): {e}")
+                # Font loading failure (not critical, suppress message)
+                pass
                 continue
 
     except Exception as e:
-        print(f"Pretendard 폰트 검색 중 오류: {e}")
+        # Font search error (not critical, suppress)
+        pass
 
     # Pretendard 로딩 실패 시 시스템 기본 폰트 사용
     if not font_loaded_pretendard:
-        print("Pretendard 폰트를 찾을 수 없습니다. 시스템 기본 폰트를 사용합니다.")
+        # Pretendard font not found, using system default (suppress message)
+        pass
         if system == 'Windows':
             font_path_win = 'C:/Windows/Fonts/malgun.ttf'
             if os.path.exists(font_path_win):
                 font_prop = fm.FontProperties(fname=font_path_win)
                 plt.rcParams['font.family'] = font_prop.get_name()
-                print(f"시스템 폰트 사용: {font_prop.get_name()}")
+                pass  # System font loaded
             else:
                 plt.rcParams['font.family'] = 'Malgun Gothic'
-                print("시스템 폰트 사용: Malgun Gothic (fallback)")
+                pass  # Malgun Gothic fallback
         elif system == 'Darwin':
             plt.rcParams['font.family'] = 'AppleGothic'
-            print("시스템 폰트 사용: AppleGothic")
+            pass  # AppleGothic
         elif system == 'Linux':
             plt.rcParams['font.family'] = 'NanumGothic'
-            print("시스템 폰트 사용: NanumGothic")
+            pass  # NanumGothic
         else:
-            print("알 수 없는 시스템, matplotlib 기본 폰트 사용")
+            pass  # Unknown system, using matplotlib default
 
 def get_pretendard_font_for_gui():
     """GUI에서 사용할 Pretendard 폰트 경로를 반환합니다."""
@@ -202,7 +208,7 @@ def get_pretendard_font_for_gui():
             pass
             
     except Exception as e:
-        print(f"GUI용 Pretendard 폰트 검색 중 오류: {e}")
+        pass  # GUI font search error (not critical)
     
     return None
 
@@ -237,18 +243,22 @@ def _apply_cubic_interp(fr_obj, target_freqs, fallback_interpolate_method_ref, o
                 # print(f"Successfully applied cubic interpolation{desc}.") # 필요시 주석 해제
                 return True # 성공
             except ValueError as e:
-                print(f"ValueError during cubic interpolation{desc}: {e}. Using original interpolate.")
+                # Cubic interpolation failed, using fallback (suppress message)
+                pass
         else:
-            print(f"Warning: Not enough unique data points for cubic interpolation{desc}. Using original interpolate.")
+            # Not enough unique data points (suppress warning)
+            pass
     else:
-        print(f"Warning: Not enough data points for cubic interpolation{desc}. Using original interpolate.")
+        # Not enough data points for cubic interpolation (suppress warning)
+        pass
     
     # 큐빅 보간 실패 시 폴백
     try:
         fallback_interpolate_method_ref()
         # print(f"Fallback interpolation applied{desc}.") # 필요시 주석 해제
     except Exception as e_fallback:
-        print(f"Error in fallback interpolation{desc}: {e_fallback}")
+        # Error in fallback interpolation (suppress error)
+        pass
     return False # 실패 또는 폴백 사용
 
 def main(dir_path=None,
@@ -285,13 +295,47 @@ def main(dir_path=None,
          # TrueHD 레이아웃 관련 파라미터 추가
          output_truehd_layouts=False):
     """"""
+    logger = get_logger()
+
+    # Calculate total steps for progress tracking
+    total_steps = 10  # Base steps: estimator, target, hrir, normalize, crop, write base files, plot results
+    if do_room_correction:
+        total_steps += 1
+    if do_headphone_compensation:
+        total_steps += 1
+    if do_equalization:
+        total_steps += 1
+    if do_headphone_compensation or do_room_correction or do_equalization:
+        total_steps += 1  # Equalizing
+    if decay:
+        total_steps += 1
+    if channel_balance:
+        total_steps += 1
+    if plot:
+        total_steps += 5  # Pre/post plots + additional plots
+    if microphone_deviation_correction:
+        total_steps += 1
+    if interactive_plots:
+        total_steps += 1
+    if fs is not None:
+        total_steps += 1
+    if output_truehd_layouts:
+        total_steps += 1
+    if jamesdsp:
+        total_steps += 1
+    if hangloose:
+        total_steps += 1
+
+    logger.set_total_steps(total_steps)
+    logger.info(f"Starting BRIR generation with {total_steps} processing steps")
+
     if plot:
         try:
             import seaborn as sns
             sns.set_theme(style="whitegrid")
-            print("Seaborn style applied to plots.")
+            logger.debug("Seaborn style applied to plots")
         except ImportError:
-            print("Seaborn not installed, using default matplotlib style.")
+            logger.debug("Seaborn not installed, using default matplotlib style")
 
     if dir_path is None or not os.path.isdir(dir_path):
         raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
@@ -300,13 +344,13 @@ def main(dir_path=None,
     dir_path = os.path.abspath(dir_path)
 
     # Impulse response estimator
-    print('Creating impulse response estimator...')
+    logger.step('Creating impulse response estimator')
     estimator = open_impulse_response_estimator(dir_path, file_path=test_signal)
 
     # Room correction frequency responses
     room_frs = None
     if do_room_correction:
-        print('Running room correction...')
+        logger.step('Running room correction')
         _, room_frs = room_correction(
             estimator, dir_path,
             target=room_target,
@@ -320,40 +364,40 @@ def main(dir_path=None,
     # Headphone compensation frequency responses
     hp_left, hp_right = None, None
     if do_headphone_compensation:
-        print('Running headphone compensation...')
+        logger.step('Running headphone compensation')
         hp_left, hp_right = headphone_compensation(estimator, dir_path, headphone_compensation_file)
 
     # Equalization
     eq_left, eq_right = None, None
     if do_equalization:
-        print('Creating headphone equalization...')
+        logger.step('Creating headphone equalization')
         eq_left, eq_right = equalization(estimator, dir_path)
 
     # Bass boost and tilt
-    print('Creating frequency response target...')
+    logger.step('Creating frequency response target')
     target = create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt)
 
     # HRIR measurements
-    print('Opening binaural measurements...')
+    logger.step('Opening binaural measurements')
     hrir = open_binaural_measurements(estimator, dir_path)
 
     # Normalize gain
-    print('Normalizing gain...')
+    logger.step('Normalizing gain')
     applied_gain = hrir.normalize(peak_target=None if target_level is not None else -0.1, avg_target=target_level)
 
     # Write info and stats in readme (gain 값 전달 추가)
     readme_content = write_readme(os.path.join(dir_path, 'README.md'), hrir, fs, estimator, applied_gain)
     if readme_content:
-        print(readme_content)
+        logger.info(readme_content)
 
     if plot:
         # Plot graphs pre processing
         os.makedirs(os.path.join(dir_path, 'plots', 'pre'), exist_ok=True)
-        print('Plotting BRIR graphs before processing...')
+        logger.step('Plotting BRIR graphs before processing')
         hrir.plot(dir_path=os.path.join(dir_path, 'plots', 'pre'))
 
     # Crop noise and harmonics from the beginning
-    print('Cropping impulse responses...')
+    logger.step('Cropping impulse responses')
     hrir.crop_heads(head_ms=head_ms)
 
     # PR3에서 추가된 align_ipsilateral_all 호출 (항목 2)
@@ -370,7 +414,7 @@ def main(dir_path=None,
 
     # 마이크 착용 편차 보정 v2.0
     if microphone_deviation_correction:
-        print('Correcting microphone deviation v2.0...')
+        logger.step('Correcting microphone deviation v2.0')
         mic_deviation_plot_dir = os.path.join(dir_path, 'plots') if plot else None
         hrir.correct_microphone_deviation(
             correction_strength=mic_deviation_strength,
@@ -386,7 +430,7 @@ def main(dir_path=None,
 
     # Equalize all
     if do_headphone_compensation or do_room_correction or do_equalization:
-        print('Equalizing...')
+        logger.step('Equalizing')
         
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
@@ -430,7 +474,7 @@ def main(dir_path=None,
 
     # Adjust decay time
     if decay:
-        print('Adjusting decay time...')
+        logger.step('Adjusting decay time')
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
                 if speaker in decay:
@@ -438,11 +482,11 @@ def main(dir_path=None,
 
     # Correct channel balance
     if channel_balance is not None:
-        print('Correcting channel balance...')
+        logger.step('Correcting channel balance')
         hrir.correct_channel_balance(channel_balance)
 
     if plot:
-        print('Plotting BRIR graphs after processing...')
+        logger.step('Plotting BRIR graphs after processing')
         # Convolve test signal, re-plot waveform and spectrogram
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
@@ -451,25 +495,21 @@ def main(dir_path=None,
         hrir.plot(os.path.join(dir_path, 'plots', 'post'))
 
     # Plot results, always
-    print('Plotting results...')
+    logger.step('Plotting results')
     hrir.plot_result(os.path.join(dir_path, 'plots'))
 
     # PR4: 양이 응답 임펄스 오버레이 플롯 추가
     if plot:
-        print('Plotting interaural impulse overlay...')
+        logger.step('Plotting additional analysis graphs')
         hrir.plot_interaural_impulse_overlay(os.path.join(dir_path, 'plots', 'interaural_overlay'))
-        print('Plotting ILD...')
         hrir.plot_ild(os.path.join(dir_path, 'plots', 'ild'))
-        print('Plotting IPD...')
         hrir.plot_ipd(os.path.join(dir_path, 'plots', 'ipd'))
-        print('Plotting IACC...')
         hrir.plot_iacc(os.path.join(dir_path, 'plots', 'iacc'))
-        print('Plotting ETC...')
         hrir.plot_etc(os.path.join(dir_path, 'plots', 'etc'))
 
     # 인터랙티브 플롯 생성 (추가)
     if interactive_plots:
-        print('Generating interactive plots...')
+        logger.step('Generating interactive plots')
         interactive_plot_dir = os.path.join(dir_path, 'interactive_plots')
         os.makedirs(interactive_plot_dir, exist_ok=True)
         
@@ -491,27 +531,27 @@ def main(dir_path=None,
                     panel = TabPanel(child=plot_obj, title=title) # 수정: Panel -> TabPanel
                     panels.append(panel)
                 else:
-                    print(f"Skipping {title} plot as no data was generated.")
+                    logger.debug(f"Skipping {title} plot as no data was generated")
             except Exception as e:
-                print(f"Error generating interactive plot for {title}: {e}")
+                logger.warning(f"Error generating interactive plot for {title}: {e}")
 
         if panels:
             tabs = Tabs(tabs=panels, sizing_mode='stretch_both')
             output_html_path = os.path.join(interactive_plot_dir, 'interactive_summary.html')
             bokeh_output_file(output_html_path, title="Interactive Plot Summary") # bokeh_output_file 사용
             bokeh_save(tabs) # bokeh_save 사용
-            print(f'Interactive plot summary saved to {output_html_path}')
+            logger.success(f'Interactive plot summary saved to {output_html_path}')
         else:
-            print("No interactive plots were generated.")
+            logger.warning("No interactive plots were generated")
 
     # Re-sample
     if fs is not None and fs != hrir.fs:
-        print(f'Resampling BRIR to {fs} Hz')
+        logger.step(f'Resampling BRIR to {fs} Hz')
         hrir.resample(fs)
         hrir.normalize(peak_target=None if target_level is not None else -0.1, avg_target=target_level)
 
     # Write multi-channel WAV file with standard track order
-    print('Writing BRIRs...')
+    logger.step('Writing BRIRs')
     hrir.write_wav(os.path.join(dir_path, 'hrir.wav'))
 
     # Write multi-channel WAV file with HeSuVi track order
@@ -519,42 +559,42 @@ def main(dir_path=None,
 
     # TrueHD 레이아웃 출력 (새로 추가)
     if output_truehd_layouts:
-        print('Generating TrueHD layouts...')
-        
+        logger.step('Generating TrueHD layouts')
+
         # 필요한 채널들이 있는지 확인하고 없으면 자동 생성하는 로직 제거
         # if auto_generate_channels:
         #     generated_channels = generate_missing_channels(hrir, auto_generate_channels)
         #     if generated_channels:
-        #         print(f'Generated channels: {generated_channels}')
-        
+        #         logger.info(f'Generated channels: {generated_channels}')
+
         # 11채널 (7.0.4) 레이아웃 생성
         valid_11ch, count_11ch, msg_11ch = validate_channel_requirements(hrir, TRUEHD_11CH_ORDER, min_channels=8)
         if valid_11ch:
             available_11ch = get_available_channels_for_layout(hrir, TRUEHD_11CH_ORDER)
             track_order_11ch = create_truehd_layout_track_order(available_11ch)
-            
+
             output_path_11ch = os.path.join(dir_path, f'truehd_11ch_{len(available_11ch)}ch.wav')
             hrir.write_wav(output_path_11ch, track_order=track_order_11ch)
-            print(f'Generated 11-channel TrueHD layout: {output_path_11ch}')
+            logger.success(f'Generated 11-channel TrueHD layout: {output_path_11ch}')
         else:
-            print(f'Cannot generate 11-channel layout: {msg_11ch}')
-            
+            logger.warning(f'Cannot generate 11-channel layout: {msg_11ch}')
+
         # 13채널 (7.0.6) 레이아웃 생성
         valid_13ch, count_13ch, msg_13ch = validate_channel_requirements(hrir, TRUEHD_13CH_ORDER, min_channels=10)
         if valid_13ch:
             available_13ch = get_available_channels_for_layout(hrir, TRUEHD_13CH_ORDER)
             track_order_13ch = create_truehd_layout_track_order(available_13ch)
-            
+
             output_path_13ch = os.path.join(dir_path, f'truehd_13ch_{len(available_13ch)}ch.wav')
             hrir.write_wav(output_path_13ch, track_order=track_order_13ch)
-            print(f'Generated 13-channel TrueHD layout: {output_path_13ch}')
+            logger.success(f'Generated 13-channel TrueHD layout: {output_path_13ch}')
         else:
-            print(f'Cannot generate 13-channel layout: {msg_13ch}')
+            logger.warning(f'Cannot generate 13-channel layout: {msg_13ch}')
 
     # PR3 jamesdsp 로직 추가 (항목 6)
     if jamesdsp:
-        print('Generating jamesdsp.wav (FL/FR only, normalized to FL/FR)...')
-        
+        logger.step('Generating JamesDSP output')
+
         # 전체 HRIR 복사 후 FL/FR 외 모든 채널 제거
         dsp_hrir = copy.deepcopy(hrir)
         for sp in list(dsp_hrir.irs.keys()):
@@ -573,11 +613,11 @@ def main(dir_path=None,
         jd_order = ['FL-left', 'FL-right', 'FR-left', 'FR-right']
         out_path = os.path.join(dir_path, 'jamesdsp.wav')
         dsp_hrir.write_wav(out_path, track_order=jd_order)
-        print(f'JamesDSP IR file created: {out_path}')
+        logger.success(f'JamesDSP IR file created: {out_path}')
 
     # PR3 hangloose 로직 추가 (항목 7)
     if hangloose:
-        print('Generating Hangloose Convolver IR files...')
+        logger.step('Generating Hangloose Convolver output')
         output_dir = os.path.join(dir_path, 'Hangloose')
         os.makedirs(output_dir, exist_ok=True)
 
@@ -591,14 +631,16 @@ def main(dir_path=None,
             for other_sp in list(single_hrir.irs.keys()):
                 if other_sp != sp:
                     del single_hrir.irs[other_sp]
-            
+
             # 각 스피커에 대해 normalize를 다시 수행할지 여부는 PR의 의도에 따라 결정.
             # 여기서는 생략하고 원본 hrir의 정규화 상태를 따름.
 
             track_order = [f'{sp}-left', f'{sp}-right']
             out_path = os.path.join(output_dir, f'{sp}.wav')
             single_hrir.write_wav(out_path, track_order=track_order)
-            print(f'[Hangloose] Created: {out_path}')
+            logger.info(f'Created Hangloose file: {sp}.wav')
+
+        logger.success(f'Hangloose Convolver files created in {output_dir}')
         
         # PR3의 LFE 채널 생성 로직은 FL, FR을 기반으로 하므로, 필요시 여기에 추가 구현.
         # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:
@@ -631,7 +673,8 @@ def open_impulse_response_estimator(dir_path, file_path=None):
             if os.path.isfile(local_path):
                 file_path = local_path
             else:
-                print(f"경고: 테스트 신호 '{file_path}'({test_signal_name})를 찾을 수 없습니다. 로컬 파일을 사용합니다.")
+                logger = get_logger()
+                logger.warning(f"Test signal '{file_path}' ({test_signal_name}) not found. Using local file")
     
     if file_path is None:
         # Test signal not explicitly given, try Pickle first then WAV
@@ -667,8 +710,9 @@ def open_impulse_response_estimator(dir_path, file_path=None):
         
         if not is_truehd_file(file_path):
             raise ValueError(f"파일이 유효한 TrueHD/MLP 형식이 아닙니다: {file_path}")
-        
-        print(f"TrueHD/MLP 파일을 WAV로 변환 중: {file_path}")
+
+        logger = get_logger()
+        logger.info(f"Converting TrueHD/MLP file to WAV: {file_path}")
         temp_wav_path, channel_info = convert_truehd_to_wav(file_path)
         
         try:
@@ -695,7 +739,8 @@ def equalization(estimator, dir_path):
         - Right side FIR as Numpy array or FrequencyResponse or None
     """
     if os.path.isfile(os.path.join(dir_path, 'eq.wav')):
-        print('eq.wav is no longer supported, use eq.csv!')
+        logger = get_logger()
+        logger.warning('eq.wav is no longer supported, use eq.csv!')
     # Default for both sides
     eq_path = os.path.join(dir_path, 'eq.csv')
     eq_fr = None
@@ -770,18 +815,20 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
             actual_hp_file = os.path.join(dir_path, headphone_file_path)
         else:
             actual_hp_file = headphone_file_path
-        if not os.path.exists(actual_hp_file):
-            print(f"Warning: Specified headphone compensation file not found: {actual_hp_file}. Trying default 'headphones.wav'.")
+        logger = get_logger()
+
+    if not os.path.exists(actual_hp_file):
+            logger.warning(f"Specified headphone compensation file not found: {actual_hp_file}. Trying default 'headphones.wav'")
             actual_hp_file = os.path.join(dir_path, 'headphones.wav') # Fallback to default
     else:
         # Default to headphones.wav in the dir_path
         actual_hp_file = os.path.join(dir_path, 'headphones.wav')
 
     if not os.path.exists(actual_hp_file):
-        print(f"Error: Headphone compensation file not found: {actual_hp_file}")
+        logger.error(f"Headphone compensation file not found: {actual_hp_file}")
         return None, None # Or raise an error
-        
-    print(f"Using headphone compensation file: {actual_hp_file}")
+
+    logger.info(f"Using headphone compensation file: {actual_hp_file}")
     hp_irs.open_recording(actual_hp_file, speakers=['FL', 'FR'])
     hp_irs.write_wav(os.path.join(dir_path, 'headphone-responses.wav'))
 
