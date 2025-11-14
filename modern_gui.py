@@ -19,6 +19,8 @@ import impulcifer
 from constants import SPEAKER_LIST_PATTERN
 from localization import get_localization_manager, SUPPORTED_LANGUAGES
 from logger import get_logger, set_gui_callbacks
+from update_checker import UpdateChecker
+from updater import Updater
 
 # Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
@@ -132,6 +134,201 @@ class ProcessingDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+class UpdateDialog(ctk.CTkToplevel):
+    """Dialog to notify user about available updates"""
+
+    def __init__(self, parent, loc_manager, current_version: str, latest_version: str, download_url: str, release_notes: str = ""):
+        super().__init__(parent)
+        self.loc = loc_manager
+        self.current_version = current_version
+        self.latest_version = latest_version
+        self.download_url = download_url
+        self.release_notes = release_notes
+        self.user_choice = None  # Will be 'update', 'skip', or 'remind_later'
+
+        self.title(self.loc.get('update_available_title', default="Update Available"))
+        self.geometry("600x500")
+        self.transient(parent)
+        self.grab_set()
+
+        # Center the dialog
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (600 // 2)
+        y = (self.winfo_screenheight() // 2) - (500 // 2)
+        self.geometry(f"600x500+{x}+{y}")
+
+        # Configure grid
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        # Title and version info
+        title_frame = ctk.CTkFrame(self)
+        title_frame.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        title_frame.grid_columnconfigure(0, weight=1)
+
+        title_label = ctk.CTkLabel(
+            title_frame,
+            text=self.loc.get('update_available_message', default="A new version is available!"),
+            font=ctk.CTkFont(size=18, weight="bold")
+        )
+        title_label.grid(row=0, column=0, pady=(0, 10))
+
+        version_text = self.loc.get('update_version_info', default="Current: {current} → New: {latest}").format(
+            current=current_version,
+            latest=latest_version
+        )
+        version_label = ctk.CTkLabel(
+            title_frame,
+            text=version_text,
+            font=ctk.CTkFont(size=14)
+        )
+        version_label.grid(row=1, column=0)
+
+        # Release notes
+        notes_label = ctk.CTkLabel(
+            self,
+            text=self.loc.get('update_release_notes', default="Release Notes:"),
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        notes_label.grid(row=1, column=0, padx=20, pady=(0, 5), sticky="w")
+
+        self.notes_text = ctk.CTkTextbox(self, width=560, height=250)
+        self.notes_text.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.grid_rowconfigure(2, weight=1)
+
+        if release_notes:
+            self.notes_text.insert("1.0", release_notes)
+        else:
+            self.notes_text.insert("1.0", self.loc.get('update_no_notes', default="No release notes available."))
+
+        self.notes_text.configure(state="disabled")
+
+        # Progress frame (hidden initially)
+        self.progress_frame = ctk.CTkFrame(self)
+        self.progress_label = ctk.CTkLabel(
+            self.progress_frame,
+            text=self.loc.get('update_downloading', default="Downloading update..."),
+            font=ctk.CTkFont(size=12)
+        )
+        self.progress_label.pack(pady=(10, 5))
+
+        self.progress_bar = ctk.CTkProgressBar(self.progress_frame, width=560)
+        self.progress_bar.set(0)
+        self.progress_bar.pack(pady=(0, 10))
+
+        # Buttons
+        button_frame = ctk.CTkFrame(self)
+        button_frame.grid(row=3, column=0, padx=20, pady=20, sticky="ew")
+        button_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        self.update_button = ctk.CTkButton(
+            button_frame,
+            text=self.loc.get('update_button_update', default="Update Now"),
+            command=self.on_update,
+            fg_color="green",
+            hover_color="darkgreen"
+        )
+        self.update_button.grid(row=0, column=0, padx=5, sticky="ew")
+
+        self.remind_button = ctk.CTkButton(
+            button_frame,
+            text=self.loc.get('update_button_remind', default="Remind Me Later"),
+            command=self.on_remind_later
+        )
+        self.remind_button.grid(row=0, column=1, padx=5, sticky="ew")
+
+        self.skip_button = ctk.CTkButton(
+            button_frame,
+            text=self.loc.get('update_button_skip', default="Skip This Version"),
+            command=self.on_skip,
+            fg_color="gray",
+            hover_color="darkgray"
+        )
+        self.skip_button.grid(row=0, column=2, padx=5, sticky="ew")
+
+    def on_update(self):
+        """User chose to update now"""
+        self.user_choice = 'update'
+
+        # Hide buttons, show progress
+        for widget in self.winfo_children():
+            if isinstance(widget, ctk.CTkFrame) and widget != self.progress_frame:
+                for button in widget.winfo_children():
+                    if isinstance(button, ctk.CTkButton):
+                        button.configure(state="disabled")
+
+        self.progress_frame.grid(row=4, column=0, padx=20, pady=(0, 10), sticky="ew")
+
+        # Start download in separate thread
+        download_thread = threading.Thread(target=self.download_and_install, daemon=True)
+        download_thread.start()
+
+    def download_and_install(self):
+        """Download and install the update"""
+        try:
+            updater = Updater(self.download_url, self.latest_version)
+
+            # Download with progress callback
+            success = updater.download(progress_callback=self.update_progress)
+
+            if success:
+                # Update UI on main thread
+                self.after(0, lambda: self.progress_label.configure(
+                    text=self.loc.get('update_installing', default="Installing update...")
+                ))
+
+                # Install and restart
+                updater.install_and_restart()
+
+                # If we get here, installation failed to start
+                self.after(0, lambda: self.show_error(
+                    self.loc.get('update_error_install', default="Failed to start installation")
+                ))
+            else:
+                self.after(0, lambda: self.show_error(
+                    self.loc.get('update_error_download', default="Failed to download update")
+                ))
+
+        except Exception as e:
+            self.after(0, lambda: self.show_error(
+                self.loc.get('update_error_general', default="Update error: {error}").format(error=str(e))
+            ))
+
+    def update_progress(self, downloaded: int, total: int):
+        """Update progress bar"""
+        if total > 0:
+            progress = downloaded / total
+            percentage = int(progress * 100)
+
+            self.after(0, lambda: self.progress_bar.set(progress))
+            self.after(0, lambda: self.progress_label.configure(
+                text=self.loc.get('update_downloading_progress', default="Downloading: {percent}%").format(
+                    percent=percentage
+                )
+            ))
+
+    def show_error(self, message: str):
+        """Show error message"""
+        messagebox.showerror(
+            self.loc.get('error_title', default="Error"),
+            message
+        )
+        self.grab_release()
+        self.destroy()
+
+    def on_remind_later(self):
+        """User chose to be reminded later"""
+        self.user_choice = 'remind_later'
+        self.grab_release()
+        self.destroy()
+
+    def on_skip(self):
+        """User chose to skip this version"""
+        self.user_choice = 'skip'
+        self.grab_release()
+        self.destroy()
+
+
 class ModernImpulciferGUI:
     def __init__(self):
         # Initialize localization manager
@@ -150,6 +347,9 @@ class ModernImpulciferGUI:
         # Show language selection dialog on first run
         if self.loc.is_first_run():
             self.root.after(500, self.show_language_selection_dialog)
+
+        # Check for updates in background (after 2 seconds)
+        self.root.after(2000, self.check_for_updates_background)
 
         # Set window size and position
         window_width = 1000
@@ -1166,6 +1366,54 @@ class ModernImpulciferGUI:
         # Start processing thread
         thread = threading.Thread(target=run_processing, daemon=True)
         thread.start()
+
+    def get_current_version(self) -> str:
+        """Get current application version from pyproject.toml"""
+        try:
+            import tomllib
+        except ImportError:
+            try:
+                import tomli as tomllib
+            except ImportError:
+                return "1.8.5"  # Fallback version
+
+        try:
+            from pathlib import Path
+            pyproject_path = Path(__file__).parent / 'pyproject.toml'
+            if pyproject_path.exists():
+                with open(pyproject_path, 'rb') as f:
+                    data = tomllib.load(f)
+                    return data.get('project', {}).get('version', '1.8.5')
+        except Exception:
+            pass
+
+        return "1.8.5"  # Fallback
+
+    def check_for_updates_background(self):
+        """Check for updates in background thread"""
+        def check_updates():
+            try:
+                current_version = self.get_current_version()
+                checker = UpdateChecker(current_version)
+                has_update, latest_version, download_url = checker.check_for_updates()
+
+                if has_update and download_url:
+                    # Show update dialog on main thread
+                    release_notes = checker.get_release_notes() or ""
+                    self.root.after(0, lambda: self.show_update_dialog(
+                        current_version, latest_version, download_url, release_notes
+                    ))
+            except Exception as e:
+                # Silently fail - don't disturb user if update check fails
+                print(f"Update check failed: {e}")
+
+        # Run in background thread
+        update_thread = threading.Thread(target=check_updates, daemon=True)
+        update_thread.start()
+
+    def show_update_dialog(self, current_version: str, latest_version: str, download_url: str, release_notes: str):
+        """Show update notification dialog"""
+        UpdateDialog(self.root, self.loc, current_version, latest_version, download_url, release_notes)
 
     def show_language_selection_dialog(self):
         """Show language selection dialog on first run"""

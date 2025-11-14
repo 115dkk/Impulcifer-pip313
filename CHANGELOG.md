@@ -4,6 +4,60 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.9.0 - 2025-11-14
+### 🎉 자동 업데이트 시스템 추가
+프로그램이 자동으로 새 버전을 확인하고 설치할 수 있는 기능을 추가했습니다.
+
+#### ✨ 새로운 기능
+- **자동 업데이트 체크**: 프로그램 시작 시 GitHub 릴리즈에서 새 버전 자동 확인
+- **업데이트 알림 다이얼로그**: 새 버전 발견 시 릴리스 노트와 함께 알림 표시
+- **원클릭 업데이트**: "지금 업데이트" 버튼 클릭으로 자동 다운로드 및 설치
+- **진행 상황 표시**: 다운로드 진행률을 실시간으로 표시
+- **자동 재시작**: 설치 완료 후 새 버전 자동 실행
+
+#### 🔧 구현 세부사항
+- **`update_checker.py`**: GitHub API를 사용한 버전 체크
+  - Semantic versioning 비교
+  - 플랫폼별 다운로드 URL 자동 선택 (Windows/macOS/Linux)
+  - 릴리스 노트 자동 가져오기
+  - GitHub API rate limiting 처리
+
+- **`updater.py`**: 다운로드 및 설치 관리
+  - 백그라운드 다운로드 with 진행 상황 콜백
+  - Windows: Inno Setup 설치 파일 자동 실행
+  - macOS: DMG/PKG 파일 열기
+  - Linux: DEB/RPM/AppImage 지원
+
+- **`modern_gui.py`**: GUI 통합
+  - 시작 2초 후 백그라운드에서 업데이트 체크
+  - `UpdateDialog`: 업데이트 알림 및 관리 다이얼로그
+  - 사용자 선택: "지금 업데이트", "나중에 알림", "이 버전 건너뛰기"
+  - 현재 버전 자동 감지 (pyproject.toml에서 읽기)
+
+#### 🌍 다국어 지원
+- 영어 (`en.json`): 모든 업데이트 관련 문자열 추가
+- 한국어 (`ko.json`): 모든 업데이트 관련 문자열 번역
+- 업데이트 다이얼로그, 버튼, 메시지 모두 번역됨
+
+#### 📦 의존성 추가
+- **`packaging>=23.0`**: Semantic versioning 비교를 위해 추가
+
+#### ⚙️ 빌드 설정 업데이트
+- **Nuitka 빌드**: `update_checker`, `updater` 모듈 포함 추가
+- 업데이트 시스템이 빌드된 실행 파일에서도 정상 작동
+
+#### 💡 사용법
+1. 프로그램 시작 시 자동으로 업데이트 확인
+2. 새 버전이 있으면 다이얼로그가 자동으로 표시됨
+3. "지금 업데이트" 클릭 → 다운로드 및 설치 자동 진행
+4. "나중에 알림" 클릭 → 다음 실행 시 다시 확인
+5. "이 버전 건너뛰기" 클릭 → 해당 버전 무시
+
+#### 🔒 보안 및 안정성
+- GitHub API를 HTTPS로만 통신
+- 다운로드 실패 시 사용자에게 수동 다운로드 안내
+- 네트워크 오류 시 조용히 실패 (사용자 방해 안함)
+
 ## 1.8.5 - 2025-11-14
 ### Nuitka 빌드 설정 수정 - 번역 시스템 복구
 Nuitka 빌드에서 누락된 필수 모듈과 데이터를 추가하여 빌드된 프로그램의 번역 기능을 복구했습니다.

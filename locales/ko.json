@@ -182,5 +182,20 @@
 
   "cli_error_hp_file_missing": "헤드폰 보상 파일을 찾을 수 없습니다: {file}",
   "cli_info_using_hp_file": "헤드폰 보상 파일 사용: {file}",
-  "cli_info_converting_truehd": "TrueHD/MLP 파일을 WAV로 변환 중: {file}"
+  "cli_info_converting_truehd": "TrueHD/MLP 파일을 WAV로 변환 중: {file}",
+
+  "update_available_title": "업데이트 사용 가능",
+  "update_available_message": "🎉 새로운 버전을 사용할 수 있습니다!",
+  "update_version_info": "현재: {current} → 새 버전: {latest}",
+  "update_release_notes": "릴리스 노트:",
+  "update_no_notes": "릴리스 노트가 없습니다.",
+  "update_button_update": "⬇️ 지금 업데이트",
+  "update_button_remind": "⏰ 나중에 알림",
+  "update_button_skip": "❌ 이 버전 건너뛰기",
+  "update_downloading": "업데이트 다운로드 중...",
+  "update_downloading_progress": "다운로드 중: {percent}%",
+  "update_installing": "업데이트 설치 중...",
+  "update_error_download": "업데이트 다운로드 실패. 나중에 다시 시도해주세요.",
+  "update_error_install": "설치 시작 실패. 수동으로 다운로드해주세요.",
+  "update_error_general": "업데이트 오류: {error}"
 }

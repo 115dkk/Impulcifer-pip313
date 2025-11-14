@@ -182,5 +182,20 @@
 
   "cli_error_hp_file_missing": "Headphone compensation file not found: {file}",
   "cli_info_using_hp_file": "Using headphone compensation file: {file}",
-  "cli_info_converting_truehd": "Converting TrueHD/MLP file to WAV: {file}"
+  "cli_info_converting_truehd": "Converting TrueHD/MLP file to WAV: {file}",
+
+  "update_available_title": "Update Available",
+  "update_available_message": "🎉 A new version is available!",
+  "update_version_info": "Current: {current} → New: {latest}",
+  "update_release_notes": "Release Notes:",
+  "update_no_notes": "No release notes available.",
+  "update_button_update": "⬇️ Update Now",
+  "update_button_remind": "⏰ Remind Me Later",
+  "update_button_skip": "❌ Skip This Version",
+  "update_downloading": "Downloading update...",
+  "update_downloading_progress": "Downloading: {percent}%",
+  "update_installing": "Installing update...",
+  "update_error_download": "Failed to download update. Please try again later.",
+  "update_error_install": "Failed to start installation. Please download manually.",
+  "update_error_general": "Update error: {error}"
 }
