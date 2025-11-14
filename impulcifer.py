@@ -431,12 +431,16 @@ def main(dir_path=None,
     # Equalize all
     if do_headphone_compensation or do_room_correction or do_equalization:
         logger.step('Equalizing')
-        
+
+        # Optimization A1: Pre-generate common frequency array to reduce allocations
+        common_freq = FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
+
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
+                # Reuse pre-generated frequency array
                 fr = FrequencyResponse(
                     name=f'{speaker}-{side} eq',
-                    frequency=FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=estimator.fs / 2),
+                    frequency=common_freq.copy(),
                     raw=0, error=0
                 )
 
@@ -460,15 +464,22 @@ def main(dir_path=None,
                 # Remove bass and tilt target from the error
                 fr.error -= target.raw
 
-                # Smoothen
-                fr.smoothen(window_size=1/3, treble_window_size=1/5)
+                # Optimization A5: Remove redundant smoothen call
+                # (equalize() method calls smoothen internally)
+                # fr.smoothen(window_size=1/3, treble_window_size=1/5)
 
                 # Equalize
-                eq_result, _, _, _, _, _, _, _, _, _ = fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=estimator.fs / 2)
-                
+                eq_result, _, _, _, _, _, _, _, _, _ = fr.equalize(
+                    max_gain=40,
+                    treble_f_lower=10000,
+                    treble_f_upper=estimator.fs / 2,
+                    window_size=1/3,
+                    treble_window_size=1/5
+                )
+
                 # Create FIR filter and equalize
                 fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
-                
+
                 # 실제 FIR 필터 적용
                 ir.equalize(fir)
 
