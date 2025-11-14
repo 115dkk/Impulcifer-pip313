@@ -4,6 +4,46 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.8.5 - 2025-11-14
+### Nuitka 빌드 설정 수정 - 번역 시스템 복구
+Nuitka 빌드에서 누락된 필수 모듈과 데이터를 추가하여 빌드된 프로그램의 번역 기능을 복구했습니다.
+
+#### 🔴 긴급 수정 (번역 시스템 복구)
+- **`localization` 모듈 추가**: 번역 시스템 모듈이 빌드에 포함되지 않던 문제 해결
+- **`locales/` 디렉토리 추가**: 모든 번역 파일 (9개 언어) 이 빌드에 포함되도록 수정
+  - en.json, ko.json, fr.json, de.json, es.json, ja.json, zh-cn.json, zh-tw.json, ru.json
+
+#### 🔧 필수 모듈 추가
+- **`logger` 모듈 추가**: 로깅 시스템이 빌드에 포함되도록 수정
+- **`channel_generation` 모듈 추가**: 채널 생성 기능이 빌드에 포함되도록 수정
+
+#### 🗑️ 불필요한 모듈 제거
+- **`scipy.io.wavfile` 제거**: v1.8.4에서 코드에서 제거된 모듈을 빌드 설정에서도 제거
+
+#### ⚙️ 엔트리 포인트 수정
+- **자동 생성 엔트리 포인트 수정**: `gui` → `modern_gui` 로 변경
+  - 기존에는 legacy GUI를 호출하도록 자동 생성되었으나, modern GUI를 사용하도록 수정
+
+#### 📝 변경된 빌드 설정
+```python
+# build_nuitka.py에 추가된 항목:
+"--include-module=localization",   # 번역 시스템
+"--include-module=logger",         # 로깅 시스템
+"--include-module=channel_generation",  # 채널 생성
+"--include-data-dir=locales=locales",  # 번역 파일
+
+# 제거된 항목:
+# "--include-module=scipy.io.wavfile"  # 사용하지 않음
+```
+
+#### 🎯 영향
+- **이전 빌드 (v1.8.4 이하)**: 번역이 작동하지 않았음
+- **현재 빌드 (v1.8.5)**: 모든 번역 기능이 정상 작동
+
+#### ⚠️ 참고
+- Legacy GUI (`gui` 모듈) 는 호환성을 위해 계속 포함됨
+- numpy, matplotlib 플러그인은 안정성을 위해 유지
+
 ## 1.8.4 - 2025-11-14
 ### 코드 품질 개선 - 린터 에러 수정
 모든 주요 린터 에러를 수정하여 코드 품질을 개선했습니다.

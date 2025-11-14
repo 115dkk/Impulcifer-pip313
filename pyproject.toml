@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "1.8.4"
+version = "1.8.5"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13.2 호환 버전: 115dkk", email="" },
