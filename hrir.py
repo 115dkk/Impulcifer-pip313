@@ -20,6 +20,15 @@ from bokeh.models import HoverTool, ColumnDataSource, Range1d
 from bokeh.palettes import Category10
 from bokeh.layouts import gridplot
 
+# Python 3.14 병렬 처리 지원
+try:
+    from parallel_processing import parallel_process_dict, is_free_threaded_available
+    PARALLEL_PROCESSING_AVAILABLE = True
+except ImportError:
+    PARALLEL_PROCESSING_AVAILABLE = False
+    parallel_process_dict = None
+    is_free_threaded_available = lambda: False
+
 
 class HRIR:
     def __init__(self, estimator):
@@ -374,11 +383,28 @@ class HRIR:
         # 전체 정규화 gain만 출력 (항목 8)
         print(f">>>>>>>>> Applied a normalization gain of {gain:.2f} dB to all channels")
 
-        # Scale impulse responses
-        for speaker, pair in self.irs.items():
-            for ir in pair.values():
-                ir.data *= 10 ** (gain / 20)
-        
+        # Scale impulse responses (Python 3.14 병렬 처리 적용)
+        gain_scalar = 10 ** (gain / 20)
+
+        if PARALLEL_PROCESSING_AVAILABLE and len(self.irs) > 4:
+            # 병렬 처리: 각 스피커 채널에 gain 적용
+            def apply_gain_to_pair(speaker, pair):
+                """각 스피커 채널에 gain을 적용"""
+                for ir in pair.values():
+                    ir.data *= gain_scalar
+                return pair
+
+            # 병렬 실행
+            self.irs = parallel_process_dict(apply_gain_to_pair, self.irs, use_threads=True)
+
+            if is_free_threaded_available():
+                print(f"  🚀 Free-Threaded 병렬 정규화 완료 ({len(self.irs)} 채널)")
+        else:
+            # 순차 처리 (채널 수가 적거나 병렬 처리 모듈 없음)
+            for speaker, pair in self.irs.items():
+                for ir in pair.values():
+                    ir.data *= gain_scalar
+
         return gain # 적용된 게인 값 반환
 
     def crop_heads(self, head_ms=1):
@@ -885,9 +911,25 @@ class HRIR:
         Returns:
             None
         """
-        for speaker, pair in self.irs.items():
-            for side, ir in pair.items():
-                ir.resample(fs)
+        if PARALLEL_PROCESSING_AVAILABLE and len(self.irs) > 4:
+            # 병렬 처리: 각 스피커 채널 리샘플링
+            def resample_pair(speaker, pair):
+                """각 스피커 채널을 리샘플링"""
+                for side, ir in pair.items():
+                    ir.resample(fs)
+                return pair
+
+            # 병렬 실행
+            self.irs = parallel_process_dict(resample_pair, self.irs, use_threads=True)
+
+            if is_free_threaded_available():
+                print(f"  🚀 Free-Threaded 병렬 리샘플링 완료 ({len(self.irs)} 채널, {self.fs}Hz → {fs}Hz)")
+        else:
+            # 순차 처리
+            for speaker, pair in self.irs.items():
+                for side, ir in pair.items():
+                    ir.resample(fs)
+
         self.fs = fs
 
     def align_ipsilateral_all(self,

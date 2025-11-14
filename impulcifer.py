@@ -40,6 +40,15 @@ import matplotlib.font_manager as fm
 import platform
 import importlib.resources # 패키지 리소스 접근을 위해 추가
 
+# Python 3.14 병렬 처리 지원
+try:
+    from parallel_processing import parallel_process_dict, is_free_threaded_available
+    PARALLEL_PROCESSING_AVAILABLE = True
+except ImportError:
+    PARALLEL_PROCESSING_AVAILABLE = False
+    parallel_process_dict = None
+    is_free_threaded_available = lambda: False
+
 # 운영체제별 기본 폰트 설정
 def set_matplotlib_font():
     system = platform.system()
@@ -434,53 +443,109 @@ def main(dir_path=None,
         # Optimization A1: Pre-generate common frequency array to reduce allocations
         common_freq = FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
 
-        for speaker, pair in hrir.irs.items():
-            for side, ir in pair.items():
-                # Reuse pre-generated frequency array
-                fr = FrequencyResponse(
-                    name=f'{speaker}-{side} eq',
-                    frequency=common_freq.copy(),
-                    raw=0, error=0
-                )
+        if PARALLEL_PROCESSING_AVAILABLE and len(hrir.irs) > 4:
+            # Python 3.14 병렬 처리: 각 스피커 채널 이퀄라이제이션
+            logger.info(f"  🚀 병렬 이퀄라이제이션 시작 ({len(hrir.irs)} 채널)")
 
-                # 룸 보정 적용
-                if room_frs is not None and speaker in room_frs and side in room_frs[speaker]:
-                    # Room correction
-                    fr.error += room_frs[speaker][side].error
+            def equalize_speaker_pair(speaker, pair):
+                """각 스피커 채널에 이퀄라이제이션 적용"""
+                for side, ir in pair.items():
+                    # Reuse pre-generated frequency array
+                    fr = FrequencyResponse(
+                        name=f'{speaker}-{side} eq',
+                        frequency=common_freq.copy(),
+                        raw=0, error=0
+                    )
 
-                # 헤드폰 보정 적용
-                hp_eq = hp_left if side == 'left' else hp_right
-                if hp_eq is not None:
-                    # Headphone compensation
-                    fr.error += hp_eq.error
+                    # 룸 보정 적용
+                    if room_frs is not None and speaker in room_frs and side in room_frs[speaker]:
+                        fr.error += room_frs[speaker][side].error
 
-                # 추가 EQ 적용
-                eq = eq_left if side == 'left' else eq_right
-                if eq is not None and isinstance(eq, FrequencyResponse):
-                    # Equalization
-                    fr.error += eq.error
+                    # 헤드폰 보정 적용
+                    hp_eq = hp_left if side == 'left' else hp_right
+                    if hp_eq is not None:
+                        fr.error += hp_eq.error
 
-                # Remove bass and tilt target from the error
-                fr.error -= target.raw
+                    # 추가 EQ 적용
+                    eq = eq_left if side == 'left' else eq_right
+                    if eq is not None and isinstance(eq, FrequencyResponse):
+                        fr.error += eq.error
 
-                # Optimization A5: Remove redundant smoothen call
-                # (equalize() method calls smoothen internally)
-                # fr.smoothen(window_size=1/3, treble_window_size=1/5)
+                    # Remove bass and tilt target from the error
+                    fr.error -= target.raw
 
-                # Equalize
-                eq_result, _, _, _, _, _, _, _, _, _ = fr.equalize(
-                    max_gain=40,
-                    treble_f_lower=10000,
-                    treble_f_upper=estimator.fs / 2,
-                    window_size=1/3,
-                    treble_window_size=1/5
-                )
+                    # Equalize
+                    eq_result, _, _, _, _, _, _, _, _, _ = fr.equalize(
+                        max_gain=40,
+                        treble_f_lower=10000,
+                        treble_f_upper=estimator.fs / 2,
+                        window_size=1/3,
+                        treble_window_size=1/5
+                    )
 
-                # Create FIR filter and equalize
-                fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
+                    # Create FIR filter and equalize
+                    fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
 
-                # 실제 FIR 필터 적용
-                ir.equalize(fir)
+                    # 실제 FIR 필터 적용
+                    ir.equalize(fir)
+
+                return pair
+
+            # 병렬 실행
+            hrir.irs = parallel_process_dict(equalize_speaker_pair, hrir.irs, use_threads=True)
+
+            if is_free_threaded_available():
+                logger.info(f"  ✅ Free-Threaded 병렬 이퀄라이제이션 완료")
+
+        else:
+            # 순차 처리 (기존 코드)
+            for speaker, pair in hrir.irs.items():
+                for side, ir in pair.items():
+                    # Reuse pre-generated frequency array
+                    fr = FrequencyResponse(
+                        name=f'{speaker}-{side} eq',
+                        frequency=common_freq.copy(),
+                        raw=0, error=0
+                    )
+
+                    # 룸 보정 적용
+                    if room_frs is not None and speaker in room_frs and side in room_frs[speaker]:
+                        # Room correction
+                        fr.error += room_frs[speaker][side].error
+
+                    # 헤드폰 보정 적용
+                    hp_eq = hp_left if side == 'left' else hp_right
+                    if hp_eq is not None:
+                        # Headphone compensation
+                        fr.error += hp_eq.error
+
+                    # 추가 EQ 적용
+                    eq = eq_left if side == 'left' else eq_right
+                    if eq is not None and isinstance(eq, FrequencyResponse):
+                        # Equalization
+                        fr.error += eq.error
+
+                    # Remove bass and tilt target from the error
+                    fr.error -= target.raw
+
+                    # Optimization A5: Remove redundant smoothen call
+                    # (equalize() method calls smoothen internally)
+                    # fr.smoothen(window_size=1/3, treble_window_size=1/5)
+
+                    # Equalize
+                    eq_result, _, _, _, _, _, _, _, _, _ = fr.equalize(
+                        max_gain=40,
+                        treble_f_lower=10000,
+                        treble_f_upper=estimator.fs / 2,
+                        window_size=1/3,
+                        treble_window_size=1/5
+                    )
+
+                    # Create FIR filter and equalize
+                    fir = fr.minimum_phase_impulse_response(fs=estimator.fs, normalize=False, f_res=5)
+
+                    # 실제 FIR 필터 적용
+                    ir.equalize(fir)
 
     # Adjust decay time
     if decay:
