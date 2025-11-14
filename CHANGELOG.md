@@ -4,6 +4,47 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.8.4 - 2025-11-14
+### 코드 품질 개선 - 린터 에러 수정
+모든 주요 린터 에러를 수정하여 코드 품질을 개선했습니다.
+
+#### 🔧 수정 사항
+- **F401 (Unused imports)**: 사용하지 않는 import 제거
+  - `logger.py`: `sys` import 제거
+  - `test_suite.py`: `FrequencyResponse` import 제거
+  - `impulcifer.py`: `scipy.io.wavfile` import 제거
+  - `utils.py`: 사용하지 않는 `Path` import 제거 후 실제 사용 확인하여 복원
+
+- **F541 (f-strings without placeholders)**: 불필요한 f-string을 일반 문자열로 변경
+  - `hrir.py`: 20개 이상의 f-string 수정
+  - 플레이스홀더가 없는 f-string을 일반 문자열로 변환
+
+- **E722 (Bare except)**: 모든 bare except를 `except Exception`으로 변경
+  - `impulcifer.py`: 2개 수정
+  - `localization.py`: 3개 수정
+  - `modern_gui.py`: 5개 수정
+  - `utils.py`: 1개 수정
+  - SystemExit, KeyboardInterrupt 등을 잘못 잡지 않도록 개선
+
+- **E701/E702 (Multiple statements on one line)**: 한 줄에 여러 문장 분리
+  - `hrir.py`: 9개의 복합 문장을 여러 줄로 분리
+  - 가독성 및 디버깅 용이성 향상
+
+- **E721 (Type comparison)**: `type() ==` 를 `isinstance()`로 변경
+  - `hrir.py`: 4개 수정
+  - `impulcifer.py`: 1개 수정
+  - 상속을 고려한 올바른 타입 체크
+
+#### ⚙️ 린터 설정 개선
+- **Jupyter notebook 제외**: `pyproject.toml`에 Ruff/Flake8 설정 추가
+  - `research/**/*` 디렉토리 제외
+  - `*.ipynb` 파일 제외
+  - 연구용 노트북은 린팅 대상에서 제외
+
+#### ✅ 테스트
+- 모든 단위 테스트 통과 (14 passed, 2 skipped)
+- 코드 동작에 영향 없이 품질만 개선
+
 ## 1.8.3 - 2025-11-14
 ### 번역 시스템 버그 수정 및 UI 개선
 v1.8.2에서 발생한 번역 관련 버그들을 수정하고 UI를 개선했습니다.

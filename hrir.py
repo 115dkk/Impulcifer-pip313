@@ -58,37 +58,37 @@ class HRIR:
             raise ValueError('Sampling rate of recording must match sampling rate of test signal.')
 
         # Debug information
-        print(f">>>>>>>>> Recording Analysis Debug Info:")
+        print(">>>>>>>>> Recording Analysis Debug Info:")
         print(f"  File: {file_path}")
         print(f"  Recording shape: {recording.shape}")
         print(f"  Requested speakers: {speakers}")
         print(f"  Side: {side}")
         print(f"  Silence length: {silence_length} seconds")
-        print(f"  Estimator info:")
+        print("  Estimator info:")
         print(f"    Length: {len(self.estimator)} samples ({len(self.estimator)/self.fs:.2f} seconds)")
         print(f"    Sample rate: {self.estimator.fs} Hz")
         print(f"    Type: {type(self.estimator).__name__}")
         if hasattr(self.estimator, 'test_signal') and self.estimator.test_signal is not None:
             print(f"    Test signal length: {len(self.estimator.test_signal)} samples ({len(self.estimator.test_signal)/self.estimator.fs:.2f} seconds)")
         else:
-            print(f"    Test signal: Not available or None")
-        
+            print("    Test signal: Not available or None")
+
         # Calculate expected recording length
         expected_length_with_silence = silence_length + len(self.estimator)
         print(f"  Expected minimum recording length: {expected_length_with_silence} samples ({expected_length_with_silence/self.fs:.2f} seconds)")
         print(f"  Actual recording length: {recording.shape[1]} samples ({recording.shape[1]/self.fs:.2f} seconds)")
         length_difference = recording.shape[1] - expected_length_with_silence
         print(f"  Length difference: {length_difference} samples ({length_difference/self.fs:.2f} seconds)")
-        
+
         if length_difference < 0:
             print(f"  WARNING: Recording is {abs(length_difference)} samples ({abs(length_difference)/self.fs:.2f} seconds) too short!")
-            print(f"  This could be caused by:")
-            print(f"    1. Recording stopped too early")
-            print(f"    2. Wrong test signal file used")
-            print(f"    3. Estimator was created with different parameters")
-        
+            print("  This could be caused by:")
+            print("    1. Recording stopped too early")
+            print("    2. Wrong test signal file used")
+            print("    3. Estimator was created with different parameters")
+
         # Analyze each channel for actual content
-        print(f"  Channel content analysis:")
+        print("  Channel content analysis:")
         for ch in range(recording.shape[0]):
             max_val = np.max(np.abs(recording[ch, :]))
             rms_val = np.sqrt(np.mean(recording[ch, :] ** 2))
@@ -126,7 +126,7 @@ class HRIR:
         # Adjust column_size if it exceeds available recording length
         if column_size > recording.shape[1]:
             print(f"  WARNING: Calculated column_size ({column_size}) exceeds recording length ({recording.shape[1]})")
-            print(f"  This suggests the recording was too short or estimator is longer than expected")
+            print("  This suggests the recording was too short or estimator is longer than expected")
             
             # Try to use the entire available length as a single column
             if n_columns <= 1:
@@ -155,7 +155,7 @@ class HRIR:
         
         if not columns:
             # Try fallback options for short recordings
-            print(f"  Attempting fallback solutions for short recording...")
+            print("  Attempting fallback solutions for short recording...")
             
             # Option 1: Reduce silence length
             if silence_length > 0:
@@ -188,8 +188,8 @@ class HRIR:
             
             # Option 2: If still no columns, try using available length even if shorter than estimator
             if not columns and recording.shape[1] > len(self.estimator) * 0.8:  # At least 80% of estimator length
-                print(f"  Fallback 2: Using available recording length even though it's shorter than estimator")
-                print(f"  WARNING: This may result in reduced impulse response quality")
+                print("  Fallback 2: Using available recording length even though it's shorter than estimator")
+                print("  WARNING: This may result in reduced impulse response quality")
                 
                 available_length = recording.shape[1]
                 if n_columns == 1:
@@ -270,12 +270,12 @@ class HRIR:
                     )
             i += tracks_k
 
-        print(f"  Speaker-Track mapping:")
+        print("  Speaker-Track mapping:")
         for mapping in speaker_track_mapping:
             print(f"    {mapping}")
-            
+
         print(f"  Final processed speakers: {list(self.irs.keys())}")
-        print(f">>>>>>>>> Recording Analysis Complete")
+        print(">>>>>>>>> Recording Analysis Complete")
 
     def write_wav(self, file_path, track_order=None, bit_depth=32):
         """Writes impulse responses to a WAV file
@@ -418,8 +418,8 @@ class HRIR:
                     # There is something wrong with the measurement
                     warnings.warn(f'Warning: {speaker} measurement has lower delay to left ear than to right ear. '
                                   f'{speaker} should be at the right side of the head so the sound should arrive first '
-                                  f'in the right ear. This is usually a problem with the measurement process or the '
-                                  f'speaker order given is not correct. Detected delay difference is '
+                                  'in the right ear. This is usually a problem with the measurement process or the '
+                                  'speaker order given is not correct. Detected delay difference is '
                                   f'{itd * 1000:.4f} milliseconds.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
@@ -435,8 +435,8 @@ class HRIR:
                     # There si something wrong with the measurement
                     warnings.warn(f'Warning: {speaker} measurement has lower delay to right ear than to left ear. '
                                   f'{speaker} should be at the left side of the head so the sound should arrive first '
-                                  f'in the left ear. This is usually a problem with the measurement process or the '
-                                  f'speaker order given is not correct. Detected delay difference is '
+                                  'in the left ear. This is usually a problem with the measurement process or the '
+                                  'speaker order given is not correct. Detected delay difference is '
                                   f'{itd * 1000:.4f} milliseconds.')
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
@@ -726,7 +726,7 @@ class HRIR:
                 else:
                     skipped_speakers.append(speaker)
                     
-            print(f"마이크 편차 보정 완료:")
+            print("마이크 편차 보정 완료:")
             print(f"  - 보정 적용: {len(corrected_speakers)}개 스피커 ({', '.join(corrected_speakers)})")
             if skipped_speakers:
                 print(f"  - 보정 건너뜀: {len(skipped_speakers)}개 스피커 ({', '.join(skipped_speakers)}) - 유의미한 편차 없음")
@@ -829,7 +829,7 @@ class HRIR:
         ax.legend(['Left raw', 'Right raw', 'Left smoothed', 'Right smoothed', 'Difference'])
 
         # Save figures
-        file_path = os.path.join(dir_path, f'results.png')
+        file_path = os.path.join(dir_path, 'results.png')
         
         # Ensure the directory exists before saving
         os.makedirs(dir_path, exist_ok=True)
@@ -853,13 +853,13 @@ class HRIR:
         Returns:
             None
         """
-        if type(fir) == list:
+        if isinstance(fir, list):
             # Turn list (list|array|ImpulseResponse) into Numpy array
-            if type(fir[0]) == np.ndarray:
+            if isinstance(fir[0], np.ndarray):
                 fir = np.vstack(fir)
-            elif type(fir[0]) == list:
+            elif isinstance(fir[0], list):
                 fir = np.array(fir)
-            elif type(fir[0]) == ImpulseResponse:
+            elif isinstance(fir[0], ImpulseResponse):
                 if len(fir) > 1:
                     fir = np.vstack([fir[0].data, fir[1].data])
                 else:
@@ -1200,19 +1200,26 @@ class HRIR:
 
             ild_values = []
             for f_low, f_high in freq_bands:
-                if f_high > self.fs / 2: f_high = self.fs / 2
-                if f_low >= f_high: ild_values.append(np.nan); continue
+                if f_high > self.fs / 2:
+                    f_high = self.fs / 2
+                if f_low >= f_high:
+                    ild_values.append(np.nan)
+                    continue
 
                 fft_len = next_fast_len(max(len(ir_left.data), len(ir_right.data)))
                 data_l_sq = ir_left.data.squeeze()
                 data_r_sq = ir_right.data.squeeze()
-                if data_l_sq.ndim > 1 or data_r_sq.ndim > 1: ild_values.append(np.nan); continue
-                
+                if data_l_sq.ndim > 1 or data_r_sq.ndim > 1:
+                    ild_values.append(np.nan)
+                    continue
+
                 fft_l_full = fft(data_l_sq, n=fft_len)
                 fft_r_full = fft(data_r_sq, n=fft_len)
                 freqs = np.fft.fftfreq(fft_len, d=1/self.fs)
                 band_idx = np.where((freqs >= f_low) & (freqs < f_high))[0]
-                if not len(band_idx): ild_values.append(np.nan); continue
+                if not len(band_idx):
+                    ild_values.append(np.nan)
+                    continue
                 
                 power_l = np.sum(np.abs(fft_l_full[band_idx])**2)
                 power_r = np.sum(np.abs(fft_r_full[band_idx])**2)
@@ -1275,19 +1282,26 @@ class HRIR:
 
             ipd_values = []
             for f_low, f_high in freq_bands:
-                if f_high > self.fs / 2: f_high = self.fs / 2
-                if f_low >= f_high: ipd_values.append(np.nan); continue
+                if f_high > self.fs / 2:
+                    f_high = self.fs / 2
+                if f_low >= f_high:
+                    ipd_values.append(np.nan)
+                    continue
 
                 fft_len = next_fast_len(max(len(ir_left.data), len(ir_right.data)))
                 data_l_sq = ir_left.data.squeeze()
                 data_r_sq = ir_right.data.squeeze()
-                if data_l_sq.ndim > 1 or data_r_sq.ndim > 1: ipd_values.append(np.nan); continue
-                
+                if data_l_sq.ndim > 1 or data_r_sq.ndim > 1:
+                    ipd_values.append(np.nan)
+                    continue
+
                 fft_l_full = fft(data_l_sq, n=fft_len)
                 fft_r_full = fft(data_r_sq, n=fft_len)
                 freqs = np.fft.fftfreq(fft_len, d=1/self.fs)
                 band_idx = np.where((freqs >= f_low) & (freqs < f_high))[0]
-                if not len(band_idx): ipd_values.append(np.nan); continue
+                if not len(band_idx):
+                    ipd_values.append(np.nan)
+                    continue
                 
                 complex_sum_l = np.sum(fft_l_full[band_idx])
                 complex_sum_r = np.sum(fft_r_full[band_idx])
@@ -1353,9 +1367,15 @@ class HRIR:
             norm_r = data_r_sq / (np.sqrt(np.mean(data_r_sq**2)) + 1e-12)
             
             len_diff = len(norm_l) - len(norm_r)
-            if len_diff > 0: norm_r_pad = np.pad(norm_r, (0, len_diff), 'constant'); norm_l_pad = norm_l
-            elif len_diff < 0: norm_l_pad = np.pad(norm_l, (0, -len_diff), 'constant'); norm_r_pad = norm_r
-            else: norm_l_pad = norm_l; norm_r_pad = norm_r
+            if len_diff > 0:
+                norm_r_pad = np.pad(norm_r, (0, len_diff), 'constant')
+                norm_l_pad = norm_l
+            elif len_diff < 0:
+                norm_l_pad = np.pad(norm_l, (0, -len_diff), 'constant')
+                norm_r_pad = norm_r
+            else:
+                norm_l_pad = norm_l
+                norm_r_pad = norm_r
 
             correlation = signal.correlate(norm_l_pad, norm_r_pad, mode='full')
             lags = signal.correlation_lags(len(norm_l_pad), len(norm_r_pad), mode='full')

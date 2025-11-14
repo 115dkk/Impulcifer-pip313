@@ -73,7 +73,7 @@ class LocalizationManager:
                 for loc_code, lang_code in LOCALE_MAPPING.items():
                     if system_locale.startswith(loc_code):
                         return lang_code
-        except:
+        except Exception:
             pass
 
         # Default to English if detection fails
@@ -85,7 +85,7 @@ class LocalizationManager:
             try:
                 with open(self.settings_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
-            except:
+            except Exception:
                 pass
         return {}
 
@@ -135,7 +135,7 @@ class LocalizationManager:
         if kwargs:
             try:
                 text = text.format(**kwargs)
-            except:
+            except Exception:
                 pass
 
         return text

@@ -92,7 +92,7 @@ class ProcessingDialog(ctk.CTkToplevel):
             self.progress_bar.set(value / 100.0)
             self.progress_label.configure(text=f"{value}% - {message}" if message else f"{value}%")
             self.update()
-        except:
+        except Exception:
             pass
 
     def add_log(self, level: str, message: str):
@@ -111,7 +111,7 @@ class ProcessingDialog(ctk.CTkToplevel):
             self.log_text.insert("end", f"{prefix}{message}\n")
             self.log_text.see("end")
             self.update()
-        except:
+        except Exception:
             pass
 
     def mark_complete(self, success: bool = True):
@@ -871,7 +871,7 @@ class ModernImpulciferGUI:
                     text = f"Recording with {channel_count} channels ({speakers_count} speakers × 2 ears). Make sure your filename matches the speaker configuration."
                 else:
                     text = "Enter valid channel count (recommended: 14, 22, or 26)"
-            except:
+            except Exception:
                 text = "Enter valid channel count (recommended: 14, 22, or 26)"
         else:
             self.channels_entry.configure(state="disabled")
@@ -952,7 +952,7 @@ class ModernImpulciferGUI:
             # Convert to relative path if possible
             try:
                 filename = os.path.relpath(filename, os.getcwd())
-            except:
+            except Exception:
                 pass
             var.set(filename)
 
@@ -966,7 +966,7 @@ class ModernImpulciferGUI:
             # Convert to relative path if possible
             try:
                 dirname = os.path.relpath(dirname, os.getcwd())
-            except:
+            except Exception:
                 pass
             var.set(dirname)
 

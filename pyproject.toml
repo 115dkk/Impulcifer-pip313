@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "1.8.3"
+version = "1.8.4"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13.2 호환 버전: 115dkk", email="" },
@@ -91,4 +91,26 @@ markers = [
 testpaths = ["test_suite.py"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
-python_functions = ["test_*"] 
+python_functions = ["test_*"]
+
+# Ruff linter 설정
+[tool.ruff]
+exclude = [
+    "research/**/*",
+    "*.ipynb",
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+]
+
+# Flake8 대체 설정 (ruff가 없는 경우를 위해)
+[tool.flake8]
+exclude = [
+    "research",
+    "*.ipynb",
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+] 

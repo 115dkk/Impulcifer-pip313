@@ -5,7 +5,6 @@ Unified logging system for Impulcifer
 Supports both CLI output and GUI callbacks with localization
 """
 
-import sys
 from typing import Callable, Optional, TYPE_CHECKING
 from enum import Enum
 

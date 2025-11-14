@@ -16,7 +16,6 @@ from pathlib import Path
 try:
     from microphone_deviation_correction import MicrophoneDeviationCorrector
     from impulse_response import ImpulseResponse
-    from frequency_response import FrequencyResponse
 except ImportError:
     # 패키지가 설치되지 않은 경우 현재 디렉토리에서 임포트
     sys.path.insert(0, str(Path(__file__).parent))
