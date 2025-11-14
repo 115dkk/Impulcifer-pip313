@@ -7,9 +7,7 @@ Python 3.14 Free-Threaded 성능 측정
 """
 
 import time
-import sys
-import os
-from parallel_processing import get_python_threading_info, is_free_threaded_available
+from parallel_processing import get_python_threading_info
 
 def print_header():
     """벤치마크 헤더 출력"""
@@ -79,7 +77,7 @@ def benchmark_normalize():
 
         avg_time = sum(times) / len(times)
         print(f"\n평균 시간: {avg_time:.4f}s")
-        print(f"✅ Normalize 벤치마크 완료\n")
+        print("✅ Normalize 벤치마크 완료\n")
 
     except Exception as e:
         print(f"❌ 벤치마크 실패: {e}\n")
@@ -120,7 +118,7 @@ def benchmark_equalization():
         # 순차 처리
         print("\n순차 처리 벤치마크...")
         start_time = time.time()
-        sequential_result = {
+        {
             speaker: simulate_eq_channel(speaker, data)
             for speaker, data in test_data.items()
         }
@@ -130,7 +128,7 @@ def benchmark_equalization():
         # 병렬 처리
         print("\n병렬 처리 벤치마크...")
         start_time = time.time()
-        parallel_result = parallel_process_dict(
+        parallel_process_dict(
             simulate_eq_channel,
             test_data,
             use_threads=True
@@ -150,7 +148,7 @@ def benchmark_equalization():
             print("⚠️  병렬 처리 오버헤드로 인한 성능 저하")
             print("   (작은 데이터셋이거나 GIL이 활성화됨)")
 
-        print(f"\n✅ Equalization 벤치마크 완료\n")
+        print("\n✅ Equalization 벤치마크 완료\n")
 
     except Exception as e:
         print(f"❌ 벤치마크 실패: {e}\n")
@@ -182,13 +180,13 @@ def benchmark_resample():
         }
 
         print(f"  채널 수: {n_channels}")
-        print(f"  원본 샘플링 레이트: 48000Hz")
-        print(f"  타겟 샘플링 레이트: 44100Hz")
+        print("  원본 샘플링 레이트: 48000Hz")
+        print("  타겟 샘플링 레이트: 44100Hz")
 
         # 순차 처리
         print("\n순차 처리 벤치마크...")
         start_time = time.time()
-        sequential_result = {
+        {
             speaker: simulate_resample(speaker, data)
             for speaker, data in test_data.items()
         }
@@ -198,7 +196,7 @@ def benchmark_resample():
         # 병렬 처리
         print("\n병렬 처리 벤치마크...")
         start_time = time.time()
-        parallel_result = parallel_process_dict(
+        parallel_process_dict(
             simulate_resample,
             test_data,
             use_threads=True
@@ -217,7 +215,7 @@ def benchmark_resample():
         else:
             print("⚠️  병렬 처리 오버헤드")
 
-        print(f"\n✅ Resample 벤치마크 완료\n")
+        print("\n✅ Resample 벤치마크 완료\n")
 
     except Exception as e:
         print(f"❌ 벤치마크 실패: {e}\n")

@@ -307,7 +307,7 @@ def benchmark_parallel_performance(
 
     # 순차 처리
     start_time = time.time()
-    sequential_results = [func(item) for item in items]
+    [func(item) for item in items]
     sequential_time = time.time() - start_time
 
     results['sequential_time'] = sequential_time
@@ -315,7 +315,7 @@ def benchmark_parallel_performance(
     # 병렬 처리
     for max_workers in max_workers_list:
         start_time = time.time()
-        parallel_results = parallel_map(func, items, max_workers=max_workers)
+        parallel_map(func, items, max_workers=max_workers)
         parallel_time = time.time() - start_time
 
         speedup = sequential_time / parallel_time if parallel_time > 0 else 0

@@ -5,12 +5,12 @@ Python 3.13 호환 버전
 """
 
 print("build_nuitka.py: Module level - script parsing started.", flush=True)
-import os
-import sys
-import subprocess
-import shutil
-import platform
-from pathlib import Path
+import os  # noqa: E402
+import sys  # noqa: E402
+import subprocess  # noqa: E402
+import shutil  # noqa: E402
+import platform  # noqa: E402
+from pathlib import Path  # noqa: E402
 print("build_nuitka.py: Module level - imports done.", flush=True)
 
 def get_project_version():

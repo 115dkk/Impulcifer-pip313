@@ -43,7 +43,7 @@ class TestParallelProcessing(unittest.TestCase):
         self.assertIsInstance(info['is_free_threaded'], bool)
         self.assertIsInstance(info['optimal_workers'], int)
 
-        print(f"\n[Python 스레딩 정보]")
+        print("\n[Python 스레딩 정보]")
         for key, value in info.items():
             print(f"  {key}: {value}")
 
@@ -70,10 +70,10 @@ class TestParallelProcessing(unittest.TestCase):
         result = parallel_map(square, data)
 
         self.assertEqual(result, expected)
-        print(f"\n[parallel_map 기본 테스트]")
+        print("\n[parallel_map 기본 테스트]")
         print(f"  Input: {data}")
         print(f"  Output: {result}")
-        print(f"  ✅ Pass")
+        print("  ✅ Pass")
 
     def test_parallel_map_empty(self):
         """빈 입력 테스트"""
@@ -117,10 +117,10 @@ class TestParallelProcessing(unittest.TestCase):
         result = parallel_process_dict(process_value, input_dict)
 
         self.assertEqual(result, expected_dict)
-        print(f"\n[parallel_process_dict 테스트]")
+        print("\n[parallel_process_dict 테스트]")
         print(f"  Input: {input_dict}")
         print(f"  Output: {result}")
-        print(f"  ✅ Pass")
+        print("  ✅ Pass")
 
     def test_parallel_process_dict_empty(self):
         """빈 딕셔너리 테스트"""
@@ -156,7 +156,7 @@ class TestParallelProcessing(unittest.TestCase):
         # 결과 동일성 확인
         self.assertEqual(sequential_result, parallel_result)
 
-        print(f"\n[CPU 집약적 작업 테스트 - Fibonacci]")
+        print("\n[CPU 집약적 작업 테스트 - Fibonacci]")
         print(f"  Input: {data}")
         print(f"  순차 처리 시간: {sequential_time:.4f}s")
         print(f"  병렬 처리 시간: {parallel_time:.4f}s")
@@ -165,7 +165,7 @@ class TestParallelProcessing(unittest.TestCase):
             speedup = sequential_time / parallel_time
             print(f"  속도 향상: {speedup:.2f}x")
         else:
-            print(f"  속도 향상: N/A (병렬 처리 시간이 너무 짧음)")
+            print("  속도 향상: N/A (병렬 처리 시간이 너무 짧음)")
 
     def test_error_handling(self):
         """에러 처리 테스트"""
@@ -187,20 +187,20 @@ class TestParallelProcessing(unittest.TestCase):
 
         # 스레드 사용 (pickle 불필요)
         start_time = time.time()
-        thread_result = parallel_map(_global_square_func, data, use_threads=True, max_workers=4)
+        parallel_map(_global_square_func, data, use_threads=True, max_workers=4)
         thread_time = time.time() - start_time
 
         # 프로세스 사용 - Python 3.11에서는 로컬 함수 pickle 불가로 스킵
         # Python 3.14 Free-Threaded에서는 스레드만 사용하므로 문제 없음
-        print(f"\n[스레드 vs 프로세스 비교]")
+        print("\n[스레드 vs 프로세스 비교]")
         print(f"  스레드 시간: {thread_time:.4f}s")
 
         # Free-Threaded 모드면 스레드가 더 빠를 것으로 예상
         if is_free_threaded_available():
-            print(f"  🚀 Free-Threaded 모드 활성화됨!")
+            print("  🚀 Free-Threaded 모드 활성화됨!")
         else:
-            print(f"  ⚠️  GIL 존재 (Python 3.13 이하 또는 표준 빌드)")
-            print(f"  ℹ️  Python 3.14 Free-Threaded에서 진정한 병렬 처리 가능")
+            print("  ⚠️  GIL 존재 (Python 3.13 이하 또는 표준 빌드)")
+            print("  ℹ️  Python 3.14 Free-Threaded에서 진정한 병렬 처리 가능")
 
     def test_benchmark(self):
         """벤치마크 테스트"""
@@ -212,15 +212,15 @@ class TestParallelProcessing(unittest.TestCase):
                 result += x * i
             return result
 
-        print(f"\n[병렬 처리 성능 벤치마크]")
+        print("\n[병렬 처리 성능 벤치마크]")
         results = benchmark_parallel_performance(test_task, n_items=50, max_workers_list=[1, 2, 4])
 
-        print(f"\n  Python 정보:")
+        print("\n  Python 정보:")
         for key, value in results['python_info'].items():
             print(f"    {key}: {value}")
 
         print(f"\n  순차 처리 시간: {results['sequential_time']:.4f}s")
-        print(f"\n  병렬 처리 결과:")
+        print("\n  병렬 처리 결과:")
 
         for benchmark in results['benchmarks']:
             print(f"    워커 수 {benchmark['max_workers']:2d}: "
