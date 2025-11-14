@@ -97,7 +97,6 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--include-module=scipy.optimize",
         "--include-module=scipy.interpolate",
         "--include-module=scipy.io",
-        "--include-module=scipy.io.wavfile",
         "--include-module=scipy.fft",
         "--include-module=nnresample",
         "--include-module=tabulate",
@@ -106,6 +105,9 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--include-module=autoeq",
         "--include-module=modern_gui",     # Modern GUI module
         "--include-module=gui",            # Legacy GUI (for compatibility)
+        "--include-module=localization",   # Localization system (CRITICAL)
+        "--include-module=logger",         # Logging system
+        "--include-module=channel_generation",  # Channel generation
         "--include-module=recorder",
         "--include-module=impulcifer",
         "--include-module=hrir",
@@ -118,6 +120,7 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist"):
         "--include-data-dir=data=data",
         "--include-data-dir=font=font",
         "--include-data-dir=img=img",
+        "--include-data-dir=locales=locales",  # Translation files (CRITICAL)
     ]
 
     # LICENSE 파일을 License.txt로 포함
@@ -196,11 +199,11 @@ def main():
         with open("gui_main.py", "w", encoding="utf-8") as f:
             f.write("""#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-\"\"\"Impulcifer GUI 엔트리 포인트\"\"\"
+\"\"\"Impulcifer Modern GUI 엔트리 포인트\"\"\"
 
 if __name__ == "__main__":
-    import gui
-    gui.main_gui()
+    import modern_gui
+    modern_gui.main_gui()
 """)
     
     if build_impulcifer(project_version=current_version, output_base_dir="dist"):

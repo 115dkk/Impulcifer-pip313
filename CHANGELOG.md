@@ -4,6 +4,87 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.8.5 - 2025-11-14
+### Nuitka 빌드 설정 수정 - 번역 시스템 복구
+Nuitka 빌드에서 누락된 필수 모듈과 데이터를 추가하여 빌드된 프로그램의 번역 기능을 복구했습니다.
+
+#### 🔴 긴급 수정 (번역 시스템 복구)
+- **`localization` 모듈 추가**: 번역 시스템 모듈이 빌드에 포함되지 않던 문제 해결
+- **`locales/` 디렉토리 추가**: 모든 번역 파일 (9개 언어) 이 빌드에 포함되도록 수정
+  - en.json, ko.json, fr.json, de.json, es.json, ja.json, zh-cn.json, zh-tw.json, ru.json
+
+#### 🔧 필수 모듈 추가
+- **`logger` 모듈 추가**: 로깅 시스템이 빌드에 포함되도록 수정
+- **`channel_generation` 모듈 추가**: 채널 생성 기능이 빌드에 포함되도록 수정
+
+#### 🗑️ 불필요한 모듈 제거
+- **`scipy.io.wavfile` 제거**: v1.8.4에서 코드에서 제거된 모듈을 빌드 설정에서도 제거
+
+#### ⚙️ 엔트리 포인트 수정
+- **자동 생성 엔트리 포인트 수정**: `gui` → `modern_gui` 로 변경
+  - 기존에는 legacy GUI를 호출하도록 자동 생성되었으나, modern GUI를 사용하도록 수정
+
+#### 📝 변경된 빌드 설정
+```python
+# build_nuitka.py에 추가된 항목:
+"--include-module=localization",   # 번역 시스템
+"--include-module=logger",         # 로깅 시스템
+"--include-module=channel_generation",  # 채널 생성
+"--include-data-dir=locales=locales",  # 번역 파일
+
+# 제거된 항목:
+# "--include-module=scipy.io.wavfile"  # 사용하지 않음
+```
+
+#### 🎯 영향
+- **이전 빌드 (v1.8.4 이하)**: 번역이 작동하지 않았음
+- **현재 빌드 (v1.8.5)**: 모든 번역 기능이 정상 작동
+
+#### ⚠️ 참고
+- Legacy GUI (`gui` 모듈) 는 호환성을 위해 계속 포함됨
+- numpy, matplotlib 플러그인은 안정성을 위해 유지
+
+## 1.8.4 - 2025-11-14
+### 코드 품질 개선 - 린터 에러 수정
+모든 주요 린터 에러를 수정하여 코드 품질을 개선했습니다.
+
+#### 🔧 수정 사항
+- **F401 (Unused imports)**: 사용하지 않는 import 제거
+  - `logger.py`: `sys` import 제거
+  - `test_suite.py`: `FrequencyResponse` import 제거
+  - `impulcifer.py`: `scipy.io.wavfile` import 제거
+  - `utils.py`: 사용하지 않는 `Path` import 제거 후 실제 사용 확인하여 복원
+
+- **F541 (f-strings without placeholders)**: 불필요한 f-string을 일반 문자열로 변경
+  - `hrir.py`: 20개 이상의 f-string 수정
+  - 플레이스홀더가 없는 f-string을 일반 문자열로 변환
+
+- **E722 (Bare except)**: 모든 bare except를 `except Exception`으로 변경
+  - `impulcifer.py`: 2개 수정
+  - `localization.py`: 3개 수정
+  - `modern_gui.py`: 5개 수정
+  - `utils.py`: 1개 수정
+  - SystemExit, KeyboardInterrupt 등을 잘못 잡지 않도록 개선
+
+- **E701/E702 (Multiple statements on one line)**: 한 줄에 여러 문장 분리
+  - `hrir.py`: 9개의 복합 문장을 여러 줄로 분리
+  - 가독성 및 디버깅 용이성 향상
+
+- **E721 (Type comparison)**: `type() ==` 를 `isinstance()`로 변경
+  - `hrir.py`: 4개 수정
+  - `impulcifer.py`: 1개 수정
+  - 상속을 고려한 올바른 타입 체크
+
+#### ⚙️ 린터 설정 개선
+- **Jupyter notebook 제외**: `pyproject.toml`에 Ruff/Flake8 설정 추가
+  - `research/**/*` 디렉토리 제외
+  - `*.ipynb` 파일 제외
+  - 연구용 노트북은 린팅 대상에서 제외
+
+#### ✅ 테스트
+- 모든 단위 테스트 통과 (14 passed, 2 skipped)
+- 코드 동작에 영향 없이 품질만 개선
+
 ## 1.8.3 - 2025-11-14
 ### 번역 시스템 버그 수정 및 UI 개선
 v1.8.2에서 발생한 번역 관련 버그들을 수정하고 UI를 개선했습니다.

@@ -28,7 +28,6 @@ from logger import get_logger
 import copy
 import contextlib
 import io
-from scipy.io import wavfile # hangloose용, 필요시 추가
 from scipy.interpolate import interp1d # 큐빅 보간을 위해 추가
 
 # Bokeh Tabs/Panel import 추가
@@ -94,7 +93,7 @@ def set_matplotlib_font():
             available_fonts = [f.name for f in fm.fontManager.ttflist]
             if 'Pretendard' in available_fonts:
                 font_search_paths.append(('system', 'Pretendard'))
-        except:
+        except Exception:
             pass
         
         # 폰트 로딩 시도
@@ -204,7 +203,7 @@ def get_pretendard_font_for_gui():
             available_fonts = [f.name for f in fm.fontManager.ttflist]
             if 'Pretendard' in available_fonts:
                 return 'Pretendard'  # 시스템 폰트 이름 반환
-        except:
+        except Exception:
             pass
             
     except Exception as e:
@@ -457,7 +456,7 @@ def main(dir_path=None,
 
                 # 추가 EQ 적용
                 eq = eq_left if side == 'left' else eq_right
-                if eq is not None and type(eq) == FrequencyResponse:
+                if eq is not None and isinstance(eq, FrequencyResponse):
                     # Equalization
                     fr.error += eq.error
 

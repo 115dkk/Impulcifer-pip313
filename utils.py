@@ -370,7 +370,7 @@ def check_ffmpeg_available():
         result = subprocess.run([FFMPEG_PATH, '-version'], 
                               capture_output=True, text=True, timeout=10)
         return result.returncode == 0
-    except:
+    except Exception:
         return False
 
 def get_supported_audio_formats():
