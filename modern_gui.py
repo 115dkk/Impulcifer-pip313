@@ -16,16 +16,30 @@ import sounddevice
 import recorder
 import impulcifer
 from constants import SPEAKER_LIST_PATTERN
+from localization import get_localization_manager, SUPPORTED_LANGUAGES
 
-# Set appearance mode and default color theme
-ctk.set_appearance_mode("dark")  # Modes: "System" (default), "Dark", "Light"
+# Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
 
 
 class ModernImpulciferGUI:
     def __init__(self):
+        # Initialize localization manager
+        self.loc = get_localization_manager()
+
+        # Apply saved theme
+        saved_theme = self.loc.get_theme()
+        if saved_theme == 'system':
+            ctk.set_appearance_mode("system")
+        else:
+            ctk.set_appearance_mode(saved_theme)
+
         self.root = ctk.CTk()
-        self.root.title("Impulcifer - Modern HRIR Processing Suite")
+        self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
+
+        # Show language selection dialog on first run
+        if self.loc.is_first_run():
+            self.root.after(500, self.show_language_selection_dialog)
 
         # Set window size and position
         window_width = 1000
@@ -52,6 +66,9 @@ class ModernImpulciferGUI:
         # Create Impulcifer tab
         self.create_impulcifer_tab()
 
+        # Create UI Settings tab
+        self.create_ui_settings_tab()
+
     def create_header(self):
         """Create header with app title and theme toggle"""
         header = ctk.CTkFrame(self.root, corner_radius=0, height=60)
@@ -59,63 +76,52 @@ class ModernImpulciferGUI:
         header.grid_columnconfigure(1, weight=1)
 
         # App title
-        title = ctk.CTkLabel(
+        self.title_label = ctk.CTkLabel(
             header,
-            text="🎧 Impulcifer",
+            text=self.loc.get('app_title'),
             font=ctk.CTkFont(size=24, weight="bold")
         )
-        title.grid(row=0, column=0, padx=20, pady=15, sticky="w")
+        self.title_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
 
         # Subtitle
-        subtitle = ctk.CTkLabel(
+        self.subtitle_label = ctk.CTkLabel(
             header,
-            text="HRIR Measurement & Binaural Processing System",
+            text=self.loc.get('app_subtitle'),
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
-        subtitle.grid(row=0, column=1, padx=10, pady=15, sticky="w")
+        self.subtitle_label.grid(row=0, column=1, padx=10, pady=15, sticky="w")
 
-        # Theme toggle button
-        self.theme_button = ctk.CTkButton(
-            header,
-            text="🌙 Dark Mode",
-            command=self.toggle_theme,
-            width=120,
-            fg_color=("gray85", "gray20"),
-            hover_color=("gray75", "gray30"),
-            text_color=("gray10", "gray90"),
-            border_width=1,
-            border_color=("gray70", "gray40")
-        )
-        self.theme_button.grid(row=0, column=2, padx=20, pady=15, sticky="e")
-        self.current_theme = "dark"
+        # Theme toggle button (removed - moved to UI Settings tab)
+        # Now header is cleaner
+        self.current_theme = self.loc.get_theme()
 
     def toggle_theme(self):
-        """Toggle between dark and light themes"""
+        """Toggle between dark and light themes (legacy method - kept for compatibility)"""
         if self.current_theme == "dark":
             ctk.set_appearance_mode("light")
-            self.theme_button.configure(text="☀️ Light Mode")
             self.current_theme = "light"
         else:
             ctk.set_appearance_mode("dark")
-            self.theme_button.configure(text="🌙 Dark Mode")
             self.current_theme = "dark"
+        self.loc.set_theme(self.current_theme)
 
     def create_tabs(self):
         """Create main tab view"""
         self.tabview = ctk.CTkTabview(self.root, corner_radius=10)
         self.tabview.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
 
-        # Add tabs
-        self.tabview.add("📼 Recorder")
-        self.tabview.add("🎛️ Impulcifer")
+        # Add tabs (using localized text)
+        self.tabview.add(self.loc.get('tab_recorder'))
+        self.tabview.add(self.loc.get('tab_impulcifer'))
+        self.tabview.add(self.loc.get('tab_ui_settings'))
 
         # Set default tab
-        self.tabview.set("📼 Recorder")
+        self.tabview.set(self.loc.get('tab_recorder'))
 
     def create_recorder_tab(self):
         """Create Recorder tab with all recording features"""
-        tab = self.tabview.tab("📼 Recorder")
+        tab = self.tabview.tab(self.loc.get('tab_recorder'))
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
 
@@ -282,7 +288,7 @@ class ModernImpulciferGUI:
 
     def create_impulcifer_tab(self):
         """Create Impulcifer tab with all processing features"""
-        tab = self.tabview.tab("🎛️ Impulcifer")
+        tab = self.tabview.tab(self.loc.get('tab_impulcifer'))
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
 
@@ -1025,6 +1031,184 @@ class ModernImpulciferGUI:
         except Exception as e:
             self.generate_button.configure(state="normal", text="⚡ GENERATE BRIR")
             messagebox.showerror('Error', f'Processing failed: {str(e)}')
+
+    def show_language_selection_dialog(self):
+        """Show language selection dialog on first run"""
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title(self.loc.get('dialog_select_language_title'))
+        dialog.geometry("400x300")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (400 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (300 // 2)
+        dialog.geometry(f"400x300+{x}+{y}")
+
+        # Message
+        message = ctk.CTkLabel(
+            dialog,
+            text=self.loc.get('dialog_select_language_message'),
+            font=ctk.CTkFont(size=14),
+            wraplength=350
+        )
+        message.pack(pady=20, padx=20)
+
+        # Language list
+        lang_frame = ctk.CTkFrame(dialog)
+        lang_frame.pack(pady=10, padx=20, fill="both", expand=True)
+
+        selected_lang = ctk.StringVar(value=self.loc.current_language)
+
+        for lang_code, lang_name in SUPPORTED_LANGUAGES.items():
+            rb = ctk.CTkRadioButton(
+                lang_frame,
+                text=lang_name,
+                variable=selected_lang,
+                value=lang_code,
+                font=ctk.CTkFont(size=12)
+            )
+            rb.pack(pady=5, padx=10, anchor="w")
+
+        # Buttons
+        button_frame = ctk.CTkFrame(dialog)
+        button_frame.pack(pady=10, padx=20, fill="x")
+
+        def on_ok():
+            self.loc.set_language(selected_lang.get())
+            self.loc.mark_language_selected()
+            dialog.destroy()
+            # Show message about restart
+            messagebox.showinfo(
+                self.loc.get('message_info'),
+                self.loc.get('message_language_changed', language=self.loc.get_language_name(selected_lang.get()))
+            )
+
+        ok_button = ctk.CTkButton(
+            button_frame,
+            text=self.loc.get('button_ok'),
+            command=on_ok
+        )
+        ok_button.pack(side="right", padx=5)
+
+        dialog.protocol("WM_DELETE_WINDOW", on_ok)
+
+    def create_ui_settings_tab(self):
+        """Create UI Settings tab for language and theme"""
+        tab = self.tabview.tab(self.loc.get('tab_ui_settings'))
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
+
+        # Create scrollable frame
+        scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
+        scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        scroll.grid_columnconfigure(0, weight=1)
+
+        row = 0
+
+        # === Language Section ===
+        lang_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        lang_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        lang_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        ctk.CTkLabel(
+            lang_frame,
+            text=self.loc.get('section_language'),
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        ctk.CTkLabel(
+            lang_frame,
+            text=self.loc.get('label_select_language')
+        ).grid(row=1, column=0, sticky="w", padx=15, pady=5)
+
+        self.language_var = ctk.StringVar(value=self.loc.get_language_name(self.loc.current_language))
+        language_menu = ctk.CTkOptionMenu(
+            lang_frame,
+            variable=self.language_var,
+            values=list(SUPPORTED_LANGUAGES.values()),
+            command=self.change_language
+        )
+        language_menu.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
+
+        # === Theme Section ===
+        theme_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        theme_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        theme_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        ctk.CTkLabel(
+            theme_frame,
+            text=self.loc.get('section_theme'),
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        ctk.CTkLabel(
+            theme_frame,
+            text=self.loc.get('label_select_theme')
+        ).grid(row=1, column=0, sticky="w", padx=15, pady=5)
+
+        current_theme = self.loc.get_theme()
+        theme_display = {
+            'dark': self.loc.get('option_theme_dark'),
+            'light': self.loc.get('option_theme_light'),
+            'system': self.loc.get('option_theme_system')
+        }
+
+        self.theme_var = ctk.StringVar(value=theme_display.get(current_theme, theme_display['dark']))
+        theme_menu = ctk.CTkOptionMenu(
+            theme_frame,
+            variable=self.theme_var,
+            values=[
+                self.loc.get('option_theme_dark'),
+                self.loc.get('option_theme_light'),
+                self.loc.get('option_theme_system')
+            ],
+            command=self.change_theme
+        )
+        theme_menu.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
+
+    def change_language(self, language_name):
+        """Change application language"""
+        # Find language code from name
+        lang_code = None
+        for code, name in SUPPORTED_LANGUAGES.items():
+            if name == language_name:
+                lang_code = code
+                break
+
+        if lang_code:
+            self.loc.set_language(lang_code)
+            messagebox.showinfo(
+                self.loc.get('message_info'),
+                self.loc.get('message_language_changed', language=language_name)
+            )
+
+    def change_theme(self, theme_name):
+        """Change application theme"""
+        # Map display name to theme code
+        theme_map = {
+            self.loc.get('option_theme_dark'): 'dark',
+            self.loc.get('option_theme_light'): 'light',
+            self.loc.get('option_theme_system'): 'system'
+        }
+
+        theme_code = theme_map.get(theme_name, 'dark')
+
+        if theme_code == 'system':
+            ctk.set_appearance_mode("system")
+        else:
+            ctk.set_appearance_mode(theme_code)
+
+        self.loc.set_theme(theme_code)
+        self.current_theme = theme_code
+
+        messagebox.showinfo(
+            self.loc.get('message_success'),
+            self.loc.get('message_theme_changed')
+        )
 
     def run(self):
         """Start the GUI main loop"""

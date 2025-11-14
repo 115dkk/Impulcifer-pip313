@@ -4,6 +4,70 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 1.8.0 - 2025-11-14
+### 다국어 지원 - 전 세계 사용자를 위한 현지화
+Impulcifer GUI가 이제 9개 언어를 지원합니다! 영어를 모르는 사용자도 쉽게 사용할 수 있습니다.
+
+#### 🌍 지원 언어
+- 🇬🇧 English (영어)
+- 🇰🇷 한국어 (Korean)
+- 🇫🇷 Français (프랑스어)
+- 🇩🇪 Deutsch (독일어)
+- 🇪🇸 Español (스페인어)
+- 🇯🇵 日本語 (일본어)
+- 🇨🇳 简体中文 (중국어 간체)
+- 🇹🇼 繁體中文 (중국어 번체)
+- 🇷🇺 Русский (러시아어)
+
+#### 새로운 기능
+- **자동 언어 감지**:
+  - 첫 실행 시 시스템 언어를 자동으로 감지
+  - 지원하지 않는 언어는 영어로 기본 설정
+  - 사용자 친화적인 언어 선택 다이얼로그
+
+- **UI Settings 탭** (`⚙️ UI 설정`):
+  - **언어 설정**: 9개 언어 중 선택 가능
+  - **테마 설정**: Dark/Light/System 테마 선택
+  - 모든 설정은 자동 저장 (~/.impulcifer/settings.json)
+
+- **현지화 시스템** (`localization.py`):
+  - 완전한 번역 관리 시스템
+  - JSON 기반 언어 파일 (locales/*.json)
+  - 실시간 언어 변경 (재시작 권장)
+  - 사용자 설정 영구 저장
+
+#### 기술적 개선
+- **설정 관리**:
+  - 사용자별 설정 디렉토리: `~/.impulcifer/`
+  - 언어 설정 자동 저장
+  - 테마 설정 자동 저장
+  - 첫 실행 감지 시스템
+
+- **확장성**:
+  - 새로운 언어 추가가 간편함 (JSON 파일만 추가)
+  - 모든 UI 텍스트가 번역 가능하도록 설계
+  - 번역 키 기반 시스템으로 유지보수 용이
+
+#### 사용자 경험 개선
+- 깔끔해진 헤더 UI (테마 버튼 제거, UI Settings 탭으로 이동)
+- 언어 변경 시 재시작 안내 메시지
+- 테마 변경 시 즉시 적용
+- 직관적인 언어 선택 인터페이스
+
+#### 파일 구조
+```
+locales/
+├── en.json      # English
+├── ko.json      # 한국어
+├── fr.json      # Français
+├── de.json      # Deutsch
+├── es.json      # Español
+├── ja.json      # 日本語
+├── zh_CN.json   # 简体中文
+├── zh_TW.json   # 繁體中文
+└── ru.json      # Русский
+```
+
 ## 1.7.2 - 2025-11-13
 ### CI/CD 개선 - 자동화된 테스트 및 품질 보증
 배포 전 자동 테스트로 코드 품질을 보장합니다. TestPyPI와 PyPI 발행 전에 유닛 테스트가 자동으로 실행됩니다.
