@@ -3,7 +3,7 @@
 This document summarizes the performance optimizations implemented in the Impulcifer-pip313 fork.
 
 ## Version
-Current version: 1.10.0
+Current version: 2.1.0
 
 ## Optimization Phases
 
