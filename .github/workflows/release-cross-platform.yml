@@ -26,7 +26,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14t'  # Free-Threaded Python 3.14 for parallel processing
+          python-version: '3.13'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -108,7 +108,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14t'  # Free-Threaded Python 3.14 for parallel processing
+          python-version: '3.13'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -249,7 +249,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14t'  # Free-Threaded Python 3.14 for parallel processing
+          python-version: '3.13'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -460,7 +460,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.14t'  # Free-Threaded Python 3.14 for parallel processing
+          python-version: '3.13'
 
       - name: Get version
         run: |
