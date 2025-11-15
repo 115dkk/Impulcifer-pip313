@@ -305,7 +305,6 @@ jobs:
           python -m nuitka \
             --standalone \
             --onefile \
-            --linux-icon=img/icon.png \
             --output-dir=dist/linux \
             --remove-output \
             --jobs=4 \
