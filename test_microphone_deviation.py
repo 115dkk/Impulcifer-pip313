@@ -98,7 +98,7 @@ def test_microphone_deviation_correction():
         plot_dir=test_output_dir
     )
     
-    print(f"보정 완료!")
+    print("보정 완료!")
     print(f"보정된 좌측 IR 크기: {np.max(np.abs(corrected_left)):.4f}")
     print(f"보정된 우측 IR 크기: {np.max(np.abs(corrected_right)):.4f}")
     
@@ -110,7 +110,7 @@ def test_microphone_deviation_correction():
     
     # 보정 적용 여부 및 통계 출력
     if analysis.get('correction_applied', False):
-        print(f"\n보정 통계:")
+        print("\n보정 통계:")
         print(f"  - 평균 편차: {analysis.get('avg_deviation_db', 0):.2f} dB")
         print(f"  - 최대 편차: {analysis.get('max_deviation_db', 0):.2f} dB")
         print(f"  - 보정 필터 길이: 좌측 {len(analysis['correction_filters']['left_fir'])} 샘플, "
@@ -119,7 +119,7 @@ def test_microphone_deviation_correction():
         print("\n보정이 적용되지 않았습니다 (편차가 임계값 이하)")
     
     # 게이트 길이 정보 출력
-    print(f"\n게이트 길이 정보:")
+    print("\n게이트 길이 정보:")
     for freq, gate_len in analysis['gate_lengths'].items():
         print(f"  {freq} Hz: {gate_len} 샘플 ({gate_len/fs*1000:.2f} ms)")
     

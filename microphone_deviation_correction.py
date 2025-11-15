@@ -4,7 +4,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
-from scipy.signal.windows import hann, tukey
 from scipy.fft import fft, ifft, fftfreq
 from autoeq.frequency_response import FrequencyResponse
 import warnings
@@ -381,7 +380,7 @@ class MicrophoneDeviationCorrector:
         for freq, deviation in deviations.items():
             mag_diff = deviation['magnitude_diff_db']
             phase_diff = deviation['phase_diff_rad']
-            itd_ms = deviation['itd_ms']
+            deviation['itd_ms']
 
             # 주파수 대역별 보정 전략 (v2.0)
             if freq in self.low_freq_bands:
@@ -484,7 +483,7 @@ class MicrophoneDeviationCorrector:
             right_complex_response = 10**(right_mag_correction / 20) * np.exp(1j * right_phase_correction)
 
             # IFFT로 임펄스 응답 생성
-            fft_length = len(frequencies) * 2
+            len(frequencies) * 2
             left_full_fft = np.concatenate([left_complex_response, np.conj(left_complex_response[::-1])])
             right_full_fft = np.concatenate([right_complex_response, np.conj(right_complex_response[::-1])])
 
@@ -779,7 +778,7 @@ def apply_microphone_deviation_correction_to_hrir(hrir,
 
     all_analysis_results = {}
 
-    print(f"\n🎧 마이크 편차 보정 v2.0 시작")
+    print("\n🎧 마이크 편차 보정 v2.0 시작")
     print(f"  - 위상 보정: {'활성화' if enable_phase_correction else '비활성화'}")
     print(f"  - 적응형 보정: {'활성화' if enable_adaptive_correction else '비활성화'}")
     print(f"  - 해부학적 검증: {'활성화' if enable_anatomical_validation else '비활성화'}")

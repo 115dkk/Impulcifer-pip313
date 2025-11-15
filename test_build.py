@@ -4,10 +4,8 @@ Impulcifer 빌드 테스트 스크립트
 """
 
 import os
-import sys
 import subprocess
 import time
-from pathlib import Path
 
 def test_executable():
     """실행 파일 테스트"""

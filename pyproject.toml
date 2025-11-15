@@ -9,15 +9,23 @@ name = "impulcifer-py313"
 version = "2.1.0"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
-  { name="Python 3.13.2 호환 버전: 115dkk", email="" },
+  { name="Python 3.13/3.14 호환 버전: 115dkk", email="" },
 ]
-description = "HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템"
+description = "HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템 (Python 3.14 Free-Threaded 지원)"
 readme = "README.md"
-requires-python = ">=3.9,<3.14"
+requires-python = ">=3.9,<3.15"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Scientific/Engineering",
 ]
 dependencies = [
     'matplotlib>=3.8.0',
@@ -46,6 +54,7 @@ impulcifer_gui_legacy = "gui:main_gui"
 [tool.hatch.build]
 include = [
     "*.py",
+    "parallel_processing.py",
     "data/sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
     "data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
     "data/sweep-seg-FL-mono-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",

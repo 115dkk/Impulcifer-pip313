@@ -252,7 +252,7 @@ class ImpulseResponseEstimator(object):
                 # Regenerate inverse filter for the new test signal
                 ire.inverse_filter = ire.generate_inverse_filter()
                 
-        except Exception as e:
+        except Exception:
             # If there's any issue with estimator creation, create a minimal one
             ire = cls(min_duration=1.0, fs=fs)  # Minimal duration
             ire.test_signal = data_for_comparison
