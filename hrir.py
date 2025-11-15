@@ -8,6 +8,7 @@ import seaborn as sns
 from scipy import signal
 from scipy.signal.windows import hann
 from scipy.fft import fft, next_fast_len
+from scipy.interpolate import InterpolatedUnivariateSpline
 from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response import ImpulseResponse
@@ -31,6 +32,41 @@ except ImportError:
 
     def is_free_threaded_available():
         return False
+
+
+def _get_center_value(fr, frequency_range):
+    """Calculate center value without modifying the FrequencyResponse object.
+
+    This is an optimized version that avoids copying the entire FrequencyResponse
+    object when only the center value is needed.
+
+    Args:
+        fr: FrequencyResponse object
+        frequency_range: Frequency or list of two frequencies for centering
+
+    Returns:
+        The negative of the gain shift that would be applied by center()
+    """
+    # Create interpolator
+    k_order = 3 if len(fr.frequency) >= 4 else 1
+    try:
+        interpolator = InterpolatedUnivariateSpline(np.log10(fr.frequency), fr.raw, k=k_order)
+    except ValueError:
+        interpolator = InterpolatedUnivariateSpline(np.log10(fr.frequency), fr.raw, k=1)
+
+    if isinstance(frequency_range, (list, np.ndarray)) and len(frequency_range) > 1:
+        # Use the average of the gain values between the given frequencies
+        diff = np.mean(fr.raw[np.logical_and(
+            fr.frequency >= frequency_range[0],
+            fr.frequency <= frequency_range[1]
+        )])
+    else:
+        if isinstance(frequency_range, (list, np.ndarray)):
+            frequency_range = frequency_range[0]
+        # Use the gain value at the given frequency
+        diff = interpolator(np.log10(frequency_range))
+
+    return -diff
 
 
 class HRIR:
@@ -665,9 +701,7 @@ class HRIR:
         if method == "mids":
             # Find gain for right side
             # R diff - L diff = L mean - R mean
-            gain = right_fr.copy().center([100, 3000]) - left_fr.copy().center(
-                [100, 3000]
-            )
+            gain = _get_center_value(right_fr, [100, 3000]) - _get_center_value(left_fr, [100, 3000])
             gain = 10 ** (gain / 20)
             n = int(round(self.fs * 0.1))  # 100 ms
             firs = [signal.unit_impulse(n), signal.unit_impulse(n) * gain]
@@ -720,8 +754,8 @@ class HRIR:
 
         elif method == "avg" or method == "min":
             # Center around 0 dB
-            left_gain = left_fr.copy().center([100, 10000])
-            right_gain = right_fr.copy().center([100, 10000])
+            left_gain = _get_center_value(left_fr, [100, 10000])
+            right_gain = _get_center_value(right_fr, [100, 10000])
             gain = (left_gain + right_gain) / 2
             left_fr.raw += gain
             right_fr.raw += gain
@@ -745,7 +779,8 @@ class HRIR:
             # Compensate and equalize both to the target
             firs = []
             for fr in [left_fr, right_fr]:
-                fr.target = target.copy()
+                # Optimized: No need to copy target array since it's not modified
+                fr.target = target
                 fr.error = fr.raw - fr.target
                 fr.smoothen_fractional_octave(
                     window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999

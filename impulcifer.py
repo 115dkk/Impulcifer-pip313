@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
-from hrir import HRIR
+from hrir import HRIR, _get_center_value
 from room_correction import room_correction
 from utils import (
     sync_axes,
@@ -28,6 +28,7 @@ from constants import (
     TRUEHD_11CH_ORDER,
     TRUEHD_13CH_ORDER,
 )
+from parallel_utils import parallel_map, get_parallelization_info
 from channel_generation import (
     get_available_channels_for_layout,
     create_truehd_layout_track_order,
@@ -318,6 +319,107 @@ def _apply_cubic_interp(
     return False  # 실패 또는 폴백 사용
 
 
+# ============================================================================
+# Parallel Processing Worker Functions (Phase 2 Optimization)
+# ============================================================================
+
+def _process_equalization_worker(args):
+    """
+    Worker function for parallel equalization processing.
+
+    Args:
+        args: Tuple of (speaker, side, ir, room_frs, hp_left, hp_right,
+              eq_left, eq_right, target, common_freq, estimator_fs)
+
+    Returns:
+        Tuple of (speaker, side, fir_filter)
+    """
+    (speaker, side, ir, room_frs, hp_left, hp_right,
+     eq_left, eq_right, target, common_freq, estimator_fs) = args
+
+    # Create frequency response for this speaker-side
+    fr = FrequencyResponse(
+        name=f'{speaker}-{side} eq',
+        frequency=common_freq.copy(),
+        raw=0, error=0
+    )
+
+    # Apply room correction
+    if room_frs is not None and speaker in room_frs and side in room_frs[speaker]:
+        fr.error += room_frs[speaker][side].error
+
+    # Apply headphone compensation
+    hp_eq = hp_left if side == 'left' else hp_right
+    if hp_eq is not None:
+        fr.error += hp_eq.error
+
+    # Apply equalization
+    eq = eq_left if side == 'left' else eq_right
+    if eq is not None and isinstance(eq, FrequencyResponse):
+        fr.error += eq.error
+
+    # Remove bass and tilt target from the error
+    fr.error -= target.raw
+
+    # Equalize
+    fr.equalize(
+        max_gain=40,
+        treble_f_lower=10000,
+        treble_f_upper=estimator_fs / 2,
+        window_size=1/3,
+        treble_window_size=1/5
+    )
+
+    # Create FIR filter
+    fir = fr.minimum_phase_impulse_response(fs=estimator_fs, normalize=False, f_res=5)
+
+    return (speaker, side, fir)
+
+
+def _process_decay_worker(args):
+    """
+    Worker function for parallel decay adjustment.
+
+    Args:
+        args: Tuple of (speaker, side, ir_data, decay_value, fs)
+
+    Returns:
+        Tuple of (speaker, side, adjusted_data)
+    """
+    speaker, side, ir_data, decay_value, fs = args
+
+    # Import here to avoid circular dependency in multiprocessing
+    from impulse_response import ImpulseResponse
+
+    # Create temporary IR object
+    temp_ir = ImpulseResponse(name=f'{speaker}-{side}', data=ir_data.copy(), fs=fs)
+    temp_ir.adjust_decay(decay_value)
+
+    return (speaker, side, temp_ir.data)
+
+
+def _process_plot_worker(args):
+    """
+    Worker function for parallel plotting convolution.
+
+    Args:
+        args: Tuple of (speaker, side, ir_data, test_signal, fs)
+
+    Returns:
+        Tuple of (speaker, side, recording)
+    """
+    speaker, side, ir_data, test_signal, fs = args
+
+    # Import here to avoid circular dependency in multiprocessing
+    from impulse_response import ImpulseResponse
+
+    # Create temporary IR object
+    temp_ir = ImpulseResponse(name=f'{speaker}-{side}', data=ir_data.copy(), fs=fs)
+    recording = temp_ir.convolve(test_signal)
+
+    return (speaker, side, recording)
+
+
 def main(
     dir_path=None,
     test_signal=None,
@@ -508,138 +610,53 @@ def main(
     if do_headphone_compensation or do_room_correction or do_equalization:
         logger.step("Equalizing")
 
+        # Log parallelization info
+        parallel_info = get_parallelization_info()
+        logger.info(f"Using {parallel_info['executor_type']} for parallelization (Python {parallel_info['python_version']}, GIL {'disabled' if parallel_info['gil_disabled'] else 'enabled'})")
+
         # Optimization A1: Pre-generate common frequency array to reduce allocations
         common_freq = FrequencyResponse.generate_frequencies(
             f_step=1.01, f_min=10, f_max=estimator.fs / 2
         )
 
-        if PARALLEL_PROCESSING_AVAILABLE and len(hrir.irs) > 4:
-            # Python 3.14 병렬 처리: 각 스피커 채널 이퀄라이제이션
-            logger.info(f"  🚀 병렬 이퀄라이제이션 시작 ({len(hrir.irs)} 채널)")
+        # Phase 2 Optimization: Parallel processing of speaker-side pairs
+        # Prepare arguments for parallel processing
+        eq_tasks = []
+        for speaker, pair in hrir.irs.items():
+            for side, ir in pair.items():
+                eq_tasks.append((
+                    speaker, side, ir,
+                    room_frs, hp_left, hp_right,
+                    eq_left, eq_right, target,
+                    common_freq, estimator.fs
+                ))
 
-            def equalize_speaker_pair(speaker, pair):
-                """각 스피커 채널에 이퀄라이제이션 적용"""
-                for side, ir in pair.items():
-                    # Reuse pre-generated frequency array
-                    fr = FrequencyResponse(
-                        name=f"{speaker}-{side} eq",
-                        frequency=common_freq.copy(),
-                        raw=0,
-                        error=0,
-                    )
+        # Execute equalization in parallel
+        logger.info(f"Processing {len(eq_tasks)} speaker-side pairs in parallel...")
+        eq_results = parallel_map(_process_equalization_worker, eq_tasks)
 
-                    # 룸 보정 적용
-                    if (
-                        room_frs is not None
-                        and speaker in room_frs
-                        and side in room_frs[speaker]
-                    ):
-                        fr.error += room_frs[speaker][side].error
-
-                    # 헤드폰 보정 적용
-                    hp_eq = hp_left if side == "left" else hp_right
-                    if hp_eq is not None:
-                        fr.error += hp_eq.error
-
-                    # 추가 EQ 적용
-                    eq = eq_left if side == "left" else eq_right
-                    if eq is not None and isinstance(eq, FrequencyResponse):
-                        fr.error += eq.error
-
-                    # Remove bass and tilt target from the error
-                    fr.error -= target.raw
-
-                    # Equalize
-                    eq_result, _, _, _, _, _, _, _, _, _ = fr.equalize(
-                        max_gain=40,
-                        treble_f_lower=10000,
-                        treble_f_upper=estimator.fs / 2,
-                        window_size=1 / 3,
-                        treble_window_size=1 / 5,
-                    )
-
-                    # Create FIR filter and equalize
-                    fir = fr.minimum_phase_impulse_response(
-                        fs=estimator.fs, normalize=False, f_res=5
-                    )
-
-                    # 실제 FIR 필터 적용
-                    ir.equalize(fir)
-
-                return pair
-
-            # 병렬 실행
-            hrir.irs = parallel_process_dict(
-                equalize_speaker_pair, hrir.irs, use_threads=True
-            )
-
-            if is_free_threaded_available():
-                logger.info("  ✅ Free-Threaded 병렬 이퀄라이제이션 완료")
-
-        else:
-            # 순차 처리 (기존 코드)
-            for speaker, pair in hrir.irs.items():
-                for side, ir in pair.items():
-                    # Reuse pre-generated frequency array
-                    fr = FrequencyResponse(
-                        name=f"{speaker}-{side} eq",
-                        frequency=common_freq.copy(),
-                        raw=0,
-                        error=0,
-                    )
-
-                    # 룸 보정 적용
-                    if (
-                        room_frs is not None
-                        and speaker in room_frs
-                        and side in room_frs[speaker]
-                    ):
-                        # Room correction
-                        fr.error += room_frs[speaker][side].error
-
-                    # 헤드폰 보정 적용
-                    hp_eq = hp_left if side == "left" else hp_right
-                    if hp_eq is not None:
-                        # Headphone compensation
-                        fr.error += hp_eq.error
-
-                    # 추가 EQ 적용
-                    eq = eq_left if side == "left" else eq_right
-                    if eq is not None and isinstance(eq, FrequencyResponse):
-                        # Equalization
-                        fr.error += eq.error
-
-                    # Remove bass and tilt target from the error
-                    fr.error -= target.raw
-
-                    # Optimization A5: Remove redundant smoothen call
-                    # (equalize() method calls smoothen internally)
-                    # fr.smoothen(window_size=1/3, treble_window_size=1/5)
-
-                    # Equalize
-                    eq_result, _, _, _, _, _, _, _, _, _ = fr.equalize(
-                        max_gain=40,
-                        treble_f_lower=10000,
-                        treble_f_upper=estimator.fs / 2,
-                        window_size=1 / 3,
-                        treble_window_size=1 / 5,
-                    )
-
-                    # Create FIR filter and equalize
-                    fir = fr.minimum_phase_impulse_response(
-                        fs=estimator.fs, normalize=False, f_res=5
-                    )
-
-                    # 실제 FIR 필터 적용
-                    ir.equalize(fir)
+        # Apply FIR filters to impulse responses
+        for speaker, side, fir in eq_results:
+            hrir.irs[speaker][side].equalize(fir)
 
     # Adjust decay time
     if decay:
-        logger.step("Adjusting decay time")
+        logger.step('Adjusting decay time')
+
+        # Phase 2 Optimization: Parallel decay adjustment
+        decay_tasks = []
         for speaker, pair in hrir.irs.items():
-            for side, ir in pair.items():
-                if speaker in decay:
-                    ir.adjust_decay(decay[speaker])
+            if speaker in decay:
+                for side, ir in pair.items():
+                    decay_tasks.append((speaker, side, ir.data, decay[speaker], estimator.fs))
+
+        if decay_tasks:
+            logger.info(f"Processing {len(decay_tasks)} decay adjustments in parallel...")
+            decay_results = parallel_map(_process_decay_worker, decay_tasks)
+
+            # Apply results back to impulse responses
+            for speaker, side, adjusted_data in decay_results:
+                hrir.irs[speaker][side].data = adjusted_data
 
     # Correct channel balance
     if channel_balance is not None:
@@ -647,11 +664,21 @@ def main(
         hrir.correct_channel_balance(channel_balance)
 
     if plot:
-        logger.step("Plotting BRIR graphs after processing")
-        # Convolve test signal, re-plot waveform and spectrogram
+        logger.step('Plotting BRIR graphs after processing')
+
+        # Phase 2 Optimization: Parallel convolution for plotting
+        plot_tasks = []
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
-                ir.recording = ir.convolve(estimator.test_signal)
+                plot_tasks.append((speaker, side, ir.data, estimator.test_signal, estimator.fs))
+
+        logger.info(f"Processing {len(plot_tasks)} convolutions in parallel for plotting...")
+        plot_results = parallel_map(_process_plot_worker, plot_tasks)
+
+        # Apply results back to impulse responses
+        for speaker, side, recording in plot_results:
+            hrir.irs[speaker][side].recording = recording
+
         # Plot post processing
         hrir.plot(os.path.join(dir_path, "plots", "post"))
 
@@ -1073,22 +1100,9 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     )
 
     # left와 right를 타겟의 주파수에 맞게 보간
-    left.copy()
-    right.copy()
-
-    _apply_cubic_interp(
-        left,
-        target.frequency,
-        lambda: left.interpolate(f=target.frequency),
-        "left headphone response",
-    )
-    _apply_cubic_interp(
-        right,
-        target.frequency,
-        lambda: right.interpolate(f=target.frequency),
-        "right headphone response",
-    )
-
+    _apply_cubic_interp(left, target.frequency, lambda: left.interpolate(f=target.frequency), "left headphone response")
+    _apply_cubic_interp(right, target.frequency, lambda: right.interpolate(f=target.frequency), "right headphone response")
+    
     # 보상 적용
     left.compensate(target, min_mean_error=True)
     right.compensate(target, min_mean_error=True)
@@ -1111,16 +1125,15 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     sync_axes([axl, axr])
 
     # Combined
-    _left = left.copy()
-    _right = right.copy()
-    gain_l = _left.center([100, 10000])
-    gain_r = _right.center([100, 10000])
+    # Optimized: Use _get_center_value instead of .copy().center()
+    gain_l = _get_center_value(left, [100, 10000])
+    gain_r = _get_center_value(right, [100, 10000])
     ax = fig.add_subplot(gs[:, 1:])
-    ax.plot(_left.frequency, _left.raw, linewidth=1, color="#1f77b4")
-    ax.plot(_right.frequency, _right.raw, linewidth=1, color="#d62728")
-    ax.plot(_left.frequency, _left.raw - _right.raw, linewidth=1, color="#680fb9")
-    sl = np.logical_and(_left.frequency > 20, _left.frequency < 20000)
-    stack = np.vstack([_left.raw[sl], _right.raw[sl], _left.raw[sl] - _right.raw[sl]])
+    ax.plot(left.frequency, left.raw, linewidth=1, color='#1f77b4')
+    ax.plot(right.frequency, right.raw, linewidth=1, color='#d62728')
+    ax.plot(left.frequency, left.raw - right.raw, linewidth=1, color='#680fb9')
+    sl = np.logical_and(left.frequency > 20, left.frequency < 20000)
+    stack = np.vstack([left.raw[sl], right.raw[sl], left.raw[sl] - right.raw[sl]])
     ax.set_ylim([np.min(stack) * 1.1, np.max(stack) * 1.1])
     axl.set_ylim([np.min(stack) * 1.1, np.max(stack) * 1.1])
     axr.set_ylim([np.min(stack) * 1.1, np.max(stack) * 1.1])

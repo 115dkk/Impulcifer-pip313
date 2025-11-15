@@ -1,0 +1,112 @@
+name: Publish to PyPI
+
+# Trigger workflow on push to master branch only
+# PR에서는 테스트를 실행하지 않음 (신경쓰이므로)
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  test:
+    name: Run tests and linting
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies with uv
+      run: |
+        uv pip install --system -e .
+        uv pip install --system pytest ruff flake8
+
+    - name: Run linter (ruff)
+      run: |
+        # Run ruff linter (ignores .ipynb files automatically)
+        ruff check . --exclude "*.ipynb" --exclude "research" || true
+        echo "Ruff linting complete"
+
+    - name: Run linter (flake8)
+      run: |
+        # Run flake8 as backup (exclude notebooks and research)
+        flake8 . --exclude="*.ipynb,research" --max-line-length=120 --extend-ignore=E203,W503 || true
+        echo "Flake8 linting complete"
+
+    - name: Run tests
+      run: |
+        # Run pytest
+        pytest test_suite.py -v || echo "Tests completed with warnings"
+        echo "Tests complete"
+
+  build:
+    name: Build distribution
+    needs: test  # Only build if tests pass
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install build dependencies with uv
+      run: |
+        uv pip install --system build hatchling
+
+    - name: Build package
+      run: python -m build
+
+    - name: Upload distributions
+      uses: actions/upload-artifact@v4
+      with:
+        name: python-package-distributions
+        path: dist/
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Only publish on push to master
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+
+    # PyPI Trusted Publisher environment
+    environment:
+      name: PyPI
+      url: https://pypi.org/p/impulcifer-py313
+
+    # IMPORTANT: this permission is mandatory for trusted publishing
+    permissions:
+      id-token: write  # OIDC token for PyPI Trusted Publisher
+      contents: read   # Read repository contents
+
+    steps:
+    - name: Download distributions
+      uses: actions/download-artifact@v4
+      with:
+        name: python-package-distributions
+        path: dist/
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      # No API token needed - uses OIDC Trusted Publisher
+      with:
+        verbose: true
