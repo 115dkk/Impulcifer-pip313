@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import signal
 from scipy.signal.windows import hann
-from scipy.fft import fft, ifft, next_fast_len
+from scipy.fft import fft, next_fast_len
 from scipy.interpolate import InterpolatedUnivariateSpline
 from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
