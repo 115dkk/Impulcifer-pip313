@@ -943,7 +943,9 @@ class ImpulseResponse:
         f_max = self.fs / 2
         f_min = 10
         step = 1.03
-        f = np.array([f_min * step ** i for i in range(int(np.log(f_max / f_min) / np.log(step)))])
+        # Phase 3 optimization: Vectorize frequency array generation
+        n_freqs = int(np.log(f_max / f_min) / np.log(step))
+        f = f_min * step ** np.arange(n_freqs)
         log_f_spec = np.ones((len(f), spectrum.shape[1]))
         for i in range(spectrum.shape[1]):
             interpolator = interpolate.InterpolatedUnivariateSpline(np.log10(freqs), spectrum[:, i], k=1)
