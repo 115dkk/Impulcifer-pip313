@@ -4,10 +4,11 @@ def main_gui():
 	import tkinter.font
 	import re
 	import shutil
-	from tkinter import Tk, Frame, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, Scrollbar, Text, END, DISABLED, NORMAL, HORIZONTAL, VERTICAL, W, E, N, S, Canvas, LEFT
+	from tkinter import Tk, Label, Button, Entry, StringVar, DoubleVar, IntVar, BooleanVar, Toplevel, Checkbutton, OptionMenu, DISABLED, NORMAL, W, Canvas, LEFT
 	from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
 	from tkinter.messagebox import showinfo, showerror
-	import recorder, impulcifer
+	import recorder
+	import impulcifer
 	import sounddevice
 	import platform
 	import matplotlib.font_manager as fm
@@ -74,7 +75,7 @@ def main_gui():
 				if 'Pretendard' in available_fonts:
 					print("시스템에 설치된 Pretendard 폰트 사용")
 					return ('Pretendard', 9), ('Pretendard', 8), ('Pretendard', 10, 'bold')
-			except:
+			except Exception:
 				pass
 			
 			# 시스템 기본 폰트 사용
@@ -150,7 +151,7 @@ def main_gui():
 			return True
 		try:
 			float(inp)
-		except:
+		except Exception:
 			return False
 		return True
 
@@ -160,7 +161,7 @@ def main_gui():
 			return True
 		try:
 			int(inp)
-		except:
+		except Exception:
 			return False
 		if len(inp) > 5: #limit chars to 5
 			return False
@@ -278,7 +279,7 @@ def main_gui():
 			try:
 				channel_count = channels.get()
 				print(f"Channels entry enabled - Recording will use {channel_count} channels")
-			except:
+			except Exception:
 				print("Channels entry enabled - Waiting for valid channel input")
 		else:
 			channels_entry.config(state=DISABLED)
@@ -345,7 +346,7 @@ def main_gui():
 	def update_channel_guidance():
 		try:
 			channel_count = channels.get()
-		except:
+		except Exception:
 			# Handle case when entry is empty or invalid
 			channel_count = 0
 			
@@ -366,7 +367,7 @@ def main_gui():
 		channel_guidance_label.config(text=guidance_text)
 		try:
 			root.update()  # Force update to refresh display
-		except:
+		except Exception:
 			pass  # Ignore update errors during shutdown
 	
 	channel_guidance_label = Label(canvas1, text="Using default 2-channel recording.", wraplength=500, justify=LEFT, font=small_font, fg='blue')

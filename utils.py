@@ -6,7 +6,7 @@ import tempfile
 import json
 import numpy as np
 import soundfile as sf
-from scipy.fft import fft, rfft
+from scipy.fft import rfft
 from scipy import signal
 from PIL import Image
 import matplotlib.ticker as ticker
@@ -310,7 +310,7 @@ def get_truehd_channel_info(file_path):
         stream = info['streams'][0]
         
         channels = stream.get('channels', 0)
-        layout = stream.get('channel_layout', '')
+        stream.get('channel_layout', '')
         
         # Map channel layouts to speaker names
         from constants import CHANNEL_LAYOUT_MAP

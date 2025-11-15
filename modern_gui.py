@@ -6,7 +6,6 @@ Professional-grade interface with dark/light mode support
 """
 
 import os
-import sys
 import re
 import shutil
 import platform
@@ -290,9 +289,8 @@ class UpdateDialog(ctk.CTkToplevel):
                 ))
 
         except Exception as e:
-            self.after(0, lambda: self.show_error(
-                self.loc.get('update_error_general', default="Update error: {error}").format(error=str(e))
-            ))
+            error_msg = self.loc.get('update_error_general', default="Update error: {error}").format(error=str(e))
+            self.after(0, lambda: self.show_error(error_msg))
 
     def update_progress(self, downloaded: int, total: int):
         """Update progress bar"""

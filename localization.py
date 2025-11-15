@@ -5,8 +5,6 @@ Localization system for Impulcifer
 Supports multiple languages with automatic system language detection
 """
 
-import os
-import sys
 import json
 import locale
 from pathlib import Path
