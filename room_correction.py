@@ -244,7 +244,8 @@ def open_generic_room_measurement(estimator,
             fr.raw -= mic_calibration.raw
         fr.center([100, 10000])
         room_fr.raw += fr.raw
-        raws.append(fr.copy())
+        if plot:
+            raws.append(fr.copy())
         fr.compensate(target, min_mean_error=True)
         if method == 'conservative' and len(irs) > 1:
             fr.smoothen(window_size=1/3, treble_window_size=1/3)
