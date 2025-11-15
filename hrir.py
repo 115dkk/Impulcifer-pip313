@@ -636,7 +636,8 @@ class HRIR:
             # Compensate and equalize both to the target
             firs = []
             for fr in [left_fr, right_fr]:
-                fr.target = target.copy()
+                # Optimized: No need to copy target array since it's not modified
+                fr.target = target
                 fr.error = fr.raw - fr.target
                 fr.smoothen_fractional_octave(window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999)
                 fr.equalize(max_gain=15, treble_f_lower=2000, treble_f_upper=self.fs / 2)

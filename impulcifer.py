@@ -11,7 +11,7 @@ import matplotlib.ticker as ticker
 from matplotlib.ticker import FormatStrFormatter
 from autoeq.frequency_response import FrequencyResponse
 from impulse_response_estimator import ImpulseResponseEstimator
-from hrir import HRIR
+from hrir import HRIR, _get_center_value
 from room_correction import room_correction
 from utils import sync_axes, save_fig_as_png, is_truehd_file, convert_truehd_to_wav, check_ffmpeg_available
 from constants import (
@@ -894,16 +894,15 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     sync_axes([axl, axr])
 
     # Combined
-    _left = left.copy()
-    _right = right.copy()
-    gain_l = _left.center([100, 10000])
-    gain_r = _right.center([100, 10000])
+    # Optimized: Use _get_center_value instead of .copy().center()
+    gain_l = _get_center_value(left, [100, 10000])
+    gain_r = _get_center_value(right, [100, 10000])
     ax = fig.add_subplot(gs[:, 1:])
-    ax.plot(_left.frequency, _left.raw, linewidth=1, color='#1f77b4')
-    ax.plot(_right.frequency, _right.raw, linewidth=1, color='#d62728')
-    ax.plot(_left.frequency, _left.raw - _right.raw, linewidth=1, color='#680fb9')
-    sl = np.logical_and(_left.frequency > 20, _left.frequency < 20000)
-    stack = np.vstack([_left.raw[sl], _right.raw[sl], _left.raw[sl] - _right.raw[sl]])
+    ax.plot(left.frequency, left.raw, linewidth=1, color='#1f77b4')
+    ax.plot(right.frequency, right.raw, linewidth=1, color='#d62728')
+    ax.plot(left.frequency, left.raw - right.raw, linewidth=1, color='#680fb9')
+    sl = np.logical_and(left.frequency > 20, left.frequency < 20000)
+    stack = np.vstack([left.raw[sl], right.raw[sl], left.raw[sl] - right.raw[sl]])
     ax.set_ylim([np.min(stack) * 1.1, np.max(stack) * 1.1])
     axl.set_ylim([np.min(stack) * 1.1, np.max(stack) * 1.1])
     axr.set_ylim([np.min(stack) * 1.1, np.max(stack) * 1.1])
