@@ -27,7 +27,7 @@ def record_target(file_path, length, fs, channels=2, append=False):
     Returns:
         None
     """
-    print(f">>>>>>>>> Recording Target Debug Info:")
+    print(">>>>>>>>> Recording Target Debug Info:")
     print(f"  File: {file_path}")
     print(f"  Length: {length} samples ({length/fs:.2f} seconds)")
     print(f"  Sample rate: {fs} Hz")
@@ -38,7 +38,7 @@ def record_target(file_path, length, fs, channels=2, append=False):
     print(f"  Raw recording shape: {recording.shape}")
     
     # Analyze recording content
-    print(f"  Recording content analysis:")
+    print("  Recording content analysis:")
     for ch in range(recording.shape[1] if len(recording.shape) > 1 else 1):
         if len(recording.shape) > 1:
             ch_data = recording[:, ch]
@@ -62,7 +62,7 @@ def record_target(file_path, length, fs, channels=2, append=False):
     
     if append and os.path.isfile(file_path):
         # Adding to existing file, read the file
-        print(f"  Appending to existing file...")
+        print("  Appending to existing file...")
         _fs, data = read_wav(file_path, expand=True)
         print(f"  Existing file shape: {data.shape}")
         
@@ -81,7 +81,7 @@ def record_target(file_path, length, fs, channels=2, append=False):
         print(f"  Final appended shape: {recording.shape}")
     
     write_wav(file_path, fs, recording)
-    print(f"  File written successfully")
+    print("  File written successfully")
     print(f'>>>>>>>>> Headroom: {-1.0*max_gain:.1f} dB')
 
 

@@ -186,7 +186,7 @@ if __name__ == '__main__':
     test_version = sys.argv[1] if len(sys.argv) > 1 else "1.8.5"
 
     print(f"Current version: {test_version}")
-    print(f"Checking for updates...")
+    print("Checking for updates...")
 
     checker = UpdateChecker(test_version)
     has_update, latest_ver, download_url = checker.check_for_updates()
@@ -197,7 +197,7 @@ if __name__ == '__main__':
 
         release_notes = checker.get_release_notes()
         if release_notes:
-            print(f"\nRelease notes:")
+            print("\nRelease notes:")
             print(release_notes[:500])  # First 500 chars
     else:
         print(f"✅ You are up to date (latest: {latest_ver})")

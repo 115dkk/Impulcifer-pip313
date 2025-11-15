@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
 from constants import AUTO_GENERATABLE_CHANNELS
 
 def generate_missing_channels(hrir, auto_generate_config):

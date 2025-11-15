@@ -71,7 +71,7 @@ def test_microphone_deviation_integration():
     # 테스트 HRIR 생성
     hrir = create_test_hrir()
     
-    print(f"테스트 HRIR 생성 완료:")
+    print("테스트 HRIR 생성 완료:")
     print(f"  - 스피커: {list(hrir.irs.keys())}")
     print(f"  - 샘플링 레이트: {hrir.fs} Hz")
     
@@ -99,18 +99,18 @@ def test_microphone_deviation_integration():
         print("보정 성공!")
         
         # 결과 분석
-        print(f"\n분석 결과:")
+        print("\n분석 결과:")
         for speaker, results in analysis_results.items():
             print(f"  {speaker} 스피커:")
             if results.get('correction_applied', False):
-                print(f"    - 보정 적용됨")
+                print("    - 보정 적용됨")
                 print(f"    - 평균 편차: {results.get('avg_deviation_db', 0):.2f} dB")
                 print(f"    - 최대 편차: {results.get('max_deviation_db', 0):.2f} dB")
             else:
-                print(f"    - 보정 건너뜀 (편차 미미)")
+                print("    - 보정 건너뜀 (편차 미미)")
         
         # 데이터 변경 확인
-        print(f"\n데이터 변경 확인:")
+        print("\n데이터 변경 확인:")
         for speaker, pair in hrir.irs.items():
             left_changed = not np.array_equal(original_data[speaker]['left'], pair['left'].data)
             right_changed = not np.array_equal(original_data[speaker]['right'], pair['right'].data)

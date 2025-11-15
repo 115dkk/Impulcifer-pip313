@@ -4,7 +4,6 @@
 Impulcifer 명령줄 진입점
 """
 
-import sys
 from impulcifer import main, create_cli
 
 def entry_point():

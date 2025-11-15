@@ -8,7 +8,6 @@ pytest 기반의 포괄적인 테스트로, CI/CD 파이프라인에서 실행�
 
 import pytest
 import numpy as np
-import os
 import sys
 from pathlib import Path
 
@@ -70,7 +69,7 @@ class TestMicrophoneDeviationCorrector:
         for i in range(len(freqs) - 1):
             # 주파수가 높아질수록 게이트 길이가 짧아지거나 같아야 함
             assert corrector.gate_lengths[freqs[i]] >= corrector.gate_lengths[freqs[i+1]], \
-                   f"게이트 길이가 주파수에 따라 올바르게 감소하지 않음"
+                   "게이트 길이가 주파수에 따라 올바르게 감소하지 않음"
 
     def test_quality_evaluation(self, corrector):
         """응답 품질 평가 테스트"""
@@ -172,7 +171,7 @@ class TestModuleImports:
     def test_recorder_module_importable(self):
         """recorder 모듈 임포트 테스트 (오디오 하드웨어 필요)"""
         try:
-            import recorder
+            import recorder  # noqa: F401
         except (ImportError, OSError) as e:
             # CI 환경에서는 PortAudio가 없을 수 있음
             pytest.skip(f"recorder 모듈 임포트 불가 (정상): {e}")
@@ -180,8 +179,8 @@ class TestModuleImports:
     def test_gui_modules_importable(self):
         """GUI 모듈 임포트 테스트 (선택적)"""
         try:
-            import modern_gui
-            import gui
+            import modern_gui  # noqa: F401
+            import gui  # noqa: F401
         except (ImportError, OSError) as e:
             # CI 환경에서는 PortAudio가 없을 수 있음
             pytest.skip(f"GUI 모듈 임포트 불가 (정상): {e}")
@@ -300,7 +299,7 @@ def run_tests(verbose=True, markers=None):
 
     # 커버리지 보고서 생성 (pytest-cov가 설치된 경우)
     try:
-        import pytest_cov
+        import pytest_cov  # noqa: F401
         args.extend(['--cov=.', '--cov-report=term-missing'])
     except ImportError:
         pass

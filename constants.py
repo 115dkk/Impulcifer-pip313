@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from utils import versus_distance
 import os
-import importlib.resources as pkg_resources
+import importlib.resources
 
 # https://en.wikipedia.org/wiki/Surround_sound
 # TrueHD 지원을 위해 확장된 스피커 이름 목록
@@ -11,7 +10,7 @@ SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'WL', 'WR', 'TFL', 'T
 # 파이썬 3.13.2 스타일로 f-string 사용 - FC와 TSL/TSR 같은 3글자 채널 지원
 SPEAKER_PATTERN = f'({"|".join(SPEAKER_NAMES + ["X"])})'
 # format() 대신 f-string 사용 - 3글자 채널 지원
-SPEAKER_LIST_PATTERN = fr'([A-Z]{{2,3}}(,[A-Z]{{2,3}})*)'
+SPEAKER_LIST_PATTERN = r'([A-Z]{2,3}(,[A-Z]{2,3})*)'
 
 # TrueHD 채널 레이아웃 정의
 TRUEHD_11CH_ORDER = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'TFL', 'TFR', 'TBL', 'TBR']  # 7.0.4
