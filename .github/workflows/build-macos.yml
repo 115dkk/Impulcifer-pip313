@@ -1,9 +1,9 @@
 name: Build macOS Distribution
 
+# 이 워크플로우는 개별 빌드용입니다
+# master push 시 자동 실행되지 않으며, workflow_dispatch(수동)나 workflow_call(호출)로만 실행됩니다
+# 통합 릴리스는 release-cross-platform.yml을 사용합니다
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
   workflow_call:
     outputs:
