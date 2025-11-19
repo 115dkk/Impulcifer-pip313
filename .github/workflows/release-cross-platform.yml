@@ -145,7 +145,6 @@ jobs:
           echo "Starting Nuitka build for macOS..."
           python -m nuitka \
             --standalone \
-            --onefile \
             --macos-create-app-bundle \
             --macos-app-name="Impulcifer" \
             --output-dir=dist/macos \
@@ -211,12 +210,22 @@ jobs:
           brew install create-dmg || true
           mkdir -p dist/dmg
 
+          # 경로 확인 디버깅용 출력
+          echo "Checking dist/macos contents:"
+          ls -R dist/macos
+
+          # .app 파일 복사 (없으면 에러 발생시키고 종료)
           if [ -d "dist/macos/Impulcifer.app" ]; then
+            echo "Found Impulcifer.app, copying to dist/dmg/"
             cp -R dist/macos/Impulcifer.app dist/dmg/
           else
-            find dist/macos -name "*.app" -exec cp -R {} dist/dmg/ \;
+            echo "Error: Impulcifer.app not found in dist/macos!"
+            echo "Searching for any .app files..."
+            find dist/macos -name "*.app" -type d
+            exit 1
           fi
 
+          # DMG 생성
           create-dmg \
             --volname "Impulcifer" \
             --window-pos 200 120 \
@@ -225,7 +234,7 @@ jobs:
             --app-drop-link 600 185 \
             --hdiutil-quiet \
             "dist/Impulcifer-${{ env.APP_VERSION }}-macOS.dmg" \
-            "dist/dmg/" || true
+            "dist/dmg/"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
