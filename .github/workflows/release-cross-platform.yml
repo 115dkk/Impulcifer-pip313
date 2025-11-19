@@ -201,6 +201,18 @@ jobs:
             --show-progress \
             --show-memory \
             gui_main.py
+
+          echo "Checking macOS build output:"
+          ls -la dist/macos/
+
+          # Rename gui_main.app to Impulcifer.app if needed
+          if [ -d "dist/macos/gui_main.app" ]; then
+            echo "Renaming gui_main.app to Impulcifer.app..."
+            mv dist/macos/gui_main.app dist/macos/Impulcifer.app
+          fi
+
+          echo "Final macOS build structure:"
+          ls -la dist/macos/
         env:
           PYTHONIOENCODING: UTF-8
 
