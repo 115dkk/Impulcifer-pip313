@@ -124,7 +124,6 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
         nuitka_cmd_args.append("--windows-console-mode=disable")
     elif target_platform == "macos":
         nuitka_cmd_args.extend([
-            "--onefile",
             "--macos-create-app-bundle",
             "--macos-app-name=Impulcifer",
         ])

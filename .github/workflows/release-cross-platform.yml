@@ -145,7 +145,6 @@ jobs:
           echo "Starting Nuitka build for macOS..."
           python -m nuitka \
             --standalone \
-            --onefile \
             --macos-create-app-bundle \
             --macos-app-name="Impulcifer" \
             --output-dir=dist/macos \
@@ -211,12 +210,22 @@ jobs:
           brew install create-dmg || true
           mkdir -p dist/dmg
 
+          # 경로 확인 디버깅용 출력
+          echo "Checking dist/macos contents:"
+          ls -R dist/macos
+
+          # .app 파일 복사 (없으면 에러 발생시키고 종료)
           if [ -d "dist/macos/Impulcifer.app" ]; then
+            echo "Found Impulcifer.app, copying to dist/dmg/"
             cp -R dist/macos/Impulcifer.app dist/dmg/
           else
-            find dist/macos -name "*.app" -exec cp -R {} dist/dmg/ \;
+            echo "Error: Impulcifer.app not found in dist/macos!"
+            echo "Searching for any .app files..."
+            find dist/macos -name "*.app" -type d
+            exit 1
           fi
 
+          # DMG 생성
           create-dmg \
             --volname "Impulcifer" \
             --window-pos 200 120 \
@@ -225,7 +234,7 @@ jobs:
             --app-drop-link 600 185 \
             --hdiutil-quiet \
             "dist/Impulcifer-${{ env.APP_VERSION }}-macOS.dmg" \
-            "dist/dmg/" || true
+            "dist/dmg/"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4
@@ -263,6 +272,7 @@ jobs:
             patchelf \
             desktop-file-utils \
             libfuse2 \
+            imagemagick \
             portaudio19-dev \
             python3-tk \
             python3-dev \
@@ -359,6 +369,9 @@ jobs:
             --show-progress \
             --show-memory \
             gui_main.py
+
+          echo "Checking Linux build output:"
+          ls -la dist/linux/
         env:
           PYTHONIOENCODING: UTF-8
 
@@ -372,60 +385,106 @@ jobs:
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
 
+          # Copy executable with validation
           if [ -f "dist/linux/Impulcifer.bin" ]; then
+            echo "Found Impulcifer.bin, copying..."
             cp dist/linux/Impulcifer.bin AppDir/usr/bin/impulcifer
           elif [ -f "dist/linux/Impulcifer" ]; then
+            echo "Found Impulcifer, copying..."
             cp dist/linux/Impulcifer AppDir/usr/bin/impulcifer
+          else
+            echo "Error: No Impulcifer executable found in dist/linux/"
+            ls -la dist/linux/
+            exit 1
           fi
 
-          cat > AppDir/usr/share/applications/impulcifer.desktop <<EOF
-          [Desktop Entry]
-          Type=Application
-          Name=Impulcifer
-          Comment=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템
-          Exec=impulcifer
-          Icon=impulcifer
-          Categories=AudioVideo;Audio;
-          Terminal=false
-          EOF
+          chmod +x AppDir/usr/bin/impulcifer
 
-          if [ -f "img/icon.png" ]; then
-            cp img/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/impulcifer.png
-          fi
+          # Create desktop file (no indentation - Desktop Entry format requirement)
+          cat > AppDir/usr/share/applications/impulcifer.desktop <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Impulcifer
+Comment=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템
+Exec=impulcifer
+Icon=impulcifer
+Categories=AudioVideo;Audio;
+Terminal=false
+EOF
 
+          # Create a simple placeholder icon (linuxdeploy requires an icon)
+          # Using ImageMagick to create a 256x256 PNG with text
+          convert -size 256x256 xc:none -gravity center \
+            -pointsize 72 -fill '#4A90E2' \
+            -draw "circle 128,128 128,28" \
+            -pointsize 48 -fill white \
+            -annotate +0+0 "I" \
+            AppDir/usr/share/icons/hicolor/256x256/apps/impulcifer.png || \
+          # Fallback: create solid color icon if ImageMagick fails
+          convert -size 256x256 xc:'#4A90E2' \
+            AppDir/usr/share/icons/hicolor/256x256/apps/impulcifer.png
+
+          echo "AppDir structure:"
+          ls -R AppDir/
+
+          # Create AppImage
           ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --output appimage \
-            --desktop-file=AppDir/usr/share/applications/impulcifer.desktop || true
+            --desktop-file=AppDir/usr/share/applications/impulcifer.desktop
 
-          if [ -f "Impulcifer-*.AppImage" ]; then
-            mv Impulcifer-*.AppImage "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+          # Rename AppImage with proper version
+          APPIMAGE_FILE=$(ls Impulcifer-*.AppImage 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE_FILE" ]; then
+            echo "Found AppImage: $APPIMAGE_FILE"
+            mv "$APPIMAGE_FILE" "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+            echo "Renamed to: Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+          else
+            echo "Error: AppImage was not created"
+            exit 1
           fi
 
       - name: Create tarball distribution
         run: |
+          echo "Creating tarball distribution..."
           mkdir -p dist/Impulcifer-linux
 
+          # Copy executable with validation
           if [ -f "dist/linux/Impulcifer.bin" ]; then
+            echo "Copying Impulcifer.bin to tarball..."
             cp dist/linux/Impulcifer.bin dist/Impulcifer-linux/impulcifer
           elif [ -f "dist/linux/Impulcifer" ]; then
+            echo "Copying Impulcifer to tarball..."
             cp dist/linux/Impulcifer dist/Impulcifer-linux/impulcifer
+          else
+            echo "Error: No Impulcifer executable found for tarball"
+            exit 1
           fi
 
-          cp README.txt dist/Impulcifer-linux/ || true
-          cp LICENSE dist/Impulcifer-linux/ || true
+          chmod +x dist/Impulcifer-linux/impulcifer
 
+          # Copy optional documentation files
+          [ -f "README.txt" ] && cp README.txt dist/Impulcifer-linux/ && echo "Copied README.txt"
+          [ -f "LICENSE" ] && cp LICENSE dist/Impulcifer-linux/ && echo "Copied LICENSE"
+
+          # Create run script
           cat > dist/Impulcifer-linux/run.sh <<'EOF'
-          #!/bin/bash
-          SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          cd "$SCRIPT_DIR"
-          ./impulcifer "$@"
-          EOF
+#!/bin/bash
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+./impulcifer "$@"
+EOF
           chmod +x dist/Impulcifer-linux/run.sh
 
+          echo "Tarball contents:"
+          ls -lah dist/Impulcifer-linux/
+
+          # Create tarball
           cd dist
           tar czf "Impulcifer-${{ env.APP_VERSION }}-linux-x86_64.tar.gz" Impulcifer-linux
           cd ..
+
+          echo "Tarball created: dist/Impulcifer-${{ env.APP_VERSION }}-linux-x86_64.tar.gz"
 
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
