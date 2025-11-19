@@ -28,13 +28,56 @@
 
 ## 💿 설치 방법
 
-### 사전 요구 사항
+Impulcifer-py313은 두 가지 방법으로 설치할 수 있습니다:
 
+### 방법 1: 최종 사용자용 독립 실행 파일 (권장)
+
+**Python 설치 없이** 바로 실행 가능한 독립 실행 파일을 제공합니다. [GitHub Releases](https://github.com/115dkk/Impulcifer-pip313/releases) 페이지에서 운영체제에 맞는 파일을 다운로드하세요.
+
+#### Windows
+1. `Impulcifer_Setup.exe` 다운로드
+2. 인스톨러 실행 후 설치 마법사 따라가기
+3. 시작 메뉴 또는 바탕화면 아이콘으로 실행
+
+#### macOS
+1. `Impulcifer-*-macOS.dmg` 다운로드
+2. DMG 파일 열기
+3. Impulcifer 아이콘을 Applications 폴더로 드래그
+4. Applications 폴더에서 실행
+
+#### Linux
+
+**AppImage (권장):**
+```bash
+# 실행 권한 부여
+chmod +x Impulcifer-*.AppImage
+
+# 실행
+./Impulcifer-*.AppImage
+```
+
+**Tarball:**
+```bash
+# 압축 해제
+tar xzf Impulcifer-*-linux-x86_64.tar.gz
+
+# 디렉토리 이동
+cd Impulcifer-linux
+
+# 실행
+./run.sh
+```
+
+### 방법 2: Python 개발 환경에서 설치
+
+Python 개발자이거나 최신 개발 버전을 사용하려는 경우 pip 또는 uv를 통해 설치할 수 있습니다.
+
+#### 사전 요구 사항
 - Python 3.9 이상, **3.13.x 또는 3.14.x 권장** (최신 버전에서 테스트 및 최적화되었습니다)
 - Python 3.13+ free-threaded 빌드 사용 시 최대 성능 (GIL 없이 3-7배 빠름)
 - `pip` (Python 패키지 설치 프로그램)
 
-### 설치
+#### 설치 명령어
 
 터미널 또는 명령 프롬프트에서 다음 명령어를 실행하여 `impulcifer-py313`을 설치합니다:
 
@@ -227,7 +270,7 @@ SOFTWARE.
 # 변경사항
 -----------------------------------------------
 
-## 최신 업데이트 (v2.1.3)
+## 최신 업데이트 (v2.1.4)
 
 ### 크로스 플랫폼 빌드 시스템 개선
 
