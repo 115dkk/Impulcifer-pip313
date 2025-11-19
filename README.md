@@ -227,6 +227,39 @@ SOFTWARE.
 # 변경사항
 -----------------------------------------------
 
+## 최신 업데이트 (v2.1.3)
+
+### 크로스 플랫폼 빌드 시스템 개선
+
+**macOS 빌드 수정**
+- macOS `.app` 번들 생성 시 `--onefile` 옵션 제거
+  - 이전에는 `--onefile`과 `--macos-create-app-bundle` 옵션 충돌로 빈 DMG(11KB) 생성 문제 발생
+  - `.app` 번들 자체가 단일 패키지이므로 `--onefile` 불필요
+  - 앱 실행 속도도 개선 (압축 해제 과정 제거)
+- DMG 생성 시 검증 로직 추가
+  - `.app` 파일 존재 확인 후 에러 발생 시 빌드 중단
+  - 디버깅을 위한 상세 출력 추가
+
+**Linux 빌드 수정**
+- AppImage 생성 시 필수 아이콘 자동 생성
+  - ImageMagick을 사용해 동적으로 플레이스홀더 아이콘 생성
+  - 아이콘 부재로 인한 빌드 실패 문제 해결
+- Desktop Entry 파일 형식 표준 준수
+  - 들여쓰기 제거 (Desktop Entry 사양 준수)
+- 파일 검증 및 에러 처리 개선
+  - 실행 파일 존재 여부 확인
+  - 에러 발생 시 명확한 메시지와 함께 빌드 중단
+  - 디버깅 출력 추가
+
+**CI/CD 안정성 향상**
+- YAML 구문 오류 수정
+  - heredoc 사용 시 발생하던 YAML 파서 충돌 해결
+  - `{ echo ... } > file` 패턴으로 변경
+- 시스템 의존성 정리
+  - Linux 빌드에 ImageMagick 추가
+
+-----------------------------------------------
+
 ### 1. 확장된 다채널 HRIR 처리 지원
 
 Atmos와 같은 다채널 오디오 시스템의 HRIR 생성을 지원하기 위해 처리 가능한 스피커 채널 목록(`constants.py`의 `SPEAKER_NAMES`) 및 관련 파일명 패턴(`constants.py`의 `SPEAKER_LIST_PATTERN`)을 확장했습니다. 이제 `WL,WR.wav`, `TFL,TFR.wav`, `TSL,TSR.wav`, `TBL,TBR.wav` 등 기존 7.1 채널 구성을 넘어서는 다양한 높이 및 와이드 채널의 측정 파일(예: `FL,FR,FC,SL,SR,BL,BR,TFL,TFR,TSL,TSR,TBL,TBR,WL,WR.wav`)을 인식하고 처리할 수 있습니다.
