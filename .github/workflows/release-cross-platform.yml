@@ -401,16 +401,16 @@ jobs:
           chmod +x AppDir/usr/bin/impulcifer
 
           # Create desktop file (no indentation - Desktop Entry format requirement)
-          cat > AppDir/usr/share/applications/impulcifer.desktop <<'EOF'
-[Desktop Entry]
-Type=Application
-Name=Impulcifer
-Comment=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템
-Exec=impulcifer
-Icon=impulcifer
-Categories=AudioVideo;Audio;
-Terminal=false
-EOF
+          {
+            echo '[Desktop Entry]'
+            echo 'Type=Application'
+            echo 'Name=Impulcifer'
+            echo 'Comment=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템'
+            echo 'Exec=impulcifer'
+            echo 'Icon=impulcifer'
+            echo 'Categories=AudioVideo;Audio;'
+            echo 'Terminal=false'
+          } > AppDir/usr/share/applications/impulcifer.desktop
 
           # Create a simple placeholder icon (linuxdeploy requires an icon)
           # Using ImageMagick to create a 256x256 PNG with text
@@ -468,12 +468,12 @@ EOF
           [ -f "LICENSE" ] && cp LICENSE dist/Impulcifer-linux/ && echo "Copied LICENSE"
 
           # Create run script
-          cat > dist/Impulcifer-linux/run.sh <<'EOF'
-#!/bin/bash
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
-./impulcifer "$@"
-EOF
+          {
+            echo '#!/bin/bash'
+            echo 'SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"'
+            echo 'cd "$SCRIPT_DIR"'
+            echo './impulcifer "$@"'
+          } > dist/Impulcifer-linux/run.sh
           chmod +x dist/Impulcifer-linux/run.sh
 
           echo "Tarball contents:"
