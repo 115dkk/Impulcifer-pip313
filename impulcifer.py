@@ -1045,6 +1045,8 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     hp_irs = HRIR(estimator)
 
     # Determine the headphone file to use
+    logger = get_logger()
+
     if headphone_file_path:
         # If a specific path is provided, use it
         # If it's a relative path, consider it relative to the current working directory or dir_path
@@ -1053,20 +1055,23 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
             actual_hp_file = os.path.join(dir_path, headphone_file_path)
         else:
             actual_hp_file = headphone_file_path
-        logger = get_logger()
-
-    if not os.path.exists(actual_hp_file):
-        logger.warning(
-            f"Specified headphone compensation file not found: {actual_hp_file}. Trying default 'headphones.wav'"
-        )
-        actual_hp_file = os.path.join(dir_path, "headphones.wav")  # Fallback to default
     else:
         # Default to headphones.wav in the dir_path
         actual_hp_file = os.path.join(dir_path, "headphones.wav")
 
+    # Validate file exists, with fallback to default if custom file was specified
     if not os.path.exists(actual_hp_file):
-        logger.error(f"Headphone compensation file not found: {actual_hp_file}")
-        return None, None  # Or raise an error
+        if headphone_file_path:
+            # Custom file specified but not found, try default
+            logger.warning(
+                f"Specified headphone compensation file not found: {actual_hp_file}. Trying default 'headphones.wav'"
+            )
+            actual_hp_file = os.path.join(dir_path, "headphones.wav")
+
+        # Final check
+        if not os.path.exists(actual_hp_file):
+            logger.error(f"Headphone compensation file not found: {actual_hp_file}")
+            return None, None  # Or raise an error
 
     logger.info(f"Using headphone compensation file: {actual_hp_file}")
     hp_irs.open_recording(actual_hp_file, speakers=["FL", "FR"])

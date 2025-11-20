@@ -183,7 +183,7 @@ if __name__ == '__main__':
     import sys
 
     # Get version from pyproject.toml or command line
-    test_version = sys.argv[1] if len(sys.argv) > 1 else "2.2.2"
+    test_version = sys.argv[1] if len(sys.argv) > 1 else "2.2.3"
 
     print(f"Current version: {test_version}")
     print("Checking for updates...")
