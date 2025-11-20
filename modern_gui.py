@@ -10,7 +10,9 @@ import re
 import shutil
 import platform
 import threading
+from pathlib import Path
 from tkinter import filedialog, messagebox
+from tkinter import font as tkfont
 import customtkinter as ctk
 import sounddevice
 import recorder
@@ -25,12 +27,98 @@ from updater import Updater
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
 
 
+def setup_pretendard_font(current_language: str = 'en') -> str:
+    """
+    Setup Pretendard font for Korean and English languages.
+    Returns font family name to use, or None for system default.
+
+    Args:
+        current_language: Current language code (e.g., 'ko', 'en')
+
+    Returns:
+        Font family name to use, or None for system default
+    """
+    # Only use Pretendard for Korean and English
+    if current_language not in ['ko', 'en']:
+        return None
+
+    try:
+        # Try to find Pretendard font file
+        font_path = None
+        script_dir = Path(__file__).parent
+
+        # Check common font locations
+        possible_paths = [
+            script_dir / "font" / "Pretendard-Regular.otf",
+            script_dir / "fonts" / "Pretendard-Regular.otf",
+            script_dir.parent / "font" / "Pretendard-Regular.otf",
+            script_dir.parent / "fonts" / "Pretendard-Regular.otf",
+        ]
+
+        for path in possible_paths:
+            if path.exists():
+                font_path = path
+                break
+
+        if font_path and font_path.exists():
+            # Try to register font with system (Windows)
+            try:
+                if platform.system() == "Windows":
+                    import ctypes
+                    from ctypes import wintypes
+
+                    # Register font temporarily for this session
+                    gdi32 = ctypes.WinDLL('gdi32', use_last_error=True)
+                    FR_PRIVATE = 0x10
+
+                    # Add font resource
+                    result = gdi32.AddFontResourceExW(
+                        str(font_path),
+                        FR_PRIVATE,
+                        0
+                    )
+
+                    if result > 0:
+                        print(f"Successfully registered Pretendard font: {font_path}")
+                        return "Pretendard"
+                    else:
+                        print(f"Failed to register Pretendard font (result={result})")
+                else:
+                    # For Linux/Mac, just try using the font name
+                    # The font should be installed system-wide
+                    print(f"Found Pretendard font at: {font_path}")
+                    print("Note: On Linux/Mac, please install Pretendard font system-wide for best results")
+                    # Try to use Pretendard anyway
+                    return "Pretendard"
+
+            except Exception as e:
+                print(f"Failed to register Pretendard font: {e}")
+
+        # Fallback: Check if Pretendard is already installed in system
+        try:
+            available_fonts = tkfont.families()
+            for font_name in available_fonts:
+                if "Pretendard" in font_name:
+                    print(f"Using system-installed Pretendard font: {font_name}")
+                    return font_name
+        except Exception as e:
+            print(f"Error checking system fonts: {e}")
+
+        print("Pretendard font not available, using system default")
+        return None
+
+    except Exception as e:
+        print(f"Error setting up Pretendard font: {e}")
+        return None
+
+
 class ProcessingDialog(ctk.CTkToplevel):
     """Dialog to show processing progress and logs"""
 
     def __init__(self, parent, loc_manager):
         super().__init__(parent)
         self.loc = loc_manager
+        self.font_family = setup_pretendard_font(self.loc.current_language)
         self.title(self.loc.get('dialog_processing_title', default="Processing"))
         self.geometry("700x500")
         self.transient(parent)
@@ -50,7 +138,7 @@ class ProcessingDialog(ctk.CTkToplevel):
         title_label = ctk.CTkLabel(
             self,
             text=self.loc.get('dialog_processing_message', default="Processing BRIR..."),
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         )
         title_label.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
 
@@ -63,7 +151,7 @@ class ProcessingDialog(ctk.CTkToplevel):
         self.progress_label = ctk.CTkLabel(
             self,
             text="0%",
-            font=ctk.CTkFont(size=12)
+            font=ctk.CTkFont(family=self.font_family, size=12)
         )
         self.progress_label.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="w")
 
@@ -139,6 +227,7 @@ class UpdateDialog(ctk.CTkToplevel):
     def __init__(self, parent, loc_manager, current_version: str, latest_version: str, download_url: str, release_notes: str = ""):
         super().__init__(parent)
         self.loc = loc_manager
+        self.font_family = setup_pretendard_font(self.loc.current_language)
         self.current_version = current_version
         self.latest_version = latest_version
         self.download_url = download_url
@@ -168,7 +257,7 @@ class UpdateDialog(ctk.CTkToplevel):
         title_label = ctk.CTkLabel(
             title_frame,
             text=self.loc.get('update_available_message', default="A new version is available!"),
-            font=ctk.CTkFont(size=18, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=18, weight="bold")
         )
         title_label.grid(row=0, column=0, pady=(0, 10))
 
@@ -179,7 +268,7 @@ class UpdateDialog(ctk.CTkToplevel):
         version_label = ctk.CTkLabel(
             title_frame,
             text=version_text,
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(family=self.font_family, size=14)
         )
         version_label.grid(row=1, column=0)
 
@@ -187,7 +276,7 @@ class UpdateDialog(ctk.CTkToplevel):
         notes_label = ctk.CTkLabel(
             self,
             text=self.loc.get('update_release_notes', default="Release Notes:"),
-            font=ctk.CTkFont(size=12, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold")
         )
         notes_label.grid(row=1, column=0, padx=20, pady=(0, 5), sticky="w")
 
@@ -207,7 +296,7 @@ class UpdateDialog(ctk.CTkToplevel):
         self.progress_label = ctk.CTkLabel(
             self.progress_frame,
             text=self.loc.get('update_downloading', default="Downloading update..."),
-            font=ctk.CTkFont(size=12)
+            font=ctk.CTkFont(family=self.font_family, size=12)
         )
         self.progress_label.pack(pady=(10, 5))
 
@@ -332,6 +421,9 @@ class ModernImpulciferGUI:
         # Initialize localization manager
         self.loc = get_localization_manager()
 
+        # Setup font based on language
+        self.font_family = setup_pretendard_font(self.loc.current_language)
+
         # Apply saved theme
         saved_theme = self.loc.get_theme()
         if saved_theme == 'system':
@@ -387,7 +479,7 @@ class ModernImpulciferGUI:
         self.title_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_title'),
-            font=ctk.CTkFont(size=24, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=24, weight="bold")
         )
         self.title_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
 
@@ -395,7 +487,7 @@ class ModernImpulciferGUI:
         self.subtitle_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_subtitle'),
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=self.font_family, size=12),
             text_color="gray"
         )
         self.subtitle_label.grid(row=0, column=1, padx=10, pady=15, sticky="w")
@@ -449,7 +541,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             devices_frame,
             text=self.loc.get('section_audio_devices'),
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         # Host API
@@ -492,7 +584,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             files_frame,
             text=self.loc.get('section_files'),
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
         # File to play
@@ -533,7 +625,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             options_frame,
             text=self.loc.get('section_recording_options'),
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
         # Channels checkbox and entry
@@ -563,7 +655,7 @@ class ModernImpulciferGUI:
         self.channel_guidance = ctk.CTkLabel(
             options_frame,
             text=self.loc.get('message_using_default_recording'),
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(family=self.font_family, size=11),
             text_color="gray",
             wraplength=800,
             justify="left"
@@ -584,7 +676,7 @@ class ModernImpulciferGUI:
             text=self.loc.get('button_start_recording'),
             command=self.start_recording,
             height=50,
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
             fg_color="#dc3545",
             hover_color="#c82333"
         )
@@ -616,7 +708,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             input_frame,
             text=self.loc.get('section_input_files'),
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
         # Your recordings
@@ -658,7 +750,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             processing_frame,
             text=self.loc.get('section_processing_options'),
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
         proc_row = 1
@@ -799,7 +891,7 @@ class ModernImpulciferGUI:
             text=self.loc.get('section_advanced_options'),
             variable=self.show_advanced_var,
             command=self.toggle_advanced_options,
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         )
         advanced_toggle.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
@@ -959,7 +1051,7 @@ class ModernImpulciferGUI:
         mic_dev_v2_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=2)
         adv_row += 1
 
-        ctk.CTkLabel(mic_dev_v2_frame, text=self.loc.get('label_v2_options'), font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(mic_dev_v2_frame, text=self.loc.get('label_v2_options'), font=ctk.CTkFont(family=self.font_family, size=11, weight="bold")).pack(side="left", padx=5)
 
         self.mic_deviation_phase_correction_var = ctk.BooleanVar(value=True)
         self.mic_dev_phase_check = ctk.CTkCheckBox(
@@ -1006,7 +1098,7 @@ class ModernImpulciferGUI:
             text=self.loc.get('button_generate_brir'),
             command=self.generate_brir,
             height=50,
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
             fg_color="#28a745",
             hover_color="#218838"
         )
@@ -1431,7 +1523,7 @@ class ModernImpulciferGUI:
         message = ctk.CTkLabel(
             dialog,
             text=self.loc.get('dialog_select_language_message'),
-            font=ctk.CTkFont(size=14),
+            font=ctk.CTkFont(family=self.font_family, size=14),
             wraplength=350
         )
         message.pack(pady=20, padx=20)
@@ -1448,7 +1540,7 @@ class ModernImpulciferGUI:
                 text=lang_name,
                 variable=selected_lang,
                 value=lang_code,
-                font=ctk.CTkFont(size=12)
+                font=ctk.CTkFont(family=self.font_family, size=12)
             )
             rb.pack(pady=5, padx=10, anchor="w")
 
@@ -1497,7 +1589,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             lang_frame,
             text=self.loc.get('section_language'),
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         ctk.CTkLabel(
@@ -1523,7 +1615,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             theme_frame,
             text=self.loc.get('section_theme'),
-            font=ctk.CTkFont(size=16, weight="bold")
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         ctk.CTkLabel(
