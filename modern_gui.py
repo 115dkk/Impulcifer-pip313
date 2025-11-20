@@ -63,7 +63,9 @@ def is_pip_available() -> bool:
         result = subprocess.run(
             [sys.executable, '-m', 'pip', '--version'],
             capture_output=True,
-            timeout=5
+            timeout=5,
+            encoding='utf-8',
+            errors='replace'
         )
         return result.returncode == 0
     except Exception:
@@ -1667,7 +1669,7 @@ class ModernImpulciferGUI:
 
         # Fallback: Unknown version
         print("Warning: Could not determine version, using fallback")
-        return "2.2.3"  # Current known version as last resort
+        return "2.2.4"  # Current known version as last resort
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""

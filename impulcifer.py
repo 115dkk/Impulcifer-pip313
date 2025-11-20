@@ -1048,29 +1048,67 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     logger = get_logger()
 
     if headphone_file_path:
-        # If a specific path is provided, use it
-        # If it's a relative path, consider it relative to the current working directory or dir_path
-        # For simplicity, we'll assume it's either absolute or relative to dir_path if not absolute
-        if not os.path.isabs(headphone_file_path):
-            actual_hp_file = os.path.join(dir_path, headphone_file_path)
+        # Normalize the path to handle Windows/Unix path separators
+        normalized_path = os.path.normpath(headphone_file_path)
+        logger.info(f"Headphone compensation file parameter provided: {normalized_path}")
+
+        # Check if it's a directory or a file
+        if os.path.isdir(normalized_path):
+            # It's a directory - search for common headphone file names
+            logger.info(f"Path is a directory, searching for headphone compensation file inside...")
+            possible_names = ["headphones.wav", "headphone.wav", "hp.wav", "compensation.wav"]
+            actual_hp_file = None
+
+            for name in possible_names:
+                candidate = os.path.join(normalized_path, name)
+                logger.info(f"Checking: {candidate}")
+                if os.path.isfile(candidate):
+                    actual_hp_file = candidate
+                    logger.info(f"Found headphone compensation file: {actual_hp_file}")
+                    break
+
+            if actual_hp_file is None:
+                # No standard file found, try to find any WAV file
+                logger.info("No standard headphone file found, searching for any .wav file...")
+                try:
+                    wav_files = [f for f in os.listdir(normalized_path) if f.lower().endswith('.wav')]
+                    if wav_files:
+                        actual_hp_file = os.path.join(normalized_path, wav_files[0])
+                        logger.info(f"Using first WAV file found: {actual_hp_file}")
+                    else:
+                        logger.warning(f"No WAV files found in directory: {normalized_path}")
+                        actual_hp_file = None
+                except Exception as e:
+                    logger.error(f"Error listing directory {normalized_path}: {e}")
+                    actual_hp_file = None
         else:
-            actual_hp_file = headphone_file_path
+            # It's a file path (or should be)
+            if not os.path.isabs(normalized_path):
+                # Relative path - make it relative to dir_path
+                actual_hp_file = os.path.join(dir_path, normalized_path)
+                logger.info(f"Relative path converted to: {actual_hp_file}")
+            else:
+                # Absolute file path
+                actual_hp_file = normalized_path
+                logger.info(f"Using absolute file path: {actual_hp_file}")
     else:
         # Default to headphones.wav in the dir_path
         actual_hp_file = os.path.join(dir_path, "headphones.wav")
+        logger.info(f"No headphone compensation file specified, using default: {actual_hp_file}")
 
-    # Validate file exists, with fallback to default if custom file was specified
-    if not os.path.exists(actual_hp_file):
+    # Validate file exists
+    if actual_hp_file is None or not os.path.exists(actual_hp_file):
         if headphone_file_path:
             # Custom file specified but not found, try default
             logger.warning(
-                f"Specified headphone compensation file not found: {actual_hp_file}. Trying default 'headphones.wav'"
+                f"Specified headphone compensation file not found: {actual_hp_file}. Trying default 'headphones.wav' in work directory"
             )
             actual_hp_file = os.path.join(dir_path, "headphones.wav")
 
         # Final check
         if not os.path.exists(actual_hp_file):
             logger.error(f"Headphone compensation file not found: {actual_hp_file}")
+            logger.error(f"Please ensure the file exists or place 'headphones.wav' in the work directory: {dir_path}")
             return None, None  # Or raise an error
 
     logger.info(f"Using headphone compensation file: {actual_hp_file}")
