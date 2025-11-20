@@ -266,8 +266,11 @@ set_matplotlib_font()  # 함수 호출하여 폰트 설정 실행
 def _apply_cubic_interp(
     fr_obj, target_freqs, fallback_interpolate_method_ref, operation_description=""
 ):
-    """FrequencyResponse 객체에 큐빅 스플라인 보간을 적용합니다.
+    """FrequencyResponse 객체에 선형 보간을 적용합니다.
     실패 시 제공된 폴백 메소드를 사용합니다.
+
+    Note: 함수명은 역사적 이유로 _apply_cubic_interp이지만,
+    실제로는 linear interpolation을 사용하여 오버슈트를 방지합니다.
     """
     if fr_obj is None:
         return
@@ -277,19 +280,19 @@ def _apply_cubic_interp(
     fr_obj.name if hasattr(fr_obj, "name") else "FrequencyResponse object"
 
     if (
-        len(source_freqs) > 3 and len(source_raw) > 3
-    ):  # interp1d 'cubic'은 최소 4개의 포인트 필요
+        len(source_freqs) > 1 and len(source_raw) > 1
+    ):  # interp1d 'linear'은 최소 2개의 포인트 필요
         unique_src_freqs, unique_indices = np.unique(source_freqs, return_index=True)
         unique_src_raw = source_raw[unique_indices]
 
-        if len(unique_src_freqs) > 3:
+        if len(unique_src_freqs) > 1:
             try:
                 # 경계값으로 fill_value를 설정하여 외삽 시 안정성 확보
                 fill_val = (unique_src_raw[0], unique_src_raw[-1])
                 interp_func = interp1d(
                     unique_src_freqs,
                     unique_src_raw,
-                    kind="cubic",
+                    kind="linear",  # Use linear interpolation to prevent overshoot artifacts
                     bounds_error=False,
                     fill_value=fill_val,
                 )
