@@ -108,7 +108,6 @@ def setup_pretendard_font(current_language: str = 'en') -> str:
             try:
                 if platform.system() == "Windows":
                     import ctypes
-                    from ctypes import wintypes
 
                     # Register font temporarily for this session
                     gdi32 = ctypes.WinDLL('gdi32', use_last_error=True)
