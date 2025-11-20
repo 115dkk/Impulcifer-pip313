@@ -347,12 +347,90 @@ class UpdateDialog(ctk.CTkToplevel):
 
         self.progress_frame.grid(row=4, column=0, padx=20, pady=(0, 10), sticky="ew")
 
-        # Start download in separate thread
-        download_thread = threading.Thread(target=self.download_and_install, daemon=True)
-        download_thread.start()
+        # Update label to show we're using pip
+        self.progress_label.configure(
+            text=self.loc.get('update_preparing', default="Preparing to update via pip...")
+        )
+        self.progress_bar.set(0.3)
+
+        # Start pip upgrade in separate thread
+        upgrade_thread = threading.Thread(target=self.pip_upgrade, daemon=True)
+        upgrade_thread.start()
+
+    def pip_upgrade(self):
+        """Upgrade using pip"""
+        try:
+            import sys
+            import subprocess
+
+            # Update progress
+            self.after(0, lambda: self.progress_label.configure(
+                text=self.loc.get('update_installing', default="Installing update via pip...")
+            ))
+            self.after(0, lambda: self.progress_bar.set(0.5))
+
+            # Get python executable path
+            python_exe = sys.executable
+
+            # Prepare upgrade command
+            upgrade_cmd = [
+                python_exe,
+                '-m',
+                'pip',
+                'install',
+                '--upgrade',
+                'impulcifer-py313'
+            ]
+
+            print(f"Upgrading with command: {' '.join(upgrade_cmd)}")
+
+            # Update progress
+            self.after(0, lambda: self.progress_bar.set(0.7))
+
+            # Run upgrade
+            if platform.system() == 'Windows':
+                # On Windows, show console window for pip output
+                process = subprocess.Popen(
+                    upgrade_cmd,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+            else:
+                # On Unix-like systems, capture output
+                process = subprocess.Popen(
+                    upgrade_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+
+            # Update progress
+            self.after(0, lambda: self.progress_bar.set(0.9))
+
+            # Wait a moment for pip to start
+            import time
+            time.sleep(1)
+
+            # Complete progress
+            self.after(0, lambda: self.progress_bar.set(1.0))
+            self.after(0, lambda: self.progress_label.configure(
+                text=self.loc.get('update_success', default="Update started! Please restart the application.")
+            ))
+
+            # Show message and close
+            self.after(2000, lambda: messagebox.showinfo(
+                self.loc.get('update_complete_title', default="Update Started"),
+                self.loc.get('update_complete_message', default="The update has been started in the background.\nPlease restart the application to use the new version.")
+            ))
+
+            self.after(3000, lambda: self.destroy())
+
+        except Exception as e:
+            error_msg = self.loc.get('update_error_general', default="Update error: {error}").format(error=str(e))
+            self.after(0, lambda: self.show_error(error_msg))
 
     def download_and_install(self):
-        """Download and install the update"""
+        """Legacy method: Download and install the update (kept for backward compatibility)"""
         try:
             updater = Updater(self.download_url, self.latest_version)
 
@@ -382,7 +460,7 @@ class UpdateDialog(ctk.CTkToplevel):
             self.after(0, lambda: self.show_error(error_msg))
 
     def update_progress(self, downloaded: int, total: int):
-        """Update progress bar"""
+        """Update progress bar (for legacy download method)"""
         if total > 0:
             progress = downloaded / total
             percentage = int(progress * 100)
@@ -1458,26 +1536,67 @@ class ModernImpulciferGUI:
         thread.start()
 
     def get_current_version(self) -> str:
-        """Get current application version from pyproject.toml"""
+        """Get current application version from package metadata or pyproject.toml"""
+        # Method 1: Try to get version from installed package metadata (most reliable)
+        try:
+            from importlib.metadata import version as get_version
+            try:
+                pkg_version = get_version('impulcifer-py313')
+                print(f"Version from package metadata: {pkg_version}")
+                return pkg_version
+            except Exception:
+                pass
+        except ImportError:
+            # Python < 3.8
+            try:
+                import pkg_resources
+                pkg_version = pkg_resources.get_distribution('impulcifer-py313').version
+                print(f"Version from pkg_resources: {pkg_version}")
+                return pkg_version
+            except Exception:
+                pass
+
+        # Method 2: Try to read pyproject.toml (development mode)
         try:
             import tomllib
         except ImportError:
             try:
                 import tomli as tomllib
             except ImportError:
-                return "1.8.5"  # Fallback version
+                tomllib = None
 
+        if tomllib:
+            try:
+                from pathlib import Path
+                # Try multiple possible locations
+                possible_paths = [
+                    Path(__file__).parent / 'pyproject.toml',
+                    Path(__file__).parent.parent / 'pyproject.toml',
+                    Path.cwd() / 'pyproject.toml',
+                ]
+
+                for pyproject_path in possible_paths:
+                    if pyproject_path.exists():
+                        with open(pyproject_path, 'rb') as f:
+                            data = tomllib.load(f)
+                            version_str = data.get('project', {}).get('version')
+                            if version_str:
+                                print(f"Version from pyproject.toml: {version_str}")
+                                return version_str
+            except Exception as e:
+                print(f"Error reading pyproject.toml: {e}")
+
+        # Method 3: Check for __version__ attribute (if defined)
         try:
-            from pathlib import Path
-            pyproject_path = Path(__file__).parent / 'pyproject.toml'
-            if pyproject_path.exists():
-                with open(pyproject_path, 'rb') as f:
-                    data = tomllib.load(f)
-                    return data.get('project', {}).get('version', '1.8.5')
+            import impulcifer
+            if hasattr(impulcifer, '__version__'):
+                return impulcifer.__version__
         except Exception:
             pass
 
-        return "1.8.5"  # Fallback
+        # Fallback: Unknown version
+        print("Warning: Could not determine version, using fallback")
+        return "2.2.2"  # Current known version as last resort
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""
