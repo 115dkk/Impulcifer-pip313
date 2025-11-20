@@ -63,7 +63,9 @@ def is_pip_available() -> bool:
         result = subprocess.run(
             [sys.executable, '-m', 'pip', '--version'],
             capture_output=True,
-            timeout=5
+            timeout=5,
+            encoding='utf-8',
+            errors='replace'
         )
         return result.returncode == 0
     except Exception:

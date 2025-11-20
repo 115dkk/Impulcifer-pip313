@@ -23,8 +23,9 @@ MIN_FFMPEG_VERSION = (4, 0)
 def get_ffmpeg_version(ffmpeg_path):
     """FFmpeg 버전을 확인합니다."""
     try:
-        result = subprocess.run([ffmpeg_path, '-version'], 
-                              capture_output=True, text=True, timeout=10)
+        result = subprocess.run([ffmpeg_path, '-version'],
+                              capture_output=True, text=True, timeout=10,
+                              encoding='utf-8', errors='replace')
         if result.returncode == 0:
             # 첫 번째 줄에서 버전 정보 추출
             first_line = result.stdout.split('\n')[0]
@@ -143,21 +144,25 @@ def install_ffmpeg():
             
             # 먼저 chocolatey 시도
             try:
-                subprocess.run(['choco', '--version'], capture_output=True, check=True, timeout=10)
+                subprocess.run(['choco', '--version'], capture_output=True, check=True, timeout=10,
+                             encoding='utf-8', errors='replace')
                 print("Chocolatey를 사용하여 FFmpeg를 설치합니다...")
-                result = subprocess.run(['choco', 'install', 'ffmpeg', '-y'], 
-                                      capture_output=True, text=True, timeout=300)
+                result = subprocess.run(['choco', 'install', 'ffmpeg', '-y'],
+                                      capture_output=True, text=True, timeout=300,
+                                      encoding='utf-8', errors='replace')
                 if result.returncode == 0:
                     return find_ffmpeg_in_common_paths()
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-            
+
             # winget 시도
             try:
-                subprocess.run(['winget', '--version'], capture_output=True, check=True, timeout=10)
+                subprocess.run(['winget', '--version'], capture_output=True, check=True, timeout=10,
+                             encoding='utf-8', errors='replace')
                 print("WinGet을 사용하여 FFmpeg를 설치합니다...")
-                result = subprocess.run(['winget', 'install', 'Gyan.FFmpeg'], 
-                                      capture_output=True, text=True, timeout=300)
+                result = subprocess.run(['winget', 'install', 'Gyan.FFmpeg'],
+                                      capture_output=True, text=True, timeout=300,
+                                      encoding='utf-8', errors='replace')
                 if result.returncode == 0:
                     return find_ffmpeg_in_common_paths()
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -166,36 +171,43 @@ def install_ffmpeg():
         elif system == 'darwin':  # macOS
             # Homebrew 사용
             try:
-                subprocess.run(['brew', '--version'], capture_output=True, check=True, timeout=10)
+                subprocess.run(['brew', '--version'], capture_output=True, check=True, timeout=10,
+                             encoding='utf-8', errors='replace')
                 print("Homebrew를 사용하여 FFmpeg를 설치합니다...")
-                result = subprocess.run(['brew', 'install', 'ffmpeg'], 
-                                      capture_output=True, text=True, timeout=600)
+                result = subprocess.run(['brew', 'install', 'ffmpeg'],
+                                      capture_output=True, text=True, timeout=600,
+                                      encoding='utf-8', errors='replace')
                 if result.returncode == 0:
                     return find_ffmpeg_in_common_paths()
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-                
+
         else:  # Linux
             # apt (Ubuntu/Debian) 시도
             try:
-                subprocess.run(['apt', '--version'], capture_output=True, check=True, timeout=10)
+                subprocess.run(['apt', '--version'], capture_output=True, check=True, timeout=10,
+                             encoding='utf-8', errors='replace')
                 print("APT를 사용하여 FFmpeg를 설치합니다...")
-                result = subprocess.run(['sudo', 'apt', 'update'], 
-                                      capture_output=True, text=True, timeout=120)
+                result = subprocess.run(['sudo', 'apt', 'update'],
+                                      capture_output=True, text=True, timeout=120,
+                                      encoding='utf-8', errors='replace')
                 if result.returncode == 0:
-                    result = subprocess.run(['sudo', 'apt', 'install', '-y', 'ffmpeg'], 
-                                          capture_output=True, text=True, timeout=300)
+                    result = subprocess.run(['sudo', 'apt', 'install', '-y', 'ffmpeg'],
+                                          capture_output=True, text=True, timeout=300,
+                                          encoding='utf-8', errors='replace')
                     if result.returncode == 0:
                         return find_ffmpeg_in_common_paths()
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 pass
-            
+
             # yum (CentOS/RHEL) 시도
             try:
-                subprocess.run(['yum', '--version'], capture_output=True, check=True, timeout=10)
+                subprocess.run(['yum', '--version'], capture_output=True, check=True, timeout=10,
+                             encoding='utf-8', errors='replace')
                 print("YUM을 사용하여 FFmpeg를 설치합니다...")
-                result = subprocess.run(['sudo', 'yum', 'install', '-y', 'ffmpeg'], 
-                                      capture_output=True, text=True, timeout=300)
+                result = subprocess.run(['sudo', 'yum', 'install', '-y', 'ffmpeg'],
+                                      capture_output=True, text=True, timeout=300,
+                                      encoding='utf-8', errors='replace')
                 if result.returncode == 0:
                     return find_ffmpeg_in_common_paths()
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -251,10 +263,11 @@ def is_truehd_file(file_path):
     
     try:
         result = subprocess.run(
-            [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0', 
-             '-show_entries', 'stream=codec_name', '-of', 'default=noprint_wrappers=1:nokey=1', 
+            [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
+             '-show_entries', 'stream=codec_name', '-of', 'default=noprint_wrappers=1:nokey=1',
              file_path],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10,
+            encoding='utf-8', errors='replace'
         )
         if result.returncode != 0:
             return False
@@ -283,8 +296,9 @@ def convert_truehd_to_wav(truehd_path, output_path=None):
         '-ar', '48000',  # Sample rate
         output_path, '-y'
     ]
-    
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60,
+                          encoding='utf-8', errors='replace')
     if result.returncode != 0:
         raise RuntimeError(f"FFmpeg conversion failed: {result.stderr}")
     
@@ -300,7 +314,8 @@ def get_truehd_channel_info(file_path):
             [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
              '-show_entries', 'stream=channel_layout,channels',
              '-of', 'json', file_path],
-            capture_output=True, text=True, timeout=10
+            capture_output=True, text=True, timeout=10,
+            encoding='utf-8', errors='replace'
         )
         
         if result.returncode != 0:
@@ -367,8 +382,9 @@ def check_ffmpeg_available():
     
     # 실제 파일 존재 및 실행 가능 여부 확인
     try:
-        result = subprocess.run([FFMPEG_PATH, '-version'], 
-                              capture_output=True, text=True, timeout=10)
+        result = subprocess.run([FFMPEG_PATH, '-version'],
+                              capture_output=True, text=True, timeout=10,
+                              encoding='utf-8', errors='replace')
         return result.returncode == 0
     except Exception:
         return False

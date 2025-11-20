@@ -57,7 +57,9 @@ def check_nuitka():
     print("build_nuitka.py: check_nuitka() called", flush=True)
     """Nuitka가 설치되어 있는지 확인"""
     try:
-        subprocess.run([sys.executable, "-m", "nuitka", "--version"], capture_output=True, text=True, check=True)
+        subprocess.run([sys.executable, "-m", "nuitka", "--version"],
+                      capture_output=True, text=True, check=True,
+                      encoding='utf-8', errors='replace')
         print("✓ Nuitka가 설치되어 있습니다.", flush=True)
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -194,7 +196,8 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
     print(f"\n{target_platform} 플랫폼용 빌드를 시작합니다... (시간이 좀 걸릴 수 있습니다)", flush=True)
 
     try:
-        result = subprocess.run(nuitka_cmd, check=True, text=True, capture_output=True, encoding='utf-8')
+        result = subprocess.run(nuitka_cmd, check=True, text=True, capture_output=True,
+                              encoding='utf-8', errors='replace')
         print("Nuitka stdout:", flush=True)
         print(result.stdout, flush=True)
         if result.stderr:
