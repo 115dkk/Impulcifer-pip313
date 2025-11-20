@@ -8,6 +8,7 @@ Professional-grade interface with dark/light mode support
 import os
 import re
 import shutil
+import sys
 import platform
 import threading
 from pathlib import Path
@@ -25,6 +26,48 @@ from updater import Updater
 
 # Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
+
+
+def is_frozen_or_standalone() -> bool:
+    """
+    Check if the application is running as a frozen/standalone executable.
+
+    Returns:
+        True if running as frozen/standalone (Nuitka, PyInstaller, etc.)
+        False if running as a normal Python script or pip-installed package
+    """
+    # Check for Nuitka
+    if hasattr(sys, '__compiled__'):
+        return True
+
+    # Check for PyInstaller or other freezers
+    if getattr(sys, 'frozen', False):
+        return True
+
+    # Check if running from a bundled executable directory
+    if hasattr(sys, '_MEIPASS'):
+        return True
+
+    return False
+
+
+def is_pip_available() -> bool:
+    """
+    Check if pip is available in the current environment.
+
+    Returns:
+        True if pip can be used for package management
+    """
+    try:
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', '--version'],
+            capture_output=True,
+            timeout=5
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def setup_pretendard_font(current_language: str = 'en') -> str:
@@ -347,15 +390,34 @@ class UpdateDialog(ctk.CTkToplevel):
 
         self.progress_frame.grid(row=4, column=0, padx=20, pady=(0, 10), sticky="ew")
 
-        # Update label to show we're using pip
-        self.progress_label.configure(
-            text=self.loc.get('update_preparing', default="Preparing to update via pip...")
-        )
-        self.progress_bar.set(0.3)
+        # Detect execution environment and choose appropriate update method
+        is_standalone = is_frozen_or_standalone()
+        has_pip = is_pip_available()
 
-        # Start pip upgrade in separate thread
-        upgrade_thread = threading.Thread(target=self.pip_upgrade, daemon=True)
-        upgrade_thread.start()
+        print(f"Update environment: standalone={is_standalone}, pip_available={has_pip}")
+
+        if is_standalone:
+            # Standalone executable - use installer
+            self.progress_label.configure(
+                text=self.loc.get('update_downloading', default="Downloading installer...")
+            )
+            self.progress_bar.set(0.1)
+            download_thread = threading.Thread(target=self.download_and_install, daemon=True)
+            download_thread.start()
+        elif has_pip:
+            # Pip environment - use pip upgrade
+            self.progress_label.configure(
+                text=self.loc.get('update_preparing', default="Preparing to update via pip...")
+            )
+            self.progress_bar.set(0.3)
+            upgrade_thread = threading.Thread(target=self.pip_upgrade, daemon=True)
+            upgrade_thread.start()
+        else:
+            # Neither pip nor installer available - show error
+            self.after(0, lambda: self.show_error(
+                self.loc.get('update_error_no_method',
+                            default="Unable to update: Neither pip nor installer is available.\nPlease update manually from GitHub.")
+            ))
 
     def pip_upgrade(self):
         """Upgrade using pip"""
@@ -430,8 +492,17 @@ class UpdateDialog(ctk.CTkToplevel):
             self.after(0, lambda: self.show_error(error_msg))
 
     def download_and_install(self):
-        """Legacy method: Download and install the update (kept for backward compatibility)"""
+        """Download installer and install the update (for standalone executables)"""
         try:
+            # Check if download URL is available
+            if not self.download_url:
+                self.after(0, lambda: self.show_error(
+                    self.loc.get('update_error_no_installer',
+                                default="No installer available. Please download manually from GitHub:\n" +
+                                       "https://github.com/115dkk/Impulcifer-pip313/releases/latest")
+                ))
+                return
+
             updater = Updater(self.download_url, self.latest_version)
 
             # Download with progress callback
@@ -442,9 +513,10 @@ class UpdateDialog(ctk.CTkToplevel):
                 self.after(0, lambda: self.progress_label.configure(
                     text=self.loc.get('update_installing', default="Installing update...")
                 ))
+                self.after(0, lambda: self.progress_bar.set(0.9))
 
-                # Install and restart
-                updater.install_and_restart()
+                # Install using legacy installer method
+                updater.install_and_restart_legacy()
 
                 # If we get here, installation failed to start
                 self.after(0, lambda: self.show_error(
