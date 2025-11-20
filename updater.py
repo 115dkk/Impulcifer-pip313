@@ -82,7 +82,73 @@ class Updater:
 
     def install_and_restart(self) -> bool:
         """
-        Install the update and restart the application
+        Install the update using pip and restart the application
+
+        Returns:
+            True if installation started successfully
+        """
+        try:
+            # For pip packages, use pip to upgrade
+            return self._upgrade_with_pip()
+
+        except Exception as e:
+            print(f"Error installing update: {e}")
+            return False
+
+    def _upgrade_with_pip(self) -> bool:
+        """
+        Upgrade using pip (recommended for Python packages)
+
+        Returns:
+            True if upgrade started successfully
+        """
+        try:
+            import sys
+
+            # Get python executable path
+            python_exe = sys.executable
+
+            # Prepare upgrade command
+            upgrade_cmd = [
+                python_exe,
+                '-m',
+                'pip',
+                'install',
+                '--upgrade',
+                'impulcifer-py313'
+            ]
+
+            print(f"Upgrading with command: {' '.join(upgrade_cmd)}")
+
+            # Run upgrade in background
+            if platform.system() == 'Windows':
+                # On Windows, use CREATE_NEW_CONSOLE to run in new window
+                subprocess.Popen(
+                    upgrade_cmd,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+            else:
+                # On Unix-like systems, run in background
+                subprocess.Popen(
+                    upgrade_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+
+            # Exit current application to complete upgrade
+            print("Upgrade started. Exiting application...")
+            # Give user a moment to see the message
+            import time
+            time.sleep(2)
+            sys.exit(0)
+
+        except Exception as e:
+            print(f"Pip upgrade error: {e}")
+            return False
+
+    def install_and_restart_legacy(self) -> bool:
+        """
+        Install the update using downloaded installer (legacy method for .exe/.dmg files)
 
         Returns:
             True if installation started successfully

@@ -241,7 +241,9 @@ class ImpulseResponseEstimator(object):
             
             # Check if the lengths match before comparing values
             if len(ire.test_signal) == len(data_for_comparison):
-                if np.max(ire.test_signal - data_for_comparison) > 1e-9:
+                # Use 1e-4 tolerance to account for 32-bit float precision in WAV files
+                # (32-bit float has ~7 decimal digits precision, vs 64-bit internal calculation)
+                if np.max(ire.test_signal - data_for_comparison) > 1e-4:
                     raise ValueError('Data read from WAV file does not match generated test signal. WAV file must be generated '
                                    'with the current version of ImpulseResponseEstimator.')
             else:
