@@ -13,16 +13,19 @@ import platform  # noqa: E402
 from pathlib import Path  # noqa: E402
 print("build_nuitka.py: Module level - imports done.", flush=True)
 
+
 def get_project_version():
     print("build_nuitka.py: get_project_version() called", flush=True)
     """get_version.py를 실행하여 프로젝트 버전 가져오기"""
     try:
         # get_version.py가 프로젝트 루트에 있다고 가정
-        result = subprocess.run([sys.executable, "get_version.py"], capture_output=True, text=True, check=True, encoding='utf-8')
+        result = subprocess.run(
+            [sys.executable, "get_version.py"],
+            capture_output=True, text=True, check=True, encoding='utf-8')
         version = result.stdout.strip()
         if not version:
             print("경고: get_version.py에서 버전을 가져왔지만 비어있습니다. 기본 버전을 사용합니다.", flush=True)
-            return "0.0.0" # 기본값 또는 오류 처리
+            return "0.0.0"  # 기본값 또는 오류 처리
         print(f"✓ get_version.py에서 프로젝트 버전({version})을 성공적으로 가져왔습니다.", flush=True)
         return version
     except FileNotFoundError:
@@ -36,6 +39,7 @@ def get_project_version():
         print(f"경고: 버전 정보 로드 중 예기치 않은 오류 발생: {e}. 기본 버전을 사용합니다.", flush=True)
         return "0.0.0"
 
+
 def get_platform():
     """현재 플랫폼 감지"""
     system = platform.system().lower()
@@ -48,6 +52,7 @@ def get_platform():
     else:
         return "unknown"
 
+
 def check_nuitka():
     print("build_nuitka.py: check_nuitka() called", flush=True)
     """Nuitka가 설치되어 있는지 확인"""
@@ -59,6 +64,7 @@ def check_nuitka():
         print("✗ Nuitka가 설치되어 있지 않습니다.", flush=True)
         print("  다음 명령어로 설치하세요: pip install nuitka", flush=True)
         return False
+
 
 def clean_specific_build_folders():
     """Nuitka 관련 이전 빌드 폴더 정리 (dist 제외)"""
@@ -77,6 +83,7 @@ def clean_specific_build_folders():
     if os.path.exists("ImpulciferGUI.exe") and not os.path.isdir("ImpulciferGUI.exe"):
         print("루트의 이전 빌드 실행 파일 삭제 중: ImpulciferGUI.exe", flush=True)
         os.remove("ImpulciferGUI.exe")
+
 
 def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_platform=None):
     print(f"build_nuitka.py: build_impulcifer() called with version={project_version}", flush=True)
@@ -203,6 +210,7 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
         print(e.stderr, flush=True)
         return False
 
+
 def main():
     print("build_nuitka.py: main() function - entry point.", flush=True)
     """메인 빌드 프로세스"""
@@ -213,10 +221,11 @@ def main():
     print(f"감지된 플랫폼: {current_platform}", flush=True)
 
     if not check_nuitka():
-       sys.exit(1)
+        sys.exit(1)
 
-    # clean_specific_build_folders() # --remove-output 옵션이 output-dir을 정리하므로, 추가 정리 불필요할 수 있음
-                                     # 필요하다면 Nuitka가 생성하는 루트의 임시 파일/폴더만 정리
+    # clean_specific_build_folders()
+    # --remove-output 옵션이 output-dir을 정리하므로, 추가 정리 불필요할 수 있음
+    # 필요하다면 Nuitka가 생성하는 루트의 임시 파일/폴더만 정리
 
     current_version = get_project_version()
     print(f"빌드에 사용될 버전: {current_version}", flush=True)
@@ -255,7 +264,8 @@ if __name__ == "__main__":
     else:
         print("\n빌드에 실패했습니다.", flush=True)
         sys.exit(1)
-        
+
+
 if __name__ == "__main__":
     print("build_nuitka.py: Script is run directly (before main() call).", flush=True)
     main()

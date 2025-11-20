@@ -49,13 +49,13 @@ SPEAKER_ANGLES = {
     'BR': -150,
     'SL': 90,
     'SR': -90,
-    'WL': 0, # 기본값, 필요시 수정
-    'WR': 0, # 기본값, 필요시 수정
-    'TFL': 0, # 기본값, 필요시 수정
-    'TFR': 0, # 기본값, 필요시 수정
-    'TSL': 0, # 기본값, 필요시 수정
-    'TSR': 0, # 기본값, 필요시 수정
-    'TBL': 0, # 기본값, 필요시 수정
+    'WL': 0,  # 기본값, 필요시 수정
+    'WR': 0,  # 기본값, 필요시 수정
+    'TFL': 0,  # 기본값, 필요시 수정
+    'TFR': 0,  # 기본값, 필요시 수정
+    'TSL': 0,  # 기본값, 필요시 수정
+    'TSR': 0,  # 기본값, 필요시 수정
+    'TBL': 0,  # 기본값, 필요시 수정
     'TBR': 0  # 기본값, 필요시 수정
 }
 
@@ -71,15 +71,15 @@ IR_ROOM_SPL = {
     sp: {'left': 0.0, 'right': 0.0}
     for sp in SPEAKER_NAMES
 }
-#for _speaker in SPEAKER_NAMES:
-#    if _speaker not in IR_ROOM_SPL:
-#        IR_ROOM_SPL[_speaker] = dict()
-#    for _side in ['left', 'right']:
-#        IR_ORDER.append(f'{_speaker}-{_side}')
-#        IR_ROOM_SPL[_speaker][_side] = versus_distance(
-#            angle=abs(SPEAKER_ANGLES[_speaker]),
-#            ear='primary' if _side[0] == _speaker.lower()[1] else 'secondary'
-#        )[2]
+# for _speaker in SPEAKER_NAMES:
+#     if _speaker not in IR_ROOM_SPL:
+#         IR_ROOM_SPL[_speaker] = dict()
+#     for _side in ['left', 'right']:
+#         IR_ORDER.append(f'{_speaker}-{_side}')
+#         IR_ROOM_SPL[_speaker][_side] = versus_distance(
+#             angle=abs(SPEAKER_ANGLES[_speaker]),
+#             ear='primary' if _side[0] == _speaker.lower()[1] else 'secondary'
+#         )[2]
 
 COLORS = {
     'lightblue': '#7db4db',
@@ -92,15 +92,15 @@ COLORS = {
 }
 
 HESUVI_TRACK_ORDER = ['FL-left', 'FL-right', 'SL-left', 'SL-right', 'BL-left', 'BL-right', 'FC-left', 'FR-right',
-                      'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right', 'WL-left', 'WL-right', 'WR-left', 'WR-right', 'TFL-left', 'TFL-right',
-                             'TFR-left', 'TFR-right', 'TSL-left', 'TSL-right', 'TSR-left', 'TSR-right',
-                             'TBL-left', 'TBL-right', 'TBR-left', 'TBR-right']
+                      'FR-left', 'SR-right', 'SR-left', 'BR-right', 'BR-left', 'FC-right', 'WL-left', 'WL-right',
+                      'WR-left', 'WR-right', 'TFL-left', 'TFL-right', 'TFR-left', 'TFR-right', 'TSL-left',
+                      'TSL-right', 'TSR-left', 'TSR-right', 'TBL-left', 'TBL-right', 'TBR-left', 'TBR-right']
 
 HEXADECAGONAL_TRACK_ORDER = ['FL-left', 'FL-right', 'FR-left', 'FR-right', 'FC-left', 'FC-right', 'LFE-left',
                              'LFE-right', 'BL-left', 'BL-right', 'BR-left', 'BR-right', 'SL-left', 'SL-right',
-                             'SR-left', 'SR-right', 'WL-left', 'WL-right', 'WR-left', 'WR-right', 'TFL-left', 'TFL-right',
-                             'TFR-left', 'TFR-right', 'TSL-left', 'TSL-right', 'TSR-left', 'TSR-right',
-                             'TBL-left', 'TBL-right', 'TBR-left', 'TBR-right']
+                             'SR-left', 'SR-right', 'WL-left', 'WL-right', 'WR-left', 'WR-right', 'TFL-left',
+                             'TFL-right', 'TFR-left', 'TFR-right', 'TSL-left', 'TSL-right', 'TSR-left',
+                             'TSR-right', 'TBL-left', 'TBL-right', 'TBR-left', 'TBR-right']
 
 # 기본 테스트 신호 파일 목록
 TEST_SIGNALS = {
@@ -118,6 +118,7 @@ TEST_SIGNALS = {
     '6': 'sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'
 }
 
+
 # 패키지 내 데이터 폴더 경로
 def get_data_path():
     """패키지 내 데이터 폴더 경로를 반환합니다."""
@@ -130,7 +131,7 @@ def get_data_path():
                 return str(data_path)
     except (ImportError, ModuleNotFoundError):
         pass
-    
+
     # 폴백: 현재 파일 기준 상대 경로
     script_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(script_dir, 'data')

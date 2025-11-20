@@ -47,8 +47,8 @@ def _get_center_value(fr, frequency_range):
     Returns:
         The negative of the gain shift that would be applied by center()
     """
-    # Create interpolator
-    k_order = 3 if len(fr.frequency) >= 4 else 1
+    # Create interpolator - use linear interpolation to avoid overshoot/undershoot
+    k_order = 1  # Always use linear interpolation to prevent artifacts
     try:
         interpolator = InterpolatedUnivariateSpline(np.log10(fr.frequency), fr.raw, k=k_order)
     except ValueError:

@@ -4,20 +4,24 @@ import sys
 try:
     # Python 3.11+
     import tomllib
+
     def load_toml_config(file_path):
         with open(file_path, 'rb') as f:
             return tomllib.load(f)
+
 except ImportError:
     # Python < 3.11
     import toml
+
     def load_toml_config(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             return toml.load(f)
 
+
 try:
     config = load_toml_config('pyproject.toml')
     app_version = config['project']['version']
-    
+
     # 표준 출력으로는 버전 정보만 출력
     print(app_version)
 
