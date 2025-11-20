@@ -40,16 +40,63 @@ LOCALE_MAPPING = {
 class LocalizationManager:
     """Manages translations and user preferences"""
 
+    def _find_locales_dir(self) -> Path:
+        """Find the locales directory in multiple possible locations"""
+        # Try different possible locations
+        possible_paths = [
+            Path(__file__).parent / 'locales',  # Development environment
+            Path(__file__).parent.parent / 'locales',  # Alternative structure
+            Path(__file__).parent.parent / 'impulcifer_py313' / 'locales',  # PyPI package structure
+        ]
+
+        # Also try using sys.prefix for installed packages
+        import sys
+        if hasattr(sys, 'prefix'):
+            possible_paths.extend([
+                Path(sys.prefix) / 'impulcifer_py313' / 'locales',
+                Path(sys.prefix) / 'share' / 'impulcifer_py313' / 'locales',
+                Path(sys.prefix) / 'lib' / 'impulcifer_py313' / 'locales',
+            ])
+
+        # Try importlib.resources for Python 3.9+
+        try:
+            import importlib.resources as importlib_resources
+            try:
+                # Try to get the locales directory from package resources
+                if hasattr(importlib_resources, 'files'):  # Python 3.9+
+                    try:
+                        package_path = importlib_resources.files('impulcifer_py313')
+                        locales_path = package_path / 'locales'
+                        if locales_path.is_dir():
+                            return Path(str(locales_path))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        except ImportError:
+            pass
+
+        # Find the first existing directory
+        for path in possible_paths:
+            if path.exists() and path.is_dir():
+                return path
+
+        # If nothing found, create in current directory as fallback
+        fallback_path = Path(__file__).parent / 'locales'
+        fallback_path.mkdir(exist_ok=True)
+        return fallback_path
+
     def __init__(self):
         self.current_language = 'en'
         self.translations: Dict[str, str] = {}
         self.settings_dir = Path.home() / '.impulcifer'
         self.settings_file = self.settings_dir / 'settings.json'
-        self.locales_dir = Path(__file__).parent / 'locales'
 
-        # Ensure directories exist
+        # Find locales directory - try multiple possible locations
+        self.locales_dir = self._find_locales_dir()
+
+        # Ensure settings directory exists
         self.settings_dir.mkdir(exist_ok=True)
-        self.locales_dir.mkdir(exist_ok=True)
 
         # Load settings
         self.settings = self.load_settings()
@@ -110,6 +157,14 @@ class LocalizationManager:
     def load_translations(self, language_code: str):
         """Load translation file for specified language"""
         locale_file = self.locales_dir / f'{language_code}.json'
+
+        # Debug: print locales directory and file path
+        if not locale_file.exists():
+            print(f"Translation file not found: {locale_file}")
+            print(f"Locales directory: {self.locales_dir}")
+            print(f"Directory exists: {self.locales_dir.exists()}")
+            if self.locales_dir.exists():
+                print(f"Files in locales dir: {list(self.locales_dir.glob('*.json'))}")
 
         if locale_file.exists():
             try:

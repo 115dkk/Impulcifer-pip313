@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "2.2.3"
+version = "2.2.4"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13/3.14 호환 버전: 115dkk", email="" },
@@ -82,6 +82,7 @@ include = [
     "CHANGELOG.md",
     "pyproject.toml",
     "font/Pretendard-Regular.otf",
+    "locales/**/*.json",
 ]
 exclude = [
     "research/**/*",
@@ -92,6 +93,7 @@ exclude = [
 [tool.hatch.build.targets.wheel.shared-data]
 "data" = "impulcifer_py313/data"
 "font" = "impulcifer_py313/font"
+"locales" = "impulcifer_py313/locales"
 
 # pytest 설정
 [tool.pytest.ini_options]
