@@ -12,7 +12,7 @@ import sys
 import platform
 import threading
 from pathlib import Path
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, TclError
 from tkinter import font as tkfont
 import customtkinter as ctk
 import sounddevice
@@ -70,6 +70,30 @@ def is_pip_available() -> bool:
         return result.returncode == 0
     except Exception:
         return False
+
+
+def safe_get_double(var, default=0.0):
+    """Safely get value from DoubleVar, returning default if empty or invalid."""
+    try:
+        return var.get()
+    except (TclError, ValueError):
+        return default
+
+
+def safe_get_int(var, default=0):
+    """Safely get value from IntVar, returning default if empty or invalid."""
+    try:
+        return var.get()
+    except (TclError, ValueError):
+        return default
+
+
+def safe_get_string(var, default=""):
+    """Safely get value from StringVar, returning default if error."""
+    try:
+        return var.get()
+    except (TclError, ValueError):
+        return default
 
 
 def setup_pretendard_font(current_language: str = 'en') -> str:
@@ -1299,20 +1323,17 @@ class ModernImpulciferGUI:
         """Update channel guidance text"""
         if self.channels_check_var.get():
             self.channels_entry.configure(state="normal")
-            try:
-                channel_count = self.channels_var.get()
-                if channel_count == 14:
-                    text = f"Recording with {channel_count} channels (7 speakers × 2 ears). Speakers: FL,FR,FC,BL,BR,SL,SR.wav"
-                elif channel_count == 22:
-                    text = f"Recording with {channel_count} channels (11 speakers × 2 ears, 7.0.4 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR.wav"
-                elif channel_count == 26:
-                    text = f"Recording with {channel_count} channels (13 speakers × 2 ears, 7.0.6 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR,TSL,TSR.wav"
-                elif channel_count > 0:
-                    speakers_count = channel_count // 2
-                    text = f"Recording with {channel_count} channels ({speakers_count} speakers × 2 ears). Make sure your filename matches the speaker configuration."
-                else:
-                    text = "Enter valid channel count (recommended: 14, 22, or 26)"
-            except Exception:
+            channel_count = safe_get_int(self.channels_var, 0)
+            if channel_count == 14:
+                text = f"Recording with {channel_count} channels (7 speakers × 2 ears). Speakers: FL,FR,FC,BL,BR,SL,SR.wav"
+            elif channel_count == 22:
+                text = f"Recording with {channel_count} channels (11 speakers × 2 ears, 7.0.4 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR.wav"
+            elif channel_count == 26:
+                text = f"Recording with {channel_count} channels (13 speakers × 2 ears, 7.0.6 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR,TSL,TSR.wav"
+            elif channel_count > 0:
+                speakers_count = channel_count // 2
+                text = f"Recording with {channel_count} channels ({speakers_count} speakers × 2 ears). Make sure your filename matches the speaker configuration."
+            else:
                 text = "Enter valid channel count (recommended: 14, 22, or 26)"
         else:
             self.channels_entry.configure(state="disabled")
@@ -1415,7 +1436,7 @@ class ModernImpulciferGUI:
         """Start recording process"""
         play_file = self.play_var.get()
         record_file = self.record_var.get()
-        selected_channels = self.channels_var.get() if self.channels_check_var.get() else 2
+        selected_channels = safe_get_int(self.channels_var, 14) if self.channels_check_var.get() else 2
 
         # Validate play file exists
         if not os.path.exists(play_file):
@@ -1504,8 +1525,8 @@ class ModernImpulciferGUI:
         if self.do_room_correction_var.get():
             args['room_target'] = self.room_target_var.get() if self.room_target_var.get() else None
             args['room_mic_calibration'] = self.room_mic_calibration_var.get() if self.room_mic_calibration_var.get() else None
-            args['specific_limit'] = self.specific_limit_var.get()
-            args['generic_limit'] = self.generic_limit_var.get()
+            args['specific_limit'] = safe_get_int(self.specific_limit_var, 20000)
+            args['generic_limit'] = safe_get_int(self.generic_limit_var, 1000)
             args['fr_combination_method'] = self.fr_combination_var.get()
 
         # Headphone compensation file handling
@@ -1524,46 +1545,66 @@ class ModernImpulciferGUI:
 
         # Advanced options
         if self.show_advanced_var.get():
-            args['fs'] = self.fs_var.get() if self.fs_check_var.get() else None
-            args['target_level'] = float(self.target_level_var.get()) if self.target_level_var.get() else None
+            args['fs'] = safe_get_int(self.fs_var, 48000) if self.fs_check_var.get() else None
+
+            # Target level - safely convert string to float
+            target_level_str = safe_get_string(self.target_level_var, "")
+            if target_level_str.strip():
+                try:
+                    args['target_level'] = float(target_level_str)
+                except ValueError:
+                    args['target_level'] = None
+            else:
+                args['target_level'] = None
 
             # Channel balance
             if self.channel_balance_var.get() == 'number':
-                args['channel_balance'] = self.channel_balance_db_var.get()
+                args['channel_balance'] = safe_get_int(self.channel_balance_db_var, 0)
             elif self.channel_balance_var.get() != 'none':
                 args['channel_balance'] = self.channel_balance_var.get()
 
-            # Bass boost
-            if self.bass_boost_gain_var.get():
-                args['bass_boost_gain'] = self.bass_boost_gain_var.get()
-                args['bass_boost_fc'] = self.bass_boost_fc_var.get()
-                args['bass_boost_q'] = self.bass_boost_q_var.get()
+            # Bass boost - safely get DoubleVar/IntVar values
+            bass_gain = safe_get_double(self.bass_boost_gain_var, 0.0)
+            if bass_gain:
+                args['bass_boost_gain'] = bass_gain
+                args['bass_boost_fc'] = safe_get_int(self.bass_boost_fc_var, 105)
+                args['bass_boost_q'] = safe_get_double(self.bass_boost_q_var, 0.76)
 
-            # Tilt
-            if self.tilt_var.get():
-                args['tilt'] = self.tilt_var.get()
+            # Tilt - safely get DoubleVar value
+            tilt_val = safe_get_double(self.tilt_var, 0.0)
+            if tilt_val:
+                args['tilt'] = tilt_val
 
-            # Decay
+            # Decay - safely handle string to float conversion
             if self.decay_per_channel_var.get():
                 decay_dict = {}
                 for ch, var in self.decay_channel_vars.items():
-                    if var.get():
-                        decay_dict[ch] = float(var.get()) / 1000
+                    val_str = safe_get_string(var, "")
+                    if val_str.strip():
+                        try:
+                            decay_dict[ch] = float(val_str) / 1000
+                        except ValueError:
+                            pass  # Skip invalid values
                 if decay_dict:
                     args['decay'] = decay_dict
-            elif self.decay_var.get():
-                decay_dict = {}
-                decay_val = float(self.decay_var.get()) / 1000
-                for ch in ['FL', 'FC', 'FR', 'SL', 'SR', 'BL', 'BR']:
-                    decay_dict[ch] = decay_val
-                args['decay'] = decay_dict
+            else:
+                decay_str = safe_get_string(self.decay_var, "")
+                if decay_str.strip():
+                    try:
+                        decay_val = float(decay_str) / 1000
+                        decay_dict = {}
+                        for ch in ['FL', 'FC', 'FR', 'SL', 'SR', 'BL', 'BR']:
+                            decay_dict[ch] = decay_val
+                        args['decay'] = decay_dict
+                    except ValueError:
+                        pass  # Skip if invalid
 
-            args['head_ms'] = self.pre_response_var.get()
+            args['head_ms'] = safe_get_double(self.pre_response_var, 1.0)
             args['jamesdsp'] = self.jamesdsp_var.get()
             args['hangloose'] = self.hangloose_var.get()
             args['interactive_plots'] = self.interactive_plots_var.get()
             args['microphone_deviation_correction'] = self.microphone_deviation_correction_var.get()
-            args['mic_deviation_strength'] = self.mic_deviation_strength_var.get()
+            args['mic_deviation_strength'] = safe_get_double(self.mic_deviation_strength_var, 0.7)
             args['mic_deviation_phase_correction'] = self.mic_deviation_phase_correction_var.get()
             args['mic_deviation_adaptive_correction'] = self.mic_deviation_adaptive_correction_var.get()
             args['mic_deviation_anatomical_validation'] = self.mic_deviation_anatomical_validation_var.get()
