@@ -110,29 +110,31 @@ jobs:
         with:
           packages-dir: dist/
 
-  testpypi-publish:
-    name: Publish Python 🐍 distribution 📦 to TestPyPI
-    runs-on: ubuntu-latest
-    needs:
-      - test  # 테스트 통과 확인
-      - release-build
-    if: github.event_name == 'push'
-    permissions:
-      id-token: write
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/project/impulcifer-py313/
-    steps:
-      - name: Retrieve release distributions
-        uses: actions/download-artifact@v4
-        with:
-          name: release-dists
-          path: dist/
-
-      - name: Publish release distributions to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          packages-dir: dist/
-          verbose: true
-          
+  # TestPyPI 발행 비활성화 (v2.2.5+)
+  # TestPyPI는 실제 사용에 도움이 되지 않아 제거함
+  # 필요시 아래 주석을 해제하여 다시 활성화 가능
+  #
+  # testpypi-publish:
+  #   name: Publish Python 🐍 distribution 📦 to TestPyPI
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #     - test
+  #     - release-build
+  #   if: github.event_name == 'push'
+  #   permissions:
+  #     id-token: write
+  #   environment:
+  #     name: testpypi
+  #     url: https://test.pypi.org/project/impulcifer-py313/
+  #   steps:
+  #     - name: Retrieve release distributions
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: release-dists
+  #         path: dist/
+  #     - name: Publish release distributions to TestPyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         repository-url: https://test.pypi.org/legacy/
+  #         packages-dir: dist/
+  #         verbose: true
