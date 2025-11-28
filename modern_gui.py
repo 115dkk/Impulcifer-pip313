@@ -1710,7 +1710,7 @@ class ModernImpulciferGUI:
 
         # Fallback: Unknown version
         print("Warning: Could not determine version, using fallback")
-        return "2.2.4"  # Current known version as last resort
+        return "2.3.0"  # Current known version as last resort
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""
