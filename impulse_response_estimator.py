@@ -259,9 +259,16 @@ class ImpulseResponseEstimator(object):
             ire = cls(min_duration=1.0, fs=fs)  # Minimal duration
             ire.test_signal = data_for_comparison
             ire.duration = len(data_for_comparison) / fs
-            # For non-sweep signals, we can't generate a proper inverse filter
-            # Use a simple approach
-            ire.inverse_filter = np.flip(data_for_comparison) / np.sum(data_for_comparison**2)
+
+            # Try to generate proper inverse filter for log sweep signals
+            # using the class's generate_inverse_filter() method
+            try:
+                ire.inverse_filter = ire.generate_inverse_filter()
+            except Exception:
+                # If that fails, fall back to simple linear inversion
+                # This works for non-sweep signals but may be inaccurate for log sweeps
+                print("Warning: Using fallback linear inversion. Result may be inaccurate for Log Sweeps.")
+                ire.inverse_filter = np.flip(data_for_comparison) / np.sum(data_for_comparison**2)
             
         return ire
 
