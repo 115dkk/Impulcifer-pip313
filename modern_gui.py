@@ -36,17 +36,50 @@ def is_frozen_or_standalone() -> bool:
         True if running as frozen/standalone (Nuitka, PyInstaller, etc.)
         False if running as a normal Python script or pip-installed package
     """
-    # Check for Nuitka
+    # Method 1: Check for Nuitka
     if hasattr(sys, '__compiled__'):
         return True
 
-    # Check for PyInstaller or other freezers
+    # Method 2: Check for PyInstaller or other freezers
     if getattr(sys, 'frozen', False):
         return True
 
-    # Check if running from a bundled executable directory
+    # Method 3: Check if running from a bundled executable directory (PyInstaller)
     if hasattr(sys, '_MEIPASS'):
         return True
+
+    # Method 4: Check executable extension (Windows .exe)
+    try:
+        exe_path = sys.executable.lower()
+        # If running from a .exe that's not python.exe or pythonw.exe
+        if exe_path.endswith('.exe'):
+            exe_name = os.path.basename(exe_path)
+            if not exe_name.startswith('python'):
+                return True
+    except Exception:
+        pass
+
+    # Method 5: Check for cx_Freeze
+    if hasattr(sys, 'frozen') or '__compiled__' in dir():
+        return True
+
+    # Method 6: Check for Nuitka onefile mode
+    try:
+        if '__nuitka__' in sys.modules:
+            return True
+    except Exception:
+        pass
+
+    # Method 7: Check if script path doesn't exist (common in frozen apps)
+    try:
+        main_script = sys.argv[0] if sys.argv else None
+        if main_script:
+            script_path = os.path.abspath(main_script)
+            # Frozen apps often have the executable as argv[0], not a .py file
+            if script_path.endswith('.exe') and not script_path.endswith('python.exe'):
+                return True
+    except Exception:
+        pass
 
     return False
 
