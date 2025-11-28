@@ -1055,7 +1055,7 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
         # Check if it's a directory or a file
         if os.path.isdir(normalized_path):
             # It's a directory - search for common headphone file names
-            logger.info(f"Path is a directory, searching for headphone compensation file inside...")
+            logger.info("Path is a directory, searching for headphone compensation file inside...")
             possible_names = ["headphones.wav", "headphone.wav", "hp.wav", "compensation.wav"]
             actual_hp_file = None
 

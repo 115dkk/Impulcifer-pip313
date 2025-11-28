@@ -485,7 +485,7 @@ class UpdateDialog(ctk.CTkToplevel):
                 )
             else:
                 # On Unix-like systems, capture output
-                process = subprocess.Popen(
+                _process = subprocess.Popen(
                     upgrade_cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE
