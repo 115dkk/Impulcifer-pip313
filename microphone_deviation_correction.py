@@ -748,7 +748,7 @@ def apply_microphone_deviation_correction_to_hrir(hrir,
     summary['v3_cross_validation'] = True
     summary['speakers_processed'] = list(speaker_data.keys())
 
-    print(f"\n✅ 마이크 편차 보정 v3.0 완료")
+    print("\n✅ 마이크 편차 보정 v3.0 완료")
     print(f"   평균 보정량: {summary['avg_error_db']:.2f} dB")
     print(f"   최대 보정량: {summary['max_error_db']:.2f} dB")
 
