@@ -612,76 +612,73 @@ class HRIR:
                 pair["right"].data[:head] *= window
 
     def crop_tails(self):
-        """Crops tails of all the impulse responses in a way that makes them all equal length.
-        Shorter IRs will be padded with zeros. A fade-out window is applied."""
+        """Crops out tails after every impulse response has decayed to noise floor.
+
+        Uses the Lundeby method via decay_params() to find the knee point where
+        each IR reaches the noise floor, then crops all IRs to an FFT-optimized
+        length based on these indices.
+        """
         if self.fs != self.estimator.fs:
             raise ValueError(
                 "Refusing to crop tails because HRIR sampling rate doesn't match estimator sampling rate."
             )
 
+        # Find indices after which there is only noise in each track
+        tail_indices = []
         lengths = []
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
+                try:
+                    _, tail_ind, _, _ = ir.decay_params()
+                    tail_indices.append(tail_ind)
+                except Exception:
+                    # If decay_params fails, use full length as fallback
+                    tail_indices.append(len(ir.data))
                 lengths.append(len(ir.data))
 
-        if not lengths:
+        if not tail_indices:
             return 0
 
-        max_len = np.max(lengths)
-
-        # 페이드 아웃 윈도우 계산 (PR의 로직 참고)
-        # self.estimator가 HRIR 객체 생성 시 주입되므로 사용 가능해야 함
-        # 다만, estimator의 n_octaves, low, high 속성이 ImpulseResponseEstimator에 있는지 확인 필요
-        # 해당 속성이 없다면, 일반적인 짧은 페이드 아웃 시간으로 대체 (예: 5ms)
-        fade_out_duration_ms = 5  # 기본 페이드 아웃 5ms
+        # Calculate fade-out window based on estimator parameters
+        fade_out_duration_ms = 5  # Default 5ms fade-out
         if (
             hasattr(self.estimator, "n_octaves")
-            and hasattr(self.estimator, "low")
-            and hasattr(self.estimator, "high")
-            and self.estimator.low > 0
-            and self.estimator.high > 0
             and self.estimator.n_octaves > 0
         ):
             try:
-                # PR의 페이드 아웃 계산 시도
                 seconds_per_octave = (
                     len(self.estimator) / self.estimator.fs / self.estimator.n_octaves
                 )
                 fade_out_samples = 2 * int(self.fs * seconds_per_octave * (1 / 24))
-            except ZeroDivisionError:
+            except (ZeroDivisionError, AttributeError):
                 fade_out_samples = int(self.fs * fade_out_duration_ms / 1000)
         else:
             fade_out_samples = int(self.fs * fade_out_duration_ms / 1000)
 
         if fade_out_samples <= 0:
-            fade_out_samples = int(self.fs * 0.005)  # 최소 5ms 보장
-        if fade_out_samples > max_len // 2:  # 너무 길지 않도록 조정
-            fade_out_samples = max_len // 2 if max_len // 2 > 0 else 1
+            fade_out_samples = int(self.fs * 0.005)  # Minimum 5ms
 
-        window = hann(fade_out_samples * 2)[-fade_out_samples:]  # 끝부분 사용
-        if len(window) == 0 and fade_out_samples > 0:  # window 생성 실패 시 대비
-            window = np.ones(fade_out_samples)
+        # Crop all tracks by FFT-optimized tail index
+        fft_len = next_fast_len(max(tail_indices))
+        tail_ind = min(np.min(lengths), fft_len)
+
+        # Ensure fade_out doesn't exceed tail_ind
+        if fade_out_samples > tail_ind // 2:
+            fade_out_samples = tail_ind // 2 if tail_ind // 2 > 0 else 1
+
+        window = hann(fade_out_samples * 2)[fade_out_samples:]  # Second half (fade-out)
+        if len(window) == 0 and fade_out_samples > 0:
+            window = np.linspace(1, 0, fade_out_samples)
 
         for speaker, pair in self.irs.items():
             for ir in pair.values():
-                current_len = len(ir.data)
-                if current_len < max_len:
-                    # 0으로 패딩하여 길이를 max_len으로 맞춤
-                    padding = np.zeros(max_len - current_len)
-                    ir.data = np.concatenate([ir.data, padding])
-                elif current_len > max_len:
-                    # 이 경우는 발생하지 않아야 하지만, 안전을 위해 자름
-                    ir.data = ir.data[:max_len]
-
-                # 페이드 아웃 적용 (윈도우 길이가 IR 길이보다 길면 문제 발생 가능)
+                # Crop to tail_ind
+                ir.data = ir.data[:tail_ind]
+                # Apply fade-out window
                 if len(ir.data) >= len(window):
-                    ir.data[-len(window) :] *= window
-                elif (
-                    len(ir.data) > 0
-                ):  # IR 데이터가 있고 윈도우보다 짧으면 전체에 적용 시도 (또는 다른 처리)
-                    # 간단히 끝부분만 처리하거나, 전체에 적용 (여기선 IR이 window보다 짧으므로 window를 잘라서 적용)
-                    ir.data[-len(ir.data) :] *= window[: len(ir.data)]
-        return max_len
+                    ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
+
+        return tail_ind
 
     def channel_balance_firs(self, left_fr, right_fr, method):
         """Creates FIR filters for correcting channel balance
