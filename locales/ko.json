@@ -104,6 +104,7 @@
   "dialog_select_language_message": "원하시는 언어를 선택해주세요:",
   "button_ok": "확인",
   "button_cancel": "취소",
+  "button_close": "닫기",
 
   "message_language_changed": "언어가 {language}(으)로 변경되었습니다. 모든 변경사항을 적용하려면 애플리케이션을 재시작해주세요.",
   "message_theme_changed": "테마가 성공적으로 변경되었습니다.",

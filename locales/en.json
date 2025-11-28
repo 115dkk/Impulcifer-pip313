@@ -104,6 +104,7 @@
   "dialog_select_language_message": "Please select your preferred language:",
   "button_ok": "OK",
   "button_cancel": "Cancel",
+  "button_close": "Close",
 
   "message_language_changed": "Language changed to {language}. Please restart the application for all changes to take effect.",
   "message_theme_changed": "Theme changed successfully.",
