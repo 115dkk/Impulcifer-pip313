@@ -395,7 +395,7 @@ def _process_decay_worker(args):
     from impulse_response import ImpulseResponse
 
     # Create temporary IR object
-    temp_ir = ImpulseResponse(name=f'{speaker}-{side}', data=ir_data.copy(), fs=fs)
+    temp_ir = ImpulseResponse(data=ir_data.copy(), fs=fs)
     temp_ir.adjust_decay(decay_value)
 
     return (speaker, side, temp_ir.data)
@@ -417,7 +417,7 @@ def _process_plot_worker(args):
     from impulse_response import ImpulseResponse
 
     # Create temporary IR object
-    temp_ir = ImpulseResponse(name=f'{speaker}-{side}', data=ir_data.copy(), fs=fs)
+    temp_ir = ImpulseResponse(data=ir_data.copy(), fs=fs)
     recording = temp_ir.convolve(test_signal)
 
     return (speaker, side, recording)
