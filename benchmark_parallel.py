@@ -57,8 +57,8 @@ def benchmark_normalize():
         for speaker in speakers[:12]:  # 12채널 테스트
             data = np.random.randn(48000)  # 1초 길이 랜덤 데이터
             hrir.irs[speaker] = {
-                'left': ImpulseResponse(name=f'{speaker}-left', fs=48000, data=data.copy()),
-                'right': ImpulseResponse(name=f'{speaker}-right', fs=48000, data=data.copy())
+                'left': ImpulseResponse(data=data.copy(), fs=48000),
+                'right': ImpulseResponse(data=data.copy(), fs=48000)
             }
 
         print(f"  채널 수: {len(hrir.irs)} (좌우 합계 {len(hrir.irs)*2})")
