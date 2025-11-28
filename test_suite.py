@@ -23,42 +23,33 @@ except ImportError:
 
 
 class TestMicrophoneDeviationCorrector:
-    """마이크 편차 보정 v2.0 테스트"""
+    """마이크 편차 보정 v3.0 테스트"""
 
     @pytest.fixture
     def corrector(self):
         """기본 corrector 인스턴스"""
         return MicrophoneDeviationCorrector(
             sample_rate=48000,
-            correction_strength=0.7,
-            enable_phase_correction=True,
-            enable_adaptive_correction=True,
-            enable_anatomical_validation=True
+            correction_strength=0.7
         )
 
     def test_corrector_initialization(self, corrector):
         """초기화 테스트"""
         assert corrector.fs == 48000
         assert corrector.correction_strength == 0.7
-        assert corrector.enable_phase_correction is True
-        assert corrector.enable_adaptive_correction is True
-        assert corrector.enable_anatomical_validation is True
+        assert len(corrector.octave_bands) > 0, "옥타브 밴드가 비어있음"
+        assert hasattr(corrector, 'expected_ild_sign'), "기대 ILD 부호 딕셔너리가 없음"
 
-    def test_frequency_band_classification(self, corrector):
-        """주파수 대역 분류 테스트"""
-        assert len(corrector.low_freq_bands) > 0, "저주파 대역이 비어있음"
-        assert len(corrector.mid_freq_bands) > 0, "중간주파 대역이 비어있음"
-        assert len(corrector.high_freq_bands) > 0, "고주파 대역이 비어있음"
-
-        # 올바른 분류 확인
-        for freq in corrector.low_freq_bands:
-            assert freq < 700, f"{freq}Hz가 저주파 대역에 잘못 분류됨"
-
-        for freq in corrector.mid_freq_bands:
-            assert 700 <= freq <= 4000, f"{freq}Hz가 중간주파 대역에 잘못 분류됨"
-
-        for freq in corrector.high_freq_bands:
-            assert freq > 4000, f"{freq}Hz가 고주파 대역에 잘못 분류됨"
+    def test_expected_ild_sign(self, corrector):
+        """스피커별 기대 ILD 부호 테스트"""
+        # 왼쪽 스피커는 양수
+        assert corrector.expected_ild_sign.get('FL', 0) > 0, "FL은 양수여야 함"
+        assert corrector.expected_ild_sign.get('SL', 0) > 0, "SL은 양수여야 함"
+        # 오른쪽 스피커는 음수
+        assert corrector.expected_ild_sign.get('FR', 0) < 0, "FR은 음수여야 함"
+        assert corrector.expected_ild_sign.get('SR', 0) < 0, "SR은 음수여야 함"
+        # 중앙 스피커는 0
+        assert corrector.expected_ild_sign.get('FC', 0) == 0, "FC는 0이어야 함"
 
     def test_gate_length_calculation(self, corrector):
         """게이트 길이 계산 테스트"""
@@ -71,37 +62,42 @@ class TestMicrophoneDeviationCorrector:
             assert corrector.gate_lengths[freqs[i]] >= corrector.gate_lengths[freqs[i+1]], \
                    "게이트 길이가 주파수에 따라 올바르게 감소하지 않음"
 
-    def test_quality_evaluation(self, corrector):
-        """응답 품질 평가 테스트"""
-        # 테스트 응답 생성
-        test_responses = {
-            125: 0.5 + 0.1j,
-            250: 0.6 + 0.05j,
-            500: 0.7 + 0.02j,
-            1000: 0.8 + 0.01j,
-            2000: 0.75 + 0.015j,
-            4000: 0.65 + 0.02j,
-            8000: 0.55 + 0.025j,
-            16000: 0.45 + 0.03j
-        }
+    def test_collect_speaker_deviation(self, corrector):
+        """스피커 편차 수집 테스트"""
+        # 테스트 IR 생성
+        length = 4800
+        left_ir = np.zeros(length)
+        right_ir = np.zeros(length)
+        left_ir[1000] = 1.0
+        right_ir[1000] = 0.8
 
-        quality = corrector._evaluate_response_quality(test_responses)
-        assert isinstance(quality, (int, float)), "품질 점수가 숫자가 아님"
-        assert quality != 0, "품질 점수가 0임"
+        deviations = corrector.collect_speaker_deviation(
+            'FL', left_ir, right_ir,
+            left_peak_index=1000, right_peak_index=1000
+        )
 
-    def test_itd_validation(self, corrector):
-        """ITD 해부학적 검증 테스트"""
-        # 정상 범위의 위상 차이
-        normal_phase_diffs = {
-            125: 0.1,
-            250: 0.15,
-            500: 0.2
-        }
+        assert isinstance(deviations, dict), "편차는 딕셔너리여야 함"
+        assert len(deviations) > 0, "편차가 비어있음"
+        assert 'FL' in corrector.all_speaker_deviations, "스피커 데이터가 저장되지 않음"
 
-        result = corrector._validate_itd(normal_phase_diffs, [125, 250, 500])
-        assert 'valid' in result
-        assert 'warnings' in result
-        assert isinstance(result['warnings'], list)
+    def test_separate_microphone_error(self, corrector):
+        """마이크 오차 분리 테스트"""
+        # 여러 스피커 데이터 수집
+        length = 4800
+        for speaker, expected_sign in [('FL', 1.0), ('FR', -1.0), ('FC', 0.0)]:
+            left_ir = np.zeros(length)
+            right_ir = np.zeros(length)
+            left_ir[1000] = 1.0
+            # 기대 방향과 반대로 편차 추가 (마이크 오차 시뮬레이션)
+            right_ir[1000] = 1.2 if expected_sign >= 0 else 0.8
+
+            corrector.collect_speaker_deviation(
+                speaker, left_ir, right_ir,
+                left_peak_index=1000, right_peak_index=1000
+            )
+
+        mic_error = corrector.separate_microphone_error()
+        assert isinstance(mic_error, dict), "마이크 오차는 딕셔너리여야 함"
 
     def test_deviation_correction_basic(self, corrector):
         """기본 편차 보정 테스트"""
@@ -125,7 +121,7 @@ class TestMicrophoneDeviationCorrector:
         assert corrected_left.shape == left_ir.shape
         assert corrected_right.shape == right_ir.shape
         assert 'deviation_results' in analysis
-        assert 'v2_features' in analysis
+        assert 'v3_cross_validation' in analysis
 
 
 class TestImpulseResponse:

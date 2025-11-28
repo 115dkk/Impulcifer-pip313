@@ -1,6 +1,44 @@
 # -*- coding: utf-8 -*-
 
-__version__ = "2.3.0"
+def _get_version() -> str:
+    """Get version from pyproject.toml or package metadata."""
+    # Method 1: Try package metadata (installed via pip)
+    try:
+        from importlib.metadata import version as get_version
+        return get_version('impulcifer-py313')
+    except Exception:
+        pass
+
+    # Method 2: Try pyproject.toml (development mode)
+    try:
+        import tomllib
+    except ImportError:
+        try:
+            import tomli as tomllib
+        except ImportError:
+            tomllib = None
+
+    if tomllib:
+        try:
+            from pathlib import Path
+            possible_paths = [
+                Path(__file__).parent / 'pyproject.toml',
+                Path(__file__).parent.parent / 'pyproject.toml',
+            ]
+            for pyproject_path in possible_paths:
+                if pyproject_path.exists():
+                    with open(pyproject_path, 'rb') as f:
+                        data = tomllib.load(f)
+                        version_str = data.get('project', {}).get('version')
+                        if version_str:
+                            return version_str
+        except Exception:
+            pass
+
+    # Fallback
+    return "2.3.1"
+
+__version__ = _get_version()
 
 import os
 import re
