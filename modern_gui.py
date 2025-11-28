@@ -30,22 +30,18 @@ ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-
 
 def is_frozen_or_standalone() -> bool:
     """
-    Check if the application is running as a frozen/standalone executable.
+    Check if the application is running as a Nuitka-compiled standalone executable.
 
     Returns:
-        True if running as frozen/standalone (Nuitka, PyInstaller, etc.)
+        True if running as Nuitka standalone
         False if running as a normal Python script or pip-installed package
     """
-    # Check for Nuitka
+    # Nuitka compiled check
     if hasattr(sys, '__compiled__'):
         return True
 
-    # Check for PyInstaller or other freezers
-    if getattr(sys, 'frozen', False):
-        return True
-
-    # Check if running from a bundled executable directory
-    if hasattr(sys, '_MEIPASS'):
+    # Nuitka onefile mode
+    if '__nuitka__' in sys.modules:
         return True
 
     return False
@@ -58,18 +54,45 @@ def is_pip_available() -> bool:
     Returns:
         True if pip can be used for package management
     """
+    # Method 1: Try importing pip directly (most reliable)
+    try:
+        import pip  # noqa: F401
+        return True
+    except ImportError:
+        pass
+
+    # Method 2: Try importing pip._internal
+    try:
+        import pip._internal  # noqa: F401
+        return True
+    except ImportError:
+        pass
+
+    # Method 3: Try subprocess check (fallback)
     try:
         import subprocess
         result = subprocess.run(
             [sys.executable, '-m', 'pip', '--version'],
             capture_output=True,
-            timeout=5,
+            timeout=10,
             encoding='utf-8',
             errors='replace'
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            return True
+    except Exception as e:
+        print(f"Subprocess pip check failed: {e}")
+
+    # Method 4: Check if pip module exists in sys.modules or can be found
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec('pip')
+        if spec is not None:
+            return True
     except Exception:
-        return False
+        pass
+
+    return False
 
 
 def safe_get_double(var, default=0.0):
@@ -1710,7 +1733,7 @@ class ModernImpulciferGUI:
 
         # Fallback: Unknown version
         print("Warning: Could not determine version, using fallback")
-        return "2.2.4"  # Current known version as last resort
+        return "2.3.0"  # Current known version as last resort
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""
