@@ -226,7 +226,7 @@ class ImpulseResponseEstimator(object):
     def from_wav(cls, file_path):
         """Creates ImpulseResponseEstimator instance from test signal WAV."""
         fs, data = read_wav(file_path)
-        
+
         # Handle multi-channel data by using the first channel only
         if len(data.shape) > 1:
             # Multi-channel data: use first channel for comparison
@@ -234,42 +234,30 @@ class ImpulseResponseEstimator(object):
         else:
             # Single channel data
             data_for_comparison = data
-        
-        # Try to create estimator with the data length
-        try:
-            ire = cls(min_duration=(len(data_for_comparison) - 1) / fs, fs=fs)
-            
-            # Check if the lengths match before comparing values
-            if len(ire.test_signal) == len(data_for_comparison):
-                # Use 1e-4 tolerance to account for 32-bit float precision in WAV files
-                # (32-bit float has ~7 decimal digits precision, vs 64-bit internal calculation)
-                if np.max(ire.test_signal - data_for_comparison) > 1e-4:
-                    raise ValueError('Data read from WAV file does not match generated test signal. WAV file must be generated '
-                                   'with the current version of ImpulseResponseEstimator.')
-            else:
-                # Length mismatch - this might be a TrueHD file or other audio content
-                # Create a new estimator that uses the actual data as test signal
-                ire.test_signal = data_for_comparison
-                ire.duration = len(data_for_comparison) / fs
-                # Regenerate inverse filter for the new test signal
-                ire.inverse_filter = ire.generate_inverse_filter()
-                
-        except Exception:
-            # If there's any issue with estimator creation, create a minimal one
-            ire = cls(min_duration=1.0, fs=fs)  # Minimal duration
+
+        # Calculate duration from actual data length
+        duration = (len(data_for_comparison) - 1) / fs
+
+        # Create estimator with the correct duration (this calculates proper n_octaves)
+        ire = cls(min_duration=duration, fs=fs)
+
+        # Handle length mismatch (can occur due to rounding in signal generation)
+        if len(ire.test_signal) != len(data_for_comparison):
+            # Length differs - use the loaded data and regenerate inverse filter
+            # with correct n_octaves (already calculated from duration)
             ire.test_signal = data_for_comparison
             ire.duration = len(data_for_comparison) / fs
+            # Regenerate inverse filter using correct n_octaves
+            ire.inverse_filter = ire.generate_inverse_filter()
 
-            # Try to generate proper inverse filter for log sweep signals
-            # using the class's generate_inverse_filter() method
-            try:
-                ire.inverse_filter = ire.generate_inverse_filter()
-            except Exception:
-                # If that fails, fall back to simple linear inversion
-                # This works for non-sweep signals but may be inaccurate for log sweeps
-                print("Warning: Using fallback linear inversion. Result may be inaccurate for Log Sweeps.")
-                ire.inverse_filter = np.flip(data_for_comparison) / np.sum(data_for_comparison**2)
-            
+        # Handle value mismatch (32-bit vs 64-bit float precision)
+        elif np.max(np.abs(ire.test_signal - data_for_comparison)) > 1e-4:
+            # Values differ slightly - use loaded data and regenerate
+            print("Warning: Loaded WAV differs slightly from generated signal. Re-calculating inverse filter based on WAV.")
+            ire.test_signal = data_for_comparison
+            # n_octaves is already correct, just regenerate inverse filter
+            ire.inverse_filter = ire.generate_inverse_filter()
+
         return ire
 
     @classmethod
