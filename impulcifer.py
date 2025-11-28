@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+__version__ = "2.3.0"
+
 import os
 import re
 import argparse
