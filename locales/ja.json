@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "出力ディレクトリが存在しません: {directory}",
   "message_recordings_not_exist": "録音が存在しません: {directory}",
   "message_processing_failed": "処理が失敗しました: {error}",
+  "dialog_processing_title": "処理中",
+  "dialog_processing_message": "BRIR処理中...",
+  "message_processing_complete": "完了!",
+  "message_processing_error": "エラーが発生しました",
+
+  "checkbox_mic_deviation_debug_plots": "デバッグプロットを保存",
 
   "error_no_file_selected": "ファイルが選択されていません",
   "error_file_not_found": "ファイルが見つかりません: {file}",
@@ -208,5 +214,12 @@
   "update_installing": "アップデートをインストール中...",
   "update_error_download": "アップデートのダウンロードに失敗しました。後で再試行してください。",
   "update_error_install": "インストールの開始に失敗しました。手動でダウンロードしてください。",
-  "update_error_general": "アップデートエラー: {error}"
+  "update_error_general": "アップデートエラー: {error}",
+  "update_preparing": "pipでアップデートを準備中...",
+  "update_error_no_method": "アップデートできません：pipまたはインストーラーが利用できません。\nGitHubから手動でアップデートしてください。",
+  "update_success": "アップデートが開始されました！アプリケーションを再起動してください。",
+  "update_complete_title": "アップデート開始",
+  "update_complete_message": "アップデートがバックグラウンドで開始されました。\n新しいバージョンを使用するにはアプリケーションを再起動してください。",
+  "update_error_no_installer": "インストーラーが利用できません。GitHubから手動でダウンロードしてください：\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "エラー"
 }

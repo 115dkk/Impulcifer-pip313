@@ -36,7 +36,7 @@ def _get_version() -> str:
             pass
 
     # Fallback
-    return "2.3.1"
+    return "2.3.2"
 
 __version__ = _get_version()
 
@@ -80,7 +80,6 @@ from logger import get_logger
 import copy
 import contextlib
 import io
-from scipy.interpolate import interp1d  # 큐빅 보간을 위해 추가
 
 # Bokeh Tabs/Panel import 추가
 # from bokeh.models import Panel, Tabs # 이전 시도
@@ -435,6 +434,7 @@ def main(
     mic_deviation_phase_correction=True,
     mic_deviation_adaptive_correction=True,
     mic_deviation_anatomical_validation=True,
+    mic_deviation_debug_plots=False,
     # TrueHD 레이아웃 관련 파라미터 추가
     output_truehd_layouts=False,
 ):
@@ -576,13 +576,13 @@ def main(
     # 마이크 착용 편차 보정 v2.0
     if microphone_deviation_correction:
         logger.step("Correcting microphone deviation v2.0")
-        mic_deviation_plot_dir = os.path.join(dir_path, "plots") if plot else None
+        mic_deviation_plot_dir = os.path.join(dir_path, "plots") if mic_deviation_debug_plots else None
         hrir.correct_microphone_deviation(
             correction_strength=mic_deviation_strength,
             enable_phase_correction=mic_deviation_phase_correction,
             enable_adaptive_correction=mic_deviation_adaptive_correction,
             enable_anatomical_validation=mic_deviation_anatomical_validation,
-            plot_analysis=plot,
+            plot_analysis=mic_deviation_debug_plots,
             plot_dir=mic_deviation_plot_dir,
         )
 
@@ -1590,6 +1590,11 @@ def create_cli():
         action="store_false",
         dest="mic_deviation_anatomical_validation",
         help="Disable ITD/ILD anatomical validation in microphone deviation correction v2.0. (Default: enabled)",
+    )
+    arg_parser.add_argument(
+        "--mic_deviation_debug_plots",
+        action="store_true",
+        help="Save debug plots for microphone deviation correction. (Default: disabled)",
     )
     arg_parser.add_argument(
         "--output_truehd_layouts", action="store_true", help="Generate TrueHD layouts."

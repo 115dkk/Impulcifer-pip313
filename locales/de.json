@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "Ausgabeverzeichnis existiert nicht: {directory}",
   "message_recordings_not_exist": "Aufnahmen existieren nicht: {directory}",
   "message_processing_failed": "Verarbeitung fehlgeschlagen: {error}",
+  "dialog_processing_title": "Verarbeitung",
+  "dialog_processing_message": "BRIR wird verarbeitet...",
+  "message_processing_complete": "Abgeschlossen!",
+  "message_processing_error": "Ein Fehler ist aufgetreten",
+
+  "checkbox_mic_deviation_debug_plots": "Debug-Diagramme speichern",
 
   "error_no_file_selected": "Keine Datei ausgewählt",
   "error_file_not_found": "Datei nicht gefunden: {file}",
@@ -208,5 +214,12 @@
   "update_installing": "Update wird installiert...",
   "update_error_download": "Download des Updates fehlgeschlagen. Bitte versuchen Sie es später erneut.",
   "update_error_install": "Installation konnte nicht gestartet werden. Bitte laden Sie manuell herunter.",
-  "update_error_general": "Update-Fehler: {error}"
+  "update_error_general": "Update-Fehler: {error}",
+  "update_preparing": "Update über pip wird vorbereitet...",
+  "update_error_no_method": "Update nicht möglich: Weder pip noch ein Installationsprogramm sind verfügbar.\nBitte aktualisieren Sie manuell von GitHub.",
+  "update_success": "Update gestartet! Bitte starten Sie die Anwendung neu.",
+  "update_complete_title": "Update gestartet",
+  "update_complete_message": "Das Update wurde im Hintergrund gestartet.\nBitte starten Sie die Anwendung neu, um die neue Version zu verwenden.",
+  "update_error_no_installer": "Installationsprogramm nicht verfügbar. Bitte laden Sie manuell von GitHub herunter:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "Fehler"
 }

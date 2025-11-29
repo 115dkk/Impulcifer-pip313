@@ -125,6 +125,12 @@
   "message_done_title": "완료!",
   "message_done": "파일 생성 완료, recordings 폴더를 확인하세요.",
   "message_processing_failed": "처리 실패: {error}",
+  "dialog_processing_title": "처리 중",
+  "dialog_processing_message": "BRIR 처리 중...",
+  "message_processing_complete": "완료!",
+  "message_processing_error": "오류가 발생했습니다",
+
+  "checkbox_mic_deviation_debug_plots": "디버그 플롯 저장",
 
   "error_no_file_selected": "파일이 선택되지 않았습니다",
   "error_file_not_found": "파일을 찾을 수 없습니다",
@@ -198,5 +204,12 @@
   "update_installing": "업데이트 설치 중...",
   "update_error_download": "업데이트 다운로드 실패. 나중에 다시 시도해주세요.",
   "update_error_install": "설치 시작 실패. 수동으로 다운로드해주세요.",
-  "update_error_general": "업데이트 오류: {error}"
+  "update_error_general": "업데이트 오류: {error}",
+  "update_preparing": "pip를 통한 업데이트 준비 중...",
+  "update_error_no_method": "업데이트 불가: pip 또는 설치 프로그램을 사용할 수 없습니다.\nGitHub에서 수동으로 업데이트해주세요.",
+  "update_success": "업데이트가 시작되었습니다! 애플리케이션을 재시작해주세요.",
+  "update_complete_title": "업데이트 시작됨",
+  "update_complete_message": "업데이트가 백그라운드에서 시작되었습니다.\n새 버전을 사용하려면 애플리케이션을 재시작해주세요.",
+  "update_error_no_installer": "설치 프로그램을 사용할 수 없습니다. GitHub에서 수동으로 다운로드해주세요:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "오류"
 }

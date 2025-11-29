@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "Le répertoire de sortie n'existe pas: {directory}",
   "message_recordings_not_exist": "Les enregistrements n'existent pas: {directory}",
   "message_processing_failed": "Le traitement a échoué: {error}",
+  "dialog_processing_title": "Traitement",
+  "dialog_processing_message": "Traitement BRIR...",
+  "message_processing_complete": "Terminé!",
+  "message_processing_error": "Une erreur s'est produite",
+
+  "checkbox_mic_deviation_debug_plots": "Sauvegarder les graphiques de débogage",
 
   "error_no_file_selected": "Aucun fichier sélectionné",
   "error_file_not_found": "Fichier non trouvé: {file}",
@@ -208,5 +214,12 @@
   "update_installing": "Installation de la mise à jour...",
   "update_error_download": "Échec du téléchargement de la mise à jour. Veuillez réessayer plus tard.",
   "update_error_install": "Échec du démarrage de l'installation. Veuillez télécharger manuellement.",
-  "update_error_general": "Erreur de mise à jour: {error}"
+  "update_error_general": "Erreur de mise à jour: {error}",
+  "update_preparing": "Préparation de la mise à jour via pip...",
+  "update_error_no_method": "Impossible de mettre à jour : ni pip ni l'installateur ne sont disponibles.\nVeuillez mettre à jour manuellement depuis GitHub.",
+  "update_success": "La mise à jour a commencé ! Veuillez redémarrer l'application.",
+  "update_complete_title": "Mise à jour démarrée",
+  "update_complete_message": "La mise à jour a été lancée en arrière-plan.\nVeuillez redémarrer l'application pour utiliser la nouvelle version.",
+  "update_error_no_installer": "Installateur non disponible. Veuillez télécharger manuellement depuis GitHub :\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "Erreur"
 }

@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "输出目录不存在: {directory}",
   "message_recordings_not_exist": "录音不存在: {directory}",
   "message_processing_failed": "处理失败: {error}",
+  "dialog_processing_title": "处理中",
+  "dialog_processing_message": "正在处理BRIR...",
+  "message_processing_complete": "完成!",
+  "message_processing_error": "发生错误",
+
+  "checkbox_mic_deviation_debug_plots": "保存调试图",
 
   "error_no_file_selected": "未选择文件",
   "error_file_not_found": "未找到文件: {file}",
@@ -208,5 +214,12 @@
   "update_installing": "正在安装更新...",
   "update_error_download": "下载更新失败。请稍后重试。",
   "update_error_install": "启动安装失败。请手动下载。",
-  "update_error_general": "更新错误: {error}"
+  "update_error_general": "更新错误: {error}",
+  "update_preparing": "正在准备通过pip更新...",
+  "update_error_no_method": "无法更新：pip或安装程序均不可用。\n请从GitHub手动更新。",
+  "update_success": "更新已开始！请重新启动应用程序。",
+  "update_complete_title": "更新已开始",
+  "update_complete_message": "更新已在后台开始。\n请重新启动应用程序以使用新版本。",
+  "update_error_no_installer": "安装程序不可用。请从GitHub手动下载：\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "错误"
 }

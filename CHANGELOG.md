@@ -4,6 +4,267 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.3.2 - 2025-11-29
+### 🔧 업데이트 체커 및 CI/CD 수정
+GitHub 자동 릴리즈 태그로 인한 업데이트 오탐지 문제를 해결하고, Linux CI/CD 빌드 이슈를 수정했습니다.
+
+#### 🐛 버그 수정
+- **업데이트 체커 타임스탬프 접미사 무시**: 자동 릴리즈 태그 (`v2.3.1-20241129123456`)가 동일한 버전임에도 "업데이트 가능"으로 잘못 표시되던 문제 해결
+  - `_normalize_version()` 메서드 추가: 기본 시맨틱 버전만 추출
+  - 예: `2.3.1-20241129123456` → `2.3.1`, `v2.3.1-beta` → `2.3.1`
+  - 양쪽 버전 모두 정규화 후 비교
+
+- **Linux CI/CD `--onefile` 문제 해결**: AppImage 생성을 위해 standalone 폴더를 사용해야 하는데 `--onefile`이 함께 지정되어 있던 문제 수정
+  - `build-linux.yml`, `release-cross-platform.yml`에서 `--onefile` 플래그 제거
+  - AppImage 생성 스크립트가 `gui_main.dist` 폴더를 올바르게 처리하도록 업데이트
+  - 래퍼 스크립트로 `LD_LIBRARY_PATH` 설정 추가
+
+#### 🌐 현지화 추가
+다음 누락된 키들을 11개 언어 파일에 추가:
+- `error_title`: 오류 다이얼로그 제목
+- `update_preparing`: pip 업데이트 준비 메시지
+- `update_error_no_method`: pip/설치 프로그램 모두 불가 시 오류
+- `update_success`: 업데이트 시작 확인
+- `update_complete_title`, `update_complete_message`: 백그라운드 업데이트 시작 알림
+- `update_error_no_installer`: 설치 프로그램 없음 오류
+
+#### 📦 변경된 파일
+- `update_checker.py`: 버전 정규화 로직 및 테스트 추가
+- `.github/workflows/build-linux.yml`: standalone 폴더 기반 AppImage 생성
+- `.github/workflows/release-cross-platform.yml`: 동일 수정
+- 모든 locale 파일 (11개): 누락 키 추가
+
+---
+
+## 2.3.1 - 2025-11-28
+### 🎯 마이크 편차 보정 v3.0 및 버전 관리 개선
+마이크 편차 보정 알고리즘을 완전히 재작성하고, 버전 관리를 pyproject.toml에서 동적으로 읽어오도록 개선했습니다.
+
+#### ⭐ 마이크 편차 보정 v3.0 (완전 재작성)
+- **교차 검증 기반 보정**: 스피커 위치별 일관성 분석
+  - 같은 방향 스피커들의 좌우 편차 패턴 비교
+  - 일관된 편차만 마이크 문제로 판단, 불일관한 편차는 음향 특성으로 보존
+
+- **마이크 고유 오류 분리**:
+  - 스피커별 편차에서 공통 패턴(마이크 오류) 추출
+  - 룸 음향 및 HRTF 특성은 보존
+
+- **품질 가중 평균**:
+  - 저주파(<200Hz): 0.3 가중치 (룸 모드 영향 큼)
+  - 중주파(200-2000Hz): 1.0 가중치 (가장 신뢰)
+  - 고주파(>2000Hz): 0.5 가중치 (HRTF 특성 보존)
+
+- **v2.0 대비 개선점**:
+  - 단순 좌우 차이 → 다중 스피커 교차 검증
+  - 적응형 보정 → 품질 기반 신뢰도 가중치
+  - 위상 보정/해부학적 검증 → 간소화된 크기 전용 보정
+
+#### 🔧 기타 수정
+- **동적 버전 읽기**: `__version__`이 pyproject.toml에서 자동으로 읽어옴
+  - pip 설치 시: `importlib.metadata.version()` 사용
+  - 개발 모드: `tomllib`로 직접 파일 읽기
+  - Nuitka 빌드: 폴백 버전 사용
+
+- **GUI v3.0 반영**: v2.0 전용 옵션(phase_correction, adaptive_correction, anatomical_validation) 제거
+- **테스트 스위트 업데이트**: v3.0 API에 맞게 테스트 케이스 수정
+- **린터 오류 수정**: F401(미사용 import), F841(미사용 변수), F541(f-string 플레이스홀더 없음)
+
+#### ⚙️ 새 설정
+- `mic_deviation_debug_plots`: 디버그 플롯 저장 옵션 (기본: 비활성화)
+  - Program Files 등 쓰기 권한 문제 방지
+
+---
+
+## 2.3.0 - 2025-11-27
+### 🔴 치명적 버그 수정 - 고주파 보간 문제
+AutoEQ/Impulcifer의 고주파 응답이 훼손되던 치명적인 버그를 수정했습니다.
+
+#### 🐛 핵심 수정
+- **고주파 보간 아티팩트 해결**: `interpolate()` 호출 시 `pol_order=1` (선형) 명시
+  - **문제**: 기본값 `pol_order=3` (큐빅)이 고주파에서 심각한 오버슈트/링잉 유발
+  - **증상**: 10kHz 이상에서 비정상적인 피크와 딥, "벽" 같은 노이즈
+  - **원인**: 큐빅 스플라인이 sparse한 고주파 데이터에서 불안정
+  - **해결**: 선형 보간(`pol_order=1`)으로 통일
+
+- **`_apply_cubic_interp` 함수 제거**: 직접 `interpolate(pol_order=1)` 호출로 대체
+  - 코드 단순화 및 명확성 향상
+  - 모든 보간 지점에서 일관된 선형 보간 적용
+
+#### 📍 영향받은 파일
+- `impulcifer.py`: 모든 `interpolate()` 호출에 `pol_order=1` 추가
+- `hrir.py`: 헤드폰 보상 관련 보간 수정
+- `frequency_response.py`: FR 조합 시 보간 수정
+
+#### ⚠️ 사용자 영향
+- 이전 버전(v1.5.2~v2.2.x)에서 생성한 BRIR은 고주파가 훼손되었을 수 있음
+- v2.3.0으로 재생성 권장
+
+---
+
+## 2.2.4 - 2025-11-24
+### PyPI 패키지 현지화 수정
+pip로 설치한 패키지에서 번역이 작동하지 않던 문제를 해결했습니다.
+
+#### 🐛 버그 수정
+- **PyPI 패키지 locale 경로 문제**: 설치된 패키지에서 `locales/` 디렉토리를 찾지 못하던 문제
+  - `importlib.resources`를 사용한 패키지 리소스 접근으로 변경
+  - `pyproject.toml`에 `[tool.hatch.build.targets.wheel]` 설정 추가
+- **한국어 Windows 인코딩 오류**: subprocess 호출 시 `UnicodeDecodeError` 수정
+  - `encoding='utf-8', errors='replace'` 옵션 추가
+- **헤드폰 보상 파일 경로 처리 개선**: 상대/절대 경로 혼합 처리
+
+---
+
+## 2.2.3 - 2025-11-23
+### 헤드폰 보상 및 WAV 검증 수정
+
+#### 🐛 버그 수정
+- **헤드폰 보상 변수 스코프 문제**: `hp_fr` 변수가 조건문 밖에서 참조되던 오류 수정
+- **WAV 파일 검증 과도**: 정상 파일이 "노이즈 월"로 오진되던 문제 완화
+  - 검증 임계값 조정
+  - 경고만 표시하고 처리는 계속 진행
+
+---
+
+## 2.2.2 - 2025-11-22
+### 폰트 렌더링 및 업데이트 메커니즘 개선
+
+#### 🔧 개선사항
+- **폰트 렌더링 최적화**: matplotlib 폰트 캐시 관리 개선
+- **업데이트 감지 개선**: Nuitka standalone 환경 감지 로직 수정
+  - `sys.frozen` 속성 확인 추가
+  - pip 가용성 체크 개선
+- **ctypes.wintypes 미사용 import 제거**: Ruff F401 수정
+
+---
+
+## 2.2.1 - 2025-11-21
+### 최종 사용자 설치 가이드 추가
+
+#### 📚 문서
+- **INSTALL_GUIDE.md** 추가: Windows/macOS/Linux 설치 방법 상세 안내
+  - Nuitka 빌드 실행 파일 설치
+  - pip 설치 방법
+  - 문제 해결 가이드
+
+---
+
+## 2.2.0 - 2025-11-20
+### 코드 품질 개선 및 선형 보간 수정
+
+#### 🐛 중요 수정
+- **두꺼운 꼬리/오버슈트 아티팩트 수정**: 큐빅 → 선형 보간으로 전환
+  - IR tail에서 발생하던 비정상적인 진동 제거
+  - 고주파 응답 안정성 향상
+
+#### 🔧 코드 품질
+- **Flake8 린팅**: 전체 코드베이스 린팅 완료
+- **gui.py 포맷팅**: 탭을 스페이스로 변환 (ruff formatter)
+- 모든 주요 린터 경고 해결
+
+---
+
+## 2.1.5 - 2025-11-19
+### macOS 앱 이름 문제 수정
+
+#### 🐛 버그 수정
+- **macOS DMG 앱 이름**: 빌드 시 잘못된 앱 이름이 생성되던 문제 수정
+- Nuitka `--macos-app-name` 옵션 올바르게 적용
+
+---
+
+## 2.1.4 - 2025-11-19
+### 최종 사용자 설치 가이드
+
+#### 📚 문서
+- 설치 가이드 초안 추가
+- 버전 범프
+
+---
+
+## 2.1.3 - 2025-11-18
+### Linux AppImage 및 macOS DMG 빌드 수정
+
+#### 🐛 빌드 수정
+- **Linux AppImage**: 아이콘 및 검증 문제 해결
+  - `.desktop` 파일 포맷 수정 (들여쓰기 제거)
+  - 아이콘 경로 올바르게 설정
+- **macOS DMG**: `--onefile` 옵션으로 11KB 빈 DMG가 생성되던 문제 수정
+  - `--standalone`만 사용하도록 변경
+- **YAML 구문 오류**: heredoc을 echo 명령으로 교체
+
+---
+
+## 2.1.2 - 2025-11-17
+### CI/CD 중복 빌드 제거
+
+#### 🔧 CI/CD
+- **중복 빌드 방지**: push와 release 이벤트가 동시에 트리거되던 문제 해결
+- **아이콘 파일 참조 오류 제거**: 존재하지 않는 아이콘 파일 참조 제거
+
+---
+
+## 2.1.1 - 2025-11-17
+### uv 패키지 매니저 도입
+
+#### 🚀 성능 개선
+- **uv 패키지 매니저**: pip 대신 uv 사용으로 의존성 설치 50-80% 단축
+- **CI/CD 워크플로우 최적화**: 모든 워크플로우에서 uv 사용
+
+---
+
+## 2.1.0 - 2025-11-16
+### 성능 최적화 Phase 1-4
+
+#### 🚀 Phase 1: 메모리 복사 최적화 (5-10% 향상)
+- 불필요한 `.copy()` 호출 제거
+- 참조로 충분한 경우 복사 방지
+
+#### 🚀 Phase 2: 적응형 병렬 처리 (3-7배 속도 향상)
+- CPU 코어 수에 따른 동적 워커 할당
+- I/O 바운드 vs CPU 바운드 작업 구분
+
+#### 🚀 Phase 3: 주파수 배열 벡터화 (5-10% 향상)
+- 루프 기반 주파수 배열 생성을 NumPy 벡터 연산으로 변환
+
+#### 🚀 Phase 4: 문서화 및 버전 업데이트
+- 최적화 문서 추가
+- Python 3.14 지원 명기
+
+---
+
+## 2.0.0 - 2025-11-15
+### 🎉 Python 3.14 Free-Threaded 지원 및 크로스 플랫폼 CI/CD
+
+#### ⭐ 주요 기능
+- **Python 3.14 Free-Threaded (no-GIL) 지원**
+  - GIL 없는 진정한 병렬 처리 가능
+  - `concurrent.futures.ThreadPoolExecutor` 활용
+  - 멀티코어 CPU에서 선형적 성능 향상
+
+- **크로스 플랫폼 CI/CD**
+  - **Windows**: Nuitka → Inno Setup 설치 파일
+  - **macOS**: Nuitka → DMG 이미지
+  - **Linux**: Nuitka → AppImage + tarball
+  - GitHub Actions로 자동 빌드 및 릴리즈
+
+#### 🔧 코드 품질
+- **Ruff 린터**: 145개 오류 모두 수정
+  - F401: 미사용 import 제거
+  - F541: 불필요한 f-string 수정
+  - E722: bare except → Exception
+  - E701/E702: 한 줄에 여러 문장 분리
+
+#### 📦 의존성
+- Python 3.9-3.14 지원
+- `requires-python = ">=3.9,<3.15"`
+
+#### ⚠️ 호환성
+- Python 3.14t (Free-Threaded)는 선택적
+- 기존 Python 3.9-3.13에서도 정상 작동
+
+---
+
 ## 1.9.1 - 2025-11-14
 ### 🌐 업데이트 시스템 번역 완료
 v1.9.0에서 추가된 자동 업데이트 시스템의 모든 문자열을 나머지 언어로 번역 완료했습니다.

@@ -91,10 +91,9 @@ jobs:
           echo "  - Nuitka cache enabled"
           echo ""
 
-          # Linux용 빌드 스크립트 실행
+          # Linux용 빌드 스크립트 실행 (standalone 폴더 생성 - AppImage로 패키징됨)
           python -m nuitka \
             --standalone \
-            --onefile \
             --output-dir=dist/linux \
             --remove-output \
             --jobs=4 \
@@ -156,44 +155,83 @@ jobs:
 
       - name: Create AppImage
         run: |
-          echo "[3/4] Creating AppImage..."
+          echo "[3/4] Creating AppImage from standalone folder..."
 
           # AppImage 빌드 도구 다운로드
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage
 
-          # AppDir 구조 생성
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-
-          # 빌드된 실행 파일 복사
-          if [ -f "dist/linux/Impulcifer.bin" ]; then
-            cp dist/linux/Impulcifer.bin AppDir/usr/bin/impulcifer
-          elif [ -f "dist/linux/Impulcifer" ]; then
-            cp dist/linux/Impulcifer AppDir/usr/bin/impulcifer
-          else
-            echo "Error: Built binary not found"
-            find dist/linux -type f -executable
+          # standalone 폴더 확인
+          STANDALONE_DIR="dist/linux/gui_main.dist"
+          if [ ! -d "$STANDALONE_DIR" ]; then
+            echo "Error: Standalone folder not found at $STANDALONE_DIR"
+            echo "Contents of dist/linux:"
+            ls -la dist/linux/
             exit 1
           fi
 
-          # .desktop 파일 생성
-          cat > AppDir/usr/share/applications/impulcifer.desktop <<EOF
-          [Desktop Entry]
-          Type=Application
-          Name=Impulcifer
-          Comment=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템
-          Exec=impulcifer
-          Icon=impulcifer
-          Categories=AudioVideo;Audio;
-          Terminal=false
-          EOF
+          echo "Found standalone folder: $STANDALONE_DIR"
+          echo "Contents:"
+          ls -la "$STANDALONE_DIR"
+
+          # AppDir 구조 생성 (standalone 폴더 전체를 포함)
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/lib/impulcifer
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          # standalone 폴더 전체를 lib 디렉토리로 복사
+          cp -r "$STANDALONE_DIR"/* AppDir/usr/lib/impulcifer/
+
+          # 실행 파일 찾기 및 심볼릭 링크/래퍼 스크립트 생성
+          EXEC_NAME=""
+          if [ -f "AppDir/usr/lib/impulcifer/Impulcifer" ]; then
+            EXEC_NAME="Impulcifer"
+          elif [ -f "AppDir/usr/lib/impulcifer/Impulcifer.bin" ]; then
+            EXEC_NAME="Impulcifer.bin"
+          elif [ -f "AppDir/usr/lib/impulcifer/gui_main" ]; then
+            EXEC_NAME="gui_main"
+          elif [ -f "AppDir/usr/lib/impulcifer/gui_main.bin" ]; then
+            EXEC_NAME="gui_main.bin"
+          else
+            echo "Error: Executable not found in standalone folder"
+            find AppDir/usr/lib/impulcifer -type f -executable | head -10
+            exit 1
+          fi
+
+          echo "Found executable: $EXEC_NAME"
+
+          # 래퍼 스크립트 생성 (라이브러리 경로 설정)
+          cat > AppDir/usr/bin/impulcifer <<'WRAPPER_EOF'
+#!/bin/bash
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+APP_DIR="$(dirname "$SCRIPT_DIR")"
+export LD_LIBRARY_PATH="$APP_DIR/lib/impulcifer:$LD_LIBRARY_PATH"
+exec "$APP_DIR/lib/impulcifer/EXEC_PLACEHOLDER" "$@"
+WRAPPER_EOF
+          sed -i "s/EXEC_PLACEHOLDER/$EXEC_NAME/g" AppDir/usr/bin/impulcifer
+          chmod +x AppDir/usr/bin/impulcifer
+
+          # .desktop 파일 생성 (들여쓰기 없이)
+          {
+            echo '[Desktop Entry]'
+            echo 'Type=Application'
+            echo 'Name=Impulcifer'
+            echo 'Comment=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템'
+            echo 'Exec=impulcifer'
+            echo 'Icon=impulcifer'
+            echo 'Categories=AudioVideo;Audio;'
+            echo 'Terminal=false'
+          } > AppDir/usr/share/applications/impulcifer.desktop
 
           # 아이콘 복사 (있는 경우)
           if [ -f "img/icon.png" ]; then
             cp img/icon.png AppDir/usr/share/icons/hicolor/256x256/apps/impulcifer.png
           fi
+
+          echo "AppDir structure:"
+          ls -la AppDir/usr/bin/
+          ls -la AppDir/usr/lib/impulcifer/ | head -20
 
           # AppImage 생성
           ./linuxdeploy-x86_64.AppImage \
@@ -203,37 +241,53 @@ jobs:
             || echo "AppImage creation completed with warnings"
 
           # 생성된 AppImage 파일 이름 변경
-          if [ -f "Impulcifer-*.AppImage" ]; then
-            mv Impulcifer-*.AppImage "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+          APPIMAGE_FILE=$(ls Impulcifer-*.AppImage 2>/dev/null | head -1)
+          if [ -n "$APPIMAGE_FILE" ]; then
+            mv "$APPIMAGE_FILE" "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+            echo "✅ Linux AppImage created: Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+          else
+            echo "Warning: AppImage file not found with expected name pattern"
+            ls -la *.AppImage 2>/dev/null || echo "No AppImage files found"
           fi
-
-          echo "✅ Linux AppImage created."
 
       - name: Create tarball distribution
         run: |
-          echo "[4/4] Creating tarball distribution..."
+          echo "[4/4] Creating tarball distribution from standalone folder..."
 
-          # 배포용 디렉토리 생성
-          mkdir -p dist/Impulcifer-linux
-
-          # 실행 파일 복사
-          if [ -f "dist/linux/Impulcifer.bin" ]; then
-            cp dist/linux/Impulcifer.bin dist/Impulcifer-linux/impulcifer
-          elif [ -f "dist/linux/Impulcifer" ]; then
-            cp dist/linux/Impulcifer dist/Impulcifer-linux/impulcifer
+          # standalone 폴더 확인
+          STANDALONE_DIR="dist/linux/gui_main.dist"
+          if [ ! -d "$STANDALONE_DIR" ]; then
+            echo "Error: Standalone folder not found"
+            exit 1
           fi
+
+          # 배포용 디렉토리 생성 (standalone 폴더 전체 복사)
+          mkdir -p dist/Impulcifer-linux
+          cp -r "$STANDALONE_DIR"/* dist/Impulcifer-linux/
 
           # 문서 및 라이선스 복사
           cp README.txt dist/Impulcifer-linux/ || true
           cp LICENSE dist/Impulcifer-linux/ || true
 
+          # 실행 파일 이름 찾기
+          EXEC_NAME=""
+          if [ -f "dist/Impulcifer-linux/Impulcifer" ]; then
+            EXEC_NAME="Impulcifer"
+          elif [ -f "dist/Impulcifer-linux/Impulcifer.bin" ]; then
+            EXEC_NAME="Impulcifer.bin"
+          elif [ -f "dist/Impulcifer-linux/gui_main" ]; then
+            EXEC_NAME="gui_main"
+          elif [ -f "dist/Impulcifer-linux/gui_main.bin" ]; then
+            EXEC_NAME="gui_main.bin"
+          fi
+
           # 실행 스크립트 생성
-          cat > dist/Impulcifer-linux/run.sh <<'EOF'
-          #!/bin/bash
-          SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          cd "$SCRIPT_DIR"
-          ./impulcifer "$@"
-          EOF
+          cat > dist/Impulcifer-linux/run.sh <<RUNSCRIPT_EOF
+#!/bin/bash
+SCRIPT_DIR="\$( cd "\$( dirname "\${BASH_SOURCE[0]}" )" && pwd )"
+cd "\$SCRIPT_DIR"
+./$EXEC_NAME "\$@"
+RUNSCRIPT_EOF
           chmod +x dist/Impulcifer-linux/run.sh
 
           # tarball 생성
