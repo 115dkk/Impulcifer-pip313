@@ -8,6 +8,7 @@ Checks GitHub releases for new versions
 import json
 import urllib.request
 import urllib.error
+import re
 from typing import Optional, Dict, Tuple
 from packaging import version
 import platform
@@ -53,14 +54,16 @@ class UpdateChecker:
                 self.latest_release_info = data
 
             # Extract version from tag name (e.g., "v1.9.0" -> "1.9.0")
+            # Also handles auto-release tags like "v2.3.1-20241129123456" -> "2.3.1"
             tag_name = data.get('tag_name', '')
-            latest_version = tag_name.lstrip('v')
+            raw_version = tag_name.lstrip('v')
+            latest_version = self._normalize_version(raw_version)
 
             if not latest_version:
                 return False, None, None
 
-            # Compare versions
-            if self._is_newer_version(latest_version):
+            # Compare versions (both will be normalized internally)
+            if self._is_newer_version(raw_version):
                 download_url = self._get_download_url(data)
                 return True, latest_version, download_url
 
@@ -84,9 +87,38 @@ class UpdateChecker:
             print(f"Error checking for updates: {e}")
             return False, None, None
 
+    def _normalize_version(self, ver_string: str) -> str:
+        """
+        Normalize version string by extracting only the semantic version part.
+        Strips timestamp suffixes from auto-release tags.
+
+        Examples:
+            "2.3.1-20241129123456" -> "2.3.1"
+            "v2.3.1" -> "2.3.1"
+            "2.3.1.post1" -> "2.3.1"
+            "2.3.1-beta" -> "2.3.1"
+
+        Args:
+            ver_string: Version string to normalize
+
+        Returns:
+            Normalized semantic version (X.Y.Z format)
+        """
+        # Remove leading 'v' if present
+        ver_string = ver_string.lstrip('v')
+
+        # Extract base semantic version (X.Y.Z or X.Y.Z.W)
+        # Match digits and dots at the beginning, stop at any suffix
+        match = re.match(r'^(\d+(?:\.\d+)*)', ver_string)
+        if match:
+            return match.group(1)
+
+        return ver_string
+
     def _is_newer_version(self, latest_version: str) -> bool:
         """
-        Compare versions using semantic versioning
+        Compare versions using semantic versioning.
+        Ignores timestamp suffixes from auto-release tags.
 
         Args:
             latest_version: Latest version string
@@ -95,8 +127,14 @@ class UpdateChecker:
             True if latest_version is newer than current_version
         """
         try:
-            current = version.parse(self.current_version)
-            latest = version.parse(latest_version)
+            # Normalize both versions to strip timestamps/suffixes
+            current_normalized = self._normalize_version(self.current_version)
+            latest_normalized = self._normalize_version(latest_version)
+
+            current = version.parse(current_normalized)
+            latest = version.parse(latest_normalized)
+
+            # Only consider it newer if the base version is actually different
             return latest > current
         except Exception as e:
             print(f"Error comparing versions: {e}")
@@ -182,11 +220,59 @@ if __name__ == '__main__':
     # Test the update checker
     import sys
 
+    # Test version normalization first
+    print("Testing version normalization:")
+    test_cases = [
+        ("2.3.1-20241129123456", "2.3.1"),
+        ("v2.3.1", "2.3.1"),
+        ("2.3.1.post1", "2.3.1"),
+        ("2.3.1-beta", "2.3.1"),
+        ("2.3.1", "2.3.1"),
+        ("v1.0.0-rc1-20241201", "1.0.0"),
+    ]
+
+    checker = UpdateChecker("2.3.1")
+    all_pass = True
+    for input_ver, expected in test_cases:
+        result = checker._normalize_version(input_ver)
+        status = "✅" if result == expected else "❌"
+        if result != expected:
+            all_pass = False
+        print(f"  {status} '{input_ver}' -> '{result}' (expected '{expected}')")
+
+    print()
+
+    # Test version comparison
+    print("Testing version comparison:")
+    comparison_tests = [
+        ("2.3.1", "2.3.1-20241129123456", False),  # Same base version
+        ("2.3.1", "2.3.2-20241129123456", True),   # Newer version
+        ("2.3.1", "2.3.0", False),                  # Older version
+        ("2.3.1", "2.4.0", True),                   # Newer version
+    ]
+
+    for current, latest, expected_update in comparison_tests:
+        test_checker = UpdateChecker(current)
+        result = test_checker._is_newer_version(latest)
+        status = "✅" if result == expected_update else "❌"
+        if result != expected_update:
+            all_pass = False
+        print(f"  {status} current={current}, latest={latest} -> update={result} (expected {expected_update})")
+
+    print()
+
+    if all_pass:
+        print("All tests passed!")
+    else:
+        print("Some tests failed!")
+
+    print()
+
     # Get version from pyproject.toml or command line
-    test_version = sys.argv[1] if len(sys.argv) > 1 else "2.2.4"
+    test_version = sys.argv[1] if len(sys.argv) > 1 else "2.3.1"
 
     print(f"Current version: {test_version}")
-    print("Checking for updates...")
+    print("Checking for updates from GitHub...")
 
     checker = UpdateChecker(test_version)
     has_update, latest_ver, download_url = checker.check_for_updates()
