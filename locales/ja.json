@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "出力ディレクトリが存在しません: {directory}",
   "message_recordings_not_exist": "録音が存在しません: {directory}",
   "message_processing_failed": "処理が失敗しました: {error}",
+  "dialog_processing_title": "処理中",
+  "dialog_processing_message": "BRIR処理中...",
+  "message_processing_complete": "完了!",
+  "message_processing_error": "エラーが発生しました",
+
+  "checkbox_mic_deviation_debug_plots": "デバッグプロットを保存",
 
   "error_no_file_selected": "ファイルが選択されていません",
   "error_file_not_found": "ファイルが見つかりません: {file}",

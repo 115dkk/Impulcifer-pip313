@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "Ausgabeverzeichnis existiert nicht: {directory}",
   "message_recordings_not_exist": "Aufnahmen existieren nicht: {directory}",
   "message_processing_failed": "Verarbeitung fehlgeschlagen: {error}",
+  "dialog_processing_title": "Verarbeitung",
+  "dialog_processing_message": "BRIR wird verarbeitet...",
+  "message_processing_complete": "Abgeschlossen!",
+  "message_processing_error": "Ein Fehler ist aufgetreten",
+
+  "checkbox_mic_deviation_debug_plots": "Debug-Diagramme speichern",
 
   "error_no_file_selected": "Keine Datei ausgewählt",
   "error_file_not_found": "Datei nicht gefunden: {file}",

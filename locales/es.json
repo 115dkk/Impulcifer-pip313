@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "El directorio de salida no existe: {directory}",
   "message_recordings_not_exist": "Las grabaciones no existen: {directory}",
   "message_processing_failed": "El procesamiento falló: {error}",
+  "dialog_processing_title": "Procesando",
+  "dialog_processing_message": "Procesando BRIR...",
+  "message_processing_complete": "¡Completado!",
+  "message_processing_error": "Ocurrió un error",
+
+  "checkbox_mic_deviation_debug_plots": "Guardar gráficos de depuración",
 
   "error_no_file_selected": "Ningún archivo seleccionado",
   "error_file_not_found": "Archivo no encontrado: {file}",

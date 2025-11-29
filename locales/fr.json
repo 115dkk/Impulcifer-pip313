@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "Le répertoire de sortie n'existe pas: {directory}",
   "message_recordings_not_exist": "Les enregistrements n'existent pas: {directory}",
   "message_processing_failed": "Le traitement a échoué: {error}",
+  "dialog_processing_title": "Traitement",
+  "dialog_processing_message": "Traitement BRIR...",
+  "message_processing_complete": "Terminé!",
+  "message_processing_error": "Une erreur s'est produite",
+
+  "checkbox_mic_deviation_debug_plots": "Sauvegarder les graphiques de débogage",
 
   "error_no_file_selected": "Aucun fichier sélectionné",
   "error_file_not_found": "Fichier non trouvé: {file}",

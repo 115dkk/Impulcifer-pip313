@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "Выходной каталог не существует: {directory}",
   "message_recordings_not_exist": "Записи не существуют: {directory}",
   "message_processing_failed": "Обработка не удалась: {error}",
+  "dialog_processing_title": "Обработка",
+  "dialog_processing_message": "Обработка BRIR...",
+  "message_processing_complete": "Завершено!",
+  "message_processing_error": "Произошла ошибка",
+
+  "checkbox_mic_deviation_debug_plots": "Сохранить отладочные графики",
 
   "error_no_file_selected": "Файл не выбран",
   "error_file_not_found": "Файл не найден: {file}",

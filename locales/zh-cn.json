@@ -135,6 +135,12 @@
   "message_output_dir_not_exist": "输出目录不存在: {directory}",
   "message_recordings_not_exist": "录音不存在: {directory}",
   "message_processing_failed": "处理失败: {error}",
+  "dialog_processing_title": "处理中",
+  "dialog_processing_message": "正在处理BRIR...",
+  "message_processing_complete": "完成!",
+  "message_processing_error": "发生错误",
+
+  "checkbox_mic_deviation_debug_plots": "保存调试图",
 
   "error_no_file_selected": "未选择文件",
   "error_file_not_found": "未找到文件: {file}",

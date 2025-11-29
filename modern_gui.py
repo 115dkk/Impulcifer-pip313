@@ -1278,6 +1278,15 @@ class ModernImpulciferGUI:
         )
         self.mic_dev_anatomical_check.pack(side="left", padx=5)
 
+        self.mic_deviation_debug_plots_var = ctk.BooleanVar(value=False)
+        self.mic_dev_debug_plots_check = ctk.CTkCheckBox(
+            mic_dev_v2_frame,
+            text=self.loc.get('checkbox_mic_deviation_debug_plots'),
+            variable=self.mic_deviation_debug_plots_var,
+            state="disabled"
+        )
+        self.mic_dev_debug_plots_check.pack(side="left", padx=5)
+
         # TrueHD layouts
         truehd_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         truehd_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
@@ -1408,11 +1417,13 @@ class ModernImpulciferGUI:
             self.mic_dev_phase_check.configure(state="normal")
             self.mic_dev_adaptive_check.configure(state="normal")
             self.mic_dev_anatomical_check.configure(state="normal")
+            self.mic_dev_debug_plots_check.configure(state="normal")
         else:
             self.mic_deviation_strength_entry.configure(state="disabled")
             self.mic_dev_phase_check.configure(state="disabled")
             self.mic_dev_adaptive_check.configure(state="disabled")
             self.mic_dev_anatomical_check.configure(state="disabled")
+            self.mic_dev_debug_plots_check.configure(state="disabled")
 
     def browse_file(self, var, mode, filetypes=None):
         """Browse for file"""
@@ -1631,6 +1642,7 @@ class ModernImpulciferGUI:
             args['mic_deviation_phase_correction'] = self.mic_deviation_phase_correction_var.get()
             args['mic_deviation_adaptive_correction'] = self.mic_deviation_adaptive_correction_var.get()
             args['mic_deviation_anatomical_validation'] = self.mic_deviation_anatomical_validation_var.get()
+            args['mic_deviation_debug_plots'] = self.mic_deviation_debug_plots_var.get()
             args['output_truehd_layouts'] = self.output_truehd_layouts_var.get()
 
         # Disable button during processing

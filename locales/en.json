@@ -125,6 +125,12 @@
   "message_done_title": "Done!",
   "message_done": "Generated files, check recordings folder.",
   "message_processing_failed": "Processing failed: {error}",
+  "dialog_processing_title": "Processing",
+  "dialog_processing_message": "Processing BRIR...",
+  "message_processing_complete": "Complete!",
+  "message_processing_error": "Error occurred",
+
+  "checkbox_mic_deviation_debug_plots": "Save Debug Plots",
 
   "error_no_file_selected": "No file selected",
   "error_file_not_found": "File not found",
