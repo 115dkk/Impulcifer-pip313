@@ -137,5 +137,35 @@
   "tooltip_bass_boost": "使用参数均衡器应用低音增强",
   "tooltip_tilt": "应用每八度dB的频谱倾斜",
   "tooltip_balance": "调整左/右声道平衡",
-  "tooltip_mic_deviation": "使用高级算法校正麦克风偏差"
+  "tooltip_mic_deviation": "使用高级算法校正麦克风偏差",
+
+  "button_close": "关闭",
+  "dialog_processing_title": "处理中",
+  "dialog_processing_message": "正在处理BRIR...",
+  "message_processing_complete": "完成！",
+  "message_processing_error": "发生错误",
+
+  "update_available_title": "更新可用",
+  "update_available_message": "🎉 有新版本可用！",
+  "update_version_info": "当前: {current} → 新: {latest}",
+  "update_release_notes": "发布说明:",
+  "update_no_notes": "没有可用的发布说明。",
+  "update_button_update": "⬇️ 立即更新",
+  "update_button_remind": "⏰ 稍后提醒我",
+  "update_button_skip": "❌ 跳过此版本",
+  "update_downloading": "正在下载更新...",
+  "update_downloading_progress": "下载中: {percent}%",
+  "update_installing": "正在安装更新...",
+  "update_error_download": "下载更新失败。请稍后重试。",
+  "update_error_install": "启动安装失败。请手动下载。",
+  "update_error_general": "更新错误: {error}",
+  "update_preparing": "正在准备通过pip更新...",
+  "update_error_no_method": "无法更新：pip或安装程序均不可用。\n请从GitHub手动更新。",
+  "update_success": "更新已开始！请重新启动应用程序。",
+  "update_complete_title": "更新已开始",
+  "update_complete_message": "更新已在后台开始。\n请重新启动应用程序以使用新版本。",
+  "update_error_no_installer": "安装程序不可用。请从GitHub手动下载：\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "错误",
+
+  "checkbox_mic_deviation_debug_plots": "保存调试图表"
 }

@@ -204,5 +204,12 @@
   "update_installing": "Installing update...",
   "update_error_download": "Failed to download update. Please try again later.",
   "update_error_install": "Failed to start installation. Please download manually.",
-  "update_error_general": "Update error: {error}"
+  "update_error_general": "Update error: {error}",
+  "update_preparing": "Preparing to update via pip...",
+  "update_error_no_method": "Unable to update: Neither pip nor installer is available.\nPlease update manually from GitHub.",
+  "update_success": "Update started! Please restart the application.",
+  "update_complete_title": "Update Started",
+  "update_complete_message": "The update has been started in the background.\nPlease restart the application to use the new version.",
+  "update_error_no_installer": "No installer available. Please download manually from GitHub:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "Error"
 }

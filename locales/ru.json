@@ -214,5 +214,12 @@
   "update_installing": "Установка обновления...",
   "update_error_download": "Не удалось загрузить обновление. Пожалуйста, попробуйте позже.",
   "update_error_install": "Не удалось запустить установку. Пожалуйста, загрузите вручную.",
-  "update_error_general": "Ошибка обновления: {error}"
+  "update_error_general": "Ошибка обновления: {error}",
+  "update_preparing": "Подготовка к обновлению через pip...",
+  "update_error_no_method": "Невозможно обновить: ни pip, ни установщик недоступны.\nПожалуйста, обновите вручную с GitHub.",
+  "update_success": "Обновление началось! Пожалуйста, перезапустите приложение.",
+  "update_complete_title": "Обновление начато",
+  "update_complete_message": "Обновление началось в фоновом режиме.\nПожалуйста, перезапустите приложение для использования новой версии.",
+  "update_error_no_installer": "Установщик недоступен. Пожалуйста, загрузите вручную с GitHub:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "Ошибка"
 }

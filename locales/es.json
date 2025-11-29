@@ -214,5 +214,12 @@
   "update_installing": "Instalando actualización...",
   "update_error_download": "Error al descargar la actualización. Por favor, inténtelo más tarde.",
   "update_error_install": "Error al iniciar la instalación. Por favor, descargue manualmente.",
-  "update_error_general": "Error de actualización: {error}"
+  "update_error_general": "Error de actualización: {error}",
+  "update_preparing": "Preparando actualización vía pip...",
+  "update_error_no_method": "No se puede actualizar: ni pip ni el instalador están disponibles.\nPor favor, actualice manualmente desde GitHub.",
+  "update_success": "¡La actualización ha comenzado! Por favor, reinicie la aplicación.",
+  "update_complete_title": "Actualización iniciada",
+  "update_complete_message": "La actualización ha comenzado en segundo plano.\nPor favor, reinicie la aplicación para usar la nueva versión.",
+  "update_error_no_installer": "Instalador no disponible. Por favor, descargue manualmente desde GitHub:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "error_title": "Error"
 }
