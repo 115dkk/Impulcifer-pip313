@@ -80,7 +80,6 @@ from logger import get_logger
 import copy
 import contextlib
 import io
-from scipy.interpolate import interp1d  # 큐빅 보간을 위해 추가
 
 # Bokeh Tabs/Panel import 추가
 # from bokeh.models import Panel, Tabs # 이전 시도
