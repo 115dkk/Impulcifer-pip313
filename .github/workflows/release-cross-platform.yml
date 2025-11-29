@@ -323,10 +323,9 @@ jobs:
 
       - name: Run Nuitka build for Linux
         run: |
-          echo "Starting Nuitka build for Linux..."
+          echo "Starting Nuitka build for Linux (standalone for AppImage)..."
           python -m nuitka \
             --standalone \
-            --onefile \
             --output-dir=dist/linux \
             --remove-output \
             --jobs=4 \
@@ -389,27 +388,59 @@ jobs:
 
       - name: Create AppImage
         run: |
-          echo "Creating AppImage..."
+          echo "Creating AppImage from standalone folder..."
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage
 
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-
-          # Copy executable with validation
-          if [ -f "dist/linux/Impulcifer.bin" ]; then
-            echo "Found Impulcifer.bin, copying..."
-            cp dist/linux/Impulcifer.bin AppDir/usr/bin/impulcifer
-          elif [ -f "dist/linux/Impulcifer" ]; then
-            echo "Found Impulcifer, copying..."
-            cp dist/linux/Impulcifer AppDir/usr/bin/impulcifer
-          else
-            echo "Error: No Impulcifer executable found in dist/linux/"
+          # standalone 폴더 확인
+          STANDALONE_DIR="dist/linux/gui_main.dist"
+          if [ ! -d "$STANDALONE_DIR" ]; then
+            echo "Error: Standalone folder not found at $STANDALONE_DIR"
+            echo "Contents of dist/linux:"
             ls -la dist/linux/
             exit 1
           fi
 
+          echo "Found standalone folder: $STANDALONE_DIR"
+          echo "Contents:"
+          ls -la "$STANDALONE_DIR"
+
+          # AppDir 구조 생성 (standalone 폴더 전체를 포함)
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/lib/impulcifer
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          # standalone 폴더 전체를 lib 디렉토리로 복사
+          cp -r "$STANDALONE_DIR"/* AppDir/usr/lib/impulcifer/
+
+          # 실행 파일 찾기
+          EXEC_NAME=""
+          if [ -f "AppDir/usr/lib/impulcifer/Impulcifer" ]; then
+            EXEC_NAME="Impulcifer"
+          elif [ -f "AppDir/usr/lib/impulcifer/Impulcifer.bin" ]; then
+            EXEC_NAME="Impulcifer.bin"
+          elif [ -f "AppDir/usr/lib/impulcifer/gui_main" ]; then
+            EXEC_NAME="gui_main"
+          elif [ -f "AppDir/usr/lib/impulcifer/gui_main.bin" ]; then
+            EXEC_NAME="gui_main.bin"
+          else
+            echo "Error: Executable not found in standalone folder"
+            find AppDir/usr/lib/impulcifer -type f -executable | head -10
+            exit 1
+          fi
+
+          echo "Found executable: $EXEC_NAME"
+
+          # 래퍼 스크립트 생성 (라이브러리 경로 설정)
+          cat > AppDir/usr/bin/impulcifer <<'WRAPPER_EOF'
+#!/bin/bash
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+APP_DIR="$(dirname "$SCRIPT_DIR")"
+export LD_LIBRARY_PATH="$APP_DIR/lib/impulcifer:$LD_LIBRARY_PATH"
+exec "$APP_DIR/lib/impulcifer/EXEC_PLACEHOLDER" "$@"
+WRAPPER_EOF
+          sed -i "s/EXEC_PLACEHOLDER/$EXEC_NAME/g" AppDir/usr/bin/impulcifer
           chmod +x AppDir/usr/bin/impulcifer
 
           # Create desktop file (no indentation - Desktop Entry format requirement)
@@ -437,7 +468,8 @@ jobs:
             AppDir/usr/share/icons/hicolor/256x256/apps/impulcifer.png
 
           echo "AppDir structure:"
-          ls -R AppDir/
+          ls -la AppDir/usr/bin/
+          ls -la AppDir/usr/lib/impulcifer/ | head -20
 
           # Create AppImage
           ./linuxdeploy-x86_64.AppImage \
@@ -458,38 +490,46 @@ jobs:
 
       - name: Create tarball distribution
         run: |
-          echo "Creating tarball distribution..."
-          mkdir -p dist/Impulcifer-linux
+          echo "Creating tarball distribution from standalone folder..."
 
-          # Copy executable with validation
-          if [ -f "dist/linux/Impulcifer.bin" ]; then
-            echo "Copying Impulcifer.bin to tarball..."
-            cp dist/linux/Impulcifer.bin dist/Impulcifer-linux/impulcifer
-          elif [ -f "dist/linux/Impulcifer" ]; then
-            echo "Copying Impulcifer to tarball..."
-            cp dist/linux/Impulcifer dist/Impulcifer-linux/impulcifer
-          else
-            echo "Error: No Impulcifer executable found for tarball"
+          # standalone 폴더 확인
+          STANDALONE_DIR="dist/linux/gui_main.dist"
+          if [ ! -d "$STANDALONE_DIR" ]; then
+            echo "Error: Standalone folder not found"
             exit 1
           fi
 
-          chmod +x dist/Impulcifer-linux/impulcifer
+          # 배포용 디렉토리 생성 (standalone 폴더 전체 복사)
+          mkdir -p dist/Impulcifer-linux
+          cp -r "$STANDALONE_DIR"/* dist/Impulcifer-linux/
 
           # Copy optional documentation files
           [ -f "README.txt" ] && cp README.txt dist/Impulcifer-linux/ && echo "Copied README.txt"
           [ -f "LICENSE" ] && cp LICENSE dist/Impulcifer-linux/ && echo "Copied LICENSE"
 
+          # 실행 파일 이름 찾기
+          EXEC_NAME=""
+          if [ -f "dist/Impulcifer-linux/Impulcifer" ]; then
+            EXEC_NAME="Impulcifer"
+          elif [ -f "dist/Impulcifer-linux/Impulcifer.bin" ]; then
+            EXEC_NAME="Impulcifer.bin"
+          elif [ -f "dist/Impulcifer-linux/gui_main" ]; then
+            EXEC_NAME="gui_main"
+          elif [ -f "dist/Impulcifer-linux/gui_main.bin" ]; then
+            EXEC_NAME="gui_main.bin"
+          fi
+
           # Create run script
-          {
-            echo '#!/bin/bash'
-            echo 'SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"'
-            echo 'cd "$SCRIPT_DIR"'
-            echo './impulcifer "$@"'
-          } > dist/Impulcifer-linux/run.sh
+          cat > dist/Impulcifer-linux/run.sh <<RUNSCRIPT_EOF
+#!/bin/bash
+SCRIPT_DIR="\$( cd "\$( dirname "\${BASH_SOURCE[0]}" )" && pwd )"
+cd "\$SCRIPT_DIR"
+./$EXEC_NAME "\$@"
+RUNSCRIPT_EOF
           chmod +x dist/Impulcifer-linux/run.sh
 
           echo "Tarball contents:"
-          ls -lah dist/Impulcifer-linux/
+          ls -lah dist/Impulcifer-linux/ | head -20
 
           # Create tarball
           cd dist
