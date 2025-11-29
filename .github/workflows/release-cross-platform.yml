@@ -433,13 +433,13 @@ jobs:
           echo "Found executable: $EXEC_NAME"
 
           # 래퍼 스크립트 생성 (라이브러리 경로 설정)
-          cat > AppDir/usr/bin/impulcifer <<'WRAPPER_EOF'
-#!/bin/bash
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-APP_DIR="$(dirname "$SCRIPT_DIR")"
-export LD_LIBRARY_PATH="$APP_DIR/lib/impulcifer:$LD_LIBRARY_PATH"
-exec "$APP_DIR/lib/impulcifer/EXEC_PLACEHOLDER" "$@"
-WRAPPER_EOF
+          {
+            echo '#!/bin/bash'
+            echo 'SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"'
+            echo 'APP_DIR="$(dirname "$SCRIPT_DIR")"'
+            echo 'export LD_LIBRARY_PATH="$APP_DIR/lib/impulcifer:$LD_LIBRARY_PATH"'
+            echo 'exec "$APP_DIR/lib/impulcifer/EXEC_PLACEHOLDER" "$@"'
+          } > AppDir/usr/bin/impulcifer
           sed -i "s/EXEC_PLACEHOLDER/$EXEC_NAME/g" AppDir/usr/bin/impulcifer
           chmod +x AppDir/usr/bin/impulcifer
 
@@ -520,12 +520,12 @@ WRAPPER_EOF
           fi
 
           # Create run script
-          cat > dist/Impulcifer-linux/run.sh <<RUNSCRIPT_EOF
-#!/bin/bash
-SCRIPT_DIR="\$( cd "\$( dirname "\${BASH_SOURCE[0]}" )" && pwd )"
-cd "\$SCRIPT_DIR"
-./$EXEC_NAME "\$@"
-RUNSCRIPT_EOF
+          {
+            echo '#!/bin/bash'
+            echo 'SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"'
+            echo 'cd "$SCRIPT_DIR"'
+            echo "./$EXEC_NAME \"\$@\""
+          } > dist/Impulcifer-linux/run.sh
           chmod +x dist/Impulcifer-linux/run.sh
 
           echo "Tarball contents:"
