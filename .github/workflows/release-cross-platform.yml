@@ -389,8 +389,11 @@ jobs:
       - name: Create AppImage
         run: |
           echo "Creating AppImage from standalone folder..."
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          chmod +x linuxdeploy-x86_64.AppImage
+
+          # Use appimagetool directly (Nuitka standalone already bundles all dependencies)
+          # linuxdeploy causes issues with scipy's internal OpenBLAS libraries
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
 
           # standalone 폴더 확인
           STANDALONE_DIR="dist/linux/gui_main.dist"
@@ -410,6 +413,7 @@ jobs:
           mkdir -p AppDir/usr/lib/impulcifer
           mkdir -p AppDir/usr/share/applications
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/share/metainfo
 
           # standalone 폴더 전체를 lib 디렉토리로 복사
           cp -r "$STANDALONE_DIR"/* AppDir/usr/lib/impulcifer/
@@ -432,57 +436,53 @@ jobs:
 
           echo "Found executable: $EXEC_NAME"
 
-          # 래퍼 스크립트 생성 (라이브러리 경로 설정)
+          # Create AppRun script (required by AppImage)
           {
             echo '#!/bin/bash'
-            echo 'SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"'
-            echo 'APP_DIR="$(dirname "$SCRIPT_DIR")"'
-            echo 'export LD_LIBRARY_PATH="$APP_DIR/lib/impulcifer:$LD_LIBRARY_PATH"'
-            echo 'exec "$APP_DIR/lib/impulcifer/EXEC_PLACEHOLDER" "$@"'
-          } > AppDir/usr/bin/impulcifer
-          sed -i "s/EXEC_PLACEHOLDER/$EXEC_NAME/g" AppDir/usr/bin/impulcifer
-          chmod +x AppDir/usr/bin/impulcifer
+            echo 'SELF=$(readlink -f "$0")'
+            echo 'HERE=${SELF%/*}'
+            echo 'export PATH="${HERE}/usr/bin:${PATH}"'
+            echo 'export LD_LIBRARY_PATH="${HERE}/usr/lib/impulcifer:${LD_LIBRARY_PATH}"'
+            echo 'exec "${HERE}/usr/lib/impulcifer/'"$EXEC_NAME"'" "$@"'
+          } > AppDir/AppRun
+          chmod +x AppDir/AppRun
 
           # Create desktop file (no indentation - Desktop Entry format requirement)
           {
             echo '[Desktop Entry]'
             echo 'Type=Application'
             echo 'Name=Impulcifer'
-            echo 'Comment=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템'
-            echo 'Exec=impulcifer'
+            echo 'Comment=HRIR Measurement and Binaural Processing System'
+            echo 'Exec=AppRun'
             echo 'Icon=impulcifer'
             echo 'Categories=AudioVideo;Audio;'
             echo 'Terminal=false'
-          } > AppDir/usr/share/applications/impulcifer.desktop
+          } > AppDir/impulcifer.desktop
+          cp AppDir/impulcifer.desktop AppDir/usr/share/applications/
 
-          # Create a simple placeholder icon (linuxdeploy requires an icon)
-          # Using ImageMagick to create a 256x256 PNG with text
+          # Create icon using ImageMagick
           convert -size 256x256 xc:none -gravity center \
             -pointsize 72 -fill '#4A90E2' \
             -draw "circle 128,128 128,28" \
             -pointsize 48 -fill white \
             -annotate +0+0 "I" \
-            AppDir/usr/share/icons/hicolor/256x256/apps/impulcifer.png || \
-          # Fallback: create solid color icon if ImageMagick fails
-          convert -size 256x256 xc:'#4A90E2' \
-            AppDir/usr/share/icons/hicolor/256x256/apps/impulcifer.png
+            AppDir/impulcifer.png 2>/dev/null || \
+          convert -size 256x256 xc:'#4A90E2' AppDir/impulcifer.png
+
+          # Copy icon to proper locations
+          cp AppDir/impulcifer.png AppDir/usr/share/icons/hicolor/256x256/apps/
+          cp AppDir/impulcifer.png AppDir/.DirIcon
 
           echo "AppDir structure:"
-          ls -la AppDir/usr/bin/
+          ls -la AppDir/
           ls -la AppDir/usr/lib/impulcifer/ | head -20
 
-          # Create AppImage
-          ./linuxdeploy-x86_64.AppImage \
-            --appdir AppDir \
-            --output appimage \
-            --desktop-file=AppDir/usr/share/applications/impulcifer.desktop
+          # Create AppImage using appimagetool (no dependency resolution - just packaging)
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
 
-          # Rename AppImage with proper version
-          APPIMAGE_FILE=$(ls Impulcifer-*.AppImage 2>/dev/null | head -1)
-          if [ -n "$APPIMAGE_FILE" ]; then
-            echo "Found AppImage: $APPIMAGE_FILE"
-            mv "$APPIMAGE_FILE" "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
-            echo "Renamed to: Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+          if [ -f "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage" ]; then
+            echo "Successfully created: Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+            ls -lh "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
           else
             echo "Error: AppImage was not created"
             exit 1
