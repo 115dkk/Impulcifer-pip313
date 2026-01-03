@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Automatic updater for Impulcifer
-Handles downloading and installing updates
+Supports both Velopack (standalone) and pip (development/pip install) environments
 """
 
 import os
@@ -15,43 +15,197 @@ from pathlib import Path
 from typing import Optional, Callable
 
 
-class Updater:
-    """Download and install updates"""
+def is_velopack_environment() -> bool:
+    """
+    Check if running in a Velopack-installed environment.
+    Velopack creates Update.exe in the app's parent directory.
+    """
+    if not getattr(sys, 'frozen', False) and not hasattr(sys, '__compiled__'):
+        return False
 
-    def __init__(self, download_url: str, version: str):
+    app_dir = Path(sys.executable).parent
+    # Velopack 구조: {packId}/current/app.exe, {packId}/Update.exe
+    update_exe = app_dir.parent / "Update.exe"
+    return update_exe.exists()
+
+
+def get_velopack_update_exe() -> Optional[Path]:
+    """Get path to Velopack's Update.exe if available."""
+    if not getattr(sys, 'frozen', False) and not hasattr(sys, '__compiled__'):
+        return None
+
+    app_dir = Path(sys.executable).parent
+    update_exe = app_dir.parent / "Update.exe"
+
+    if update_exe.exists():
+        return update_exe
+    return None
+
+
+def is_pip_environment() -> bool:
+    """Check if pip is available for package management."""
+    try:
+        import pip  # noqa: F401
+        return True
+    except ImportError:
+        pass
+
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', '--version'],
+            capture_output=True,
+            timeout=10
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+class VelopackUpdater:
+    """Updater for Velopack-installed standalone executables."""
+
+    def __init__(self, releases_url: str, version: str):
         """
-        Initialize updater
+        Initialize Velopack updater.
 
         Args:
-            download_url: URL to download the installer
-            version: Version being installed
+            releases_url: Base URL for releases (e.g., GitHub releases URL)
+            version: Target version string
         """
+        self.releases_url = releases_url
+        self.version = version
+        self.update_exe = get_velopack_update_exe()
+
+    def check_and_download(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> bool:
+        """
+        Check for updates and download if available.
+
+        Args:
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            True if update is downloaded and ready to apply
+        """
+        if not self.update_exe:
+            print("Velopack Update.exe not found")
+            return False
+
+        try:
+            # Velopack CLI로 업데이트 확인 및 다운로드
+            result = subprocess.run(
+                [str(self.update_exe), "download", self.releases_url],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if result.returncode == 0:
+                print(f"Update downloaded successfully: {result.stdout}")
+                return True
+            else:
+                print(f"Update download failed: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            print("Update download timed out")
+            return False
+        except Exception as e:
+            print(f"Update download error: {e}")
+            return False
+
+    def apply_and_restart(self) -> bool:
+        """
+        Apply downloaded update and restart the application.
+        This method does not return if successful.
+
+        Returns:
+            False if application failed (method returns only on failure)
+        """
+        if not self.update_exe:
+            print("Velopack Update.exe not found")
+            return False
+
+        try:
+            # Velopack이 앱을 종료하고 업데이트 적용 후 재시작함
+            subprocess.Popen(
+                [str(self.update_exe), "apply", "--restart"],
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                if platform.system() == 'Windows' else 0
+            )
+
+            # 현재 프로세스 종료
+            sys.exit(0)
+
+        except Exception as e:
+            print(f"Update apply error: {e}")
+            return False
+
+
+class PipUpdater:
+    """Updater for pip-installed packages."""
+
+    def __init__(self, package_name: str = "impulcifer-py313"):
+        """
+        Initialize pip updater.
+
+        Args:
+            package_name: Name of the package on PyPI
+        """
+        self.package_name = package_name
+
+    def upgrade(self) -> bool:
+        """
+        Upgrade the package using pip.
+
+        Returns:
+            True if upgrade process started successfully
+        """
+        try:
+            upgrade_cmd = [
+                sys.executable,
+                '-m', 'pip', 'install', '--upgrade',
+                self.package_name
+            ]
+
+            print(f"Upgrading with command: {' '.join(upgrade_cmd)}")
+
+            if platform.system() == 'Windows':
+                subprocess.Popen(
+                    upgrade_cmd,
+                    creationflags=subprocess.CREATE_NEW_CONSOLE
+                )
+            else:
+                subprocess.Popen(
+                    upgrade_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+
+            return True
+
+        except Exception as e:
+            print(f"Pip upgrade error: {e}")
+            return False
+
+
+class LegacyInstallerUpdater:
+    """Legacy updater for downloading and running installer files (macOS/Linux)."""
+
+    def __init__(self, download_url: str, version: str):
         self.download_url = download_url
         self.version = version
         self.download_path: Optional[Path] = None
 
     def download(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> bool:
-        """
-        Download the installer
-
-        Args:
-            progress_callback: Callback function(downloaded, total) for progress updates
-
-        Returns:
-            True if download successful, False otherwise
-        """
+        """Download the installer file."""
         try:
-            # Determine file extension from URL
             url_parts = self.download_url.split('/')
-            filename = url_parts[-1] if url_parts else f"impulcifer_setup_{self.version}.exe"
+            filename = url_parts[-1] if url_parts else f"impulcifer_update_{self.version}"
 
-            # Create temp directory for download
             temp_dir = Path(tempfile.gettempdir()) / "impulcifer_updates"
             temp_dir.mkdir(exist_ok=True)
-
             self.download_path = temp_dir / filename
 
-            # Download with progress
             req = urllib.request.Request(
                 self.download_url,
                 headers={'User-Agent': 'Impulcifer-Updater'}
@@ -67,190 +221,83 @@ class Updater:
                         chunk = response.read(chunk_size)
                         if not chunk:
                             break
-
                         f.write(chunk)
                         downloaded += len(chunk)
-
                         if progress_callback and total_size > 0:
                             progress_callback(downloaded, total_size)
 
             return True
 
         except Exception as e:
-            print(f"Error downloading update: {e}")
+            print(f"Download error: {e}")
             return False
 
-    def install_and_restart(self) -> bool:
-        """
-        Install the update using pip and restart the application
+    def install(self) -> bool:
+        """Run the downloaded installer."""
+        if not self.download_path or not self.download_path.exists():
+            return False
 
-        Returns:
-            True if installation started successfully
-        """
+        system = platform.system()
+
         try:
-            # For pip packages, use pip to upgrade
-            return self._upgrade_with_pip()
-
+            if system == 'Darwin':  # macOS
+                subprocess.Popen(['open', str(self.download_path)])
+                return True
+            elif system == 'Linux':
+                path_str = str(self.download_path)
+                if path_str.endswith('.appimage'):
+                    os.chmod(self.download_path, 0o755)
+                    subprocess.Popen([path_str])
+                else:
+                    subprocess.Popen(['xdg-open', path_str])
+                return True
         except Exception as e:
-            print(f"Error installing update: {e}")
-            return False
+            print(f"Install error: {e}")
 
-    def _upgrade_with_pip(self) -> bool:
-        """
-        Upgrade using pip (recommended for Python packages)
+        return False
 
-        Returns:
-            True if upgrade started successfully
-        """
-        try:
-            import sys
 
-            # Get python executable path
-            python_exe = sys.executable
+# GitHub Releases URL 상수
+GITHUB_RELEASES_URL = "https://github.com/115dkk/Impulcifer-pip313/releases/latest/download"
 
-            # Prepare upgrade command
-            upgrade_cmd = [
-                python_exe,
-                '-m',
-                'pip',
-                'install',
-                '--upgrade',
-                'impulcifer-py313'
-            ]
 
-            print(f"Upgrading with command: {' '.join(upgrade_cmd)}")
+def get_updater(download_url: str, version: str):
+    """
+    Factory function to get the appropriate updater for the current environment.
 
-            # Run upgrade in background
-            if platform.system() == 'Windows':
-                # On Windows, use CREATE_NEW_CONSOLE to run in new window
-                subprocess.Popen(
-                    upgrade_cmd,
-                    creationflags=subprocess.CREATE_NEW_CONSOLE
-                )
-            else:
-                # On Unix-like systems, run in background
-                subprocess.Popen(
-                    upgrade_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
+    Args:
+        download_url: URL to download update from
+        version: Target version
 
-            # Exit current application to complete upgrade
-            print("Upgrade started. Exiting application...")
-            # Give user a moment to see the message
-            import time
-            time.sleep(2)
-            sys.exit(0)
+    Returns:
+        Tuple of (updater_instance, updater_type_string)
+    """
+    if is_velopack_environment():
+        return VelopackUpdater(GITHUB_RELEASES_URL, version), "velopack"
+    elif is_pip_environment():
+        return PipUpdater(), "pip"
+    else:
+        return LegacyInstallerUpdater(download_url, version), "legacy"
 
-        except Exception as e:
-            print(f"Pip upgrade error: {e}")
-            return False
+
+# Legacy compatibility: Keep Updater class for backward compatibility
+class Updater:
+    """Legacy Updater class for backward compatibility. Use get_updater() instead."""
+
+    def __init__(self, download_url: str, version: str):
+        self.download_url = download_url
+        self.version = version
+        self._legacy = LegacyInstallerUpdater(download_url, version)
+
+    def download(self, progress_callback: Optional[Callable[[int, int], None]] = None) -> bool:
+        return self._legacy.download(progress_callback)
 
     def install_and_restart_legacy(self) -> bool:
-        """
-        Install the update using downloaded installer (legacy method for .exe/.dmg files)
-
-        Returns:
-            True if installation started successfully
-        """
-        if not self.download_path or not self.download_path.exists():
-            print("No installer file found")
-            return False
-
-        try:
-            system = platform.system()
-
-            if system == 'Windows':
-                return self._install_windows()
-            elif system == 'Darwin':  # macOS
-                return self._install_macos()
-            elif system == 'Linux':
-                return self._install_linux()
-            else:
-                print(f"Unsupported platform: {system}")
-                return False
-
-        except Exception as e:
-            print(f"Error installing update: {e}")
-            return False
-
-    def _install_windows(self) -> bool:
-        """Install on Windows"""
-        try:
-            # Run installer silently and exit current program
-            # /VERYSILENT /NORESTART /SP- are common Inno Setup flags
-            installer_args = [
-                str(self.download_path),
-                '/VERYSILENT',
-                '/NORESTART',
-                '/SP-',
-            ]
-
-            # Start installer
-            subprocess.Popen(
-                installer_args,
-                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-            )
-
-            # Exit current application to allow installation
-            # The installer should handle restarting the new version
-            sys.exit(0)
-
-        except Exception as e:
-            print(f"Windows installation error: {e}")
-            return False
-
-    def _install_macos(self) -> bool:
-        """Install on macOS"""
-        try:
-            # For .dmg: mount and copy
-            # For .pkg: run installer
-            if str(self.download_path).endswith('.pkg'):
-                subprocess.Popen(['open', str(self.download_path)])
-            elif str(self.download_path).endswith('.dmg'):
-                # Mount DMG and open Finder
-                subprocess.Popen(['open', str(self.download_path)])
-
-            # User will need to manually install
-            print("Please follow the installation prompts")
-            return True
-
-        except Exception as e:
-            print(f"macOS installation error: {e}")
-            return False
-
-    def _install_linux(self) -> bool:
-        """Install on Linux"""
-        try:
-            path_str = str(self.download_path)
-
-            if path_str.endswith('.deb'):
-                # Debian/Ubuntu
-                subprocess.Popen(['xdg-open', path_str])
-            elif path_str.endswith('.rpm'):
-                # RedHat/Fedora
-                subprocess.Popen(['xdg-open', path_str])
-            elif path_str.endswith('.appimage'):
-                # Make executable and run
-                os.chmod(self.download_path, 0o755)
-                subprocess.Popen([path_str])
-
-            return True
-
-        except Exception as e:
-            print(f"Linux installation error: {e}")
-            return False
-
-    def cleanup(self):
-        """Clean up downloaded files"""
-        if self.download_path and self.download_path.exists():
-            try:
-                self.download_path.unlink()
-            except Exception as e:
-                print(f"Error cleaning up download: {e}")
+        return self._legacy.install()
 
 
 if __name__ == '__main__':
-    # Test the updater
-    print("This module should be imported, not run directly")
-    print("Use update_checker.py to check for updates first")
+    print("Updater environment detection:")
+    print(f"  Velopack environment: {is_velopack_environment()}")
+    print(f"  Pip environment: {is_pip_environment()}")
+    print(f"  Update.exe path: {get_velopack_update_exe()}")

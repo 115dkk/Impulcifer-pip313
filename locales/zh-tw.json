@@ -184,5 +184,11 @@
   "update_complete_title": "更新已開始",
   "update_complete_message": "更新已在背景開始。\n請重新啟動應用程式以使用新版本。",
   "update_error_no_installer": "安裝程式不可用。請從GitHub手動下載：\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "update_restart_message": "應用程式將立即重新啟動以完成更新。",
+  "update_error_apply": "套用更新失敗",
+  "update_manual_complete": "請按照安裝程式的提示完成更新。",
+  "section_data_access": "資料存取",
+  "label_data_folder_description": "存取參考檔案、測試訊號和錄音",
+  "button_open_data_folder": "開啟資料資料夾",
   "error_title": "錯誤"
 }

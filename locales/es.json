@@ -184,5 +184,11 @@
   "update_complete_title": "Actualización iniciada",
   "update_complete_message": "La actualización ha comenzado en segundo plano.\nPor favor, reinicie la aplicación para usar la nueva versión.",
   "update_error_no_installer": "Instalador no disponible. Por favor, descargue manualmente desde GitHub:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "update_restart_message": "La aplicación se reiniciará ahora para completar la actualización.",
+  "update_error_apply": "Error al aplicar la actualización",
+  "update_manual_complete": "Por favor, siga las instrucciones del instalador para completar la actualización.",
+  "section_data_access": "Acceso a datos",
+  "label_data_folder_description": "Acceder a archivos de referencia, señales de prueba y grabaciones",
+  "button_open_data_folder": "Abrir carpeta de datos",
   "error_title": "Error"
 }

@@ -22,10 +22,39 @@ from constants import SPEAKER_LIST_PATTERN
 from localization import get_localization_manager, SUPPORTED_LANGUAGES
 from logger import get_logger, set_gui_callbacks
 from update_checker import UpdateChecker
-from updater import Updater
+from updater import Updater, is_velopack_environment, is_pip_environment, VelopackUpdater, LegacyInstallerUpdater, GITHUB_RELEASES_URL
 
 # Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
+
+
+def open_data_folder():
+    """Open the application's data folder in file explorer."""
+    import subprocess
+
+    if getattr(sys, 'frozen', False) or hasattr(sys, '__compiled__'):
+        # Nuitka compiled
+        app_dir = Path(sys.executable).parent
+    else:
+        # Development
+        app_dir = Path(__file__).parent
+
+    data_dir = app_dir / "data"
+
+    if not data_dir.exists():
+        data_dir = app_dir  # Fallback to app directory
+
+    system = platform.system()
+
+    try:
+        if system == 'Windows':
+            subprocess.Popen(['explorer', str(data_dir)])
+        elif system == 'Darwin':
+            subprocess.Popen(['open', str(data_dir)])
+        else:  # Linux
+            subprocess.Popen(['xdg-open', str(data_dir)])
+    except Exception as e:
+        print(f"Failed to open data folder: {e}")
 
 
 def is_frozen_or_standalone() -> bool:
@@ -429,7 +458,7 @@ class UpdateDialog(ctk.CTkToplevel):
         """User chose to update now"""
         self.user_choice = 'update'
 
-        # Hide buttons, show progress
+        # Disable buttons
         for widget in self.winfo_children():
             if isinstance(widget, ctk.CTkFrame) and widget != self.progress_frame:
                 for button in widget.winfo_children():
@@ -438,22 +467,14 @@ class UpdateDialog(ctk.CTkToplevel):
 
         self.progress_frame.grid(row=4, column=0, padx=20, pady=(0, 10), sticky="ew")
 
-        # Detect execution environment and choose appropriate update method
-        is_standalone = is_frozen_or_standalone()
-        has_pip = is_pip_available()
-
-        print(f"Update environment: standalone={is_standalone}, pip_available={has_pip}")
-
-        if is_standalone:
-            # Standalone executable - use installer
+        if is_velopack_environment():
             self.progress_label.configure(
-                text=self.loc.get('update_downloading', default="Downloading installer...")
+                text=self.loc.get('update_downloading', default="Downloading update...")
             )
             self.progress_bar.set(0.1)
-            download_thread = threading.Thread(target=self.download_and_install, daemon=True)
-            download_thread.start()
-        elif has_pip:
-            # Pip environment - use pip upgrade
+            update_thread = threading.Thread(target=self.velopack_update, daemon=True)
+            update_thread.start()
+        elif is_pip_environment():
             self.progress_label.configure(
                 text=self.loc.get('update_preparing', default="Preparing to update via pip...")
             )
@@ -461,11 +482,13 @@ class UpdateDialog(ctk.CTkToplevel):
             upgrade_thread = threading.Thread(target=self.pip_upgrade, daemon=True)
             upgrade_thread.start()
         else:
-            # Neither pip nor installer available - show error
-            self.after(0, lambda: self.show_error(
-                self.loc.get('update_error_no_method',
-                            default="Unable to update: Neither pip nor installer is available.\nPlease update manually from GitHub.")
-            ))
+            # macOS/Linux legacy installer
+            self.progress_label.configure(
+                text=self.loc.get('update_downloading', default="Downloading installer...")
+            )
+            self.progress_bar.set(0.1)
+            download_thread = threading.Thread(target=self.legacy_update, daemon=True)
+            download_thread.start()
 
     def pip_upgrade(self):
         """Upgrade using pip"""
@@ -539,37 +562,72 @@ class UpdateDialog(ctk.CTkToplevel):
             error_msg = self.loc.get('update_error_general', default="Update error: {error}").format(error=str(e))
             self.after(0, lambda: self.show_error(error_msg))
 
-    def download_and_install(self):
-        """Download installer and install the update (for standalone executables)"""
+    def velopack_update(self):
+        """Update using Velopack (Windows standalone)"""
         try:
-            # Check if download URL is available
+            updater = VelopackUpdater(GITHUB_RELEASES_URL, self.latest_version)
+
+            self.after(0, lambda: self.progress_bar.set(0.3))
+            self.after(0, lambda: self.progress_label.configure(
+                text=self.loc.get('update_downloading', default="Downloading update...")
+            ))
+
+            success = updater.check_and_download()
+
+            if success:
+                self.after(0, lambda: self.progress_bar.set(0.8))
+                self.after(0, lambda: self.progress_label.configure(
+                    text=self.loc.get('update_installing', default="Applying update...")
+                ))
+
+                # Show message before restart
+                self.after(0, lambda: messagebox.showinfo(
+                    self.loc.get('update_complete_title', default="Update Ready"),
+                    self.loc.get('update_restart_message', default="The application will now restart to complete the update.")
+                ))
+
+                updater.apply_and_restart()
+                # If we get here, something went wrong
+                self.after(0, lambda: self.show_error(
+                    self.loc.get('update_error_apply', default="Failed to apply update")
+                ))
+            else:
+                self.after(0, lambda: self.show_error(
+                    self.loc.get('update_error_download', default="Failed to download update")
+                ))
+
+        except Exception as e:
+            error_msg = self.loc.get('update_error_general', default="Update error: {error}").format(error=str(e))
+            self.after(0, lambda: self.show_error(error_msg))
+
+    def legacy_update(self):
+        """Update using legacy installer download (macOS/Linux)"""
+        try:
             if not self.download_url:
                 self.after(0, lambda: self.show_error(
                     self.loc.get('update_error_no_installer',
-                                default="No installer available. Please download manually from GitHub:\n" +
-                                       "https://github.com/115dkk/Impulcifer-pip313/releases/latest")
+                                default="No installer available. Please download manually from GitHub.")
                 ))
                 return
 
-            updater = Updater(self.download_url, self.latest_version)
+            updater = LegacyInstallerUpdater(self.download_url, self.latest_version)
 
-            # Download with progress callback
             success = updater.download(progress_callback=self.update_progress)
 
             if success:
-                # Update UI on main thread
                 self.after(0, lambda: self.progress_label.configure(
-                    text=self.loc.get('update_installing', default="Installing update...")
+                    text=self.loc.get('update_installing', default="Opening installer...")
                 ))
                 self.after(0, lambda: self.progress_bar.set(0.9))
 
-                # Install using legacy installer method
-                updater.install_and_restart_legacy()
+                updater.install()
 
-                # If we get here, installation failed to start
-                self.after(0, lambda: self.show_error(
-                    self.loc.get('update_error_install', default="Failed to start installation")
+                self.after(0, lambda: self.progress_bar.set(1.0))
+                self.after(0, lambda: messagebox.showinfo(
+                    self.loc.get('update_complete_title', default="Update Started"),
+                    self.loc.get('update_manual_complete', default="Please follow the installer prompts to complete the update.")
                 ))
+                self.after(1000, self.destroy)
             else:
                 self.after(0, lambda: self.show_error(
                     self.loc.get('update_error_download', default="Failed to download update")
@@ -1872,6 +1930,36 @@ class ModernImpulciferGUI:
             command=self.change_theme
         )
         theme_menu.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
+
+        # === Data Access Section ===
+        data_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        data_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        data_frame.grid_columnconfigure(0, weight=1)
+        row += 1
+
+        ctk.CTkLabel(
+            data_frame,
+            text=self.loc.get('section_data_access', default="Data Access"),
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+        ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+
+        # Description label
+        ctk.CTkLabel(
+            data_frame,
+            text=self.loc.get('label_data_folder_description',
+                             default="Access reference files, test signals, and recordings"),
+            font=ctk.CTkFont(family=self.font_family, size=12),
+            text_color="gray"
+        ).grid(row=1, column=0, sticky="w", padx=15, pady=(0, 10))
+
+        # Open data folder button
+        open_folder_btn = ctk.CTkButton(
+            data_frame,
+            text=self.loc.get('button_open_data_folder', default="Open Data Folder"),
+            command=open_data_folder,
+            width=200
+        )
+        open_folder_btn.grid(row=2, column=0, sticky="w", padx=15, pady=(0, 15))
 
     def change_language(self, language_name):
         """Change application language"""
