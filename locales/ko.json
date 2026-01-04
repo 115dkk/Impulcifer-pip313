@@ -211,5 +211,11 @@
   "update_complete_title": "업데이트 시작됨",
   "update_complete_message": "업데이트가 백그라운드에서 시작되었습니다.\n새 버전을 사용하려면 애플리케이션을 재시작해주세요.",
   "update_error_no_installer": "설치 프로그램을 사용할 수 없습니다. GitHub에서 수동으로 다운로드해주세요:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "update_restart_message": "업데이트를 완료하기 위해 프로그램이 재시작됩니다.",
+  "update_error_apply": "업데이트 적용에 실패했습니다",
+  "update_manual_complete": "설치 프로그램의 안내에 따라 업데이트를 완료해주세요.",
+  "section_data_access": "데이터 접근",
+  "label_data_folder_description": "레퍼런스 파일, 테스트 시그널, 녹음 파일에 접근합니다",
+  "button_open_data_folder": "데이터 폴더 열기",
   "error_title": "오류"
 }

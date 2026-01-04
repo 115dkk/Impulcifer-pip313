@@ -211,5 +211,11 @@
   "update_complete_title": "Update Started",
   "update_complete_message": "The update has been started in the background.\nPlease restart the application to use the new version.",
   "update_error_no_installer": "No installer available. Please download manually from GitHub:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "update_restart_message": "The application will now restart to complete the update.",
+  "update_error_apply": "Failed to apply update",
+  "update_manual_complete": "Please follow the installer prompts to complete the update.",
+  "section_data_access": "Data Access",
+  "label_data_folder_description": "Access reference files, test signals, and recordings",
+  "button_open_data_folder": "Open Data Folder",
   "error_title": "Error"
 }

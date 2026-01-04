@@ -184,5 +184,11 @@
   "update_complete_title": "Обновление начато",
   "update_complete_message": "Обновление началось в фоновом режиме.\nПожалуйста, перезапустите приложение для использования новой версии.",
   "update_error_no_installer": "Установщик недоступен. Пожалуйста, загрузите вручную с GitHub:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
+  "update_restart_message": "Приложение перезапустится для завершения обновления.",
+  "update_error_apply": "Не удалось применить обновление",
+  "update_manual_complete": "Пожалуйста, следуйте инструкциям установщика для завершения обновления.",
+  "section_data_access": "Доступ к данным",
+  "label_data_folder_description": "Доступ к файлам справки, тестовым сигналам и записям",
+  "button_open_data_folder": "Открыть папку данных",
   "error_title": "Ошибка"
 }

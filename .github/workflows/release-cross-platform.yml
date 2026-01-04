@@ -28,6 +28,11 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -76,22 +81,47 @@ jobs:
         env:
           PYTHONIOENCODING: UTF-8
 
-      - name: Set up Inno Setup
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
-        with:
-          path: .github/workflows/Impulcifer install maker.iss
-          options: /DNUITKA_BUILD_DIR="${{ env.NUITKA_OUTPUT_DIR }}" /DAPP_VERSION="${{ env.APP_VERSION }}" /DPROJECT_ROOT_FOR_ISS="${{ env.PROJECT_ROOT_FOR_ISS }}" /DISS_PATH="${{ env.ISS_PATH }}"
-
-      - name: Set installer path
+      - name: Install Velopack CLI
         run: |
-          echo "INSTALLER_PATH=${{ env.ISS_PATH }}\Impulcifer_Setup.exe" >> $GITHUB_ENV
+          dotnet tool install -g vpk
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
         shell: bash
 
-      - name: Upload Windows installer
+      - name: Package with Velopack
+        run: |
+          # Nuitka 빌드 결과물 경로
+          DIST_DIR="${{ github.workspace }}/dist/Impulcifer_Distribution/ImpulciferGUI/gui_main.dist"
+          OUTPUT_DIR="${{ github.workspace }}/velopack-releases"
+
+          mkdir -p "$OUTPUT_DIR"
+
+          # Velopack 패키징
+          # 주의: --icon 옵션은 아이콘 파일이 준비되면 활성화
+          vpk pack \
+            --packId "Impulcifer" \
+            --packTitle "Modern Impulcifer" \
+            --packVersion "${{ env.APP_VERSION }}" \
+            --packDir "$DIST_DIR" \
+            --mainExe "ImpulciferGUI.exe" \
+            --shortcuts Desktop,StartMenuRoot \
+            --outputDir "$OUTPUT_DIR"
+
+          # 아이콘이 준비되면 아래 옵션을 vpk pack 명령에 추가:
+          # --icon "${{ github.workspace }}/assets/icon.ico"
+
+          echo "VELOPACK_OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_ENV
+
+          echo "Velopack output files:"
+          ls -la "$OUTPUT_DIR"
+        shell: bash
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+      - name: Upload Velopack releases
         uses: actions/upload-artifact@v4
         with:
-          name: windows-installer
-          path: ${{ env.INSTALLER_PATH }}
+          name: windows-velopack
+          path: ${{ env.VELOPACK_OUTPUT_DIR }}/*
           retention-days: 30
 
   # macOS 빌드
@@ -625,7 +655,8 @@ jobs:
             ## 다운로드
 
             ### Windows
-            - `Impulcifer_Setup.exe` - Windows 인스톨러 (권장)
+            - `Impulcifer-*-win-Setup.exe` - Windows 인스톨러 (권장, 자동 업데이트 지원)
+            - `RELEASES`, `*.nupkg` - 자동 업데이트용 파일
 
             ### macOS
             - `Impulcifer-*-macOS.dmg` - macOS DMG 이미지
@@ -643,9 +674,10 @@ jobs:
             ## Installation Instructions
 
             ### Windows
-            1. Download `Impulcifer_Setup.exe`
+            1. Download `Impulcifer-*-win-Setup.exe`
             2. Run the installer
-            3. Follow the installation wizard
+            3. The app will be installed to `%LocalAppData%\Impulcifer`
+            4. Shortcuts will be created on Desktop and Start Menu
 
             ### macOS
             1. Download `Impulcifer-*-macOS.dmg`
@@ -667,7 +699,7 @@ jobs:
             ./run.sh
             ```
           files: |
-            artifacts/windows-installer/*
+            artifacts/windows-velopack/*
             artifacts/macos-dmg/*
             artifacts/linux-appimage/*
             artifacts/linux-tarball/*
