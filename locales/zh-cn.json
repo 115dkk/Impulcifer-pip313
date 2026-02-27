@@ -190,5 +190,23 @@
   "section_data_access": "数据访问",
   "label_data_folder_description": "访问参考文件、测试信号和录音",
   "button_open_data_folder": "打开数据文件夹",
-  "error_title": "错误"
+  "error_title": "错误",
+
+  "vbass_group_title": "虚拟低音",
+  "vbass_enable": "启用虚拟低音",
+  "vbass_enable_tooltip": "用合成的最小相位低音替换低频内容，改善次低音响应",
+  "vbass_crossover_freq": "分频频率 (Hz)",
+  "vbass_crossover_freq_tooltip": "此频率以下的原始低音将被合成低音替换。建议范围：100\u2013300 Hz",
+  "vbass_hp_freq": "次低音高通 (Hz)",
+  "vbass_hp_freq_tooltip": "去除此频率以下的直流隆隆声。默认15 Hz适用于大多数情况",
+  "vbass_polarity": "极性处理",
+  "vbass_polarity_auto": "自动检测",
+  "vbass_polarity_normal": "正常",
+  "vbass_polarity_invert": "反转",
+  "vbass_polarity_tooltip": "麦克风极性处理方式。自动检测适用于包括Samson LM10x在内的大多数麦克风",
+  "vbass_status_processing": "正在应用虚拟低音合成...",
+  "vbass_status_complete": "虚拟低音合成完成",
+  "vbass_status_skipped": "虚拟低音已跳过（已禁用）",
+  "vbass_warning_high_crossover": "分频频率 {freq} Hz 异常偏高。建议范围：100\u2013300 Hz",
+  "vbass_error_sr_limit": "分频频率超出采样率限制。虚拟低音已禁用。"
 }

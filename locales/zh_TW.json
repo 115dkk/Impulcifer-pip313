@@ -190,5 +190,23 @@
   "section_data_access": "資料存取",
   "label_data_folder_description": "存取參考檔案、測試訊號和錄音",
   "button_open_data_folder": "開啟資料資料夾",
-  "error_title": "錯誤"
+  "error_title": "錯誤",
+
+  "vbass_group_title": "虛擬低音",
+  "vbass_enable": "啟用虛擬低音",
+  "vbass_enable_tooltip": "以合成的最小相位低音取代低頻內容，改善次低音響應",
+  "vbass_crossover_freq": "分頻頻率 (Hz)",
+  "vbass_crossover_freq_tooltip": "此頻率以下的原始低音將被合成低音取代。建議範圍：100\u2013300 Hz",
+  "vbass_hp_freq": "次低音高通 (Hz)",
+  "vbass_hp_freq_tooltip": "移除此頻率以下的直流隆隆聲。預設15 Hz適用於大多數情況",
+  "vbass_polarity": "極性處理",
+  "vbass_polarity_auto": "自動偵測",
+  "vbass_polarity_normal": "正常",
+  "vbass_polarity_invert": "反轉",
+  "vbass_polarity_tooltip": "麥克風極性處理方式。自動偵測適用於包含Samson LM10x在內的大多數麥克風",
+  "vbass_status_processing": "正在套用虛擬低音合成...",
+  "vbass_status_complete": "虛擬低音合成完成",
+  "vbass_status_skipped": "虛擬低音已略過（已停用）",
+  "vbass_warning_high_crossover": "分頻頻率 {freq} Hz 異常偏高。建議範圍：100\u2013300 Hz",
+  "vbass_error_sr_limit": "分頻頻率超出取樣率限制。虛擬低音已停用。"
 }

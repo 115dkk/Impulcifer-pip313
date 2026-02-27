@@ -217,5 +217,23 @@
   "section_data_access": "데이터 접근",
   "label_data_folder_description": "레퍼런스 파일, 테스트 시그널, 녹음 파일에 접근합니다",
   "button_open_data_folder": "데이터 폴더 열기",
-  "error_title": "오류"
+  "error_title": "오류",
+
+  "vbass_group_title": "가상 베이스",
+  "vbass_enable": "가상 베이스 활성화",
+  "vbass_enable_tooltip": "저주파 대역을 합성된 미니멈 페이즈 베이스로 교체하여 서브베이스 응답을 개선합니다",
+  "vbass_crossover_freq": "크로스오버 주파수 (Hz)",
+  "vbass_crossover_freq_tooltip": "이 주파수 이하의 원본 저음이 합성 베이스로 교체됩니다. 권장 범위: 100\u2013300 Hz",
+  "vbass_hp_freq": "서브베이스 하이패스 (Hz)",
+  "vbass_hp_freq_tooltip": "이 주파수 이하의 DC 럼블을 제거합니다. 대부분 기본값 15 Hz로 충분합니다",
+  "vbass_polarity": "극성 처리",
+  "vbass_polarity_auto": "자동 감지",
+  "vbass_polarity_normal": "정상",
+  "vbass_polarity_invert": "반전",
+  "vbass_polarity_tooltip": "마이크 극성 처리 방식입니다. Samson LM10x 등 대부분의 마이크에서 자동 감지가 동작합니다",
+  "vbass_status_processing": "가상 베이스 합성 중...",
+  "vbass_status_complete": "가상 베이스 합성 완료",
+  "vbass_status_skipped": "가상 베이스 건너뜀 (비활성화)",
+  "vbass_warning_high_crossover": "크로스오버 주파수 {freq} Hz가 비정상적으로 높습니다. 권장 범위: 100\u2013300 Hz",
+  "vbass_error_sr_limit": "크로스오버 주파수가 샘플레이트 한계를 초과했습니다. 가상 베이스를 비활성화합니다."
 }

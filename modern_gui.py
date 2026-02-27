@@ -1324,6 +1324,78 @@ class ModernImpulciferGUI:
             variable=self.output_truehd_layouts_var
         ).pack(side="left", padx=5)
 
+        # === Virtual Bass Section ===
+        vbass_group = ctk.CTkFrame(scroll, corner_radius=10)
+        vbass_group.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        vbass_group.grid_columnconfigure(0, weight=1)
+        row += 1
+
+        ctk.CTkLabel(
+            vbass_group,
+            text=self.loc.get('vbass_group_title'),
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+        ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+
+        vbass_row = 1
+
+        # Enable toggle
+        vbass_enable_frame = ctk.CTkFrame(vbass_group, fg_color="transparent")
+        vbass_enable_frame.grid(row=vbass_row, column=0, sticky="ew", padx=15, pady=5)
+        vbass_row += 1
+
+        self.vbass_enable_var = ctk.BooleanVar(value=False)
+        self.vbass_enable_check = ctk.CTkCheckBox(
+            vbass_enable_frame,
+            text=self.loc.get('vbass_enable'),
+            variable=self.vbass_enable_var,
+            command=self.toggle_vbass
+        )
+        self.vbass_enable_check.pack(side="left", padx=5)
+
+        # Virtual Bass options container
+        self.vbass_options_frame = ctk.CTkFrame(vbass_group, fg_color="transparent")
+
+        vbopt_row = 0
+
+        # Crossover frequency
+        xo_frame = ctk.CTkFrame(self.vbass_options_frame, fg_color="transparent")
+        xo_frame.grid(row=vbopt_row, column=0, sticky="ew", padx=30, pady=5)
+        vbopt_row += 1
+
+        ctk.CTkLabel(xo_frame, text=self.loc.get('vbass_crossover_freq')).pack(side="left", padx=5)
+        self.vbass_freq_var = ctk.IntVar(value=250)
+        self.vbass_freq_spin = ctk.CTkEntry(xo_frame, textvariable=self.vbass_freq_var, width=80)
+        self.vbass_freq_spin.pack(side="left", padx=5)
+
+        # Sub-bass high-pass
+        hp_frame = ctk.CTkFrame(self.vbass_options_frame, fg_color="transparent")
+        hp_frame.grid(row=vbopt_row, column=0, sticky="ew", padx=30, pady=5)
+        vbopt_row += 1
+
+        ctk.CTkLabel(hp_frame, text=self.loc.get('vbass_hp_freq')).pack(side="left", padx=5)
+        self.vbass_hp_var = ctk.DoubleVar(value=15.0)
+        self.vbass_hp_entry = ctk.CTkEntry(hp_frame, textvariable=self.vbass_hp_var, width=80)
+        self.vbass_hp_entry.pack(side="left", padx=5)
+
+        # Polarity handling
+        pol_frame = ctk.CTkFrame(self.vbass_options_frame, fg_color="transparent")
+        pol_frame.grid(row=vbopt_row, column=0, sticky="ew", padx=30, pady=(5, 15))
+        vbopt_row += 1
+
+        ctk.CTkLabel(pol_frame, text=self.loc.get('vbass_polarity')).pack(side="left", padx=5)
+        self.vbass_polarity_var = ctk.StringVar(value=self.loc.get('vbass_polarity_auto'))
+        self.vbass_polarity_menu = ctk.CTkOptionMenu(
+            pol_frame,
+            variable=self.vbass_polarity_var,
+            values=[
+                self.loc.get('vbass_polarity_auto'),
+                self.loc.get('vbass_polarity_normal'),
+                self.loc.get('vbass_polarity_invert'),
+            ],
+            width=150
+        )
+        self.vbass_polarity_menu.pack(side="left", padx=5)
+
         # === Generate Button ===
         self.generate_button = ctk.CTkButton(
             scroll,
@@ -1434,6 +1506,18 @@ class ModernImpulciferGUI:
         else:
             self.decay_entry.configure(state="normal")
             self.decay_channels_frame.grid_forget()
+
+    def toggle_vbass(self):
+        """Enable/disable virtual bass options"""
+        enabled = self.vbass_enable_var.get()
+        state = "normal" if enabled else "disabled"
+        self.vbass_freq_spin.configure(state=state)
+        self.vbass_hp_entry.configure(state=state)
+        self.vbass_polarity_menu.configure(state=state)
+        if enabled:
+            self.vbass_options_frame.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, 10))
+        else:
+            self.vbass_options_frame.grid_forget()
 
     def toggle_mic_deviation(self):
         """Enable/disable mic deviation strength entry and v3.0 options"""
@@ -1665,6 +1749,20 @@ class ModernImpulciferGUI:
             args['mic_deviation_debug_plots'] = self.mic_deviation_debug_plots_var.get()
             args['output_truehd_layouts'] = self.output_truehd_layouts_var.get()
 
+        # Virtual bass options
+        if self.vbass_enable_var.get():
+            args['vbass'] = True
+            args['vbass_freq'] = max(30, min(500, safe_get_int(self.vbass_freq_var, 250)))
+            args['vbass_hp'] = safe_get_double(self.vbass_hp_var, 15.0)
+            # Map localized polarity string back to CLI value
+            polarity_text = self.vbass_polarity_var.get()
+            if polarity_text == self.loc.get('vbass_polarity_normal'):
+                args['vbass_polarity'] = 'normal'
+            elif polarity_text == self.loc.get('vbass_polarity_invert'):
+                args['vbass_polarity'] = 'invert'
+            else:
+                args['vbass_polarity'] = 'auto'
+
         # Disable button during processing
         self.generate_button.configure(state="disabled", text=self.loc.get('button_processing'))
 
@@ -1765,7 +1863,7 @@ class ModernImpulciferGUI:
 
         # Fallback: Unknown version
         print("Warning: Could not determine version, using fallback")
-        return "2.3.2"  # Current known version as last resort
+        return "2.4.0"  # Current known version as last resort
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""

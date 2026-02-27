@@ -190,5 +190,23 @@
   "section_data_access": "Datenzugriff",
   "label_data_folder_description": "Zugriff auf Referenzdateien, Testsignale und Aufnahmen",
   "button_open_data_folder": "Datenordner öffnen",
-  "error_title": "Fehler"
+  "error_title": "Fehler",
+
+  "vbass_group_title": "Virtueller Bass",
+  "vbass_enable": "Virtuellen Bass aktivieren",
+  "vbass_enable_tooltip": "Ersetzt niederfrequente Inhalte durch synthetisierten Minimalphasen-Bass für bessere Sub-Bass-Wiedergabe",
+  "vbass_crossover_freq": "Übergangsfrequenz (Hz)",
+  "vbass_crossover_freq_tooltip": "Originalbass unterhalb dieser Frequenz wird durch synthetisierten Bass ersetzt. Empfohlen: 100\u2013300 Hz",
+  "vbass_hp_freq": "Sub-Bass Hochpass (Hz)",
+  "vbass_hp_freq_tooltip": "Entfernt DC-Rumpeln unterhalb dieser Frequenz. Der Standardwert von 15 Hz ist für die meisten Fälle geeignet",
+  "vbass_polarity": "Polaritätsbehandlung",
+  "vbass_polarity_auto": "Automatisch erkennen",
+  "vbass_polarity_normal": "Normal",
+  "vbass_polarity_invert": "Invertieren",
+  "vbass_polarity_tooltip": "Art der Mikrofonpolaritätsbehandlung. Automatische Erkennung funktioniert bei den meisten Mikrofonen einschließlich Samson LM10x",
+  "vbass_status_processing": "Virtuelle Bass-Synthese wird angewendet...",
+  "vbass_status_complete": "Virtuelle Bass-Synthese abgeschlossen",
+  "vbass_status_skipped": "Virtueller Bass übersprungen (deaktiviert)",
+  "vbass_warning_high_crossover": "Übergangsfrequenz {freq} Hz ist ungewöhnlich hoch. Empfohlener Bereich: 100\u2013300 Hz",
+  "vbass_error_sr_limit": "Übergangsfrequenz überschreitet die Abtastratenbegrenzung. Virtueller Bass deaktiviert."
 }

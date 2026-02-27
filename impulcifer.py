@@ -36,7 +36,7 @@ def _get_version() -> str:
             pass
 
     # Fallback
-    return "2.3.2"
+    return "2.4.0"
 
 __version__ = _get_version()
 
@@ -437,6 +437,11 @@ def main(
     mic_deviation_debug_plots=False,
     # TrueHD 레이아웃 관련 파라미터 추가
     output_truehd_layouts=False,
+    # Virtual bass 파라미터
+    vbass=False,
+    vbass_freq=250,
+    vbass_hp=15.0,
+    vbass_polarity='auto',
 ):
     """"""
     logger = get_logger()
@@ -458,6 +463,8 @@ def main(
     if plot:
         total_steps += 5  # Pre/post plots + additional plots
     if microphone_deviation_correction:
+        total_steps += 1
+    if vbass:
         total_steps += 1
     if interactive_plots:
         total_steps += 1
@@ -572,6 +579,19 @@ def main(
 
     # Crop noise from the tail
     hrir.crop_tails()
+
+    # Virtual bass synthesis
+    if vbass:
+        logger.step("vbass_status_processing")
+        from virtual_bass import apply_virtual_bass_to_hrir
+        polarity_map = {'auto': None, 'normal': False, 'invert': True}
+        apply_virtual_bass_to_hrir(
+            hrir,
+            crossover_freq=vbass_freq,
+            head_ms=head_ms,
+            hp_freq=vbass_hp,
+            invert_polarity=polarity_map.get(vbass_polarity),
+        )
 
     # 마이크 착용 편차 보정 v2.0
     if microphone_deviation_correction:
@@ -1598,6 +1618,23 @@ def create_cli():
     )
     arg_parser.add_argument(
         "--output_truehd_layouts", action="store_true", help="Generate TrueHD layouts."
+    )
+    arg_parser.add_argument(
+        "--vbass", action="store_true",
+        help="Enable virtual bass synthesis.",
+    )
+    arg_parser.add_argument(
+        "--vbass_freq", type=int, default=250,
+        help="Virtual bass crossover frequency in Hz (default: 250).",
+    )
+    arg_parser.add_argument(
+        "--vbass_hp", type=float, default=15.0,
+        help="Virtual bass sub-bass high-pass frequency in Hz (default: 15.0).",
+    )
+    arg_parser.add_argument(
+        "--vbass_polarity", type=str, default="auto",
+        choices=["auto", "normal", "invert"],
+        help="Virtual bass polarity handling (default: auto).",
     )
     args = vars(arg_parser.parse_args())
     if "bass_boost" in args:

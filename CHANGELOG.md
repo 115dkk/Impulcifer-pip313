@@ -4,6 +4,44 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.0 - 2026-02-27
+### 🎵 가상 베이스 (Virtual Bass) 합성 기능 추가
+저주파 대역을 합성된 미니멈 페이즈 베이스로 교체하여 서브베이스 응답을 개선하는 기능을 추가했습니다.
+
+#### ⭐ 새로운 기능
+- **Virtual Bass 합성 엔진** (`virtual_bass.py`):
+  - 크로스오버 주파수 이하의 원본 저음을 합성 베이스로 교체
+  - 미니멈 페이즈 변환을 통한 자연스러운 베이스 재생
+  - 자동 극성 감지 (Samson LM10x 등 대부분의 마이크 지원)
+  - ILD (Interaural Level Difference) 셸프 보정
+  - 크로스오버 주파수에서 자동 게인 매칭
+  - 서브베이스 하이패스 필터로 DC 럼블 제거
+
+- **CLI 인자 추가**:
+  - `--vbass`: 가상 베이스 합성 활성화
+  - `--vbass_freq`: 크로스오버 주파수 (Hz, 기본값 250)
+  - `--vbass_hp`: 서브베이스 하이패스 주파수 (Hz, 기본값 15)
+  - `--vbass_polarity`: 극성 처리 (auto/normal/invert)
+
+- **GUI 통합** (Modern GUI):
+  - Virtual Bass 전용 설정 그룹 추가
+  - 활성화 토글, 크로스오버 주파수, 하이패스, 극성 설정
+  - 비활성화 시 자동으로 옵션 잠금
+
+#### 🌐 다국어 지원
+- 9개 언어 모두 Virtual Bass 관련 문자열 번역 완료
+  - 한국어, 영어, 일본어, 중국어(간체/번체), 프랑스어, 독일어, 스페인어, 러시아어
+
+#### 🧪 테스트
+- `test_virtual_bass.py`: 스피커 분류, 극성 감지, ILD 셸프, 전체 파이프라인 스모크 테스트
+
+#### 📦 변경된 파일
+- **신규**: `virtual_bass.py`, `test_virtual_bass.py`
+- **수정**: `impulcifer.py`, `modern_gui.py`, `pyproject.toml`, `CHANGELOG.md`
+- **번역**: 모든 locale 파일 (11개)
+
+---
+
 ## 2.3.2 - 2025-11-29
 ### 🔧 업데이트 체커 및 CI/CD 수정
 GitHub 자동 릴리즈 태그로 인한 업데이트 오탐지 문제를 해결하고, Linux CI/CD 빌드 이슈를 수정했습니다.

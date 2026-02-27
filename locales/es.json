@@ -190,5 +190,23 @@
   "section_data_access": "Acceso a datos",
   "label_data_folder_description": "Acceder a archivos de referencia, señales de prueba y grabaciones",
   "button_open_data_folder": "Abrir carpeta de datos",
-  "error_title": "Error"
+  "error_title": "Error",
+
+  "vbass_group_title": "Bajo virtual",
+  "vbass_enable": "Activar bajo virtual",
+  "vbass_enable_tooltip": "Reemplaza el contenido de baja frecuencia con bajo sintetizado de fase mínima para mejor respuesta de sub-graves",
+  "vbass_crossover_freq": "Frecuencia de cruce (Hz)",
+  "vbass_crossover_freq_tooltip": "Los graves originales por debajo de esta frecuencia se reemplazan con graves sintetizados. Recomendado: 100\u2013300 Hz",
+  "vbass_hp_freq": "Paso alto de sub-graves (Hz)",
+  "vbass_hp_freq_tooltip": "Elimina el ruido DC por debajo de esta frecuencia. El valor predeterminado de 15 Hz es adecuado para la mayoría de los casos",
+  "vbass_polarity": "Manejo de polaridad",
+  "vbass_polarity_auto": "Detección automática",
+  "vbass_polarity_normal": "Normal",
+  "vbass_polarity_invert": "Invertir",
+  "vbass_polarity_tooltip": "Modo de tratamiento de polaridad del micrófono. La detección automática funciona con la mayoría de micrófonos, incluyendo Samson LM10x",
+  "vbass_status_processing": "Aplicando síntesis de bajo virtual...",
+  "vbass_status_complete": "Síntesis de bajo virtual completada",
+  "vbass_status_skipped": "Bajo virtual omitido (desactivado)",
+  "vbass_warning_high_crossover": "La frecuencia de cruce {freq} Hz es inusualmente alta. Rango recomendado: 100\u2013300 Hz",
+  "vbass_error_sr_limit": "La frecuencia de cruce excede el límite de frecuencia de muestreo. Bajo virtual desactivado."
 }
