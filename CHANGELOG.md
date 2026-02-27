@@ -4,6 +4,13 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.1 - 2026-02-27
+### 🔧 Virtual Bass 로거 번역 수정
+- `vbass_` 접두사가 로거 자동 번역 시스템에서 누락되어 번역 키가 그대로 출력되던 문제 수정
+- `logger.py`의 `_translate()` 접두사 목록에 `vbass_` 추가
+
+---
+
 ## 2.4.0 - 2026-02-27
 ### 🎵 가상 베이스 (Virtual Bass) 합성 기능 추가
 저주파 대역을 합성된 미니멈 페이즈 베이스로 교체하여 서브베이스 응답을 개선하는 기능을 추가했습니다.

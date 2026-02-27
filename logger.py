@@ -69,7 +69,7 @@ class ImpulciferLogger:
             return message
 
         # If message starts with common prefixes, treat as translation key
-        if message.startswith(('cli_', 'message_', 'error_', 'warning_', 'success_', 'info_')):
+        if message.startswith(('cli_', 'message_', 'error_', 'warning_', 'success_', 'info_', 'vbass_')):
             return self.localization.get(message, **kwargs)
 
         # Otherwise return as-is (allows mixing translated and non-translated messages)
