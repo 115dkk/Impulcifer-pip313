@@ -217,5 +217,23 @@
   "section_data_access": "Data Access",
   "label_data_folder_description": "Access reference files, test signals, and recordings",
   "button_open_data_folder": "Open Data Folder",
-  "error_title": "Error"
+  "error_title": "Error",
+
+  "vbass_group_title": "Virtual Bass",
+  "vbass_enable": "Enable Virtual Bass",
+  "vbass_enable_tooltip": "Replace low-frequency content with synthesized minimum-phase bass for better sub-bass response",
+  "vbass_crossover_freq": "Crossover Frequency (Hz)",
+  "vbass_crossover_freq_tooltip": "Frequency below which original bass is replaced with synthesized bass. Recommended: 100\u2013300 Hz",
+  "vbass_hp_freq": "Sub-bass High-pass (Hz)",
+  "vbass_hp_freq_tooltip": "Removes DC rumble below this frequency. Default 15 Hz is suitable for most cases",
+  "vbass_polarity": "Polarity Handling",
+  "vbass_polarity_auto": "Auto-detect",
+  "vbass_polarity_normal": "Normal",
+  "vbass_polarity_invert": "Invert",
+  "vbass_polarity_tooltip": "How to handle microphone polarity. Auto-detect works for most microphones including Samson LM10x",
+  "vbass_status_processing": "Applying virtual bass synthesis...",
+  "vbass_status_complete": "Virtual bass synthesis complete",
+  "vbass_status_skipped": "Virtual bass skipped (disabled)",
+  "vbass_warning_high_crossover": "Crossover frequency {freq} Hz is unusually high. Recommended range: 100\u2013300 Hz",
+  "vbass_error_sr_limit": "Crossover frequency exceeds sample rate limit. Virtual bass disabled."
 }

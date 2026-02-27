@@ -190,5 +190,23 @@
   "section_data_access": "データアクセス",
   "label_data_folder_description": "リファレンスファイル、テストシグナル、録音にアクセスします",
   "button_open_data_folder": "データフォルダを開く",
-  "error_title": "エラー"
+  "error_title": "エラー",
+
+  "vbass_group_title": "バーチャルベース",
+  "vbass_enable": "バーチャルベースを有効化",
+  "vbass_enable_tooltip": "低周波帯域を合成されたミニマムフェーズベースに置き換え、サブベース応答を改善します",
+  "vbass_crossover_freq": "クロスオーバー周波数 (Hz)",
+  "vbass_crossover_freq_tooltip": "この周波数以下の原音低域が合成ベースに置き換えられます。推奨範囲: 100\u2013300 Hz",
+  "vbass_hp_freq": "サブベース ハイパス (Hz)",
+  "vbass_hp_freq_tooltip": "この周波数以下のDCランブルを除去します。ほとんどの場合、デフォルトの15 Hzで十分です",
+  "vbass_polarity": "極性処理",
+  "vbass_polarity_auto": "自動検出",
+  "vbass_polarity_normal": "通常",
+  "vbass_polarity_invert": "反転",
+  "vbass_polarity_tooltip": "マイクの極性処理方式です。Samson LM10x等ほとんどのマイクで自動検出が動作します",
+  "vbass_status_processing": "バーチャルベース合成中...",
+  "vbass_status_complete": "バーチャルベース合成完了",
+  "vbass_status_skipped": "バーチャルベースをスキップ（無効化中）",
+  "vbass_warning_high_crossover": "クロスオーバー周波数 {freq} Hzが異常に高いです。推奨範囲: 100\u2013300 Hz",
+  "vbass_error_sr_limit": "クロスオーバー周波数がサンプルレート上限を超えました。バーチャルベースを無効化します。"
 }

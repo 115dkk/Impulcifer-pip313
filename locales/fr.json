@@ -190,5 +190,23 @@
   "section_data_access": "Accès aux données",
   "label_data_folder_description": "Accéder aux fichiers de référence, signaux de test et enregistrements",
   "button_open_data_folder": "Ouvrir le dossier de données",
-  "error_title": "Erreur"
+  "error_title": "Erreur",
+
+  "vbass_group_title": "Basse virtuelle",
+  "vbass_enable": "Activer la basse virtuelle",
+  "vbass_enable_tooltip": "Remplace le contenu basse fréquence par une basse synthétisée à phase minimale pour une meilleure réponse sub-bass",
+  "vbass_crossover_freq": "Fréquence de coupure (Hz)",
+  "vbass_crossover_freq_tooltip": "Les basses originales en dessous de cette fréquence sont remplacées par des basses synthétisées. Recommandé : 100\u2013300 Hz",
+  "vbass_hp_freq": "Passe-haut sub-bass (Hz)",
+  "vbass_hp_freq_tooltip": "Supprime le grondement DC en dessous de cette fréquence. La valeur par défaut de 15 Hz convient dans la plupart des cas",
+  "vbass_polarity": "Gestion de la polarité",
+  "vbass_polarity_auto": "Détection auto",
+  "vbass_polarity_normal": "Normal",
+  "vbass_polarity_invert": "Inverser",
+  "vbass_polarity_tooltip": "Mode de traitement de la polarité du microphone. La détection automatique fonctionne pour la plupart des microphones, y compris le Samson LM10x",
+  "vbass_status_processing": "Application de la synthèse de basse virtuelle...",
+  "vbass_status_complete": "Synthèse de basse virtuelle terminée",
+  "vbass_status_skipped": "Basse virtuelle ignorée (désactivée)",
+  "vbass_warning_high_crossover": "La fréquence de coupure {freq} Hz est anormalement élevée. Plage recommandée : 100\u2013300 Hz",
+  "vbass_error_sr_limit": "La fréquence de coupure dépasse la limite du taux d'échantillonnage. Basse virtuelle désactivée."
 }
