@@ -36,7 +36,7 @@ def _get_version() -> str:
             pass
 
     # Fallback
-    return "2.4.1"
+    return "2.4.2"
 
 __version__ = _get_version()
 
@@ -49,17 +49,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from autoeq.frequency_response import FrequencyResponse
-from impulse_response_estimator import ImpulseResponseEstimator
-from hrir import HRIR, _get_center_value
-from room_correction import room_correction
-from utils import (
+from core.impulse_response_estimator import ImpulseResponseEstimator
+from core.hrir import HRIR, _get_center_value
+from core.room_correction import room_correction
+from core.utils import (
     sync_axes,
     save_fig_as_png,
     is_truehd_file,
     convert_truehd_to_wav,
     check_ffmpeg_available,
 )
-from constants import (
+from core.constants import (
     SPEAKER_NAMES,
     SPEAKER_LIST_PATTERN,
     HESUVI_TRACK_ORDER,
@@ -68,13 +68,13 @@ from constants import (
     TRUEHD_11CH_ORDER,
     TRUEHD_13CH_ORDER,
 )
-from parallel_utils import parallel_map, get_parallelization_info
-from channel_generation import (
+from core.parallel_utils import parallel_map, get_parallelization_info
+from core.channel_generation import (
     get_available_channels_for_layout,
     create_truehd_layout_track_order,
     validate_channel_requirements,
 )
-from logger import get_logger
+from infra.logger import get_logger
 
 # PR3에서 추가된 import 문들
 import copy
@@ -96,7 +96,7 @@ import importlib.resources  # 패키지 리소스 접근을 위해 추가
 
 # Python 3.14 병렬 처리 지원
 try:
-    from parallel_processing import parallel_process_dict, is_free_threaded_available
+    from core.parallel_processing import parallel_process_dict, is_free_threaded_available
 
     PARALLEL_PROCESSING_AVAILABLE = True
 except ImportError:
@@ -371,7 +371,7 @@ def _process_decay_worker(args):
     speaker, side, ir_data, decay_value, fs = args
 
     # Import here to avoid circular dependency in multiprocessing
-    from impulse_response import ImpulseResponse
+    from core.impulse_response import ImpulseResponse
 
     # Create temporary IR object
     temp_ir = ImpulseResponse(data=ir_data.copy(), fs=fs)
@@ -393,7 +393,7 @@ def _process_plot_worker(args):
     speaker, side, ir_data, test_signal, fs = args
 
     # Import here to avoid circular dependency in multiprocessing
-    from impulse_response import ImpulseResponse
+    from core.impulse_response import ImpulseResponse
 
     # Create temporary IR object
     temp_ir = ImpulseResponse(data=ir_data.copy(), fs=fs)
@@ -583,7 +583,7 @@ def main(
     # Virtual bass synthesis
     if vbass:
         logger.step("vbass_status_processing")
-        from virtual_bass import apply_virtual_bass_to_hrir
+        from core.virtual_bass import apply_virtual_bass_to_hrir
         polarity_map = {'auto': None, 'normal': False, 'invert': True}
         apply_virtual_bass_to_hrir(
             hrir,

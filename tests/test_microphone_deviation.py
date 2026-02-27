@@ -10,7 +10,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
-from microphone_deviation_correction import MicrophoneDeviationCorrector
+from core.microphone_deviation_correction import MicrophoneDeviationCorrector
 import os
 
 

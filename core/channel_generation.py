@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from constants import AUTO_GENERATABLE_CHANNELS
+from core.constants import AUTO_GENERATABLE_CHANNELS
 
 def generate_missing_channels(hrir, auto_generate_config):
     """자동으로 누락된 채널들을 생성합니다.
@@ -38,7 +38,7 @@ def generate_missing_channels(hrir, auto_generate_config):
                             mixed_data += src_data
                     
                     # 새 IR 객체 생성
-                    from hrir import ImpulseResponse
+                    from core.hrir import ImpulseResponse
                     new_ir = ImpulseResponse(mixed_data, hrir.fs)
                     hrir.irs[channel_name][side] = new_ir
                 

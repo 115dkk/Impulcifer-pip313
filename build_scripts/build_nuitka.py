@@ -149,20 +149,32 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
     common_modules = [
         "sounddevice", "soundfile", "scipy", "scipy.signal", "scipy.optimize",
         "scipy.interpolate", "scipy.io", "scipy.fft", "nnresample", "tabulate",
-        "seaborn", "bokeh", "autoeq", "modern_gui", "gui", "localization",
-        "logger", "channel_generation", "update_checker", "updater", "recorder",
-        "impulcifer", "hrir", "impulse_response", "impulse_response_estimator",
-        "room_correction", "microphone_deviation_correction", "utils", "constants",
+        "seaborn", "bokeh", "autoeq",
+        # Project packages
+        "core", "core.constants", "core.utils", "core.impulse_response",
+        "core.impulse_response_estimator", "core.hrir", "core.room_correction",
+        "core.microphone_deviation_correction", "core.virtual_bass",
+        "core.channel_generation", "core.recorder",
+        "core.parallel_processing", "core.parallel_utils",
+        "gui", "gui.modern_gui", "gui.legacy_gui",
+        "i18n", "i18n.localization",
+        "infra", "infra.logger", "infra.resource_helper", "infra.get_version",
+        "updater", "updater.update_checker", "updater.updater_core",
+        "impulcifer",
     ]
 
     for module in common_modules:
         nuitka_cmd_args.append(f"--include-module={module}")
 
     # 데이터 디렉토리 포함
-    data_dirs = ["data", "font", "img", "locales"]
+    data_dirs = ["data", "font", "img"]
     for data_dir in data_dirs:
         if os.path.exists(data_dir):
             nuitka_cmd_args.append(f"--include-data-dir={data_dir}={data_dir}")
+
+    # i18n/locales directory (localization data)
+    if os.path.exists("i18n/locales"):
+        nuitka_cmd_args.append("--include-data-dir=i18n/locales=i18n/locales")
 
     # LICENSE 파일 포함
     if os.path.exists("LICENSE"):

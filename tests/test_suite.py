@@ -13,13 +13,13 @@ from pathlib import Path
 
 # 테스트 대상 모듈 임포트
 try:
-    from microphone_deviation_correction import MicrophoneDeviationCorrector
-    from impulse_response import ImpulseResponse
+    from core.microphone_deviation_correction import MicrophoneDeviationCorrector
+    from core.impulse_response import ImpulseResponse
 except ImportError:
-    # 패키지가 설치되지 않은 경우 현재 디렉토리에서 임포트
-    sys.path.insert(0, str(Path(__file__).parent))
-    from microphone_deviation_correction import MicrophoneDeviationCorrector
-    from impulse_response import ImpulseResponse
+    # 패키지가 설치되지 않은 경우 프로젝트 루트를 경로에 추가
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from core.microphone_deviation_correction import MicrophoneDeviationCorrector
+    from core.impulse_response import ImpulseResponse
 
 
 class TestMicrophoneDeviationCorrector:

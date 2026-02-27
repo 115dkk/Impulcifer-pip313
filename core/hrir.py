@@ -11,9 +11,9 @@ from scipy.fft import fft, next_fast_len
 from scipy.interpolate import InterpolatedUnivariateSpline
 from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
-from impulse_response import ImpulseResponse
-from utils import read_wav, write_wav, magnitude_response, sync_axes
-from constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER
+from core.impulse_response import ImpulseResponse
+from core.utils import read_wav, write_wav, magnitude_response, sync_axes
+from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER
 
 # Bokeh imports
 from bokeh.plotting import figure
@@ -23,7 +23,7 @@ from bokeh.layouts import gridplot
 
 # Python 3.14 병렬 처리 지원
 try:
-    from parallel_processing import parallel_process_dict, is_free_threaded_available
+    from core.parallel_processing import parallel_process_dict, is_free_threaded_available
 
     PARALLEL_PROCESSING_AVAILABLE = True
 except ImportError:
@@ -883,7 +883,7 @@ class HRIR:
         Returns:
             dict: 각 스피커별 분석 결과
         """
-        from microphone_deviation_correction import (
+        from core.microphone_deviation_correction import (
             apply_microphone_deviation_correction_to_hrir,
         )
 

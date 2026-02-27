@@ -7,7 +7,7 @@ Python 3.9+ 호환
 import unittest
 import time
 import sys
-from parallel_processing import (
+from core.parallel_processing import (
     parallel_map,
     parallel_process_dict,
     get_optimal_worker_count,

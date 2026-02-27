@@ -328,7 +328,7 @@ def get_truehd_channel_info(file_path):
         stream.get('channel_layout', '')
         
         # Map channel layouts to speaker names
-        from constants import CHANNEL_LAYOUT_MAP
+        from core.constants import CHANNEL_LAYOUT_MAP
         
         if channels in CHANNEL_LAYOUT_MAP:
             return CHANNEL_LAYOUT_MAP[channels]

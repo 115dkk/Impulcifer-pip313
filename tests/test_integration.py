@@ -8,8 +8,8 @@
 
 import numpy as np
 import os
-from hrir import HRIR
-from impulse_response import ImpulseResponse
+from core.hrir import HRIR
+from core.impulse_response import ImpulseResponse
 
 
 def create_test_hrir():

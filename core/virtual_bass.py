@@ -9,7 +9,7 @@ import numpy as np
 from scipy.signal import butter, sosfilt, minimum_phase, sosfilt_zi
 from typing import Optional
 
-from logger import get_logger
+from infra.logger import get_logger
 
 # ---------------------------------------------------------------------------
 # Speaker classification constants (DO NOT MODIFY)

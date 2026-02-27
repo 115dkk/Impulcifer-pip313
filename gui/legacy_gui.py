@@ -24,7 +24,7 @@ def main_gui():
     )
     from tkinter.filedialog import askdirectory, askopenfilename, asksaveasfilename
     from tkinter.messagebox import showinfo, showerror
-    import recorder
+    import core.recorder as recorder
     import impulcifer
     import sounddevice
     import platform
@@ -561,7 +561,7 @@ def main_gui():
         # Extract expected speakers from record filename
         try:
             import re
-            from constants import SPEAKER_LIST_PATTERN
+            from core.constants import SPEAKER_LIST_PATTERN
 
             filename = os.path.basename(record_file)
             match = re.search(SPEAKER_LIST_PATTERN, filename)
