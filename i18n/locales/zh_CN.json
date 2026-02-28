@@ -18,7 +18,7 @@
   "label_force_channels": "Force Channels:",
   "message_using_default_recording": "Using default 2-channel recording.",
   "checkbox_append_to_file": "Append to existing file (silence will be added to equalize track lengths)",
-  "button_start_recording": "🎙️ 开始录音",
+  "button_start_recording": "🔴 开始录音",
   "button_start_recording_active": "🔴 RECORDING...",
   "section_input_files": "输入文件",
   "label_your_recordings": "您的录音:",
