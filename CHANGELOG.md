@@ -4,6 +4,18 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.4 - 2026-02-28
+### Virtual Bass ITD 반영
+- Virtual Bass: ITD(Interaural Time Difference) 반영 로직 추가. 합성된 bass IR에 원본 HRIR의 좌우 귀 도달 시간차를 보존하도록 개선.
+
+### Import 정리
+- `impulcifer.py`: 누락된 `importlib.resources`, `matplotlib.font_manager` import 추가
+- `core/channel_generation.py`: ImpulseResponse를 올바른 소스 모듈에서 import하도록 수정
+- `research/` 전체(10개 파일 + 1 notebook): `sys.path` 경로 수정 및 패키지 접두사 적용
+
+## 2.4.3 - 2026-02-28
+### Import 정리 및 경로 수정 (중간 릴리스)
+
 ## 2.4.2 - 2026-02-27
 ### 📁 프로젝트 구조 재편
 루트에 평면적으로 나열되어 있던 모듈들을 논리적 패키지 구조로 재편했습니다.

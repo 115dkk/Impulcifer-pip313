@@ -232,8 +232,19 @@ def synthesize_virtual_bass(
     dummy_len = None
     freq_idx = None
 
+    head_samples = int(head_ms * fs / 1000.0)
+
     for speaker, pair in irs.items():
         speaker_class = _classify_speaker(speaker)
+
+        # --- Compute ITD from the original IR peaks (before any processing) ---
+        has_left = 'left' in pair
+        has_right = 'right' in pair
+        itd_samples = 0
+        if has_left and has_right:
+            peak_left = np.argmax(np.abs(pair['left'].data))
+            peak_right = np.argmax(np.abs(pair['right'].data))
+            itd_samples = peak_right - peak_left  # positive = left ear first
 
         for side in ('left', 'right'):
             if side not in pair:
@@ -309,13 +320,25 @@ def synthesize_virtual_bass(
             # --- Step 8: Apply ILD shelf ---
             ir_bass = _apply_ild_shelf(ir_bass, shelf_info, side, speaker_class)
 
-            # --- Step 9: Align bass onset with head_ms ---
-            head_samples = int(head_ms * fs / 1000.0)
-            # Find the peak of the bass signal
+            # --- Step 9: Align bass onset with ITD-aware delay ---
+            # Ipsilateral ear (closer to source) gets base delay;
+            # contralateral ear gets base delay + ITD offset.
+            if speaker_class == 'center':
+                target_delay = head_samples
+            elif speaker_class == 'left':
+                if side == 'left':
+                    target_delay = head_samples                      # ipsilateral
+                else:
+                    target_delay = head_samples + abs(itd_samples)   # contralateral
+            else:  # speaker_class == 'right'
+                if side == 'right':
+                    target_delay = head_samples                      # ipsilateral
+                else:
+                    target_delay = head_samples + abs(itd_samples)   # contralateral
+
             bass_peak_idx = np.argmax(np.abs(ir_bass))
-            if bass_peak_idx > head_samples:
-                shift_amount = head_samples - bass_peak_idx
-                ir_bass = _shift(ir_bass, shift_amount)
+            shift_amount = target_delay - bass_peak_idx
+            ir_bass = _shift(ir_bass, shift_amount)
 
             # --- Step 10: Combine high-passed original + synthesized bass ---
             combined = ir_hp + ir_bass[:len(ir_hp)]
