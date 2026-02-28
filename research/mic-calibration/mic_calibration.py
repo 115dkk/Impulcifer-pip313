@@ -8,10 +8,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 from autoeq.frequency_response import FrequencyResponse
-sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
-from impulse_response_estimator import ImpulseResponseEstimator
-from hrir import HRIR
-from utils import optimize_png_size
+sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
+from core.impulse_response_estimator import ImpulseResponseEstimator
+from core.hrir import HRIR
+from core.utils import optimize_png_size
 
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))

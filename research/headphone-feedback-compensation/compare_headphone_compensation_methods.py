@@ -5,11 +5,11 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from autoeq.frequency_response import FrequencyResponse
-sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
-from impulse_response_estimator import ImpulseResponseEstimator
-from hrir import HRIR
-from utils import sync_axes, save_fig_as_png, config_fr_axis
-from constants import COLORS
+sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
+from core.impulse_response_estimator import ImpulseResponseEstimator
+from core.hrir import HRIR
+from core.utils import sync_axes, save_fig_as_png, config_fr_axis
+from core.constants import COLORS
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl')

@@ -38,7 +38,7 @@ def generate_missing_channels(hrir, auto_generate_config):
                             mixed_data += src_data
                     
                     # 새 IR 객체 생성
-                    from core.hrir import ImpulseResponse
+                    from core.impulse_response import ImpulseResponse
                     new_ir = ImpulseResponse(mixed_data, hrir.fs)
                     hrir.irs[channel_name][side] = new_ir
                 

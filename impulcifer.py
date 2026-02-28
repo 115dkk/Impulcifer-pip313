@@ -36,7 +36,7 @@ def _get_version() -> str:
             pass
 
     # Fallback
-    return "2.4.2"
+    return "2.4.3"
 
 __version__ = _get_version()
 
@@ -48,6 +48,8 @@ from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+import matplotlib.font_manager as fm
+import importlib.resources
 from autoeq.frequency_response import FrequencyResponse
 from core.impulse_response_estimator import ImpulseResponseEstimator
 from core.hrir import HRIR, _get_center_value

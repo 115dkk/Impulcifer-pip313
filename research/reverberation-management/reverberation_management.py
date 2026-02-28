@@ -8,8 +8,8 @@ from scipy import signal
 from scipy.signal.windows import hann
 import matplotlib.pyplot as plt
 sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
-from utils import read_wav, write_wav
-from constants import HEXADECAGONAL_TRACK_ORDER, HESUVI_TRACK_ORDER, SPEAKER_NAMES
+from core.utils import read_wav, write_wav
+from core.constants import HEXADECAGONAL_TRACK_ORDER, HESUVI_TRACK_ORDER, SPEAKER_NAMES
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 
