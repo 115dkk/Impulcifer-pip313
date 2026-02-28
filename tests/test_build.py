@@ -6,11 +6,12 @@ Impulcifer 빌드 테스트 스크립트
 import os
 import subprocess
 import time
+import pytest
 
 def test_executable():
     """실행 파일 테스트"""
     print("=== Impulcifer 빌드 테스트 ===\n")
-    
+
     # 가능한 실행 파일 위치들
     possible_paths = [
         "ImpulciferGUI.exe",
@@ -19,17 +20,15 @@ def test_executable():
         "dist/gui_main.dist/ImpulciferGUI.exe",
         "gui_main.exe",
     ]
-    
+
     exe_path = None
     for path in possible_paths:
         if os.path.exists(path):
             exe_path = path
             break
-    
+
     if not exe_path:
-        print("✗ 실행 파일을 찾을 수 없습니다.")
-        print("  먼저 build_nuitka.py를 실행하여 빌드하세요.")
-        assert False, "실행 파일을 찾을 수 없습니다"
+        pytest.skip("실행 파일을 찾을 수 없습니다. 먼저 build_nuitka.py를 실행하여 빌드하세요.")
     
     print(f"✓ 실행 파일 발견: {exe_path}")
     

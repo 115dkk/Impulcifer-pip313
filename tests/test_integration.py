@@ -97,17 +97,13 @@ def test_microphone_deviation_integration():
         )
         
         print("보정 성공!")
-        
+
         # 결과 분석
         print("\n분석 결과:")
-        for speaker, results in analysis_results.items():
-            print(f"  {speaker} 스피커:")
-            if results.get('correction_applied', False):
-                print("    - 보정 적용됨")
-                print(f"    - 평균 편차: {results.get('avg_deviation_db', 0):.2f} dB")
-                print(f"    - 최대 편차: {results.get('max_deviation_db', 0):.2f} dB")
-            else:
-                print("    - 보정 건너뜀 (편차 미미)")
+        print(f"  평균 보정량: {analysis_results.get('avg_error_db', 0):.2f} dB")
+        print(f"  최대 보정량: {analysis_results.get('max_error_db', 0):.2f} dB")
+        print(f"  처리된 스피커: {analysis_results.get('speakers_processed', [])}")
+        print(f"  교차검증 사용: {analysis_results.get('v3_cross_validation', False)}")
         
         # 데이터 변경 확인
         print("\n데이터 변경 확인:")
