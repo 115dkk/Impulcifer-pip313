@@ -5,11 +5,11 @@ import sys
 from glob import glob
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
+sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
 from impulcifer import headphone_compensation
-from impulse_response_estimator import ImpulseResponseEstimator
-from impulse_response import ImpulseResponse
-from utils import read_wav, optimize_png_size, sync_axes
+from core.impulse_response_estimator import ImpulseResponseEstimator
+from core.impulse_response import ImpulseResponse
+from core.utils import read_wav, optimize_png_size, sync_axes
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 

@@ -4,8 +4,8 @@ import os
 import sys
 import matplotlib.pyplot as plt
 from autoeq.frequency_response import FrequencyResponse
-sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
-from utils import optimize_png_size
+sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
+from core.utils import optimize_png_size
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 
