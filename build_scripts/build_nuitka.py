@@ -16,11 +16,10 @@ print("build_nuitka.py: Module level - imports done.", flush=True)
 
 def get_project_version():
     print("build_nuitka.py: get_project_version() called", flush=True)
-    """get_version.py를 실행하여 프로젝트 버전 가져오기"""
+    """infra/get_version.py를 실행하여 프로젝트 버전 가져오기"""
     try:
-        # get_version.py가 프로젝트 루트에 있다고 가정
         result = subprocess.run(
-            [sys.executable, "get_version.py"],
+            [sys.executable, "infra/get_version.py"],
             capture_output=True, text=True, check=True, encoding='utf-8')
         version = result.stdout.strip()
         if not version:
@@ -253,8 +252,8 @@ def main():
 \"\"\"Impulcifer Modern GUI 엔트리 포인트\"\"\"
 
 if __name__ == "__main__":
-    import modern_gui
-    modern_gui.main_gui()
+    from gui.modern_gui import main_gui
+    main_gui()
 """)
 
     if build_impulcifer(project_version=current_version, output_base_dir="dist"):

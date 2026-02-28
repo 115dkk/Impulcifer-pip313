@@ -197,26 +197,26 @@ jobs:
             --include-module=seaborn \
             --include-module=bokeh \
             --include-module=autoeq \
-            --include-module=modern_gui \
-            --include-module=gui \
-            --include-module=localization \
-            --include-module=logger \
-            --include-module=channel_generation \
-            --include-module=update_checker \
-            --include-module=updater \
-            --include-module=recorder \
+            --include-module=gui.modern_gui \
+            --include-package=gui \
+            --include-module=i18n.localization \
+            --include-module=infra.logger \
+            --include-module=core.channel_generation \
+            --include-module=updater.update_checker \
+            --include-package=updater \
+            --include-module=core.recorder \
             --include-module=impulcifer \
-            --include-module=hrir \
-            --include-module=impulse_response \
-            --include-module=impulse_response_estimator \
-            --include-module=room_correction \
-            --include-module=microphone_deviation_correction \
-            --include-module=utils \
-            --include-module=constants \
+            --include-module=core.hrir \
+            --include-module=core.impulse_response \
+            --include-module=core.impulse_response_estimator \
+            --include-module=core.room_correction \
+            --include-module=core.microphone_deviation_correction \
+            --include-module=core.utils \
+            --include-module=core.constants \
             --include-data-dir=data=data \
             --include-data-dir=font=font \
             --include-data-dir=img=img \
-            --include-data-dir=locales=locales \
+            --include-data-dir=i18n/locales=locales \
             --include-data-file=LICENSE=License.txt \
             --include-data-file=README.txt=README.txt \
             --output-filename=Impulcifer \
@@ -376,26 +376,26 @@ jobs:
             --include-module=seaborn \
             --include-module=bokeh \
             --include-module=autoeq \
-            --include-module=modern_gui \
-            --include-module=gui \
-            --include-module=localization \
-            --include-module=logger \
-            --include-module=channel_generation \
-            --include-module=update_checker \
-            --include-module=updater \
-            --include-module=recorder \
+            --include-module=gui.modern_gui \
+            --include-package=gui \
+            --include-module=i18n.localization \
+            --include-module=infra.logger \
+            --include-module=core.channel_generation \
+            --include-module=updater.update_checker \
+            --include-package=updater \
+            --include-module=core.recorder \
             --include-module=impulcifer \
-            --include-module=hrir \
-            --include-module=impulse_response \
-            --include-module=impulse_response_estimator \
-            --include-module=room_correction \
-            --include-module=microphone_deviation_correction \
-            --include-module=utils \
-            --include-module=constants \
+            --include-module=core.hrir \
+            --include-module=core.impulse_response \
+            --include-module=core.impulse_response_estimator \
+            --include-module=core.room_correction \
+            --include-module=core.microphone_deviation_correction \
+            --include-module=core.utils \
+            --include-module=core.constants \
             --include-data-dir=data=data \
             --include-data-dir=font=font \
             --include-data-dir=img=img \
-            --include-data-dir=locales=locales \
+            --include-data-dir=i18n/locales=locales \
             --include-data-file=LICENSE=License.txt \
             --include-data-file=README.txt=README.txt \
             --output-filename=Impulcifer \
