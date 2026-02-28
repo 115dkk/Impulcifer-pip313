@@ -77,8 +77,7 @@ jobs:
 
       - name: Read project version and set APP_VERSION
         run: |
-          python get_version.py
-          APP_VERSION=$(python get_version.py)
+          APP_VERSION=$(python infra/get_version.py)
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
           echo "Building version: $APP_VERSION"
 
