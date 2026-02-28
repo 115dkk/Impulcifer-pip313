@@ -63,8 +63,7 @@ jobs:
 
       - name: Read project version and set APP_VERSION
         run: |
-          python get_version.py
-          APP_VERSION=$(python get_version.py)
+          APP_VERSION=$(python infra/get_version.py)
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
           echo "Building version: $APP_VERSION"
         shell: bash
@@ -72,7 +71,7 @@ jobs:
       - name: Run Nuitka build using build_nuitka.py
         run: |
           echo "[2/3] Starting optimized Nuitka build for Windows..."
-          python build_nuitka.py
+          python build_scripts/build_nuitka.py
           echo "NUITKA_OUTPUT_DIR=${{ github.workspace }}\dist\Impulcifer_Distribution\ImpulciferGUI" >> $GITHUB_ENV
           echo "PROJECT_ROOT_FOR_ISS=${{ github.workspace }}" >> $GITHUB_ENV
           echo "ISS_PATH=${{ github.workspace }}\.github\workflows\Output" >> $GITHUB_ENV
@@ -167,7 +166,7 @@ jobs:
 
       - name: Read project version
         run: |
-          APP_VERSION=$(python get_version.py)
+          APP_VERSION=$(python infra/get_version.py)
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
 
       - name: Run Nuitka build for macOS
@@ -348,7 +347,7 @@ jobs:
 
       - name: Read project version
         run: |
-          APP_VERSION=$(python get_version.py)
+          APP_VERSION=$(python infra/get_version.py)
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
 
       - name: Run Nuitka build for Linux
@@ -604,7 +603,7 @@ jobs:
 
       - name: Get version
         run: |
-          APP_VERSION=$(python get_version.py)
+          APP_VERSION=$(python infra/get_version.py)
           echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
           echo "Version: $APP_VERSION"
 
