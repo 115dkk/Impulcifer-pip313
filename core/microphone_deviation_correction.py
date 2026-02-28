@@ -372,16 +372,20 @@ class CrossValidatedMicrophoneCorrector:
         # FrequencyResponse 객체로 FIR 생성
         # 왼쪽에는 -correction/2, 오른쪽에는 +correction/2 적용
         # (총 correction만큼 상대적 차이 보정)
+        left_correction = -correction_curve / 2
+        right_correction = correction_curve / 2
         left_fr = FrequencyResponse(
             name='left_mic_correction',
             frequency=frequencies.copy(),
-            raw=-correction_curve / 2
+            raw=left_correction
         )
+        left_fr.equalization = left_correction.copy()
         right_fr = FrequencyResponse(
             name='right_mic_correction',
             frequency=frequencies.copy(),
-            raw=correction_curve / 2
+            raw=right_correction
         )
+        right_fr.equalization = right_correction.copy()
 
         # 최소 위상 FIR 생성 (크기만 보정하므로 minimum_phase 사용이 적절함)
         try:
@@ -439,9 +443,9 @@ class MicrophoneDeviationCorrector(CrossValidatedMicrophoneCorrector):
                  correction_strength=0.7,
                  smoothing_window=1/3,
                  max_correction_db=6.0,
-                 enable_phase_correction=True,  # 무시됨 (v3.0에서 제거)
-                 enable_adaptive_correction=True,  # 무시됨 (v3.0에서 제거)
-                 enable_anatomical_validation=True,  # 무시됨 (v3.0에서 통합)
+                 enable_phase_correction=False,  # 무시됨 (v3.0에서 제거)
+                 enable_adaptive_correction=False,  # 무시됨 (v3.0에서 제거)
+                 enable_anatomical_validation=False,  # 무시됨 (v3.0에서 통합)
                  itd_range_ms=(-0.7, 0.7),  # 무시됨
                  head_radius_cm=8.75):  # 무시됨
         """
@@ -626,9 +630,9 @@ class MicrophoneDeviationCorrector(CrossValidatedMicrophoneCorrector):
 
 def apply_microphone_deviation_correction_to_hrir(hrir,
                                                   correction_strength=0.7,
-                                                  enable_phase_correction=True,  # 무시됨
-                                                  enable_adaptive_correction=True,  # 무시됨
-                                                  enable_anatomical_validation=True,  # 무시됨
+                                                  enable_phase_correction=False,  # 무시됨
+                                                  enable_adaptive_correction=False,  # 무시됨
+                                                  enable_anatomical_validation=False,  # 무시됨
                                                   plot_analysis=False,
                                                   plot_dir=None):
     """

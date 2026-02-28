@@ -853,9 +853,9 @@ class HRIR:
     def correct_microphone_deviation(
         self,
         correction_strength=0.7,
-        enable_phase_correction=True,
-        enable_adaptive_correction=True,
-        enable_anatomical_validation=True,
+        enable_phase_correction=False,
+        enable_adaptive_correction=False,
+        enable_anatomical_validation=False,
         plot_analysis=False,
         plot_dir=None,
     ):

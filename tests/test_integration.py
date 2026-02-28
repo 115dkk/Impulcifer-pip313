@@ -118,19 +118,16 @@ def test_microphone_deviation_integration():
         
         print(f"\n테스트 결과가 '{test_output_dir}' 디렉토리에 저장되었습니다.")
         print("통합 테스트 완료!")
-        
-        return True
-        
+
     except Exception as e:
-        print(f"테스트 실패: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"테스트 실패: {e}"
 
 
 if __name__ == "__main__":
-    success = test_microphone_deviation_integration()
-    if success:
+    try:
+        test_microphone_deviation_integration()
         print("\n✅ 모든 테스트 통과!")
-    else:
+    except AssertionError:
         print("\n❌ 테스트 실패!") 
