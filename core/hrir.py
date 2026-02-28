@@ -907,40 +907,15 @@ class HRIR:
             plot_dir=mic_deviation_plot_dir,
         )
 
-        # 보정 결과 요약 출력
-        if analysis_results:
-            corrected_speakers = []
-            skipped_speakers = []
-            total_deviations = []
-
-            for speaker, results in analysis_results.items():
-                if results.get("correction_applied", False):
-                    corrected_speakers.append(speaker)
-                    if "avg_deviation_db" in results:
-                        total_deviations.append(results["avg_deviation_db"])
-                else:
-                    skipped_speakers.append(speaker)
+        # 보정 결과 요약 출력 (v3.0 flat summary dict)
+        if analysis_results and not analysis_results.get('error'):
+            speakers_processed = analysis_results.get('speakers_processed', [])
+            avg_error = analysis_results.get('avg_error_db', 0)
+            max_error = analysis_results.get('max_error_db', 0)
 
             print("마이크 편차 보정 완료:")
-            print(
-                f"  - 보정 적용: {len(corrected_speakers)}개 스피커 ({', '.join(corrected_speakers)})"
-            )
-            if skipped_speakers:
-                print(
-                    f"  - 보정 건너뜀: {len(skipped_speakers)}개 스피커 ({', '.join(skipped_speakers)}) - 유의미한 편차 없음"
-                )
-
-            if total_deviations:
-                avg_deviation = np.mean(total_deviations)
-                max_deviation = max(
-                    [
-                        results.get("max_deviation_db", 0)
-                        for results in analysis_results.values()
-                    ]
-                )
-                print(
-                    f"  - 평균 편차: {avg_deviation:.2f} dB, 최대 편차: {max_deviation:.2f} dB"
-                )
+            print(f"  - 처리된 스피커: {len(speakers_processed)}개 ({', '.join(speakers_processed)})")
+            print(f"  - 평균 보정량: {avg_error:.2f} dB, 최대 보정량: {max_error:.2f} dB")
         else:
             print("마이크 편차 보정: 처리된 스피커가 없습니다.")
 
