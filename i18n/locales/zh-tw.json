@@ -208,5 +208,11 @@
   "vbass_status_complete": "虛擬低音合成完成",
   "vbass_status_skipped": "虛擬低音已略過（已停用）",
   "vbass_warning_high_crossover": "分頻頻率 {freq} Hz 異常偏高。建議範圍：100\u2013300 Hz",
-  "vbass_error_sr_limit": "分頻頻率超出取樣率限制。虛擬低音已停用。"
+  "vbass_error_sr_limit": "分頻頻率超出取樣率限制。虛擬低音已停用。",
+
+  "tab_info": "ℹ️ 資訊",
+  "section_about": "關於",
+  "label_version": "版本：",
+  "button_view_license": "查看授權條款",
+  "button_report_bug": "回報錯誤"
 }

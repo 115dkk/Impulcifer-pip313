@@ -208,5 +208,11 @@
   "vbass_status_complete": "Virtuelle Bass-Synthese abgeschlossen",
   "vbass_status_skipped": "Virtueller Bass übersprungen (deaktiviert)",
   "vbass_warning_high_crossover": "Übergangsfrequenz {freq} Hz ist ungewöhnlich hoch. Empfohlener Bereich: 100\u2013300 Hz",
-  "vbass_error_sr_limit": "Übergangsfrequenz überschreitet die Abtastratenbegrenzung. Virtueller Bass deaktiviert."
+  "vbass_error_sr_limit": "Übergangsfrequenz überschreitet die Abtastratenbegrenzung. Virtueller Bass deaktiviert.",
+
+  "tab_info": "ℹ️ Info",
+  "section_about": "Über",
+  "label_version": "Version:",
+  "button_view_license": "Lizenz anzeigen",
+  "button_report_bug": "Fehler melden"
 }

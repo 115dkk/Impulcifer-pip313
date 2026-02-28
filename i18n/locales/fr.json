@@ -208,5 +208,11 @@
   "vbass_status_complete": "Synthèse de basse virtuelle terminée",
   "vbass_status_skipped": "Basse virtuelle ignorée (désactivée)",
   "vbass_warning_high_crossover": "La fréquence de coupure {freq} Hz est anormalement élevée. Plage recommandée : 100\u2013300 Hz",
-  "vbass_error_sr_limit": "La fréquence de coupure dépasse la limite du taux d'échantillonnage. Basse virtuelle désactivée."
+  "vbass_error_sr_limit": "La fréquence de coupure dépasse la limite du taux d'échantillonnage. Basse virtuelle désactivée.",
+
+  "tab_info": "ℹ️ Info",
+  "section_about": "À propos",
+  "label_version": "Version :",
+  "button_view_license": "Voir la licence",
+  "button_report_bug": "Signaler un bug"
 }

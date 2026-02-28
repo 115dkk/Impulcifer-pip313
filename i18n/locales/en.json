@@ -235,5 +235,11 @@
   "vbass_status_complete": "Virtual bass synthesis complete",
   "vbass_status_skipped": "Virtual bass skipped (disabled)",
   "vbass_warning_high_crossover": "Crossover frequency {freq} Hz is unusually high. Recommended range: 100\u2013300 Hz",
-  "vbass_error_sr_limit": "Crossover frequency exceeds sample rate limit. Virtual bass disabled."
+  "vbass_error_sr_limit": "Crossover frequency exceeds sample rate limit. Virtual bass disabled.",
+
+  "tab_info": "ℹ️ Info",
+  "section_about": "About",
+  "label_version": "Version:",
+  "button_view_license": "View License",
+  "button_report_bug": "Report a Bug"
 }

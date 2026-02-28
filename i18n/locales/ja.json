@@ -208,5 +208,11 @@
   "vbass_status_complete": "バーチャルベース合成完了",
   "vbass_status_skipped": "バーチャルベースをスキップ（無効化中）",
   "vbass_warning_high_crossover": "クロスオーバー周波数 {freq} Hzが異常に高いです。推奨範囲: 100\u2013300 Hz",
-  "vbass_error_sr_limit": "クロスオーバー周波数がサンプルレート上限を超えました。バーチャルベースを無効化します。"
+  "vbass_error_sr_limit": "クロスオーバー周波数がサンプルレート上限を超えました。バーチャルベースを無効化します。",
+
+  "tab_info": "ℹ️ 情報",
+  "section_about": "概要",
+  "label_version": "バージョン:",
+  "button_view_license": "ライセンスを表示",
+  "button_report_bug": "バグを報告"
 }

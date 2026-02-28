@@ -11,6 +11,7 @@ import shutil
 import sys
 import platform
 import threading
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, TclError
 from tkinter import font as tkfont
@@ -725,6 +726,9 @@ class ModernImpulciferGUI:
         # Create UI Settings tab
         self.create_ui_settings_tab()
 
+        # Create Info tab
+        self.create_info_tab()
+
     def create_header(self):
         """Create header with app title and theme toggle"""
         header = ctk.CTkFrame(self.root, corner_radius=0, height=60)
@@ -771,6 +775,7 @@ class ModernImpulciferGUI:
         self.tabview.add(self.loc.get('tab_recorder'))
         self.tabview.add(self.loc.get('tab_impulcifer'))
         self.tabview.add(self.loc.get('tab_ui_settings'))
+        self.tabview.add(self.loc.get('tab_info'))
 
         # Set default tab
         self.tabview.set(self.loc.get('tab_recorder'))
@@ -2058,6 +2063,70 @@ class ModernImpulciferGUI:
             width=200
         )
         open_folder_btn.grid(row=2, column=0, sticky="w", padx=15, pady=(0, 15))
+
+    def create_info_tab(self):
+        """Create Info tab with version, license, and bug report"""
+        tab = self.tabview.tab(self.loc.get('tab_info'))
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
+
+        # Create scrollable frame
+        scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
+        scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        scroll.grid_columnconfigure(0, weight=1)
+
+        row = 0
+
+        # === About Section ===
+        about_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        about_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        about_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        ctk.CTkLabel(
+            about_frame,
+            text=self.loc.get('section_about'),
+            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        # Version
+        ctk.CTkLabel(
+            about_frame,
+            text=self.loc.get('label_version'),
+            font=ctk.CTkFont(family=self.font_family, size=13)
+        ).grid(row=1, column=0, sticky="w", padx=15, pady=5)
+
+        ctk.CTkLabel(
+            about_frame,
+            text=impulcifer.__version__,
+            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold")
+        ).grid(row=1, column=1, sticky="w", padx=5, pady=5)
+
+        # License button
+        def open_license():
+            license_path = Path(__file__).parent.parent / 'LICENSE'
+            if license_path.exists():
+                if platform.system() == 'Windows':
+                    os.startfile(license_path)
+                elif platform.system() == 'Darwin':
+                    os.system(f'open "{license_path}"')
+                else:
+                    os.system(f'xdg-open "{license_path}"')
+
+        ctk.CTkButton(
+            about_frame,
+            text=self.loc.get('button_view_license'),
+            command=open_license,
+            width=200
+        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=15, pady=(10, 5))
+
+        # Bug report button
+        ctk.CTkButton(
+            about_frame,
+            text=self.loc.get('button_report_bug'),
+            command=lambda: webbrowser.open("https://github.com/115dkk/Impulcifer-pip313/issues/new"),
+            width=200
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
 
     def change_language(self, language_name):
         """Change application language"""

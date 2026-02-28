@@ -208,5 +208,11 @@
   "vbass_status_complete": "虚拟低音合成完成",
   "vbass_status_skipped": "虚拟低音已跳过（已禁用）",
   "vbass_warning_high_crossover": "分频频率 {freq} Hz 异常偏高。建议范围：100\u2013300 Hz",
-  "vbass_error_sr_limit": "分频频率超出采样率限制。虚拟低音已禁用。"
+  "vbass_error_sr_limit": "分频频率超出采样率限制。虚拟低音已禁用。",
+
+  "tab_info": "ℹ️ 信息",
+  "section_about": "关于",
+  "label_version": "版本：",
+  "button_view_license": "查看许可证",
+  "button_report_bug": "报告错误"
 }

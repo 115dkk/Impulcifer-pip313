@@ -208,5 +208,11 @@
   "vbass_status_complete": "Síntesis de bajo virtual completada",
   "vbass_status_skipped": "Bajo virtual omitido (desactivado)",
   "vbass_warning_high_crossover": "La frecuencia de cruce {freq} Hz es inusualmente alta. Rango recomendado: 100\u2013300 Hz",
-  "vbass_error_sr_limit": "La frecuencia de cruce excede el límite de frecuencia de muestreo. Bajo virtual desactivado."
+  "vbass_error_sr_limit": "La frecuencia de cruce excede el límite de frecuencia de muestreo. Bajo virtual desactivado.",
+
+  "tab_info": "ℹ️ Info",
+  "section_about": "Acerca de",
+  "label_version": "Versión:",
+  "button_view_license": "Ver licencia",
+  "button_report_bug": "Reportar un error"
 }

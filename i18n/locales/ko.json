@@ -235,5 +235,11 @@
   "vbass_status_complete": "가상 베이스 합성 완료",
   "vbass_status_skipped": "가상 베이스 건너뜀 (비활성화)",
   "vbass_warning_high_crossover": "크로스오버 주파수 {freq} Hz가 비정상적으로 높습니다. 권장 범위: 100\u2013300 Hz",
-  "vbass_error_sr_limit": "크로스오버 주파수가 샘플레이트 한계를 초과했습니다. 가상 베이스를 비활성화합니다."
+  "vbass_error_sr_limit": "크로스오버 주파수가 샘플레이트 한계를 초과했습니다. 가상 베이스를 비활성화합니다.",
+
+  "tab_info": "ℹ️ 정보",
+  "section_about": "소개",
+  "label_version": "버전:",
+  "button_view_license": "라이선스 보기",
+  "button_report_bug": "버그 제보"
 }
