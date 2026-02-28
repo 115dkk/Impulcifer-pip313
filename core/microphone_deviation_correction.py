@@ -22,6 +22,7 @@ from scipy import signal
 from scipy.fft import fft, fftfreq
 from scipy.interpolate import interp1d
 from autoeq.frequency_response import FrequencyResponse
+from core.utils import set_matplotlib_font
 import warnings
 
 
@@ -554,6 +555,7 @@ class MicrophoneDeviationCorrector(CrossValidatedMicrophoneCorrector):
                                corrected_left, corrected_right,
                                analysis_results, plot_dir):
         """분석 결과 플롯 생성"""
+        set_matplotlib_font()
         os.makedirs(plot_dir, exist_ok=True)
 
         # 1. 편차 분석 결과 플롯
@@ -784,6 +786,7 @@ def _apply_single_speaker_fallback(hrir, corrector, speaker_data, plot_analysis,
 
 def _plot_cross_validation_results(corrector, plot_dir):
     """교차검증 결과 플롯 생성"""
+    set_matplotlib_font()
     os.makedirs(plot_dir, exist_ok=True)
 
     fig, axes = plt.subplots(2, 1, figsize=(14, 10))

@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 from core.microphone_deviation_correction import MicrophoneDeviationCorrector
+from core.utils import set_matplotlib_font
 import os
 
 
@@ -124,6 +125,7 @@ def test_microphone_deviation_correction():
         print(f"  {freq} Hz: {gate_len} 샘플 ({gate_len/fs*1000:.2f} ms)")
     
     # 간단한 비교 플롯 생성
+    set_matplotlib_font()
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
     
     # 시간 축

@@ -58,6 +58,7 @@ from core.utils import (
     is_truehd_file,
     convert_truehd_to_wav,
     check_ffmpeg_available,
+    set_matplotlib_font,
 )
 from core.constants import (
     SPEAKER_NAMES,
@@ -89,11 +90,6 @@ from bokeh.plotting import (
     save as bokeh_save,
 )  # 중복 방지
 
-# 한글 폰트 설정 추가
-import matplotlib.font_manager as fm
-import platform
-import importlib.resources  # 패키지 리소스 접근을 위해 추가
-
 # Python 3.14 병렬 처리 지원
 try:
     from core.parallel_processing import parallel_process_dict, is_free_threaded_available
@@ -105,142 +101,6 @@ except ImportError:
 
     def is_free_threaded_available():
         return False
-
-
-# 운영체제별 기본 폰트 설정
-def set_matplotlib_font():
-    system = platform.system()
-    font_name_pretendard = "Pretendard"
-    font_loaded_pretendard = False
-
-    plt.rcParams["axes.unicode_minus"] = False  # 마이너스 부호 문제 해결
-
-    # Pretendard 폰트를 찾을 수 있는 여러 경로 시도
-    font_search_paths = []
-
-    try:
-        # 1. 패키지 내 폰트 시도
-        try:
-            # Python 3.9+ 에서는 files() 사용
-            if hasattr(importlib.resources, "files"):
-                try:
-                    # 설치된 패키지에서 시도
-                    font_resource = (
-                        importlib.resources.files("impulcifer_py313")
-                        .joinpath("font")
-                        .joinpath("Pretendard-Regular.otf")
-                    )
-                    font_search_paths.append(("bundled (files)", font_resource))
-                except (FileNotFoundError, ModuleNotFoundError):
-                    pass
-
-            # Python 3.7, 3.8 호환 (path 사용)
-            elif hasattr(importlib.resources, "path"):
-                try:
-                    font_resource = importlib.resources.path(
-                        "impulcifer_py313.font", "Pretendard-Regular.otf"
-                    )
-                    font_search_paths.append(("bundled (path)", font_resource))
-                except (FileNotFoundError, ModuleNotFoundError):
-                    pass
-        except ImportError:
-            pass
-
-        # 2. 로컬 개발 환경에서 시도
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        local_font_paths = [
-            os.path.join(script_dir, "font", "Pretendard-Regular.otf"),  # font/
-            os.path.join(script_dir, "fonts", "Pretendard-Regular.otf"),  # fonts/
-            os.path.join(
-                script_dir, "..", "font", "Pretendard-Regular.otf"
-            ),  # 상위 디렉토리
-            os.path.join(
-                script_dir, "..", "fonts", "Pretendard-Regular.otf"
-            ),  # 상위 디렉토리
-        ]
-
-        for local_path in local_font_paths:
-            if os.path.exists(local_path):
-                font_search_paths.append(("local", local_path))
-                break  # 첫 번째로 찾은 것만 사용
-
-        # 3. 시스템 전역에서 Pretendard 폰트 찾기
-        try:
-            # matplotlib의 fontManager를 사용해서 시스템에 설치된 Pretendard 찾기
-            available_fonts = [f.name for f in fm.fontManager.ttflist]
-            if "Pretendard" in available_fonts:
-                font_search_paths.append(("system", "Pretendard"))
-        except Exception:
-            pass
-
-        # 폰트 로딩 시도
-        for source_type, font_path in font_search_paths:
-            try:
-                if source_type in ["bundled (files)"]:
-                    with importlib.resources.as_file(font_path) as font_file_path:
-                        fm.fontManager.addfont(str(font_file_path))
-                        prop = fm.FontProperties(fname=str(font_file_path))
-                        font_name_pretendard = prop.get_name()
-                        plt.rcParams["font.family"] = font_name_pretendard
-                        font_loaded_pretendard = True
-                        # Font loading success (debug level, not critical)
-                        pass
-                        break
-                elif source_type in ["bundled (path)"]:
-                    with font_path as font_file_path:
-                        fm.fontManager.addfont(str(font_file_path))
-                        prop = fm.FontProperties(fname=str(font_file_path))
-                        font_name_pretendard = prop.get_name()
-                        plt.rcParams["font.family"] = font_name_pretendard
-                        font_loaded_pretendard = True
-                        # Font loading success (debug level, not critical)
-                        pass
-                        break
-                elif source_type == "local":
-                    fm.fontManager.addfont(font_path)
-                    prop = fm.FontProperties(fname=font_path)
-                    font_name_pretendard = prop.get_name()
-                    plt.rcParams["font.family"] = font_name_pretendard
-                    font_loaded_pretendard = True
-                    print(f"Pretendard 폰트 로딩 성공 ({source_type}): {font_path}")
-                    break
-                elif source_type == "system":
-                    plt.rcParams["font.family"] = "Pretendard"
-                    font_loaded_pretendard = True
-                    print(
-                        f"Pretendard 폰트 로딩 성공 ({source_type}): 시스템 설치된 폰트"
-                    )
-                    break
-            except Exception:
-                # Font loading failure (not critical, suppress message)
-                pass
-                continue
-
-    except Exception:
-        # Font search error (not critical, suppress)
-        pass
-
-    # Pretendard 로딩 실패 시 시스템 기본 폰트 사용
-    if not font_loaded_pretendard:
-        # Pretendard font not found, using system default (suppress message)
-        pass
-        if system == "Windows":
-            font_path_win = "C:/Windows/Fonts/malgun.ttf"
-            if os.path.exists(font_path_win):
-                font_prop = fm.FontProperties(fname=font_path_win)
-                plt.rcParams["font.family"] = font_prop.get_name()
-                pass  # System font loaded
-            else:
-                plt.rcParams["font.family"] = "Malgun Gothic"
-                pass  # Malgun Gothic fallback
-        elif system == "Darwin":
-            plt.rcParams["font.family"] = "AppleGothic"
-            pass  # AppleGothic
-        elif system == "Linux":
-            plt.rcParams["font.family"] = "NanumGothic"
-            pass  # NanumGothic
-        else:
-            pass  # Unknown system, using matplotlib default
 
 
 def get_pretendard_font_for_gui():
