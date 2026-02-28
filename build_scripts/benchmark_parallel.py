@@ -7,7 +7,7 @@ Python 3.14 Free-Threaded 성능 측정
 """
 
 import time
-from parallel_processing import get_python_threading_info
+from core.parallel_processing import get_python_threading_info
 
 def print_header():
     """벤치마크 헤더 출력"""
@@ -41,8 +41,8 @@ def benchmark_normalize():
     print("-" * 80)
 
     try:
-        from impulse_response_estimator import ImpulseResponseEstimator
-        from hrir import HRIR
+        from core.impulse_response_estimator import ImpulseResponseEstimator
+        from core.hrir import HRIR
         import numpy as np
 
         # 테스트 데이터 생성
@@ -52,7 +52,7 @@ def benchmark_normalize():
 
         # 16채널 테스트 데이터 (Dolby Atmos 기준)
         speakers = ['FL', 'FR', 'FC', 'SL', 'SR', 'BL', 'BR', 'TFL', 'TFR', 'TSL', 'TSR', 'TBL', 'TBR', 'WL', 'WR', 'LFE']
-        from impulse_response import ImpulseResponse
+        from core.impulse_response import ImpulseResponse
 
         for speaker in speakers[:12]:  # 12채널 테스트
             data = np.random.randn(48000)  # 1초 길이 랜덤 데이터
@@ -90,7 +90,7 @@ def benchmark_equalization():
     print("-" * 80)
 
     try:
-        from parallel_processing import parallel_process_dict
+        from core.parallel_processing import parallel_process_dict
         import numpy as np
 
         # 이퀄라이제이션 시뮬레이션 함수
@@ -161,7 +161,7 @@ def benchmark_resample():
     print("-" * 80)
 
     try:
-        from parallel_processing import parallel_process_dict
+        from core.parallel_processing import parallel_process_dict
         import numpy as np
         from scipy import signal
 

@@ -11,9 +11,9 @@ from scipy.fft import fft, next_fast_len
 from scipy.interpolate import InterpolatedUnivariateSpline
 from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
-from impulse_response import ImpulseResponse
-from utils import read_wav, write_wav, magnitude_response, sync_axes
-from constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER
+from core.impulse_response import ImpulseResponse
+from core.utils import read_wav, write_wav, magnitude_response, sync_axes
+from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER
 
 # Bokeh imports
 from bokeh.plotting import figure
@@ -23,7 +23,7 @@ from bokeh.layouts import gridplot
 
 # Python 3.14 병렬 처리 지원
 try:
-    from parallel_processing import parallel_process_dict, is_free_threaded_available
+    from core.parallel_processing import parallel_process_dict, is_free_threaded_available
 
     PARALLEL_PROCESSING_AVAILABLE = True
 except ImportError:
@@ -853,9 +853,9 @@ class HRIR:
     def correct_microphone_deviation(
         self,
         correction_strength=0.7,
-        enable_phase_correction=True,
-        enable_adaptive_correction=True,
-        enable_anatomical_validation=True,
+        enable_phase_correction=False,
+        enable_adaptive_correction=False,
+        enable_anatomical_validation=False,
         plot_analysis=False,
         plot_dir=None,
     ):
@@ -883,7 +883,7 @@ class HRIR:
         Returns:
             dict: 각 스피커별 분석 결과
         """
-        from microphone_deviation_correction import (
+        from core.microphone_deviation_correction import (
             apply_microphone_deviation_correction_to_hrir,
         )
 
@@ -907,40 +907,15 @@ class HRIR:
             plot_dir=mic_deviation_plot_dir,
         )
 
-        # 보정 결과 요약 출력
-        if analysis_results:
-            corrected_speakers = []
-            skipped_speakers = []
-            total_deviations = []
-
-            for speaker, results in analysis_results.items():
-                if results.get("correction_applied", False):
-                    corrected_speakers.append(speaker)
-                    if "avg_deviation_db" in results:
-                        total_deviations.append(results["avg_deviation_db"])
-                else:
-                    skipped_speakers.append(speaker)
+        # 보정 결과 요약 출력 (v3.0 flat summary dict)
+        if analysis_results and not analysis_results.get('error'):
+            speakers_processed = analysis_results.get('speakers_processed', [])
+            avg_error = analysis_results.get('avg_error_db', 0)
+            max_error = analysis_results.get('max_error_db', 0)
 
             print("마이크 편차 보정 완료:")
-            print(
-                f"  - 보정 적용: {len(corrected_speakers)}개 스피커 ({', '.join(corrected_speakers)})"
-            )
-            if skipped_speakers:
-                print(
-                    f"  - 보정 건너뜀: {len(skipped_speakers)}개 스피커 ({', '.join(skipped_speakers)}) - 유의미한 편차 없음"
-                )
-
-            if total_deviations:
-                avg_deviation = np.mean(total_deviations)
-                max_deviation = max(
-                    [
-                        results.get("max_deviation_db", 0)
-                        for results in analysis_results.values()
-                    ]
-                )
-                print(
-                    f"  - 평균 편차: {avg_deviation:.2f} dB, 최대 편차: {max_deviation:.2f} dB"
-                )
+            print(f"  - 처리된 스피커: {len(speakers_processed)}개 ({', '.join(speakers_processed)})")
+            print(f"  - 평균 보정량: {avg_error:.2f} dB, 최대 보정량: {max_error:.2f} dB")
         else:
             print("마이크 편차 보정: 처리된 스피커가 없습니다.")
 

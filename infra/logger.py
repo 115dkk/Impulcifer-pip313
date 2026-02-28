@@ -9,7 +9,7 @@ from typing import Callable, Optional, TYPE_CHECKING
 from enum import Enum
 
 if TYPE_CHECKING:
-    from localization import LocalizationManager
+    from i18n.localization import LocalizationManager
 
 
 class LogLevel(Enum):

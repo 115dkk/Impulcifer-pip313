@@ -10,7 +10,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
-from microphone_deviation_correction import MicrophoneDeviationCorrector
+from core.microphone_deviation_correction import MicrophoneDeviationCorrector
+from core.utils import set_matplotlib_font
 import os
 
 
@@ -104,10 +105,10 @@ def test_microphone_deviation_correction():
     
     # 편차 분석 결과 출력
     print("\n편차 분석 결과:")
-    for freq, deviation in analysis['deviations'].items():
-        print(f"  {freq} Hz: 크기 차이 = {deviation['magnitude_diff_db']:.2f} dB, "
-              f"위상 차이 = {deviation['phase_diff_rad']*180/np.pi:.1f}°")
-    
+    freq_deviations = analysis.get('deviation_results', {}).get('frequency_deviations', {})
+    for freq, deviation_db in freq_deviations.items():
+        print(f"  {freq} Hz: 편차 = {deviation_db:.2f} dB")
+
     # 보정 적용 여부 및 통계 출력
     if analysis.get('correction_applied', False):
         print("\n보정 통계:")
@@ -117,13 +118,14 @@ def test_microphone_deviation_correction():
               f"우측 {len(analysis['correction_filters']['right_fir'])} 샘플")
     else:
         print("\n보정이 적용되지 않았습니다 (편차가 임계값 이하)")
-    
+
     # 게이트 길이 정보 출력
     print("\n게이트 길이 정보:")
-    for freq, gate_len in analysis['gate_lengths'].items():
+    for freq, gate_len in corrector.gate_lengths.items():
         print(f"  {freq} Hz: {gate_len} 샘플 ({gate_len/fs*1000:.2f} ms)")
     
     # 간단한 비교 플롯 생성
+    set_matplotlib_font()
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
     
     # 시간 축

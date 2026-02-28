@@ -4,6 +4,33 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.2 - 2026-02-27
+### 📁 프로젝트 구조 재편
+루트에 평면적으로 나열되어 있던 모듈들을 논리적 패키지 구조로 재편했습니다.
+
+#### 새로운 폴더 구조
+- **`core/`** — 핵심 오디오 처리 모듈 (constants, utils, impulse_response, hrir, room_correction, virtual_bass, channel_generation, recorder, parallel_processing 등)
+- **`gui/`** — GUI 모듈 (modern_gui, legacy_gui)
+- **`i18n/`** — 국제화/로컬라이제이션 (localization.py + locales/*.json)
+- **`infra/`** — 인프라 유틸리티 (logger, resource_helper, get_version)
+- **`updater/`** — 업데이트 관리 (update_checker, updater_core)
+- **`tests/`** — 테스트 파일
+- **`build_scripts/`** — 빌드 스크립트 (build_nuitka, benchmark_parallel)
+
+#### 루트에 유지된 파일
+- `impulcifer.py` — 메인 파이프라인
+- `impulcifer_cli.py`, `impulcifer-cli.py` — CLI 진입점
+- `gui_main.py` — Nuitka 빌드 진입점
+- `pyproject.toml` — 프로젝트 설정
+
+#### 변경 사항
+- 모든 내부 임포트를 새 패키지 경로로 업데이트
+- pyproject.toml 엔트리 포인트, 빌드 설정, 공유 데이터 경로 업데이트
+- build_nuitka.py 모듈 포함 목록 업데이트
+- pytest 설정의 testpaths 업데이트
+
+---
+
 ## 2.4.1 - 2026-02-27
 ### 🔧 Virtual Bass 로거 번역 수정
 - `vbass_` 접두사가 로거 자동 번역 시스템에서 누락되어 번역 키가 그대로 출력되던 문제 수정

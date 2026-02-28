@@ -6,10 +6,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 from autoeq.frequency_response import FrequencyResponse
-from impulse_response import ImpulseResponse
-from hrir import HRIR
-from utils import sync_axes, save_fig_as_png, read_wav, get_ylim, config_fr_axis
-from constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL, COLORS
+from core.impulse_response import ImpulseResponse
+from core.hrir import HRIR
+from core.utils import sync_axes, save_fig_as_png, read_wav, get_ylim, config_fr_axis
+from core.constants import SPEAKER_NAMES, SPEAKER_LIST_PATTERN, IR_ROOM_SPL, COLORS
 
 
 def room_correction(

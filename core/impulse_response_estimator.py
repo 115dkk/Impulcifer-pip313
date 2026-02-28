@@ -8,7 +8,7 @@ from scipy.signal import convolve
 from scipy.signal.windows import hann
 import numpy as np
 import matplotlib.pyplot as plt
-from utils import read_wav, write_wav, magnitude_response
+from core.utils import read_wav, write_wav, magnitude_response
 
 
 class ImpulseResponseEstimator(object):

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "2.4.1"
+version = "2.4.2"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13/3.14 호환 버전: 115dkk", email="" },
@@ -44,8 +44,8 @@ dependencies = [
 
 [project.scripts]
 impulcifer = "impulcifer_cli:entry_point"
-impulcifer_gui = "modern_gui:main_gui"
-impulcifer_gui_legacy = "gui:main_gui"
+impulcifer_gui = "gui.modern_gui:main_gui"
+impulcifer_gui_legacy = "gui.legacy_gui:main_gui"
 
 [project.urls]
 "Homepage" = "https://github.com/jaakkopasanen/impulcifer"
@@ -54,7 +54,14 @@ impulcifer_gui_legacy = "gui:main_gui"
 [tool.hatch.build]
 include = [
     "*.py",
-    "parallel_processing.py",
+    "core/**/*.py",
+    "gui/**/*.py",
+    "i18n/**/*.py",
+    "i18n/locales/**/*.json",
+    "infra/**/*.py",
+    "updater/**/*.py",
+    "tests/**/*.py",
+    "build_scripts/**/*.py",
     "data/sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
     "data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
     "data/sweep-seg-FL-mono-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
@@ -82,7 +89,6 @@ include = [
     "CHANGELOG.md",
     "pyproject.toml",
     "font/Pretendard-Regular.otf",
-    "locales/**/*.json",
 ]
 exclude = [
     "research/**/*",
@@ -93,14 +99,14 @@ exclude = [
 [tool.hatch.build.targets.wheel.shared-data]
 "data" = "impulcifer_py313/data"
 "font" = "impulcifer_py313/font"
-"locales" = "impulcifer_py313/locales"
+"i18n/locales" = "impulcifer_py313/locales"
 
 # pytest 설정
 [tool.pytest.ini_options]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
 ]
-testpaths = ["test_suite.py"]
+testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -115,6 +121,10 @@ exclude = [
     "build",
     "dist",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# impulcifer.py has __version__ computed before imports (intentional pattern)
+"impulcifer.py" = ["E402"]
 
 # Flake8 대체 설정 (ruff가 없는 경우를 위해)
 [tool.flake8]

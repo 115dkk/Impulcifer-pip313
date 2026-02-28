@@ -16,13 +16,13 @@ from tkinter import filedialog, messagebox, TclError
 from tkinter import font as tkfont
 import customtkinter as ctk
 import sounddevice
-import recorder
+import core.recorder as recorder
 import impulcifer
-from constants import SPEAKER_LIST_PATTERN
-from localization import get_localization_manager, SUPPORTED_LANGUAGES
-from logger import get_logger, set_gui_callbacks
-from update_checker import UpdateChecker
-from updater import Updater, is_velopack_environment, is_pip_environment, VelopackUpdater, LegacyInstallerUpdater, GITHUB_RELEASES_URL
+from core.constants import SPEAKER_LIST_PATTERN
+from i18n.localization import get_localization_manager, SUPPORTED_LANGUAGES
+from infra.logger import get_logger, set_gui_callbacks
+from updater.update_checker import UpdateChecker
+from updater.updater_core import is_velopack_environment, is_pip_environment, VelopackUpdater, LegacyInstallerUpdater, GITHUB_RELEASES_URL
 
 # Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
@@ -1863,7 +1863,7 @@ class ModernImpulciferGUI:
 
         # Fallback: Unknown version
         print("Warning: Could not determine version, using fallback")
-        return "2.4.1"  # Current known version as last resort
+        return "2.4.2"  # Current known version as last resort
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""

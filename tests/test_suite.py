@@ -13,13 +13,13 @@ from pathlib import Path
 
 # 테스트 대상 모듈 임포트
 try:
-    from microphone_deviation_correction import MicrophoneDeviationCorrector
-    from impulse_response import ImpulseResponse
+    from core.microphone_deviation_correction import MicrophoneDeviationCorrector
+    from core.impulse_response import ImpulseResponse
 except ImportError:
-    # 패키지가 설치되지 않은 경우 현재 디렉토리에서 임포트
-    sys.path.insert(0, str(Path(__file__).parent))
-    from microphone_deviation_correction import MicrophoneDeviationCorrector
-    from impulse_response import ImpulseResponse
+    # 패키지가 설치되지 않은 경우 프로젝트 루트를 경로에 추가
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from core.microphone_deviation_correction import MicrophoneDeviationCorrector
+    from core.impulse_response import ImpulseResponse
 
 
 class TestMicrophoneDeviationCorrector:
@@ -153,9 +153,9 @@ class TestModuleImports:
         """핵심 모듈들이 임포트 가능한지 테스트"""
         modules_to_test = [
             'impulcifer',
-            'impulse_response',
-            'hrir',
-            'microphone_deviation_correction',
+            'core.impulse_response',
+            'core.hrir',
+            'core.microphone_deviation_correction',
         ]
 
         for module_name in modules_to_test:
@@ -167,7 +167,7 @@ class TestModuleImports:
     def test_recorder_module_importable(self):
         """recorder 모듈 임포트 테스트 (오디오 하드웨어 필요)"""
         try:
-            import recorder  # noqa: F401
+            import core.recorder  # noqa: F401
         except (ImportError, OSError) as e:
             # CI 환경에서는 PortAudio가 없을 수 있음
             pytest.skip(f"recorder 모듈 임포트 불가 (정상): {e}")
@@ -175,8 +175,8 @@ class TestModuleImports:
     def test_gui_modules_importable(self):
         """GUI 모듈 임포트 테스트 (선택적)"""
         try:
-            import modern_gui  # noqa: F401
-            import gui  # noqa: F401
+            from gui import modern_gui  # noqa: F401
+            from gui import legacy_gui  # noqa: F401
         except (ImportError, OSError) as e:
             # CI 환경에서는 PortAudio가 없을 수 있음
             pytest.skip(f"GUI 모듈 임포트 불가 (정상): {e}")
@@ -185,9 +185,13 @@ class TestModuleImports:
 class TestDataFiles:
     """데이터 파일 존재 확인 테스트"""
 
+    @staticmethod
+    def _project_root():
+        return Path(__file__).parent.parent
+
     def test_data_directory_exists(self):
         """data 디렉토리 존재 확인"""
-        data_dir = Path(__file__).parent / 'data'
+        data_dir = self._project_root() / 'data'
         assert data_dir.exists(), "data 디렉토리가 없음"
 
     def test_essential_data_files(self):
@@ -198,16 +202,20 @@ class TestDataFiles:
         ]
 
         for file_path in essential_files:
-            full_path = Path(__file__).parent / file_path
+            full_path = self._project_root() / file_path
             assert full_path.exists(), f"필수 파일 {file_path}가 없음"
 
 
 class TestConfigurationFiles:
     """설정 파일 검증 테스트"""
 
+    @staticmethod
+    def _project_root():
+        return Path(__file__).parent.parent
+
     def test_pyproject_toml_exists(self):
         """pyproject.toml 존재 확인"""
-        pyproject = Path(__file__).parent / 'pyproject.toml'
+        pyproject = self._project_root() / 'pyproject.toml'
         assert pyproject.exists(), "pyproject.toml이 없음"
 
     def test_pyproject_toml_valid(self):
@@ -217,7 +225,7 @@ class TestConfigurationFiles:
         except ImportError:
             import tomli as tomllib
 
-        pyproject = Path(__file__).parent / 'pyproject.toml'
+        pyproject = self._project_root() / 'pyproject.toml'
         try:
             with open(pyproject, 'rb') as f:
                 config = tomllib.load(f)
@@ -234,7 +242,7 @@ class TestVersionConsistency:
 
     def test_version_in_pyproject(self):
         """pyproject.toml의 버전 확인"""
-        pyproject = Path(__file__).parent / 'pyproject.toml'
+        pyproject = Path(__file__).parent.parent / 'pyproject.toml'
 
         with open(pyproject, 'r', encoding='utf-8') as f:
             content = f.read()

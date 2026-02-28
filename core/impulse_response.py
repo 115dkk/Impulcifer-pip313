@@ -11,8 +11,8 @@ from scipy.signal.windows import hann
 import nnresample
 from copy import deepcopy
 from autoeq.frequency_response import FrequencyResponse
-from utils import magnitude_response, get_ylim, running_mean
-from constants import COLORS
+from core.utils import magnitude_response, get_ylim, running_mean
+from core.constants import COLORS
 import os
 
 

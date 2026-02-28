@@ -44,8 +44,8 @@ class LocalizationManager:
         """Find the locales directory in multiple possible locations"""
         # Try different possible locations
         possible_paths = [
-            Path(__file__).parent / 'locales',  # Development environment
-            Path(__file__).parent.parent / 'locales',  # Alternative structure
+            Path(__file__).parent / 'locales',  # Development environment (i18n/locales)
+            Path(__file__).parent.parent / 'i18n' / 'locales',  # Alternative: project root
             Path(__file__).parent.parent / 'impulcifer_py313' / 'locales',  # PyPI package structure
         ]
 

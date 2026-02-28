@@ -11,11 +11,107 @@ from scipy import signal
 from PIL import Image
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import platform
 import shutil
+import importlib.resources
 from pathlib import Path
 
 plt.rcParams['axes.unicode_minus'] = False
+
+_font_configured = False
+
+
+def set_matplotlib_font():
+    """한글을 지원하는 폰트를 matplotlib에 설정합니다.
+
+    Pretendard 번들 폰트를 우선 사용하고, 없으면 OS별 시스템 폰트로 대체합니다.
+    한 번만 실행되며 이후 호출은 무시됩니다.
+    """
+    global _font_configured
+    if _font_configured:
+        return
+    _font_configured = True
+
+    system = platform.system()
+    font_loaded = False
+
+    # 1. 번들 Pretendard 폰트 시도
+    font_search_paths = []
+
+    try:
+        if hasattr(importlib.resources, "files"):
+            try:
+                font_resource = (
+                    importlib.resources.files("impulcifer_py313")
+                    .joinpath("font")
+                    .joinpath("Pretendard-Regular.otf")
+                )
+                font_search_paths.append(("bundled_files", font_resource))
+            except (FileNotFoundError, ModuleNotFoundError):
+                pass
+    except Exception:
+        pass
+
+    # 2. 로컬 개발 환경 폰트 경로
+    project_root = Path(__file__).parent.parent
+    local_candidates = [
+        project_root / "font" / "Pretendard-Regular.otf",
+        project_root / "fonts" / "Pretendard-Regular.otf",
+    ]
+    for local_path in local_candidates:
+        if local_path.exists():
+            font_search_paths.append(("local", str(local_path)))
+            break
+
+    # 3. 시스템 설치 Pretendard
+    try:
+        if any(f.name == "Pretendard" for f in fm.fontManager.ttflist):
+            font_search_paths.append(("system", "Pretendard"))
+    except Exception:
+        pass
+
+    # 로딩 시도
+    for source_type, font_path in font_search_paths:
+        try:
+            if source_type == "bundled_files":
+                with importlib.resources.as_file(font_path) as fp:
+                    fm.fontManager.addfont(str(fp))
+                    prop = fm.FontProperties(fname=str(fp))
+                    plt.rcParams["font.family"] = prop.get_name()
+                    font_loaded = True
+                    break
+            elif source_type == "local":
+                fm.fontManager.addfont(font_path)
+                prop = fm.FontProperties(fname=font_path)
+                plt.rcParams["font.family"] = prop.get_name()
+                font_loaded = True
+                break
+            elif source_type == "system":
+                plt.rcParams["font.family"] = "Pretendard"
+                font_loaded = True
+                break
+        except Exception:
+            continue
+
+    # 4. OS 기본 한글 폰트 대체
+    if not font_loaded:
+        if system == "Windows":
+            win_font = "C:/Windows/Fonts/malgun.ttf"
+            if os.path.exists(win_font):
+                prop = fm.FontProperties(fname=win_font)
+                plt.rcParams["font.family"] = prop.get_name()
+            else:
+                plt.rcParams["font.family"] = "Malgun Gothic"
+        elif system == "Darwin":
+            plt.rcParams["font.family"] = "AppleGothic"
+        elif system == "Linux":
+            # NanumGothic 시도, 없으면 sans-serif 유지
+            try:
+                if any(f.name == "NanumGothic" for f in fm.fontManager.ttflist):
+                    plt.rcParams["font.family"] = "NanumGothic"
+            except Exception:
+                pass
 
 # FFmpeg 최소 요구 버전 (major.minor 형태)
 MIN_FFMPEG_VERSION = (4, 0)
@@ -328,7 +424,7 @@ def get_truehd_channel_info(file_path):
         stream.get('channel_layout', '')
         
         # Map channel layouts to speaker names
-        from constants import CHANNEL_LAYOUT_MAP
+        from core.constants import CHANNEL_LAYOUT_MAP
         
         if channels in CHANNEL_LAYOUT_MAP:
             return CHANNEL_LAYOUT_MAP[channels]

@@ -3,7 +3,7 @@
 import os
 import re
 import sounddevice as sd
-from utils import read_wav, write_wav, read_audio, is_truehd_file
+from core.utils import read_wav, write_wav, read_audio, is_truehd_file
 import numpy as np
 from threading import Thread
 import argparse
