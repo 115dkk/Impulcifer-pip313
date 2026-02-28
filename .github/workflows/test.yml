@@ -36,11 +36,11 @@ jobs:
 
     - name: Run unit tests
       run: |
-        python test_suite.py
+        python -m pytest tests/test_suite.py -v
 
     - name: Run pytest with coverage
       run: |
-        pytest test_suite.py -v --cov=. --cov-report=xml --cov-report=term-missing
+        pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -75,16 +75,19 @@ jobs:
     - name: Test core imports
       run: |
         python -c "import impulcifer; print('✓ impulcifer')"
-        python -c "import hrir; print('✓ hrir')"
-        python -c "import impulse_response; print('✓ impulse_response')"
-        python -c "import microphone_deviation_correction; print('✓ microphone_deviation_correction')"
+        python -c "from core.hrir import HRIR; print('✓ core.hrir')"
+        python -c "from core.impulse_response import ImpulseResponse; print('✓ core.impulse_response')"
+        python -c "from core.microphone_deviation_correction import MicrophoneDeviationCorrector; print('✓ core.microphone_deviation_correction')"
+        python -c "from i18n.localization import get_localization_manager; print('✓ i18n.localization')"
+        python -c "from infra.logger import get_logger; print('✓ infra.logger')"
+        python -c "from updater.update_checker import UpdateChecker; print('✓ updater.update_checker')"
 
     - name: Test audio/GUI imports (optional - requires PortAudio)
       continue-on-error: true
       run: |
-        python -c "import recorder; print('✓ recorder')"
-        python -c "import modern_gui; print('✓ modern_gui')"
-        python -c "import gui; print('✓ gui (legacy)')"
+        python -c "import core.recorder; print('✓ core.recorder')"
+        python -c "from gui.modern_gui import main_gui; print('✓ gui.modern_gui')"
+        python -c "from gui.legacy_gui import main_gui; print('✓ gui.legacy_gui')"
 
   lint:
     name: Code Quality Checks
@@ -115,6 +118,7 @@ jobs:
     - name: Check Python syntax
       run: |
         python -m py_compile *.py
+        python -m py_compile core/*.py gui/*.py i18n/*.py infra/*.py updater/*.py
 
   test-summary:
     name: Test Summary

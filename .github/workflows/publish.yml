@@ -46,7 +46,7 @@ jobs:
     - name: Run tests
       run: |
         # Run pytest
-        pytest test_suite.py -v || echo "Tests completed with warnings"
+        pytest tests/ -v || echo "Tests completed with warnings"
         echo "Tests complete"
 
   build:

@@ -22,7 +22,7 @@ from core.constants import SPEAKER_LIST_PATTERN
 from i18n.localization import get_localization_manager, SUPPORTED_LANGUAGES
 from infra.logger import get_logger, set_gui_callbacks
 from updater.update_checker import UpdateChecker
-from updater.updater_core import Updater, is_velopack_environment, is_pip_environment, VelopackUpdater, LegacyInstallerUpdater, GITHUB_RELEASES_URL
+from updater.updater_core import is_velopack_environment, is_pip_environment, VelopackUpdater, LegacyInstallerUpdater, GITHUB_RELEASES_URL
 
 # Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"

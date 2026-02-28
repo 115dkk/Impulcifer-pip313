@@ -42,12 +42,12 @@ jobs:
 
       - name: Run unit tests
         run: |
-          pytest test_suite.py -v --tb=short
+          pytest tests/ -v --tb=short
 
       - name: Test package installation
         run: |
           uv pip install --system -e .
-          python -c "import impulcifer; import microphone_deviation_correction"
+          python -c "import impulcifer; from core.microphone_deviation_correction import MicrophoneDeviationCorrector"
 
   release-build:
     runs-on: ubuntu-latest

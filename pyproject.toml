@@ -122,6 +122,10 @@ exclude = [
     "dist",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# impulcifer.py has __version__ computed before imports (intentional pattern)
+"impulcifer.py" = ["E402"]
+
 # Flake8 대체 설정 (ruff가 없는 경우를 위해)
 [tool.flake8]
 exclude = [

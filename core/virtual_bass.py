@@ -6,7 +6,7 @@ for improved sub-bass response in binaural impulse responses.
 """
 
 import numpy as np
-from scipy.signal import butter, sosfilt, minimum_phase, sosfilt_zi
+from scipy.signal import butter, sosfilt, minimum_phase
 from typing import Optional
 
 from infra.logger import get_logger
@@ -214,7 +214,7 @@ def synthesize_virtual_bass(
 
     # Warn if crossover is unusually high
     if crossover_freq > 300:
-        logger.warning(f"vbass_warning_high_crossover",
+        logger.warning("vbass_warning_high_crossover",
                        freq=crossover_freq)
 
     # Pre-build SOS filter chains (same for all speakers — hoisted out of loop)
