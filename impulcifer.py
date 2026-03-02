@@ -340,7 +340,7 @@ def main(
         total_steps += 1
 
     logger.set_total_steps(total_steps)
-    logger.info(f"Starting BRIR generation with {total_steps} processing steps")
+    logger.info("cli_starting_brir_generation", total_steps=total_steps)
 
     if plot:
         try:
@@ -358,13 +358,13 @@ def main(
     dir_path = os.path.abspath(dir_path)
 
     # Impulse response estimator
-    logger.step("Creating impulse response estimator")
+    logger.step("cli_creating_estimator")
     estimator = open_impulse_response_estimator(dir_path, file_path=test_signal)
 
     # Room correction frequency responses
     room_frs = None
     if do_room_correction:
-        logger.step("Running room correction")
+        logger.step("cli_running_room_correction")
         _, room_frs = room_correction(
             estimator,
             dir_path,
@@ -379,7 +379,7 @@ def main(
     # Headphone compensation frequency responses
     hp_left, hp_right = None, None
     if do_headphone_compensation:
-        logger.step("Running headphone compensation")
+        logger.step("cli_running_headphone_compensation")
         hp_left, hp_right = headphone_compensation(
             estimator, dir_path, headphone_compensation_file
         )
@@ -387,21 +387,21 @@ def main(
     # Equalization
     eq_left, eq_right = None, None
     if do_equalization:
-        logger.step("Creating headphone equalization")
+        logger.step("cli_creating_equalization")
         eq_left, eq_right = equalization(estimator, dir_path)
 
     # Bass boost and tilt
-    logger.step("Creating frequency response target")
+    logger.step("cli_creating_target")
     target = create_target(
         estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt
     )
 
     # HRIR measurements
-    logger.step("Opening binaural measurements")
+    logger.step("cli_opening_measurements")
     hrir = open_binaural_measurements(estimator, dir_path)
 
     # Normalize gain
-    logger.step("Normalizing gain")
+    logger.step("cli_normalizing_gain")
     applied_gain = hrir.normalize(
         peak_target=None if target_level is not None else -0.1, avg_target=target_level
     )
@@ -416,11 +416,11 @@ def main(
     if plot:
         # Plot graphs pre processing
         os.makedirs(os.path.join(dir_path, "plots", "pre"), exist_ok=True)
-        logger.step("Plotting BRIR graphs before processing")
+        logger.step("cli_plotting_pre")
         hrir.plot(dir_path=os.path.join(dir_path, "plots", "pre"))
 
     # Crop noise and harmonics from the beginning
-    logger.step("Cropping impulse responses")
+    logger.step("cli_cropping_responses")
     hrir.crop_heads(head_ms=head_ms)
 
     # PR3에서 추가된 align_ipsilateral_all 호출 (항목 2)
@@ -457,7 +457,7 @@ def main(
 
     # 마이크 착용 편차 보정 v2.0
     if microphone_deviation_correction:
-        logger.step("Correcting microphone deviation v2.0")
+        logger.step("cli_correcting_deviation")
         mic_deviation_plot_dir = os.path.join(dir_path, "plots") if mic_deviation_debug_plots else None
         hrir.correct_microphone_deviation(
             correction_strength=mic_deviation_strength,
@@ -473,11 +473,11 @@ def main(
 
     # Equalize all
     if do_headphone_compensation or do_room_correction or do_equalization:
-        logger.step("Equalizing")
+        logger.step("cli_equalizing")
 
         # Log parallelization info
         parallel_info = get_parallelization_info()
-        logger.info(f"Using {parallel_info['executor_type']} for parallelization (Python {parallel_info['python_version']}, GIL {'disabled' if parallel_info['gil_disabled'] else 'enabled'})")
+        logger.info("cli_info_parallel_executor", executor=parallel_info['executor_type'], version=parallel_info['python_version'], status='disabled' if parallel_info['gil_disabled'] else 'enabled')
 
         # Optimization A1: Pre-generate common frequency array to reduce allocations
         common_freq = FrequencyResponse.generate_frequencies(
@@ -497,7 +497,7 @@ def main(
                 ))
 
         # Execute equalization in parallel
-        logger.info(f"Processing {len(eq_tasks)} speaker-side pairs in parallel...")
+        logger.info("cli_info_parallel_eq", count=len(eq_tasks))
         eq_results = parallel_map(_process_equalization_worker, eq_tasks)
 
         # Apply FIR filters to impulse responses
@@ -506,7 +506,7 @@ def main(
 
     # Adjust decay time
     if decay:
-        logger.step('Adjusting decay time')
+        logger.step("cli_adjusting_decay")
 
         # Phase 2 Optimization: Parallel decay adjustment
         decay_tasks = []
@@ -516,7 +516,7 @@ def main(
                     decay_tasks.append((speaker, side, ir.data, decay[speaker], estimator.fs))
 
         if decay_tasks:
-            logger.info(f"Processing {len(decay_tasks)} decay adjustments in parallel...")
+            logger.info("cli_info_parallel_decay", count=len(decay_tasks))
             decay_results = parallel_map(_process_decay_worker, decay_tasks)
 
             # Apply results back to impulse responses
@@ -525,11 +525,11 @@ def main(
 
     # Correct channel balance
     if channel_balance is not None:
-        logger.step("Correcting channel balance")
+        logger.step("cli_correcting_balance")
         hrir.correct_channel_balance(channel_balance)
 
     if plot:
-        logger.step('Plotting BRIR graphs after processing')
+        logger.step("cli_plotting_post")
 
         # Phase 2 Optimization: Parallel convolution for plotting
         plot_tasks = []
@@ -537,7 +537,7 @@ def main(
             for side, ir in pair.items():
                 plot_tasks.append((speaker, side, ir.data, estimator.test_signal, estimator.fs))
 
-        logger.info(f"Processing {len(plot_tasks)} convolutions in parallel for plotting...")
+        logger.info("cli_info_parallel_plotting", count=len(plot_tasks))
         plot_results = parallel_map(_process_plot_worker, plot_tasks)
 
         # Apply results back to impulse responses
@@ -548,12 +548,12 @@ def main(
         hrir.plot(os.path.join(dir_path, "plots", "post"))
 
     # Plot results, always
-    logger.step("Plotting results")
+    logger.step("cli_plotting_results")
     hrir.plot_result(os.path.join(dir_path, "plots"))
 
     # PR4: 양이 응답 임펄스 오버레이 플롯 추가
     if plot:
-        logger.step("Plotting additional analysis graphs")
+        logger.step("cli_plotting_additional")
         hrir.plot_interaural_impulse_overlay(
             os.path.join(dir_path, "plots", "interaural_overlay")
         )
@@ -564,7 +564,7 @@ def main(
 
     # 인터랙티브 플롯 생성 (추가)
     if interactive_plots:
-        logger.step("Generating interactive plots")
+        logger.step("cli_generating_interactive")
         interactive_plot_dir = os.path.join(dir_path, "interactive_plots")
         os.makedirs(interactive_plot_dir, exist_ok=True)
 
@@ -588,9 +588,9 @@ def main(
                     )  # 수정: Panel -> TabPanel
                     panels.append(panel)
                 else:
-                    logger.debug(f"Skipping {title} plot as no data was generated")
+                    logger.debug("cli_warning_plot_skipped", title=title)
             except Exception as e:
-                logger.warning(f"Error generating interactive plot for {title}: {e}")
+                logger.warning("cli_warning_interactive_plot_error", title=title, error=str(e))
 
         if panels:
             tabs = Tabs(tabs=panels, sizing_mode="stretch_both")
@@ -601,13 +601,13 @@ def main(
                 output_html_path, title="Interactive Plot Summary"
             )  # bokeh_output_file 사용
             bokeh_save(tabs)  # bokeh_save 사용
-            logger.success(f"Interactive plot summary saved to {output_html_path}")
+            logger.success("cli_success_interactive_saved", path=output_html_path)
         else:
-            logger.warning("No interactive plots were generated")
+            logger.warning("cli_warning_no_interactive")
 
     # Re-sample
     if fs is not None and fs != hrir.fs:
-        logger.step(f"Resampling BRIR to {fs} Hz")
+        logger.step("cli_resampling", fs=fs)
         hrir.resample(fs)
         hrir.normalize(
             peak_target=None if target_level is not None else -0.1,
@@ -615,7 +615,7 @@ def main(
         )
 
     # Write multi-channel WAV file with standard track order
-    logger.step("Writing BRIRs")
+    logger.step("cli_writing_brirs")
     hrir.write_wav(os.path.join(dir_path, "hrir.wav"))
 
     # Write multi-channel WAV file with HeSuVi track order
@@ -623,7 +623,7 @@ def main(
 
     # TrueHD 레이아웃 출력 (새로 추가)
     if output_truehd_layouts:
-        logger.step("Generating TrueHD layouts")
+        logger.step("cli_generating_truehd")
 
         # 필요한 채널들이 있는지 확인하고 없으면 자동 생성하는 로직 제거
         # if auto_generate_channels:
@@ -643,9 +643,9 @@ def main(
                 dir_path, f"truehd_11ch_{len(available_11ch)}ch.wav"
             )
             hrir.write_wav(output_path_11ch, track_order=track_order_11ch)
-            logger.success(f"Generated 11-channel TrueHD layout: {output_path_11ch}")
+            logger.success("cli_success_truehd_11ch", path=output_path_11ch)
         else:
-            logger.warning(f"Cannot generate 11-channel layout: {msg_11ch}")
+            logger.warning("cli_warning_truehd_11ch_fail", msg=msg_11ch)
 
         # 13채널 (7.0.6) 레이아웃 생성
         valid_13ch, count_13ch, msg_13ch = validate_channel_requirements(
@@ -659,13 +659,13 @@ def main(
                 dir_path, f"truehd_13ch_{len(available_13ch)}ch.wav"
             )
             hrir.write_wav(output_path_13ch, track_order=track_order_13ch)
-            logger.success(f"Generated 13-channel TrueHD layout: {output_path_13ch}")
+            logger.success("cli_success_truehd_13ch", path=output_path_13ch)
         else:
-            logger.warning(f"Cannot generate 13-channel layout: {msg_13ch}")
+            logger.warning("cli_warning_truehd_13ch_fail", msg=msg_13ch)
 
     # PR3 jamesdsp 로직 추가 (항목 6)
     if jamesdsp:
-        logger.step("Generating JamesDSP output")
+        logger.step("cli_generating_jamesdsp")
 
         # 전체 HRIR 복사 후 FL/FR 외 모든 채널 제거
         dsp_hrir = copy.deepcopy(hrir)
@@ -685,11 +685,11 @@ def main(
         jd_order = ["FL-left", "FL-right", "FR-left", "FR-right"]
         out_path = os.path.join(dir_path, "jamesdsp.wav")
         dsp_hrir.write_wav(out_path, track_order=jd_order)
-        logger.success(f"JamesDSP IR file created: {out_path}")
+        logger.success("cli_success_jamesdsp", path=out_path)
 
     # PR3 hangloose 로직 추가 (항목 7)
     if hangloose:
-        logger.step("Generating Hangloose Convolver output")
+        logger.step("cli_generating_hangloose")
         output_dir = os.path.join(dir_path, "Hangloose")
         os.makedirs(output_dir, exist_ok=True)
 
@@ -710,9 +710,9 @@ def main(
             track_order = [f"{sp}-left", f"{sp}-right"]
             out_path = os.path.join(output_dir, f"{sp}.wav")
             single_hrir.write_wav(out_path, track_order=track_order)
-            logger.info(f"Created Hangloose file: {sp}.wav")
+            logger.info("cli_success_hangloose_file", file=f"{sp}.wav")
 
-        logger.success(f"Hangloose Convolver files created in {output_dir}")
+        logger.success("cli_success_hangloose", path=output_dir)
 
         # PR3의 LFE 채널 생성 로직은 FL, FR을 기반으로 하므로, 필요시 여기에 추가 구현.
         # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:
@@ -748,9 +748,7 @@ def open_impulse_response_estimator(dir_path, file_path=None):
                 file_path = local_path
             else:
                 logger = get_logger()
-                logger.warning(
-                    f"Test signal '{file_path}' ({test_signal_name}) not found. Using local file"
-                )
+                logger.warning("cli_warning_test_signal_not_found", signal=file_path, name=test_signal_name)
 
     if file_path is None:
         # Test signal not explicitly given, try Pickle first then WAV
@@ -796,7 +794,7 @@ def open_impulse_response_estimator(dir_path, file_path=None):
             raise ValueError(f"파일이 유효한 TrueHD/MLP 형식이 아닙니다: {file_path}")
 
         logger = get_logger()
-        logger.info(f"Converting TrueHD/MLP file to WAV: {file_path}")
+        logger.info("cli_info_converting_truehd", file=file_path)
         temp_wav_path, channel_info = convert_truehd_to_wav(file_path)
 
         try:
@@ -826,7 +824,7 @@ def equalization(estimator, dir_path):
     """
     if os.path.isfile(os.path.join(dir_path, "eq.wav")):
         logger = get_logger()
-        logger.warning("eq.wav is no longer supported, use eq.csv!")
+        logger.warning("cli_warning_eq_wav_deprecated")
     # Default for both sides
     eq_path = os.path.join(dir_path, "eq.csv")
     eq_fr = None
@@ -894,68 +892,66 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     if headphone_file_path:
         # Normalize the path to handle Windows/Unix path separators
         normalized_path = os.path.normpath(headphone_file_path)
-        logger.info(f"Headphone compensation file parameter provided: {normalized_path}")
+        logger.info("cli_info_hp_param_provided", file=normalized_path)
 
         # Check if it's a directory or a file
         if os.path.isdir(normalized_path):
             # It's a directory - search for common headphone file names
-            logger.info("Path is a directory, searching for headphone compensation file inside...")
+            logger.info("cli_info_hp_searching_dir")
             possible_names = ["headphones.wav", "headphone.wav", "hp.wav", "compensation.wav"]
             actual_hp_file = None
 
             for name in possible_names:
                 candidate = os.path.join(normalized_path, name)
-                logger.info(f"Checking: {candidate}")
+                logger.debug("cli_info_hp_checking", file=candidate)
                 if os.path.isfile(candidate):
                     actual_hp_file = candidate
-                    logger.info(f"Found headphone compensation file: {actual_hp_file}")
+                    logger.info("cli_info_hp_found", file=actual_hp_file)
                     break
 
             if actual_hp_file is None:
                 # No standard file found, try to find any WAV file
-                logger.info("No standard headphone file found, searching for any .wav file...")
+                logger.info("cli_info_hp_searching_wav")
                 try:
                     wav_files = [f for f in os.listdir(normalized_path) if f.lower().endswith('.wav')]
                     if wav_files:
                         actual_hp_file = os.path.join(normalized_path, wav_files[0])
-                        logger.info(f"Using first WAV file found: {actual_hp_file}")
+                        logger.info("cli_info_hp_using_first_wav", file=actual_hp_file)
                     else:
-                        logger.warning(f"No WAV files found in directory: {normalized_path}")
+                        logger.warning("cli_warning_hp_no_wav", dir=normalized_path)
                         actual_hp_file = None
                 except Exception as e:
-                    logger.error(f"Error listing directory {normalized_path}: {e}")
+                    logger.error("cli_error_hp_list_dir", dir=normalized_path, error=str(e))
                     actual_hp_file = None
         else:
             # It's a file path (or should be)
             if not os.path.isabs(normalized_path):
                 # Relative path - make it relative to dir_path
                 actual_hp_file = os.path.join(dir_path, normalized_path)
-                logger.info(f"Relative path converted to: {actual_hp_file}")
+                logger.debug("cli_info_hp_relative_path", file=actual_hp_file)
             else:
                 # Absolute file path
                 actual_hp_file = normalized_path
-                logger.info(f"Using absolute file path: {actual_hp_file}")
+                logger.debug("cli_info_hp_absolute_path", file=actual_hp_file)
     else:
         # Default to headphones.wav in the dir_path
         actual_hp_file = os.path.join(dir_path, "headphones.wav")
-        logger.info(f"No headphone compensation file specified, using default: {actual_hp_file}")
+        logger.info("cli_info_hp_default", file=actual_hp_file)
 
     # Validate file exists
     if actual_hp_file is None or not os.path.exists(actual_hp_file):
         if headphone_file_path:
             # Custom file specified but not found, try default
-            logger.warning(
-                f"Specified headphone compensation file not found: {actual_hp_file}. Trying default 'headphones.wav' in work directory"
-            )
+            logger.warning("cli_warning_hp_file_not_found", file=actual_hp_file)
             actual_hp_file = os.path.join(dir_path, "headphones.wav")
 
         # Final check
         if not os.path.exists(actual_hp_file):
-            logger.error(f"Headphone compensation file not found: {actual_hp_file}")
-            logger.error(f"Please ensure the file exists or place 'headphones.wav' in the work directory: {dir_path}")
+            logger.error("cli_error_hp_file_missing", file=actual_hp_file)
+            logger.error("cli_error_hp_ensure_exists", dir=dir_path)
             return None, None  # Or raise an error
 
-    logger.info(f"Using headphone compensation file: {actual_hp_file}")
+    logger.info("cli_info_using_hp_file", file=actual_hp_file)
     hp_irs.open_recording(actual_hp_file, speakers=["FL", "FR"])
     hp_irs.write_wav(os.path.join(dir_path, "headphone-responses.wav"))
 
@@ -1112,14 +1108,17 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
     Returns:
         str: Content of the README file.
     """
+    # Import localization for translated README content
+    from i18n.localization import t
+
     # 기본 헤더 생성
-    content = "# BRIR Info\n\n"
-    content += f"Processed on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}. Output sampling rate is {fs if fs is not None else hrir.fs} Hz.\n\n"
+    content = f"# {t('cli_readme_title')}\n\n"
+    content += t('cli_readme_processed', date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'), fs=fs if fs is not None else hrir.fs) + "\n\n"
 
     # 항목 8: 적용된 노멀라이제이션 게인 추가
     if applied_gain is not None:
-        content += "## Applied Normalization Gain\n"
-        content += f"{applied_gain:.2f} dB was applied to all channels.\n\n"
+        content += f"## {t('cli_readme_gain_title')}\n"
+        content += t('cli_readme_gain_value', gain=f"{applied_gain:.2f}") + "\n\n"
 
     # 기존 통계 테이블 생성 로직 (rt_name, table, speaker_names 등)
     table_data = []  # 변수명 변경 (table -> table_data)
@@ -1217,7 +1216,7 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
             table_data.append(
                 [
                     speaker,
-                    side,
+                    t(f'cli_readme_side_{side}'),
                     f"{pnr_val:.1f} dB" if not np.isnan(pnr_val) else "N/A",
                     f"{current_itd:.1f} us" if not np.isnan(current_itd) else "N/A",
                     f"{length_ms:.1f} ms"
@@ -1241,7 +1240,7 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
         final_rt_name = "RTxx"  # 기본값
 
     if table_data:
-        headers = ["Speaker", "Side", "PNR", "ITD", "Length", final_rt_name]
+        headers = [t('cli_readme_header_speaker'), t('cli_readme_header_side'), "PNR", "ITD", t('cli_readme_header_length'), final_rt_name]
         content += tabulate(table_data, headers=headers, tablefmt="pipe")
         content += "\n\n"
 
@@ -1249,7 +1248,7 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
     if estimator and hasattr(hrir, "calculate_reflection_levels"):
         reflection_data = hrir.calculate_reflection_levels()  # 인자 없이 호출
         if reflection_data:
-            content += "## Reflection Levels (Direct vs. Early/Late)\n"
+            content += f"## {t('cli_readme_reflection_title')}\n"
             # SPEAKER_NAMES 순서대로 정렬하되, 없는 스피커는 뒤로
             sorted_reflection_speakers = sorted(
                 reflection_data.keys(),
@@ -1265,9 +1264,9 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
                 sides_data = reflection_data[speaker]
                 content += f"### {speaker}\n"
                 if "left" in sides_data and isinstance(sides_data["left"], dict):
-                    content += f"- Left Ear: Early (20-50ms): {sides_data['left'].get('early_db', np.nan):.2f} dB, Late (50-150ms): {sides_data['left'].get('late_db', np.nan):.2f} dB\n"
+                    content += f"- {t('cli_readme_left_ear')}: {t('cli_readme_early_label')}: {sides_data['left'].get('early_db', np.nan):.2f} dB, {t('cli_readme_late_label')}: {sides_data['left'].get('late_db', np.nan):.2f} dB\n"
                 if "right" in sides_data and isinstance(sides_data["right"], dict):
-                    content += f"- Right Ear: Early (20-50ms): {sides_data['right'].get('early_db', np.nan):.2f} dB, Late (50-150ms): {sides_data['right'].get('late_db', np.nan):.2f} dB\n"
+                    content += f"- {t('cli_readme_right_ear')}: {t('cli_readme_early_label')}: {sides_data['right'].get('early_db', np.nan):.2f} dB, {t('cli_readme_late_label')}: {sides_data['right'].get('late_db', np.nan):.2f} dB\n"
             content += "\n"
 
     # 파일에 쓰기
@@ -1277,12 +1276,74 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
     return content
 
 
+def _print_info():
+    """Print diagnostic information for bug reports (English-only output)."""
+    import sys
+    import platform as pf
+    lines = [f"Impulcifer {__version__}"]
+    lines.append(f"Python {sys.version.split()[0]}")
+    lines.append(f"OS: {pf.system()} {pf.release()} ({pf.machine()})")
+    lines.append(f"CPU cores: {os.cpu_count() or 'unknown'}")
+
+    # GIL status
+    if hasattr(sys, '_is_gil_enabled'):
+        gil = "Disabled (Free-Threaded)" if not sys._is_gil_enabled() else "Enabled"
+    else:
+        gil = "N/A (pre-3.14)"
+    lines.append(f"GIL: {gil}")
+
+    # Optimal workers
+    try:
+        from core.parallel_processing import get_python_threading_info
+        info = get_python_threading_info()
+        lines.append(f"Optimal workers: {info.get('optimal_workers', 'unknown')}")
+    except Exception:
+        pass
+
+    # Installation type
+    try:
+        from updater.updater_core import is_velopack_environment, is_pip_environment
+        if is_velopack_environment():
+            lines.append("Installation: Standalone (Velopack)")
+        elif is_pip_environment():
+            lines.append("Installation: pip package")
+        else:
+            lines.append("Installation: Development")
+    except Exception:
+        lines.append("Installation: Development")
+
+    # Key dependency versions
+    dep_versions = []
+    for pkg in ['numpy', 'scipy', 'matplotlib', 'soundfile', 'customtkinter', 'bokeh', 'autoeq-py313']:
+        try:
+            from importlib.metadata import version as get_ver
+            dep_versions.append(f"{pkg}=={get_ver(pkg)}")
+        except Exception:
+            pass
+    if dep_versions:
+        lines.append(f"Dependencies: {', '.join(dep_versions)}")
+
+    print('\n'.join(lines))
+
+
 def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
+        "-V", "--version",
+        action="version",
+        version=f"Impulcifer {__version__}",
+    )
+    arg_parser.add_argument(
+        "--info",
+        action="store_true",
+        default=False,
+        help="Print diagnostic information (version, Python, OS, etc.) and exit.",
+    )
+    arg_parser.add_argument(
         "--dir_path",
         type=str,
-        required=True,
+        required=False,
+        default=None,
         help="Path to directory for recordings and outputs.",
     )
     arg_parser.add_argument(
@@ -1499,6 +1560,17 @@ def create_cli():
         help="Virtual bass polarity handling (default: auto).",
     )
     args = vars(arg_parser.parse_args())
+
+    # Handle --info early exit
+    if args.get("info"):
+        _print_info()
+        raise SystemExit(0)
+    del args["info"]
+
+    # Validate --dir_path is provided (was required=True, now manual check)
+    if args.get("dir_path") is None:
+        arg_parser.error("the following arguments are required: --dir_path")
+
     if "bass_boost" in args:
         bass_boost = args["bass_boost"].split(",")
         if len(bass_boost) == 1:
