@@ -4,6 +4,41 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.5.0 - 2026-03-02
+### 🌐 콘솔/GUI 메시지 전면 국제화 및 Info 탭 추가
+
+#### ⭐ 새로운 기능
+- **Info 탭 추가**: 버전 정보, 라이선스 보기, 버그 리포트 링크를 제공하는 Info 탭 신설
+  - `tab_info`, `section_about`, `label_version`, `button_view_license`, `button_report_bug` 키 추가
+
+#### 🌐 콘솔 메시지 국제화
+- **BRIR 생성 전 과정의 콘솔 메시지 국제화**: `impulcifer.py`의 40개 이상 logger 호출을 번역 키로 전환
+  - `logger.step()`에 `**kwargs` 지원 추가 (매개변수화된 번역 키 지원)
+  - `write_readme()` 함수의 BRIR Info 섹션 전면 국제화
+  - 헤드폰 보상 파일 탐색 과정의 진단 메시지 국제화
+  - 병렬 처리 정보 메시지 국제화
+- **33개 신규 번역 키** 추가 (11개 로케일 파일 모두 반영):
+  - 헤드폰 파일 탐색: `cli_info_hp_*` (10개)
+  - 병렬 처리: `cli_info_parallel_*` (4개)
+  - BRIR Info: `cli_readme_*` (14개)
+  - 경고/오류: `cli_warning_hp_no_wav`, `cli_error_hp_*` (3개)
+
+#### 🐛 번역 품질 수정
+- **9개 로케일 파일의 번역 오류 수정**:
+  - FR: `cli_readme_side_right` 약어 역전 수정, `cli_adjusting_decay` 잘못된 용어 수정
+  - RU: `cli_adjusting_decay` 존재하지 않는 단어 수정
+  - 7개 언어: `message_channel_mismatch_warning`의 누락된 `\n\n` 복원
+  - 다수 언어: `{play_channels}` 등 팬텀 포맷 플레이스홀더 제거
+  - 이모지 불일치 수정
+- **zh_CN/zh_TW 로케일 동기화**: zh-cn/zh-tw의 완전 번역을 zh_CN/zh_TW에 복사하여 미번역 문자열 해결
+
+#### 📦 변경된 파일
+- `impulcifer.py`: 40+ logger 호출 국제화, `write_readme()` 국제화
+- `infra/logger.py`: `step()` 메서드 `**kwargs` 지원
+- 모든 locale 파일 (11개): 33개 신규 키 + 오류 수정
+
+---
+
 ## 2.4.4 - 2026-02-28
 ### Virtual Bass ITD 반영
 - Virtual Bass: ITD(Interaural Time Difference) 반영 로직 추가. 합성된 bass IR에 원본 HRIR의 좌우 귀 도달 시간차를 보존하도록 개선.
@@ -47,6 +82,28 @@ been fixed and old features improved.
 ### 🔧 Virtual Bass 로거 번역 수정
 - `vbass_` 접두사가 로거 자동 번역 시스템에서 누락되어 번역 키가 그대로 출력되던 문제 수정
 - `logger.py`의 `_translate()` 접두사 목록에 `vbass_` 추가
+
+---
+
+## 2.3.3 - 2026-01-04
+### 🔄 Windows CI/CD Velopack 마이그레이션
+Windows 배포 시스템을 Inno Setup에서 Velopack으로 전환하여 델타 업데이트를 지원합니다.
+
+#### 🚀 주요 변경
+- **Inno Setup → Velopack**: Windows 설치 파일(.iss) 제거, Velopack 패키징으로 전환
+  - .NET SDK 설정 단계 추가 (Velopack CLI 도구용)
+  - 델타 업데이트 메커니즘으로 업데이트 크기 대폭 감소
+- **업데이터 재작성** (`updater.py`): Velopack + pip 이중 지원 구조
+  - `velopack_update()`: Velopack 기반 자동 업데이트
+  - `legacy_update()`: pip 기반 폴백 업데이트
+- **데이터 폴더 접근**: UI Settings 탭에 "Data Access" 섹션 추가
+  - 참조 파일, 테스트 신호, 녹음 파일에 바로 접근 가능
+- **현지화 키 추가**: `section_data_access`, `label_data_folder_description`, `button_open_data_folder` 등 (11개 로케일)
+
+#### 📦 변경된 파일
+- **제거**: `.github/workflows/Impulcifer install maker.iss`
+- **수정**: `release-cross-platform.yml`, `updater.py`, `modern_gui.py`
+- **번역**: 모든 locale 파일 (11개)
 
 ---
 
@@ -156,6 +213,19 @@ GitHub 자동 릴리즈 태그로 인한 업데이트 오탐지 문제를 해결
 #### ⚙️ 새 설정
 - `mic_deviation_debug_plots`: 디버그 플롯 저장 옵션 (기본: 비활성화)
   - Program Files 등 쓰기 권한 문제 방지
+
+---
+
+## 2.2.5 - 2025-11-28
+### 🐛 역필터 및 GUI 안정성 수정
+
+#### 🐛 버그 수정
+- **from_wav 역필터 계산 치명적 버그 수정**: 외부 WAV 파일의 역필터 생성 시 잘못된 계산이 수행되던 문제 해결
+- **역필터 생성 개선**: 외부 WAV 파일에 대한 역필터 생성 로직 전반 개선
+- **GUI 크래시 수정**: DoubleVar/IntVar Entry 필드가 비어있을 때 발생하던 GUI 크래시 해결
+- **병렬 워커 ImpulseResponse 오류 수정**: 병렬 처리 시 ImpulseResponse 인스턴스 생성 오류 해결
+- **crop_tails() 노이즈 플로어 크롭 수정**: IR 꼬리가 노이즈 플로어에서 올바르게 잘리지 않던 문제 수정
+- **`button_close` 번역 누락 추가**: en.json, ko.json에 누락된 키 추가
 
 ---
 
@@ -980,6 +1050,35 @@ Modern GUI에서 마이크 편차 보정 v2.0의 모든 고급 기능을 사용�
   - 결과: 헤드폰과 룸의 이도 응답을 합성할 때 FR(Frequency Response) 및 임펄스 응답이 훼손되었습니다.
   - 해결: Fallback 람다 함수가 실제 객체를 수정하도록 변경하여 주파수 그리드 정렬이 올바르게 이루어지도록 했습니다.
 - 이 수정으로 구버전에서 제대로 작동하던 결과가 복원되었습니다.
+
+## 1.5.0 - 2025-06-03
+### TrueHD 지원 및 다채널 확장
+
+#### ⭐ 새로운 기능
+- **TrueHD/MLP 파일 인식 및 측정 지원**: TrueHD 파일을 자동 인식하고 WAV로 변환하여 측정
+- **확장된 다채널 HRIR 처리**: Atmos 등 최대 16채널까지의 HRIR 생성 지원
+  - `WL,WR`, `TFL,TFR`, `TSL,TSR`, `TBL,TBR` 등 높이/와이드 채널 추가
+  - `HEXADECAGONAL_TRACK_ORDER`에 따른 표준화된 채널 순서 저장
+  - HeSuVi 소프트웨어 전용 채널 순서 지원
+
+#### 🔧 개선사항
+- **동측 귀 임펄스 응답 정렬 개선** (`align_ipsilateral_all`):
+  - 동일 쪽 귀의 임펄스 응답을 상호 상관(cross-correlation)으로 정렬
+  - 시간축 불일치 보정으로 정확한 음상 정위 실현
+- **저음 부스팅/하이패스 필터 수정**:
+  - `create_target`에서 의도치 않은 +3dB 추가 부스트 제거
+  - 사용자 설정값만 정확히 반영되도록 수정
+- **주파수 응답 보간법 개선**: 3차 스플라인(cubic spline) 보간 도입
+  - 실패 시 선형 보간으로 안전하게 폴백
+  - (v2.3.0에서 선형 보간으로 재전환 — 고주파 아티팩트 발견)
+- **Seaborn 스타일 플롯**: `whitegrid` 스타일 적용으로 플롯 가독성 향상
+- **커스텀 한글 폰트(Pretendard)**: 시스템 폰트 없이도 한글 표시 가능
+  - `importlib.resources`로 동적 로드, 폴백 폰트 지원
+  - Matplotlib 마이너스 부호 유니코드 문제 해결
+- **방어적 프로그래밍**: 각종 예외 상황에서도 실행을 계속할 수 있도록 개선
+- **스피커 크기 대비 귀 크기 반영**: 귀가 스피커의 2배 크기인 점을 반영
+
+---
 
 ## 1.4.0 - 2024-12-20
 ### GUI에 추가된 기능들
