@@ -1819,14 +1819,7 @@ class ModernImpulciferGUI:
             except Exception:
                 pass
         except ImportError:
-            # Python < 3.8
-            try:
-                import pkg_resources
-                pkg_version = pkg_resources.get_distribution('impulcifer-py313').version
-                print(f"Version from pkg_resources: {pkg_version}")
-                return pkg_version
-            except Exception:
-                pass
+            pass
 
         # Method 2: Try to read pyproject.toml (development mode)
         try:

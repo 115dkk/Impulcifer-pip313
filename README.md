@@ -218,7 +218,7 @@ impulcifer --dir_path="path/to/your/my_measurements" --interactive_plots
 
 ## ⚠️ 주의 사항
 
-- 이 버전은 **Python 3.13.2** 환경에 맞춰 개발되고 테스트되었습니다. 다른 Python 버전에서는 예기치 않은 문제가 발생할 수 있습니다. (Python 3.8 이상 지원 목표)
+- 이 버전은 **Python 3.13.2** 환경에 맞춰 개발되고 테스트되었습니다. 다른 Python 버전에서는 예기치 않은 문제가 발생할 수 있습니다. (Python 3.9 이상 지원)
 - 원본 Impulcifer의 핵심 기능은 대부분 유지하려고 노력했지만, 내부 코드 수정으로 인해 미세한 동작 차이가 있을 수 있습니다.
 - `autoeq-py313` 등 Python 3.13.2 호환성을 위해 수정된 버전에 의존합니다.
 
@@ -241,7 +241,7 @@ pip install --upgrade impulcifer-py313
 MIT License
 
 Copyright (c) 2018-2022 Jaakko Pasanen
-Copyright (c) 2023-2024 115dkk (For the Python 3.13.2 compatibility modifications and enhancements)
+Copyright (c) 2024- 115dkk (For the Python 3.13.2 compatibility modifications and enhancements)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
