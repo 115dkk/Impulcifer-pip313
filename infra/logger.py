@@ -80,12 +80,12 @@ class ImpulciferLogger:
         self.total_steps = total
         self.current_step = 0
 
-    def step(self, message: str = ""):
+    def step(self, message: str = "", **kwargs):
         """Increment step counter and update progress"""
         self.current_step += 1
         progress = int((self.current_step / self.total_steps) * 100)
         if message:
-            self.progress(progress, message)
+            self.progress(progress, message, **kwargs)
         else:
             self.progress(progress, f"Step {self.current_step}/{self.total_steps}")
 
