@@ -246,5 +246,29 @@
   "section_about": "概要",
   "label_version": "バージョン:",
   "button_view_license": "ライセンスを表示",
-  "button_report_bug": "バグを報告"
+  "button_report_bug": "バグを報告",
+
+  "label_installation": "インストール方式:",
+  "info_install_velopack": "スタンドアロン (Velopack)",
+  "info_install_pip": "pipパッケージ",
+  "info_install_dev": "開発環境",
+
+  "section_contributors": "貢献者",
+  "contributor_role_original": "原作者",
+  "contributor_role_py313": "Python 3.13/3.14移植",
+  "contributor_role_contributor": "貢献者",
+
+  "section_system_info": "システム情報",
+  "label_python": "Python:",
+  "label_os": "OS:",
+  "label_cpu_cores": "CPUコア数:",
+  "label_gil_status": "GILステータス:",
+  "label_optimal_workers": "最適ワーカー数:",
+  "info_gil_enabled": "有効",
+  "info_gil_disabled": "無効 (Free-Threaded)",
+  "info_gil_unknown": "該当なし (3.14以前)",
+
+  "section_project_links": "プロジェクトリンク",
+  "button_original_repo": "オリジナルImpulciferリポジトリ",
+  "button_fork_repo": "このフォーク (Python 3.13+移植)"
 }

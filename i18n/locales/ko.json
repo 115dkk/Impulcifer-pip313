@@ -272,5 +272,29 @@
   "section_about": "소개",
   "label_version": "버전:",
   "button_view_license": "라이선스 보기",
-  "button_report_bug": "버그 제보"
+  "button_report_bug": "버그 제보",
+
+  "label_installation": "설치 방식:",
+  "info_install_velopack": "독립 실행형 (Velopack)",
+  "info_install_pip": "pip 패키지",
+  "info_install_dev": "개발 환경",
+
+  "section_contributors": "기여자",
+  "contributor_role_original": "원작자",
+  "contributor_role_py313": "Python 3.13/3.14 포팅",
+  "contributor_role_contributor": "기여자",
+
+  "section_system_info": "시스템 정보",
+  "label_python": "Python:",
+  "label_os": "운영체제:",
+  "label_cpu_cores": "CPU 코어:",
+  "label_gil_status": "GIL 상태:",
+  "label_optimal_workers": "최적 워커 수:",
+  "info_gil_enabled": "활성화",
+  "info_gil_disabled": "비활성화 (Free-Threaded)",
+  "info_gil_unknown": "해당 없음 (3.14 이전)",
+
+  "section_project_links": "프로젝트 링크",
+  "button_original_repo": "원본 Impulcifer 저장소",
+  "button_fork_repo": "이 포크 (Python 3.13+ 포팅)"
 }

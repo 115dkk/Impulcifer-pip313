@@ -246,5 +246,29 @@
   "section_about": "О программе",
   "label_version": "Версия:",
   "button_view_license": "Просмотреть лицензию",
-  "button_report_bug": "Сообщить об ошибке"
+  "button_report_bug": "Сообщить об ошибке",
+
+  "label_installation": "Установка:",
+  "info_install_velopack": "Автономная (Velopack)",
+  "info_install_pip": "pip-пакет",
+  "info_install_dev": "Разработка",
+
+  "section_contributors": "Участники",
+  "contributor_role_original": "Оригинальный автор",
+  "contributor_role_py313": "Портирование Python 3.13/3.14",
+  "contributor_role_contributor": "Участник",
+
+  "section_system_info": "Информация о системе",
+  "label_python": "Python:",
+  "label_os": "ОС:",
+  "label_cpu_cores": "Ядра ЦП:",
+  "label_gil_status": "Статус GIL:",
+  "label_optimal_workers": "Оптимальные воркеры:",
+  "info_gil_enabled": "Включён",
+  "info_gil_disabled": "Отключён (Free-Threaded)",
+  "info_gil_unknown": "Н/Д (до 3.14)",
+
+  "section_project_links": "Ссылки проекта",
+  "button_original_repo": "Оригинальный репозиторий Impulcifer",
+  "button_fork_repo": "Этот форк (портирование Python 3.13+)"
 }

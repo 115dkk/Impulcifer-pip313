@@ -246,5 +246,29 @@
   "section_about": "Über",
   "label_version": "Version:",
   "button_view_license": "Lizenz anzeigen",
-  "button_report_bug": "Fehler melden"
+  "button_report_bug": "Fehler melden",
+
+  "label_installation": "Installation:",
+  "info_install_velopack": "Eigenständig (Velopack)",
+  "info_install_pip": "pip-Paket",
+  "info_install_dev": "Entwicklung",
+
+  "section_contributors": "Mitwirkende",
+  "contributor_role_original": "Originalautor",
+  "contributor_role_py313": "Python 3.13/3.14 Portierung",
+  "contributor_role_contributor": "Mitwirkender",
+
+  "section_system_info": "Systeminformationen",
+  "label_python": "Python:",
+  "label_os": "Betriebssystem:",
+  "label_cpu_cores": "CPU-Kerne:",
+  "label_gil_status": "GIL-Status:",
+  "label_optimal_workers": "Optimale Worker:",
+  "info_gil_enabled": "Aktiviert",
+  "info_gil_disabled": "Deaktiviert (Free-Threaded)",
+  "info_gil_unknown": "N/V (vor 3.14)",
+
+  "section_project_links": "Projektlinks",
+  "button_original_repo": "Original Impulcifer Repository",
+  "button_fork_repo": "Dieser Fork (Python 3.13+ Portierung)"
 }

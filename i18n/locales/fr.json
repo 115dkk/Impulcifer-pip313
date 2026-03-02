@@ -246,5 +246,29 @@
   "section_about": "À propos",
   "label_version": "Version :",
   "button_view_license": "Voir la licence",
-  "button_report_bug": "Signaler un bug"
+  "button_report_bug": "Signaler un bug",
+
+  "label_installation": "Installation :",
+  "info_install_velopack": "Autonome (Velopack)",
+  "info_install_pip": "Paquet pip",
+  "info_install_dev": "Développement",
+
+  "section_contributors": "Contributeurs",
+  "contributor_role_original": "Auteur original",
+  "contributor_role_py313": "Portage Python 3.13/3.14",
+  "contributor_role_contributor": "Contributeur",
+
+  "section_system_info": "Informations système",
+  "label_python": "Python :",
+  "label_os": "SE :",
+  "label_cpu_cores": "Cœurs CPU :",
+  "label_gil_status": "État du GIL :",
+  "label_optimal_workers": "Workers optimaux :",
+  "info_gil_enabled": "Activé",
+  "info_gil_disabled": "Désactivé (Free-Threaded)",
+  "info_gil_unknown": "N/D (avant 3.14)",
+
+  "section_project_links": "Liens du projet",
+  "button_original_repo": "Dépôt Impulcifer original",
+  "button_fork_repo": "Ce fork (portage Python 3.13+)"
 }

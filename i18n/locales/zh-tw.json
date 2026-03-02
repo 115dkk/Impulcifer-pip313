@@ -246,5 +246,29 @@
   "section_about": "關於",
   "label_version": "版本：",
   "button_view_license": "查看授權條款",
-  "button_report_bug": "回報錯誤"
+  "button_report_bug": "回報錯誤",
+
+  "label_installation": "安裝方式：",
+  "info_install_velopack": "獨立執行 (Velopack)",
+  "info_install_pip": "pip 套件",
+  "info_install_dev": "開發環境",
+
+  "section_contributors": "貢獻者",
+  "contributor_role_original": "原作者",
+  "contributor_role_py313": "Python 3.13/3.14 移植",
+  "contributor_role_contributor": "貢獻者",
+
+  "section_system_info": "系統資訊",
+  "label_python": "Python：",
+  "label_os": "作業系統：",
+  "label_cpu_cores": "CPU 核心數：",
+  "label_gil_status": "GIL 狀態：",
+  "label_optimal_workers": "最佳工作執行緒數：",
+  "info_gil_enabled": "已啟用",
+  "info_gil_disabled": "已停用 (Free-Threaded)",
+  "info_gil_unknown": "不適用 (3.14 之前)",
+
+  "section_project_links": "專案連結",
+  "button_original_repo": "原始 Impulcifer 儲存庫",
+  "button_fork_repo": "本 Fork (Python 3.13+ 移植)"
 }

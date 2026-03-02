@@ -1276,12 +1276,74 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
     return content
 
 
+def _print_info():
+    """Print diagnostic information for bug reports (English-only output)."""
+    import sys
+    import platform as pf
+    lines = [f"Impulcifer {__version__}"]
+    lines.append(f"Python {sys.version.split()[0]}")
+    lines.append(f"OS: {pf.system()} {pf.release()} ({pf.machine()})")
+    lines.append(f"CPU cores: {os.cpu_count() or 'unknown'}")
+
+    # GIL status
+    if hasattr(sys, '_is_gil_enabled'):
+        gil = "Disabled (Free-Threaded)" if not sys._is_gil_enabled() else "Enabled"
+    else:
+        gil = "N/A (pre-3.14)"
+    lines.append(f"GIL: {gil}")
+
+    # Optimal workers
+    try:
+        from core.parallel_processing import get_python_threading_info
+        info = get_python_threading_info()
+        lines.append(f"Optimal workers: {info.get('optimal_workers', 'unknown')}")
+    except Exception:
+        pass
+
+    # Installation type
+    try:
+        from updater.updater_core import is_velopack_environment, is_pip_environment
+        if is_velopack_environment():
+            lines.append("Installation: Standalone (Velopack)")
+        elif is_pip_environment():
+            lines.append("Installation: pip package")
+        else:
+            lines.append("Installation: Development")
+    except Exception:
+        lines.append("Installation: Development")
+
+    # Key dependency versions
+    dep_versions = []
+    for pkg in ['numpy', 'scipy', 'matplotlib', 'soundfile', 'customtkinter', 'bokeh', 'autoeq-py313']:
+        try:
+            from importlib.metadata import version as get_ver
+            dep_versions.append(f"{pkg}=={get_ver(pkg)}")
+        except Exception:
+            pass
+    if dep_versions:
+        lines.append(f"Dependencies: {', '.join(dep_versions)}")
+
+    print('\n'.join(lines))
+
+
 def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
+        "-V", "--version",
+        action="version",
+        version=f"Impulcifer {__version__}",
+    )
+    arg_parser.add_argument(
+        "--info",
+        action="store_true",
+        default=False,
+        help="Print diagnostic information (version, Python, OS, etc.) and exit.",
+    )
+    arg_parser.add_argument(
         "--dir_path",
         type=str,
-        required=True,
+        required=False,
+        default=None,
         help="Path to directory for recordings and outputs.",
     )
     arg_parser.add_argument(
@@ -1498,6 +1560,17 @@ def create_cli():
         help="Virtual bass polarity handling (default: auto).",
     )
     args = vars(arg_parser.parse_args())
+
+    # Handle --info early exit
+    if args.get("info"):
+        _print_info()
+        raise SystemExit(0)
+    del args["info"]
+
+    # Validate --dir_path is provided (was required=True, now manual check)
+    if args.get("dir_path") is None:
+        arg_parser.error("the following arguments are required: --dir_path")
+
     if "bass_boost" in args:
         bass_boost = args["bass_boost"].split(",")
         if len(bass_boost) == 1:

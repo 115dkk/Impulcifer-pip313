@@ -24,6 +24,7 @@ from i18n.localization import get_localization_manager, SUPPORTED_LANGUAGES
 from infra.logger import get_logger, set_gui_callbacks
 from updater.update_checker import UpdateChecker
 from updater.updater_core import is_velopack_environment, is_pip_environment, VelopackUpdater, LegacyInstallerUpdater, GITHUB_RELEASES_URL
+from core.parallel_processing import get_python_threading_info
 
 # Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
@@ -2058,7 +2059,7 @@ class ModernImpulciferGUI:
         open_folder_btn.grid(row=2, column=0, sticky="w", padx=15, pady=(0, 15))
 
     def create_info_tab(self):
-        """Create Info tab with version, license, and bug report"""
+        """Create Info tab with version, contributors, system info, and links"""
         tab = self.tabview.tab(self.loc.get('tab_info'))
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
@@ -2068,34 +2069,44 @@ class ModernImpulciferGUI:
         scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll.grid_columnconfigure(0, weight=1)
 
-        row = 0
+        section_row = 0
+        label_font = ctk.CTkFont(family=self.font_family, size=13)
+        value_font = ctk.CTkFont(family=self.font_family, size=13, weight="bold")
+        heading_font = ctk.CTkFont(family=self.font_family, size=16, weight="bold")
 
         # === About Section ===
         about_frame = ctk.CTkFrame(scroll, corner_radius=10)
-        about_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        about_frame.grid(row=section_row, column=0, sticky="ew", padx=10, pady=10)
         about_frame.grid_columnconfigure(1, weight=1)
-        row += 1
+        section_row += 1
 
-        ctk.CTkLabel(
-            about_frame,
-            text=self.loc.get('section_about'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
-        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+        r = 0
+        ctk.CTkLabel(about_frame, text=self.loc.get('section_about'), font=heading_font
+                      ).grid(row=r, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         # Version
-        ctk.CTkLabel(
-            about_frame,
-            text=self.loc.get('label_version'),
-            font=ctk.CTkFont(family=self.font_family, size=13)
-        ).grid(row=1, column=0, sticky="w", padx=15, pady=5)
+        r += 1
+        ctk.CTkLabel(about_frame, text=self.loc.get('label_version'), font=label_font
+                      ).grid(row=r, column=0, sticky="w", padx=15, pady=5)
+        ctk.CTkLabel(about_frame, text=impulcifer.__version__, font=value_font
+                      ).grid(row=r, column=1, sticky="w", padx=5, pady=5)
 
-        ctk.CTkLabel(
-            about_frame,
-            text=impulcifer.__version__,
-            font=ctk.CTkFont(family=self.font_family, size=13, weight="bold")
-        ).grid(row=1, column=1, sticky="w", padx=5, pady=5)
+        # Installation type
+        r += 1
+        ctk.CTkLabel(about_frame, text=self.loc.get('label_installation'), font=label_font
+                      ).grid(row=r, column=0, sticky="w", padx=15, pady=5)
+        if is_velopack_environment():
+            install_text = self.loc.get('info_install_velopack')
+        elif is_pip_environment():
+            install_text = self.loc.get('info_install_pip')
+        else:
+            install_text = self.loc.get('info_install_dev')
+        ctk.CTkLabel(about_frame, text=install_text, font=value_font
+                      ).grid(row=r, column=1, sticky="w", padx=5, pady=5)
 
         # License button
+        r += 1
+
         def open_license():
             license_path = Path(__file__).parent.parent / 'LICENSE'
             if license_path.exists():
@@ -2106,20 +2117,99 @@ class ModernImpulciferGUI:
                 else:
                     os.system(f'xdg-open "{license_path}"')
 
-        ctk.CTkButton(
-            about_frame,
-            text=self.loc.get('button_view_license'),
-            command=open_license,
-            width=200
-        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=15, pady=(10, 5))
+        ctk.CTkButton(about_frame, text=self.loc.get('button_view_license'),
+                       command=open_license, width=200
+                       ).grid(row=r, column=0, columnspan=2, sticky="w", padx=15, pady=(10, 5))
 
         # Bug report button
-        ctk.CTkButton(
-            about_frame,
-            text=self.loc.get('button_report_bug'),
-            command=lambda: webbrowser.open("https://github.com/115dkk/Impulcifer-pip313/issues/new"),
-            width=200
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
+        r += 1
+        ctk.CTkButton(about_frame, text=self.loc.get('button_report_bug'),
+                       command=lambda: webbrowser.open("https://github.com/115dkk/Impulcifer-pip313/issues/new"),
+                       width=200
+                       ).grid(row=r, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
+
+        # === Contributors Section ===
+        contrib_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        contrib_frame.grid(row=section_row, column=0, sticky="ew", padx=10, pady=10)
+        contrib_frame.grid_columnconfigure(1, weight=1)
+        section_row += 1
+
+        ctk.CTkLabel(contrib_frame, text=self.loc.get('section_contributors'), font=heading_font
+                      ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        contributors = [
+            ("Jaakko Pasanen", self.loc.get('contributor_role_original')),
+            ("115dkk", self.loc.get('contributor_role_py313')),
+            ("LionLion123", self.loc.get('contributor_role_contributor')),
+            ("SDC (DCinside)", self.loc.get('contributor_role_contributor')),
+        ]
+        for i, (name, role) in enumerate(contributors):
+            ctk.CTkLabel(contrib_frame, text=name, font=value_font
+                          ).grid(row=i + 1, column=0, sticky="w", padx=15, pady=3)
+            ctk.CTkLabel(contrib_frame, text=role, font=label_font
+                          ).grid(row=i + 1, column=1, sticky="w", padx=5, pady=3)
+        # bottom padding for last contributor
+        contrib_frame.grid_rowconfigure(len(contributors) + 1, minsize=10)
+
+        # === System Information Section ===
+        sys_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        sys_frame.grid(row=section_row, column=0, sticky="ew", padx=10, pady=10)
+        sys_frame.grid_columnconfigure(1, weight=1)
+        section_row += 1
+
+        ctk.CTkLabel(sys_frame, text=self.loc.get('section_system_info'), font=heading_font
+                      ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        try:
+            threading_info = get_python_threading_info()
+        except Exception:
+            threading_info = {}
+
+        py_ver = threading_info.get('python_version', f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+        os_name = f"{platform.system()} {platform.release()}"
+        cpu_cores = str(threading_info.get('cpu_count', os.cpu_count() or '?'))
+        optimal_workers = str(threading_info.get('optimal_workers', '?'))
+
+        gil_raw = threading_info.get('gil_enabled', 'unknown (pre-3.14)')
+        if gil_raw is True:
+            gil_text = self.loc.get('info_gil_enabled')
+        elif gil_raw is False:
+            gil_text = self.loc.get('info_gil_disabled')
+        else:
+            gil_text = self.loc.get('info_gil_unknown')
+
+        sys_items = [
+            (self.loc.get('label_python'), py_ver),
+            (self.loc.get('label_os'), os_name),
+            (self.loc.get('label_cpu_cores'), cpu_cores),
+            (self.loc.get('label_gil_status'), gil_text),
+            (self.loc.get('label_optimal_workers'), optimal_workers),
+        ]
+        for i, (label, value) in enumerate(sys_items):
+            ctk.CTkLabel(sys_frame, text=label, font=label_font
+                          ).grid(row=i + 1, column=0, sticky="w", padx=15, pady=3)
+            ctk.CTkLabel(sys_frame, text=value, font=value_font
+                          ).grid(row=i + 1, column=1, sticky="w", padx=5, pady=3)
+        sys_frame.grid_rowconfigure(len(sys_items) + 1, minsize=10)
+
+        # === Project Links Section ===
+        links_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        links_frame.grid(row=section_row, column=0, sticky="ew", padx=10, pady=10)
+        links_frame.grid_columnconfigure(0, weight=1)
+        section_row += 1
+
+        ctk.CTkLabel(links_frame, text=self.loc.get('section_project_links'), font=heading_font
+                      ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
+
+        ctk.CTkButton(links_frame, text=self.loc.get('button_original_repo'),
+                       command=lambda: webbrowser.open("https://github.com/jaakkopasanen/Impulcifer"),
+                       width=280
+                       ).grid(row=1, column=0, sticky="w", padx=15, pady=(5, 5))
+
+        ctk.CTkButton(links_frame, text=self.loc.get('button_fork_repo'),
+                       command=lambda: webbrowser.open("https://github.com/115dkk/Impulcifer-pip313"),
+                       width=280
+                       ).grid(row=2, column=0, sticky="w", padx=15, pady=(5, 15))
 
     def change_language(self, language_name):
         """Change application language"""
