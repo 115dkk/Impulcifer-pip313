@@ -246,6 +246,26 @@ def synthesize_virtual_bass(
             peak_right = np.argmax(np.abs(pair['right'].data))
             itd_samples = peak_right - peak_left  # positive = left ear first
 
+        # --- Per-speaker polarity detection ---
+        # Use ipsilateral ear as the reference to ensure consistent polarity
+        # across both ears of the same speaker.
+        if invert_polarity is None:
+            if speaker_class == 'left' and has_left:
+                ref_ir_lp = sosfilt(sos_lp8_xo, pair['left'].data)
+                ref_polarity = _detect_polarity(ref_ir_lp)
+            elif speaker_class == 'right' and has_right:
+                ref_ir_lp = sosfilt(sos_lp8_xo, pair['right'].data)
+                ref_polarity = _detect_polarity(ref_ir_lp)
+            else:
+                # center or missing ipsilateral: use first available ear
+                first_side = next(iter(pair))
+                ref_ir_lp = sosfilt(sos_lp8_xo, pair[first_side].data)
+                ref_polarity = _detect_polarity(ref_ir_lp)
+        elif invert_polarity:
+            ref_polarity = -1.0
+        else:
+            ref_polarity = 1.0
+
         for side in ('left', 'right'):
             if side not in pair:
                 continue
@@ -265,13 +285,8 @@ def synthesize_virtual_bass(
             # --- Step 2: Extract the low-frequency envelope ---
             ir_lp = sosfilt(sos_lp8_xo, ir)
 
-            # --- Step 3: Detect / apply polarity ---
-            if invert_polarity is None:
-                polarity = _detect_polarity(ir_lp)
-            elif invert_polarity:
-                polarity = -1.0
-            else:
-                polarity = 1.0
+            # --- Step 3: Apply per-speaker unified polarity ---
+            polarity = ref_polarity
 
             ir_lp_corrected = ir_lp * polarity
 
