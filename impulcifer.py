@@ -264,6 +264,28 @@ def _process_plot_worker(args):
     return (speaker, side, recording)
 
 
+def _save_bokeh_analysis_plots(hrir, dir_path, logger):
+    """PR4 분석 플롯(ILD/IPD/IACC/ETC)을 Bokeh HTML로 저장."""
+    plot_configs = {
+        "ild": ("ILD Analysis", hrir.generate_ild_bokeh_layout),
+        "ipd": ("IPD Analysis", hrir.generate_ipd_bokeh_layout),
+        "iacc": ("IACC Analysis", hrir.generate_iacc_bokeh_layout),
+        "etc": ("ETC Analysis", hrir.generate_etc_bokeh_layout),
+    }
+    for name, (title, func) in plot_configs.items():
+        try:
+            layout = func()
+            if layout is not None:
+                out_dir = os.path.join(dir_path, "plots", name)
+                os.makedirs(out_dir, exist_ok=True)
+                out_path = os.path.join(out_dir, f"{name}_analysis.html")
+                bokeh_output_file(out_path, title=title)
+                bokeh_save(layout)
+        except Exception as e:
+            logger.warning("cli_warning_interactive_plot_error",
+                          title=name, error=str(e))
+
+
 def main(
     dir_path=None,
     test_signal=None,
@@ -557,10 +579,8 @@ def main(
         hrir.plot_interaural_impulse_overlay(
             os.path.join(dir_path, "plots", "interaural_overlay")
         )
-        hrir.plot_ild(os.path.join(dir_path, "plots", "ild"))
-        hrir.plot_ipd(os.path.join(dir_path, "plots", "ipd"))
-        hrir.plot_iacc(os.path.join(dir_path, "plots", "iacc"))
-        hrir.plot_etc(os.path.join(dir_path, "plots", "etc"))
+        # ILD/IPD/IACC/ETC는 Bokeh 레이아웃만 존재하므로 HTML로 저장
+        _save_bokeh_analysis_plots(hrir, dir_path, logger)
 
     # 인터랙티브 플롯 생성 (추가)
     if interactive_plots:

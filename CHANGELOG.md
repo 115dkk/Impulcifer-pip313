@@ -4,6 +4,22 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.5 - 2026-03-04
+### 🐛 버그 수정 및 안정성 개선
+
+#### 🐛 버그 수정
+- **plot_ild/plot_ipd/plot_iacc/plot_etc AttributeError 수정**: PR4에서 Bokeh 레이아웃 메서드만 구현하고 matplotlib 래퍼(`plot_ild`, `plot_ipd`, `plot_iacc`, `plot_etc`)를 누락한 문제 해결
+  - `impulcifer.py`의 호출부를 Bokeh HTML 저장 방식(`_save_bokeh_analysis_plots` 헬퍼)으로 전환
+  - 각 분석 플롯이 `plots/<name>/<name>_analysis.html`로 저장됨
+- **가상 베이스 극성 감지 왜곡 수정**: `virtual_bass.py`의 `_detect_polarity()`가 채널별로 독립 실행되어 같은 스피커의 좌/우 ear IR에 서로 다른 극성이 적용되던 문제 해결
+  - 스피커 단위로 ipsilateral ear의 극성을 기준으로 통일하여 좌우 일관된 저역 응답 보장
+
+#### ⭐ 새로운 기능
+- **Velopack 라이프사이클 훅 처리**: `gui_main.py`에 `--velopack-install`, `--velopack-updated`, `--velopack-obsolete`, `--velopack-uninstall` 인자 처리 추가
+  - 설치/업데이트 시 불필요한 GUI 실행 방지 (이슈 3: install hook failed 해결)
+  - 제거 시 즉시 종료하여 GUI가 실행되는 문제 해결 (이슈 4)
+  - 제거 시 `%LOCALAPPDATA%/Impulcifer/config` 설정 파일 자동 정리 (이슈 5)
+
 ## 2.5.0 - 2026-03-02
 ### 🌐 콘솔/GUI 메시지 전면 국제화 및 Info 탭 추가
 
