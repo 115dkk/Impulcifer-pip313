@@ -1834,7 +1834,7 @@ class ModernImpulciferGUI:
             pass
 
         # Fallback
-        return "2.4.6"
+        return "2.4.7"
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""

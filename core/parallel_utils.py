@@ -7,7 +7,9 @@ This module provides adaptive parallelization that uses:
 - ProcessPoolExecutor for standard Python with GIL
 """
 
+import os
 import sys
+import concurrent.futures.process
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Callable, List, Any, Optional
 
@@ -68,13 +70,23 @@ def parallel_map(func: Callable, items: List[Any], max_workers: Optional[int] = 
     if not items:
         return []
 
-    with get_optimal_executor(max_workers=max_workers) as executor:
-        # Submit all tasks and maintain order
-        futures = [executor.submit(func, item) for item in items]
-        # Collect results in order
-        results = [future.result() for future in futures]
+    # 작업 수보다 많은 워커 생성 방지
+    if max_workers is None:
+        max_workers = min(os.cpu_count() or 4, len(items))
 
-    return results
+    try:
+        with get_optimal_executor(max_workers=max_workers) as executor:
+            # Submit all tasks and maintain order
+            futures = [executor.submit(func, item) for item in items]
+            # Collect results in order
+            results = [future.result() for future in futures]
+        return results
+    except (concurrent.futures.process.BrokenProcessPool, RuntimeError):
+        # ProcessPoolExecutor 워커 크래시 시 ThreadPoolExecutor로 자동 폴백
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(func, item) for item in items]
+            results = [future.result() for future in futures]
+        return results
 
 
 def get_parallelization_info() -> dict:

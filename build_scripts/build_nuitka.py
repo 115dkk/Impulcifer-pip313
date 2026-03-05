@@ -166,7 +166,7 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
         "core.impulse_response_estimator", "core.hrir", "core.room_correction",
         "core.microphone_deviation_correction", "core.virtual_bass",
         "core.channel_generation", "core.recorder",
-        "core.parallel_processing", "core.parallel_utils",
+        "core.parallel_processing", "core.parallel_utils", "core.parallel_workers",
         "gui", "gui.modern_gui", "gui.legacy_gui",
         "i18n", "i18n.localization",
         "infra", "infra.logger", "infra.resource_helper", "infra.get_version",

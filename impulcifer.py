@@ -44,7 +44,7 @@ def _get_version() -> str:
         pass
 
     # Fallback
-    return "2.4.6"
+    return "2.4.7"
 
 __version__ = _get_version()
 
@@ -173,103 +173,14 @@ set_matplotlib_font()  # 함수 호출하여 폰트 설정 실행
 
 # ============================================================================
 # Parallel Processing Worker Functions (Phase 2 Optimization)
+# 워커 함수는 core/parallel_workers.py에 정의 (경량 모듈).
+# ProcessPoolExecutor 워커가 impulcifer.py 전체를 import하지 않도록 분리.
 # ============================================================================
-
-def _process_equalization_worker(args):
-    """
-    Worker function for parallel equalization processing.
-
-    Args:
-        args: Tuple of (speaker, side, ir, room_frs, hp_left, hp_right,
-              eq_left, eq_right, target, common_freq, estimator_fs)
-
-    Returns:
-        Tuple of (speaker, side, fir_filter)
-    """
-    (speaker, side, ir, room_frs, hp_left, hp_right,
-     eq_left, eq_right, target, common_freq, estimator_fs) = args
-
-    # Create frequency response for this speaker-side
-    fr = FrequencyResponse(
-        name=f'{speaker}-{side} eq',
-        frequency=common_freq.copy(),
-        raw=0, error=0
-    )
-
-    # Apply room correction
-    if room_frs is not None and speaker in room_frs and side in room_frs[speaker]:
-        fr.error += room_frs[speaker][side].error
-
-    # Apply headphone compensation
-    hp_eq = hp_left if side == 'left' else hp_right
-    if hp_eq is not None:
-        fr.error += hp_eq.error
-
-    # Apply equalization
-    eq = eq_left if side == 'left' else eq_right
-    if eq is not None and isinstance(eq, FrequencyResponse):
-        fr.error += eq.error
-
-    # Remove bass and tilt target from the error
-    fr.error -= target.raw
-
-    # Equalize
-    fr.equalize(
-        max_gain=40,
-        treble_f_lower=10000,
-        treble_f_upper=estimator_fs / 2,
-        window_size=1/3,
-        treble_window_size=1/5
-    )
-
-    # Create FIR filter
-    fir = fr.minimum_phase_impulse_response(fs=estimator_fs, normalize=False, f_res=5)
-
-    return (speaker, side, fir)
-
-
-def _process_decay_worker(args):
-    """
-    Worker function for parallel decay adjustment.
-
-    Args:
-        args: Tuple of (speaker, side, ir_data, decay_value, fs)
-
-    Returns:
-        Tuple of (speaker, side, adjusted_data)
-    """
-    speaker, side, ir_data, decay_value, fs = args
-
-    # Import here to avoid circular dependency in multiprocessing
-    from core.impulse_response import ImpulseResponse
-
-    # Create temporary IR object
-    temp_ir = ImpulseResponse(data=ir_data.copy(), fs=fs)
-    temp_ir.adjust_decay(decay_value)
-
-    return (speaker, side, temp_ir.data)
-
-
-def _process_plot_worker(args):
-    """
-    Worker function for parallel plotting convolution.
-
-    Args:
-        args: Tuple of (speaker, side, ir_data, test_signal, fs)
-
-    Returns:
-        Tuple of (speaker, side, recording)
-    """
-    speaker, side, ir_data, test_signal, fs = args
-
-    # Import here to avoid circular dependency in multiprocessing
-    from core.impulse_response import ImpulseResponse
-
-    # Create temporary IR object
-    temp_ir = ImpulseResponse(data=ir_data.copy(), fs=fs)
-    recording = temp_ir.convolve(test_signal)
-
-    return (speaker, side, recording)
+from core.parallel_workers import (
+    process_equalization_worker,
+    process_decay_worker,
+    process_plot_worker,
+)
 
 
 def _save_bokeh_analysis_plots(hrir, dir_path, logger):
@@ -528,7 +439,7 @@ def main(
 
         # Execute equalization in parallel
         logger.info("cli_info_parallel_eq", count=len(eq_tasks))
-        eq_results = parallel_map(_process_equalization_worker, eq_tasks)
+        eq_results = parallel_map(process_equalization_worker, eq_tasks)
 
         # Apply FIR filters to impulse responses
         for speaker, side, fir in eq_results:
@@ -547,7 +458,7 @@ def main(
 
         if decay_tasks:
             logger.info("cli_info_parallel_decay", count=len(decay_tasks))
-            decay_results = parallel_map(_process_decay_worker, decay_tasks)
+            decay_results = parallel_map(process_decay_worker, decay_tasks)
 
             # Apply results back to impulse responses
             for speaker, side, adjusted_data in decay_results:
@@ -568,7 +479,7 @@ def main(
                 plot_tasks.append((speaker, side, ir.data, estimator.test_signal, estimator.fs))
 
         logger.info("cli_info_parallel_plotting", count=len(plot_tasks))
-        plot_results = parallel_map(_process_plot_worker, plot_tasks)
+        plot_results = parallel_map(process_plot_worker, plot_tasks)
 
         # Apply results back to impulse responses
         for speaker, side, recording in plot_results:
