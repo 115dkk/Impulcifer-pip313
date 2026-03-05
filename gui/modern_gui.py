@@ -33,18 +33,19 @@ ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-
 def open_data_folder():
     """Open the application's data folder in file explorer."""
     import subprocess
+    from infra.resource_helper import DATA_DIR
 
-    if is_frozen_or_standalone():
-        # Nuitka compiled
-        app_dir = Path(sys.executable).parent
-    else:
-        # Development
-        app_dir = Path(__file__).parent
-
-    data_dir = app_dir / "data"
+    data_dir = Path(DATA_DIR)
 
     if not data_dir.exists():
-        data_dir = app_dir  # Fallback to app directory
+        # Fallback: executable 디렉토리 기준
+        if is_frozen_or_standalone():
+            data_dir = Path(sys.executable).parent / "data"
+        else:
+            data_dir = Path(__file__).parent.parent / "data"
+
+    if not data_dir.exists():
+        data_dir = Path.home() / "Documents"  # 최종 폴백
 
     system = platform.system()
 

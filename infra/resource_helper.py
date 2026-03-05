@@ -8,17 +8,25 @@ import sys
 
 def get_resource_path(relative_path):
     """리소스 파일의 절대 경로를 반환
-    
+
     개발 환경과 Nuitka 빌드 환경 모두에서 작동
     """
-    # Nuitka 빌드 환경 확인
+    # 빌드 마커 우선
+    try:
+        from infra._build_info import BUILD_TYPE
+        if BUILD_TYPE == "standalone":
+            base_path = os.path.dirname(sys.executable)
+            return os.path.join(base_path, relative_path)
+    except ImportError:
+        pass
+
+    # Nuitka 컴파일 폴백 (__compiled__는 모듈 전역 변수)
     if "__compiled__" in globals():
-        # Nuitka로 컴파일된 경우
-        base_path = os.path.dirname(sys.argv[0])
-    else:
-        # 개발 환경
-        base_path = os.path.dirname(os.path.abspath(__file__))
-    
+        base_path = os.path.dirname(sys.executable)
+        return os.path.join(base_path, relative_path)
+
+    # 개발 환경: infra/ 의 상위 디렉토리 = 프로젝트 루트
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
 def get_data_path(filename):
