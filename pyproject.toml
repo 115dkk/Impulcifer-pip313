@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "2.4.5"
+version = "2.4.7"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13/3.14 호환 버전: 115dkk", email="" },
@@ -100,6 +100,9 @@ exclude = [
 "data" = "impulcifer_py313/data"
 "font" = "impulcifer_py313/font"
 "i18n/locales" = "impulcifer_py313/locales"
+
+# 빌드 훅 — PyPI 빌드 시 infra/_build_info.py에 마커 생성
+[tool.hatch.build.hooks.custom]
 
 # pytest 설정
 [tool.pytest.ini_options]

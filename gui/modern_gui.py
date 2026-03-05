@@ -33,18 +33,19 @@ ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-
 def open_data_folder():
     """Open the application's data folder in file explorer."""
     import subprocess
+    from infra.resource_helper import DATA_DIR
 
-    if getattr(sys, 'frozen', False) or hasattr(sys, '__compiled__'):
-        # Nuitka compiled
-        app_dir = Path(sys.executable).parent
-    else:
-        # Development
-        app_dir = Path(__file__).parent
-
-    data_dir = app_dir / "data"
+    data_dir = Path(DATA_DIR)
 
     if not data_dir.exists():
-        data_dir = app_dir  # Fallback to app directory
+        # Fallback: executable 디렉토리 기준
+        if is_frozen_or_standalone():
+            data_dir = Path(sys.executable).parent / "data"
+        else:
+            data_dir = Path(__file__).parent.parent / "data"
+
+    if not data_dir.exists():
+        data_dir = Path.home() / "Documents"  # 최종 폴백
 
     system = platform.system()
 
@@ -67,11 +68,17 @@ def is_frozen_or_standalone() -> bool:
         True if running as Nuitka standalone
         False if running as a normal Python script or pip-installed package
     """
-    # Nuitka compiled check
-    if hasattr(sys, '__compiled__'):
+    # 빌드 마커 우선 (가장 확실)
+    try:
+        from infra._build_info import BUILD_TYPE
+        return BUILD_TYPE == "standalone"
+    except ImportError:
+        pass
+
+    # 폴백: 기존 런타임 감지
+    if getattr(sys, 'frozen', False):
         return True
 
-    # Nuitka onefile mode
     if '__nuitka__' in sys.modules:
         return True
 
@@ -1809,50 +1816,16 @@ class ModernImpulciferGUI:
         thread.start()
 
     def get_current_version(self) -> str:
-        """Get current application version from package metadata or pyproject.toml"""
-        # Method 1: Try to get version from installed package metadata (most reliable)
+        """Get current application version from build marker, pyproject.toml, or metadata."""
+        # Method 0: 빌드 마커 (Nuitka/pip 빌드에서 가장 확실)
         try:
-            from importlib.metadata import version as get_version
-            try:
-                pkg_version = get_version('impulcifer-py313')
-                print(f"Version from package metadata: {pkg_version}")
-                return pkg_version
-            except Exception:
-                pass
+            from infra._build_info import VERSION as build_version
+            if build_version is not None:
+                return build_version
         except ImportError:
             pass
 
-        # Method 2: Try to read pyproject.toml (development mode)
-        try:
-            import tomllib
-        except ImportError:
-            try:
-                import tomli as tomllib
-            except ImportError:
-                tomllib = None
-
-        if tomllib:
-            try:
-                from pathlib import Path
-                # Try multiple possible locations
-                possible_paths = [
-                    Path(__file__).parent / 'pyproject.toml',
-                    Path(__file__).parent.parent / 'pyproject.toml',
-                    Path.cwd() / 'pyproject.toml',
-                ]
-
-                for pyproject_path in possible_paths:
-                    if pyproject_path.exists():
-                        with open(pyproject_path, 'rb') as f:
-                            data = tomllib.load(f)
-                            version_str = data.get('project', {}).get('version')
-                            if version_str:
-                                print(f"Version from pyproject.toml: {version_str}")
-                                return version_str
-            except Exception as e:
-                print(f"Error reading pyproject.toml: {e}")
-
-        # Method 3: Check for __version__ attribute (if defined)
+        # Method 1: impulcifer.__version__ (이미 빌드 마커 → pyproject.toml → metadata 순으로 시도)
         try:
             import impulcifer
             if hasattr(impulcifer, '__version__'):
@@ -1860,9 +1833,8 @@ class ModernImpulciferGUI:
         except Exception:
             pass
 
-        # Fallback: Unknown version
-        print("Warning: Could not determine version, using fallback")
-        return "2.4.4"  # Current known version as last resort
+        # Fallback
+        return "2.4.7"
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""
@@ -2108,14 +2080,27 @@ class ModernImpulciferGUI:
         r += 1
 
         def open_license():
-            license_path = Path(__file__).parent.parent / 'LICENSE'
-            if license_path.exists():
+            # Nuitka 빌드에서는 LICENSE가 License.txt로 리네임되어 번들됨
+            candidates = [
+                Path(sys.executable).parent / 'License.txt',   # Nuitka 빌드
+                Path(__file__).parent.parent / 'LICENSE',       # 개발 환경
+                Path(__file__).parent.parent / 'License.txt',   # 혹시 모를 경우
+            ]
+            license_path = None
+            for p in candidates:
+                if p.exists():
+                    license_path = p
+                    break
+
+            if license_path:
                 if platform.system() == 'Windows':
                     os.startfile(license_path)
                 elif platform.system() == 'Darwin':
                     os.system(f'open "{license_path}"')
                 else:
                     os.system(f'xdg-open "{license_path}"')
+            else:
+                webbrowser.open("https://github.com/115dkk/Impulcifer-pip313/blob/main/LICENSE")
 
         ctk.CTkButton(about_frame, text=self.loc.get('button_view_license'),
                        command=open_license, width=200

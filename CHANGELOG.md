@@ -4,6 +4,35 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.7 - 2026-03-05
+### 🐛 가상 베이스 + 플롯 병렬 처리 크래시 수정
+
+#### 🐛 버그 수정
+- **가상 베이스 + 플롯 동시 사용 시 크래시 수정**: ProcessPoolExecutor 워커 프로세스가 `impulcifer.py` 전체를 import하여 matplotlib, bokeh, autoeq 등 무거운 모듈을 불필요하게 로드 → 가상 베이스의 메모리 사용과 결합하여 워커 OOM 크래시
+  - 워커 함수를 `core/parallel_workers.py` 경량 모듈로 분리
+  - `process_plot_worker`: `scipy.signal.convolve`만 사용 (matplotlib/bokeh 불필요)
+  - 워커당 메모리: ~200-400 MB → ~50-80 MB
+- **ProcessPoolExecutor 안전망 추가**: `BrokenProcessPool` 발생 시 `ThreadPoolExecutor`로 자동 폴백
+- **max_workers 최적화**: 작업 수보다 많은 워커 생성 방지 (`min(cpu_count, len(items))`)
+
+## 2.4.6 - 2026-03-05
+### 🔧 빌드 타임 마커 기반 버전/설치방식/라이선스 수정
+
+#### 🐛 버그 수정
+- **버전 인식 오류 수정**: Nuitka 스탠드얼론 빌드에서 `importlib.metadata`와 `pyproject.toml` 모두 실패하여 하드코딩된 구 버전이 표시되던 문제 해결
+  - `infra/_build_info.py` 빌드 마커 시스템 도입으로 모든 빌드 경로에서 정확한 버전 보장
+- **설치 방식 오인식 수정**: Nuitka가 `__compiled__`를 `sys` 속성이 아닌 모듈 전역 변수로 설정하여 `hasattr(sys, '__compiled__')` 감지 실패 → 스탠드얼론인데 "pip 패키지"로 표시되던 문제 해결
+  - `updater_core.py`에 빌드 마커 기반 `_is_standalone_build()` 도입
+  - `is_pip_environment()`가 스탠드얼론에 번들된 pip을 무시하도록 수정
+- **라이선스 파일 열리지 않는 문제 수정**: Nuitka 빌드에서 `LICENSE`가 `License.txt`로 리네임되어 번들되는데 GUI가 `LICENSE`만 탐색하던 문제 해결
+  - 복수 후보 경로(`License.txt`, `LICENSE`) 탐색 + GitHub 폴백
+
+#### ⭐ 새로운 기능
+- **빌드 타임 마커 시스템**: `infra/_build_info.py`를 통한 빌드 타입/버전 관리
+  - Nuitka 빌드: `build_scripts/build_nuitka.py`가 `BUILD_TYPE="standalone"` 마커 생성
+  - PyPI 빌드: `hatch_build.py` 커스텀 훅이 `BUILD_TYPE="pip"` 마커 생성
+  - 개발 환경: 기본값 `BUILD_TYPE="dev"` 사용, pyproject.toml에서 동적 읽기
+
 ## 2.4.5 - 2026-03-04
 ### 🐛 버그 수정 및 안정성 개선
 

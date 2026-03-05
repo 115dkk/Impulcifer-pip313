@@ -86,6 +86,18 @@ def clean_specific_build_folders():
         os.remove("ImpulciferGUI.exe")
 
 
+def _generate_build_info(version: str):
+    """Nuitka 빌드용 마커 파일 생성 — 런타임에서 버전/빌드 타입을 확실히 식별."""
+    build_info_path = Path("infra/_build_info.py")
+    content = f'''# -*- coding: utf-8 -*-
+"""빌드 정보 마커 — build_nuitka.py에 의해 자동 생성됨."""
+BUILD_TYPE = "standalone"
+VERSION = "{version}"
+'''
+    build_info_path.write_text(content, encoding="utf-8")
+    print(f"✓ 빌드 마커 생성: BUILD_TYPE=standalone, VERSION={version}", flush=True)
+
+
 def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_platform=None):
     print(f"build_nuitka.py: build_impulcifer() called with version={project_version}", flush=True)
     """Nuitka로 Impulcifer GUI 빌드 (크로스 플랫폼 지원)"""
@@ -154,10 +166,11 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
         "core.impulse_response_estimator", "core.hrir", "core.room_correction",
         "core.microphone_deviation_correction", "core.virtual_bass",
         "core.channel_generation", "core.recorder",
-        "core.parallel_processing", "core.parallel_utils",
+        "core.parallel_processing", "core.parallel_utils", "core.parallel_workers",
         "gui", "gui.modern_gui", "gui.legacy_gui",
         "i18n", "i18n.localization",
         "infra", "infra.logger", "infra.resource_helper", "infra.get_version",
+        "infra._build_info",
         "updater", "updater.update_checker", "updater.updater_core",
         "impulcifer",
     ]
@@ -243,6 +256,9 @@ def main():
 
     current_version = get_project_version()
     print(f"빌드에 사용될 버전: {current_version}", flush=True)
+
+    # 빌드 마커 파일 생성 (런타임 버전/빌드 타입 식별용)
+    _generate_build_info(current_version)
 
     if not os.path.exists("gui_main.py"):
         print("\n엔트리 포인트 파일 생성 중...", flush=True)
