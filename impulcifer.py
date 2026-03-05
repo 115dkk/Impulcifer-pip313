@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 
 def _get_version() -> str:
-    """Get version from pyproject.toml or package metadata."""
-    # Method 1: Try package metadata (installed via pip)
+    """Get version from build marker, pyproject.toml, or package metadata."""
+    # Method 0: 빌드 마커 (Nuitka/pip 빌드에서 가장 확실)
     try:
-        from importlib.metadata import version as get_version
-        return get_version('impulcifer-py313')
-    except Exception:
+        from infra._build_info import VERSION as build_version
+        if build_version is not None:
+            return build_version
+    except ImportError:
         pass
 
-    # Method 2: Try pyproject.toml (development mode)
+    # Method 1: pyproject.toml (개발 환경)
     try:
         import tomllib
     except ImportError:
@@ -35,8 +36,15 @@ def _get_version() -> str:
         except Exception:
             pass
 
+    # Method 2: Package metadata (pip 설치, 마커 없는 경우)
+    try:
+        from importlib.metadata import version as get_version
+        return get_version('impulcifer-py313')
+    except Exception:
+        pass
+
     # Fallback
-    return "2.4.4"
+    return "2.4.6"
 
 __version__ = _get_version()
 

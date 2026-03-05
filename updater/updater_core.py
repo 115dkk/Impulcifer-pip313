@@ -15,12 +15,27 @@ from pathlib import Path
 from typing import Optional, Callable
 
 
+def _is_standalone_build() -> bool:
+    """빌드 마커 기반 스탠드얼론(Nuitka) 빌드 감지."""
+    try:
+        from infra._build_info import BUILD_TYPE
+        return BUILD_TYPE == "standalone"
+    except ImportError:
+        pass
+    # 폴백: 기존 런타임 감지 (마커 없는 구 빌드 호환)
+    if getattr(sys, 'frozen', False):
+        return True
+    if '__nuitka__' in sys.modules:
+        return True
+    return False
+
+
 def is_velopack_environment() -> bool:
     """
     Check if running in a Velopack-installed environment.
     Velopack creates Update.exe in the app's parent directory.
     """
-    if not getattr(sys, 'frozen', False) and not hasattr(sys, '__compiled__'):
+    if not _is_standalone_build():
         return False
 
     app_dir = Path(sys.executable).parent
@@ -31,7 +46,7 @@ def is_velopack_environment() -> bool:
 
 def get_velopack_update_exe() -> Optional[Path]:
     """Get path to Velopack's Update.exe if available."""
-    if not getattr(sys, 'frozen', False) and not hasattr(sys, '__compiled__'):
+    if not _is_standalone_build():
         return None
 
     app_dir = Path(sys.executable).parent
@@ -43,7 +58,17 @@ def get_velopack_update_exe() -> Optional[Path]:
 
 
 def is_pip_environment() -> bool:
-    """Check if pip is available for package management."""
+    """Check if running as a pip-installed package."""
+    # 빌드 마커 우선
+    try:
+        from infra._build_info import BUILD_TYPE
+        return BUILD_TYPE == "pip"
+    except ImportError:
+        pass
+    # 스탠드얼론 빌드에 번들된 pip은 무시
+    if _is_standalone_build():
+        return False
+    # 폴백: 기존 pip 확인 로직
     try:
         import pip  # noqa: F401
         return True
