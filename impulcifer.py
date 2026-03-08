@@ -44,7 +44,7 @@ def _get_version() -> str:
         pass
 
     # Fallback
-    return "2.4.7"
+    return "2.4.8"
 
 __version__ = _get_version()
 
@@ -656,6 +656,11 @@ def main(
         # PR3의 LFE 채널 생성 로직은 FL, FR을 기반으로 하므로, 필요시 여기에 추가 구현.
         # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:
         # LFE 생성 로직 ...
+
+    # 메모리 회수: 순환 참조 해제 + GC 강제 수행
+    # BRIR 반복 생성 시 메모리 누적 방지
+    import gc
+    gc.collect()
 
 
 def open_impulse_response_estimator(dir_path, file_path=None):
