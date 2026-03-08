@@ -1810,6 +1810,19 @@ class ModernImpulciferGUI:
                     state="normal",
                     text=self.loc.get('button_generate_brir')
                 ))
+            finally:
+                # 메모리 회수: BRIR 반복 생성 시 메모리 누적 방지
+                import gc
+                gc.collect()
+                # Windows: 프로세스 working set 트리밍 (물리 메모리 OS 반환)
+                try:
+                    import ctypes
+                    kernel32 = ctypes.windll.kernel32
+                    kernel32.SetProcessWorkingSetSize(
+                        kernel32.GetCurrentProcess(), -1, -1
+                    )
+                except Exception:
+                    pass
 
         # Start processing thread
         thread = threading.Thread(target=run_processing, daemon=True)
@@ -1834,7 +1847,7 @@ class ModernImpulciferGUI:
             pass
 
         # Fallback
-        return "2.4.7"
+        return "2.4.8"
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""

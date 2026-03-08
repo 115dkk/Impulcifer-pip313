@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.8 - 2026-03-08
+### 🐛 Velopack 설치 훅 + 메모리 회수
+
+#### 🐛 버그 수정
+- **Velopack 설치 훅 실패 수정**: `--velopack-install=<version>` 형식의 인자를 exact match로 검사하여 감지 실패 → 설치 중 GUI가 실행되고 "install hook failed" 경고 발생
+  - `startswith('--velopack-')` prefix 매칭으로 변경하여 모든 인자 형식 처리
+
+#### ⭐ 개선
+- **BRIR 생성 후 메모리 회수**: 처리 완료 후 ~3 GB 메모리가 해제되지 않던 문제
+  - `impulcifer.py:main()` 끝에 `gc.collect()` 추가
+  - GUI `run_processing()` finally 블록에서 `gc.collect()` + Windows working set 트리밍
+  - BRIR 반복 생성 시 메모리 누적 방지
+
 ## 2.4.7 - 2026-03-05
 ### 🐛 가상 베이스 + 플롯 병렬 처리 크래시 수정
 

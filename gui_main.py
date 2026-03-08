@@ -9,17 +9,12 @@ def _handle_velopack_lifecycle():
     """Velopack 설치/업데이트/제거 훅 처리.
 
     Velopack은 설치/업데이트/제거 시 실행 파일에 특수 인자를 전달합니다.
+    형식: --velopack-install <version>, --velopack-install=<version> 등
     이 인자가 감지되면 GUI를 실행하지 않고 즉시 종료합니다.
     """
-    velopack_args = {
-        '--velopack-install',
-        '--velopack-updated',
-        '--velopack-obsolete',
-        '--velopack-uninstall',
-    }
     for arg in sys.argv[1:]:
-        if arg in velopack_args:
-            if arg == '--velopack-uninstall':
+        if arg.startswith('--velopack-'):
+            if arg.startswith('--velopack-uninstall'):
                 _cleanup_on_uninstall()
             sys.exit(0)
 
