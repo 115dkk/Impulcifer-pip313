@@ -4,6 +4,18 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.9 - 2026-03-19
+### 🐛 Velopack 훅 인자명 수정 + 업데이트 UX 개선
+
+#### 🐛 버그 수정
+- **Velopack 라이프사이클 훅 인자명 수정**: Velopack은 `--veloapp-*` prefix를 사용하지만 코드가 `--velopack-*`을 검색하고 있어 모든 훅(설치/업데이트/제거)이 감지 실패
+  - `gui_main.py`: `--velopack-` → `--veloapp-` (공식 문서: https://docs.velopack.io/integrating/hooks)
+  - `build_nuitka.py`: 폴백 엔트리포인트에도 올바른 Velopack 훅 핸들러 추가
+
+#### ⭐ 개선
+- **업데이트 후 재시작 알림**: `VELOPACK_RESTART` 환경 변수 감지하여 업데이트 완료 메시지 표시
+- **업데이트 전 메시지 개선**: "앱이 종료됩니다. 잠시 후 자동으로 다시 시작됩니다." 안내 추가
+
 ## 2.4.8 - 2026-03-08
 ### 🐛 Velopack 설치 훅 + 메모리 회수
 
