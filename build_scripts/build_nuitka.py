@@ -266,8 +266,13 @@ def main():
             f.write("""#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 \"\"\"Impulcifer Modern GUI 엔트리 포인트\"\"\"
+import sys
 
 if __name__ == "__main__":
+    # Velopack lifecycle hooks (https://docs.velopack.io/integrating/hooks)
+    for arg in sys.argv[1:]:
+        if arg.startswith('--veloapp-'):
+            sys.exit(0)
     from gui.modern_gui import main_gui
     main_gui()
 """)

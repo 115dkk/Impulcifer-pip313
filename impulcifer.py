@@ -44,7 +44,7 @@ def _get_version() -> str:
         pass
 
     # Fallback
-    return "2.4.8"
+    return "2.4.9"
 
 __version__ = _get_version()
 

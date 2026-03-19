@@ -592,7 +592,9 @@ class UpdateDialog(ctk.CTkToplevel):
                 # Show message before restart
                 self.after(0, lambda: messagebox.showinfo(
                     self.loc.get('update_complete_title', default="Update Ready"),
-                    self.loc.get('update_restart_message', default="The application will now restart to complete the update.")
+                    self.loc.get('update_restart_message',
+                                 default="The application will close to apply the update.\n"
+                                         "It will restart automatically in a few seconds.")
                 ))
 
                 updater.apply_and_restart()
@@ -705,6 +707,13 @@ class ModernImpulciferGUI:
 
         # Check for updates in background (after 2 seconds)
         self.root.after(2000, self.check_for_updates_background)
+
+        # Velopack 업데이트 후 재시작 감지 — 사용자에게 완료 알림
+        if os.environ.get('VELOPACK_RESTART'):
+            self.root.after(1000, lambda: messagebox.showinfo(
+                self.loc.get('update_complete_title', default="Update Complete"),
+                self.loc.get('update_restart_done', default="The new version has been installed successfully.")
+            ))
 
         # Set window size and position
         window_width = 1000
@@ -1847,7 +1856,7 @@ class ModernImpulciferGUI:
             pass
 
         # Fallback
-        return "2.4.8"
+        return "2.4.9"
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""
