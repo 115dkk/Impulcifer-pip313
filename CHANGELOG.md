@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.11 - 2026-03-23
+### ⚡ GUI 스크롤 성능 개선
+
+#### ⚡ 성능 개선
+- **스크롤 시 GPU 스파이크(~30%) 해소**: CTkScrollableFrame 내부 중첩 프레임 14개의 `corner_radius=10` → `0`으로 변경
+  - CustomTkinter의 corner_radius는 Canvas 위에 안티앨리어싱 라운드 코너를 매 프레임 렌더링하여 스크롤 시 GPU 부하 유발
+  - 최상위 컨테이너(탭뷰, 스크롤 프레임)의 라운드 코너는 유지하여 디자인 톤 보존
+- **ProcessingDialog `.update()` → `.update_idletasks()`**: 로그 출력 시 전체 이벤트 루프 처리 대신 화면 갱신만 수행하여 처리 중 UI 응답성 개선
+
 ## 2.4.10 - 2026-03-23
 ### 🐛 BRIR 처리 후 메모리 미해제 수정
 
