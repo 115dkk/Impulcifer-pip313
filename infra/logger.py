@@ -200,7 +200,5 @@ def set_gui_callbacks(log_callback: Optional[Callable] = None,
         progress_callback: Function(progress: int, message: str) to update progress
     """
     logger = get_logger()
-    if log_callback:
-        logger.set_gui_callback(log_callback)
-    if progress_callback:
-        logger.set_progress_callback(progress_callback)
+    logger.set_gui_callback(log_callback)
+    logger.set_progress_callback(progress_callback)

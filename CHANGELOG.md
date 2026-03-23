@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.10 - 2026-03-23
+### 🐛 BRIR 처리 후 메모리 미해제 수정
+
+#### 🐛 버그 수정
+- **BRIR 처리 후 ~3.6GB 메모리 미해제**: `gc.collect()`만으로는 아직 스코프 내 로컬 변수를 수거하지 못함
+  - `impulcifer.py:main()` 끝에서 `del hrir, estimator` 등 대형 객체 명시적 삭제 후 GC 수행
+  - jamesdsp `dsp_hrir` deepcopy 사용 후 즉시 `del`
+  - hangloose `single_hrir` deepcopy 사용 후 즉시 `del`
+  - 글로벌 로거의 GUI 콜백 참조 해제 (ProcessingDialog → GUI 위젯 참조 체인 끊기)
+  - `infra/logger.py:set_gui_callbacks()`에서 None 전달 시에도 콜백 설정 가능하도록 수정
+
 ## 2.4.9 - 2026-03-19
 ### 🐛 Velopack 훅 인자명 수정 + 업데이트 UX 개선
 

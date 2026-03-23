@@ -44,7 +44,7 @@ def _get_version() -> str:
         pass
 
     # Fallback
-    return "2.4.9"
+    return "2.4.10"
 
 __version__ = _get_version()
 
@@ -624,6 +624,7 @@ def main(
         jd_order = ["FL-left", "FL-right", "FR-left", "FR-right"]
         out_path = os.path.join(dir_path, "jamesdsp.wav")
         dsp_hrir.write_wav(out_path, track_order=jd_order)
+        del dsp_hrir
         logger.success("cli_success_jamesdsp", path=out_path)
 
     # PR3 hangloose 로직 추가 (항목 7)
@@ -649,6 +650,7 @@ def main(
             track_order = [f"{sp}-left", f"{sp}-right"]
             out_path = os.path.join(output_dir, f"{sp}.wav")
             single_hrir.write_wav(out_path, track_order=track_order)
+            del single_hrir
             logger.info("cli_success_hangloose_file", file=f"{sp}.wav")
 
         logger.success("cli_success_hangloose", path=output_dir)
@@ -657,8 +659,14 @@ def main(
         # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:
         # LFE 생성 로직 ...
 
-    # 메모리 회수: 순환 참조 해제 + GC 강제 수행
+    # 메모리 회수: 대형 객체 명시적 삭제 후 GC 강제 수행
     # BRIR 반복 생성 시 메모리 누적 방지
+    del hrir
+    del estimator
+    try:
+        del room_frs, hp_left, hp_right, eq_left, eq_right, target
+    except NameError:
+        pass
     import gc
     gc.collect()
 

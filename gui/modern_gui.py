@@ -1820,6 +1820,8 @@ class ModernImpulciferGUI:
                     text=self.loc.get('button_generate_brir')
                 ))
             finally:
+                # 로거 콜백 해제 (다이얼로그 → GUI 위젯 참조 체인 끊기)
+                set_gui_callbacks(log_callback=None, progress_callback=None)
                 # 메모리 회수: BRIR 반복 생성 시 메모리 누적 방지
                 import gc
                 gc.collect()
@@ -1856,7 +1858,7 @@ class ModernImpulciferGUI:
             pass
 
         # Fallback
-        return "2.4.9"
+        return "2.4.10"
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""
