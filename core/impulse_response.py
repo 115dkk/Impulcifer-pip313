@@ -15,6 +15,8 @@ from core.utils import magnitude_response, get_ylim, running_mean
 from core.constants import COLORS
 import os
 
+EPSILON = 1e-20
+
 
 class ImpulseResponse:
     def __init__(self, data, fs, recording=None):
@@ -42,14 +44,13 @@ class ImpulseResponse:
             peak_height: Minimum peak height. Default is -18 dBFS
 
         Returns:
-            Peak index to impulse response data, or None if no peak found or data is empty
+            Peak index to impulse response data.
         """
+        if len(self.data) == 0:
+            return 0
+
         if end is None:
             end = len(self.data)
-
-        # Check for empty data
-        if len(self.data) == 0:
-            return None
 
         # Peak height threshold, relative to the data maximum value
         # Copy to avoid manipulating the original data here
@@ -57,31 +58,25 @@ class ImpulseResponse:
         # Limit search to given range
         data = data[start:end]
 
-        # Check if the sliced data is empty
         if len(data) == 0:
-            return None
+            return start
 
-        # Check if all data values are zero
-        if np.all(data == 0):
-            return None
+        max_abs_val = np.max(np.abs(data))
+        if max_abs_val < EPSILON:
+            return start
 
         # Normalize to 1.0
-        max_abs_val = np.max(np.abs(data))
-        if max_abs_val == 0:
-            return None
-
         data /= max_abs_val
 
         # Find positive peaks
-        peaks_pos, properties = signal.find_peaks(data, height=peak_height)
+        peaks_pos, _ = signal.find_peaks(data, height=peak_height)
         # Find negative peaks that are at least
         peaks_neg, _ = signal.find_peaks(data * -1.0, height=peak_height)
         # Combine positive and negative peaks
         peaks = np.concatenate([peaks_pos, peaks_neg])
 
-        # Check if any peaks were found
         if len(peaks) == 0:
-            return None
+            return np.argmax(np.abs(data)) + start
 
         # Add start delta to peak indices
         peaks += start
@@ -100,187 +95,216 @@ class ImpulseResponse:
             - noise_floor: Noise floor in dBFS, also peak to noise ratio
             - window_size: Averaging window size as determined by Lundeby method
         """
+        if len(self.data) < 10:
+            return 0, len(self.data), -200.0, len(self.data) if len(self.data) > 0 else 1
+
         peak_index = self.peak_index()
 
-        # 1. The squared impulse response is averaged into localtime intervals in the range of 10–50 ms,
-        # to yield a smooth curve without losing short decays.
+        # Analyze from the peak to at most two seconds after it.
         data = self.data.copy()
-        # From peak to 2 seconds after the peak
-        data = data[peak_index : min(peak_index + 2 * self.fs, len(self))]
-        data /= np.max(np.abs(data))  # Normalize
-        squared = data**2  # Squared impulse response starting from the peak
-        t_squared = np.linspace(
-            0, len(squared) / self.fs, len(squared)
-        )  # Time stamps starting from peak
-        wd = 0.03  # Window duration, let's start with 30 ms
-        n = int(len(squared) / self.fs / wd)  # Number of time windows
-        w = int(len(squared) / n)  # Width of a single time window
-        t_windows = np.arange(n) * wd + wd / 2  # Timestamps for the window centers
-        windows = squared.copy()  # Copy to avoid modifying the original
-        windows = np.reshape(
-            windows[: n * w], (n, w)
-        )  # Split into time windows, one window per row
-        windows = np.mean(windows, axis=1)  # Average each time window
-        windows = 10 * np.log10(windows)  # dB
+        analysis_end = min(peak_index + int(2 * self.fs), len(self))
+        if peak_index >= analysis_end:
+            if peak_index >= len(self.data):
+                peak_index = len(self.data) - 1
+            if peak_index < 0:
+                peak_index = 0
+            data = data[peak_index : peak_index + 1] if peak_index < len(data) else np.array([EPSILON])
+        else:
+            data = data[peak_index:analysis_end]
 
-        # 2. A first estimate for the background noise level is determined  from a time segment containing the last
-        # 10 % of the impulse response. This gives a reasonable statistical selection without a large systematic error,
-        # if the decay continues to the end of the response.
-        tail = squared[int(-0.1 * len(squared)) :]  # Last 10 %
-        noise_floor = 10 * np.log10(np.mean(tail))  # Mean as dBs, not mean of dB values
+        if len(data) == 0:
+            data = np.array([EPSILON])
 
-        # 3. The decay slope is estimated using linear regression between the time interval containing the response
-        # 0 dB peak, and  the  first interval 5–10 dB above the background noise level.
-        try:
-            slope_end = (
-                np.argwhere(windows <= noise_floor + 10)[0, 0] - 1
-            )  # Index previous to the first below 10 dB
-        except IndexError:
-            # No windows found below noise_floor + 10, use a fallback approach
-            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        max_abs = np.max(np.abs(data))
+        if max_abs >= EPSILON:
+            data = data / max_abs
 
-        # Check if slope_end is valid for linear regression
-        if slope_end <= 0:
-            # Not enough data points for slope calculation
-            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        squared = data**2
+        if len(squared) == 0:
+            return peak_index, len(self.data), -200.0, 100
 
-        # Ensure we have at least 2 data points for linear regression
+        t_squared = np.linspace(0, len(squared) / self.fs, len(squared))
+
+        wd = 0.03
+        n = int(len(squared) / self.fs / wd) if self.fs > 0 and wd > 0 else 0
+        if n == 0:
+            noise_floor = 10 * np.log10(max(np.mean(squared), EPSILON))
+            return peak_index, peak_index + len(squared), noise_floor, max(1, len(squared))
+
+        w = int(len(squared) / n)
+        if w == 0:
+            w = 1
+        w_fallback = w
+
+        t_windows = np.arange(n) * wd + wd / 2
+        windows = squared[: n * w]
+        if len(windows) < n * w and n > 0:
+            n = len(windows) // w if w > 0 else 0
+            if n == 0:
+                noise_floor = 10 * np.log10(max(np.mean(squared), EPSILON))
+                return peak_index, peak_index + len(squared), noise_floor, w_fallback
+
+        if n == 0:
+            noise_floor = 10 * np.log10(max(np.mean(squared), EPSILON))
+            return peak_index, peak_index + len(squared), noise_floor, w_fallback
+
+        windows = np.reshape(windows, (n, w))
+        windows = np.mean(windows, axis=1)
+        windows = 10 * np.log10(np.maximum(windows, EPSILON))
+
+        tail = squared[int(len(squared) * 0.9) :]
+        if len(tail) == 0:
+            tail = squared
+        noise_floor = 10 * np.log10(np.maximum(np.mean(tail), EPSILON))
+
+        candidates = np.where(windows <= noise_floor + 10.0)[0]
+        slope_end = len(windows)
+        if len(candidates) > 0 and candidates[0] > 0:
+            slope_end = candidates[0]
+
         if slope_end < 2:
-            slope_end = min(2, len(windows) - 1)
+            if len(windows) >= 2:
+                slope_end = len(windows)
+            else:
+                return peak_index, peak_index + len(squared), noise_floor, w_fallback
 
-        # Final check to ensure we have valid data for regression
-        if slope_end <= 0 or slope_end >= len(t_windows) or slope_end >= len(windows):
-            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        slope, intercept, _, _, _ = stats.linregress(t_windows[:slope_end], windows[:slope_end])
+        if np.isnan(slope) or abs(slope) < EPSILON:
+            return peak_index, peak_index + len(squared), noise_floor, w_fallback
 
-        slope, intercept, _, _, _ = stats.linregress(
-            t_windows[:slope_end], windows[:slope_end]
-        )
-
-        # 4. A preliminary knee point is determined at the intersection of the decay slope and the background noise
-        # level.
-        # Everything falls apart if this is not in the decay range but in the tail
-        # This can happen when there is a long tail which has plateau first but then starts to decay again
-        # in that case the noise floor estimated from the end of the impulse response is far below the knee point.
-        # Should be preventable by truncating the impulse response to N seconds after the peak
         knee_point_time = (noise_floor - intercept) / slope
+        if len(t_squared) > 0:
+            knee_point_time = np.clip(knee_point_time, t_squared[0], t_squared[-1])
+        else:
+            knee_point_time = 0
 
-        # 5. A new time interval length is calculated according to the calculated slope, so that there are 3–10
-        # intervals per 10 dB of decay.
         n_windows_per_10dB = 3
-        wd = 10 / (abs(slope) * n_windows_per_10dB)
-        n = int(len(squared) / self.fs / wd)  # Number of time windows
+        wd_denominator = abs(slope) * n_windows_per_10dB
+        if wd_denominator < EPSILON:
+            wd = (t_squared[-1] if len(t_squared) > 0 else 1.0) / 3.0
+        else:
+            wd = 10 / wd_denominator
 
-        # Check for edge case where n becomes 0 (very short impulse response)
-        if n <= 0:
-            # For very short impulse responses, return simplified parameters
-            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        if self.fs <= 0 or wd <= EPSILON:
+            n = 1
+        else:
+            n = int(len(squared) / self.fs / wd)
+        if n == 0:
+            n = 1
 
-        w = int(len(squared) / n)  # Width of a single time window
+        w = int(len(squared) / n)
+        if w == 0:
+            w = 1
 
-        # Ensure w is at least 1 to avoid further issues
-        if w <= 0:
-            return peak_index, len(self), noise_floor, max(1, len(squared) // 10)
+        t_windows = np.arange(n) * wd + wd / 2
+        windows = squared[: n * w]
+        if len(windows) < n * w and n > 0:
+            n = len(windows) // w if w > 0 else 0
+            if n == 0:
+                knee_ind = np.argmin(np.abs(t_squared - knee_point_time)) if len(t_squared) > 0 else 0
+                return peak_index, peak_index + knee_ind, noise_floor, w
 
-        t_windows = np.arange(n) * wd + wd / 2  # Time window center time stamps
+        if n == 0:
+            knee_ind = np.argmin(np.abs(t_squared - knee_point_time)) if len(t_squared) > 0 else 0
+            return peak_index, peak_index + knee_ind, noise_floor, w_fallback
 
-        # 6. The squared impulse is averaged into the new local time intervals.
-        windows = squared.copy()
-        windows = np.reshape(windows[: n * w], (n, w))  # Split into time windows
-        windows = np.mean(windows, axis=1)  # Average each time window
-        windows = 10 * np.log10(windows)  # dB
+        windows = np.reshape(windows, (n, w))
+        windows = np.mean(windows, axis=1)
+        windows = 10 * np.log10(np.maximum(windows, EPSILON))
 
         try:
             knee_point_index = np.argwhere(t_windows >= knee_point_time)[0, 0]
             knee_point_value = windows[knee_point_index]
         except IndexError:
-            # Probably tail has already been cropped
-            return peak_index, len(self), noise_floor, w
-        # print(f'    Knee point: {knee_point_value:.2f} dB @ {knee_point_time * 1000:.0f} ms')
+            if len(t_windows) > 0:
+                knee_point_time = t_windows[-1]
+                knee_point_index = len(t_windows) - 1
+                knee_point_value = windows[-1]
+            else:
+                knee_ind = np.argmin(np.abs(t_squared - knee_point_time)) if len(t_squared) > 0 else 0
+                return peak_index, peak_index + knee_ind, noise_floor, w
 
-        # Steps 7–9 are iterated until the knee_point is found to converge(max. 5 iterations).
-        for i in range(5):
-            # print(f'    iter {i}')
-            # 7. The background noise level is determined again. The evaluated noise segment should start from a
-            # point corresponding to 5–10 dB of decay after the knee_point, or a minimum of 10 % of the total
-            # response length.
+        noise_floor_iter = noise_floor
+        knee_point_time_iter = knee_point_time
+        knee_point_value_iter = knee_point_value
+        knee_point_index_iter = knee_point_index
+
+        for _ in range(5):
             try:
-                noise_floor_start_index = np.argwhere(windows <= knee_point_value - 5)[
-                    0, 0
-                ]
+                noise_floor_start_index = np.argwhere(windows <= knee_point_value_iter - 5)[0, 0]
             except IndexError:
                 break
-            noise_floor_start_time = max(
-                t_windows[noise_floor_start_index], 0.1 * self.duration()
-            )
-            # Protection against over shooting the impulse response end, in case the IR has been truncated already
-            # In that case the noise floor will be calculated from the last half of the last window
-            noise_floor_start_time = min(noise_floor_start_time, t_windows[-1])
 
-            # noise_floor_end_time = noise_floor_start_time + 0.1 * len(squared) / ir.fs  # TODO: Until the very end?
-            # Noise floor estimation range ends one full decay time after the start, truncated to the IR length
-            noise_floor_end_time = min(
-                noise_floor_start_time + knee_point_time, self.duration()
-            )
-            noise_floor = np.mean(
-                squared[
-                    np.logical_and(
-                        t_squared >= noise_floor_start_time,
-                        t_squared <= noise_floor_end_time,
-                    )
-                ]
-            )
-            noise_floor = 10 * np.log10(noise_floor)  # dB
-            # print(f'      Noise floor '
-            #       f'({(noise_floor_start_time + peak_index / self.fs) * 1000:.0f} ms -> '
-            #       f'{(noise_floor_end_time + peak_index / self.fs) * 1000:.0f} ms): '
-            #       f'{noise_floor}')
+            total_duration = t_squared[-1] if len(t_squared) > 0 else 0.0
+            noise_floor_start_time = max(t_windows[noise_floor_start_index], 0.1 * total_duration)
+            if noise_floor_start_time > t_windows[-1]:
+                break
+            noise_floor_end_time = min(noise_floor_start_time + knee_point_time_iter, total_duration)
 
-            # 8. The late decay slope is estimated for a dynamic range of 10–20 dB, starting from a point 5–10 dB above
-            # the noise level.
+            noise_start = np.argmin(np.abs(t_squared - noise_floor_start_time))
+            noise_end = np.argmin(np.abs(t_squared - noise_floor_end_time))
+            if noise_start >= noise_end:
+                break
+            noise_segment = squared[noise_start:noise_end]
+            if len(noise_segment) == 0:
+                noise_segment = np.array([EPSILON])
+            noise_floor_iter = 10 * np.log10(np.maximum(np.mean(noise_segment), EPSILON))
+
             slope_end_headroom = 8
             slope_dynamic_range = 20
             try:
-                slope_end = (
-                    np.argwhere(windows <= noise_floor + slope_end_headroom)[0, 0] - 1
-                )  # 8 dB above noise level
+                slope_end = np.argwhere(windows <= noise_floor_iter + slope_end_headroom)[0, 0] - 1
                 slope_start = (
-                    np.argwhere(
-                        windows
-                        <= noise_floor + (slope_end_headroom + slope_dynamic_range)
-                    )[0, 0]
-                    - 1
+                    np.argwhere(windows <= noise_floor_iter + slope_end_headroom + slope_dynamic_range)[0, 0] - 1
                 )
-                late_slope, late_intercept, _, _, _ = stats.linregress(
-                    t_windows[slope_start:slope_end], windows[slope_start:slope_end]
-                )
-            except (IndexError, ValueError):
-                # Problems with already cropped IR tail
+            except IndexError:
                 break
-            # print(f'      Late slope {t_windows[slope_start] * 1000:.0f} ms -> {t_windows[slope_end] * 1000:.0f} ms: {late_slope:.1f}t + {late_intercept:.2f}')
 
-            # 9. A new knee_point is found.
-            knee_point_time = (noise_floor - late_intercept) / late_slope
-            if knee_point_time > t_windows[-1]:
-                knee_point_time = t_windows[-1]
+            if slope_start < 0:
+                slope_start = 0
+            if slope_end <= slope_start + 1:
                 break
-            knee_point_index = np.argwhere(t_windows >= knee_point_time)[0, 0]
-            knee_point_value = windows[knee_point_index]
-            # print(f'      Knee point: {knee_point_value:.2f} dB @ {knee_point_time * 1000:.0f} ms')
-            # Index of first window which comes after slope end time
-            new_knee_point_index = np.argwhere(t_windows >= knee_point_time)[0, 0]
-            if new_knee_point_index == knee_point_index:
-                # Converged
-                knee_point_index = new_knee_point_index
+            if len(t_windows[slope_start:slope_end]) < 2:
                 break
-            else:
-                knee_point_index = new_knee_point_index
 
-        # Until this point knee_point_index has been an index to windows,
-        # find the index to impulse response data
-        knee_point_time = t_windows[knee_point_index]
-        knee_point_index = np.argwhere(t_squared >= knee_point_time)[0, 0]
+            late_slope, late_intercept, _, _, _ = stats.linregress(
+                t_windows[slope_start:slope_end], windows[slope_start:slope_end]
+            )
+            if np.isnan(late_slope) or abs(late_slope) < EPSILON:
+                break
 
-        return peak_index, peak_index + knee_point_index, noise_floor, w
+            new_knee_point_time = (noise_floor_iter - late_intercept) / late_slope
+            if len(t_windows) == 0:
+                break
+            new_knee_point_time = np.clip(new_knee_point_time, t_windows[0], t_windows[-1])
+            try:
+                new_knee_point_index = np.argwhere(t_windows >= new_knee_point_time)[0, 0]
+            except IndexError:
+                new_knee_point_index = len(t_windows) - 1 if len(t_windows) > 0 else 0
+
+            if new_knee_point_index == knee_point_index_iter:
+                knee_point_index_iter = new_knee_point_index
+                knee_point_time_iter = t_windows[knee_point_index_iter] if len(t_windows) > 0 else 0
+                break
+
+            knee_point_index_iter = new_knee_point_index
+            knee_point_time_iter = (
+                t_windows[knee_point_index_iter]
+                if len(t_windows) > 0 and knee_point_index_iter < len(t_windows)
+                else (t_windows[-1] if len(t_windows) > 0 else 0)
+            )
+            knee_point_value_iter = (
+                windows[knee_point_index_iter]
+                if len(windows) > 0 and knee_point_index_iter < len(windows)
+                else (windows[-1] if len(windows) > 0 else -200)
+            )
+
+        if len(t_squared) > 0:
+            knee_point_index = np.argmin(np.abs(t_squared - knee_point_time_iter))
+        else:
+            knee_point_index = 0
+
+        return peak_index, peak_index + knee_point_index, noise_floor_iter, w
 
     def decay_times(
         self, peak_ind=None, knee_point_ind=None, noise_floor=None, window_size=None
@@ -395,7 +419,13 @@ class ImpulseResponse:
 
     def crop_head(self, head_ms=1):
         """Crops away head."""
-        self.data = self.data[self.peak_index() - int(self.fs * head_ms / 1000) :]
+        if len(self.data) == 0:
+            return
+        peak_idx = self.peak_index()
+        crop_start = peak_idx - int(self.fs * head_ms / 1000)
+        if crop_start < 0:
+            crop_start = 0
+        self.data = self.data[crop_start:]
 
     def equalize(self, fir):
         """Equalizes this impulse response with give FIR filter.
@@ -478,16 +508,34 @@ class ImpulseResponse:
 
     def frequency_response(self):
         """Creates FrequencyResponse instance."""
+        if len(self.data) < 2:
+            frequency = FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=self.fs / 2)
+            return FrequencyResponse(name="Frequency response (short IR)", frequency=frequency, raw=np.zeros_like(frequency))
+
         f, m = self.magnitude_response()
-        n = self.fs / 2 / 4  # 4 Hz resolution
-        step = int(len(f) / n)
-        # 0Hz 제외 (첫 번째 요소가 0인 경우)
-        start_idx = 1 if f[0] == 0 else 0
-        fr = FrequencyResponse(
-            name="Frequency response",
-            frequency=f[start_idx::step],
-            raw=m[start_idx::step],
-        )
+        if len(f) == 0:
+            frequency = FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=self.fs / 2)
+            return FrequencyResponse(name="Frequency response (empty FFT)", frequency=frequency, raw=np.zeros_like(frequency))
+
+        target_fr_points = (self.fs / 2) / 4.0
+        if target_fr_points < 2 or len(f) < 2:
+            step = 1
+        else:
+            step = int(round(len(f) / target_fr_points))
+            if step == 0:
+                step = 1
+
+        if len(f[1::step]) == 0:
+            frequency = f[1:]
+            raw = m[1:]
+            if len(frequency) == 0:
+                frequency = FrequencyResponse.generate_frequencies(f_step=1.01, f_min=10, f_max=self.fs / 2)
+                return FrequencyResponse(name="Frequency response (FFT too short)", frequency=frequency, raw=np.zeros_like(frequency))
+        else:
+            frequency = f[1::step]
+            raw = m[1::step]
+
+        fr = FrequencyResponse(name="Frequency response", frequency=frequency, raw=raw)
         fr.interpolate(f_step=1.01, f_min=10, f_max=self.fs / 2)
         return fr
 

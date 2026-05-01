@@ -81,14 +81,9 @@ def process_equalization_worker(args):
     # Remove bass and tilt target from the error
     fr.error -= target.raw
 
-    # Equalize
-    fr.equalize(
-        max_gain=40,
-        treble_f_lower=10000,
-        treble_f_upper=estimator_fs / 2,
-        window_size=1/3,
-        treble_window_size=1/5
-    )
+    # Smoothen and equalize using the same AutoEQ pipeline as LionLion123/Impulcifer.
+    fr.smoothen_heavy_light()
+    fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=estimator_fs / 2)
 
     # Create FIR filter
     fir = fr.minimum_phase_impulse_response(fs=estimator_fs, normalize=False, f_res=5)

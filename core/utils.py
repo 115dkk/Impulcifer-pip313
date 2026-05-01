@@ -6,7 +6,7 @@ import tempfile
 import json
 import numpy as np
 import soundfile as sf
-from scipy.fft import rfft
+from scipy.fftpack import fft
 from scipy import signal
 from PIL import Image
 import matplotlib.ticker as ticker
@@ -595,13 +595,12 @@ def magnitude_response(x, fs):
         - Frequency values as numpy array
         - Frequency magnitudes as numpy array
     """
-    # Use rfft for real-valued signals (more efficient than fft)
-    X = rfft(x)
-    # Magnitude in dB
-    X_mag = 20 * np.log10(np.abs(X) + 1e-10)
-    # Frequencies (positive only)
-    f = np.arange(len(X)) * fs / (2 * len(X))
-    return f, X_mag
+    nfft = len(x)
+    df = fs / nfft
+    f = np.arange(0, fs - df, df)
+    X = fft(x)
+    X_mag = 20 * np.log10(np.abs(X))
+    return f[0:int(np.ceil(nfft / 2))], X_mag[0:int(np.ceil(nfft / 2))]
 
 
 def sync_axes(axes, sync_x=True, sync_y=True):

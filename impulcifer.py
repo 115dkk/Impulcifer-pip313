@@ -341,19 +341,6 @@ def main(
     logger.step("cli_opening_measurements")
     hrir = open_binaural_measurements(estimator, dir_path)
 
-    # Normalize gain
-    logger.step("cli_normalizing_gain")
-    applied_gain = hrir.normalize(
-        peak_target=None if target_level is not None else -0.1, avg_target=target_level
-    )
-
-    # Write info and stats in readme (gain 값 전달 추가)
-    readme_content = write_readme(
-        os.path.join(dir_path, "README.md"), hrir, fs, estimator, applied_gain
-    )
-    if readme_content:
-        logger.info(readme_content)
-
     if plot:
         # Plot graphs pre processing
         os.makedirs(os.path.join(dir_path, "plots", "pre"), exist_ok=True)
@@ -379,6 +366,7 @@ def main(
         ],  # FC, WL, WR 쌍은 적절히 수정 필요할 수 있음
         segment_ms=30,
     )
+    hrir.align_onset_groups_peak_leftref()
 
     # Crop noise from the tail
     hrir.crop_tails()
@@ -468,6 +456,19 @@ def main(
     if channel_balance is not None:
         logger.step("cli_correcting_balance")
         hrir.correct_channel_balance(channel_balance)
+
+    # Normalize gain after all processing, matching the original Impulcifer pipeline.
+    logger.step("cli_normalizing_gain")
+    applied_gain = hrir.normalize(
+        peak_target=None if target_level is not None else -0.1, avg_target=target_level
+    )
+
+    # Write info and stats in readme (gain 값 전달 추가)
+    readme_content = write_readme(
+        os.path.join(dir_path, "README.md"), hrir, fs, estimator, applied_gain
+    )
+    if readme_content:
+        logger.info(readme_content)
 
     if plot:
         logger.step("cli_plotting_post")
@@ -911,39 +912,19 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     left = hp_irs.irs["FL"]["left"].frequency_response()
     right = hp_irs.irs["FR"]["right"].frequency_response()
 
-    # 배열 길이 검증 및 일치시키기
-    if len(left.frequency) != len(right.frequency):
-        # 둘 중 더 작은 길이로 조정
-        min_length = min(len(left.frequency), len(right.frequency))
-        left.frequency = left.frequency[:min_length]
-        left.raw = left.raw[:min_length]
-        right.frequency = right.frequency[:min_length]
-        right.raw = right.raw[:min_length]
-
     # Center by left channel
     gain = left.center([100, 10000])
     right.raw += gain
 
-    # 저주파 롤오프 방지를 위한 타겟 생성
-    freq = FrequencyResponse.generate_frequencies(
-        f_min=10, f_max=estimator.fs / 2, f_step=1.01
+    # Compensate exactly as the original/Lion pipeline: the headphone response
+    # itself is the error against a flat zero target, without min-mean recentering.
+    zero = FrequencyResponse(
+        name="zero",
+        frequency=left.frequency,
+        raw=np.zeros(len(left.frequency)),
     )
-
-    # 새로운 타겟: 저주파에 6dB 부스트를 적용한 타겟
-    target_raw = np.zeros(len(freq))
-
-    # 타겟 응답 객체 생성
-    target = FrequencyResponse(
-        name="headphone_compensation_target", frequency=freq, raw=target_raw
-    )
-
-    # left와 right를 타겟의 주파수에 맞게 보간
-    left.interpolate(f=target.frequency, pol_order=1)
-    right.interpolate(f=target.frequency, pol_order=1)
-    
-    # 보상 적용
-    left.compensate(target, min_mean_error=True)
-    right.compensate(target, min_mean_error=True)
+    left.compensate(zero, min_mean_error=False)
+    right.compensate(zero, min_mean_error=False)
 
     # 기존 헤드폰 플롯
     fig = plt.figure()

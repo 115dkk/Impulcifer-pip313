@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy import signal
+from scipy import signal, fftpack
 from scipy.signal.windows import hann
 from scipy.fft import fft, next_fast_len
 from scipy.interpolate import InterpolatedUnivariateSpline
@@ -580,8 +580,7 @@ class HRIR:
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
 
-                # Ensure we don't go negative in array indexing
-                crop_index = max(0, peak_right - delay)
+                crop_index = max(0, peak_left - delay)
                 pair["left"].data = pair["left"].data[crop_index:]
                 pair["right"].data = pair["right"].data[crop_index:]
             else:
@@ -599,8 +598,7 @@ class HRIR:
                 # Crop out silence from the beginning, only required channel delay remains
                 # Secondary ear has additional delay for inter aural time difference
 
-                # Ensure we don't go negative in array indexing
-                crop_index = max(0, peak_left - delay)
+                crop_index = max(0, peak_right - delay)
                 pair["right"].data = pair["right"].data[crop_index:]
                 pair["left"].data = pair["left"].data[crop_index:]
 
@@ -639,44 +637,19 @@ class HRIR:
         if not tail_indices:
             return 0
 
-        # Calculate fade-out window based on estimator parameters
-        fade_out_duration_ms = 5  # Default 5ms fade-out
-        if (
-            hasattr(self.estimator, "n_octaves")
-            and self.estimator.n_octaves > 0
-        ):
-            try:
-                seconds_per_octave = (
-                    len(self.estimator) / self.estimator.fs / self.estimator.n_octaves
-                )
-                fade_out_samples = 2 * int(self.fs * seconds_per_octave * (1 / 24))
-            except (ZeroDivisionError, AttributeError):
-                fade_out_samples = int(self.fs * fade_out_duration_ms / 1000)
-        else:
-            fade_out_samples = int(self.fs * fade_out_duration_ms / 1000)
-
-        if fade_out_samples <= 0:
-            fade_out_samples = int(self.fs * 0.005)  # Minimum 5ms
-
         # Crop all tracks by FFT-optimized tail index
-        fft_len = next_fast_len(max(tail_indices))
+        seconds_per_octave = len(self.estimator) / self.estimator.fs / self.estimator.n_octaves
+        fade_out = 2 * int(self.fs * seconds_per_octave * (1 / 24))
+        window = hann(fade_out)[fade_out // 2:]
+        fft_len = fftpack.next_fast_len(max(tail_indices))
         tail_ind = min(np.min(lengths), fft_len)
-
-        # Ensure fade_out doesn't exceed tail_ind
-        if fade_out_samples > tail_ind // 2:
-            fade_out_samples = tail_ind // 2 if tail_ind // 2 > 0 else 1
-
-        window = hann(fade_out_samples * 2)[fade_out_samples:]  # Second half (fade-out)
-        if len(window) == 0 and fade_out_samples > 0:
-            window = np.linspace(1, 0, fade_out_samples)
 
         for speaker, pair in self.irs.items():
             for ir in pair.values():
                 # Crop to tail_ind
                 ir.data = ir.data[:tail_ind]
                 # Apply fade-out window
-                if len(ir.data) >= len(window):
-                    ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
+                ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
 
         return tail_ind
 
@@ -1141,90 +1114,106 @@ class HRIR:
         self.fs = fs
 
     def align_ipsilateral_all(self, speaker_pairs=None, segment_ms=30):
-        """Aligns ipsilateral ear impulse responses for all speaker pairs to the earliest one.
-
-        Best results are achieved when the impulse responses are already cropped fairly well.
-        This means that there is no silence in the beginning of any of the impulse responses which is longer than
-        the true delay caused by the distance from speaker to ear.
-
-        Args:
-            speaker_pairs: List of speaker pairs to align. Each speaker pair is a list of two speakers, eg. [['FL', 'FR'], ['SL', 'SR']]. Default None aligns all available L/R pairs.
-            segment_ms: Length of the segment from impulse response peak to be used for cross-correlation in milliseconds
-        """
         if speaker_pairs is None:
-            speaker_pairs = []
-            for i in range(len(SPEAKER_NAMES) // 2):
-                speaker_pairs.append(SPEAKER_NAMES[i * 2 : i * 2 + 2])
+            speaker_pairs = [
+                ("FL", "FR"),
+                ("SL", "SR"),
+                ("BL", "BR"),
+                ("WL", "WR"),
+                ("TFL", "TFR"),
+                ("TSL", "TSR"),
+                ("TBL", "TBR"),
+                ("FC", "FC"),
+            ]
 
-        segment_len = int(self.fs / 1000 * segment_ms)
+        segment_len = int(self.fs * segment_ms / 1000)
 
-        for pair_speakers in speaker_pairs:
-            # Skip if either one of the pair is not found
-            if pair_speakers[0] not in self.irs or pair_speakers[1] not in self.irs:
+        for sp1, sp2 in speaker_pairs:
+            if sp1 not in self.irs or sp2 not in self.irs:
                 continue
 
-            # Left side speakers, left ear
-            # Right side speakers, right ear
-            # Center channel speakers skip (FC)
-            if pair_speakers[0].endswith("L"):
-                # Left side speaker pair
-                ir_a = self.irs[pair_speakers[0]]["left"]
-                ir_b = self.irs[pair_speakers[1]]["left"]
-            elif pair_speakers[0].endswith("R"):
-                # Right side speaker pair
-                ir_a = self.irs[pair_speakers[0]]["right"]
-                ir_b = self.irs[pair_speakers[1]]["right"]
-            else:
-                # Must be FC, skip
+            if sp1 == sp2:
+                data_l = self.irs[sp1]["left"].data[:segment_len]
+                data_r = self.irs[sp1]["right"].data[:segment_len]
+                corr = signal.correlate(data_l, data_r, mode="full")
+                lags = np.arange(-len(data_l) + 1, len(data_l))
+                lag = lags[np.argmax(corr)]
+
+                if lag > 0:
+                    data = self.irs[sp1]["right"].data
+                    self.irs[sp1]["right"].data = np.concatenate((np.zeros(lag), data))[:len(data)]
+                elif lag < 0:
+                    data = self.irs[sp1]["left"].data
+                    self.irs[sp1]["left"].data = np.concatenate((np.zeros(-lag), data))[:len(data)]
                 continue
 
-            # Cross correlate selected segments
-            # Peak indices
-            peak_a = ir_a.peak_index()
-            peak_b = ir_b.peak_index()
+            data1 = self.irs[sp1]["left"].data[:segment_len]
+            data2 = self.irs[sp2]["right"].data[:segment_len]
+            corr = signal.correlate(data1, data2, mode="full")
+            lags = np.arange(-len(data1) + 1, len(data1))
+            lag = lags[np.argmax(corr)]
 
-            # Handle cases where peak_index returns None (empty arrays)
-            if peak_a is None or peak_b is None:
-                print(
-                    f"Warning: Could not find peaks for speaker pair {pair_speakers}. Skipping alignment for this pair."
-                )
+            if lag > 0:
+                for side in ("left", "right"):
+                    data = self.irs[sp2][side].data
+                    self.irs[sp2][side].data = np.concatenate((np.zeros(lag), data))[:len(data)]
+            elif lag < 0:
+                for side in ("left", "right"):
+                    data = self.irs[sp1][side].data
+                    self.irs[sp1][side].data = np.concatenate((np.zeros(-lag), data))[:len(data)]
+
+    def align_onset_groups_peak_leftref(self, groups=None):
+        """Align speaker groups to FL using each group's left-channel peak.
+
+        This mirrors the Lion virtual-bass pipeline: each speaker pair is kept
+        intact while group onset is aligned from the first speaker's left ear.
+        """
+        if groups is None:
+            groups = [
+                ("FL", "FR"),
+                ("SL", "SR"),
+                ("BL", "BR"),
+                ("WL", "WR"),
+                ("TFL", "TFR"),
+                ("TSL", "TSR"),
+                ("TBL", "TBR"),
+                ("FC",),
+            ]
+
+        def group_left_peak(group):
+            speaker = group[0]
+            if speaker not in self.irs or "left" not in self.irs[speaker]:
+                return None
+            return self.irs[speaker]["left"].peak_index()
+
+        ref_group = ("FL", "FR")
+        ref_peak = group_left_peak(ref_group)
+        if ref_peak is None:
+            raise RuntimeError("Cannot find FL left channel reference for onset alignment.")
+
+        for group in groups:
+            if group == ref_group:
                 continue
 
-            # Ensure peaks are within valid range for segment extraction
-            if peak_a + segment_len > len(ir_a.data) or peak_b + segment_len > len(
-                ir_b.data
-            ):
-                print(
-                    f"Warning: Not enough data after peak for segment extraction in speaker pair {pair_speakers}. Skipping alignment."
-                )
+            group_peak = group_left_peak(group)
+            if group_peak is None:
                 continue
 
-            # Segments from peaks
-            segment_a = ir_a.data[peak_a : peak_a + segment_len]
-            segment_b = ir_b.data[peak_b : peak_b + segment_len]
-
-            # Ensure segments are not empty
-            if len(segment_a) == 0 or len(segment_b) == 0:
-                print(
-                    f"Warning: Empty segments extracted for speaker pair {pair_speakers}. Skipping alignment."
-                )
-                continue
-
-            # Cross correlation
-            corr = signal.correlate(segment_a, segment_b, mode="full")
-            # Delay from peak b to peak a in samples
-            delay = np.argmax(corr) - (len(segment_b) - 1)  # delay = peak_a - peak_b
-
-            # peak_b + delay = peak_a
-            # Corrected peak_b is at the same position as peak_a
-            # If delay is positive, peak_a is further than peak_b --> shift b forward by delay amount
-            # If delay is negative, peak_a is closer than peak_b --> shift b backward by delay amount
-            if delay > 0:
-                # B is earlier than A, pad B from beginning
-                ir_b.data = np.concatenate([np.zeros(delay), ir_b.data])
-            else:
-                # A is earlier than B or same, pad A from beginning
-                ir_a.data = np.concatenate([np.zeros(np.abs(delay)), ir_a.data])
+            shift = group_peak - ref_peak
+            for speaker in group:
+                if speaker not in self.irs:
+                    continue
+                for side in ("left", "right"):
+                    data = self.irs[speaker][side].data
+                    n = len(data)
+                    if shift > 0:
+                        trimmed = data[shift:]
+                        if len(trimmed) < n:
+                            trimmed = np.pad(trimmed, (0, n - len(trimmed)))
+                        self.irs[speaker][side].data = trimmed
+                    elif shift < 0:
+                        delay = -shift
+                        self.irs[speaker][side].data = np.concatenate((np.zeros(delay), data))[:n]
 
     def calculate_reflection_levels(
         self,

@@ -117,11 +117,11 @@ class ImpulciferLogger:
         if level == LogLevel.PROGRESS:
             console_msg = f"[{progress_value}%] {translated_msg}"
         elif level == LogLevel.SUCCESS:
-            console_msg = f"✓ {translated_msg}"
+            console_msg = f"OK: {translated_msg}"
         elif level == LogLevel.ERROR:
-            console_msg = f"✗ {translated_msg}"
+            console_msg = f"ERROR: {translated_msg}"
         elif level == LogLevel.WARNING:
-            console_msg = f"⚠ {translated_msg}"
+            console_msg = f"WARNING: {translated_msg}"
         else:
             console_msg = translated_msg
 
