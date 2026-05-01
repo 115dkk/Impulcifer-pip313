@@ -5,11 +5,28 @@ Unified logging system for Impulcifer
 Supports both CLI output and GUI callbacks with localization
 """
 
+import sys
 from typing import Callable, Optional, TYPE_CHECKING
 from enum import Enum
 
 if TYPE_CHECKING:
     from i18n.localization import LocalizationManager
+
+
+def _ensure_utf8_console() -> None:
+    """Best-effort UTF-8 reconfiguration so console glyphs survive on Windows cp949."""
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+_ensure_utf8_console()
 
 
 class LogLevel(Enum):
@@ -117,11 +134,11 @@ class ImpulciferLogger:
         if level == LogLevel.PROGRESS:
             console_msg = f"[{progress_value}%] {translated_msg}"
         elif level == LogLevel.SUCCESS:
-            console_msg = f"OK: {translated_msg}"
+            console_msg = f"✓ {translated_msg}"
         elif level == LogLevel.ERROR:
-            console_msg = f"ERROR: {translated_msg}"
+            console_msg = f"✗ {translated_msg}"
         elif level == LogLevel.WARNING:
-            console_msg = f"WARNING: {translated_msg}"
+            console_msg = f"⚠ {translated_msg}"
         else:
             console_msg = translated_msg
 

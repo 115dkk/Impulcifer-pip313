@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """경량 병렬 처리 워커 함수 모듈.
 
-ProcessPoolExecutor 워커 프로세스가 이 모듈만 import하면 됨.
-impulcifer.py의 무거운 import 체인(matplotlib, bokeh, autoeq 등)을 피함.
-
-워커 프로세스 메모리: ~50-80 MB (scipy + numpy) vs ~200-400 MB (impulcifer 전체)
+ProcessPoolExecutor 워커 프로세스가 이 모듈만 import하면 됨. 그러면 impulcifer.py
+나 GUI 트리(bokeh, customtkinter, seaborn 등)는 워커 측에서 로드되지 않는다.
+플롯/decay 워커는 scipy + numpy만 끌어오고, EQ 워커는 lazy import로
+``autoeq.frequency_response``를 통해 matplotlib + Pillow + tabulate까지 끌어온다.
 """
 def process_plot_worker(args):
     """플롯용 컨볼루션 워커. scipy.signal.convolve만 사용.

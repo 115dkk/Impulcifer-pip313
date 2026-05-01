@@ -6,7 +6,6 @@ import tempfile
 import json
 import numpy as np
 import soundfile as sf
-from scipy.fftpack import fft
 from scipy import signal
 from PIL import Image
 import matplotlib.ticker as ticker
@@ -590,22 +589,19 @@ def write_wav(file_path, fs, data, bit_depth=32):
 
 
 def magnitude_response(x, fs):
-    """Calculates frequency magnitude response
+    """Calculates frequency magnitude response.
 
-    Args:
-        x: Input signal
-        fs: Sampling rate
-
-    Returns:
-        - Frequency values as numpy array
-        - Frequency magnitudes as numpy array
+    Returns the same first ``ceil(N/2)`` bins as Lion's full-FFT implementation
+    while only computing the one-sided real spectrum (``rfft`` is ~2x faster on
+    real input). For real ``x`` we have ``fft(x)[k] == rfft(x)[k]`` for
+    ``0 <= k <= N/2``, so the slice we expose here is bit-identical to Lion.
     """
     nfft = len(x)
-    df = fs / nfft
-    f = np.arange(0, fs - df, df)
-    X = fft(x)
-    X_mag = 20 * np.log10(np.abs(X))
-    return f[0:int(np.ceil(nfft / 2))], X_mag[0:int(np.ceil(nfft / 2))]
+    half = int(np.ceil(nfft / 2))
+    X = np.fft.rfft(x)
+    X_mag = 20 * np.log10(np.abs(X[:half]))
+    f = np.arange(half) * (fs / nfft)
+    return f, X_mag
 
 
 def sync_axes(axes, sync_x=True, sync_y=True):
