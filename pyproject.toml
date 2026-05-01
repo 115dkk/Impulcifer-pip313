@@ -35,7 +35,6 @@ dependencies = [
     'sounddevice>=0.4.6',
     'nnresample>=0.2.4',
     'tabulate>=0.9.0',
-    'pandas>=2.0.0',
     'Pillow>=10.0.0',
     'seaborn',
     'bokeh>=3.0.0',
@@ -118,7 +117,10 @@ python_functions = ["test_*"]
 
 # Ruff linter 설정
 [tool.ruff]
+force-exclude = true
 exclude = [
+    "autoeq/**/*",
+    "_verification/**/*",
     "research/**/*",
     "*.ipynb",
     ".git",

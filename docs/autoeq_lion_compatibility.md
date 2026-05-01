@@ -8,6 +8,7 @@
    - `autoeq-py313` 배포판 의존을 제거하고, Lion에서 쓰는 구 AutoEQ 계열 구현을 저장소의 `autoeq/` 패키지로 벤더링했다.
    - `FrequencyResponse.smoothen_heavy_light()`, 구형 `equalize()`, `minimum_phase_impulse_response()` 경로를 그대로 사용한다.
    - 기존 코드가 기대하던 이름을 유지하기 위해 `read_csv`, `write_csv`, `plot()`, `smoothen()` 호환 래퍼를 추가했다.
+   - CSV 입출력은 표준 라이브러리 `csv`로 처리하므로 AutoEQ 패키지 설치나 `pandas` 설치 없이 동작한다.
 
 2. Equalization worker
    - `core/parallel_workers.py`의 EQ 생성 경로를 `fr.smoothen_heavy_light()` 후 `fr.equalize(max_gain=40, treble_f_lower=10000, treble_f_upper=fs/2)`로 변경했다.
@@ -54,6 +55,25 @@
    - 이 차이는 고역 쪽 작은 편차와 채널별 tilt를 만들 수 있다.
 
 결론적으로 `autoeq-py313`은 Python 3.13 설치 호환성을 제공하지만, Lion/원본 Impulcifer와 bit/spectral parity가 필요한 경로에서는 대체재가 아니었다. 향후 `autoeq-py313`의 최적화를 다시 도입하려면 먼저 `smoothen_heavy_light()` 호환 모드, 구 `equalize()` parity mode, frequency grid parity를 구현하고 demo 기반 회귀 테스트를 통과시켜야 한다.
+
+## 벤더 AutoEQ의 목적과 의존성 경계
+
+이번에 추가한 `autoeq/` 패키지의 목적은 외부 AutoEQ 배포판을 새로 설치하는 것이 아니라, Lion과 같은 수치 알고리즘을 프로젝트 안에 고정하는 것이다. Python import는 저장소 루트의 `autoeq/`를 먼저 찾으므로 `autoeq-py313`이나 Python 3.8 전용 AutoEQ wheel이 없어도 실행된다. 패키징도 `pyproject.toml`의 `autoeq/**/*.py` include로 이 코드를 함께 배포한다.
+
+따라서 "AutoEQ 자체"는 별도 설치가 필요 없다. 필요한 것은 Impulcifer가 이미 쓰는 수치/플로팅 기반 의존성이다.
+
+- 필수 처리 경로: `numpy`, `scipy`, `matplotlib`, `tabulate`
+- CSV 입출력: 표준 라이브러리 `csv`
+- 이미지 팔레트 최적화: `Pillow`를 사용한다. 이 의존성은 `core.utils`에서도 이미 `PIL.Image`를 import하므로 AutoEQ만의 새 요구사항은 아니다.
+- TensorFlow 기반 parametric EQ 최적화 함수는 벤더 코드에 남아 있지만 Impulcifer의 BRIR 생성 경로에서는 호출하지 않는다. TensorFlow는 설치 요구사항에 넣지 않는다.
+
+`autoeq/`는 ruff 검사에서 제외했다. 이유는 이 디렉터리가 일반 애플리케이션 코드가 아니라 parity 기준이 되는 벤더 수치 코드이기 때문이다. ruff의 `E721`, `F522`, `F901` 같은 알림을 자동 수정하면 현재 통과한 Lion bit parity를 다시 깨뜨릴 수 있다. 이 디렉터리를 바꿀 때는 lint 정리보다 demo parity 검증을 우선한다.
+
+향후 최적화를 재도입하려면 이 벤더 패키지 안에 "Lion parity mode"와 "optimized mode"를 명확히 분리하는 것이 안전하다. 최적화된 AutoEQ 경로도 아래 검증을 통과해야 한다.
+
+1. `responses.wav`, `room-responses.wav`, `headphone-responses.wav`가 Lion 대조군과 동일하거나 의도된 차이를 문서화할 것
+2. `Hesuvi.wav`가 Python 3.13 Lion 대조군과 `exact_equal=True`이거나, 최적화 모드라면 허용 오차와 청각/수치 근거를 별도로 정의할 것
+3. 저역 15-200 Hz와 고역 10-20 kHz의 평균/최대 편차를 PR에 기록할 것
 
 ## 검증 증거
 

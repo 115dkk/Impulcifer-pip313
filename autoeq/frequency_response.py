@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*_
 
 import os
+import csv
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import math
-import pandas as pd
 from io import StringIO
 from scipy.interpolate import InterpolatedUnivariateSpline
 from scipy.signal import savgol_filter, find_peaks, minimum_phase, firwin2
@@ -172,18 +172,24 @@ class FrequencyResponse:
 
         if re.match(autoeq_pattern, s):
             # Known AutoEq CSV format
-            df = pd.read_csv(StringIO(s), sep=',', header=0)
-            frequency = list(df['frequency'])
-            raw = list(df['raw']) if 'raw' in df else None
-            smoothed = list(df['smoothed']) if 'smoothed' in df else None
-            error = list(df['error']) if 'error' in df else None
-            error_smoothed = list(df['error_smoothed']) if 'error_smoothed' in df else None
-            equalization = list(df['equalization']) if 'equalization' in df else None
-            parametric_eq = list(df['parametric_eq']) if 'parametric_eq' in df else None
-            fixed_band_eq = list(df['fixed_band_eq']) if 'fixed_band_eq' in df else None
-            equalized_raw = list(df['equalized_raw']) if 'equalized_raw' in df else None
-            equalized_smoothed = list(df['equalized_smoothed']) if 'equalized_smoothed' in df else None
-            target = list(df['target']) if 'target' in df else None
+            rows = list(csv.DictReader(StringIO(s)))
+
+            def column(name):
+                if not rows or name not in rows[0]:
+                    return None
+                return [float(row[name]) for row in rows]
+
+            frequency = column('frequency')
+            raw = column('raw')
+            smoothed = column('smoothed')
+            error = column('error')
+            error_smoothed = column('error_smoothed')
+            equalization = column('equalization')
+            parametric_eq = column('parametric_eq')
+            fixed_band_eq = column('fixed_band_eq')
+            equalized_raw = column('equalized_raw')
+            equalized_smoothed = column('equalized_smoothed')
+            target = column('target')
             return cls(
                 name=name,
                 frequency=frequency,
@@ -240,8 +246,23 @@ class FrequencyResponse:
     def write_to_csv(self, file_path=None):
         """Writes data to files as CSV."""
         file_path = os.path.abspath(file_path)
-        df = pd.DataFrame(self.to_dict())
-        df.to_csv(file_path, header=True, index=False, float_format='%.2f')
+        data = self.to_dict()
+        fieldnames = list(data.keys())
+        n_rows = max((len(values) for values in data.values()), default=0)
+
+        def format_value(value):
+            if isinstance(value, float):
+                return f'{value:.2f}'
+            return value
+
+        with open(file_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for i in range(n_rows):
+                writer.writerow({
+                    key: format_value(values[i]) if i < len(values) else ''
+                    for key, values in data.items()
+                })
 
     # Compatibility aliases used by autoeq-py313. The processing math above is
     # intentionally kept at AutoEQ 1.2.5 to match LionLion123/Impulcifer output.
