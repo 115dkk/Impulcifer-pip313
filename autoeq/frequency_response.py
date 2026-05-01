@@ -7,13 +7,13 @@ import matplotlib.ticker as ticker
 import math
 from io import StringIO
 from scipy.interpolate import InterpolatedUnivariateSpline
+from scipy.optimize import least_squares
 from scipy.signal import savgol_filter, find_peaks, minimum_phase, firwin2
 from scipy.special import expit
 from scipy.stats import linregress
 from scipy.fftpack import next_fast_len
 import numpy as np
 import urllib
-from time import time
 from tabulate import tabulate
 from PIL import Image
 import re
@@ -26,6 +26,11 @@ from autoeq.constants import DEFAULT_F_MIN, DEFAULT_F_MAX, DEFAULT_STEP, DEFAULT
     DEFAULT_F_RES, DEFAULT_BASS_BOOST_GAIN, DEFAULT_BASS_BOOST_FC, \
     DEFAULT_BASS_BOOST_Q, DEFAULT_GRAPHIC_EQ_STEP, HARMAN_INEAR_PREFENCE_FREQUENCIES, \
     HARMAN_ONEAR_PREFERENCE_FREQUENCIES
+
+try:
+    ADAPTIVE_PALETTE = Image.Palette.ADAPTIVE
+except AttributeError:
+    ADAPTIVE_PALETTE = getattr(Image, 'ADAPTIVE')
 
 
 class FrequencyResponse:
@@ -83,7 +88,7 @@ class FrequencyResponse:
         if data is None:
             # None means empty array
             data = []
-        elif type(data) == float or type(data) == int:
+        elif isinstance(data, (float, int)) and not isinstance(data, bool):
             # Scalar means all values are that, same shape as frequency
             data = np.ones(self.frequency.shape) * data
         # Replace nans with Nones
@@ -299,40 +304,57 @@ class FrequencyResponse:
         return s
 
     @staticmethod
-    def optimize_biquad_filters(frequency, target, max_time=5, max_filters=None, fs=DEFAULT_FS, fc=None, q=None):
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        import tensorflow.compat.v1 as tf
-        tf.get_logger().setLevel('ERROR')
-        tf.disable_v2_behavior()
+    def _empty_biquad_result(frequency):
+        empty = np.array([])
+        coeffs = np.empty((0, 3))
+        return np.zeros(np.asarray(frequency).shape), 0.0, empty, empty, empty, coeffs, coeffs
+
+    @staticmethod
+    def _biquad_eq_response(frequency, fc, q, gain, fs=DEFAULT_FS):
+        fc = np.atleast_1d(np.asarray(fc, dtype=float))
+        q = np.atleast_1d(np.asarray(q, dtype=float))
+        gain = np.atleast_1d(np.asarray(gain, dtype=float))
+
+        if len(fc) == 0:
+            return np.zeros(np.asarray(frequency).shape), np.empty((0, 3)), np.empty((0, 3))
+
+        fc_column = np.expand_dims(fc, axis=1)
+        q_column = np.expand_dims(np.abs(q), axis=1)
+        gain_column = np.expand_dims(gain, axis=1)
+        a0, a1, a2, b0, b1, b2 = biquad.peaking(fc_column, q_column, gain_column, fs=fs)
+        frequency_rows = np.repeat(np.expand_dims(frequency, axis=0), len(fc_column), axis=0)
+        eq = np.sum(biquad.digital_coeffs(frequency_rows, fs, a0, a1, a2, b0, b1, b2), axis=0)
+        coeffs_a = np.hstack((np.tile(a0, a1.shape), a1, a2))
+        coeffs_b = np.hstack((b0, b1, b2))
+        return eq, coeffs_a, coeffs_b
+
+    @staticmethod
+    def _optimize_biquad_filters_scipy(
+            frequency, target, max_time=5, max_filters=None, fs=DEFAULT_FS, fc=None, q=None):
+        """Fits biquad peaking filters without TensorFlow v1."""
+        frequency = np.asarray(frequency, dtype=float)
+        target = np.asarray(target, dtype=float)
 
         if fc is not None or q is not None:
             if fc is None:
                 raise TypeError('"fc" must be given if "q" is given.')
             if q is None:
-                raise TypeError('"q" must be give nif "fc" is given.')
+                raise TypeError('"q" must be given if "fc" is given.')
             if max_filters is not None:
                 raise TypeError('"max_filters" must not be given when "fc" and "q" are given.')
-            fc = np.array(fc, dtype='float32')
-            q = np.array(q, dtype='float32')
+            fc = np.atleast_1d(np.asarray(fc, dtype=float))
+            q = np.atleast_1d(np.asarray(q, dtype=float))
+            if len(q) == 1 and len(fc) > 1:
+                q = np.repeat(q[0], len(fc))
+            if len(fc) != len(q):
+                raise ValueError('"fc" and "q" must have the same length.')
 
         parametric = fc is None
-
-        # Reset graph to be able to run this again
-        tf.reset_default_graph()
-        # Sampling frequency
-        fs_tf = tf.constant(fs, name='f', dtype='float32')
-
-        # Smoothen heavily
         fr_target = FrequencyResponse(name='Filter Initialization', frequency=frequency, raw=target)
         fr_target.smoothen_fractional_octave(window_size=1 / 7, iterations=1000)
-
-        # Equalization target
-        eq_target = tf.constant(target, name='eq_target', dtype='float32')
-
-        n_ls = n_hs = 0
+        interpolator = InterpolatedUnivariateSpline(np.log10(frequency), fr_target.smoothed, k=1)
 
         if parametric:
-            # Fc and Q not given, parametric equalizer, find initial estimation of peaks and gains
             fr_target_pos = np.clip(fr_target.smoothed, a_min=0.0, a_max=None)
             peak_inds = find_peaks(fr_target_pos)[0]
             fr_target_neg = np.clip(-fr_target.smoothed, a_min=0.0, a_max=None)
@@ -340,30 +362,24 @@ class FrequencyResponse:
             peak_inds.sort()
             peak_inds = peak_inds[np.abs(fr_target.smoothed[peak_inds]) > 0.1]
 
-            # Peak center frequencies and gains
-            peak_fc = frequency[peak_inds].astype('float32')
+            if len(peak_inds) == 0:
+                return FrequencyResponse._empty_biquad_result(frequency)
 
+            peak_fc = frequency[peak_inds].astype(float)
             if peak_fc[0] > 80:
-                # First peak is beyond 80Hz, add peaks to 20Hz and 60Hz
-                peak_fc = np.concatenate((np.array([20, 60], dtype='float32'), peak_fc))
+                peak_fc = np.concatenate((np.array([20, 60], dtype=float), peak_fc))
             elif peak_fc[0] > 40:
-                # First peak is beyond 40Hz, add peak to 20Hz
-                peak_fc = np.concatenate((np.array([20], dtype='float32'), peak_fc))
-
-            # Gains at peak center frequencies
-            interpolator = InterpolatedUnivariateSpline(np.log10(frequency), fr_target.smoothed, k=1)
-            peak_g = interpolator(np.log10(peak_fc)).astype('float32')
+                peak_fc = np.concatenate((np.array([20], dtype=float), peak_fc))
+            peak_g = interpolator(np.log10(peak_fc)).astype(float)
 
             def remove_small_filters(min_gain):
-                # Remove peaks with too little gain
                 nonlocal peak_fc, peak_g
-                peak_fc = peak_fc[np.abs(peak_g) > min_gain]
-                peak_g = peak_g[np.abs(peak_g) > min_gain]
+                keep = np.abs(peak_g) > min_gain
+                peak_fc = peak_fc[keep]
+                peak_g = peak_g[keep]
 
             def merge_filters():
-                # Merge two filters which have small integral between them
                 nonlocal peak_fc, peak_g
-                # Form filter pairs, select only filters with equal gain sign
                 pair_inds = []
                 for j in range(len(peak_fc) - 1):
                     if np.sign(peak_g[j]) == np.sign(peak_g[j + 1]):
@@ -372,249 +388,127 @@ class FrequencyResponse:
                 min_err = None
                 min_err_ind = None
                 for pair_ind in pair_inds:
-                    # Interpolate between the two points
                     f_0 = peak_fc[pair_ind]
                     g_0 = peak_g[pair_ind]
                     i_0 = np.argmin(np.abs(frequency - f_0))
                     f_1 = peak_fc[pair_ind + 1]
                     i_1 = np.argmin(np.abs(frequency - f_1))
-                    g_1 = peak_g[pair_ind]
+                    g_1 = peak_g[pair_ind + 1]
                     interp = InterpolatedUnivariateSpline(np.log10([f_0, f_1]), [g_0, g_1], k=1)
-                    line = interp(frequency[i_0:i_1 + 1])
+                    line = interp(np.log10(frequency[i_0:i_1 + 1]))
                     err = line - fr_target.smoothed[i_0:i_1 + 1]
-                    err = np.sqrt(np.mean(np.square(err)))  # Root mean squared error
+                    err = np.sqrt(np.mean(np.square(err)))
                     if min_err is None or err < min_err:
                         min_err = err
                         min_err_ind = pair_ind
 
                 if min_err is None:
-                    # No pairs detected
                     return False
 
-                # Select smallest error if err < threshold
                 if min_err < 0.3:
-                    # New filter
                     c = peak_fc[min_err_ind] * np.sqrt(peak_fc[min_err_ind + 1] / peak_fc[min_err_ind])
                     c = frequency[np.argmin(np.abs(frequency - c))]
                     g = np.mean([peak_g[min_err_ind], peak_g[min_err_ind + 1]])
-                    # Remove filters
                     peak_fc = np.delete(peak_fc, [min_err_ind, min_err_ind + 1])
                     peak_g = np.delete(peak_g, [min_err_ind, min_err_ind + 1])
-                    # Add filter in-between
                     peak_fc = np.insert(peak_fc, min_err_ind, c)
                     peak_g = np.insert(peak_g, min_err_ind, g)
                     return True
-                return False  # No prominent filter pairs
+                return False
 
-            # Remove insignificant filters
             remove_small_filters(0.1)
             if len(peak_fc) == 0:
-                # All filters were insignificant, exit
-                return np.zeros(frequency.shape), 0.0, np.array([]), np.array([]), np.array([])
+                return FrequencyResponse._empty_biquad_result(frequency)
 
-            # Limit filter number to max_filters by removing least significant filters and merging close filters
             if max_filters is not None:
                 if len(peak_fc) > max_filters:
-                    # Remove too small filters
                     remove_small_filters(0.2)
-
                 if len(peak_fc) > max_filters:
-                    # Try to remove some more
                     remove_small_filters(0.33)
-
-                # Merge filters if needed
-                while merge_filters() and len(peak_fc) > max_filters:
+                while len(peak_fc) > max_filters and merge_filters():
                     pass
-
                 if len(peak_fc) > max_filters:
-                    # Remove smallest filters
-                    sorted_inds = np.flip(np.argsort(np.abs(peak_g)))
-                    sorted_inds = sorted_inds[:max_filters]
+                    sorted_inds = np.flip(np.argsort(np.abs(peak_g)))[:max_filters]
                     peak_fc = peak_fc[sorted_inds]
                     peak_g = peak_g[sorted_inds]
 
             sorted_inds = np.argsort(peak_fc)
-            peak_fc = peak_fc[sorted_inds]
-            peak_g = peak_g[sorted_inds]
-
-            n = n_pk = len(peak_fc)
-
-            # Frequencies
-            f = tf.constant(np.repeat(np.expand_dims(frequency, axis=0), n, axis=0), name='f', dtype='float32')
-
-            # Center frequencies
-            fc = tf.get_variable('fc', initializer=np.expand_dims(np.log10(peak_fc), axis=1), dtype='float32')
-
-            # Q
-            Q_init = np.ones([n, 1], dtype='float32') * np.ones([n_pk, 1], dtype='float32')
-            Q = tf.get_variable('Q', initializer=Q_init, dtype='float32')
-
+            initial_fc = peak_fc[sorted_inds]
+            initial_gain = peak_g[sorted_inds]
+            initial_q = np.ones(len(initial_fc), dtype=float)
         else:
-            # Fc and Q given, fixed band equalizer
-            Q = tf.get_variable(
-                'Q',
-                initializer=np.expand_dims(q, axis=1),
-                dtype='float32',
-                trainable=False
-            )
+            initial_fc = fc
+            initial_q = q
+            initial_gain = interpolator(np.log10(initial_fc)).astype(float)
 
-            # Gains at peak center frequencies
-            interpolator = InterpolatedUnivariateSpline(np.log10(frequency), fr_target.smoothed, k=1)
-            peak_g = interpolator(np.log10(fc)).astype('float32')
-
-            # Number of filters
-            n = n_pk = len(fc)
-
-            # Frequencies
-            f = tf.constant(np.repeat(np.expand_dims(frequency, axis=0), n, axis=0), name='f', dtype='float32')
-
-            # Center frequencies
-            fc = tf.get_variable(
-                'fc',
-                initializer=np.expand_dims(np.log10(fc), axis=1),
-                dtype='float32',
-                trainable=False
-            )
-
-        # Gain
-        gain = tf.get_variable('gain', initializer=np.expand_dims(peak_g, axis=1), dtype='float32')
-
-        # Filter design
-
-        # Low shelf filter
-        # This is not used at the moment but is kept for future
-        A = 10 ** (gain[:n_ls, :] / 40)
-        w0 = 2 * np.pi * tf.pow(10.0, fc[:n_ls, :]) / fs_tf
-        alpha = tf.sin(w0) / (2 * Q[:n_ls, :])
-
-        a0_ls = ((A + 1) + (A - 1) * tf.cos(w0) + 2 * tf.sqrt(A) * alpha)
-        a1_ls = (-(-2 * ((A - 1) + (A + 1) * tf.cos(w0))) / a0_ls)
-        a2_ls = (-((A + 1) + (A - 1) * tf.cos(w0) - 2 * tf.sqrt(A) * alpha) / a0_ls)
-
-        b0_ls = ((A * ((A + 1) - (A - 1) * tf.cos(w0) + 2 * tf.sqrt(A) * alpha)) / a0_ls)
-        b1_ls = ((2 * A * ((A - 1) - (A + 1) * tf.cos(w0))) / a0_ls)
-        b2_ls = ((A * ((A + 1) - (A - 1) * tf.cos(w0) - 2 * tf.sqrt(A) * alpha)) / a0_ls)
-
-        # Peak filter
-        A = 10 ** (gain[n_ls:n_ls + n_pk, :] / 40)
-        w0 = 2 * np.pi * tf.pow(10.0, fc[n_ls:n_ls + n_pk, :]) / fs_tf
-        alpha = tf.sin(w0) / (2 * Q[n_ls:n_ls + n_pk, :])
-
-        a0_pk = (1 + alpha / A)
-        a1_pk = -(-2 * tf.cos(w0)) / a0_pk
-        a2_pk = -(1 - alpha / A) / a0_pk
-
-        b0_pk = (1 + alpha * A) / a0_pk
-        b1_pk = (-2 * tf.cos(w0)) / a0_pk
-        b2_pk = (1 - alpha * A) / a0_pk
-
-        # High self filter
-        # This is not kept at the moment but kept for future
-        A = 10 ** (gain[n_ls + n_pk:, :] / 40)
-        w0 = 2 * np.pi * tf.pow(10.0, fc[n_ls + n_pk:, :]) / fs_tf
-        alpha = tf.sin(w0) / (2 * Q[n_ls + n_pk:, :])
-
-        a0_hs = (A + 1) - (A - 1) * tf.cos(w0) + 2 * tf.sqrt(A) * alpha
-        a1_hs = -(2 * ((A - 1) - (A + 1) * tf.cos(w0))) / a0_hs
-        a2_hs = -((A + 1) - (A - 1) * tf.cos(w0) - 2 * tf.sqrt(A) * alpha) / a0_hs
-
-        b0_hs = (A * ((A + 1) + (A - 1) * tf.cos(w0) + 2 * tf.sqrt(A) * alpha)) / a0_hs
-        b1_hs = (-2 * A * ((A - 1) + (A + 1) * tf.cos(w0))) / a0_hs
-        b2_hs = (A * ((A + 1) + (A - 1) * tf.cos(w0) - 2 * tf.sqrt(A) * alpha)) / a0_hs
-
-        # Concatenate all
-        a0 = tf.concat([a0_ls, a0_pk, a0_hs], axis=0)
-        a1 = tf.concat([a1_ls, a1_pk, a1_hs], axis=0)
-        a2 = tf.concat([a2_ls, a2_pk, a2_hs], axis=0)
-        b0 = tf.concat([b0_ls, b0_pk, b0_hs], axis=0)
-        b1 = tf.concat([b1_ls, b1_pk, b1_hs], axis=0)
-        b2 = tf.concat([b2_ls, b2_pk, b2_hs], axis=0)
-
-        w = 2 * np.pi * f / fs_tf
-        phi = 4 * tf.sin(w / 2) ** 2
-
-        a0 = 1.0
-        a1 *= -1
-        a2 *= -1
-
-        # Equalizer frequency response
-        eq_op = 10 * tf.log(
-            (b0 + b1 + b2) ** 2 + (b0 * b2 * phi - (b1 * (b0 + b2) + 4 * b0 * b2)) * phi
-        ) / tf.log(10.0) - 10 * tf.log(
-            (a0 + a1 + a2) ** 2 + (a0 * a2 * phi - (a1 * (a0 + a2) + 4 * a0 * a2)) * phi
-        ) / tf.log(10.0)
-        eq_op = tf.reduce_sum(eq_op, axis=0)
-
-        # RMSE as loss
-        loss = tf.reduce_mean(tf.square(eq_op - eq_target))
-        learning_rate_value = 0.1
-        decay = 0.9995
-        learning_rate = tf.placeholder('float32', shape=(), name='learning_rate')
-        train_step = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(loss)
-
-        # Optimization loop
-        min_loss = None
-        threshold = 0.01
-        momentum = 100
-        bad_steps = 0
-
-        with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
-            t = time()
-            while time() - t < max_time:
-                step_loss, _ = sess.run([loss, train_step], feed_dict={learning_rate: learning_rate_value})
-                if min_loss is None or step_loss < min_loss:
-                    # Improvement, update model
-                    _eq, _fc, _Q, _gain = sess.run([eq_op, fc, Q, gain])
-                    _fc = 10 ** _fc
-
-                if min_loss is None or min_loss - step_loss > threshold:
-                    # Loss improved
-                    min_loss = step_loss
-                    bad_steps = 0
-                else:
-                    # No improvement, increment bad step counter
-                    bad_steps += 1
-                if bad_steps > momentum:
-                    # Bad steps exceed maximum number of bad steps, break
-                    break
-                learning_rate_value = learning_rate_value * decay
-
-        rmse = np.sqrt(min_loss)  # RMSE
-
-        # Fold center frequencies back to normal
-        _fc = np.abs(np.round(_fc / fs) * fs - _fc)
-
-        # Squeeze to rank-1 arrays
-        _fc = np.squeeze(_fc)
-        _Q = np.squeeze(_Q)
-        _gain = np.squeeze(_gain)
+        if len(initial_fc) == 0:
+            return FrequencyResponse._empty_biquad_result(frequency)
 
         if parametric:
-            # Filter selection slice
+            n_filters = len(initial_fc)
+            x0 = np.concatenate((np.log10(initial_fc), np.log(initial_q), initial_gain))
+            lower = np.concatenate((
+                np.full(n_filters, np.log10(max(10.0, frequency[0]))),
+                np.full(n_filters, np.log(0.1)),
+                np.full(n_filters, -60.0),
+            ))
+            upper = np.concatenate((
+                np.full(n_filters, np.log10(fs / 2)),
+                np.full(n_filters, np.log(20.0)),
+                np.full(n_filters, 60.0),
+            ))
+
+            def unpack(x):
+                return 10 ** x[:n_filters], np.exp(x[n_filters:2 * n_filters]), x[2 * n_filters:]
+        else:
+            x0 = initial_gain
+            lower = np.full(len(initial_fc), -60.0)
+            upper = np.full(len(initial_fc), 60.0)
+
+            def unpack(x):
+                return initial_fc, initial_q, x
+
+        def residual(x):
+            _fc, _q, _gain = unpack(x)
+            eq, _, _ = FrequencyResponse._biquad_eq_response(frequency, _fc, _q, _gain, fs=fs)
+            return eq - target
+
+        max_nfev = max(20, int(max_time * 120)) if max_time is not None else None
+        result = least_squares(residual, x0, bounds=(lower, upper), max_nfev=max_nfev)
+        _fc, _Q, _gain = unpack(result.x)
+        rmse = np.sqrt(np.mean(np.square(residual(result.x))))
+
+        _fc = np.abs(np.round(_fc / fs) * fs - _fc)
+        _Q = np.abs(_Q)
+
+        if parametric:
             sl = np.logical_and(np.abs(_gain) > 0.1, _fc > 10)
             _fc = _fc[sl]
-            _Q = np.abs(_Q[sl])
+            _Q = _Q[sl]
             _gain = _gain[sl]
 
-        # Sort filters by center frequency
+        if len(_fc) == 0:
+            return FrequencyResponse._empty_biquad_result(frequency)
+
         sorted_inds = np.argsort(_fc)
         _fc = _fc[sorted_inds]
         _Q = _Q[sorted_inds]
         _gain = _gain[sorted_inds]
 
-        # Expand dimensionality for biquad
-        _fc = np.expand_dims(_fc, axis=1)
-        _Q = np.expand_dims(np.abs(_Q), axis=1)
-        _gain = np.expand_dims(_gain, axis=1)
-        # Re-compute eq
-        a0, a1, a2, b0, b1, b2 = biquad.peaking(_fc, _Q, _gain, fs=fs)
-        frequency = np.repeat(np.expand_dims(frequency, axis=0), len(_fc), axis=0)
-        _eq = np.sum(biquad.digital_coeffs(frequency, fs, a0, a1, a2, b0, b1, b2), axis=0)
+        _eq, coeffs_a, coeffs_b = FrequencyResponse._biquad_eq_response(frequency, _fc, _Q, _gain, fs=fs)
+        return _eq, rmse, _fc, _Q, _gain, coeffs_a, coeffs_b
 
-        coeffs_a = np.hstack((np.tile(a0, a1.shape), a1, a2))
-        coeffs_b = np.hstack((b0, b1, b2))
-        return _eq, rmse, np.squeeze(_fc, axis=1), np.squeeze(_Q, axis=1), np.squeeze(_gain, axis=1), coeffs_a, coeffs_b
+    @staticmethod
+    def optimize_biquad_filters(frequency, target, max_time=5, max_filters=None, fs=DEFAULT_FS, fc=None, q=None):
+        return FrequencyResponse._optimize_biquad_filters_scipy(
+            frequency=frequency,
+            target=target,
+            max_time=max_time,
+            max_filters=max_filters,
+            fs=fs,
+            fc=fc,
+            q=q,
+        )
 
     def optimize_parametric_eq(self, max_filters=None, fs=DEFAULT_FS):
         """Fits multiple biquad filters to equalization curve. If max_filters is a list with more than one element, one
@@ -640,7 +534,7 @@ class FrequencyResponse:
         if not len(self.equalization):
             raise ValueError('Equalization has not been done yet.')
 
-        if type(max_filters) != list:
+        if not isinstance(max_filters, list):
             max_filters = [max_filters]
 
         self.parametric_eq = np.zeros(self.frequency.shape)
@@ -837,7 +731,7 @@ class FrequencyResponse:
             ).replace('+', '|').replace('|-', '|:')
 
             max_filters_str = ''
-            if type(max_filters) == list and len(max_filters) > 1:
+            if isinstance(max_filters, list) and len(max_filters) > 1:
                 n = [0]
                 for x in max_filters:
                     n.append(n[-1] + x)
@@ -851,7 +745,7 @@ class FrequencyResponse:
                 max_filters_str = 'The first {} filters can be used independently.'.format(max_filters_str)
 
             preamp_str = ''
-            if type(max_gains) == list and len(max_gains) > 1:
+            if isinstance(max_gains, list) and len(max_gains) > 1:
                 max_gains = [x + 0.1 for x in max_gains]
                 if len(max_gains) > 3:
                     _s = 'When using independent subset of filters, apply preamp of {}, respectively.'
@@ -873,7 +767,6 @@ class FrequencyResponse:
 
             {filters_table}
             '''.format(
-                model=model,
                 preamp=max_gains[-1],
                 max_filters_str=max_filters_str,
                 preamp_str=preamp_str,
@@ -918,7 +811,6 @@ class FrequencyResponse:
 
             {filters_table}
             '''.format(
-                model=model,
                 preamp=preamp,
                 filters_table=filters_table_str
             )
@@ -1002,14 +894,14 @@ class FrequencyResponse:
         equal_energy_fr = FrequencyResponse(name='equal_energy', frequency=self.frequency.copy(), raw=self.raw.copy())
         equal_energy_fr.interpolate()
         interpolator = InterpolatedUnivariateSpline(np.log10(equal_energy_fr.frequency), equal_energy_fr.raw, k=1)
-        if type(frequency) in [list, np.ndarray] and len(frequency) > 1:
+        if isinstance(frequency, (list, np.ndarray)) and len(frequency) > 1:
             # Use the average of the gain values between the given frequencies as the difference to be subtracted
             diff = np.mean(equal_energy_fr.raw[np.logical_and(
                 equal_energy_fr.frequency >= frequency[0],
                 equal_energy_fr.frequency <= frequency[1]
             )])
         else:
-            if type(frequency) in [list, np.ndarray]:
+            if isinstance(frequency, (list, np.ndarray)):
                 # List or array with only one element
                 frequency = frequency[0]
             # Use the gain value at the given frequency as the difference to be subtracted
@@ -1354,24 +1246,14 @@ class FrequencyResponse:
             raise ValueError('None values detected during equalization, interpolating data with default parameters.')
 
         # Invert with max gain clipping
-        previous_clipped = False
-        kink_inds = []
-
-        # Max gain at each frequency
         max_gain = self._sigmoid(treble_f_lower, treble_f_upper, a_normal=max_gain, a_treble=treble_max_gain)
         gain_k = self._sigmoid(treble_f_lower, treble_f_upper, a_normal=1.0, a_treble=treble_gain_k)
-        for i in range(len(error)):
-            gain = - error[i] * gain_k[i]
-            clipped = gain > max_gain[i]
-            if previous_clipped != clipped:
-                kink_inds.append(i)
-            previous_clipped = clipped
-            if clipped:
-                gain = max_gain[i]
-            self.equalization.append(gain)
-
+        gain = -error * gain_k
+        clipped = gain > max_gain
+        kink_inds = np.flatnonzero(np.concatenate(([clipped[0]], clipped[1:] != clipped[:-1])))
         if len(kink_inds) and kink_inds[0] == 0:
-            del kink_inds[0]
+            kink_inds = kink_inds[1:]
+        self.equalization = np.where(clipped, max_gain, gain)
 
         if smoothen:
             # Smooth out kinks
@@ -1387,12 +1269,12 @@ class FrequencyResponse:
                 if len(self.frequency) - i in doomed_inds:
                     del doomed_inds[doomed_inds.index(len(self.frequency) - i)]
 
-            f = np.array([x for i, x in enumerate(self.frequency) if i not in doomed_inds])
-            e = np.array([x for i, x in enumerate(self.equalization) if i not in doomed_inds])
+            keep = np.ones(len(self.frequency), dtype=bool)
+            keep[doomed_inds] = False
+            f = self.frequency[keep]
+            e = self.equalization[keep]
             interpolator = InterpolatedUnivariateSpline(np.log10(f), e, k=2)
             self.equalization = interpolator(np.log10(self.frequency))
-        else:
-            self.equalization = np.array(self.equalization)
 
         # Equalized
         self.equalized_raw = self.raw + self.equalization
@@ -1517,7 +1399,7 @@ class FrequencyResponse:
             file_path = os.path.abspath(file_path)
             fig.savefig(file_path, dpi=120)
             im = Image.open(file_path)
-            im = im.convert('P', palette=Image.ADAPTIVE, colors=60)
+            im = im.convert('P', palette=ADAPTIVE_PALETTE, colors=60)
             im.save(file_path, optimize=True)
         if show:
             plt.show()
@@ -1646,18 +1528,18 @@ class FrequencyResponse:
                 raise ValueError('"fc" and "q" must be given when "fixed_band_eq" is given.')
             # Center frequencies are given but Q is a single value
             # Repeat Q to length of Fc
-            if type(q) in [list, np.ndarray]:
+            if isinstance(q, (list, np.ndarray)):
                 if len(q) == 1:
                     q = np.repeat(q[0], len(fc))
                 elif len(q) != len(fc):
                     raise ValueError('q must have one elemet or the same number of elements as fc.')
-            elif type(q) not in [list, np.ndarray]:
+            elif not isinstance(q, (list, np.ndarray)):
                 q = np.repeat(q, len(fc))
 
         if fixed_band_eq and not equalize:
             raise ValueError('equalize must be True when fixed_band_eq or ten_band_eq is True.')
 
-        if max_filters is not None and type(max_filters) != list:
+        if max_filters is not None and not isinstance(max_filters, list):
             max_filters = [max_filters]
 
         # Interpolate to standard frequency vector

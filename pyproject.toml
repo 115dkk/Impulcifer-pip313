@@ -119,7 +119,6 @@ python_functions = ["test_*"]
 [tool.ruff]
 force-exclude = true
 exclude = [
-    "autoeq/**/*",
     "_verification/**/*",
     "research/**/*",
     "*.ipynb",

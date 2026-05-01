@@ -1247,7 +1247,7 @@ def _print_info():
 
     # Key dependency versions
     dep_versions = []
-    for pkg in ['numpy', 'scipy', 'matplotlib', 'soundfile', 'customtkinter', 'bokeh', 'autoeq-py313']:
+    for pkg in ['numpy', 'scipy', 'matplotlib', 'soundfile', 'customtkinter', 'bokeh']:
         try:
             from importlib.metadata import version as get_ver
             dep_versions.append(f"{pkg}=={get_ver(pkg)}")

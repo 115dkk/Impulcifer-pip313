@@ -12,7 +12,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from core.impulse_response import ImpulseResponse
-from core.utils import read_wav, write_wav, magnitude_response, sync_axes
+from core.utils import read_wav, write_wav, magnitude_response, sync_axes, ADAPTIVE_PALETTE
 from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER
 
 # Bokeh imports
@@ -951,7 +951,7 @@ class HRIR:
                     figs[speaker][side].savefig(file_path, bbox_inches="tight")
                     # Optimize file size
                     im = Image.open(file_path)
-                    im = im.convert("P", palette=Image.ADAPTIVE, colors=60)
+                    im = im.convert("P", palette=ADAPTIVE_PALETTE, colors=60)
                     im.save(file_path, optimize=True)
 
         # Close plots
@@ -1043,7 +1043,7 @@ class HRIR:
         plt.close(fig)
         # Optimize file size
         im = Image.open(file_path)
-        im = im.convert("P", palette=Image.ADAPTIVE, colors=60)
+        im = im.convert("P", palette=ADAPTIVE_PALETTE, colors=60)
         im.save(file_path, optimize=True)
 
     def equalize(self, fir):
@@ -1402,7 +1402,7 @@ class HRIR:
                 fig.savefig(plot_file_path, bbox_inches="tight")
                 im = Image.open(plot_file_path)
                 im = im.convert(
-                    "P", palette=Image.ADAPTIVE, colors=128
+                    "P", palette=ADAPTIVE_PALETTE, colors=128
                 )  # 색상 수 조정 가능
                 im.save(plot_file_path, optimize=True)
             except Exception as e:

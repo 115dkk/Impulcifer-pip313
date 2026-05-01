@@ -19,6 +19,11 @@ from pathlib import Path
 
 plt.rcParams['axes.unicode_minus'] = False
 
+try:
+    ADAPTIVE_PALETTE = Image.Palette.ADAPTIVE
+except AttributeError:
+    ADAPTIVE_PALETTE = getattr(Image, 'ADAPTIVE')
+
 _font_configured = False
 
 
@@ -702,7 +707,7 @@ def optimize_png_size(file_path, n_colors=60):
         None
     """
     im = Image.open(file_path)
-    im = im.convert('P', palette=Image.ADAPTIVE, colors=n_colors)
+    im = im.convert('P', palette=ADAPTIVE_PALETTE, colors=n_colors)
     im.save(file_path, optimize=True)
 
 
