@@ -3,7 +3,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-from scipy import signal
 
 
 def numpyfy(fc, Q, gain, fs):
@@ -133,11 +132,6 @@ def digital_coeffs(f, fs, a0, a1, a2, b0, b1, b2):
 
 def impulse_response(a0, a1, a2, b0, b1, b2, n=250):
     raise NotImplementedError('biquad.impulse_response is not correctly implemented!')
-    ir = signal.unit_impulse(n)
-    for _a0, _a1, _a2, _b0, _b1, _b2 in zip(a0, a1, a2, b0, b1, b2):
-        ir = signal.lfilter(np.concatenate([_b0, _b1, _b2]), np.concatenate([_a0, _a1, _a2]), ir)
-    ir = np.concatenate(([0.0], ir))
-    return ir
 
 
 def main():

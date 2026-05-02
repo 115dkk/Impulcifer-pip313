@@ -165,8 +165,8 @@ class FrequencyResponse:
         name = '.'.join(os.path.split(file_path)[1].split('.')[:-1])
 
         # Read file
-        f = open(file_path, 'r', encoding='utf-8')
-        s = f.read()
+        with open(file_path, 'r', encoding='utf-8') as f:
+            s = f.read()
 
         # Regex for AutoEq style CSV
         header_pattern = r'frequency(,(raw|smoothed|error|error_smoothed|equalization|parametric_eq|fixed_band_eq|equalized_raw|equalized_smoothed|target))+'
@@ -478,7 +478,6 @@ class FrequencyResponse:
         _fc, _Q, _gain = unpack(result.x)
         rmse = np.sqrt(np.mean(np.square(residual(result.x))))
 
-        _fc = np.abs(np.round(_fc / fs) * fs - _fc)
         _Q = np.abs(_Q)
 
         if parametric:
@@ -840,14 +839,15 @@ class FrequencyResponse:
 
     def interpolate(self, f=None, f_step=DEFAULT_STEP, pol_order=1, f_min=DEFAULT_F_MIN, f_max=DEFAULT_F_MAX):
         """Interpolates missing values from previous and next value. Resets all but raw data."""
-        # Remove None values
-        i = 0
-        while i < len(self.raw):
-            if self.raw[i] is None:
-                self.raw = np.delete(self.raw, i)
-                self.frequency = np.delete(self.frequency, i)
-            else:
-                i += 1
+        # Drop NaN entries (originally Nones turned into NaNs by ``_init_data``).
+        # ``self.raw`` is a float ndarray here, so ``is None`` would never match
+        # and the original Python loop was dead code.
+        if len(self.raw):
+            raw_arr = np.asarray(self.raw, dtype=float)
+            valid = ~np.isnan(raw_arr)
+            if not valid.all():
+                self.raw = raw_arr[valid]
+                self.frequency = self.frequency[valid]
 
         # Interpolation functions
         keys = 'raw error error_smoothed equalization equalized_raw equalized_smoothed target'.split()
@@ -1059,9 +1059,11 @@ class FrequencyResponse:
             treble_f_upper: Upper boundary of transition frequency reqion. In the transition region normal filter is \
                         switched to treble filter with sigmoid weighting function.
         """
-        if None in self.frequency or None in data:
-            # Must not contain None values
-            raise ValueError('None values present, cannot smoothen!')
+        # Reject NaN-bearing arrays. After ``_init_data`` Nones are stored as
+        # NaN floats, so ``np.isnan`` is the appropriate gate.
+        if np.any(np.isnan(np.asarray(self.frequency, dtype=float))) \
+                or np.any(np.isnan(np.asarray(data, dtype=float))):
+            raise ValueError('NaN values present, cannot smoothen!')
 
         # Normal filter
         y_normal = data
@@ -1241,9 +1243,12 @@ class FrequencyResponse:
         else:
             raise ValueError('Error data is missing. Call FrequencyResponse.compensate().')
 
-        if None in error or None in self.equalization or None in self.equalized_raw:
-            # Must not contain None values
-            raise ValueError('None values detected during equalization, interpolating data with default parameters.')
+        # ``equalization`` and ``equalized_raw`` were just reset to empty lists,
+        # so only ``error`` (an ndarray of floats with NaN replacing None) needs
+        # checking here. ``np.any(np.isnan(...))`` works whether ``error`` is a
+        # list or an ndarray.
+        if np.any(np.isnan(np.asarray(error, dtype=float))):
+            raise ValueError('NaN values detected during equalization, interpolating data with default parameters.')
 
         # Invert with max gain clipping
         max_gain = self._sigmoid(treble_f_lower, treble_f_upper, a_normal=max_gain, a_treble=treble_max_gain)
