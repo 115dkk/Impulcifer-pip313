@@ -180,7 +180,6 @@
   "cli_warning_hp_no_wav": "Aucun fichier WAV trouvé dans le répertoire : {dir}",
   "cli_error_hp_list_dir": "Erreur lors du listage du répertoire {dir} : {error}",
   "cli_error_hp_ensure_exists": "Veuillez vérifier que le fichier existe ou placez 'headphones.wav' dans le répertoire de travail : {dir}",
-
   "cli_readme_title": "Informations BRIR",
   "cli_readme_processed": "Traité le {date}. Fréquence d'échantillonnage de sortie : {fs} Hz.",
   "cli_readme_gain_title": "Gain de normalisation appliqué",
@@ -195,7 +194,6 @@
   "cli_readme_late_label": "Tardif (50-150ms)",
   "cli_readme_side_left": "gauche",
   "cli_readme_side_right": "droite",
-
   "update_available_title": "Mise à jour disponible",
   "update_available_message": "🎉 Une nouvelle version est disponible!",
   "update_version_info": "Actuelle: {current} → Nouvelle: {latest}",
@@ -223,12 +221,11 @@
   "label_data_folder_description": "Accéder aux fichiers de référence, signaux de test et enregistrements",
   "button_open_data_folder": "Ouvrir le dossier de données",
   "error_title": "Erreur",
-
   "vbass_group_title": "Basse virtuelle",
   "vbass_enable": "Activer la basse virtuelle",
   "vbass_enable_tooltip": "Remplace le contenu basse fréquence par une basse synthétisée à phase minimale pour une meilleure réponse sub-bass",
   "vbass_crossover_freq": "Fréquence de coupure (Hz)",
-  "vbass_crossover_freq_tooltip": "Les basses originales en dessous de cette fréquence sont remplacées par des basses synthétisées. Recommandé : 100\u2013300 Hz",
+  "vbass_crossover_freq_tooltip": "Les basses originales en dessous de cette fréquence sont remplacées par des basses synthétisées. Recommandé : 100–300 Hz",
   "vbass_hp_freq": "Passe-haut sub-bass (Hz)",
   "vbass_hp_freq_tooltip": "Supprime le grondement DC en dessous de cette fréquence. La valeur par défaut de 15 Hz convient dans la plupart des cas",
   "vbass_polarity": "Gestion de la polarité",
@@ -239,25 +236,21 @@
   "vbass_status_processing": "Application de la synthèse de basse virtuelle...",
   "vbass_status_complete": "Synthèse de basse virtuelle terminée",
   "vbass_status_skipped": "Basse virtuelle ignorée (désactivée)",
-  "vbass_warning_high_crossover": "La fréquence de coupure {freq} Hz est anormalement élevée. Plage recommandée : 100\u2013300 Hz",
+  "vbass_warning_high_crossover": "La fréquence de coupure {freq} Hz est anormalement élevée. Plage recommandée : 100–300 Hz",
   "vbass_error_sr_limit": "La fréquence de coupure dépasse la limite du taux d'échantillonnage. Basse virtuelle désactivée.",
-
   "tab_info": "ℹ️ Info",
   "section_about": "À propos",
   "label_version": "Version :",
   "button_view_license": "Voir la licence",
   "button_report_bug": "Signaler un bug",
-
   "label_installation": "Installation :",
   "info_install_velopack": "Autonome (Velopack)",
   "info_install_pip": "Paquet pip",
   "info_install_dev": "Développement",
-
   "section_contributors": "Contributeurs",
   "contributor_role_original": "Auteur original",
   "contributor_role_py313": "Portage Python 3.13/3.14",
   "contributor_role_contributor": "Contributeur",
-
   "section_system_info": "Informations système",
   "label_python": "Python :",
   "label_os": "SE :",
@@ -267,8 +260,14 @@
   "info_gil_enabled": "Activé",
   "info_gil_disabled": "Désactivé (Free-Threaded)",
   "info_gil_unknown": "N/D (avant 3.14)",
-
   "section_project_links": "Liens du projet",
   "button_original_repo": "Dépôt Impulcifer original",
-  "button_fork_repo": "Ce fork (portage Python 3.13+)"
+  "button_fork_repo": "Ce fork (portage Python 3.13+)",
+  "message_channel_guidance_standard": "Recording with {channels} channels ({speakers} speakers × 2 ears). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_atmos_704": "Recording with {channels} channels ({speakers} speakers × 2 ears, 7.0.4 Atmos). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_atmos_706": "Recording with {channels} channels ({speakers} speakers × 2 ears, 7.0.6 Atmos). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_custom": "Recording with {channels} channels ({speakers} speakers × 2 ears). Make sure your filename matches the speaker configuration.",
+  "message_channel_guidance_invalid": "Enter valid channel count (recommended: 14, 22, or 26)",
+  "message_channel_mismatch_body": "Channel count mismatch detected!\n\nRecording filename suggests {expected_speakers} speakers ({speaker_names}) which requires {expected_channels} channels (stereo pairs).\n\nBut you have selected {selected_channels} input channels.\n\nContinue anyway?",
+  "message_recording_setup_info": "Recording Setup:\nPlay file: {play_file}\nRecord file: {record_file}\nInput device: {input_device}\nOutput device: {output_device}\nChannels: {channels}\nHost API: {host_api}\n\nMake sure:\n- Your audio interface is properly connected\n- Input/output devices are correctly selected\n- Channel count matches your setup\n\nReady to start recording?"
 }
