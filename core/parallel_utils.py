@@ -82,7 +82,10 @@ def parallel_map(func: Callable, items: List[Any], max_workers: Optional[int] = 
             results = [future.result() for future in futures]
         return results
     except (concurrent.futures.process.BrokenProcessPool, RuntimeError):
-        # ProcessPoolExecutor 워커 크래시 시 ThreadPoolExecutor로 자동 폴백
+        if not is_gil_disabled():
+            raise
+        # Free-threaded Python can safely keep CPU-bound fallback work in threads.
+        # Standard GIL builds must keep CPU-bound parallelism in process workers.
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(func, item) for item in items]
             results = [future.result() for future in futures]

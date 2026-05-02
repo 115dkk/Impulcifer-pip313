@@ -309,7 +309,7 @@ class ProcessingDialog(ctk.CTkToplevel):
         try:
             self.progress_bar.set(value / 100.0)
             self.progress_label.configure(text=f"{value}% - {message}" if message else f"{value}%")
-            self.update()
+            self.update_idletasks()
         except Exception:
             pass
 
@@ -328,7 +328,7 @@ class ProcessingDialog(ctk.CTkToplevel):
 
             self.log_text.insert("end", f"{prefix}{message}\n")
             self.log_text.see("end")
-            self.update()
+            self.update_idletasks()
         except Exception:
             pass
 
@@ -811,7 +811,7 @@ class ModernImpulciferGUI:
         row = 0
 
         # === Audio Devices Section ===
-        devices_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        devices_frame = ctk.CTkFrame(scroll, corner_radius=0)
         devices_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         devices_frame.grid_columnconfigure(1, weight=1)
         row += 1
@@ -854,7 +854,7 @@ class ModernImpulciferGUI:
         self.input_device_menu.grid(row=3, column=1, sticky="ew", padx=15, pady=(5, 15))
 
         # === Files Section ===
-        files_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        files_frame = ctk.CTkFrame(scroll, corner_radius=0)
         files_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         files_frame.grid_columnconfigure(1, weight=1)
         row += 1
@@ -895,7 +895,7 @@ class ModernImpulciferGUI:
         ).grid(row=2, column=2, padx=(15, 15), pady=(5, 15))
 
         # === Recording Options Section ===
-        options_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        options_frame = ctk.CTkFrame(scroll, corner_radius=0)
         options_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         options_frame.grid_columnconfigure(0, weight=1)
         row += 1
@@ -978,7 +978,7 @@ class ModernImpulciferGUI:
         row = 0
 
         # === Input Files Section ===
-        input_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        input_frame = ctk.CTkFrame(scroll, corner_radius=0)
         input_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         input_frame.grid_columnconfigure(1, weight=1)
         row += 1
@@ -1020,7 +1020,7 @@ class ModernImpulciferGUI:
         ).grid(row=2, column=2, padx=(15, 15), pady=(5, 15))
 
         # === Processing Options Section ===
-        processing_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        processing_frame = ctk.CTkFrame(scroll, corner_radius=0)
         processing_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         processing_frame.grid_columnconfigure(0, weight=1)
         row += 1
@@ -1158,7 +1158,7 @@ class ModernImpulciferGUI:
         proc_row += 1
 
         # === Advanced Options Section ===
-        advanced_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        advanced_frame = ctk.CTkFrame(scroll, corner_radius=0)
         advanced_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         advanced_frame.grid_columnconfigure(0, weight=1)
         row += 1
@@ -1347,7 +1347,7 @@ class ModernImpulciferGUI:
         ).pack(side="left", padx=5)
 
         # === Virtual Bass Section ===
-        vbass_group = ctk.CTkFrame(scroll, corner_radius=10)
+        vbass_group = ctk.CTkFrame(scroll, corner_radius=0)
         vbass_group.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         vbass_group.grid_columnconfigure(0, weight=1)
         row += 1
@@ -1820,6 +1820,8 @@ class ModernImpulciferGUI:
                     text=self.loc.get('button_generate_brir')
                 ))
             finally:
+                # 로거 콜백 해제 (다이얼로그 → GUI 위젯 참조 체인 끊기)
+                set_gui_callbacks(log_callback=None, progress_callback=None)
                 # 메모리 회수: BRIR 반복 생성 시 메모리 누적 방지
                 import gc
                 gc.collect()
@@ -1856,7 +1858,7 @@ class ModernImpulciferGUI:
             pass
 
         # Fallback
-        return "2.4.9"
+        return "2.4.11"
 
     def check_for_updates_background(self):
         """Check for updates in background thread"""
@@ -1960,7 +1962,7 @@ class ModernImpulciferGUI:
         row = 0
 
         # === Language Section ===
-        lang_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        lang_frame = ctk.CTkFrame(scroll, corner_radius=0)
         lang_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         lang_frame.grid_columnconfigure(1, weight=1)
         row += 1
@@ -1986,7 +1988,7 @@ class ModernImpulciferGUI:
         language_menu.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
 
         # === Theme Section ===
-        theme_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        theme_frame = ctk.CTkFrame(scroll, corner_radius=0)
         theme_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         theme_frame.grid_columnconfigure(1, weight=1)
         row += 1
@@ -2023,7 +2025,7 @@ class ModernImpulciferGUI:
         theme_menu.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
 
         # === Data Access Section ===
-        data_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        data_frame = ctk.CTkFrame(scroll, corner_radius=0)
         data_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
         data_frame.grid_columnconfigure(0, weight=1)
         row += 1
@@ -2069,7 +2071,7 @@ class ModernImpulciferGUI:
         heading_font = ctk.CTkFont(family=self.font_family, size=16, weight="bold")
 
         # === About Section ===
-        about_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        about_frame = ctk.CTkFrame(scroll, corner_radius=0)
         about_frame.grid(row=section_row, column=0, sticky="ew", padx=10, pady=10)
         about_frame.grid_columnconfigure(1, weight=1)
         section_row += 1
@@ -2136,7 +2138,7 @@ class ModernImpulciferGUI:
                        ).grid(row=r, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
 
         # === Contributors Section ===
-        contrib_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        contrib_frame = ctk.CTkFrame(scroll, corner_radius=0)
         contrib_frame.grid(row=section_row, column=0, sticky="ew", padx=10, pady=10)
         contrib_frame.grid_columnconfigure(1, weight=1)
         section_row += 1
@@ -2159,7 +2161,7 @@ class ModernImpulciferGUI:
         contrib_frame.grid_rowconfigure(len(contributors) + 1, minsize=10)
 
         # === System Information Section ===
-        sys_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        sys_frame = ctk.CTkFrame(scroll, corner_radius=0)
         sys_frame.grid(row=section_row, column=0, sticky="ew", padx=10, pady=10)
         sys_frame.grid_columnconfigure(1, weight=1)
         section_row += 1
@@ -2200,7 +2202,7 @@ class ModernImpulciferGUI:
         sys_frame.grid_rowconfigure(len(sys_items) + 1, minsize=10)
 
         # === Project Links Section ===
-        links_frame = ctk.CTkFrame(scroll, corner_radius=10)
+        links_frame = ctk.CTkFrame(scroll, corner_radius=0)
         links_frame.grid(row=section_row, column=0, sticky="ew", padx=10, pady=10)
         links_frame.grid_columnconfigure(0, weight=1)
         section_row += 1

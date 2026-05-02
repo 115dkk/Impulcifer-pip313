@@ -6,7 +6,6 @@ import tempfile
 import json
 import numpy as np
 import soundfile as sf
-from scipy.fft import rfft
 from scipy import signal
 from PIL import Image
 import matplotlib.ticker as ticker
@@ -18,6 +17,11 @@ import importlib.resources
 from pathlib import Path
 
 plt.rcParams['axes.unicode_minus'] = False
+
+try:
+    ADAPTIVE_PALETTE = Image.Palette.ADAPTIVE
+except AttributeError:
+    ADAPTIVE_PALETTE = getattr(Image, 'ADAPTIVE')
 
 _font_configured = False
 
@@ -585,22 +589,18 @@ def write_wav(file_path, fs, data, bit_depth=32):
 
 
 def magnitude_response(x, fs):
-    """Calculates frequency magnitude response
+    """Calculates frequency magnitude response.
 
-    Args:
-        x: Input signal
-        fs: Sampling rate
-
-    Returns:
-        - Frequency values as numpy array
-        - Frequency magnitudes as numpy array
+    Returns the same first ``ceil(N/2)`` bins as Lion's full-FFT implementation
+    while only computing the one-sided real spectrum (``rfft`` is ~2x faster on
+    real input). For real ``x`` we have ``fft(x)[k] == rfft(x)[k]`` for
+    ``0 <= k <= N/2``, so the slice we expose here is bit-identical to Lion.
     """
-    # Use rfft for real-valued signals (more efficient than fft)
-    X = rfft(x)
-    # Magnitude in dB
-    X_mag = 20 * np.log10(np.abs(X) + 1e-10)
-    # Frequencies (positive only)
-    f = np.arange(len(X)) * fs / (2 * len(X))
+    nfft = len(x)
+    half = int(np.ceil(nfft / 2))
+    X = np.fft.rfft(x)
+    X_mag = 20 * np.log10(np.abs(X[:half]))
+    f = np.arange(half) * (fs / nfft)
     return f, X_mag
 
 
@@ -703,7 +703,7 @@ def optimize_png_size(file_path, n_colors=60):
         None
     """
     im = Image.open(file_path)
-    im = im.convert('P', palette=Image.ADAPTIVE, colors=n_colors)
+    im = im.convert('P', palette=ADAPTIVE_PALETTE, colors=n_colors)
     im.save(file_path, optimize=True)
 
 

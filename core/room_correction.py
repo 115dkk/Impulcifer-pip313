@@ -66,7 +66,6 @@ def room_correction(
             for side, ir in pair.items():
                 ir.crop_head()
         rir.crop_tails()
-        rir.crop_tails()
         rir.write_wav(os.path.join(dir_path, 'room-responses.wav'))
 
         if plot:
