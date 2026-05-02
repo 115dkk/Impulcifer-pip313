@@ -82,8 +82,6 @@ jobs:
             --jobs=4 \
             --lto=no \
             --enable-plugin=tk-inter \
-            --enable-plugin=numpy \
-            --enable-plugin=matplotlib \
             --include-package=customtkinter \
             --include-module=sounddevice \
             --include-module=soundfile \

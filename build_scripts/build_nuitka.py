@@ -134,8 +134,6 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
         "--jobs=4",
         "--lto=no",
         "--enable-plugin=tk-inter",
-        "--enable-plugin=numpy",
-        "--enable-plugin=matplotlib",
         "--include-package=customtkinter",
     ]
 

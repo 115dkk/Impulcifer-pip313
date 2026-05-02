@@ -4,6 +4,47 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.12 - 2026-05-02
+### 🐛 Lion 가상 베이스 AutoEQ 패리티 회복 + 빌드 설정 정리
+
+#### 🐛 버그 수정 (PR #62)
+- **가상 베이스 출력 변조 회귀 수정**: 외부 `autoeq-py313` 의존성이 단순 Python 3.13 포팅이 아닌 알고리즘 변경판이라 LionLion123/Impulcifer 대비 EQ FIR magnitude를 흐트러뜨려 저역 채널 불일치와 고역 변조를 발생시키던 문제 해결
+  - `autoeq-py313` 외부 의존을 제거하고 AutoEQ 1.2.5 계열을 `autoeq/` 패키지로 벤더링
+  - `smoothen_heavy_light()` / 구형 `equalize()` / `minimum_phase_impulse_response()` 경로를 EQ 워커가 직접 사용
+  - `core/utils.py:magnitude_response()`, `core/impulse_response.py:frequency_response()`, headphone compensation을 Lion 동작으로 정렬
+  - 정규화는 모든 처리 후 한 번 수행하도록 파이프라인 순서 복원
+- **가상 베이스 합성 경로 정렬**: 채널별 임의 boost/cut을 막기 위해 shared band-limited bass impulse + global crossover gain 매칭 + ITD 보존 + ILD shelf 적용 방식으로 통일
+- **TensorFlow v1 의존성 제거**: parametric/fixed-band EQ 최적화의 활성 경로를 `scipy.optimize.least_squares`로 대체 (BRIR 출력에는 영향 없음 — 데모 hesuvi.wav 비트 동등)
+- **Pillow 12 호환**: `Image.ADAPTIVE` 직접 사용을 `Image.Palette.ADAPTIVE` 우선 fallback으로 교체
+- **병렬 처리 정책 명확화**: 표준 GIL Python에서 BrokenProcessPool 시 thread fallback을 차단(직렬화로 회귀 방지). free-threaded 빌드에서만 thread fallback 허용
+
+#### ⚡ 현대화 — 출력 동등 보장 (PR #63)
+- **`magnitude_response`를 `np.fft.rfft`로 전환**: 기존 `scipy.fftpack.fft` + half-slice와 첫 `ceil(N/2)` 빈에서 비트 동일. 실수 입력에서 `fft(x)[k] == rfft(x)[k]`가 성립하는 범위만 노출. 약 2배 빠름. 회귀 방지를 위한 `tests/test_magnitude_response_parity.py` 추가
+- **콘솔 유니코드 글리프 복원**: `✓ / ✗ / ⚠`를 다시 사용. Windows cp949 인코딩 에러는 글리프 제거가 아니라 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` 일회성 호출로 해결
+- **벤더링한 AutoEQ 정리** (출력 영향 없음):
+  - `autoeq/__init__.py`에 `__version__ = "1.2.5+impulcifer"` 추가
+  - `raise NotImplementedError` 뒤 도달 불가능 코드 제거
+  - `_fc = np.abs(np.round(_fc / fs) * fs - _fc)` 항등 연산 제거
+  - `read_from_csv`를 `with open(...)` 블록으로 전환 (파일 핸들 누수 차단)
+  - `None in ndarray` / float ndarray의 `is None` 체크를 `np.any(np.isnan(...))`로 교체 (NumPy 2.x deprecation 트랩 회피)
+  - `interpolate()`의 죽은 None-제거 루프를 `~np.isnan` boolean mask로 벡터화
+- **`core/parallel_workers.py` docstring 정정**: "scipy + numpy만 사용" 표현은 EQ 워커가 lazy-import로 matplotlib/PIL/tabulate까지 끌어오는 실제 동작과 어긋나므로 수정
+
+#### 🛠 빌드 설정 정리 (PR #65)
+- **불필요한 Nuitka 플러그인 활성화 제거**: 현행 Nuitka(V4.1rc9) 소스 검증 결과 다음 두 플래그가 빌드 로그에 경고를 출력하는 무의미한 호출이라 제거. `--enable-plugin=tk-inter`만 유지
+  - `--enable-plugin=numpy`: `NumpyPlugin.isDeprecated() == True`. 본문이 비어 있고 deprecation 경고 출력
+  - `--enable-plugin=matplotlib`: `MatplotlibPlugin.isAlwaysEnabled() == True`. 표준 빌드에서 자동 활성화. "이미 항상 활성화" 경고 출력
+  - 적용 위치: `build_scripts/build_nuitka.py`, `.github/workflows/build-linux.yml`, `.github/workflows/build-macos.yml`, `.github/workflows/release-cross-platform.yml`(2개 잡)
+- **`requirements.txt` ↔ `pyproject.toml` 동기화**: AutoEQ 벤더링 후 드리프트되어 있던 항목들 정정
+  - 제거: `autoeq-py313>=1.2.0` (벤더링됨, 코드에서 import 없음)
+  - 추가: `Pillow>=10.0.0` (PNG 팔레트 최적화에 사용)
+  - 추가: `packaging>=23.0` (`updater/update_checker.py` 버전 비교)
+
+#### ✅ 검증
+- 데모 입력(`data/demo` + `--vbass --vbass_freq 250`)으로 생성한 `hesuvi.wav`가 Lion Python 3.13 대조군과 비트 단위 일치 (PR #62), Lion Python 3.8 대조군과는 cross-Python BLAS 부동소수 바닥값(`max_abs_sample_diff ~7e-9`)에서 일치
+- PR #63 현대화 이후에도 동일 데모의 `hesuvi.wav` MD5(`d295982d021a6d16ab2c194c3517c162`) 변동 없음
+- PR #65 빌드 설정 변경 후에도 동일 MD5 유지 — 빌드 설정은 런타임 경로를 건드리지 않음
+
 ## 2.4.11 - 2026-03-23
 ### ⚡ GUI 스크롤 성능 개선
 
