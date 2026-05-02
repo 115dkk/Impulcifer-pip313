@@ -180,7 +180,6 @@
   "cli_warning_hp_no_wav": "ディレクトリにWAVファイルがありません: {dir}",
   "cli_error_hp_list_dir": "ディレクトリ一覧取得エラー {dir}: {error}",
   "cli_error_hp_ensure_exists": "ファイルが存在するか確認するか、作業ディレクトリに'headphones.wav'を配置してください: {dir}",
-
   "cli_readme_title": "BRIR情報",
   "cli_readme_processed": "{date}に処理。出力サンプリングレート: {fs} Hz。",
   "cli_readme_gain_title": "適用された正規化ゲイン",
@@ -195,7 +194,6 @@
   "cli_readme_late_label": "後期 (50-150ms)",
   "cli_readme_side_left": "左",
   "cli_readme_side_right": "右",
-
   "update_available_title": "アップデート利用可能",
   "update_available_message": "🎉 新しいバージョンが利用可能です!",
   "update_version_info": "現在: {current} → 新: {latest}",
@@ -223,12 +221,11 @@
   "label_data_folder_description": "リファレンスファイル、テストシグナル、録音にアクセスします",
   "button_open_data_folder": "データフォルダを開く",
   "error_title": "エラー",
-
   "vbass_group_title": "バーチャルベース",
   "vbass_enable": "バーチャルベースを有効化",
   "vbass_enable_tooltip": "低周波帯域を合成されたミニマムフェーズベースに置き換え、サブベース応答を改善します",
   "vbass_crossover_freq": "クロスオーバー周波数 (Hz)",
-  "vbass_crossover_freq_tooltip": "この周波数以下の原音低域が合成ベースに置き換えられます。推奨範囲: 100\u2013300 Hz",
+  "vbass_crossover_freq_tooltip": "この周波数以下の原音低域が合成ベースに置き換えられます。推奨範囲: 100–300 Hz",
   "vbass_hp_freq": "サブベース ハイパス (Hz)",
   "vbass_hp_freq_tooltip": "この周波数以下のDCランブルを除去します。ほとんどの場合、デフォルトの15 Hzで十分です",
   "vbass_polarity": "極性処理",
@@ -239,25 +236,21 @@
   "vbass_status_processing": "バーチャルベース合成中...",
   "vbass_status_complete": "バーチャルベース合成完了",
   "vbass_status_skipped": "バーチャルベースをスキップ（無効化中）",
-  "vbass_warning_high_crossover": "クロスオーバー周波数 {freq} Hzが異常に高いです。推奨範囲: 100\u2013300 Hz",
+  "vbass_warning_high_crossover": "クロスオーバー周波数 {freq} Hzが異常に高いです。推奨範囲: 100–300 Hz",
   "vbass_error_sr_limit": "クロスオーバー周波数がサンプルレート上限を超えました。バーチャルベースを無効化します。",
-
   "tab_info": "ℹ️ 情報",
   "section_about": "概要",
   "label_version": "バージョン:",
   "button_view_license": "ライセンスを表示",
   "button_report_bug": "バグを報告",
-
   "label_installation": "インストール方式:",
   "info_install_velopack": "スタンドアロン (Velopack)",
   "info_install_pip": "pipパッケージ",
   "info_install_dev": "開発環境",
-
   "section_contributors": "貢献者",
   "contributor_role_original": "原作者",
   "contributor_role_py313": "Python 3.13/3.14移植",
   "contributor_role_contributor": "貢献者",
-
   "section_system_info": "システム情報",
   "label_python": "Python:",
   "label_os": "OS:",
@@ -267,8 +260,14 @@
   "info_gil_enabled": "有効",
   "info_gil_disabled": "無効 (Free-Threaded)",
   "info_gil_unknown": "該当なし (3.14以前)",
-
   "section_project_links": "プロジェクトリンク",
   "button_original_repo": "オリジナルImpulciferリポジトリ",
-  "button_fork_repo": "このフォーク (Python 3.13+移植)"
+  "button_fork_repo": "このフォーク (Python 3.13+移植)",
+  "message_channel_guidance_standard": "Recording with {channels} channels ({speakers} speakers × 2 ears). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_atmos_704": "Recording with {channels} channels ({speakers} speakers × 2 ears, 7.0.4 Atmos). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_atmos_706": "Recording with {channels} channels ({speakers} speakers × 2 ears, 7.0.6 Atmos). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_custom": "Recording with {channels} channels ({speakers} speakers × 2 ears). Make sure your filename matches the speaker configuration.",
+  "message_channel_guidance_invalid": "Enter valid channel count (recommended: 14, 22, or 26)",
+  "message_channel_mismatch_body": "Channel count mismatch detected!\n\nRecording filename suggests {expected_speakers} speakers ({speaker_names}) which requires {expected_channels} channels (stereo pairs).\n\nBut you have selected {selected_channels} input channels.\n\nContinue anyway?",
+  "message_recording_setup_info": "Recording Setup:\nPlay file: {play_file}\nRecord file: {record_file}\nInput device: {input_device}\nOutput device: {output_device}\nChannels: {channels}\nHost API: {host_api}\n\nMake sure:\n- Your audio interface is properly connected\n- Input/output devices are correctly selected\n- Channel count matches your setup\n\nReady to start recording?"
 }

@@ -29,6 +29,38 @@ from core.parallel_processing import get_python_threading_info
 # Default theme setting (will be overridden by user preference)
 ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
 
+# Shared file dialog filters — defined once at module level so changes propagate
+# uniformly and identical filters never drift between call sites.
+FILETYPES_AUDIO = [
+    ('Audio files', '*.wav *.mlp *.thd *.truehd'),
+    ('WAV files', '*.wav'),
+    ('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
+    ('All files', '*.*'),
+]
+
+FILETYPES_AUDIO_WITH_PKL = [
+    ('Audio files', '*.wav *.pkl *.mlp *.thd *.truehd'),
+    ('WAV files', '*.wav'),
+    ('Pickle files', '*.pkl'),
+    ('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
+    ('All files', '*.*'),
+]
+
+FILETYPES_TEXT = [
+    ('Text files', '*.csv *.txt'),
+    ('All files', '*.*'),
+]
+
+FILETYPES_WAV = [
+    ('Audio files', '*.wav'),
+    ('All files', '*.*'),
+]
+
+FILETYPES_WAV_SAVE = [
+    ('WAV file', '*.wav'),
+    ('All files', '*.*'),
+]
+
 
 def open_data_folder():
     """Open the application's data folder in file explorer."""
@@ -157,6 +189,12 @@ def safe_get_string(var, default=""):
         return default
 
 
+# Cache for setup_pretendard_font() — keyed by language code, holds resolved font family
+# (or None when no Pretendard is available). Avoids repeated GDI calls on Windows and
+# repeated tkfont.families() scans across dialog construction.
+_font_cache: dict = {}
+
+
 def setup_pretendard_font(current_language: str = 'en') -> str:
     """
     Setup Pretendard font for Korean and English languages.
@@ -168,9 +206,16 @@ def setup_pretendard_font(current_language: str = 'en') -> str:
     Returns:
         Font family name to use, or None for system default
     """
+    if current_language in _font_cache:
+        return _font_cache[current_language]
+
+    def _cache_and_return(value):
+        _font_cache[current_language] = value
+        return value
+
     # Only use Pretendard for Korean and English
     if current_language not in ['ko', 'en']:
-        return None
+        return _cache_and_return(None)
 
     try:
         # Try to find Pretendard font file
@@ -209,7 +254,7 @@ def setup_pretendard_font(current_language: str = 'en') -> str:
 
                     if result > 0:
                         print(f"Successfully registered Pretendard font: {font_path}")
-                        return "Pretendard"
+                        return _cache_and_return("Pretendard")
                     else:
                         print(f"Failed to register Pretendard font (result={result})")
                 else:
@@ -218,7 +263,7 @@ def setup_pretendard_font(current_language: str = 'en') -> str:
                     print(f"Found Pretendard font at: {font_path}")
                     print("Note: On Linux/Mac, please install Pretendard font system-wide for best results")
                     # Try to use Pretendard anyway
-                    return "Pretendard"
+                    return _cache_and_return("Pretendard")
 
             except Exception as e:
                 print(f"Failed to register Pretendard font: {e}")
@@ -229,25 +274,48 @@ def setup_pretendard_font(current_language: str = 'en') -> str:
             for font_name in available_fonts:
                 if "Pretendard" in font_name:
                     print(f"Using system-installed Pretendard font: {font_name}")
-                    return font_name
+                    return _cache_and_return(font_name)
         except Exception as e:
             print(f"Error checking system fonts: {e}")
 
         print("Pretendard font not available, using system default")
-        return None
+        return _cache_and_return(None)
 
     except Exception as e:
         print(f"Error setting up Pretendard font: {e}")
-        return None
+        return _cache_and_return(None)
+
+
+def _build_fallback_fonts(font_family: str) -> dict:
+    """Build a minimal fonts dict for dialogs instantiated without a parent fonts dict.
+
+    Mirrors the keys created by ModernImpulciferGUI._build_fonts. Dialogs always
+    receive a shared fonts dict in normal use; this only fires if a dialog is
+    constructed standalone (e.g. from tests).
+    """
+    return {
+        'heading':       ctk.CTkFont(family=font_family, size=16, weight="bold"),
+        'title':         ctk.CTkFont(family=font_family, size=24, weight="bold"),
+        'subtitle':      ctk.CTkFont(family=font_family, size=12),
+        'label':         ctk.CTkFont(family=font_family, size=13),
+        'value':         ctk.CTkFont(family=font_family, size=13, weight="bold"),
+        'button_large':  ctk.CTkFont(family=font_family, size=16, weight="bold"),
+        'small':         ctk.CTkFont(family=font_family, size=11),
+        'small_bold':    ctk.CTkFont(family=font_family, size=12, weight="bold"),
+        'dialog_title':  ctk.CTkFont(family=font_family, size=18, weight="bold"),
+        'dialog_body':   ctk.CTkFont(family=font_family, size=14),
+        'dialog_small':  ctk.CTkFont(family=font_family, size=12),
+    }
 
 
 class ProcessingDialog(ctk.CTkToplevel):
     """Dialog to show processing progress and logs"""
 
-    def __init__(self, parent, loc_manager):
+    def __init__(self, parent, loc_manager, fonts: dict = None):
         super().__init__(parent)
         self.loc = loc_manager
         self.font_family = setup_pretendard_font(self.loc.current_language)
+        self.fonts = fonts if fonts is not None else _build_fallback_fonts(self.font_family)
         self.title(self.loc.get('dialog_processing_title', default="Processing"))
         self.geometry("700x500")
         self.transient(parent)
@@ -267,7 +335,7 @@ class ProcessingDialog(ctk.CTkToplevel):
         title_label = ctk.CTkLabel(
             self,
             text=self.loc.get('dialog_processing_message', default="Processing BRIR..."),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         )
         title_label.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
 
@@ -280,7 +348,7 @@ class ProcessingDialog(ctk.CTkToplevel):
         self.progress_label = ctk.CTkLabel(
             self,
             text="0%",
-            font=ctk.CTkFont(family=self.font_family, size=12)
+            font=self.fonts['dialog_small']
         )
         self.progress_label.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="w")
 
@@ -305,44 +373,64 @@ class ProcessingDialog(ctk.CTkToplevel):
         self.processing_error = False
 
     def update_progress(self, value: int, message: str = ""):
-        """Update progress bar and label"""
+        """Update progress bar and label - thread-safe (marshals to main thread)"""
+        def _update():
+            try:
+                self.progress_bar.set(value / 100.0)
+                self.progress_label.configure(
+                    text=f"{value}% - {message}" if message else f"{value}%"
+                )
+            except Exception:
+                pass
         try:
-            self.progress_bar.set(value / 100.0)
-            self.progress_label.configure(text=f"{value}% - {message}" if message else f"{value}%")
-            self.update_idletasks()
+            self.after(0, _update)
         except Exception:
             pass
 
     def add_log(self, level: str, message: str):
-        """Add log message to text box"""
+        """Add log message to text box - thread-safe (marshals to main thread)"""
+        def _add():
+            try:
+                if level == "ERROR":
+                    prefix = "✗ "
+                elif level == "SUCCESS":
+                    prefix = "✓ "
+                elif level == "WARNING":
+                    prefix = "⚠ "
+                else:
+                    prefix = ""
+                self.log_text.insert("end", f"{prefix}{message}\n")
+                self.log_text.see("end")
+            except Exception:
+                pass
         try:
-            # Add timestamp and level prefix
-            if level == "ERROR":
-                prefix = "✗ "
-            elif level == "SUCCESS":
-                prefix = "✓ "
-            elif level == "WARNING":
-                prefix = "⚠ "
-            else:
-                prefix = ""
-
-            self.log_text.insert("end", f"{prefix}{message}\n")
-            self.log_text.see("end")
-            self.update_idletasks()
+            self.after(0, _add)
         except Exception:
             pass
 
     def mark_complete(self, success: bool = True):
-        """Mark processing as complete"""
+        """Mark processing as complete - thread-safe (marshals to main thread)"""
         self.processing_complete = True
         self.processing_error = not success
-        self.close_button.configure(state="normal")
 
-        if success:
-            self.progress_bar.set(1.0)
-            self.progress_label.configure(text="100% - " + self.loc.get('message_processing_complete', default="Complete!"))
-        else:
-            self.progress_label.configure(text=self.loc.get('message_processing_error', default="Error occurred"))
+        def _apply():
+            try:
+                self.close_button.configure(state="normal")
+                if success:
+                    self.progress_bar.set(1.0)
+                    self.progress_label.configure(
+                        text="100% - " + self.loc.get('message_processing_complete', default="Complete!")
+                    )
+                else:
+                    self.progress_label.configure(
+                        text=self.loc.get('message_processing_error', default="Error occurred")
+                    )
+            except Exception:
+                pass
+        try:
+            self.after(0, _apply)
+        except Exception:
+            pass
 
     def on_close(self):
         """Close dialog"""
@@ -353,10 +441,11 @@ class ProcessingDialog(ctk.CTkToplevel):
 class UpdateDialog(ctk.CTkToplevel):
     """Dialog to notify user about available updates"""
 
-    def __init__(self, parent, loc_manager, current_version: str, latest_version: str, download_url: str, release_notes: str = ""):
+    def __init__(self, parent, loc_manager, current_version: str, latest_version: str, download_url: str, release_notes: str = "", fonts: dict = None):
         super().__init__(parent)
         self.loc = loc_manager
         self.font_family = setup_pretendard_font(self.loc.current_language)
+        self.fonts = fonts if fonts is not None else _build_fallback_fonts(self.font_family)
         self.current_version = current_version
         self.latest_version = latest_version
         self.download_url = download_url
@@ -386,7 +475,7 @@ class UpdateDialog(ctk.CTkToplevel):
         title_label = ctk.CTkLabel(
             title_frame,
             text=self.loc.get('update_available_message', default="A new version is available!"),
-            font=ctk.CTkFont(family=self.font_family, size=18, weight="bold")
+            font=self.fonts['dialog_title']
         )
         title_label.grid(row=0, column=0, pady=(0, 10))
 
@@ -397,7 +486,7 @@ class UpdateDialog(ctk.CTkToplevel):
         version_label = ctk.CTkLabel(
             title_frame,
             text=version_text,
-            font=ctk.CTkFont(family=self.font_family, size=14)
+            font=self.fonts['dialog_body']
         )
         version_label.grid(row=1, column=0)
 
@@ -405,7 +494,7 @@ class UpdateDialog(ctk.CTkToplevel):
         notes_label = ctk.CTkLabel(
             self,
             text=self.loc.get('update_release_notes', default="Release Notes:"),
-            font=ctk.CTkFont(family=self.font_family, size=12, weight="bold")
+            font=self.fonts['small_bold']
         )
         notes_label.grid(row=1, column=0, padx=20, pady=(0, 5), sticky="w")
 
@@ -425,7 +514,7 @@ class UpdateDialog(ctk.CTkToplevel):
         self.progress_label = ctk.CTkLabel(
             self.progress_frame,
             text=self.loc.get('update_downloading', default="Downloading update..."),
-            font=ctk.CTkFont(family=self.font_family, size=12)
+            font=self.fonts['dialog_small']
         )
         self.progress_label.pack(pady=(10, 5))
 
@@ -467,12 +556,10 @@ class UpdateDialog(ctk.CTkToplevel):
         """User chose to update now"""
         self.user_choice = 'update'
 
-        # Disable buttons
-        for widget in self.winfo_children():
-            if isinstance(widget, ctk.CTkFrame) and widget != self.progress_frame:
-                for button in widget.winfo_children():
-                    if isinstance(button, ctk.CTkButton):
-                        button.configure(state="disabled")
+        # Disable our action buttons via direct references — robust to layout changes.
+        self.update_button.configure(state="disabled")
+        self.remind_button.configure(state="disabled")
+        self.skip_button.configure(state="disabled")
 
         self.progress_frame.grid(row=4, column=0, padx=20, pady=(0, 10), sticky="ew")
 
@@ -500,21 +587,18 @@ class UpdateDialog(ctk.CTkToplevel):
             download_thread.start()
 
     def pip_upgrade(self):
-        """Upgrade using pip"""
+        """Upgrade using pip — waits for the subprocess and surfaces failures."""
+        process = None
         try:
             import sys
             import subprocess
 
-            # Update progress
             self.after(0, lambda: self.progress_label.configure(
                 text=self.loc.get('update_installing', default="Installing update via pip...")
             ))
             self.after(0, lambda: self.progress_bar.set(0.5))
 
-            # Get python executable path
             python_exe = sys.executable
-
-            # Prepare upgrade command
             upgrade_cmd = [
                 python_exe,
                 '-m',
@@ -526,47 +610,39 @@ class UpdateDialog(ctk.CTkToplevel):
 
             print(f"Upgrading with command: {' '.join(upgrade_cmd)}")
 
-            # Update progress
             self.after(0, lambda: self.progress_bar.set(0.7))
 
-            # Run upgrade
-            if platform.system() == 'Windows':
-                # On Windows, show console window for pip output
-                _process = subprocess.Popen(
-                    upgrade_cmd,
-                    creationflags=subprocess.CREATE_NEW_CONSOLE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
+            # Capture output on every platform so we can detect failures.
+            process = subprocess.Popen(
+                upgrade_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+
+            # Wait for pip to actually finish (5 minute cap).
+            stdout, stderr = process.communicate(timeout=300)
+
+            if process.returncode == 0:
+                self.after(0, lambda: self.progress_bar.set(1.0))
+                self.after(0, lambda: self.progress_label.configure(
+                    text=self.loc.get('update_success', default="Update started! Please restart the application.")
+                ))
+                self.after(1000, lambda: messagebox.showinfo(
+                    self.loc.get('update_complete_title', default="Update Complete"),
+                    self.loc.get('update_complete_message', default="The update has been started in the background.\nPlease restart the application to use the new version.")
+                ))
+                self.after(2000, lambda: self.destroy())
             else:
-                # On Unix-like systems, capture output
-                _process = subprocess.Popen(
-                    upgrade_cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
+                error_detail = stderr.decode('utf-8', errors='replace')[:500] if stderr else ''
+                code = process.returncode
+                self.after(0, lambda: self.show_error(
+                    f"pip upgrade failed (exit code {code}):\n{error_detail}"
+                ))
 
-            # Update progress
-            self.after(0, lambda: self.progress_bar.set(0.9))
-
-            # Wait a moment for pip to start
-            import time
-            time.sleep(1)
-
-            # Complete progress
-            self.after(0, lambda: self.progress_bar.set(1.0))
-            self.after(0, lambda: self.progress_label.configure(
-                text=self.loc.get('update_success', default="Update started! Please restart the application.")
-            ))
-
-            # Show message and close
-            self.after(2000, lambda: messagebox.showinfo(
-                self.loc.get('update_complete_title', default="Update Started"),
-                self.loc.get('update_complete_message', default="The update has been started in the background.\nPlease restart the application to use the new version.")
-            ))
-
-            self.after(3000, lambda: self.destroy())
-
+        except subprocess.TimeoutExpired:
+            if process is not None:
+                process.kill()
+            self.after(0, lambda: self.show_error("Update timed out after 5 minutes."))
         except Exception as e:
             error_msg = self.loc.get('update_error_general', default="Update error: {error}").format(error=str(e))
             self.after(0, lambda: self.show_error(error_msg))
@@ -701,6 +777,11 @@ class ModernImpulciferGUI:
         self.root = ctk.CTk()
         self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
 
+        # Shared CTkFont instances — reused across all tabs and dialogs to avoid
+        # rebuilding identical font specs for every label/button (was a major
+        # cost at startup since most widgets requested size=16 bold).
+        self.fonts = self._build_fonts()
+
         # Show language selection dialog on first run
         if self.loc.is_first_run():
             self.root.after(500, self.show_language_selection_dialog)
@@ -746,6 +827,27 @@ class ModernImpulciferGUI:
         # Create Info tab
         self.create_info_tab()
 
+    def _build_fonts(self) -> dict:
+        """Build shared CTkFont instances keyed by semantic role.
+
+        Must be called after `self.root = ctk.CTk()` because CTkFont needs a
+        Tk default root.
+        """
+        family = self.font_family
+        return {
+            'heading':       ctk.CTkFont(family=family, size=16, weight="bold"),
+            'title':         ctk.CTkFont(family=family, size=24, weight="bold"),
+            'subtitle':      ctk.CTkFont(family=family, size=12),
+            'label':         ctk.CTkFont(family=family, size=13),
+            'value':         ctk.CTkFont(family=family, size=13, weight="bold"),
+            'button_large':  ctk.CTkFont(family=family, size=16, weight="bold"),
+            'small':         ctk.CTkFont(family=family, size=11),
+            'small_bold':    ctk.CTkFont(family=family, size=12, weight="bold"),
+            'dialog_title':  ctk.CTkFont(family=family, size=18, weight="bold"),
+            'dialog_body':   ctk.CTkFont(family=family, size=14),
+            'dialog_small':  ctk.CTkFont(family=family, size=12),
+        }
+
     def create_header(self):
         """Create header with app title and theme toggle"""
         header = ctk.CTkFrame(self.root, corner_radius=0, height=60)
@@ -756,7 +858,7 @@ class ModernImpulciferGUI:
         self.title_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_title'),
-            font=ctk.CTkFont(family=self.font_family, size=24, weight="bold")
+            font=self.fonts['title']
         )
         self.title_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
 
@@ -764,7 +866,7 @@ class ModernImpulciferGUI:
         self.subtitle_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_subtitle'),
-            font=ctk.CTkFont(family=self.font_family, size=12),
+            font=self.fonts['subtitle'],
             text_color="gray"
         )
         self.subtitle_label.grid(row=0, column=1, padx=10, pady=15, sticky="w")
@@ -819,7 +921,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             devices_frame,
             text=self.loc.get('section_audio_devices'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         # Host API
@@ -862,7 +964,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             files_frame,
             text=self.loc.get('section_files'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
         # File to play
@@ -873,12 +975,7 @@ class ModernImpulciferGUI:
         ctk.CTkButton(
             files_frame,
             text=self.loc.get('button_browse'),
-            command=lambda: self.browse_file(self.play_var, 'open', [
-                ('Audio files', '*.wav *.mlp *.thd *.truehd'),
-                ('WAV files', '*.wav'),
-                ('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
-                ('All files', '*.*')
-            ]),
+            command=lambda: self.browse_file(self.play_var, 'open', FILETYPES_AUDIO),
             width=100
         ).grid(row=1, column=2, padx=15, pady=5)
 
@@ -903,7 +1000,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             options_frame,
             text=self.loc.get('section_recording_options'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
         # Channels checkbox and entry
@@ -933,7 +1030,7 @@ class ModernImpulciferGUI:
         self.channel_guidance = ctk.CTkLabel(
             options_frame,
             text=self.loc.get('message_using_default_recording'),
-            font=ctk.CTkFont(family=self.font_family, size=11),
+            font=self.fonts['small'],
             text_color="gray",
             wraplength=800,
             justify="left"
@@ -954,7 +1051,7 @@ class ModernImpulciferGUI:
             text=self.loc.get('button_start_recording'),
             command=self.start_recording,
             height=50,
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            font=self.fonts['heading'],
             fg_color="#dc3545",
             hover_color="#c82333"
         )
@@ -986,7 +1083,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             input_frame,
             text=self.loc.get('section_input_files'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
         # Your recordings
@@ -1009,13 +1106,7 @@ class ModernImpulciferGUI:
         ctk.CTkButton(
             input_frame,
             text=self.loc.get('button_browse'),
-            command=lambda: self.browse_file(self.test_signal_var, 'open', [
-                ('Audio files', '*.wav *.pkl *.mlp *.thd *.truehd'),
-                ('WAV files', '*.wav'),
-                ('Pickle files', '*.pkl'),
-                ('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
-                ('All files', '*.*')
-            ]),
+            command=lambda: self.browse_file(self.test_signal_var, 'open', FILETYPES_AUDIO_WITH_PKL),
             width=100
         ).grid(row=2, column=2, padx=(15, 15), pady=(5, 15))
 
@@ -1028,7 +1119,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             processing_frame,
             text=self.loc.get('section_processing_options'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
         proc_row = 1
@@ -1042,6 +1133,9 @@ class ModernImpulciferGUI:
             command=self.toggle_room_correction
         )
         self.room_correction_check.grid(row=proc_row, column=0, sticky="w", padx=15, pady=5)
+        proc_row += 1
+        # Reserve next row for room options frame (revealed by toggle)
+        self._room_options_row = proc_row
         proc_row += 1
 
         # Room correction options (initially hidden)
@@ -1087,10 +1181,7 @@ class ModernImpulciferGUI:
         ctk.CTkButton(
             mic_frame,
             text=self.loc.get('button_browse'),
-            command=lambda: self.browse_file(self.room_mic_calibration_var, 'open', [
-                ('Text files', '*.csv *.txt'),
-                ('All files', '*.*')
-            ]),
+            command=lambda: self.browse_file(self.room_mic_calibration_var, 'open', FILETYPES_TEXT),
             width=80
         ).grid(row=0, column=2, padx=5, pady=2)
 
@@ -1101,10 +1192,7 @@ class ModernImpulciferGUI:
         ctk.CTkButton(
             mic_frame,
             text=self.loc.get('button_browse'),
-            command=lambda: self.browse_file(self.room_target_var, 'open', [
-                ('Text files', '*.csv *.txt'),
-                ('All files', '*.*')
-            ]),
+            command=lambda: self.browse_file(self.room_target_var, 'open', FILETYPES_TEXT),
             width=80
         ).grid(row=1, column=2, padx=5, pady=2)
 
@@ -1117,6 +1205,9 @@ class ModernImpulciferGUI:
             command=self.toggle_headphone_compensation
         )
         self.headphone_check.grid(row=proc_row, column=0, sticky="w", padx=15, pady=5)
+        proc_row += 1
+        # Reserve next row for headphone options frame (revealed by toggle)
+        self._headphone_options_row = proc_row
         proc_row += 1
 
         # Headphone compensation options (initially hidden)
@@ -1132,10 +1223,7 @@ class ModernImpulciferGUI:
         ctk.CTkButton(
             hp_frame,
             text=self.loc.get('button_browse'),
-            command=lambda: self.browse_file(self.headphone_compensation_file_var, 'open', [
-                ('Audio files', '*.wav'),
-                ('All files', '*.*')
-            ]),
+            command=lambda: self.browse_file(self.headphone_compensation_file_var, 'open', FILETYPES_WAV),
             width=80
         ).grid(row=0, column=2, padx=5, pady=2)
 
@@ -1169,7 +1257,7 @@ class ModernImpulciferGUI:
             text=self.loc.get('section_advanced_options'),
             variable=self.show_advanced_var,
             command=self.toggle_advanced_options,
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         )
         advanced_toggle.grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
@@ -1269,6 +1357,10 @@ class ModernImpulciferGUI:
         )
         self.decay_per_channel_check.pack(side="left", padx=10)
 
+        # Reserve next row for per-channel decay frame (revealed by toggle)
+        self._decay_channels_row = adv_row
+        adv_row += 1
+
         # Per-channel decay (initially hidden)
         self.decay_channels_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
 
@@ -1355,7 +1447,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             vbass_group,
             text=self.loc.get('vbass_group_title'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
         vbass_row = 1
@@ -1424,7 +1516,7 @@ class ModernImpulciferGUI:
             text=self.loc.get('button_generate_brir'),
             command=self.generate_brir,
             height=50,
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold"),
+            font=self.fonts['heading'],
             fg_color="#28a745",
             hover_color="#218838"
         )
@@ -1476,33 +1568,48 @@ class ModernImpulciferGUI:
             self.channels_entry.configure(state="normal")
             channel_count = safe_get_int(self.channels_var, 0)
             if channel_count == 14:
-                text = f"Recording with {channel_count} channels (7 speakers × 2 ears). Speakers: FL,FR,FC,BL,BR,SL,SR.wav"
+                text = self.loc.get(
+                    'message_channel_guidance_standard',
+                    channels=channel_count, speakers=7,
+                    speaker_list="FL,FR,FC,BL,BR,SL,SR",
+                )
             elif channel_count == 22:
-                text = f"Recording with {channel_count} channels (11 speakers × 2 ears, 7.0.4 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR.wav"
+                text = self.loc.get(
+                    'message_channel_guidance_atmos_704',
+                    channels=channel_count, speakers=11,
+                    speaker_list="FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR",
+                )
             elif channel_count == 26:
-                text = f"Recording with {channel_count} channels (13 speakers × 2 ears, 7.0.6 Atmos). Speakers: FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR,TSL,TSR.wav"
+                text = self.loc.get(
+                    'message_channel_guidance_atmos_706',
+                    channels=channel_count, speakers=13,
+                    speaker_list="FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR,TSL,TSR",
+                )
             elif channel_count > 0:
-                speakers_count = channel_count // 2
-                text = f"Recording with {channel_count} channels ({speakers_count} speakers × 2 ears). Make sure your filename matches the speaker configuration."
+                text = self.loc.get(
+                    'message_channel_guidance_custom',
+                    channels=channel_count,
+                    speakers=channel_count // 2,
+                )
             else:
-                text = "Enter valid channel count (recommended: 14, 22, or 26)"
+                text = self.loc.get('message_channel_guidance_invalid')
         else:
             self.channels_entry.configure(state="disabled")
-            text = "Using default 2-channel recording."
+            text = self.loc.get('message_using_default_recording')
 
         self.channel_guidance.configure(text=text)
 
     def toggle_room_correction(self):
         """Show/hide room correction options"""
         if self.do_room_correction_var.get():
-            self.room_options_frame.grid(row=99, column=0, sticky="ew", padx=0, pady=(0, 10))
+            self.room_options_frame.grid(row=self._room_options_row, column=0, sticky="ew", padx=0, pady=(0, 10))
         else:
             self.room_options_frame.grid_forget()
 
     def toggle_headphone_compensation(self):
         """Show/hide headphone compensation options"""
         if self.do_headphone_compensation_var.get():
-            self.headphone_options_frame.grid(row=100, column=0, sticky="ew", padx=0, pady=(0, 10))
+            self.headphone_options_frame.grid(row=self._headphone_options_row, column=0, sticky="ew", padx=0, pady=(0, 10))
         else:
             self.headphone_options_frame.grid_forget()
 
@@ -1524,7 +1631,7 @@ class ModernImpulciferGUI:
         """Show/hide per-channel decay entries"""
         if self.decay_per_channel_var.get():
             self.decay_entry.configure(state="disabled")
-            self.decay_channels_frame.grid(row=999, column=0, sticky="ew", padx=0, pady=5)
+            self.decay_channels_frame.grid(row=self._decay_channels_row, column=0, sticky="ew", padx=0, pady=5)
         else:
             self.decay_entry.configure(state="normal")
             self.decay_channels_frame.grid_forget()
@@ -1566,7 +1673,7 @@ class ModernImpulciferGUI:
                 initialdir=os.path.dirname(var.get()) if var.get() else os.getcwd(),
                 initialfile=os.path.basename(var.get()) if var.get() else "",
                 defaultextension=".wav",
-                filetypes=[('WAV file', '*.wav'), ('All files', '*.*')]
+                filetypes=FILETYPES_WAV_SAVE
             )
 
         if filename:
@@ -1612,15 +1719,12 @@ class ModernImpulciferGUI:
                 expected_channels = len(expected_speakers) * 2
 
                 if self.channels_check_var.get() and selected_channels != expected_channels:
-                    warning_msg = (
-                        f"Channel count mismatch detected!\n\n"
-                        f"Recording filename suggests {len(expected_speakers)} speakers ({', '.join(expected_speakers)}) "
-                        f"which requires {expected_channels} channels (stereo pairs).\n\n"
-                        f"But you have selected {selected_channels} input channels.\n\n"
-                        f"Expected speakers: {', '.join(expected_speakers)}\n"
-                        f"Expected channels: {expected_channels}\n"
-                        f"Selected channels: {selected_channels}\n\n"
-                        f"Continue anyway?"
+                    warning_msg = self.loc.get(
+                        'message_channel_mismatch_body',
+                        expected_speakers=len(expected_speakers),
+                        speaker_names=', '.join(expected_speakers),
+                        expected_channels=expected_channels,
+                        selected_channels=selected_channels,
                     )
 
                     if not messagebox.askyesno(self.loc.get('message_channel_mismatch_warning_title'), warning_msg):
@@ -1629,44 +1733,70 @@ class ModernImpulciferGUI:
             print(f"Warning: Could not parse filename for speaker validation: {e}")
 
         # Confirmation dialog
-        info_msg = (
-            f"Recording Setup:\n"
-            f"Play file: {os.path.basename(play_file)}\n"
-            f"Record file: {os.path.basename(record_file)}\n"
-            f"Input device: {self.input_device_var.get() or 'Default'}\n"
-            f"Output device: {self.output_device_var.get() or 'Default'}\n"
-            f"Channels: {selected_channels}\n"
-            f"Host API: {self.host_api_var.get() or 'Auto'}\n\n"
-            f"Make sure:\n"
-            f"- Your audio interface is properly connected\n"
-            f"- Input/output devices are correctly selected\n"
-            f"- Channel count matches your setup\n\n"
-            f"Ready to start recording?"
+        info_msg = self.loc.get(
+            'message_recording_setup_info',
+            play_file=os.path.basename(play_file),
+            record_file=os.path.basename(record_file),
+            input_device=self.input_device_var.get() or 'Default',
+            output_device=self.output_device_var.get() or 'Default',
+            channels=selected_channels,
+            host_api=self.host_api_var.get() or 'Auto',
         )
 
         if not messagebox.askyesno(self.loc.get('message_start_recording_title'), info_msg):
             return
 
-        # Start recording
-        try:
-            self.record_button.configure(state="disabled", text=self.loc.get('button_start_recording_active'))
-            self.root.update()
+        # Snapshot variables now (Tk vars must be read on main thread)
+        input_device = self.input_device_var.get()
+        output_device = self.output_device_var.get()
+        host_api = self.host_api_var.get()
+        append = self.append_var.get()
 
-            recorder.play_and_record(
-                play=play_file,
-                record=record_file,
-                input_device=self.input_device_var.get(),
-                output_device=self.output_device_var.get(),
-                host_api=self.host_api_var.get(),
-                channels=selected_channels,
-                append=self.append_var.get()
-            )
+        self.record_button.configure(
+            state="disabled",
+            text=self.loc.get('button_start_recording_active')
+        )
 
-            self.record_button.configure(state="normal", text=self.loc.get('button_start_recording'))
-            messagebox.showinfo(self.loc.get('message_recording_complete_title'), self.loc.get('message_recording_complete', file=record_file))
-        except Exception as e:
-            self.record_button.configure(state="normal", text=self.loc.get('button_start_recording'))
-            messagebox.showerror(self.loc.get('message_recording_error_title'), self.loc.get('message_recording_error', error=str(e)))
+        def run_recording():
+            try:
+                recorder.play_and_record(
+                    play=play_file,
+                    record=record_file,
+                    input_device=input_device,
+                    output_device=output_device,
+                    host_api=host_api,
+                    channels=selected_channels,
+                    append=append
+                )
+                self.root.after(0, lambda: self._on_recording_complete(record_file))
+            except Exception as e:
+                err = str(e)
+                self.root.after(0, lambda: self._on_recording_error(err))
+
+        thread = threading.Thread(target=run_recording, daemon=True)
+        thread.start()
+
+    def _on_recording_complete(self, record_file):
+        """Re-enable record button and show success message on main thread"""
+        self.record_button.configure(
+            state="normal",
+            text=self.loc.get('button_start_recording')
+        )
+        messagebox.showinfo(
+            self.loc.get('message_recording_complete_title'),
+            self.loc.get('message_recording_complete', file=record_file)
+        )
+
+    def _on_recording_error(self, error_msg):
+        """Re-enable record button and show error message on main thread"""
+        self.record_button.configure(
+            state="normal",
+            text=self.loc.get('button_start_recording')
+        )
+        messagebox.showerror(
+            self.loc.get('message_recording_error_title'),
+            self.loc.get('message_recording_error', error=error_msg)
+        )
 
     def generate_brir(self):
         """Generate BRIR using Impulcifer with progress dialog"""
@@ -1789,7 +1919,7 @@ class ModernImpulciferGUI:
         self.generate_button.configure(state="disabled", text=self.loc.get('button_processing'))
 
         # Create processing dialog
-        dialog = ProcessingDialog(self.root, self.loc)
+        dialog = ProcessingDialog(self.root, self.loc, fonts=self.fonts)
 
         # Setup logger callbacks and localization
         logger = get_logger()
@@ -1884,7 +2014,7 @@ class ModernImpulciferGUI:
 
     def show_update_dialog(self, current_version: str, latest_version: str, download_url: str, release_notes: str):
         """Show update notification dialog"""
-        UpdateDialog(self.root, self.loc, current_version, latest_version, download_url, release_notes)
+        UpdateDialog(self.root, self.loc, current_version, latest_version, download_url, release_notes, fonts=self.fonts)
 
     def show_language_selection_dialog(self):
         """Show language selection dialog on first run"""
@@ -1904,7 +2034,7 @@ class ModernImpulciferGUI:
         message = ctk.CTkLabel(
             dialog,
             text=self.loc.get('dialog_select_language_message'),
-            font=ctk.CTkFont(family=self.font_family, size=14),
+            font=self.fonts['dialog_body'],
             wraplength=350
         )
         message.pack(pady=20, padx=20)
@@ -1921,7 +2051,7 @@ class ModernImpulciferGUI:
                 text=lang_name,
                 variable=selected_lang,
                 value=lang_code,
-                font=ctk.CTkFont(family=self.font_family, size=12)
+                font=self.fonts['subtitle']
             )
             rb.pack(pady=5, padx=10, anchor="w")
 
@@ -1970,7 +2100,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             lang_frame,
             text=self.loc.get('section_language'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         ctk.CTkLabel(
@@ -1996,7 +2126,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             theme_frame,
             text=self.loc.get('section_theme'),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         ctk.CTkLabel(
@@ -2033,7 +2163,7 @@ class ModernImpulciferGUI:
         ctk.CTkLabel(
             data_frame,
             text=self.loc.get('section_data_access', default="Data Access"),
-            font=ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+            font=self.fonts['heading']
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
         # Description label
@@ -2041,7 +2171,7 @@ class ModernImpulciferGUI:
             data_frame,
             text=self.loc.get('label_data_folder_description',
                              default="Access reference files, test signals, and recordings"),
-            font=ctk.CTkFont(family=self.font_family, size=12),
+            font=self.fonts['subtitle'],
             text_color="gray"
         ).grid(row=1, column=0, sticky="w", padx=15, pady=(0, 10))
 
@@ -2066,9 +2196,9 @@ class ModernImpulciferGUI:
         scroll.grid_columnconfigure(0, weight=1)
 
         section_row = 0
-        label_font = ctk.CTkFont(family=self.font_family, size=13)
-        value_font = ctk.CTkFont(family=self.font_family, size=13, weight="bold")
-        heading_font = ctk.CTkFont(family=self.font_family, size=16, weight="bold")
+        label_font = self.fonts['label']
+        value_font = self.fonts['value']
+        heading_font = self.fonts['heading']
 
         # === About Section ===
         about_frame = ctk.CTkFrame(scroll, corner_radius=0)

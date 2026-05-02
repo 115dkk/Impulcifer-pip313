@@ -4,6 +4,24 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.13 - 2026-05-02
+### 🐛 Modern GUI 스레드 안전성·블로킹·자잘한 회귀 정리
+
+#### 🐛 버그 수정
+- **녹음 중 GUI 응답 불능 해소**: `start_recording()`이 메인 스레드에서 `recorder.play_and_record()`(완전 블로킹 함수)를 직접 호출하던 동작을 별도 스레드 실행으로 전환. 완료/실패 처리는 `root.after(0, ...)`로 메인 스레드에 위임
+- **로거 콜백 스레드 안전성 확보**: 워커 스레드에서 `ProcessingDialog.add_log/update_progress/mark_complete`가 Tkinter 위젯의 `insert/configure/set`을 직접 호출하던 위반을 수정. 모든 위젯 조작을 `self.after(0, _fn)`로 메인 스레드에 마샬링하고 의미 없던 `update_idletasks()` 제거
+- **`pip_upgrade()` 무성공 표시 차단**: `subprocess.Popen` 후 `time.sleep(1)`로 끝내고 항상 성공 메시지를 띄우던 동작을 `process.communicate(timeout=300)`으로 완료 대기·`returncode` 분기·실패 시 stderr 노출로 교체. Windows `CREATE_NEW_CONSOLE`를 제거해 양 플랫폼 모두 출력을 캡처
+- **`UpdateDialog.on_update()` 위젯 트리 순회 의존 제거**: `winfo_children()` 검색으로 버튼을 찾던 취약한 비활성화 로직을 `update_button` / `remind_button` / `skip_button` 인스턴스 직접 참조로 교체
+
+#### ⚡ 성능 개선
+- **`setup_pretendard_font()` 결과 캐싱**: `ModernImpulciferGUI.__init__`·`ProcessingDialog.__init__`·`UpdateDialog.__init__`마다 GDI `AddFontResourceExW`와 `tkfont.families()` 순회를 반복하던 비용을 모듈 수준 `_font_cache`(언어 코드 기준)로 1회로 고정
+- **CTkFont 인스턴스 공용화**: 동일한 `family/size/weight` 조합의 `ctk.CTkFont(...)`를 탭·다이얼로그마다 재생성하던 23곳을 `ModernImpulciferGUI._build_fonts()`가 만드는 `self.fonts` 딕셔너리(11종) 한 번 생성·재사용으로 정리. `ProcessingDialog`·`UpdateDialog`도 `fonts` 파라미터로 같은 폰트 셋을 공유
+
+#### ⭐ 개선
+- **GUI 하드코딩 문자열 i18n화**: `update_channel_guidance()`(채널 안내 5종)와 `start_recording()`(녹음 설정 확인·채널 불일치 본문)에서 영어 하드코딩되어 있던 문자열을 i18n 키로 추출. `message_channel_guidance_*`, `message_channel_mismatch_body`, `message_recording_setup_info` 등 7개 키를 `en.json`/`ko.json`(한국어 번역)에 추가하고 나머지 7개 언어 파일에는 영어 fallback으로 동기화
+- **매직넘버 row 제거**: `toggle_room_correction`/`toggle_headphone_compensation`/`toggle_decay_per_channel`이 `row=99/100/999`로 임의 행에 프레임을 그리던 동작을 부모 grid 흐름과 일치하는 예약 행(`_room_options_row`/`_headphone_options_row`/`_decay_channels_row`)으로 교체
+- **파일 다이얼로그 필터 상수화**: `browse_file` 호출 시 중복되던 `filetypes` 리터럴 5개소를 `FILETYPES_AUDIO`/`FILETYPES_AUDIO_WITH_PKL`/`FILETYPES_TEXT`/`FILETYPES_WAV`/`FILETYPES_WAV_SAVE` 모듈 상수로 통합
+
 ## 2.4.12 - 2026-05-02
 ### 🐛 Lion 가상 베이스 AutoEQ 패리티 회복 + 빌드 설정 정리
 

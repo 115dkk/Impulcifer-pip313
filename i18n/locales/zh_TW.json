@@ -180,7 +180,6 @@
   "cli_warning_hp_no_wav": "目錄中未找到WAV檔案: {dir}",
   "cli_error_hp_list_dir": "目錄列表錯誤 {dir}: {error}",
   "cli_error_hp_ensure_exists": "請確認檔案存在或將 'headphones.wav' 放置在工作目錄中: {dir}",
-
   "cli_readme_title": "BRIR 資訊",
   "cli_readme_processed": "處理時間 {date}。輸出取樣率: {fs} Hz。",
   "cli_readme_gain_title": "已套用的正規化增益",
@@ -195,7 +194,6 @@
   "cli_readme_late_label": "晚期 (50-150ms)",
   "cli_readme_side_left": "左",
   "cli_readme_side_right": "右",
-
   "update_available_title": "更新可用",
   "update_available_message": "🎉 有新版本可用！",
   "update_version_info": "目前: {current} → 新: {latest}",
@@ -223,12 +221,11 @@
   "label_data_folder_description": "存取參考檔案、測試訊號和錄音",
   "button_open_data_folder": "開啟資料資料夾",
   "error_title": "錯誤",
-
   "vbass_group_title": "虛擬低音",
   "vbass_enable": "啟用虛擬低音",
   "vbass_enable_tooltip": "以合成的最小相位低音取代低頻內容，改善次低音響應",
   "vbass_crossover_freq": "分頻頻率 (Hz)",
-  "vbass_crossover_freq_tooltip": "此頻率以下的原始低音將被合成低音取代。建議範圍：100\u2013300 Hz",
+  "vbass_crossover_freq_tooltip": "此頻率以下的原始低音將被合成低音取代。建議範圍：100–300 Hz",
   "vbass_hp_freq": "次低音高通 (Hz)",
   "vbass_hp_freq_tooltip": "移除此頻率以下的直流隆隆聲。預設15 Hz適用於大多數情況",
   "vbass_polarity": "極性處理",
@@ -239,25 +236,21 @@
   "vbass_status_processing": "正在套用虛擬低音合成...",
   "vbass_status_complete": "虛擬低音合成完成",
   "vbass_status_skipped": "虛擬低音已略過（已停用）",
-  "vbass_warning_high_crossover": "分頻頻率 {freq} Hz 異常偏高。建議範圍：100\u2013300 Hz",
+  "vbass_warning_high_crossover": "分頻頻率 {freq} Hz 異常偏高。建議範圍：100–300 Hz",
   "vbass_error_sr_limit": "分頻頻率超出取樣率限制。虛擬低音已停用。",
-
   "tab_info": "ℹ️ 資訊",
   "section_about": "關於",
   "label_version": "版本：",
   "button_view_license": "查看授權條款",
   "button_report_bug": "回報錯誤",
-
   "label_installation": "安裝方式：",
   "info_install_velopack": "獨立執行 (Velopack)",
   "info_install_pip": "pip 套件",
   "info_install_dev": "開發環境",
-
   "section_contributors": "貢獻者",
   "contributor_role_original": "原作者",
   "contributor_role_py313": "Python 3.13/3.14 移植",
   "contributor_role_contributor": "貢獻者",
-
   "section_system_info": "系統資訊",
   "label_python": "Python：",
   "label_os": "作業系統：",
@@ -267,8 +260,14 @@
   "info_gil_enabled": "已啟用",
   "info_gil_disabled": "已停用 (Free-Threaded)",
   "info_gil_unknown": "不適用 (3.14 之前)",
-
   "section_project_links": "專案連結",
   "button_original_repo": "原始 Impulcifer 儲存庫",
-  "button_fork_repo": "本 Fork (Python 3.13+ 移植)"
+  "button_fork_repo": "本 Fork (Python 3.13+ 移植)",
+  "message_channel_guidance_standard": "Recording with {channels} channels ({speakers} speakers × 2 ears). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_atmos_704": "Recording with {channels} channels ({speakers} speakers × 2 ears, 7.0.4 Atmos). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_atmos_706": "Recording with {channels} channels ({speakers} speakers × 2 ears, 7.0.6 Atmos). Speakers: {speaker_list}.wav",
+  "message_channel_guidance_custom": "Recording with {channels} channels ({speakers} speakers × 2 ears). Make sure your filename matches the speaker configuration.",
+  "message_channel_guidance_invalid": "Enter valid channel count (recommended: 14, 22, or 26)",
+  "message_channel_mismatch_body": "Channel count mismatch detected!\n\nRecording filename suggests {expected_speakers} speakers ({speaker_names}) which requires {expected_channels} channels (stereo pairs).\n\nBut you have selected {selected_channels} input channels.\n\nContinue anyway?",
+  "message_recording_setup_info": "Recording Setup:\nPlay file: {play_file}\nRecord file: {record_file}\nInput device: {input_device}\nOutput device: {output_device}\nChannels: {channels}\nHost API: {host_api}\n\nMake sure:\n- Your audio interface is properly connected\n- Input/output devices are correctly selected\n- Channel count matches your setup\n\nReady to start recording?"
 }
