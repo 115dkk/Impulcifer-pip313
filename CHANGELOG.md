@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.14 - 2026-05-03
+### 🔧 Modern GUI 구조적 분리 (Phase 4 — Move-only refactor)
+
+#### 🔧 빌드 / 설정 변경
+- **`gui/modern_gui.py` 6개 모듈로 분할**: 단일 2,405줄 God Object를 메인 오케스트레이터(~250줄) + 4개 탭(`gui/tabs/{recorder,impulcifer,settings,info}_tab.py`) + 다이얼로그(`gui/dialogs.py`) + 헬퍼(`gui/utils.py`) + 상수(`gui/constants.py`)로 분리. 동작·UI 레이아웃·`generate_brir()` 인자 조립 로직은 변경 없음 (move-only refactor)
+- **외부 인터페이스 보존**: `gui_main.py`, `pyproject.toml`의 콘솔 스크립트, `tests/test_suite.py`, Nuitka 빌드 스크립트가 사용하는 `from gui.modern_gui import main_gui` 경로는 그대로 유지
+- **Nuitka 빌드 동기화**: `build_scripts/build_nuitka.py`에 신규 8개 모듈(`gui.constants`, `gui.utils`, `gui.dialogs`, `gui.tabs`, `gui.tabs.recorder_tab`, `gui.tabs.impulcifer_tab`, `gui.tabs.settings_tab`, `gui.tabs.info_tab`)을 명시. CI 워크플로우는 이미 `--include-package=gui`로 하위 패키지를 재귀 포함하므로 미수정
+- **테스트 회귀 없음**: 전체 pytest 스위트(57 passed, 3 skipped — GUI 임포트는 headless 환경에서 skip), `magnitude_response` parity, virtual bass, parallel processing, 마이크 편차 보정 통합 테스트 모두 통과. en/ko 271개 i18n 키 동기 유지
+
 ## 2.4.13 - 2026-05-02
 ### 🐛 Modern GUI 스레드 안전성·블로킹·자잘한 회귀 정리
 
