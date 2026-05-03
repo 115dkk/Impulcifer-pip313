@@ -44,7 +44,7 @@ def _get_version() -> str:
         pass
 
     # Fallback
-    return "2.4.15"
+    return "2.4.16"
 
 __version__ = _get_version()
 
@@ -203,7 +203,6 @@ set_matplotlib_font()  # 함수 호출하여 폰트 설정 실행
 from core.parallel_workers import (
     process_equalization_worker,
     process_decay_worker,
-    process_plot_worker,
 )
 
 
@@ -450,12 +449,14 @@ def main(
         )
 
         # Phase 2 Optimization: Parallel processing of speaker-side pairs
-        # Prepare arguments for parallel processing
+        # Prepare arguments for parallel processing.
+        # Worker는 ir 객체를 사용하지 않으므로 task tuple에서 제외해 IPC pickle
+        # 비용과 ImpulseResponse 객체 직렬화 부담을 제거한다.
         eq_tasks = []
         for speaker, pair in hrir.irs.items():
-            for side, ir in pair.items():
+            for side in pair.keys():
                 eq_tasks.append((
-                    speaker, side, ir,
+                    speaker, side,
                     room_frs, hp_left, hp_right,
                     eq_left, eq_right, target,
                     common_freq, estimator.fs
@@ -514,18 +515,15 @@ def main(
     if plot:
         logger.step("cli_plotting_post")
 
-        # Phase 2 Optimization: Parallel convolution for plotting
-        plot_tasks = []
+        # Compute convolutions for recording plots serially. Each convolution is
+        # ~scipy.signal.convolve一행짜리 작업이라 ProcessPoolExecutor 14개 워커
+        # (각 ~150MB) 비용이 직렬 실행보다 훨씬 비싸다. 추가로, 워커가 반환한
+        # recording 배열을 plot_tasks/plot_results 튜플이 보유하면 hrir 메모리
+        # 회수 시점까지 참조가 살아남아 ~3GB 잔류를 일으킨다.
+        from scipy.signal import convolve
         for speaker, pair in hrir.irs.items():
             for side, ir in pair.items():
-                plot_tasks.append((speaker, side, ir.data, estimator.test_signal, estimator.fs))
-
-        logger.info("cli_info_parallel_plotting", count=len(plot_tasks))
-        plot_results = parallel_map(process_plot_worker, plot_tasks)
-
-        # Apply results back to impulse responses
-        for speaker, side, recording in plot_results:
-            hrir.irs[speaker][side].recording = recording
+                ir.recording = convolve(estimator.test_signal, ir.data, mode="full")
 
         # Plot post processing
         hrir.plot(os.path.join(dir_path, "plots", "post"))
@@ -711,14 +709,30 @@ def main(
         # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:
         # LFE 생성 로직 ...
 
-    # 메모리 회수: 대형 객체 명시적 삭제 후 GC 강제 수행
-    # BRIR 반복 생성 시 메모리 누적 방지
+    # 메모리 회수: 중간 변수 → 루트 객체 순서로 삭제 후 GC 수행.
+    # eq_tasks/decay_tasks 등 중간 변수가 hrir/estimator 내부 데이터에 대한
+    # 참조를 유지하고 있어, 루트 객체를 먼저 삭제하면 내부 데이터가 해제되지
+    # 않는다. 반드시 중간 변수를 먼저 삭제한 후 루트 객체를 삭제할 것.
+    try:
+        del eq_tasks, eq_results
+    except NameError:
+        pass
+    try:
+        del decay_tasks, decay_results
+    except NameError:
+        pass
+
     del hrir
     del estimator
     try:
         del room_frs, hp_left, hp_right, eq_left, eq_right, target
     except NameError:
         pass
+
+    # safety net: 정상 경로에서는 hrir.plot()이 figure를 닫지만, 예외 발생
+    # 시 닫히지 않은 figure가 남을 수 있어 전체 close를 한 번 더 호출한다.
+    plt.close('all')
+
     import gc
     gc.collect()
 
@@ -788,8 +802,10 @@ def open_impulse_response_estimator(dir_path, file_path=None):
         # Test signal is Pickle file
         estimator = ImpulseResponseEstimator.from_pickle(file_path)
     elif re.match(r"^.+\.(mlp|thd|truehd)$", file_path, flags=re.IGNORECASE):
-        # Test signal is TrueHD/MLP file - convert to temporary WAV first
-        if not check_ffmpeg_available():
+        # Test signal is TrueHD/MLP file - convert to temporary WAV first.
+        # auto_install=True로 호출해 사용자가 .mlp/.thd/.truehd 파일을 직접
+        # 지정한 경우 FFmpeg가 없으면 기존처럼 자동 설치 UX를 시도한다.
+        if not check_ffmpeg_available(auto_install=True):
             raise RuntimeError(
                 "TrueHD/MLP 파일을 처리하기 위해서는 FFmpeg가 필요합니다. FFmpeg를 설치해주세요."
             )

@@ -12,7 +12,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from PIL import Image
 from autoeq.frequency_response import FrequencyResponse
 from core.impulse_response import ImpulseResponse
-from core.utils import read_wav, write_wav, magnitude_response, sync_axes, ADAPTIVE_PALETTE
+from core.utils import read_wav, write_wav, magnitude_response, ADAPTIVE_PALETTE
 from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER
 
 # Bokeh imports
@@ -905,12 +905,75 @@ class HRIR:
         plot_waterfall=True,
         close_plots=True,
     ):
-        """Plots all impulse responses."""
-        # Plot and save max limits
-        figs = dict()
+        """Plots all impulse responses with memory-efficient 2-pass rendering.
+
+        Pass 1: Generate each figure to collect axis limits, then close immediately.
+        Pass 2: Regenerate each figure with synchronized limits, save, then close.
+
+        Holding all 14 figures in memory simultaneously (the previous behavior)
+        fragments the matplotlib heap and pins ~3GB of small objects through
+        ``gc.collect()``. This 2-pass form caps live figures at 1 at the cost
+        of generating each figure twice — plotting time roughly doubles, but
+        plotting is a small fraction of total BRIR generation time.
+        """
+        import gc
+
+        plot_flags = [
+            plot_recording,
+            plot_ir,
+            plot_decay,
+            plot_spectrogram,
+            plot_fr,
+            plot_waterfall,
+        ]
+
+        # --- Pass 1: Collect axis limits ---
+        limits = {}
+        for idx in range(6):
+            if plot_flags[idx]:
+                limits[idx] = {
+                    'x_mins': [], 'x_maxs': [],
+                    'y_mins': [], 'y_maxs': [],
+                }
+
         for speaker, pair in self.irs.items():
-            if speaker not in figs:
-                figs[speaker] = dict()
+            for side, ir in pair.items():
+                fig = ir.plot(
+                    plot_recording=plot_recording,
+                    plot_spectrogram=plot_spectrogram,
+                    plot_ir=plot_ir,
+                    plot_fr=plot_fr,
+                    plot_decay=plot_decay,
+                    plot_waterfall=plot_waterfall,
+                )
+                axes_list = fig.get_axes()
+                for idx in limits:
+                    if idx < len(axes_list):
+                        ax = axes_list[idx]
+                        xlim = ax.get_xlim()
+                        ylim = ax.get_ylim()
+                        limits[idx]['x_mins'].append(xlim[0])
+                        limits[idx]['x_maxs'].append(xlim[1])
+                        limits[idx]['y_mins'].append(ylim[0])
+                        limits[idx]['y_maxs'].append(ylim[1])
+                plt.close(fig)
+
+        sync_limits = {}
+        for idx, lim in limits.items():
+            if lim['x_mins']:
+                sync_limits[idx] = {
+                    'xlim': [float(np.min(lim['x_mins'])), float(np.max(lim['x_maxs']))],
+                    'ylim': [float(np.min(lim['y_mins'])), float(np.max(lim['y_maxs']))],
+                }
+
+        gc.collect()
+
+        # --- Pass 2: Render with synchronized limits ---
+        figs = dict()
+        if dir_path is not None:
+            os.makedirs(dir_path, exist_ok=True)
+
+        for speaker, pair in self.irs.items():
             for side, ir in pair.items():
                 fig = ir.plot(
                     plot_recording=plot_recording,
@@ -921,45 +984,29 @@ class HRIR:
                     plot_waterfall=plot_waterfall,
                 )
                 fig.suptitle(f"{speaker}-{side}")
-                figs[speaker][side] = fig
 
-        # Synchronize axes limits
-        plot_flags = [
-            plot_recording,
-            plot_ir,
-            plot_decay,
-            plot_spectrogram,
-            plot_fr,
-            plot_waterfall,
-        ]
-        for r in range(2):
-            for c in range(3):
-                if not plot_flags[r * 3 + c]:
-                    continue
-                axes = []
-                for speaker, pair in figs.items():
-                    for side, fig in pair.items():
-                        axes.append(fig.get_axes()[r * 3 + c])
-                sync_axes(axes)
+                axes_list = fig.get_axes()
+                for idx, sl in sync_limits.items():
+                    if idx < len(axes_list):
+                        axes_list[idx].set_xlim(sl['xlim'])
+                        axes_list[idx].set_ylim(sl['ylim'])
 
-        # Show write figures to files
-        if dir_path is not None:
-            os.makedirs(dir_path, exist_ok=True)
-            for speaker, pair in self.irs.items():
-                for side, ir in pair.items():
+                if dir_path is not None:
                     file_path = os.path.join(dir_path, f"{speaker}-{side}.png")
-                    figs[speaker][side].savefig(file_path, bbox_inches="tight")
-                    # Optimize file size
+                    fig.savefig(file_path, bbox_inches="tight")
                     im = Image.open(file_path)
                     im = im.convert("P", palette=ADAPTIVE_PALETTE, colors=60)
                     im.save(file_path, optimize=True)
+                    del im
 
-        # Close plots
-        if close_plots:
-            for speaker, pair in self.irs.items():
-                for side, ir in pair.items():
-                    plt.close(figs[speaker][side])
+                if close_plots:
+                    plt.close(fig)
+                else:
+                    if speaker not in figs:
+                        figs[speaker] = dict()
+                    figs[speaker][side] = fig
 
+        gc.collect()
         return figs
 
     def plot_result(self, dir_path):

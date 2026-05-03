@@ -42,13 +42,13 @@ def process_equalization_worker(args):
     """이퀄라이제이션 워커.
 
     Args:
-        args: Tuple of (speaker, side, ir, room_frs, hp_left, hp_right,
+        args: Tuple of (speaker, side, room_frs, hp_left, hp_right,
               eq_left, eq_right, target, common_freq, estimator_fs)
 
     Returns:
         Tuple of (speaker, side, fir_filter)
     """
-    (speaker, side, ir, room_frs, hp_left, hp_right,
+    (speaker, side, room_frs, hp_left, hp_right,
      eq_left, eq_right, target, common_freq, estimator_fs) = args
 
     # Lazy import to keep module-level imports minimal
