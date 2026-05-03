@@ -387,3 +387,54 @@ def browse_directory(var: Any) -> None:
         except Exception:
             pass
         var.set(dirname)
+
+
+def install_smooth_scrolling(scroll_frame: ctk.CTkScrollableFrame) -> None:
+    """Patch a ``CTkScrollableFrame`` to skip redundant scrollregion updates.
+
+    **Why this exists.** ``CTkScrollableFrame.__init__`` binds the inner Frame's
+    ``<Configure>`` event to a lambda that calls ``canvas.bbox('all')`` and
+    ``canvas.configure(scrollregion=...)`` on every event. On Win32 Tk fires
+    ``<Configure>`` for *position* changes too — so every scroll step (each
+    ``yview_moveto`` call) triggers a fresh ``bbox('all')`` walk over the
+    canvas item tree plus a scrollregion reconfigure. With ~100 visible CTk
+    widgets each containing their own ``tk.Canvas``, this is O(N) work per
+    scroll step. Combined with DWM compositor traffic from moving all those
+    child windows, it pushes the GPU to ~30% during scroll.
+
+    **What this does.** Replaces the inner Frame's ``<Configure>`` binding
+    with a size-change-only variant: it remembers the last seen ``(width,
+    height)`` and only recomputes scrollregion when either dimension actually
+    changes (children added / removed / resized — e.g. on language change or
+    advanced-options toggle). Position-only Configure events from scrolling
+    are no-ops, so the scrollregion bookkeeping stays in sync with the
+    canvas content but the per-step cost goes from O(N) to O(1).
+
+    The fix is reversible: the size-change branch still calls the same
+    ``bbox + configure(scrollregion)`` so layout-driven sizing still works
+    exactly like the upstream CustomTkinter behavior.
+    """
+    canvas = scroll_frame._parent_canvas  # type: ignore[attr-defined]
+
+    # Drop the lambda installed by CTkScrollableFrame.__init__. ``unbind``
+    # without a binding ID removes ALL bindings for the sequence on this
+    # widget — that's what we want here, since the only `<Configure>` binding
+    # CTkScrollableFrame installs is the unconditional one.
+    scroll_frame.unbind("<Configure>")
+
+    # Use a list so the closure can mutate without `nonlocal`.
+    last_size: list[Optional[int]] = [None, None]
+
+    def _on_configure(event):
+        """Recompute scrollregion only on actual size changes."""
+        if event.width == last_size[0] and event.height == last_size[1]:
+            return
+        last_size[0] = event.width
+        last_size[1] = event.height
+        try:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        except TclError:
+            # Widget being destroyed — bbox/configure raise during teardown.
+            pass
+
+    scroll_frame.bind("<Configure>", _on_configure, add="+")

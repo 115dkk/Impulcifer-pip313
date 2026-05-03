@@ -33,6 +33,7 @@ from gui.dialogs import ProcessingDialog
 from gui.utils import (
     browse_directory,
     browse_file,
+    install_smooth_scrolling,
     restore_tk_vars,
     safe_get_double,
     safe_get_int,
@@ -71,6 +72,8 @@ class ImpulciferTab:
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
         scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll.grid_columnconfigure(0, weight=1)
+        # Skip per-scroll-step bbox/scrollregion recompute — see install_smooth_scrolling.
+        install_smooth_scrolling(scroll)
 
         row = 0
 

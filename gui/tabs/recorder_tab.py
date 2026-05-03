@@ -24,7 +24,13 @@ from gui.constants import (
     WIDGET_BUTTON_WIDTH_BROWSE,
     WIDGET_ENTRY_WIDTH_DEFAULT,
 )
-from gui.utils import browse_file, restore_tk_vars, safe_get_int, snapshot_tk_vars
+from gui.utils import (
+    browse_file,
+    install_smooth_scrolling,
+    restore_tk_vars,
+    safe_get_int,
+    snapshot_tk_vars,
+)
 
 if TYPE_CHECKING:
     from gui.modern_gui import ModernImpulciferGUI
@@ -56,6 +62,8 @@ class RecorderTab:
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
         scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll.grid_columnconfigure(0, weight=1)
+        # Skip per-scroll-step bbox/scrollregion recompute — see install_smooth_scrolling.
+        install_smooth_scrolling(scroll)
 
         row = 0
 
