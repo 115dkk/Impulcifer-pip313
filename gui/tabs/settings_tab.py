@@ -14,7 +14,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from gui.constants import WIDGET_BUTTON_WIDTH_MEDIUM
-from gui.utils import open_data_folder
+from gui.utils import install_smooth_scrolling, open_data_folder
 from i18n.localization import SUPPORTED_LANGUAGES
 
 if TYPE_CHECKING:
@@ -47,6 +47,8 @@ class SettingsTab:
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
         scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll.grid_columnconfigure(0, weight=1)
+        # Skip per-scroll-step bbox/scrollregion recompute — see install_smooth_scrolling.
+        install_smooth_scrolling(scroll)
 
         row = 0
 

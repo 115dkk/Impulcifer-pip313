@@ -4,6 +4,34 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.18 - 2026-05-03
+### ⚡ GUI 스크롤 GPU 스파이크(20-30%) 추가 해소
+
+#### ⚡ 성능 개선
+- **CTkScrollableFrame `<Configure>` 핸들러 size-change-only로 교체** (`gui/utils.py::install_smooth_scrolling`):
+  - **근본 원인**: CustomTkinter의 `CTkScrollableFrame.__init__`은 내부 Frame의 `<Configure>` 이벤트에 `lambda e: canvas.configure(scrollregion=canvas.bbox('all'))`를 무조건 바인딩한다. Win32 Tk는 *위치 변경*에 대해서도 `<Configure>`를 발생시키므로(SetWindowPos → WM_WINDOWPOSCHANGED → `<Configure>`), 매 스크롤 스텝(`yview_moveto` 호출)마다 캔버스 아이템 트리를 walk(`bbox('all')`)하고 scrollregion을 재설정한다. 약 100개의 CTk 위젯이 있는 BRIR 탭에서 이 O(N) 작업이 초당 수십~수백 회 발생하면서 DWM 컴포지터까지 연쇄적으로 깨워 GPU 점유율이 20-30%로 치솟는다
+  - **수정**: `install_smooth_scrolling()` 헬퍼 추가. 기존 lambda 바인딩을 제거하고, 마지막 본 `(width, height)`를 기억하여 *크기 변경*(자식 위젯 추가/제거/리사이즈, 언어 변경, 고급옵션 토글 등)일 때만 `bbox + configure(scrollregion=...)`를 수행하는 size-change-only 핸들러로 교체. 위치 변경만 발생한 경우(스크롤) 핸들러는 즉시 return하여 O(1) 비용
+  - **적용 위치**: 4개 탭의 모든 `CTkScrollableFrame`에 적용 (`gui/tabs/{impulcifer,recorder,settings,info}_tab.py`)
+- **측정 결과** (`tools/bench_scroll.py`, 임펄사이퍼 탭과 동일한 위젯 분포로 ~175개 위젯 + 3 passes × 60 steps 스크롤):
+
+  | 지표 | 수정 전 | 수정 후 |
+  |------|---------|---------|
+  | `bbox_calls` (캔버스 아이템 트리 walk) | 150 | **0** |
+  | `canvas.configure(scrollregion=...)` 호출 | 150 | **0** |
+  | `yview_moveto` 호출 | 186 | 186 (변화 없음 — 스크롤 동작 자체는 동일) |
+  | `<Configure>` 이벤트 | 150 | 150 (Win32에서 차단 불가, 그러나 핸들러는 fast-return) |
+
+  스크롤 1회당 캔버스 트리 walk + scrollregion 재설정이 완전히 제거됨. 실제 GUI에서 빠른 스크롤 시 발생하던 wakeup 캐스케이드(canvas configure → paint event → DWM 컴포지트)가 차단되어 GPU 스파이크 해소
+
+#### 🧪 회귀 방지 테스트 (`tests/test_scroll_perf.py`, 3 테스트)
+- **정적 테스트** (디스플레이 불요, CI 안전): 4개 탭 소스를 AST로 파싱하여 `CTkScrollableFrame` 호출 직후 `install_smooth_scrolling`이 호출되는지 검증. 향후 새 탭 추가 시 패치를 빠뜨리면 즉시 실패
+- **기능 테스트** (디스플레이 필요, headless에서 자동 skip):
+  - 베이스라인 sanity: 패치 미적용 상태에서 스크롤 시 `bbox` 호출 ≥ 10 (CTkScrollableFrame 업스트림 동작이 바뀌면 알림)
+  - 수정 검증: 패치 적용 시 스크롤 중 `bbox`/`configure` 호출이 정확히 0임을 검증
+
+#### 🛠 기타
+- **벤치마크 스크립트 추가** (`tools/bench_scroll.py`): A/B 비교를 통해 스크롤 시 캔버스 호출 횟수와 elapsed 시간을 측정. `--fix` 플래그로 패치 적용/미적용 비교 가능
+
 ## 2.4.17 - 2026-05-03
 ### 🐛 스탠드얼론 자동 업데이트 다운로드 실패 해결
 

@@ -20,6 +20,7 @@ import customtkinter as ctk
 import impulcifer
 from core.parallel_processing import get_python_threading_info
 from gui.constants import WIDGET_BUTTON_WIDTH_MEDIUM, WIDGET_BUTTON_WIDTH_WIDE
+from gui.utils import install_smooth_scrolling
 from updater.updater_core import is_pip_environment, is_velopack_environment
 
 if TYPE_CHECKING:
@@ -52,6 +53,8 @@ class InfoTab:
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
         scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll.grid_columnconfigure(0, weight=1)
+        # Skip per-scroll-step bbox/scrollregion recompute — see install_smooth_scrolling.
+        install_smooth_scrolling(scroll)
 
         section_row = 0
         label_font = self.fonts['label']
