@@ -4,6 +4,24 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.17 - 2026-05-03
+### 🐛 스탠드얼론 자동 업데이트 다운로드 실패 해결
+
+#### 🐛 버그 수정
+- **Velopack 자동 업데이트 다운로드 실패 (#82)**: 스탠드얼론 빌드의 GUI에서 "지금 업데이트" 클릭 시 "업데이트 다운로드 실패. 나중에 다시 시도해주세요." 오류로 항상 실패하던 회귀 수정
+  - **근본 원인**: 코드는 `Update.exe download <feed_url>` 서브커맨드로 다운로드를 위임했지만, Velopack v0.0.x에서 `download` 서브커맨드가 완전히 제거되었고 다운로드 책임이 SDK 측(lib-csharp/lib-rust/...)으로 이동. 현 Velopack의 `Update.exe`는 `apply`/`start`/`patch`/`uninstall`/`update-self`만 인식하므로 호출이 "Unknown subcommand 'download'"로 즉시 실패하고 GUI가 일반 오류 다이얼로그를 띄움
+  - **수정**: `VelopackUpdater.check_and_download()`을 Python urllib 기반으로 재구현. `releases.<channel>.json` 매니페스트(`win`/`osx`/`linux`)를 파싱하여 최신 full nupkg를 찾고, 청크 단위 스트리밍으로 Velopack의 packages 디렉터리(`<root>/packages` 또는 LOCALAPPDATA fallback)에 `.partial` 임시 파일로 저장. SHA256(우선) 또는 SHA1로 무결성 검증 후 최종 경로로 rename. 캐시된 동일 크기/체크섬 패키지가 이미 있으면 재다운로드 생략
+  - **`apply_and_restart()` 강화**: `Update.exe apply --package <downloaded_path>`로 명시 인자를 전달해 Velopack의 `find_latest_full_package` 휴리스틱에 의존하지 않도록 함. `--restart`는 Velopack v0.0.x apply의 기본 동작이라 별도 플래그 불필요
+  - **에러 메시지 개선**: 다운로드 실패 시 GUI에 “release feed 도달 불가 / 패키지 누락 / 체크섬 검증 실패” 가능 원인과 GitHub에서 수동 다운로드하라는 fallback 안내를 함께 표시
+- **회귀 방지 테스트 추가** (`tests/test_velopack_updater.py`, 13개): 실제 localhost HTTP 서버 + 가짜 `Update.exe` 스크립트 + 가짜 Velopack 설치 레이아웃(`<root>/Update.exe`, `<root>/current/app.exe`, `<root>/sq.version`, `<root>/packages/`)을 tempdir에 구성하여 스탠드얼론 빌드를 띄우지 않고도 업데이트 경로를 end-to-end로 검증. Linux/macOS/Windows 어디서든 실행 가능
+  - 행복 경로(매니페스트 → nupkg → 체크섬 검증 → packages 디렉터리에 저장)
+  - `Update.exe download` 서브커맨드가 절대 호출되지 않음을 가짜 스크립트의 invocation log로 검증
+  - 캐시된 패키지 재다운로드 생략 / 크기 불일치 시 재다운로드
+  - 체크섬 불일치 / 매니페스트 누락 / 서버 도달 불가 시 깨끗하게 False 반환 (예외로 누설되지 않음)
+  - 진행률 콜백이 `(downloaded, total)` 바이트 쌍을 받음
+  - `apply_and_restart()`가 `Update.exe apply --package <path>`를 호출하고 `download`를 절대 포함하지 않음
+  - 읽기 전용 root → LOCALAPPDATA fallback / `sq.version`에서 packId 읽기 / Update.exe 부재 시 안전한 False 반환
+
 ## 2.4.16 - 2026-05-03
 ### ⚡ 플롯 메모리 잔류 해소와 FFmpeg lazy setup
 
