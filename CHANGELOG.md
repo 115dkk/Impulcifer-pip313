@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.16 - 2026-05-03
+### ⚡ 플롯 메모리 잔류 해소와 FFmpeg lazy setup
+
+#### ⚡ 성능 개선
+- **플롯 후 ~3GB 메모리 잔류 해소**: `plot=True`로 BRIR을 생성하면 작업 종료 후에도 ~3GB가 프로세스에 남아 있던 문제를 두 단계로 해결
+  - **`impulcifer.py` (Phase 1)**: 플롯용 convolve를 ProcessPoolExecutor로 14개 워커(워커당 ~150MB)에 분산하던 동작을 직렬 `scipy.signal.convolve`로 환원. 워커 결과를 `plot_tasks`/`plot_results` 튜플에 보관하느라 `del hrir`/`del estimator` 후에도 recording·test_signal 참조가 살아남던 잔류 경로를 제거. 메모리 회수 블록은 중간 변수(`eq_tasks`/`eq_results`/`decay_tasks`/`decay_results`) → 루트 객체(`hrir`/`estimator`/`room_frs` 등) 순서로 삭제하도록 정정하고, safety net으로 `plt.close('all')`을 `gc.collect()` 직전에 호출
+  - **`core/hrir.py` (Phase 2)**: `HRIR.plot()`을 2-pass 렌더링으로 리팩토링. Pass 1에서 figure를 1개씩 생성·축 범위 수집 후 즉시 `plt.close()`, Pass 2에서 동기화된 limit으로 다시 생성하여 저장. 동시 존재 figure를 14개 → 1개로 줄여 matplotlib 객체 단편화에 의한 메모리 부풀림 차단. `gc.collect()`를 패스 사이에 1회 호출
+- **FFmpeg setup lazy화**: `core/utils.py` import 시점에 항상 실행되던 `setup_ffmpeg()` (시스템 PATH 탐색 + 일반 경로 검색 + 미발견 시 자동 설치 시도)를 `ensure_ffmpeg_available()`로 분리하여 실제 사용 시점까지 지연. 일반 WAV 처리, ProcessPool 워커 import, unit test에서는 ffmpeg/ffprobe subprocess 호출이 발생하지 않음. TrueHD/MLP 처리 경로(`is_truehd_file` / `convert_truehd_to_wav` / `get_truehd_channel_info`, 그리고 `open_impulse_response_estimator`의 .mlp/.thd/.truehd 분기)는 `auto_install=True`로 호출해 사용자가 직접 .mlp 파일을 열었을 때 자동 설치 UX는 그대로 보존. `read_audio()`는 확장자가 `.mlp`/`.thd`/`.truehd`가 아니면 `is_truehd_file()` 호출을 건너뛰어 일반 WAV 경로의 lazy setup도 우회
+- **EQ task tuple에서 미사용 `ir` 제거**: `process_equalization_worker`가 unpack만 하고 사용하지 않던 `ir` (ImpulseResponse) 객체를 task 튜플에서 제외. ProcessPoolExecutor 환경에서 14개 IR 객체 pickle/IPC 비용 제거 (출력은 bit-identical, 데모 hesuvi.wav md5 유지)
+
+#### 🐛 버그 수정
+- **`core/hrir.py` 미사용 `sync_axes` import 제거**: 2-pass 리팩토링으로 sync_axes 직접 호출이 사라져 ruff F401 경고 해소
+
 ## 2.4.15 - 2026-05-03
 ### ⭐ Modern GUI 후속 개선과 취소 지원
 

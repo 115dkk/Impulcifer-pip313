@@ -320,12 +320,18 @@ def install_ffmpeg():
         print(f"FFmpeg 설치 중 오류 발생: {e}")
         return None, None
 
-def setup_ffmpeg():
-    """FFmpeg를 설정하고 경로를 반환합니다."""
+def setup_ffmpeg(auto_install=True):
+    """FFmpeg를 설정하고 경로를 반환합니다.
+
+    Args:
+        auto_install: 시스템 PATH 및 일반 경로 검색에 실패한 경우 자동 설치
+            를 시도할지 여부. TrueHD/MLP 처리 경로에서는 기본값 ``True``를
+            유지해 사용자 편의 기능을 보존한다.
+    """
     # 1. 시스템 PATH에서 ffmpeg 확인
     ffmpeg_path = shutil.which('ffmpeg')
     ffprobe_path = shutil.which('ffprobe')
-    
+
     if ffmpeg_path and ffprobe_path:
         version = get_ffmpeg_version(ffmpeg_path)
         if version and version >= MIN_FFMPEG_VERSION:
@@ -333,34 +339,69 @@ def setup_ffmpeg():
             return ffmpeg_path, ffprobe_path
         else:
             print(f"시스템 PATH의 FFmpeg 버전이 너무 오래됨: {version}")
-    
+
     # 2. 일반적인 경로에서 검색
     ffmpeg_path, ffprobe_path = find_ffmpeg_in_common_paths()
     if ffmpeg_path and ffprobe_path:
         version = get_ffmpeg_version(ffmpeg_path)
         print(f"로컬 경로에서 FFmpeg {version[0]}.{version[1]} 감지됨: {ffmpeg_path}")
         return ffmpeg_path, ffprobe_path
-    
-    # 3. 자동 설치 시도
-    ffmpeg_path, ffprobe_path = install_ffmpeg()
-    if ffmpeg_path and ffprobe_path:
-        version = get_ffmpeg_version(ffmpeg_path)
-        print(f"FFmpeg {version[0]}.{version[1]} 설치 완료: {ffmpeg_path}")
-        return ffmpeg_path, ffprobe_path
-    
-    # 4. 모든 시도 실패
-    print("FFmpeg를 찾거나 설치할 수 없습니다. TrueHD/MLP 지원이 비활성화됩니다.")
+
+    # 3. 자동 설치 시도 (TrueHD/MLP 사용 경로에서만 트리거)
+    if auto_install:
+        ffmpeg_path, ffprobe_path = install_ffmpeg()
+        if ffmpeg_path and ffprobe_path:
+            version = get_ffmpeg_version(ffmpeg_path)
+            print(f"FFmpeg {version[0]}.{version[1]} 설치 완료: {ffmpeg_path}")
+            return ffmpeg_path, ffprobe_path
+        # install_ffmpeg() 내부에서 실패 메시지를 이미 출력함
+        return None, None
+
+    # 4. auto_install=False — 단순 검출만 수행, 사용자에게 알리지 않음
     return None, None
 
-# FFmpeg 경로 자동 설정
-FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg()
+
+# FFmpeg 경로는 lazy하게 초기화한다. 모듈 import 시점에 setup_ffmpeg()를 실행
+# 하면 일반 WAV 처리, ProcessPool 워커 import, unit test에서도 ffmpeg/ffprobe
+# 탐색과 subprocess 호출이 발생해 시작 비용이 누적된다. 실제로 TrueHD/MLP
+# 기능을 사용하는 경로에서만 ensure_ffmpeg_available()를 통해 1회 초기화된다.
+FFMPEG_PATH = None
+FFPROBE_PATH = None
+_FFMPEG_SETUP_DONE = False
+
+
+def ensure_ffmpeg_available(auto_install=True):
+    """Lazy 초기화. 최초 호출 시 ``setup_ffmpeg()``를 실행하고 결과 캐시.
+
+    Args:
+        auto_install: 자동 설치 시도 여부. TrueHD/MLP 실제 사용 경로에서는
+            ``True``를 유지하고, 단순 정보 조회(`get_supported_audio_formats`
+            등)에서는 ``False``로 호출해 불필요한 install attempt를 막는다.
+
+    Returns:
+        FFmpeg/ffprobe 경로가 모두 설정되어 있으면 ``True``, 아니면 ``False``.
+    """
+    global FFMPEG_PATH, FFPROBE_PATH, _FFMPEG_SETUP_DONE
+
+    if _FFMPEG_SETUP_DONE:
+        return FFMPEG_PATH is not None and FFPROBE_PATH is not None
+
+    _FFMPEG_SETUP_DONE = True
+    FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=auto_install)
+
+    if FFMPEG_PATH is None or FFPROBE_PATH is None:
+        if auto_install:
+            print("FFmpeg를 찾거나 설치할 수 없습니다. TrueHD/MLP 지원이 비활성화됩니다.")
+        return False
+    return True
+
 
 def is_truehd_file(file_path):
     """Check if file is TrueHD/MLP format"""
-    # FFmpeg가 사용 불가능하면 False 반환
-    if not check_ffmpeg_available():
+    # TrueHD/MLP 처리 경로 — 자동 설치를 허용한다.
+    if not ensure_ffmpeg_available(auto_install=True):
         return False
-    
+
     try:
         result = subprocess.run(
             [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
@@ -371,7 +412,7 @@ def is_truehd_file(file_path):
         )
         if result.returncode != 0:
             return False
-        
+
         codec = result.stdout.strip().lower()
         return codec in ['truehd', 'mlp']
     except Exception:
@@ -379,16 +420,16 @@ def is_truehd_file(file_path):
 
 def convert_truehd_to_wav(truehd_path, output_path=None):
     """Convert TrueHD/MLP file to WAV format"""
-    if not check_ffmpeg_available():
+    if not ensure_ffmpeg_available(auto_install=True):
         raise RuntimeError("FFmpeg is not available for TrueHD conversion")
-    
+
     if output_path is None:
         fd, output_path = tempfile.mkstemp(suffix='.wav')
         os.close(fd)
-    
+
     # Get channel layout info first
     channel_info = get_truehd_channel_info(truehd_path)
-    
+
     # Convert to WAV with proper channel mapping
     cmd = [
         FFMPEG_PATH, '-i', truehd_path,
@@ -401,14 +442,14 @@ def convert_truehd_to_wav(truehd_path, output_path=None):
                           encoding='utf-8', errors='replace')
     if result.returncode != 0:
         raise RuntimeError(f"FFmpeg conversion failed: {result.stderr}")
-    
+
     return output_path, channel_info
 
 def get_truehd_channel_info(file_path):
     """Get channel layout information from TrueHD file"""
-    if not check_ffmpeg_available():
+    if not ensure_ffmpeg_available(auto_install=True):
         return None
-    
+
     try:
         result = subprocess.run(
             [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
@@ -417,19 +458,19 @@ def get_truehd_channel_info(file_path):
             capture_output=True, text=True, timeout=10,
             encoding='utf-8', errors='replace'
         )
-        
+
         if result.returncode != 0:
             return None
-            
+
         info = json.loads(result.stdout)
         stream = info['streams'][0]
-        
+
         channels = stream.get('channels', 0)
         stream.get('channel_layout', '')
-        
+
         # Map channel layouts to speaker names
         from core.constants import CHANNEL_LAYOUT_MAP
-        
+
         if channels in CHANNEL_LAYOUT_MAP:
             return CHANNEL_LAYOUT_MAP[channels]
         else:
@@ -438,15 +479,22 @@ def get_truehd_channel_info(file_path):
     except Exception:
         return None
 
+# TrueHD/MLP 확장자 집합 — read_audio()의 fast-path 분기에 사용한다.
+_TRUEHD_EXTENSIONS = frozenset({'.mlp', '.thd', '.truehd'})
+
+
 def read_audio(file_path, expand=False):
     """Read audio file (WAV or TrueHD/MLP)
-    
+
     Returns:
         - Sample rate
         - Audio data (channels x samples)
         - Channel info (for TrueHD) or None
     """
-    if is_truehd_file(file_path):
+    # 일반 WAV 등 비-TrueHD 확장자는 FFmpeg setup 자체를 건너뛴다. 확장자
+    # 기반 빠른 분기로 모듈 import / 일반 처리 경로의 ffmpeg 탐색 비용을 제거.
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext in _TRUEHD_EXTENSIONS and is_truehd_file(file_path):
         # Convert TrueHD to temporary WAV
         temp_wav, channel_info = convert_truehd_to_wav(file_path)
         try:
@@ -456,7 +504,7 @@ def read_audio(file_path, expand=False):
                 data = np.transpose(data)
             elif expand:
                 data = np.expand_dims(data, axis=0)
-            
+
             return fs, data, channel_info
         finally:
             # Clean up temp file
@@ -472,14 +520,18 @@ def read_audio(file_path, expand=False):
             data = np.expand_dims(data, axis=0)
         return fs, data, None
 
-def check_ffmpeg_available():
-    """Check if FFmpeg is available"""
-    global FFMPEG_PATH, FFPROBE_PATH
-    
-    # FFmpeg 경로가 None이면 사용 불가
-    if FFMPEG_PATH is None or FFPROBE_PATH is None:
+def check_ffmpeg_available(auto_install=False):
+    """Check if FFmpeg is available.
+
+    Args:
+        auto_install: ``True``로 호출하면 lazy setup 시 자동 설치를 시도한다.
+            TrueHD/MLP 처리 진입점(예: ``open_impulse_response_estimator``)에서
+            이 옵션을 켜 사용자가 .mlp/.thd/.truehd 파일을 열 때 자동 설치
+            UX가 유지되도록 한다.
+    """
+    if not ensure_ffmpeg_available(auto_install=auto_install):
         return False
-    
+
     # 실제 파일 존재 및 실행 가능 여부 확인
     try:
         result = subprocess.run([FFMPEG_PATH, '-version'],
@@ -497,11 +549,12 @@ def get_supported_audio_formats():
         'thd': 'TrueHD Audio',
         'truehd': 'Dolby TrueHD'
     }
-    
-    if not check_ffmpeg_available():
+
+    # 정보 조회용이므로 자동 설치는 트리거하지 않는다.
+    if not check_ffmpeg_available(auto_install=False):
         # If FFmpeg not available, only support WAV
         return {'wav': 'WAV Audio'}
-    
+
     return formats
 
 
