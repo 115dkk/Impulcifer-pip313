@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-Modern GUI for Impulcifer using CustomTkinter
-Professional-grade interface with dark/light mode support
-"""
+"""Modern GUI for Impulcifer using CustomTkinter."""
+
+from __future__ import annotations
 
 import os
 import threading
@@ -11,13 +10,15 @@ from tkinter import messagebox
 
 import customtkinter as ctk
 
-from gui.dialogs import UpdateDialog
+from gui.constants import WINDOW_MAIN_SIZE
+from gui.dialogs import LanguageSelectionDialog, UpdateDialog
+from gui.event_bus import EventBus
 from gui.tabs.impulcifer_tab import ImpulciferTab
 from gui.tabs.info_tab import InfoTab
 from gui.tabs.recorder_tab import RecorderTab
 from gui.tabs.settings_tab import SettingsTab
 from gui.utils import build_fonts, setup_pretendard_font
-from i18n.localization import SUPPORTED_LANGUAGES, get_localization_manager
+from i18n.localization import get_localization_manager
 from updater.update_checker import UpdateChecker
 
 # Default theme setting (will be overridden by user preference)
@@ -25,19 +26,25 @@ ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-
 
 
 class ModernImpulciferGUI:
-    def __init__(self):
+    """Top-level orchestrator for the modern GUI."""
+
+    def __init__(self) -> None:
+        """Initialize localization, theme, root window, and tabs."""
         # Initialize localization manager
         self.loc = get_localization_manager()
+        self.current_theme = self.loc.get_theme()
+        self.bus = EventBus()
+        self.bus.on('language_changed', self._handle_language_changed)
+        self.bus.on('theme_changed', self._handle_theme_changed)
 
         # Setup font based on language
         self.font_family = setup_pretendard_font(self.loc.current_language)
 
         # Apply saved theme
-        saved_theme = self.loc.get_theme()
-        if saved_theme == 'system':
+        if self.current_theme == 'system':
             ctk.set_appearance_mode("system")
         else:
-            ctk.set_appearance_mode(saved_theme)
+            ctk.set_appearance_mode(self.current_theme)
 
         self.root = ctk.CTk()
         self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
@@ -62,8 +69,7 @@ class ModernImpulciferGUI:
             ))
 
         # Set window size and position
-        window_width = 1000
-        window_height = 700
+        window_width, window_height = WINDOW_MAIN_SIZE
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         x = (screen_width - window_width) // 2
@@ -86,8 +92,8 @@ class ModernImpulciferGUI:
         self.settings_tab = SettingsTab(self)
         self.info_tab = InfoTab(self)
 
-    def create_header(self):
-        """Create header with app title and theme toggle"""
+    def create_header(self) -> None:
+        """Create the localized app header."""
         header = ctk.CTkFrame(self.root, corner_radius=0, height=60)
         header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
         header.grid_columnconfigure(1, weight=1)
@@ -111,28 +117,28 @@ class ModernImpulciferGUI:
 
         # Theme toggle button (removed - moved to UI Settings tab)
         # Now header is cleaner
-        self.current_theme = self.loc.get_theme()
 
-    def toggle_theme(self):
+    def toggle_theme(self) -> None:
         """Toggle between dark and light themes (legacy method - kept for compatibility)"""
         if self.current_theme == "dark":
-            ctk.set_appearance_mode("light")
-            self.current_theme = "light"
+            self.bus.emit('theme_changed', code="light")
         else:
-            ctk.set_appearance_mode("dark")
-            self.current_theme = "dark"
-        self.loc.set_theme(self.current_theme)
+            self.bus.emit('theme_changed', code="dark")
 
-    def create_tabs(self):
-        """Create main tab view"""
+    def create_tabs(self) -> None:
+        """Create the localized tab view."""
         self.tabview = ctk.CTkTabview(self.root, corner_radius=10)
         self.tabview.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="nsew")
 
-        # Add tabs (using localized text)
-        self.tabview.add(self.loc.get('tab_recorder'))
-        self.tabview.add(self.loc.get('tab_impulcifer'))
-        self.tabview.add(self.loc.get('tab_ui_settings'))
-        self.tabview.add(self.loc.get('tab_info'))
+        self.tab_keys = {
+            'recorder': 'tab_recorder',
+            'impulcifer': 'tab_impulcifer',
+            'settings': 'tab_ui_settings',
+            'info': 'tab_info',
+        }
+
+        for tab_key in self.tab_keys.values():
+            self.tabview.add(self.loc.get(tab_key))
 
         # Set default tab
         self.tabview.set(self.loc.get('tab_recorder'))
@@ -156,10 +162,10 @@ class ModernImpulciferGUI:
             pass
 
         # Fallback
-        return "2.4.11"
+        return "2.4.15"
 
-    def check_for_updates_background(self):
-        """Check for updates in background thread"""
+    def check_for_updates_background(self) -> None:
+        """Check for updates in a background thread."""
         def check_updates():
             try:
                 current_version = self.get_current_version()
@@ -180,79 +186,104 @@ class ModernImpulciferGUI:
         update_thread = threading.Thread(target=check_updates, daemon=True)
         update_thread.start()
 
-    def show_update_dialog(self, current_version: str, latest_version: str, download_url: str, release_notes: str):
-        """Show update notification dialog"""
+    def show_update_dialog(self, current_version: str, latest_version: str, download_url: str, release_notes: str) -> None:
+        """Show update notification dialog."""
         UpdateDialog(self.root, self.loc, current_version, latest_version, download_url, release_notes, fonts=self.fonts)
 
-    def show_language_selection_dialog(self):
-        """Show language selection dialog on first run"""
-        dialog = ctk.CTkToplevel(self.root)
-        dialog.title(self.loc.get('dialog_select_language_title'))
-        dialog.geometry("400x550")
-        dialog.transient(self.root)
-        dialog.grab_set()
+    def show_language_selection_dialog(self) -> None:
+        """Show the first-run language selection dialog."""
+        LanguageSelectionDialog(
+            self.root,
+            self.loc,
+            self.fonts,
+            on_complete=self._complete_first_run_language_selection,
+        ).show()
 
-        # Center the dialog
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (400 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (550 // 2)
-        dialog.geometry(f"400x550+{x}+{y}")
-
-        # Message
-        message = ctk.CTkLabel(
-            dialog,
-            text=self.loc.get('dialog_select_language_message'),
-            font=self.fonts['dialog_body'],
-            wraplength=350
+    def _complete_first_run_language_selection(self, language_code: str) -> None:
+        """Apply the first-run language selection."""
+        self.bus.emit(
+            'language_changed',
+            code=language_code,
+            selected_tab_key='recorder',
+            mark_selected=True,
         )
-        message.pack(pady=20, padx=20)
+        messagebox.showinfo(
+            self.loc.get('message_info'),
+            self.loc.get(
+                'message_language_changed',
+                language=self.loc.get_language_name(language_code),
+            ),
+        )
 
-        # Language list
-        lang_frame = ctk.CTkFrame(dialog)
-        lang_frame.pack(pady=10, padx=20, fill="both", expand=True)
+    def _handle_theme_changed(self, code: str) -> None:
+        """Apply and persist a theme change event."""
+        if code == 'system':
+            ctk.set_appearance_mode("system")
+        else:
+            ctk.set_appearance_mode(code)
+        self.loc.set_theme(code)
+        self.current_theme = code
 
-        selected_lang = ctk.StringVar(value=self.loc.current_language)
-
-        for lang_code, lang_name in SUPPORTED_LANGUAGES.items():
-            rb = ctk.CTkRadioButton(
-                lang_frame,
-                text=lang_name,
-                variable=selected_lang,
-                value=lang_code,
-                font=self.fonts['subtitle']
-            )
-            rb.pack(pady=5, padx=10, anchor="w")
-
-        # Buttons
-        button_frame = ctk.CTkFrame(dialog)
-        button_frame.pack(pady=10, padx=20, fill="x")
-
-        def on_ok():
-            self.loc.set_language(selected_lang.get())
+    def _handle_language_changed(
+        self,
+        code: str,
+        selected_tab_key: str = 'settings',
+        mark_selected: bool = False,
+    ) -> None:
+        """Apply a language change and rebuild localized widgets."""
+        self.loc.set_language(code)
+        if mark_selected:
             self.loc.mark_language_selected()
-            dialog.destroy()
-            # Show message about restart
-            messagebox.showinfo(
-                self.loc.get('message_info'),
-                self.loc.get('message_language_changed', language=self.loc.get_language_name(selected_lang.get()))
-            )
+        self.refresh_localized_ui(selected_tab_key=selected_tab_key)
 
-        ok_button = ctk.CTkButton(
-            button_frame,
-            text=self.loc.get('button_ok'),
-            command=on_ok
-        )
-        ok_button.pack(side="right", padx=5)
+    def refresh_localized_ui(self, selected_tab_key: str = 'settings') -> None:
+        """Rebuild localized widgets while preserving tab input state."""
+        state = self._collect_tab_state()
+        for child in self.root.winfo_children():
+            child.destroy()
 
-        dialog.protocol("WM_DELETE_WINDOW", on_ok)
+        self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
+        self.font_family = setup_pretendard_font(self.loc.current_language)
+        self.fonts = build_fonts(self.font_family)
 
-    def run(self):
-        """Start the GUI main loop"""
+        self.create_header()
+        self.create_tabs()
+        self.recorder_tab = RecorderTab(self)
+        self.impulcifer_tab = ImpulciferTab(self)
+        self.settings_tab = SettingsTab(self)
+        self.info_tab = InfoTab(self)
+        self._restore_tab_state(state)
+        self.select_tab(selected_tab_key)
+
+    def _collect_tab_state(self) -> dict[str, dict]:
+        """Collect state snapshots from tabs that support it."""
+        state: dict[str, dict] = {}
+        for name in ('recorder_tab', 'impulcifer_tab'):
+            tab = getattr(self, name, None)
+            if tab is not None and hasattr(tab, 'get_state'):
+                state[name] = tab.get_state()
+        return state
+
+    def _restore_tab_state(self, state: dict[str, dict]) -> None:
+        """Restore state snapshots after rebuilding tabs."""
+        for name, tab_state in state.items():
+            tab = getattr(self, name, None)
+            if tab is not None and hasattr(tab, 'apply_state'):
+                tab.apply_state(tab_state)
+
+    def select_tab(self, tab_key: str) -> None:
+        """Select a tab by stable internal key."""
+        loc_key = self.tab_keys.get(tab_key)
+        if loc_key is not None:
+            self.tabview.set(self.loc.get(loc_key))
+
+    def run(self) -> None:
+        """Start the GUI main loop."""
         self.root.mainloop()
 
 
-def main_gui():
-    """Entry point for modern GUI"""
+def main_gui() -> None:
+    """Start the modern GUI application."""
     app = ModernImpulciferGUI()
     app.run()
 

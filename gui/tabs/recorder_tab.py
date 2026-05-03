@@ -6,23 +6,39 @@ Hosts the host-API/device pickers, file paths, recording options, and the
 record button. Moved from ``gui/modern_gui.py`` without behavioural changes.
 """
 
+from __future__ import annotations
+
 import os
 import platform
-import re
 import threading
+from typing import TYPE_CHECKING
 from tkinter import messagebox
 
 import customtkinter as ctk
 import sounddevice
 
 import core.recorder as recorder
-from core.constants import SPEAKER_LIST_PATTERN
-from gui.constants import FILETYPES_AUDIO
-from gui.utils import browse_file, safe_get_int
+from core.recording_validation import validate_recording_setup
+from gui.constants import (
+    FILETYPES_AUDIO,
+    WIDGET_BUTTON_WIDTH_BROWSE,
+    WIDGET_ENTRY_WIDTH_DEFAULT,
+)
+from gui.utils import browse_file, restore_tk_vars, safe_get_int, snapshot_tk_vars
+
+if TYPE_CHECKING:
+    from gui.modern_gui import ModernImpulciferGUI
 
 
 class RecorderTab:
-    def __init__(self, app):
+    """Build and handle the recording tab."""
+
+    def __init__(self, app: ModernImpulciferGUI) -> None:
+        """Create the recorder tab.
+
+        Args:
+            app: Top-level GUI application.
+        """
         self.app = app
         self.loc = app.loc
         self.fonts = app.fonts
@@ -30,8 +46,8 @@ class RecorderTab:
         self.root = app.root
         self._build()
 
-    def _build(self):
-        """Create Recorder tab with all recording features"""
+    def _build(self) -> None:
+        """Create Recorder tab with all recording features."""
         tab = self.tabview.tab(self.loc.get('tab_recorder'))
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
@@ -107,7 +123,7 @@ class RecorderTab:
             files_frame,
             text=self.loc.get('button_browse'),
             command=lambda: browse_file(self.play_var, 'open', FILETYPES_AUDIO),
-            width=100
+            width=WIDGET_BUTTON_WIDTH_BROWSE,
         ).grid(row=1, column=2, padx=15, pady=5)
 
         # Record to file
@@ -119,7 +135,7 @@ class RecorderTab:
             files_frame,
             text=self.loc.get('button_browse'),
             command=lambda: browse_file(self.record_var, 'save'),
-            width=100
+            width=WIDGET_BUTTON_WIDTH_BROWSE,
         ).grid(row=2, column=2, padx=(15, 15), pady=(5, 15))
 
         # === Recording Options Section ===
@@ -152,7 +168,7 @@ class RecorderTab:
         self.channels_entry = ctk.CTkEntry(
             channels_subframe,
             textvariable=self.channels_var,
-            width=80,
+            width=WIDGET_ENTRY_WIDTH_DEFAULT,
             state="disabled"
         )
         self.channels_entry.grid(row=0, column=1, sticky="w", padx=10, pady=5)
@@ -192,8 +208,17 @@ class RecorderTab:
         self.refresh_devices()
         self.update_channel_guidance()
 
-    def refresh_devices(self, *args):
-        """Refresh audio device lists"""
+    def get_state(self) -> dict:
+        """Return a snapshot of user-editable Tk variables."""
+        return snapshot_tk_vars(self)
+
+    def apply_state(self, state: dict) -> None:
+        """Restore user-editable Tk variables after a UI rebuild."""
+        restore_tk_vars(self, state)
+        self.update_channel_guidance()
+
+    def refresh_devices(self, *args: object) -> None:
+        """Refresh audio device lists."""
         # Get host APIs
         host_apis = {}
         for i, host in enumerate(sounddevice.query_hostapis()):
@@ -230,8 +255,8 @@ class RecorderTab:
             if not self.input_device_var.get() or self.input_device_var.get() not in input_devices:
                 self.input_device_var.set(input_devices[0])
 
-    def update_channel_guidance(self):
-        """Update channel guidance text"""
+    def update_channel_guidance(self) -> None:
+        """Update channel guidance text."""
         if self.channels_check_var.get():
             self.channels_entry.configure(state="normal")
             channel_count = safe_get_int(self.channels_var, 0)
@@ -267,8 +292,8 @@ class RecorderTab:
 
         self.channel_guidance.configure(text=text)
 
-    def start_recording(self):
-        """Start recording process"""
+    def start_recording(self) -> None:
+        """Start recording process."""
         play_file = self.play_var.get()
         record_file = self.record_var.get()
         selected_channels = safe_get_int(self.channels_var, 14) if self.channels_check_var.get() else 2
@@ -278,28 +303,22 @@ class RecorderTab:
             messagebox.showerror(self.loc.get('message_error'), self.loc.get('message_play_file_not_exist', file=play_file))
             return
 
-        # Channel mismatch warning
-        try:
-            filename = os.path.basename(record_file)
-            match = re.search(SPEAKER_LIST_PATTERN, filename)
-            if match:
-                speakers_str = match.group(1)
-                expected_speakers = speakers_str.split(',')
-                expected_channels = len(expected_speakers) * 2
+        validation = validate_recording_setup(
+            record_file,
+            selected_channels,
+            self.channels_check_var.get(),
+        )
+        if validation and validation.has_mismatch:
+            warning_msg = self.loc.get(
+                'message_channel_mismatch_body',
+                expected_speakers=len(validation.expected_speakers),
+                speaker_names=', '.join(validation.expected_speakers),
+                expected_channels=validation.expected_channels,
+                selected_channels=validation.selected_channels,
+            )
 
-                if self.channels_check_var.get() and selected_channels != expected_channels:
-                    warning_msg = self.loc.get(
-                        'message_channel_mismatch_body',
-                        expected_speakers=len(expected_speakers),
-                        speaker_names=', '.join(expected_speakers),
-                        expected_channels=expected_channels,
-                        selected_channels=selected_channels,
-                    )
-
-                    if not messagebox.askyesno(self.loc.get('message_channel_mismatch_warning_title'), warning_msg):
-                        return
-        except Exception as e:
-            print(f"Warning: Could not parse filename for speaker validation: {e}")
+            if not messagebox.askyesno(self.loc.get('message_channel_mismatch_warning_title'), warning_msg):
+                return
 
         # Confirmation dialog
         info_msg = self.loc.get(
@@ -345,8 +364,8 @@ class RecorderTab:
         thread = threading.Thread(target=run_recording, daemon=True)
         thread.start()
 
-    def _on_recording_complete(self, record_file):
-        """Re-enable record button and show success message on main thread"""
+    def _on_recording_complete(self, record_file: str) -> None:
+        """Re-enable record button and show success message on main thread."""
         self.record_button.configure(
             state="normal",
             text=self.loc.get('button_start_recording')
@@ -356,8 +375,8 @@ class RecorderTab:
             self.loc.get('message_recording_complete', file=record_file)
         )
 
-    def _on_recording_error(self, error_msg):
-        """Re-enable record button and show error message on main thread"""
+    def _on_recording_error(self, error_msg: str) -> None:
+        """Re-enable record button and show error message on main thread."""
         self.record_button.configure(
             state="normal",
             text=self.loc.get('button_start_recording')

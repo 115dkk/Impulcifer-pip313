@@ -4,6 +4,24 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.15 - 2026-05-03
+### ⭐ Modern GUI 후속 개선과 취소 지원
+
+#### ⭐ 개선
+- **다이얼로그 공통 베이스 도입**: `ProcessingDialog`, `UpdateDialog`, `LanguageSelectionDialog`가 공통 모달 초기화와 중앙 정렬 로직을 공유하도록 정리
+- **언어 변경 즉시 적용**: UI 설정 탭에서 언어를 바꾸면 입력값을 보존한 채 Modern GUI 탭을 재생성해 재시작 없이 새 번역을 반영
+- **BRIR 생성 취소 지원**: 처리 다이얼로그에 Cancel 버튼을 추가하고 단계 경계에서 협력적으로 중단하도록 cancellation scope를 도입
+
+#### 🔧 빌드 / 설정 변경
+- **GUI 이벤트 버스 추가**: 언어/테마 변경 이벤트를 `EventBus`로 발행해 탭과 앱 오케스트레이터의 직접 결합을 낮춤
+- **업데이트 실행 로직 분리**: pip, Velopack, legacy installer 업데이트 실행을 UI 없는 executor 클래스로 분리해 테스트 가능하게 변경
+- **i18n 키 정합성 CI 검증**: 모든 로케일 JSON이 `en.json`과 동일한 키를 갖는지 lint 잡에서 확인
+- **GUI 매직 사이즈 상수화**: Modern GUI 창/다이얼로그/주요 위젯 폭 값을 `gui.constants`로 모음
+- **standalone 빌드 include 동기화**: 신규 `gui.event_bus`와 `core.recording_validation` 모듈을 Nuitka 빌드 설정에 반영
+
+#### 🐛 버그 수정
+- **녹음 채널 검증 분리**: 파일명 기반 스피커 목록과 강제 채널 수 불일치 검사를 순수 함수로 분리하고 단위 테스트를 추가
+
 ## 2.4.14 - 2026-05-03
 ### 🔧 Modern GUI 구조적 분리 (Phase 4 — Move-only refactor)
 

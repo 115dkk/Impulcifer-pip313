@@ -120,6 +120,34 @@ jobs:
         python -m py_compile *.py
         python -m py_compile core/*.py gui/*.py i18n/*.py infra/*.py updater/*.py
 
+    - name: Verify i18n key parity
+      run: |
+        python - <<'PY'
+        import json
+        from pathlib import Path
+
+        locales = sorted(Path('i18n/locales').glob('*.json'))
+        reference = json.loads(Path('i18n/locales/en.json').read_text(encoding='utf-8'))
+        reference_keys = set(reference)
+        failed = False
+
+        for locale_file in locales:
+            keys = set(json.loads(locale_file.read_text(encoding='utf-8')))
+            missing = reference_keys - keys
+            extra = keys - reference_keys
+            if missing:
+                print(f'{locale_file.name}: missing {len(missing)} keys: {sorted(missing)[:5]}')
+                failed = True
+            if extra:
+                print(f'{locale_file.name}: extra {len(extra)} keys: {sorted(extra)[:5]}')
+                failed = True
+
+        if failed:
+            raise SystemExit(1)
+
+        print(f'OK: all {len(locales)} locales sync with en.json ({len(reference_keys)} keys)')
+        PY
+
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest

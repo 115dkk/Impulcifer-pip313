@@ -104,6 +104,7 @@ jobs:
             --include-module=updater.update_checker \
             --include-package=updater \
             --include-module=core.recorder \
+            --include-module=core.recording_validation \
             --include-module=impulcifer \
             --include-module=core.hrir \
             --include-module=core.impulse_response \

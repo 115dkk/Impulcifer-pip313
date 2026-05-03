@@ -3,21 +3,17 @@
   "app_subtitle": "HRIR 측정 및 바이노럴 처리 시스템",
   "theme_dark": "🌙 다크 모드",
   "theme_light": "☀️ 라이트 모드",
-
   "tab_recorder": "📼 녹음기",
   "tab_impulcifer": "🎛️ Impulcifer",
   "tab_ui_settings": "⚙️ UI 설정",
-
   "section_audio_devices": "오디오 장치",
   "label_host_api": "Host API:",
   "label_playback_device": "재생 장치:",
   "label_recording_device": "녹음 장치:",
-
   "section_files": "파일",
   "label_file_to_play": "재생할 파일:",
   "button_browse": "찾아보기...",
   "label_record_to_file": "녹음 파일:",
-
   "section_recording_options": "녹음 옵션",
   "label_force_channels": "채널 강제 지정:",
   "message_using_default_recording": "기본 2채널 녹음을 사용합니다.",
@@ -29,20 +25,16 @@
   "checkbox_append_to_file": "기존 파일에 추가 (트랙 길이 맞추기 위해 무음 추가됨)",
   "button_start_recording": "🔴 녹음 시작",
   "button_start_recording_active": "🔴 녹음 중...",
-
   "section_input_files": "입력 파일",
   "label_your_recordings": "녹음 파일:",
   "button_browse_files": "파일 찾아보기...",
   "label_test_signal": "테스트 신호:",
   "option_select_test_signal": "테스트 신호 선택...",
-
   "section_hrir_database": "HRIR 데이터베이스",
   "option_select_hrir": "HRIR 데이터베이스 선택...",
-
   "section_output": "출력",
   "label_output_dir": "출력 디렉토리:",
   "button_browse_dir": "찾아보기...",
-
   "section_processing_options": "처리 옵션",
   "section_room_correction": "룸 보정",
   "label_specific_limit": "특정 제한 (Hz):",
@@ -50,7 +42,6 @@
   "label_fr_combination": "주파수 응답 조합:",
   "option_average": "평균",
   "option_left_right": "좌-우",
-
   "section_equalization": "이퀄라이제이션",
   "label_mic_calibration": "마이크 보정:",
   "option_none": "없음",
@@ -58,12 +49,10 @@
   "option_free": "자유음장",
   "option_diffuse": "확산음장",
   "option_df": "DF (자유음장 → 확산음장)",
-
   "section_headphone_compensation": "헤드폰 보상",
   "label_headphone_file": "헤드폰 파일:",
   "checkbox_custom_eq": "커스텀 EQ (eq.csv / eq-left.csv / eq-right.csv 파일 사용)",
   "checkbox_plot_results": "결과 플롯 (그래프 생성, 처리 시간 증가)",
-
   "section_advanced_options": "고급 옵션",
   "checkbox_resample_to": "리샘플링 (Hz):",
   "label_target_level": "목표 레벨 (dB):",
@@ -79,12 +68,10 @@
   "label_decay": "감쇠 (ms):",
   "checkbox_per_channel": "채널별 설정",
   "label_pre_response": "프리 응답 (ms):",
-
   "section_output_formats": "출력 형식",
   "checkbox_jamesdsp": "JamesDSP 출력",
   "checkbox_hangloose": "Hangloose 출력",
   "checkbox_interactive_plots": "인터랙티브 플롯",
-
   "section_mic_deviation_correction": "마이크 편차 보정",
   "checkbox_enable_mic_deviation": "마이크 편차 보정",
   "label_strength": "강도:",
@@ -93,10 +80,8 @@
   "checkbox_adaptive_correction": "적응형 보정",
   "checkbox_anatomical_validation": "해부학적 검증",
   "checkbox_truehd_layouts": "TrueHD 레이아웃 (11ch/13ch)",
-
   "button_generate_brir": "⚡ BRIR 생성",
   "button_processing": "⚡ 처리 중...",
-
   "section_language": "언어",
   "label_select_language": "언어 선택:",
   "section_theme": "테마",
@@ -104,20 +89,17 @@
   "option_theme_dark": "다크",
   "option_theme_light": "라이트",
   "option_theme_system": "시스템",
-
   "dialog_select_language_title": "언어 선택",
   "dialog_select_language_message": "원하시는 언어를 선택해주세요:",
   "button_ok": "확인",
   "button_cancel": "취소",
   "button_close": "닫기",
-
-  "message_language_changed": "언어가 {language}(으)로 변경되었습니다. 모든 변경사항을 적용하려면 애플리케이션을 재시작해주세요.",
+  "message_language_changed": "??? {language}(?)? ???????.",
   "message_theme_changed": "테마가 성공적으로 변경되었습니다.",
   "message_error": "오류",
   "message_success": "성공",
   "message_info": "정보",
   "message_warning": "경고",
-
   "message_play_file_not_exist": "재생 파일이 존재하지 않습니다: {file}",
   "message_channel_mismatch_warning_title": "채널 불일치 경고",
   "message_channel_mismatch_warning": "경고: 재생 파일은 {play_channels}채널이지만 {record_channels}채널로 녹음하려고 합니다.\n\nBRIR 생성 중 문제가 발생할 수 있습니다. 채널 수를 맞추는 것을 권장합니다.\n\n그래도 계속하시겠습니까?",
@@ -136,24 +118,19 @@
   "dialog_processing_message": "BRIR 처리 중...",
   "message_processing_complete": "완료!",
   "message_processing_error": "오류가 발생했습니다",
-
   "checkbox_mic_deviation_debug_plots": "디버그 플롯 저장",
-
   "error_no_file_selected": "파일이 선택되지 않았습니다",
   "error_file_not_found": "파일을 찾을 수 없습니다",
   "error_invalid_input": "잘못된 입력",
   "error_recording_failed": "녹음 실패",
-
   "success_recording_complete": "녹음 완료",
   "success_processing_complete": "처리 완료",
-
   "tooltip_resample": "지정된 샘플레이트로 오디오 리샘플링",
   "tooltip_target_level": "dB 단위의 목표 출력 레벨",
   "tooltip_bass_boost": "파라메트릭 EQ를 사용한 저음 부스트 적용",
   "tooltip_tilt": "옥타브당 dB 단위로 스펙트럼 기울기 적용",
   "tooltip_balance": "좌/우 채널 밸런스 조정",
   "tooltip_mic_deviation": "고급 알고리즘을 사용하여 마이크 편차 보정",
-
   "cli_starting_brir_generation": "BRIR 생성 시작 (총 {total_steps}단계)",
   "cli_creating_estimator": "임펄스 응답 추정기 생성 중",
   "cli_running_room_correction": "룸 보정 실행 중",
@@ -177,14 +154,12 @@
   "cli_generating_truehd": "TrueHD 레이아웃 생성 중",
   "cli_generating_jamesdsp": "JamesDSP 출력 생성 중",
   "cli_generating_hangloose": "Hangloose Convolver 출력 생성 중",
-
   "cli_success_interactive_saved": "인터랙티브 플롯 요약이 {path}에 저장되었습니다",
   "cli_success_truehd_11ch": "11채널 TrueHD 레이아웃 생성됨: {path}",
   "cli_success_truehd_13ch": "13채널 TrueHD 레이아웃 생성됨: {path}",
   "cli_success_jamesdsp": "JamesDSP IR 파일 생성됨: {path}",
   "cli_success_hangloose": "Hangloose Convolver 파일이 {path}에 생성되었습니다",
   "cli_success_hangloose_file": "Hangloose 파일 생성됨: {file}",
-
   "cli_warning_no_interactive": "인터랙티브 플롯이 생성되지 않았습니다",
   "cli_warning_truehd_11ch_fail": "11채널 레이아웃을 생성할 수 없습니다: {msg}",
   "cli_warning_truehd_13ch_fail": "13채널 레이아웃을 생성할 수 없습니다: {msg}",
@@ -193,7 +168,6 @@
   "cli_warning_test_signal_not_found": "테스트 신호 '{signal}' ({name})를 찾을 수 없습니다. 로컬 파일을 사용합니다",
   "cli_warning_interactive_plot_error": "{title} 인터랙티브 플롯 생성 중 오류 발생: {error}",
   "cli_warning_plot_skipped": "데이터가 생성되지 않아 {title} 플롯을 건너뜁니다",
-
   "cli_error_hp_file_missing": "헤드폰 보상 파일을 찾을 수 없습니다: {file}",
   "cli_info_using_hp_file": "헤드폰 보상 파일 사용: {file}",
   "cli_info_converting_truehd": "TrueHD/MLP 파일을 WAV로 변환 중: {file}",
@@ -213,7 +187,6 @@
   "cli_warning_hp_no_wav": "디렉토리에 WAV 파일이 없습니다: {dir}",
   "cli_error_hp_list_dir": "디렉토리 목록 조회 오류 {dir}: {error}",
   "cli_error_hp_ensure_exists": "파일이 존재하는지 확인하거나 작업 디렉토리에 'headphones.wav'를 배치해주세요: {dir}",
-
   "cli_readme_title": "BRIR 정보",
   "cli_readme_processed": "{date}에 처리됨. 출력 샘플레이트: {fs} Hz.",
   "cli_readme_gain_title": "적용된 정규화 게인",
@@ -228,7 +201,6 @@
   "cli_readme_late_label": "후기 (50-150ms)",
   "cli_readme_side_left": "왼쪽",
   "cli_readme_side_right": "오른쪽",
-
   "update_available_title": "업데이트 사용 가능",
   "update_available_message": "🎉 새로운 버전을 사용할 수 있습니다!",
   "update_version_info": "현재: {current} → 새 버전: {latest}",
@@ -256,12 +228,11 @@
   "label_data_folder_description": "레퍼런스 파일, 테스트 시그널, 녹음 파일에 접근합니다",
   "button_open_data_folder": "데이터 폴더 열기",
   "error_title": "오류",
-
   "vbass_group_title": "가상 베이스",
   "vbass_enable": "가상 베이스 활성화",
   "vbass_enable_tooltip": "저주파 대역을 합성된 미니멈 페이즈 베이스로 교체하여 서브베이스 응답을 개선합니다",
   "vbass_crossover_freq": "크로스오버 주파수 (Hz)",
-  "vbass_crossover_freq_tooltip": "이 주파수 이하의 원본 저음이 합성 베이스로 교체됩니다. 권장 범위: 100\u2013300 Hz",
+  "vbass_crossover_freq_tooltip": "이 주파수 이하의 원본 저음이 합성 베이스로 교체됩니다. 권장 범위: 100–300 Hz",
   "vbass_hp_freq": "서브베이스 하이패스 (Hz)",
   "vbass_hp_freq_tooltip": "이 주파수 이하의 DC 럼블을 제거합니다. 대부분 기본값 15 Hz로 충분합니다",
   "vbass_polarity": "극성 처리",
@@ -272,25 +243,21 @@
   "vbass_status_processing": "가상 베이스 합성 중...",
   "vbass_status_complete": "가상 베이스 합성 완료",
   "vbass_status_skipped": "가상 베이스 건너뜀 (비활성화)",
-  "vbass_warning_high_crossover": "크로스오버 주파수 {freq} Hz가 비정상적으로 높습니다. 권장 범위: 100\u2013300 Hz",
+  "vbass_warning_high_crossover": "크로스오버 주파수 {freq} Hz가 비정상적으로 높습니다. 권장 범위: 100–300 Hz",
   "vbass_error_sr_limit": "크로스오버 주파수가 샘플레이트 한계를 초과했습니다. 가상 베이스를 비활성화합니다.",
-
   "tab_info": "ℹ️ 정보",
   "section_about": "소개",
   "label_version": "버전:",
   "button_view_license": "라이선스 보기",
   "button_report_bug": "버그 제보",
-
   "label_installation": "설치 방식:",
   "info_install_velopack": "독립 실행형 (Velopack)",
   "info_install_pip": "pip 패키지",
   "info_install_dev": "개발 환경",
-
   "section_contributors": "기여자",
   "contributor_role_original": "원작자",
   "contributor_role_py313": "Python 3.13/3.14 포팅",
   "contributor_role_contributor": "기여자",
-
   "section_system_info": "시스템 정보",
   "label_python": "Python:",
   "label_os": "운영체제:",
@@ -300,8 +267,9 @@
   "info_gil_enabled": "활성화",
   "info_gil_disabled": "비활성화 (Free-Threaded)",
   "info_gil_unknown": "해당 없음 (3.14 이전)",
-
   "section_project_links": "프로젝트 링크",
   "button_original_repo": "원본 Impulcifer 저장소",
-  "button_fork_repo": "이 포크 (Python 3.13+ 포팅)"
+  "button_fork_repo": "이 포크 (Python 3.13+ 포팅)",
+  "message_processing_cancelling": "?? ??? ??? ?? ?????...",
+  "message_processing_cancelled": "??? ???????."
 }
