@@ -6,21 +6,35 @@ Shows version, contributors, system info, and project links. Moved from
 ``gui/modern_gui.py`` without behavioural changes.
 """
 
+from __future__ import annotations
+
 import os
 import platform
 import sys
 import webbrowser
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import customtkinter as ctk
 
 import impulcifer
 from core.parallel_processing import get_python_threading_info
+from gui.constants import WIDGET_BUTTON_WIDTH_MEDIUM, WIDGET_BUTTON_WIDTH_WIDE
 from updater.updater_core import is_pip_environment, is_velopack_environment
+
+if TYPE_CHECKING:
+    from gui.modern_gui import ModernImpulciferGUI
 
 
 class InfoTab:
-    def __init__(self, app):
+    """Build the read-only application information tab."""
+
+    def __init__(self, app: ModernImpulciferGUI) -> None:
+        """Create the info tab.
+
+        Args:
+            app: Top-level GUI application.
+        """
         self.app = app
         self.loc = app.loc
         self.fonts = app.fonts
@@ -28,8 +42,8 @@ class InfoTab:
         self.root = app.root
         self._build()
 
-    def _build(self):
-        """Create Info tab with version, contributors, system info, and links"""
+    def _build(self) -> None:
+        """Create version, contributor, system info, and link sections."""
         tab = self.tabview.tab(self.loc.get('tab_info'))
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
@@ -77,7 +91,7 @@ class InfoTab:
         # License button
         r += 1
 
-        def open_license():
+        def open_license() -> None:
             # Nuitka 빌드에서는 LICENSE가 License.txt로 리네임되어 번들됨
             candidates = [
                 Path(sys.executable).parent / 'License.txt',   # Nuitka 빌드
@@ -101,14 +115,14 @@ class InfoTab:
                 webbrowser.open("https://github.com/115dkk/Impulcifer-pip313/blob/main/LICENSE")
 
         ctk.CTkButton(about_frame, text=self.loc.get('button_view_license'),
-                       command=open_license, width=200
+                       command=open_license, width=WIDGET_BUTTON_WIDTH_MEDIUM
                        ).grid(row=r, column=0, columnspan=2, sticky="w", padx=15, pady=(10, 5))
 
         # Bug report button
         r += 1
         ctk.CTkButton(about_frame, text=self.loc.get('button_report_bug'),
                        command=lambda: webbrowser.open("https://github.com/115dkk/Impulcifer-pip313/issues/new"),
-                       width=200
+                       width=WIDGET_BUTTON_WIDTH_MEDIUM
                        ).grid(row=r, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
 
         # === Contributors Section ===
@@ -186,10 +200,10 @@ class InfoTab:
 
         ctk.CTkButton(links_frame, text=self.loc.get('button_original_repo'),
                        command=lambda: webbrowser.open("https://github.com/jaakkopasanen/Impulcifer"),
-                       width=280
+                       width=WIDGET_BUTTON_WIDTH_WIDE
                        ).grid(row=1, column=0, sticky="w", padx=15, pady=(5, 5))
 
         ctk.CTkButton(links_frame, text=self.loc.get('button_fork_repo'),
                        command=lambda: webbrowser.open("https://github.com/115dkk/Impulcifer-pip313"),
-                       width=280
+                       width=WIDGET_BUTTON_WIDTH_WIDE
                        ).grid(row=2, column=0, sticky="w", padx=15, pady=(5, 15))

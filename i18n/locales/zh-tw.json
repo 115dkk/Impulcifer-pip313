@@ -89,7 +89,7 @@
   "button_ok": "確定",
   "button_cancel": "取消",
   "button_close": "關閉",
-  "message_language_changed": "語言已更改為{language}。請重新啟動應用程式以使所有變更生效。",
+  "message_language_changed": "Language changed to {language}.",
   "message_theme_changed": "主題更改成功。",
   "message_error": "錯誤",
   "message_success": "成功",
@@ -269,5 +269,7 @@
   "message_channel_guidance_custom": "Recording with {channels} channels ({speakers} speakers × 2 ears). Make sure your filename matches the speaker configuration.",
   "message_channel_guidance_invalid": "Enter valid channel count (recommended: 14, 22, or 26)",
   "message_channel_mismatch_body": "Channel count mismatch detected!\n\nRecording filename suggests {expected_speakers} speakers ({speaker_names}) which requires {expected_channels} channels (stereo pairs).\n\nBut you have selected {selected_channels} input channels.\n\nContinue anyway?",
-  "message_recording_setup_info": "Recording Setup:\nPlay file: {play_file}\nRecord file: {record_file}\nInput device: {input_device}\nOutput device: {output_device}\nChannels: {channels}\nHost API: {host_api}\n\nMake sure:\n- Your audio interface is properly connected\n- Input/output devices are correctly selected\n- Channel count matches your setup\n\nReady to start recording?"
+  "message_recording_setup_info": "Recording Setup:\nPlay file: {play_file}\nRecord file: {record_file}\nInput device: {input_device}\nOutput device: {output_device}\nChannels: {channels}\nHost API: {host_api}\n\nMake sure:\n- Your audio interface is properly connected\n- Input/output devices are correctly selected\n- Channel count matches your setup\n\nReady to start recording?",
+  "message_processing_cancelling": "Cancelling after the current step...",
+  "message_processing_cancelled": "Processing cancelled."
 }

@@ -44,7 +44,7 @@ def _get_version() -> str:
         pass
 
     # Fallback
-    return "2.4.11"
+    return "2.4.15"
 
 __version__ = _get_version()
 
@@ -53,6 +53,7 @@ import re
 import argparse
 from tabulate import tabulate
 from datetime import datetime
+from contextvars import ContextVar
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -99,6 +100,29 @@ from bokeh.plotting import (
     output_file as bokeh_output_file,
     save as bokeh_save,
 )  # 중복 방지
+
+_CANCEL_EVENT = ContextVar("impulcifer_cancel_event", default=None)
+
+
+class CancelledError(RuntimeError):
+    """Raised when BRIR generation is cancelled cooperatively."""
+
+
+@contextlib.contextmanager
+def cancellation_scope(cancel_event):
+    """Install a cancellation event for the current processing context."""
+    token = _CANCEL_EVENT.set(cancel_event)
+    try:
+        yield
+    finally:
+        _CANCEL_EVENT.reset(token)
+
+
+def _check_cancelled():
+    """Raise ``CancelledError`` if the active cancellation event is set."""
+    cancel_event = _CANCEL_EVENT.get()
+    if cancel_event is not None and cancel_event.is_set():
+        raise CancelledError("User cancelled BRIR generation.")
 
 # Python 3.14 병렬 처리 지원
 try:
@@ -297,10 +321,12 @@ def main(
 
     # Dir path as absolute
     dir_path = os.path.abspath(dir_path)
+    _check_cancelled()
 
     # Impulse response estimator
     logger.step("cli_creating_estimator")
     estimator = open_impulse_response_estimator(dir_path, file_path=test_signal)
+    _check_cancelled()
 
     # Room correction frequency responses
     room_frs = None
@@ -316,6 +342,7 @@ def main(
             generic_limit=generic_limit,
             plot=plot,
         )
+        _check_cancelled()
 
     # Headphone compensation frequency responses
     hp_left, hp_right = None, None
@@ -324,28 +351,33 @@ def main(
         hp_left, hp_right = headphone_compensation(
             estimator, dir_path, headphone_compensation_file
         )
+        _check_cancelled()
 
     # Equalization
     eq_left, eq_right = None, None
     if do_equalization:
         logger.step("cli_creating_equalization")
         eq_left, eq_right = equalization(estimator, dir_path)
+        _check_cancelled()
 
     # Bass boost and tilt
     logger.step("cli_creating_target")
     target = create_target(
         estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt
     )
+    _check_cancelled()
 
     # HRIR measurements
     logger.step("cli_opening_measurements")
     hrir = open_binaural_measurements(estimator, dir_path)
+    _check_cancelled()
 
     if plot:
         # Plot graphs pre processing
         os.makedirs(os.path.join(dir_path, "plots", "pre"), exist_ok=True)
         logger.step("cli_plotting_pre")
         hrir.plot(dir_path=os.path.join(dir_path, "plots", "pre"))
+        _check_cancelled()
 
     # Crop noise and harmonics from the beginning
     logger.step("cli_cropping_responses")
@@ -370,6 +402,7 @@ def main(
 
     # Crop noise from the tail
     hrir.crop_tails()
+    _check_cancelled()
 
     # Virtual bass synthesis
     if vbass:
@@ -383,6 +416,7 @@ def main(
             hp_freq=vbass_hp,
             invert_polarity=polarity_map.get(vbass_polarity),
         )
+        _check_cancelled()
 
     # 마이크 착용 편차 보정 v2.0
     if microphone_deviation_correction:
@@ -396,8 +430,10 @@ def main(
             plot_analysis=mic_deviation_debug_plots,
             plot_dir=mic_deviation_plot_dir,
         )
+        _check_cancelled()
 
     # Write multi-channel WAV file with sine sweeps for debugging
+    _check_cancelled()
     hrir.write_wav(os.path.join(dir_path, "responses.wav"))
 
     # Equalize all
@@ -432,6 +468,7 @@ def main(
         # Apply FIR filters to impulse responses
         for speaker, side, fir in eq_results:
             hrir.irs[speaker][side].equalize(fir)
+        _check_cancelled()
 
     # Adjust decay time
     if decay:
@@ -451,17 +488,20 @@ def main(
             # Apply results back to impulse responses
             for speaker, side, adjusted_data in decay_results:
                 hrir.irs[speaker][side].data = adjusted_data
+        _check_cancelled()
 
     # Correct channel balance
     if channel_balance is not None:
         logger.step("cli_correcting_balance")
         hrir.correct_channel_balance(channel_balance)
+        _check_cancelled()
 
     # Normalize gain after all processing, matching the original Impulcifer pipeline.
     logger.step("cli_normalizing_gain")
     applied_gain = hrir.normalize(
         peak_target=None if target_level is not None else -0.1, avg_target=target_level
     )
+    _check_cancelled()
 
     # Write info and stats in readme (gain 값 전달 추가)
     readme_content = write_readme(
@@ -469,6 +509,7 @@ def main(
     )
     if readme_content:
         logger.info(readme_content)
+    _check_cancelled()
 
     if plot:
         logger.step("cli_plotting_post")
@@ -488,10 +529,12 @@ def main(
 
         # Plot post processing
         hrir.plot(os.path.join(dir_path, "plots", "post"))
+        _check_cancelled()
 
     # Plot results, always
     logger.step("cli_plotting_results")
     hrir.plot_result(os.path.join(dir_path, "plots"))
+    _check_cancelled()
 
     # PR4: 양이 응답 임펄스 오버레이 플롯 추가
     if plot:
@@ -501,6 +544,7 @@ def main(
         )
         # ILD/IPD/IACC/ETC는 Bokeh 레이아웃만 존재하므로 HTML로 저장
         _save_bokeh_analysis_plots(hrir, dir_path, logger)
+        _check_cancelled()
 
     # 인터랙티브 플롯 생성 (추가)
     if interactive_plots:
@@ -544,6 +588,7 @@ def main(
             logger.success("cli_success_interactive_saved", path=output_html_path)
         else:
             logger.warning("cli_warning_no_interactive")
+        _check_cancelled()
 
     # Re-sample
     if fs is not None and fs != hrir.fs:
@@ -553,12 +598,15 @@ def main(
             peak_target=None if target_level is not None else -0.1,
             avg_target=target_level,
         )
+        _check_cancelled()
 
     # Write multi-channel WAV file with standard track order
     logger.step("cli_writing_brirs")
+    _check_cancelled()
     hrir.write_wav(os.path.join(dir_path, "hrir.wav"))
 
     # Write multi-channel WAV file with HeSuVi track order
+    _check_cancelled()
     hrir.write_wav(os.path.join(dir_path, "hesuvi.wav"), track_order=HESUVI_TRACK_ORDER)
 
     # TrueHD 레이아웃 출력 (새로 추가)
@@ -602,6 +650,7 @@ def main(
             logger.success("cli_success_truehd_13ch", path=output_path_13ch)
         else:
             logger.warning("cli_warning_truehd_13ch_fail", msg=msg_13ch)
+        _check_cancelled()
 
     # PR3 jamesdsp 로직 추가 (항목 6)
     if jamesdsp:
@@ -627,6 +676,7 @@ def main(
         dsp_hrir.write_wav(out_path, track_order=jd_order)
         del dsp_hrir
         logger.success("cli_success_jamesdsp", path=out_path)
+        _check_cancelled()
 
     # PR3 hangloose 로직 추가 (항목 7)
     if hangloose:
@@ -655,6 +705,7 @@ def main(
             logger.info("cli_success_hangloose_file", file=f"{sp}.wav")
 
         logger.success("cli_success_hangloose", path=output_dir)
+        _check_cancelled()
 
         # PR3의 LFE 채널 생성 로직은 FL, FR을 기반으로 하므로, 필요시 여기에 추가 구현.
         # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:

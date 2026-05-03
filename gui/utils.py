@@ -7,19 +7,22 @@ accessors, file dialog wrappers) that were previously colocated in
 ``gui/modern_gui.py``.
 """
 
+from __future__ import annotations
+
 import os
 import platform
 import sys
 from pathlib import Path
 from tkinter import filedialog, TclError
 from tkinter import font as tkfont
+from typing import Any, Optional
 
 import customtkinter as ctk
 
 from gui.constants import FILETYPES_WAV_SAVE
 
 
-def open_data_folder():
+def open_data_folder() -> None:
     """Open the application's data folder in file explorer."""
     import subprocess
     from infra.resource_helper import DATA_DIR
@@ -122,24 +125,48 @@ def is_pip_available() -> bool:
     return False
 
 
-def safe_get_double(var, default=0.0):
-    """Safely get value from DoubleVar, returning default if empty or invalid."""
+def safe_get_double(var: Any, default: float = 0.0) -> float:
+    """Safely read a DoubleVar.
+
+    Args:
+        var: Tk variable with a ``get`` method.
+        default: Value returned when the variable is empty or invalid.
+
+    Returns:
+        The variable value or ``default``.
+    """
     try:
         return var.get()
     except (TclError, ValueError):
         return default
 
 
-def safe_get_int(var, default=0):
-    """Safely get value from IntVar, returning default if empty or invalid."""
+def safe_get_int(var: Any, default: int = 0) -> int:
+    """Safely read an IntVar.
+
+    Args:
+        var: Tk variable with a ``get`` method.
+        default: Value returned when the variable is empty or invalid.
+
+    Returns:
+        The variable value or ``default``.
+    """
     try:
         return var.get()
     except (TclError, ValueError):
         return default
 
 
-def safe_get_string(var, default=""):
-    """Safely get value from StringVar, returning default if error."""
+def safe_get_string(var: Any, default: str = "") -> str:
+    """Safely read a StringVar.
+
+    Args:
+        var: Tk variable with a ``get`` method.
+        default: Value returned when the variable is empty or invalid.
+
+    Returns:
+        The variable value or ``default``.
+    """
     try:
         return var.get()
     except (TclError, ValueError):
@@ -149,10 +176,10 @@ def safe_get_string(var, default=""):
 # Cache for setup_pretendard_font() — keyed by language code, holds resolved font family
 # (or None when no Pretendard is available). Avoids repeated GDI calls on Windows and
 # repeated tkfont.families() scans across dialog construction.
-_font_cache: dict = {}
+_font_cache: dict[str, Optional[str]] = {}
 
 
-def setup_pretendard_font(current_language: str = 'en') -> str:
+def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
     """
     Setup Pretendard font for Korean and English languages.
     Returns font family name to use, or None for system default.
@@ -166,7 +193,7 @@ def setup_pretendard_font(current_language: str = 'en') -> str:
     if current_language in _font_cache:
         return _font_cache[current_language]
 
-    def _cache_and_return(value):
+    def _cache_and_return(value: Optional[str]) -> Optional[str]:
         _font_cache[current_language] = value
         return value
 
@@ -243,29 +270,7 @@ def setup_pretendard_font(current_language: str = 'en') -> str:
         return _cache_and_return(None)
 
 
-def _build_fallback_fonts(font_family: str) -> dict:
-    """Build a minimal fonts dict for dialogs instantiated without a parent fonts dict.
-
-    Mirrors the keys created by build_fonts. Dialogs always receive a shared
-    fonts dict in normal use; this only fires if a dialog is constructed
-    standalone (e.g. from tests).
-    """
-    return {
-        'heading':       ctk.CTkFont(family=font_family, size=16, weight="bold"),
-        'title':         ctk.CTkFont(family=font_family, size=24, weight="bold"),
-        'subtitle':      ctk.CTkFont(family=font_family, size=12),
-        'label':         ctk.CTkFont(family=font_family, size=13),
-        'value':         ctk.CTkFont(family=font_family, size=13, weight="bold"),
-        'button_large':  ctk.CTkFont(family=font_family, size=16, weight="bold"),
-        'small':         ctk.CTkFont(family=font_family, size=11),
-        'small_bold':    ctk.CTkFont(family=font_family, size=12, weight="bold"),
-        'dialog_title':  ctk.CTkFont(family=font_family, size=18, weight="bold"),
-        'dialog_body':   ctk.CTkFont(family=font_family, size=14),
-        'dialog_small':  ctk.CTkFont(family=font_family, size=12),
-    }
-
-
-def build_fonts(family: str) -> dict:
+def build_fonts(family: Optional[str]) -> dict[str, ctk.CTkFont]:
     """Build shared CTkFont instances keyed by semantic role.
 
     Must be called after a Tk default root exists (i.e. ``ctk.CTk()`` has
@@ -286,8 +291,63 @@ def build_fonts(family: str) -> dict:
     }
 
 
-def browse_file(var, mode, filetypes=None):
-    """Browse for file"""
+def snapshot_tk_vars(owner: Any) -> dict[str, Any]:
+    """Snapshot Tk variable attributes from an object.
+
+    Args:
+        owner: Object whose ``*_var`` attributes should be captured.
+
+    Returns:
+        A dictionary of attribute names to plain Python values. Nested
+        dictionaries of Tk variables are preserved under the same attribute
+        name.
+    """
+    state: dict[str, Any] = {}
+    for name, value in vars(owner).items():
+        if name.endswith("_var") and hasattr(value, "get"):
+            try:
+                state[name] = value.get()
+            except (TclError, ValueError):
+                continue
+        elif name.endswith("_vars") and isinstance(value, dict):
+            nested: dict[str, Any] = {}
+            for key, var in value.items():
+                if hasattr(var, "get"):
+                    try:
+                        nested[key] = var.get()
+                    except (TclError, ValueError):
+                        continue
+            if nested:
+                state[name] = nested
+    return state
+
+
+def restore_tk_vars(owner: Any, state: dict[str, Any]) -> None:
+    """Restore Tk variable attributes captured by :func:`snapshot_tk_vars`.
+
+    Args:
+        owner: Object whose Tk variables should be restored.
+        state: Snapshot returned by :func:`snapshot_tk_vars`.
+    """
+    for name, saved_value in state.items():
+        current = getattr(owner, name, None)
+        if hasattr(current, "set"):
+            try:
+                current.set(saved_value)
+            except (TclError, ValueError):
+                continue
+        elif isinstance(current, dict) and isinstance(saved_value, dict):
+            for key, nested_value in saved_value.items():
+                var = current.get(key)
+                if hasattr(var, "set"):
+                    try:
+                        var.set(nested_value)
+                    except (TclError, ValueError):
+                        continue
+
+
+def browse_file(var: Any, mode: str, filetypes: Optional[list[tuple[str, str]]] = None) -> None:
+    """Open a file chooser and store the selected path in a Tk variable."""
     if filetypes is None:
         filetypes = [('All files', '*.*')]
 
@@ -314,8 +374,8 @@ def browse_file(var, mode, filetypes=None):
         var.set(filename)
 
 
-def browse_directory(var):
-    """Browse for directory"""
+def browse_directory(var: Any) -> None:
+    """Open a directory chooser and store the selected path in a Tk variable."""
     dirname = filedialog.askdirectory(
         initialdir=var.get() if var.get() else os.getcwd()
     )
