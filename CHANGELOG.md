@@ -12,7 +12,7 @@ been fixed and old features improved.
   - **수정**: 9개 캐노니컬 로케일(`en, ko, de, es, fr, ja, ru, zh_CN, zh_TW`) 전부에 키 추가. ko는 자연스러운 한국어 번역(`새 버전이 정상적으로 설치되었습니다.`), 나머지 7개 비-en 언어는 영어 fallback(`The new version has been installed successfully.`)으로 동기화. 키 총수 273→274
 - **ko.json 3개 키 mojibake 복구**: 한글이 `?`로 망가져 있어 사용자에게 `??? 한국어(?)? ???????.` 같은 텍스트가 노출되던 문제. CP949↔UTF-8 인코딩 사고로 추정
   - `message_language_changed` (ko.json:97): `??? {language}(?)? ???????.` → `언어가 {language}(으)로 변경되었습니다.` (조사 자동 처리 형태로 복구)
-  - `message_processing_cancelling` (ko.json:273): `?? ??? ??? ?? ?????...` → `현재 단계가 끝나면 취소됩니다...`
+  - `message_processing_cancelling` (ko.json:273): `?? ??? ??? ?? ?????...` → `이 작업을 마치고 취소하겠습니다...`
   - `message_processing_cancelled` (ko.json:274): `??? ???????.` → `처리가 취소되었습니다.`
 
 ## 2.4.18 - 2026-05-04

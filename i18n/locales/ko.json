@@ -271,6 +271,6 @@
   "section_project_links": "프로젝트 링크",
   "button_original_repo": "원본 Impulcifer 저장소",
   "button_fork_repo": "이 포크 (Python 3.13+ 포팅)",
-  "message_processing_cancelling": "현재 단계가 끝나면 취소됩니다...",
+  "message_processing_cancelling": "이 작업을 마치고 취소하겠습니다...",
   "message_processing_cancelled": "처리가 취소되었습니다."
 }
