@@ -52,7 +52,7 @@ updater/
 
 `core/utils.py`의 `magnitude_response()`는 원본 Lion 구현과 bit-identical한 출력을 보장해야 한다. `test_magnitude_response_parity.py`가 이를 검증한다.
 
-데모 WAV 파일(`data/demo/*.wav`)은 Git LFS로 관리된다. 클론 후 `git lfs pull`이 필요하다.
+데모 WAV 파일(`data/demo/*.wav`)은 raw 바이너리로 repo에 포함되어 있다(약 55MB). 일반 `git clone`으로 받아진다. `.gitignore`가 demo 폴더를 기본 무시하면서 화이트리스트로 필요한 파일들만 통과시키므로, 새 데모 파일을 추가할 때는 `.gitignore`의 `!data/demo/...` 라인을 갱신해야 한다.
 
 Nuitka 빌드 설정은 5개소에 중복 존재한다: `build_scripts/build_nuitka.py`, `build-linux.yml`, `build-macos.yml`, `release-cross-platform.yml`(2개소). 빌드 플래그 변경 시 5곳 모두 반영해야 한다.
 
@@ -216,10 +216,9 @@ else:
 
 #### Step 1: 데모 BRIR 생성
 
-데모 데이터로 hesuvi.wav를 생성한다. 데모 파일이 LFS에 있으므로 먼저 pull한다.
+데모 데이터로 hesuvi.wav를 생성한다.
 
 ```bash
-git lfs pull
 python impulcifer.py \
     --dir_path=data/demo \
     --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl \
@@ -255,7 +254,6 @@ cp data/demo/hesuvi.wav /tmp/hesuvi_test.wav
 
 git stash
 git checkout master
-git lfs pull
 python impulcifer.py \
     --dir_path=data/demo \
     --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl \

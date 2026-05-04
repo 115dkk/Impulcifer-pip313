@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.18 - 2026-05-04
+### 🔧 데모 데이터 raw binary 전환 (LFS 포기)
+
+#### 🔧 빌드 / 설정 변경
+- **`data/demo/*.wav` 13개 raw 바이너리로 재커밋(약 55MB)**: 기존 Git LFS 포인터 방식이 GitHub의 public fork LFS 업로드 차단 정책(`@user can not upload new objects to public fork`)에 막혀 master에 데모 파일이 계속 누락된 상태였음. fork-detach 없이 즉시 해결 가능한 raw binary 방식으로 전환
+  - **`.gitattributes` 삭제**: `data/demo/*.{wav,WAV,png,PNG,html,HTML}` LFS 필터 라인 제거. repo 내 LFS 추적 대상이 사라져 파일 자체를 삭제
+  - **`.gitignore` 화이트리스트 갱신**: 옛 `room-responses.wav`(단일 파일) 흔적 제거하고 현재 데모 구조에 맞게 `!data/demo/room-*.wav` 패턴 추가. `SR,BR.WAV` → `SR,BR.wav` 케이스 정정
+  - **CLAUDE.md 갱신**: "LFS로 관리됨, `git lfs pull` 필요" 안내 제거. Tier 3 알고리즘 무결성 검증 절차에서 `git lfs pull` 단계 제거(일반 `git clone`만으로 데모 이용 가능)
+  - **결과**: PR #63 이후 사라졌던 데모 파일이 master에 다시 포함됨. Tier 3 검증의 baseline md5(`d295982d021a6d16ab2c194c3517c162`) 비교가 신규 클론 환경에서도 즉시 가능
+
 ## 2.4.18 - 2026-05-03
 ### ⚡ GUI 스크롤 GPU 스파이크(20-30%) 추가 해소
 

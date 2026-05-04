@@ -114,12 +114,12 @@ data/demo/*
 !data/demo/README.md
 !data/demo/headphones.wav
 !data/demo/room-mic-calibration.txt
-!data/demo/room-responses.wav
 !data/demo/room-target.csv
 !data/demo/FC.wav
 !data/demo/FL,FR.wav
 !data/demo/BL,SL.wav
-!data/demo/SR,BR.WAV
+!data/demo/SR,BR.wav
+!data/demo/room-*.wav
 
 research/**/*.csv
 research/**/*.txt
