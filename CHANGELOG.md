@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.19 - 2026-05-04
+### 🐛 한국어 로케일 mojibake 복구 + 업데이트 재시작 알림 누락 키 추가
+
+#### 🐛 버그 수정
+- **`update_restart_done` 키 누락(전 언어)**: Velopack 자동 업데이트로 앱이 재시작된 직후 띄우는 정보 다이얼로그(`gui/modern_gui.py:67-69`)가 코드에서 `loc.get('update_restart_done', default=...)`를 호출하지만 9개 로케일 어디에도 키가 없어 본문이 키 이름 그대로 `update_restart_done`으로 표시되던 회귀
+  - **수정**: 9개 캐노니컬 로케일(`en, ko, de, es, fr, ja, ru, zh_CN, zh_TW`) 전부에 키 추가. ko는 자연스러운 한국어 번역(`새 버전이 정상적으로 설치되었습니다.`), 나머지 7개 비-en 언어는 영어 fallback(`The new version has been installed successfully.`)으로 동기화. 키 총수 273→274
+- **ko.json 3개 키 mojibake 복구**: 한글이 `?`로 망가져 있어 사용자에게 `??? 한국어(?)? ???????.` 같은 텍스트가 노출되던 문제. CP949↔UTF-8 인코딩 사고로 추정
+  - `message_language_changed` (ko.json:97): `??? {language}(?)? ???????.` → `언어가 {language}(으)로 변경되었습니다.` (조사 자동 처리 형태로 복구)
+  - `message_processing_cancelling` (ko.json:273): `?? ??? ??? ?? ?????...` → `현재 단계가 끝나면 취소됩니다...`
+  - `message_processing_cancelled` (ko.json:274): `??? ???????.` → `처리가 취소되었습니다.`
+
 ## 2.4.18 - 2026-05-04
 ### 🔧 데모 데이터 raw binary 전환 (LFS 포기)
 

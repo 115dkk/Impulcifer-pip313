@@ -215,6 +215,7 @@
   "update_complete_message": "La mise à jour a été lancée en arrière-plan.\nVeuillez redémarrer l'application pour utiliser la nouvelle version.",
   "update_error_no_installer": "Installateur non disponible. Veuillez télécharger manuellement depuis GitHub :\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
   "update_restart_message": "L'application va maintenant redémarrer pour terminer la mise à jour.",
+  "update_restart_done": "The new version has been installed successfully.",
   "update_error_apply": "Échec de l'application de la mise à jour",
   "update_manual_complete": "Veuillez suivre les instructions de l'installateur pour terminer la mise à jour.",
   "section_data_access": "Accès aux données",

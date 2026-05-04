@@ -94,7 +94,7 @@
   "button_ok": "확인",
   "button_cancel": "취소",
   "button_close": "닫기",
-  "message_language_changed": "??? {language}(?)? ???????.",
+  "message_language_changed": "언어가 {language}(으)로 변경되었습니다.",
   "message_theme_changed": "테마가 성공적으로 변경되었습니다.",
   "message_error": "오류",
   "message_success": "성공",
@@ -222,6 +222,7 @@
   "update_complete_message": "업데이트가 백그라운드에서 시작되었습니다.\n새 버전을 사용하려면 애플리케이션을 재시작해주세요.",
   "update_error_no_installer": "설치 프로그램을 사용할 수 없습니다. GitHub에서 수동으로 다운로드해주세요:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
   "update_restart_message": "업데이트를 완료하기 위해 프로그램이 재시작됩니다.",
+  "update_restart_done": "새 버전이 정상적으로 설치되었습니다.",
   "update_error_apply": "업데이트 적용에 실패했습니다",
   "update_manual_complete": "설치 프로그램의 안내에 따라 업데이트를 완료해주세요.",
   "section_data_access": "데이터 접근",
@@ -270,6 +271,6 @@
   "section_project_links": "프로젝트 링크",
   "button_original_repo": "원본 Impulcifer 저장소",
   "button_fork_repo": "이 포크 (Python 3.13+ 포팅)",
-  "message_processing_cancelling": "?? ??? ??? ?? ?????...",
-  "message_processing_cancelled": "??? ???????."
+  "message_processing_cancelling": "현재 단계가 끝나면 취소됩니다...",
+  "message_processing_cancelled": "처리가 취소되었습니다."
 }

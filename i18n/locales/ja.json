@@ -215,6 +215,7 @@
   "update_complete_message": "アップデートがバックグラウンドで開始されました。\n新しいバージョンを使用するにはアプリケーションを再起動してください。",
   "update_error_no_installer": "インストーラーが利用できません。GitHubから手動でダウンロードしてください：\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
   "update_restart_message": "アップデートを完了するためにアプリケーションを再起動します。",
+  "update_restart_done": "The new version has been installed successfully.",
   "update_error_apply": "アップデートの適用に失敗しました",
   "update_manual_complete": "インストーラーの指示に従ってアップデートを完了してください。",
   "section_data_access": "データアクセス",
