@@ -215,6 +215,7 @@
   "update_complete_message": "Das Update wurde im Hintergrund gestartet.\nBitte starten Sie die Anwendung neu, um die neue Version zu verwenden.",
   "update_error_no_installer": "Installationsprogramm nicht verfügbar. Bitte laden Sie manuell von GitHub herunter:\nhttps://github.com/115dkk/Impulcifer-pip313/releases/latest",
   "update_restart_message": "Die Anwendung wird jetzt neu gestartet, um das Update abzuschließen.",
+  "update_restart_done": "The new version has been installed successfully.",
   "update_error_apply": "Update konnte nicht angewendet werden",
   "update_manual_complete": "Bitte folgen Sie den Anweisungen des Installationsprogramms, um das Update abzuschließen.",
   "section_data_access": "Datenzugriff",
