@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Regression test pinning Lion-equivalent behaviour for ``magnitude_response``.
+"""Regression test pinning verified ``magnitude_response`` behaviour.
 
-The current implementation uses ``np.fft.rfft`` for speed, but it must return
-exactly the same first ``ceil(N/2)`` magnitude bins as Lion's full-FFT path
-(``scipy.fftpack.fft`` followed by a ``[:ceil(N/2)]`` slice). For real inputs
-those two FFT paths agree bit-for-bit on the bins we expose, so this test
-fails the moment someone introduces an epsilon, a windowed FFT, or a different
-bin layout.
+The BRIR integrity baseline was established with the one-sided NumPy ``rfft``
+path below. A full FFT can be numerically close, but it is not bit-identical on
+all supported platforms and changes the generated ``hesuvi.wav`` md5.
 """
 
 from __future__ import annotations
@@ -14,29 +11,27 @@ from __future__ import annotations
 import unittest
 
 import numpy as np
-from scipy.fftpack import fft
 
 from core.utils import magnitude_response
 
 
-def _lion_magnitude_response(x: np.ndarray, fs: int):
+def _verified_magnitude_response(x: np.ndarray, fs: int):
     nfft = len(x)
-    df = fs / nfft
-    f = np.arange(0, fs - df, df)
-    X = fft(x)
-    X_mag = 20 * np.log10(np.abs(X))
     half = int(np.ceil(nfft / 2))
-    return f[:half], X_mag[:half]
+    spectrum = np.fft.rfft(x)
+    magnitude = 20 * np.log10(np.abs(spectrum[:half]))
+    frequency = np.arange(half) * (fs / nfft)
+    return frequency, magnitude
 
 
-class MagnitudeResponseLionParity(unittest.TestCase):
+class MagnitudeResponseVerifiedParity(unittest.TestCase):
     def _assert_bit_identical(self, x: np.ndarray, fs: int):
-        f_lion, m_lion = _lion_magnitude_response(x, fs)
-        f_modern, m_modern = magnitude_response(x, fs)
-        self.assertEqual(f_lion.shape, f_modern.shape)
-        self.assertTrue(np.array_equal(f_lion, f_modern))
-        self.assertEqual(m_lion.shape, m_modern.shape)
-        self.assertTrue(np.array_equal(m_lion, m_modern))
+        f_expected, m_expected = _verified_magnitude_response(x, fs)
+        f_actual, m_actual = magnitude_response(x, fs)
+        self.assertEqual(f_expected.shape, f_actual.shape)
+        self.assertTrue(np.array_equal(f_expected, f_actual))
+        self.assertEqual(m_expected.shape, m_actual.shape)
+        self.assertTrue(np.array_equal(m_expected, m_actual))
 
     def test_even_length(self):
         rng = np.random.default_rng(0xA110)
@@ -56,7 +51,6 @@ class MagnitudeResponseLionParity(unittest.TestCase):
         self._assert_bit_identical(x, 48000)
 
     def test_sweep_like(self):
-        # Smooth, broadband signal that exercises every FFT bin.
         n = 4096
         t = np.arange(n) / 48000
         x = np.sin(2 * np.pi * np.linspace(20, 20000, n) * t)

@@ -50,7 +50,7 @@ updater/
 
 `core/recorder.py`의 `play_and_record()`는 `sd.play(blocking=True)` + `Thread.join()`으로 완전한 블로킹 함수다. 이 동작을 변경하지 말 것.
 
-`core/utils.py`의 `magnitude_response()`는 원본 Lion 구현과 bit-identical한 출력을 보장해야 한다. `test_magnitude_response_parity.py`가 이를 검증한다.
+`core/utils.py`의 `magnitude_response()`는 현재 검증된 NumPy `rfft` 기반 출력과 bit-identical해야 한다. full FFT 경로는 수치적으로 가까워도 BRIR md5를 바꿀 수 있으므로, `test_magnitude_response_parity.py`가 이 verified 동작을 고정한다.
 
 데모 WAV 파일(`data/demo/*.wav`)은 raw 바이너리로 repo에 포함되어 있다(약 55MB). 일반 `git clone`으로 받아진다. `.gitignore`가 demo 폴더를 기본 무시하면서 화이트리스트로 필요한 파일들만 통과시키므로, 새 데모 파일을 추가할 때는 `.gitignore`의 `!data/demo/...` 라인을 갱신해야 한다.
 
@@ -171,7 +171,7 @@ pytest tests/ -v
 
 Tier 1의 `test_suite.py` 외에 아래 테스트가 추가로 실행된다.
 
-`test_magnitude_response_parity.py`는 `core/utils.py`의 `magnitude_response()` 함수가 원본 Lion 구현(`scipy.fftpack.fft` 경로)과 bit-identical한 출력을 내는지 검증한다. even/odd 길이, 임펄스, sweep-like 신호에 대해 모두 확인한다. `core/utils.py`를 수정했다면 이 테스트가 가장 중요하다.
+`test_magnitude_response_parity.py`는 `core/utils.py`의 `magnitude_response()` 함수가 현재 검증된 NumPy `rfft` 경로와 bit-identical한 출력을 내는지 검증한다. even/odd 길이, 임펄스, sweep-like 신호에 대해 모두 확인한다. `core/utils.py`를 수정했다면 이 테스트가 가장 중요하다.
 
 `test_virtual_bass.py`는 `_classify_speaker()`의 좌/우/중앙 분류, `_detect_polarity()`의 극성 감지, `_build_ild_shelf()`의 ILD 셸프 필터 생성, `apply_virtual_bass_to_hrir()`의 전체 플로우를 검증한다.
 
@@ -225,6 +225,14 @@ python impulcifer.py \
     --vbass --vbass_freq=250
 ```
 
+기본값 경로도 함께 검증한다. 이 경로에는 기본 헤드폰 보정(`headphones.wav`)이 포함된다.
+
+```bash
+python impulcifer.py \
+    --dir_path=data/demo \
+    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl
+```
+
 출력 파일: `data/demo/hesuvi.wav`
 
 #### Step 2: md5 해시 비교
@@ -233,11 +241,13 @@ python impulcifer.py \
 md5sum data/demo/hesuvi.wav
 ```
 
-현재 검증된 baseline md5:
+현재 검증된 baseline md5(가상 베이스 경로):
 
 ```
 d295982d021a6d16ab2c194c3517c162  data/demo/hesuvi.wav
 ```
+
+CI의 `brir-integrity` job은 hardcoded md5 하나만 보지 않고, 같은 Ubuntu CPython 3.13 환경에서 무결성이 확인된 기준 ref(`origin/master`)와 현재 브랜치의 `hesuvi.wav`를 모두 생성해 비교한다. 비교 대상은 기본값(헤드폰 보정 포함)과 `--vbass --vbass_freq=250` 두 경로다.
 
 이 해시는 PR #63(AutoEQ 벤더링) 이후 확립된 것이다. 일치하면 무결성 확인 완료. 불일치하면 Step 3으로 진행한다.
 

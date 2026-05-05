@@ -58,6 +58,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -76,6 +78,7 @@ jobs:
     - name: Check demo BRIR baseline
       env:
         IMPULCIFER_RUN_BRIR_INTEGRITY: "1"
+        IMPULCIFER_BRIR_REFERENCE_REF: origin/master
         MPLBACKEND: Agg
       run: |
         python -m pytest tests/test_brir_integrity.py -v --tb=short
