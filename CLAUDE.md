@@ -54,7 +54,7 @@ updater/
 
 데모 WAV 파일(`data/demo/*.wav`)은 raw 바이너리로 repo에 포함되어 있다(약 55MB). 일반 `git clone`으로 받아진다. `.gitignore`가 demo 폴더를 기본 무시하면서 화이트리스트로 필요한 파일들만 통과시키므로, 새 데모 파일을 추가할 때는 `.gitignore`의 `!data/demo/...` 라인을 갱신해야 한다.
 
-Nuitka 빌드 설정은 5개소에 중복 존재한다: `build_scripts/build_nuitka.py`, `build-linux.yml`, `build-macos.yml`, `release-cross-platform.yml`(2개소). 빌드 플래그 변경 시 5곳 모두 반영해야 한다.
+Nuitka 빌드 플래그의 정본은 `build_scripts/nuitka_flags.py`다. `build_scripts/build_nuitka.py`는 이 모듈에서 import하여 사용하므로, Windows 릴리스 워크플로(`release-cross-platform.yml`)에서 호출되는 경로는 자동으로 동기화된다. 다만 `.github/workflows/build-linux.yml`, `build-macos.yml`, `release-cross-platform.yml`의 macOS 잡은 아직 인라인 Nuitka 명령을 사용한다(이슈 #87 Phase 4 후속). 빌드 플래그를 추가/변경할 때는 우선 `nuitka_flags.py`를 갱신하고, 인라인 명령이 남은 워크플로 3곳에도 같은 플래그가 반영됐는지 확인할 것. `python build_scripts/nuitka_flags.py --platform linux --version X` 으로 정본 플래그 목록을 한 줄씩 출력해 비교에 활용할 수 있다.
 
 `requirements.txt`와 `pyproject.toml`의 `[project] dependencies`는 동기화 상태를 유지해야 한다. 정본은 `pyproject.toml`이다.
 

@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.24 - 2026-05-05
+### 🔧 Nuitka 빌드 플래그 단일 소스화 (이슈 #87 Phase 4)
+
+#### 🔧 빌드 / 설정 변경
+- **`build_scripts/nuitka_flags.py` 신설**: `COMMON_FLAGS`, `INCLUDED_PACKAGES`, `INCLUDED_MODULES`, `INCLUDED_DATA_DIRS`, `INCLUDED_DATA_FILES`, `METADATA_TEMPLATE`, `PLATFORM_OUTPUT_DIRS` 등을 모듈 상수로 정의하고, `build_nuitka_args(target_platform, version)`이 platform-conditional 플래그(Windows console-disable, macOS app-bundle, Linux/macOS 아이콘)를 합쳐 완성된 인자 리스트를 반환한다. 또한 `python build_scripts/nuitka_flags.py --platform linux --version X` 형태의 CLI 모드를 제공해 워크플로 한 줄씩 비교에 활용할 수 있다.
+- **`build_scripts/build_nuitka.py` 단순화**: 인라인 100여 줄의 인자 조립 코드를 제거하고 `nuitka_flags.build_nuitka_args(...)`를 호출하도록 변경. Windows 릴리스 워크플로(`release-cross-platform.yml`)는 이 스크립트를 통해 빌드하므로 자동 동기화됨. 인라인 Nuitka 명령이 남은 `build-linux.yml` / `build-macos.yml` / `release-cross-platform.yml`(macOS 잡)은 후속 PR에서 동일하게 정본을 호출하도록 통합 예정.
+- **무결성 가드 `tests/test_nuitka_flags.py` 추가**: 모듈 공개 심볼/플랫폼별 스위치/Phase 1·2의 신규 패키지(`core.plotting`, `core.pipeline`, `core.cli_builder`) 포함 여부/locales 데이터 경로/CLI 출력 형식을 9개 케이스로 검증한다.
+
 ## 2.4.23 - 2026-05-05
 ### ⭐ argparse 자동 생성 (이슈 #87 Phase 3)
 
