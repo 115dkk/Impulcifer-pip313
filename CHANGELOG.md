@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.20 - 2026-05-05
+### 🔧 Python 3.14 테스트 확대 + 빌드/GUI 폰트 안정화
+
+#### 🔧 빌드 / 설정 변경
+- **Python 3.14 pytest 매트릭스 추가**: GitHub Actions `test.yml`의 테스트 대상에 Python 3.14를 추가하고, `CLAUDE.md`와 `README.md`의 CI 검증 범위 안내를 Python 3.9~3.14로 갱신
+- **데모 BRIR md5 회귀 검증 자동화**: `tests/test_brir_integrity.py`를 추가해 CI에서 무결성이 확인된 기준 ref(`origin/master`)와 현재 브랜치의 `hesuvi.wav`를 같은 Linux CPython 3.13 환경에서 생성한 뒤 md5를 비교하도록 함
+- **전용 GitHub Actions job 추가**: 무거운 BRIR 생성 검증이 Python 버전 매트릭스에서 반복되지 않도록 `brir-integrity` job에서 단일 실행으로 분리하고, 기본값(헤드폰 보정 포함)과 `--vbass --vbass_freq=250` 두 경로를 모두 검증하며, 실패 시 `test-summary`가 PR을 실패 처리하도록 연결
+- **Nuitka `--onefile` 잔존 옵션 제거**: AppImage/DMG 패키징이 standalone 폴더를 전제로 하므로 `build_scripts/build_nuitka.py`와 `build-macos.yml`에 남아 있던 `--onefile` 옵션을 제거
+
+#### 🐛 버그 수정
+- **GUI Pretendard 폰트 검증 강화**: 번들 폰트 파일을 발견했다는 이유만으로 `"Pretendard"`를 반환하지 않고, 플랫폼별 프로세스 폰트 등록 후 Tk에서 실제로 보이는 family 이름만 CustomTkinter 폰트에 전달하도록 수정
+- **`magnitude_response()` verified parity 고정**: full FFT 경로가 BRIR md5를 바꾸지 않도록 verified NumPy `rfft` 경로를 유지하고, `tests/test_magnitude_response_parity.py`와 `CLAUDE.md`를 해당 무결성 기준에 맞게 갱신
+
 ## 2.4.19 - 2026-05-04
 ### 🐛 한국어 로케일 mojibake 복구 + 업데이트 재시작 알림 누락 키 추가
 

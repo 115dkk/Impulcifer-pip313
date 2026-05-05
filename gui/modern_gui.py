@@ -37,8 +37,7 @@ class ModernImpulciferGUI:
         self.bus.on('language_changed', self._handle_language_changed)
         self.bus.on('theme_changed', self._handle_theme_changed)
 
-        # Setup font based on language
-        self.font_family = setup_pretendard_font(self.loc.current_language)
+        self.font_family = None
 
         # Apply saved theme
         if self.current_theme == 'system':
@@ -48,6 +47,10 @@ class ModernImpulciferGUI:
 
         self.root = ctk.CTk()
         self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
+
+        # Setup font after Tk exists so bundled font registration can be
+        # verified against Tk-visible font families.
+        self.font_family = setup_pretendard_font(self.loc.current_language)
 
         # Shared CTkFont instances — reused across all tabs and dialogs to avoid
         # rebuilding identical font specs for every label/button (was a major

@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import platform
 import sys
+from ctypes.util import find_library
 from pathlib import Path
 from tkinter import filedialog, TclError
 from tkinter import font as tkfont
@@ -179,6 +180,143 @@ def safe_get_string(var: Any, default: str = "") -> str:
 _font_cache: dict[str, Optional[str]] = {}
 
 
+def _find_pretendard_font_file() -> Optional[Path]:
+    """Return the bundled Pretendard font path when it is available."""
+    script_dir = Path(__file__).parent
+    candidates: list[Path] = []
+
+    try:
+        from infra.resource_helper import get_font_path
+
+        candidates.append(Path(get_font_path("Pretendard-Regular.otf")))
+    except Exception:
+        pass
+
+    candidates.extend([
+        script_dir / "font" / "Pretendard-Regular.otf",
+        script_dir / "fonts" / "Pretendard-Regular.otf",
+        script_dir.parent / "font" / "Pretendard-Regular.otf",
+        script_dir.parent / "fonts" / "Pretendard-Regular.otf",
+    ])
+
+    for path in candidates:
+        if path.exists():
+            return path
+    return None
+
+
+def _font_family_from_file(font_path: Path) -> str:
+    """Read the real family name from the font name table when possible."""
+    try:
+        from fontTools.ttLib import TTFont
+
+        with TTFont(str(font_path), lazy=True) as font:
+            names = font["name"].names
+            for name_id in (1, 16):
+                for record in names:
+                    if record.nameID == name_id:
+                        family = record.toUnicode().strip()
+                        if family:
+                            return family
+    except Exception:
+        pass
+    return "Pretendard"
+
+
+def _get_tk_font_families() -> Optional[set[str]]:
+    """Return Tk-visible font families, or None when Tk is not initialized."""
+    try:
+        return {str(name) for name in tkfont.families()}
+    except (RuntimeError, TclError):
+        return None
+
+
+def _match_tk_family(families: Optional[set[str]], desired: str) -> Optional[str]:
+    """Find the exact Tk-visible spelling for a desired family name."""
+    if not families:
+        return None
+    desired_folded = desired.casefold()
+    for family in families:
+        if family.casefold() == desired_folded:
+            return family
+    return None
+
+
+def _register_font_file_for_tk(font_path: Path) -> bool:
+    """Register a font for the current GUI process when the platform supports it."""
+    system = platform.system()
+
+    try:
+        if system == "Windows":
+            import ctypes
+
+            gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+            result = gdi32.AddFontResourceExW(str(font_path), 0x10, 0)  # FR_PRIVATE
+            if result > 0:
+                try:
+                    user32 = ctypes.WinDLL("user32", use_last_error=True)
+                    user32.SendMessageTimeoutW(0xFFFF, 0x001D, 0, 0, 0x0002, 1000, None)
+                except Exception:
+                    pass
+                return True
+            return False
+
+        if system == "Darwin":
+            import ctypes
+
+            core_text_path = find_library("CoreText")
+            core_foundation_path = find_library("CoreFoundation")
+            if not core_text_path or not core_foundation_path:
+                return False
+
+            core_text = ctypes.CDLL(core_text_path)
+            core_foundation = ctypes.CDLL(core_foundation_path)
+            path_bytes = os.fsencode(str(font_path))
+
+            core_foundation.CFURLCreateFromFileSystemRepresentation.restype = ctypes.c_void_p
+            core_foundation.CFURLCreateFromFileSystemRepresentation.argtypes = [
+                ctypes.c_void_p,
+                ctypes.c_char_p,
+                ctypes.c_long,
+                ctypes.c_bool,
+            ]
+            url = core_foundation.CFURLCreateFromFileSystemRepresentation(
+                None, path_bytes, len(path_bytes), False
+            )
+            if not url:
+                return False
+
+            try:
+                core_text.CTFontManagerRegisterFontsForURL.restype = ctypes.c_bool
+                core_text.CTFontManagerRegisterFontsForURL.argtypes = [
+                    ctypes.c_void_p,
+                    ctypes.c_uint,
+                    ctypes.c_void_p,
+                ]
+                return bool(core_text.CTFontManagerRegisterFontsForURL(url, 1, None))
+            finally:
+                core_foundation.CFRelease.argtypes = [ctypes.c_void_p]
+                core_foundation.CFRelease(url)
+
+        if system == "Linux":
+            import ctypes
+
+            fontconfig_path = find_library("fontconfig")
+            if not fontconfig_path:
+                return False
+            fontconfig = ctypes.CDLL(fontconfig_path)
+            fontconfig.FcConfigAppFontAddFile.restype = ctypes.c_int
+            fontconfig.FcConfigAppFontAddFile.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+            result = fontconfig.FcConfigAppFontAddFile(None, os.fsencode(str(font_path)))
+            if result:
+                fontconfig.FcConfigBuildFonts(None)
+            return bool(result)
+    except Exception as e:
+        print(f"Failed to register Pretendard font: {e}")
+
+    return False
+
+
 def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
     """
     Setup Pretendard font for Korean and English languages.
@@ -202,65 +340,35 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
         return _cache_and_return(None)
 
     try:
-        # Try to find Pretendard font file
-        font_path = None
-        script_dir = Path(__file__).parent
+        available_fonts = _get_tk_font_families()
+        system_family = _match_tk_family(available_fonts, "Pretendard")
+        if system_family:
+            print(f"Using system-installed Pretendard font: {system_family}")
+            return _cache_and_return(system_family)
 
-        # Check common font locations
-        possible_paths = [
-            script_dir / "font" / "Pretendard-Regular.otf",
-            script_dir / "fonts" / "Pretendard-Regular.otf",
-            script_dir.parent / "font" / "Pretendard-Regular.otf",
-            script_dir.parent / "fonts" / "Pretendard-Regular.otf",
-        ]
+        font_path = _find_pretendard_font_file()
+        if font_path:
+            family_name = _font_family_from_file(font_path)
+            registered = _register_font_file_for_tk(font_path)
+            available_fonts = _get_tk_font_families()
+            tk_family = _match_tk_family(available_fonts, family_name)
 
-        for path in possible_paths:
-            if path.exists():
-                font_path = path
-                break
+            if tk_family:
+                print(f"Successfully registered Pretendard font: {font_path}")
+                return _cache_and_return(tk_family)
 
-        if font_path and font_path.exists():
-            # Try to register font with system (Windows)
-            try:
-                if platform.system() == "Windows":
-                    import ctypes
+            if registered and available_fonts is None:
+                print(f"Registered Pretendard font before Tk font validation: {font_path}")
+                return family_name
 
-                    # Register font temporarily for this session
-                    gdi32 = ctypes.WinDLL('gdi32', use_last_error=True)
-                    FR_PRIVATE = 0x10
+            print(f"Pretendard font file was found but is not visible to Tk: {font_path}")
 
-                    # Add font resource
-                    result = gdi32.AddFontResourceExW(
-                        str(font_path),
-                        FR_PRIVATE,
-                        0
-                    )
-
-                    if result > 0:
-                        print(f"Successfully registered Pretendard font: {font_path}")
-                        return _cache_and_return("Pretendard")
-                    else:
-                        print(f"Failed to register Pretendard font (result={result})")
-                else:
-                    # For Linux/Mac, just try using the font name
-                    # The font should be installed system-wide
-                    print(f"Found Pretendard font at: {font_path}")
-                    print("Note: On Linux/Mac, please install Pretendard font system-wide for best results")
-                    # Try to use Pretendard anyway
-                    return _cache_and_return("Pretendard")
-
-            except Exception as e:
-                print(f"Failed to register Pretendard font: {e}")
-
-        # Fallback: Check if Pretendard is already installed in system
-        try:
-            available_fonts = tkfont.families()
+        available_fonts = _get_tk_font_families()
+        if available_fonts:
             for font_name in available_fonts:
                 if "Pretendard" in font_name:
                     print(f"Using system-installed Pretendard font: {font_name}")
                     return _cache_and_return(font_name)
-        except Exception as e:
-            print(f"Error checking system fonts: {e}")
 
         print("Pretendard font not available, using system default")
         return _cache_and_return(None)

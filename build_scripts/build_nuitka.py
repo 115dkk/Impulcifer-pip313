@@ -149,7 +149,6 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
         if os.path.exists("img/icon.icns"):
             nuitka_cmd_args.append("--macos-app-icon=img/icon.icns")
     elif target_platform == "linux":
-        nuitka_cmd_args.append("--onefile")
         # Linux 아이콘이 있다면 추가
         if os.path.exists("img/icon.png"):
             nuitka_cmd_args.append("--linux-icon=img/icon.png")
