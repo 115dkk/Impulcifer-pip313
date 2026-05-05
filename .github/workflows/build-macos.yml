@@ -74,7 +74,6 @@ jobs:
           # macOS용 빌드 스크립트 실행
           python -m nuitka \
             --standalone \
-            --onefile \
             --macos-create-app-bundle \
             --macos-app-name="Impulcifer" \
             --output-dir=dist/macos \

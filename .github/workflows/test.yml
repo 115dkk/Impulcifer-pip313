@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
     - name: Checkout code
@@ -50,6 +50,35 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+
+  brir-integrity:
+    name: BRIR Baseline Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv pip install --system -r requirements-dev.txt
+
+    - name: Check demo BRIR baseline
+      env:
+        IMPULCIFER_RUN_BRIR_INTEGRITY: "1"
+        MPLBACKEND: Agg
+      run: |
+        python -m pytest tests/test_brir_integrity.py -v --tb=short
 
   test-imports:
     name: Test Module Imports
@@ -151,17 +180,18 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [test, test-imports, lint]
+    needs: [test, brir-integrity, test-imports, lint]
     if: always()
     steps:
     - name: Check test results
       run: |
-        if [ "${{ needs.test.result }}" = "success" ] && [ "${{ needs.test-imports.result }}" = "success" ]; then
+        if [ "${{ needs.test.result }}" = "success" ] && [ "${{ needs['brir-integrity'].result }}" = "success" ] && [ "${{ needs.test-imports.result }}" = "success" ] && [ "${{ needs.lint.result }}" = "success" ]; then
           echo "✅ All tests passed!"
           exit 0
         else
           echo "❌ Some tests failed"
           echo "  test: ${{ needs.test.result }}"
+          echo "  brir-integrity: ${{ needs['brir-integrity'].result }}"
           echo "  test-imports: ${{ needs.test-imports.result }}"
           echo "  lint: ${{ needs.lint.result }}"
           exit 1

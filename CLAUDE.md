@@ -140,7 +140,7 @@ README에 해당 사항이 없으면 갱신하지 않는다. 불필요한 변경
 
 ## PR 전 검증 절차
 
-아래 3개 Tier를 순서대로 수행한다. Tier 1은 모든 커밋 전에, Tier 2는 PR 생성 전에, Tier 3는 런타임 코드 변경이 포함된 PR에서 수행한다. GitHub CI(`test.yml`)가 Python 3.9~3.13에서 동일한 검증을 수행하지만, Claude Code 단계에서 먼저 잡는 것이 안전하다.
+아래 3개 Tier를 순서대로 수행한다. Tier 1은 모든 커밋 전에, Tier 2는 PR 생성 전에, Tier 3는 런타임 코드 변경이 포함된 PR에서 수행한다. GitHub CI(`test.yml`)가 Python 3.9~3.14에서 동일한 검증을 수행하지만, Claude Code 단계에서 먼저 잡는 것이 안전하다.
 
 ### Tier 1: 빠른 검증 (매 커밋 전)
 

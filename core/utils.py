@@ -7,6 +7,7 @@ import json
 import numpy as np
 import soundfile as sf
 from scipy import signal
+from scipy.fftpack import fft
 from PIL import Image
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
@@ -650,11 +651,12 @@ def magnitude_response(x, fs):
     ``0 <= k <= N/2``, so the slice we expose here is bit-identical to Lion.
     """
     nfft = len(x)
+    df = fs / nfft
     half = int(np.ceil(nfft / 2))
-    X = np.fft.rfft(x)
-    X_mag = 20 * np.log10(np.abs(X[:half]))
-    f = np.arange(half) * (fs / nfft)
-    return f, X_mag
+    f = np.arange(0, fs - df, df)
+    X = fft(x)
+    X_mag = 20 * np.log10(np.abs(X))
+    return f[:half], X_mag[:half]
 
 
 def sync_axes(axes, sync_x=True, sync_y=True):
