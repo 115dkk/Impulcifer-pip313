@@ -1423,6 +1423,16 @@ def _print_info():
 
 
 def create_cli():
+    """Build and parse CLI args, with definitions sourced from ProcessingConfig.
+
+    Most ``--flag`` arguments are auto-registered from
+    :class:`core.pipeline.ProcessingConfig` metadata via
+    :func:`core.cli_builder.add_processing_config_arguments`. Only non-config
+    arguments (``--info``, ``--version``, the ``--bass_boost`` shelf splitter)
+    and post-processing remain here.
+    """
+    from core.cli_builder import add_processing_config_arguments
+
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
         "-V", "--version",
@@ -1435,134 +1445,12 @@ def create_cli():
         default=False,
         help="Print diagnostic information (version, Python, OS, etc.) and exit.",
     )
-    arg_parser.add_argument(
-        "--dir_path",
-        type=str,
-        required=False,
-        default=None,
-        help="Path to directory for recordings and outputs.",
-    )
-    arg_parser.add_argument(
-        "--test_signal",
-        type=str,
-        default=argparse.SUPPRESS,
-        help="Path to sine sweep test signal or pickled impulse response estimator. "
-        "You can also use a predefined name or number: "
-        '"default"/"1" (.pkl), "sweep"/"2" (.wav), "stereo"/"3" (FL,FR), '
-        '"mono-left"/"4" (FL mono), "left"/"5" (FL stereo), "right"/"6" (FR stereo).',
-    )
-    arg_parser.add_argument(
-        "--room_target",
-        type=str,
-        default=argparse.SUPPRESS,
-        help="Path to room target response AutoEQ style CSV file.",
-    )
-    arg_parser.add_argument(
-        "--room_mic_calibration",
-        type=str,
-        default=argparse.SUPPRESS,
-        help="Path to room measurement microphone calibration file.",
-    )
-    arg_parser.add_argument(
-        "--no_room_correction",
-        action="store_false",
-        dest="do_room_correction",
-        help="Skip room correction.",
-    )
-    arg_parser.add_argument(
-        "--no_headphone_compensation",
-        action="store_false",
-        dest="do_headphone_compensation",
-        help="Skip headphone compensation.",
-    )
-    arg_parser.add_argument(
-        "--headphone_compensation_file",
-        type=str,
-        default=None,
-        help='Path to the headphone compensation WAV file. Defaults to "headphones.wav" in dir_path.',
-    )
-    arg_parser.add_argument(
-        "--no_equalization",
-        action="store_false",
-        dest="do_equalization",
-        help="Skip equalization.",
-    )
-    arg_parser.add_argument(
-        "--fs",
-        type=int,
-        default=argparse.SUPPRESS,
-        help="Output sampling rate in Hertz.",
-    )
-    arg_parser.add_argument(
-        "--plot", action="store_true", help="Plot graphs for debugging."
-    )
-    arg_parser.add_argument(
-        "--interactive_plots",
-        action="store_true",
-        help="Generate interactive Bokeh plots in HTML files.",
-    )
-    arg_parser.add_argument(
-        "--channel_balance",
-        type=str,
-        default=argparse.SUPPRESS,
-        help="Channel balance correction by equalizing left and right ear results to the same "
-        'level or frequency response. "trend" equalizes right side by the difference trend '
-        'of right and left side. "left" equalizes right side to left side fr, "right" '
-        'equalizes left side to right side fr, "avg" equalizes both to the average fr, "min" '
-        "equalizes both to the minimum of left and right side frs. Number values will boost "
-        'or attenuate right side relative to left side by the number of dBs. "mids" is the '
-        "same as the numerical values but guesses the value automatically from mid frequency "
-        "levels.",
-    )
-    arg_parser.add_argument(
-        "--decay",
-        type=str,
-        default=argparse.SUPPRESS,
-        help="Target decay time in milliseconds to reach -60 dB. When the natural decay time is "
-        "longer than the target decay time, a downward slope will be applied to decay tail. "
-        "Decay cannot be increased with this. By default no decay time adjustment is done. "
-        "A comma separated list of channel name and  reverberation time pairs, separated by "
-        "a colon. If only a single numeric value is given, it is used for all channels. When "
-        "some channel names are give but not all, the missing channels are not affected. For "
-        'example "--decay=300" or "--decay=FL:500,FC:100,FR:500,SR:700,BR:700,BL:700,SL:700" '
-        'or "--decay=FC:100".',
-    )
-    arg_parser.add_argument(
-        "--target_level",
-        type=float,
-        default=argparse.SUPPRESS,
-        help="Target average gain level for left and right channels. This will sum together all "
-        "left side impulse responses and right side impulse responses respectively and take "
-        "the average gain from mid frequencies. The averaged level is then normalized to the "
-        "given target level. This makes it possible to compare HRIRs with somewhat similar "
-        "loudness levels. This should be negative in most cases to avoid clipping.",
-    )
-    arg_parser.add_argument(
-        "--fr_combination_method",
-        type=str,
-        default="average",
-        help="Method for combining frequency responses of generic room measurements if there are "
-        'more than one tracks in the file. "average" will simply average the frequency'
-        'responses. "conservative" will take the minimum absolute value for each frequency '
-        "but only if the values in all the measurements are positive or negative at the same "
-        "time.",
-    )
-    arg_parser.add_argument(
-        "--specific_limit",
-        type=float,
-        default=400,
-        help="Upper limit for room equalization with speaker-ear specific room measurements. "
-        "Equalization will drop down to 0 dB at this frequency in the leading octave. 0 "
-        "disables limit.",
-    )
-    arg_parser.add_argument(
-        "--generic_limit",
-        type=float,
-        default=300,
-        help="Upper limit for room equalization with generic room measurements. "
-        "Equalization will drop down to 0 dB at this frequency in the leading octave. 0 "
-        "disables limit.",
-    )
+
+    # All BRIR-pipeline parameters (35 fields) come from the dataclass:
+    add_processing_config_arguments(arg_parser)
+
+    # bass_boost is a CLI convenience that splits into 3 fields in
+    # ProcessingConfig (bass_boost_gain/fc/q), so it stays manual here.
     arg_parser.add_argument(
         "--bass_boost",
         type=str,
@@ -1574,87 +1462,7 @@ def create_cli():
         "given, default values for Fc and Q are used which are 105 Hz and 0.76, respectively. "
         'For example "--bass_boost=6" or "--bass_boost=6,150,0.69".',
     )
-    arg_parser.add_argument(
-        "--tilt",
-        type=float,
-        default=argparse.SUPPRESS,
-        help="Target tilt in dB/octave. Positive value (upwards slope) will result in brighter "
-        "frequency response and negative value (downwards slope) will result in darker "
-        "frequency response. 1 dB/octave will produce nearly 10 dB difference in "
-        "desired value between 20 Hz and 20 kHz. Tilt is applied with bass boost and both "
-        "will affect the bass gain.",
-    )
-    arg_parser.add_argument(
-        "--c",
-        type=float,
-        default=1.0,
-        dest="head_ms",
-        help="Head room in milliseconds for cropping impulse response heads. Default is 1.0 (ms). (항목 4)",
-    )
-    arg_parser.add_argument(
-        "--jamesdsp",
-        action="store_true",
-        help="Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels. (항목 6)",
-    )
-    arg_parser.add_argument(
-        "--hangloose",
-        action="store_true",
-        help="Generate separate stereo IR for each channel for Hangloose Convolver. (항목 7)",
-    )
-    arg_parser.add_argument(
-        "--microphone_deviation_correction",
-        action="store_true",
-        help="Enable microphone deviation correction v2.0 to compensate for microphone placement variations between left and right ears.",
-    )
-    arg_parser.add_argument(
-        "--mic_deviation_strength",
-        type=float,
-        default=0.7,
-        help="Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction. Default is 0.7.",
-    )
-    arg_parser.add_argument(
-        "--no_mic_deviation_phase_correction",
-        action="store_false",
-        dest="mic_deviation_phase_correction",
-        help="Disable phase correction in microphone deviation correction v2.0. (Default: enabled)",
-    )
-    arg_parser.add_argument(
-        "--no_mic_deviation_adaptive_correction",
-        action="store_false",
-        dest="mic_deviation_adaptive_correction",
-        help="Disable adaptive asymmetric correction in microphone deviation correction v2.0. (Default: enabled)",
-    )
-    arg_parser.add_argument(
-        "--no_mic_deviation_anatomical_validation",
-        action="store_false",
-        dest="mic_deviation_anatomical_validation",
-        help="Disable ITD/ILD anatomical validation in microphone deviation correction v2.0. (Default: enabled)",
-    )
-    arg_parser.add_argument(
-        "--mic_deviation_debug_plots",
-        action="store_true",
-        help="Save debug plots for microphone deviation correction. (Default: disabled)",
-    )
-    arg_parser.add_argument(
-        "--output_truehd_layouts", action="store_true", help="Generate TrueHD layouts."
-    )
-    arg_parser.add_argument(
-        "--vbass", action="store_true",
-        help="Enable virtual bass synthesis.",
-    )
-    arg_parser.add_argument(
-        "--vbass_freq", type=int, default=250,
-        help="Virtual bass crossover frequency in Hz (default: 250).",
-    )
-    arg_parser.add_argument(
-        "--vbass_hp", type=float, default=15.0,
-        help="Virtual bass sub-bass high-pass frequency in Hz (default: 15.0).",
-    )
-    arg_parser.add_argument(
-        "--vbass_polarity", type=str, default="auto",
-        choices=["auto", "normal", "invert"],
-        help="Virtual bass polarity handling (default: auto).",
-    )
+
     args = vars(arg_parser.parse_args())
 
     # Handle --info early exit

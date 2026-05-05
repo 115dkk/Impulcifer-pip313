@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.23 - 2026-05-05
+### ⭐ argparse 자동 생성 (이슈 #87 Phase 3)
+
+#### ⭐ 새로운 기능 / 개선
+- **`core/cli_builder.py` 신설**: `ProcessingConfig`의 필드 메타데이터(`cli_flag`, `cli_help`, `cli_arg_type`/`cli_arg_action`, `cli_dest`, `cli_suppress_default`, `cli_choices`, `cli_skip`)를 읽어 argparse 인자를 자동 등록한다. `impulcifer.py`의 `create_cli()`는 234라인 → 약 35라인의 thin wrapper로 축소. CLI 정의가 `ProcessingConfig`라는 단일 소스에서 나오므로 향후 GUI 생성기가 같은 메타데이터를 재사용할 수 있다.
+- **수동 처리 잔존**: `--bass_boost`(3개 필드로 split), `--info`(즉시 종료), `-V/--version`은 dataclass 필드와 1:1 대응되지 않으므로 `create_cli()`에 그대로 남는다. `--decay`/`--bass_boost` 후처리(`SPEAKER_NAMES` 분배 / 셸프 파라미터 split)도 보존.
+- **BRIR md5 회귀 없음**: 기본값/`--vbass`/`--bass_boost=4,150,0.69 --decay=300` 세 경로 모두 무결성이 유지됨을 Windows에서 검증.
+
 ## 2.4.22 - 2026-05-05
 ### ⭐ ProcessingConfig + BRIRPipeline 구조화 (이슈 #87 Phase 2)
 
