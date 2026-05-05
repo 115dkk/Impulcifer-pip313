@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.25 - 2026-05-05
+### 🔧 책임별 모듈 분리 (이슈 #87 Phase 5)
+
+#### 🔧 빌드 / 설정 변경
+- **`core/utils.py` 분리**: FFmpeg 검색/설치 + TrueHD/MLP 변환 로직(440줄)을 `core/ffmpeg_utils.py`로 분리. 모듈 globals(`FFMPEG_PATH`, `FFPROBE_PATH`, `_FFMPEG_SETUP_DONE`)와 lazy 초기화 패턴은 새 모듈에 그대로 유지된다. `core.utils`는 동일한 12개 공개 심볼(`MIN_FFMPEG_VERSION`, `is_truehd_file`, `convert_truehd_to_wav`, `read_audio` 등)을 re-export하므로 기존 `from core.utils import …` 호출은 코드 변경 없이 그대로 동작한다. `utils.py`: 785→347라인.
+- **`gui/legacy_gui.py` deprecation 정책 명시**: 모듈 docstring에 (1) Modern GUI가 primary, (2) bug-fix-only 모드, (3) 신규 작업은 `gui/modern_gui.py`로, (4) Modern GUI가 한 번의 minor release를 무사히 거친 뒤 major bump(≥3.0.0)에서 제거 가능 — 4개 항목으로 정리. `tests/test_suite.py::test_gui_modules_importable`이 import 안전망 역할.
+- **`updater/updater_core.py` 후속 분리 방향 기록**: `CLAUDE.md`에 `VelopackUpdater` / `PipUpdater` / `LegacyInstallerUpdater` + `UpdateExecutor` 계열을 별도 모듈로 분리할 것을 안내. 현재는 ~770줄을 1파일에 둔 채로 유지(분리는 다음 PR로 미룸).
+- **BRIR md5 회귀 없음**: 기본값 `cf37a9aa…` / `--vbass` `07eef9ef…` 양쪽 무결성이 master와 일치함을 Windows에서 검증. 53건의 빠른 테스트도 모두 통과.
+
 ## 2.4.24 - 2026-05-05
 ### 🔧 Nuitka 빌드 플래그 단일 소스화 (이슈 #87 Phase 4)
 
