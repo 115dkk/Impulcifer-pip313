@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.21 - 2026-05-05
+### 🔧 시각화 코드 분리 (이슈 #87 Phase 1)
+
+#### 🔧 빌드 / 설정 변경
+- **`core/plotting/` 서브패키지 신설**: `core/plotting/hrir_plotter.py`와 `core/plotting/impulse_response_plotter.py`에 `HRIRPlotter`, `ImpulseResponsePlotter` mixin을 도입해 matplotlib/Bokeh 시각화 로직을 데이터 클래스에서 분리. `HRIR(HRIRPlotter)`, `ImpulseResponse(ImpulseResponsePlotter)` 상속 구조로 기존 `hrir.plot(...)` / `ir.plot_fr(...)` 호출 API는 그대로 유지. `core/hrir.py`는 2086→1149라인, `core/impulse_response.py`는 1231→534라인으로 축소(목표 1500라인 미만 달성). BRIR md5는 기본값/`--vbass` 경로 모두 master와 동일(`cf37a9aa…`, `07eef9ef…`)함을 Windows에서 확인.
+
 ## 2.4.20 - 2026-05-05
 ### 🔧 Python 3.14 테스트 확대 + 빌드/GUI 폰트 안정화
 
