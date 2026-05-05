@@ -36,7 +36,43 @@ def _cleanup_on_uninstall():
         pass
 
 
+def _smoke_test():
+    """Non-interactive import-chain verification for Nuitka standalone builds.
+
+    Imports the full GUI tree without opening a Tk window. Used in CI to
+    confirm the bundled binary has all transitive modules available — if any
+    ``--include-module`` was wrongly trimmed, this exits non-zero.
+    """
+    import importlib
+
+    for mod in (
+        "gui.modern_gui",
+        "gui.tabs.impulcifer_tab",
+        "gui.tabs.recorder_tab",
+        "gui.tabs.settings_tab",
+        "gui.tabs.info_tab",
+        "impulcifer",
+        "core.hrir",
+        "core.impulse_response",
+        "core.parallel_workers",
+        "core.pipeline",
+        "core.cli_builder",
+        "core.plotting.hrir_plotter",
+        "core.plotting.impulse_response_plotter",
+        "core.ffmpeg_utils",
+        "i18n.localization",
+        "updater.update_checker",
+        "updater.updater_core",
+        "infra.logger",
+    ):
+        importlib.import_module(mod)
+    print("smoke-test OK")
+
+
 if __name__ == "__main__":
     _handle_velopack_lifecycle()
+    if "--smoke-test" in sys.argv[1:]:
+        _smoke_test()
+        sys.exit(0)
     from gui.modern_gui import main_gui
     main_gui()

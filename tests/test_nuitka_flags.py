@@ -65,19 +65,69 @@ def test_platform_specific_flags_macos_includes_app_bundle():
     assert "--macos-app-name=Impulcifer" in flags
 
 
-def test_included_modules_cover_phase1_and_phase2_packages():
-    """The Phase 1 plotting subpackage and Phase 2 pipeline module must be
-    explicitly included so Nuitka picks them up in the standalone bundle."""
+def test_included_modules_keeps_only_non_static_imports():
+    """After the post-Phase 5 cleanup, the explicit list should only contain
+    modules Nuitka cannot find via static-import tracing.
+
+    Project modules (``core.*`` except ``parallel_workers``, ``gui.*``,
+    ``i18n.*``, ``updater.*``, ``impulcifer``) and statically-imported
+    third-party packages (``nnresample``, ``tabulate``, ``autoeq``,
+    ``soundfile``, ``sounddevice``, top-level ``scipy``, ``seaborn``) are
+    intentionally absent — the tracer follows them automatically and listing
+    them only inflates compile time.
+    """
     mod = _flags_module()
-    required = {
+    listed = set(mod.INCLUDED_MODULES)
+
+    # Things that MUST stay: subprocess-loaded worker + build-time marker
+    assert "core.parallel_workers" in listed, (
+        "ProcessPoolExecutor child processes need this explicit include."
+    )
+    assert "infra._build_info" in listed, (
+        "build_nuitka.py generates this file just-in-time; defensive include."
+    )
+
+    # Things that MUST be absent: project tree statically followed from
+    # gui_main → gui.modern_gui → gui.tabs → impulcifer → core.* → ...
+    forbidden = {
+        "core",
+        "core.constants",
+        "core.utils",
+        "core.impulse_response",
+        "core.hrir",
+        "core.pipeline",
+        "core.cli_builder",
         "core.plotting",
         "core.plotting.hrir_plotter",
         "core.plotting.impulse_response_plotter",
-        "core.pipeline",
-        "core.cli_builder",
+        "gui",
+        "gui.modern_gui",
+        "gui.legacy_gui",
+        "gui.tabs.recorder_tab",
+        "gui.tabs.impulcifer_tab",
+        "i18n.localization",
+        "infra.logger",
+        "updater.update_checker",
+        "updater.updater_core",
+        "impulcifer",
     }
-    missing = required - set(mod.INCLUDED_MODULES)
-    assert not missing, f"INCLUDED_MODULES missing: {missing}"
+    leaked = forbidden & listed
+    assert not leaked, (
+        f"INCLUDED_MODULES contains entries Nuitka follows automatically: {leaked}"
+    )
+
+
+def test_common_flags_enable_required_plugins():
+    mod = _flags_module()
+    flags = mod.COMMON_FLAGS
+    assert "--enable-plugin=tk-inter" in flags
+    assert "--enable-plugin=matplotlib" in flags
+    # multiprocessing / pkg-resources / anti-bloat are auto-enabled by
+    # Nuitka itself; explicitly listing them would be a noise.
+    for auto in ("multiprocessing", "pkg-resources", "anti-bloat"):
+        assert f"--enable-plugin={auto}" not in flags, (
+            f"--enable-plugin={auto} is auto-enabled and shouldn't be listed."
+        )
 
 
 def test_data_dirs_route_locales_into_i18n_subfolder():

@@ -11,6 +11,15 @@ import subprocess  # noqa: E402
 import shutil  # noqa: E402
 import platform  # noqa: E402
 from pathlib import Path  # noqa: E402
+
+# When invoked as `python build_scripts/build_nuitka.py`, sys.path[0] is the
+# `build_scripts/` directory and `from build_scripts.nuitka_flags import …`
+# fails. Insert the project root so the package-qualified import resolves
+# regardless of how this script is launched.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 print("build_nuitka.py: Module level - imports done.", flush=True)
 
 
