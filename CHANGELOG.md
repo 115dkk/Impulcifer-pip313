@@ -4,6 +4,13 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.22 - 2026-05-05
+### ⭐ ProcessingConfig + BRIRPipeline 구조화 (이슈 #87 Phase 2)
+
+#### ⭐ 새로운 기능 / 개선
+- **`core/pipeline.py` 신설**: BRIR 생성 파이프라인을 객체화. `ProcessingConfig` 데이터클래스가 `main()`이 받는 35개 파라미터를 단일 소스로 들고 있고(각 필드에 CLI 메타데이터 — flag, help, action, dest, suppress_default, choices — 부여), `BRIRPipeline`이 실행을 책임진다. `impulcifer.main(**kwargs)`는 `ProcessingConfig.from_kwargs()` → `BRIRPipeline(config).run()` 두 줄짜리 thin wrapper가 됨. Phase 3에서 GUI/argparse 자동 생성을 위한 토대를 놓았다.
+- **레거시 파이프라인 본문 보존**: 알고리즘 본체는 `_run_pipeline_legacy()`로 그대로 옮겨 BRIR md5가 byte-identical하게 유지됨을 확인(기본값 `cf37a9aa…`, `--vbass` `07eef9ef…`).
+
 ## 2.4.21 - 2026-05-05
 ### 🔧 시각화 코드 분리 (이슈 #87 Phase 1)
 

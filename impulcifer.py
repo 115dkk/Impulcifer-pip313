@@ -269,7 +269,103 @@ def main(
     vbass_hp=15.0,
     vbass_polarity='auto',
 ):
-    """"""
+    """Thin wrapper around :class:`core.pipeline.BRIRPipeline` (issue #87 Phase 2).
+
+    The 30+ keyword arguments are preserved to keep the GUI's
+    ``generate_brir()`` call site unchanged. They are forwarded into a
+    :class:`~core.pipeline.ProcessingConfig` and the pipeline executes the
+    legacy stage sequence in :func:`_run_pipeline_legacy` so the BRIR md5
+    remains byte-identical to pre-refactor output.
+    """
+    # Local import to avoid a circular dependency: core.pipeline imports back
+    # into impulcifer for the legacy stage runner.
+    from core.pipeline import ProcessingConfig, BRIRPipeline
+
+    config = ProcessingConfig.from_kwargs(
+        dir_path=dir_path,
+        test_signal=test_signal,
+        room_target=room_target,
+        room_mic_calibration=room_mic_calibration,
+        headphone_compensation_file=headphone_compensation_file,
+        fs=fs,
+        plot=plot,
+        channel_balance=channel_balance,
+        decay=decay,
+        target_level=target_level,
+        fr_combination_method=fr_combination_method,
+        specific_limit=specific_limit,
+        generic_limit=generic_limit,
+        bass_boost_gain=bass_boost_gain,
+        bass_boost_fc=bass_boost_fc,
+        bass_boost_q=bass_boost_q,
+        tilt=tilt,
+        do_room_correction=do_room_correction,
+        do_headphone_compensation=do_headphone_compensation,
+        do_equalization=do_equalization,
+        head_ms=head_ms,
+        jamesdsp=jamesdsp,
+        hangloose=hangloose,
+        interactive_plots=interactive_plots,
+        microphone_deviation_correction=microphone_deviation_correction,
+        mic_deviation_strength=mic_deviation_strength,
+        mic_deviation_phase_correction=mic_deviation_phase_correction,
+        mic_deviation_adaptive_correction=mic_deviation_adaptive_correction,
+        mic_deviation_anatomical_validation=mic_deviation_anatomical_validation,
+        mic_deviation_debug_plots=mic_deviation_debug_plots,
+        output_truehd_layouts=output_truehd_layouts,
+        vbass=vbass,
+        vbass_freq=vbass_freq,
+        vbass_hp=vbass_hp,
+        vbass_polarity=vbass_polarity,
+    )
+    BRIRPipeline(config).run()
+
+
+def _run_pipeline_legacy(
+    dir_path=None,
+    test_signal=None,
+    room_target=None,
+    room_mic_calibration=None,
+    headphone_compensation_file=None,
+    fs=None,
+    plot=False,
+    channel_balance=None,
+    decay=None,
+    target_level=None,
+    fr_combination_method="average",
+    specific_limit=20000,
+    generic_limit=1000,
+    bass_boost_gain=0.0,
+    bass_boost_fc=105,
+    bass_boost_q=0.76,
+    tilt=0.0,
+    do_room_correction=True,
+    do_headphone_compensation=True,
+    do_equalization=True,
+    head_ms=1,
+    jamesdsp=False,
+    hangloose=False,
+    interactive_plots=False,
+    microphone_deviation_correction=False,
+    mic_deviation_strength=0.7,
+    mic_deviation_phase_correction=True,
+    mic_deviation_adaptive_correction=True,
+    mic_deviation_anatomical_validation=True,
+    mic_deviation_debug_plots=False,
+    output_truehd_layouts=False,
+    vbass=False,
+    vbass_freq=250,
+    vbass_hp=15.0,
+    vbass_polarity='auto',
+):
+    """Verbatim BRIR pipeline body — invoked by :class:`BRIRPipeline.run`.
+
+    Kept as a free function (not a method) so the implementation remains a
+    line-for-line copy of the pre-refactor ``main()``. Phase 2 only
+    introduces the structural ``ProcessingConfig`` / ``BRIRPipeline`` wrapper;
+    a later phase can split this body into per-stage methods without changing
+    BRIR output.
+    """
     logger = get_logger()
 
     # Calculate total steps for progress tracking
