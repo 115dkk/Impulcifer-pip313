@@ -4,6 +4,25 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.26 - 2026-05-05
+### 🔧 Nuitka 빌드 클린업 + 워크플로 통합 + updater_core 분리 (이슈 #87 후속)
+
+#### 🔧 빌드 / 설정 변경
+- **Nuitka `--include-module` 50+ → 8개 트림**: Nuitka 4.x의 정적/lazy import 자동 추적을 활용해 `core.*`/`gui.*`/`i18n.*`/`infra.*`/`updater.*`/`impulcifer` 및 `nnresample`/`tabulate`/`autoeq`/`soundfile`/`sounddevice`/`seaborn`/top-level `scipy`를 명시 리스트에서 제거. 유지: `scipy.signal`/`scipy.optimize`/`scipy.interpolate`/`scipy.io`/`scipy.fft`/`bokeh`(heavy submodules) + `core.parallel_workers`(ProcessPoolExecutor 자식 import) + `infra._build_info`(빌드 단계 just-in-time 생성). 플러그인은 `tk-inter` 외 `matplotlib`을 추가하고, `multiprocessing`/`pkg-resources`/`anti-bloat`은 Nuitka가 자동 활성화하므로 명시하지 않음.
+- **검증 완료**: Windows / Nuitka 4.0.8 / Python 3.13.3 환경에서 `python build_scripts/build_nuitka.py` exit 0, `ImpulciferGUI.exe`(204MB) 생성, `ImpulciferGUI.exe --smoke-test`로 18개 핵심 모듈 import 체인 검증 통과. 검증을 위해 `gui_main.py`에 비대화형 `--smoke-test` 모드를 추가.
+- **`build_scripts/build_nuitka.py` sys.path 회귀 수정**: `python build_scripts/build_nuitka.py` 직접 실행 시 `from build_scripts.nuitka_flags import …`가 ModuleNotFoundError로 실패하던 문제를 project root를 `sys.path`에 prepend하여 해결.
+- **CI 워크플로 통합**: `build-linux.yml` / `build-macos.yml` / `release-cross-platform.yml`(macOS 잡) 세 곳의 60줄짜리 인라인 `python -m nuitka …` 블록을 모두 `python build_scripts/build_nuitka.py` 한 줄로 줄였다. 플랫폼은 `platform.system()`으로 자동 감지되며, AppImage/DMG 후속 패키징은 영향 없이 그대로 동작한다.
+
+#### ⭐ 새로운 기능 / 개선
+- **`updater/updater_core.py`(770줄) 분리**: 이슈 #87 Phase 5에서 후속으로 미뤄둔 작업을 완료. 5개 모듈로 책임별 분리.
+  - `updater/environment.py`: 런타임 환경 감지(`_is_standalone_build`, `is_velopack_environment`, `get_velopack_update_exe`, `is_pip_environment`)
+  - `updater/velopack.py`: Velopack 다운로드/적용 (`VelopackUpdater`, `VelopackDownloadError`)
+  - `updater/pip_updater.py`: pip-install 환경 업그레이드 (`PipUpdater`)
+  - `updater/legacy.py`: 직접 다운로드/실행 경로 (`LegacyInstallerUpdater`, `Updater` 레거시 호환, `GITHUB_RELEASES_URL`)
+  - `updater/executors.py`: 비-GUI 실행 프레임워크 (`UpdateExecutor` ABC + `PipExecutor`/`VelopackExecutor`/`LegacyExecutor` + `create_update_executor`/`get_updater` 팩토리)
+  - `updater/updater_core.py`: 18개 공개 심볼을 모두 re-export하는 thin shim. 기존 `from updater.updater_core import …` 호출자(`gui/dialogs.py`, `gui/tabs/info_tab.py`, `impulcifer.py`)는 코드 변경 없이 동작.
+- **테스트 patch 대상 정정**: `tests/test_velopack_updater.py` / `tests/test_update_executors.py`가 `mock.patch.object(updater_core, …)` 형태로 shim 네임스페이스를 패치했지만, `from X import Y`로 인해 실제 호출부의 `Y` 바인딩은 새 모듈에 있었기에 patch가 무효였다. 16건 테스트가 모두 통과하도록 patch 대상을 `velopack_module` / `executors_module`로 정정 (`subprocess`, `sys`, `get_velopack_update_exe`, `GITHUB_RELEASES_URL`).
+
 ## 2.4.25 - 2026-05-05
 ### 🔧 책임별 모듈 분리 (이슈 #87 Phase 5)
 
