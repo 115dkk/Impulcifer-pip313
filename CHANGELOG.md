@@ -23,6 +23,9 @@ been fixed and old features improved.
   - `updater/updater_core.py`: 18개 공개 심볼을 모두 re-export하는 thin shim. 기존 `from updater.updater_core import …` 호출자(`gui/dialogs.py`, `gui/tabs/info_tab.py`, `impulcifer.py`)는 코드 변경 없이 동작.
 - **테스트 patch 대상 정정**: `tests/test_velopack_updater.py` / `tests/test_update_executors.py`가 `mock.patch.object(updater_core, …)` 형태로 shim 네임스페이스를 패치했지만, `from X import Y`로 인해 실제 호출부의 `Y` 바인딩은 새 모듈에 있었기에 patch가 무효였다. 16건 테스트가 모두 통과하도록 patch 대상을 `velopack_module` / `executors_module`로 정정 (`subprocess`, `sys`, `get_velopack_update_exe`, `GITHUB_RELEASES_URL`).
 
+#### 🐛 버그 수정
+- **`tests/test_ffmpeg_lazy_setup.py` patch 대상 정정**: Phase 5에서 FFmpeg 헬퍼가 `core/ffmpeg_utils.py`로 이동했으나, lazy state(`FFMPEG_PATH`/`FFPROBE_PATH`/`_FFMPEG_SETUP_DONE`)와 실제 호출부(`setup_ffmpeg`/`install_ffmpeg`/`find_ffmpeg_in_common_paths`)는 새 모듈에 있는데 테스트가 여전히 `core.utils`를 패치하고 있어 spy가 호출 경로에 닿지 못했다. 결과적으로 Python 3.9~3.14 전 버전에서 3개 테스트(`test_check_ffmpeg_available_with_auto_install_triggers_install`, `test_import_does_not_call_setup_ffmpeg`, `test_truehd_helpers_trigger_lazy_setup`)가 실패하며 CI pytest 전체가 탈락했다. patch/state 접근을 `core.ffmpeg_utils`로 이동하고 setUp의 모듈 캐시 클리어에 `core.ffmpeg_utils`도 추가해 6건 모두 통과하도록 수정. 런타임 동작·BRIR 출력은 변경 없음 (테스트 파일 단독 수정).
+
 ## 2.4.25 - 2026-05-05
 ### 🔧 책임별 모듈 분리 (이슈 #87 Phase 5)
 
