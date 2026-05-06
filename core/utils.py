@@ -13,7 +13,6 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import platform
 import shutil
-import importlib.resources
 from pathlib import Path
 
 plt.rcParams['axes.unicode_minus'] = False
@@ -24,98 +23,216 @@ except AttributeError:
     ADAPTIVE_PALETTE = getattr(Image, 'ADAPTIVE')
 
 _font_configured = False
+# Result of the most recent set_matplotlib_font() call. Public read-only
+# diagnostic surface so the smoke-test in gui_main.py can verify Pretendard
+# was actually applied (not just silently fell back to a system font).
+#
+# Shape:
+#     {
+#         "source": "bundled" | "system" | "fallback" | None,
+#         "family": str | None,        # the family name written to rcParams
+#         "path":   Path | None,       # the file findfont() resolved to
+#         "is_pretendard": bool,       # True iff the resolved path is a
+#                                       # Pretendard variant (.otf/.ttf with
+#                                       # "pretendard" in the file name)
+#     }
+font_setup_result: dict = {
+    "source": None,
+    "family": None,
+    "path": None,
+    "is_pretendard": False,
+}
+
+
+def _resolve_bundled_font_dir() -> "Path | None":
+    """Return the bundled ``font/`` directory across all runtime modes.
+
+    Routes through :func:`infra.resource_helper.get_resource_path` first
+    (Nuitka standalone / pip-install / dev), with a last-ditch
+    ``Path(__file__).parent.parent`` fallback for the rare case ``infra``
+    itself can't be imported (e.g. ad-hoc scripts).
+    """
+    try:
+        from infra.resource_helper import get_resource_path
+
+        candidate = Path(get_resource_path("font"))
+        if candidate.is_dir():
+            return candidate
+    except Exception:
+        pass
+
+    project_root = Path(__file__).parent.parent
+    for legacy in (project_root / "font", project_root / "fonts"):
+        if legacy.is_dir():
+            return legacy
+    return None
+
+
+def _scan_bundled_fonts() -> "list[Path]":
+    """List every ``.otf`` / ``.ttf`` / ``.ttc`` bundled in the ``font/`` dir.
+
+    Returns the files in case-insensitive name order so the same dev /
+    standalone tree always yields the same registration order — important
+    for matplotlib's ``findfont`` scoring when multiple bundled fonts
+    declare the same family.
+    """
+    font_dir = _resolve_bundled_font_dir()
+    if font_dir is None:
+        return []
+    suffixes = {".otf", ".ttf", ".ttc"}
+    return sorted(
+        (p for p in font_dir.iterdir() if p.suffix.lower() in suffixes),
+        key=lambda p: p.name.casefold(),
+    )
+
+
+def _resolve_bundled_pretendard_path() -> "Path | None":
+    """Find the bundled Pretendard regular weight (legacy compat name).
+
+    Kept as a thin wrapper over :func:`_scan_bundled_fonts` so existing tests
+    and old callers keep working. New code should prefer the scan-all helper
+    so user-dropped fonts (e.g. a Source Han Serif placed alongside
+    Pretendard) are also picked up.
+    """
+    for path in _scan_bundled_fonts():
+        if "pretendard-regular" in path.stem.lower():
+            return path
+    # Pretendard not present? Return whatever Pretendard-shaped file we have.
+    for path in _scan_bundled_fonts():
+        if "pretendard" in path.stem.lower():
+            return path
+    return None
+
+
+def _register_bundled_fonts_with_matplotlib() -> "list[Path]":
+    """addfont() every bundled font for matplotlib and return the registered list.
+
+    matplotlib's ``fontManager.addfont`` is idempotent (it deduplicates by
+    file path), so this is safe to call multiple times. Used by
+    :func:`set_matplotlib_font` so that BOTH Pretendard AND any extra Korean
+    serif (e.g. Source Han Serif) the user drops into ``font/`` are
+    available to matplotlib code that may want to reference them by family
+    name.
+    """
+    registered: list[Path] = []
+    for path in _scan_bundled_fonts():
+        try:
+            fm.fontManager.addfont(str(path))
+            registered.append(path)
+        except Exception:
+            continue
+    return registered
 
 
 def set_matplotlib_font():
-    """한글을 지원하는 폰트를 matplotlib에 설정합니다.
+    """한글을 지원하는 폰트를 matplotlib에 설정한다.
 
-    Pretendard 번들 폰트를 우선 사용하고, 없으면 OS별 시스템 폰트로 대체합니다.
-    한 번만 실행되며 이후 호출은 무시됩니다.
+    번들 Pretendard 우선 → 시스템 Pretendard → OS별 한글 폴백 순으로
+    시도하며, 한 번만 실행되고 이후 호출은 캐시된 결과를 반환한다.
+
+    이전 구현은 silent fallback이라 "Pretendard 적용에 실패해 Malgun으로
+    떨어졌다"를 추적할 방법이 없었다. 이번 리팩토링은:
+
+    1. 번들 경로 해석을 ``infra.resource_helper.get_font_path`` 로 일원화해
+       Nuitka standalone 환경에서도 같은 경로 규칙을 따른다.
+    2. 어떤 source가 채택됐는지(``bundled`` / ``system`` / ``fallback``)와
+       findfont가 실제로 어떤 파일을 골랐는지를 ``font_setup_result`` 모듈
+       전역에 기록한다 — smoke-test가 이를 보고 "Pretendard 보장" 검증을
+       수행할 수 있다.
+
+    Returns:
+        ``font_setup_result`` 의 사본. ``is_pretendard`` 가 ``True`` 일 때
+        만 호출자는 Pretendard 적용이 보장되었다고 간주해야 한다.
     """
     global _font_configured
     if _font_configured:
-        return
+        return dict(font_setup_result)
+
     _font_configured = True
 
     system = platform.system()
-    font_loaded = False
 
-    # 1. 번들 Pretendard 폰트 시도
-    font_search_paths = []
+    # Register EVERY bundled font (Pretendard + any user-dropped extras such
+    # as Source Han Serif). matplotlib only renders text in the family set on
+    # rcParams, but registering the others makes them addressable when code
+    # explicitly opts-in via FontProperties(family=...).
+    registered = _register_bundled_fonts_with_matplotlib()
+    bundled_pretendard = next(
+        (p for p in registered if "pretendard" in p.stem.lower()),
+        None,
+    )
 
-    try:
-        if hasattr(importlib.resources, "files"):
-            try:
-                font_resource = (
-                    importlib.resources.files("impulcifer_py313")
-                    .joinpath("font")
-                    .joinpath("Pretendard-Regular.otf")
-                )
-                font_search_paths.append(("bundled_files", font_resource))
-            except (FileNotFoundError, ModuleNotFoundError):
-                pass
-    except Exception:
-        pass
+    chosen_source = None
+    chosen_family = None
 
-    # 2. 로컬 개발 환경 폰트 경로
-    project_root = Path(__file__).parent.parent
-    local_candidates = [
-        project_root / "font" / "Pretendard-Regular.otf",
-        project_root / "fonts" / "Pretendard-Regular.otf",
-    ]
-    for local_path in local_candidates:
-        if local_path.exists():
-            font_search_paths.append(("local", str(local_path)))
-            break
-
-    # 3. 시스템 설치 Pretendard
-    try:
-        if any(f.name == "Pretendard" for f in fm.fontManager.ttflist):
-            font_search_paths.append(("system", "Pretendard"))
-    except Exception:
-        pass
-
-    # 로딩 시도
-    for source_type, font_path in font_search_paths:
+    # 1) 번들 Pretendard (the default sans-serif body font)
+    if bundled_pretendard is not None:
         try:
-            if source_type == "bundled_files":
-                with importlib.resources.as_file(font_path) as fp:
-                    fm.fontManager.addfont(str(fp))
-                    prop = fm.FontProperties(fname=str(fp))
-                    plt.rcParams["font.family"] = prop.get_name()
-                    font_loaded = True
-                    break
-            elif source_type == "local":
-                fm.fontManager.addfont(font_path)
-                prop = fm.FontProperties(fname=font_path)
-                plt.rcParams["font.family"] = prop.get_name()
-                font_loaded = True
-                break
-            elif source_type == "system":
-                plt.rcParams["font.family"] = "Pretendard"
-                font_loaded = True
-                break
+            prop = fm.FontProperties(fname=str(bundled_pretendard))
+            family = prop.get_name()
+            plt.rcParams["font.family"] = family
+            chosen_source = "bundled"
+            chosen_family = family
         except Exception:
-            continue
+            chosen_source = None  # fall through to system
 
-    # 4. OS 기본 한글 폰트 대체
-    if not font_loaded:
+    # 2) 시스템 설치 Pretendard
+    if chosen_source is None:
+        try:
+            if any(f.name == "Pretendard" for f in fm.fontManager.ttflist):
+                plt.rcParams["font.family"] = "Pretendard"
+                chosen_source = "system"
+                chosen_family = "Pretendard"
+        except Exception:
+            pass
+
+    # 3) OS 한글 폴백
+    if chosen_source is None:
+        chosen_source = "fallback"
         if system == "Windows":
             win_font = "C:/Windows/Fonts/malgun.ttf"
             if os.path.exists(win_font):
                 prop = fm.FontProperties(fname=win_font)
-                plt.rcParams["font.family"] = prop.get_name()
+                family = prop.get_name()
+                plt.rcParams["font.family"] = family
+                chosen_family = family
             else:
                 plt.rcParams["font.family"] = "Malgun Gothic"
+                chosen_family = "Malgun Gothic"
         elif system == "Darwin":
             plt.rcParams["font.family"] = "AppleGothic"
+            chosen_family = "AppleGothic"
         elif system == "Linux":
-            # NanumGothic 시도, 없으면 sans-serif 유지
             try:
                 if any(f.name == "NanumGothic" for f in fm.fontManager.ttflist):
                     plt.rcParams["font.family"] = "NanumGothic"
+                    chosen_family = "NanumGothic"
             except Exception:
                 pass
+
+    # 4) findfont로 실제 결과 검증
+    resolved_path = None
+    is_pretendard = False
+    try:
+        resolved = fm.findfont(
+            fm.FontProperties(family=chosen_family or "Pretendard"),
+            fallback_to_default=True,
+        )
+        if resolved:
+            resolved_path = Path(resolved)
+            is_pretendard = "pretendard" in resolved_path.name.lower()
+    except Exception:
+        pass
+
+    font_setup_result.update(
+        {
+            "source": chosen_source,
+            "family": chosen_family,
+            "path": resolved_path,
+            "is_pretendard": is_pretendard,
+        }
+    )
+    return dict(font_setup_result)
 
 # -- Backward-compat re-exports (issue #87 Phase 5) --
 # FFmpeg / TrueHD helpers were split into ``core.ffmpeg_utils``. We import

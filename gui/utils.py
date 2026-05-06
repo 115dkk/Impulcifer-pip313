@@ -180,27 +180,56 @@ def safe_get_string(var: Any, default: str = "") -> str:
 _font_cache: dict[str, Optional[str]] = {}
 
 
-def _find_pretendard_font_file() -> Optional[Path]:
-    """Return the bundled Pretendard font path when it is available."""
+def _resolve_bundled_font_dir() -> Optional[Path]:
+    """Return the bundled ``font/`` directory across runtime modes."""
     script_dir = Path(__file__).parent
     candidates: list[Path] = []
-
     try:
-        from infra.resource_helper import get_font_path
+        from infra.resource_helper import get_resource_path
 
-        candidates.append(Path(get_font_path("Pretendard-Regular.otf")))
+        candidates.append(Path(get_resource_path("font")))
     except Exception:
         pass
+    candidates.extend(
+        [
+            script_dir / "font",
+            script_dir / "fonts",
+            script_dir.parent / "font",
+            script_dir.parent / "fonts",
+        ]
+    )
+    for c in candidates:
+        if c.is_dir():
+            return c
+    return None
 
-    candidates.extend([
-        script_dir / "font" / "Pretendard-Regular.otf",
-        script_dir / "fonts" / "Pretendard-Regular.otf",
-        script_dir.parent / "font" / "Pretendard-Regular.otf",
-        script_dir.parent / "fonts" / "Pretendard-Regular.otf",
-    ])
 
-    for path in candidates:
-        if path.exists():
+def _scan_bundled_fonts() -> list[Path]:
+    """Enumerate every ``.otf`` / ``.ttf`` / ``.ttc`` in the bundled font dir."""
+    font_dir = _resolve_bundled_font_dir()
+    if font_dir is None:
+        return []
+    suffixes = {".otf", ".ttf", ".ttc"}
+    return sorted(
+        (p for p in font_dir.iterdir() if p.suffix.lower() in suffixes),
+        key=lambda p: p.name.casefold(),
+    )
+
+
+def _find_pretendard_font_file() -> Optional[Path]:
+    """Return the bundled Pretendard font path when it is available.
+
+    Looks for any ``Pretendard*Regular*.otf`` so a renamed / weight-suffixed
+    file (e.g. ``Pretendard-Regular.otf``, ``PretendardRegular.otf``) still
+    resolves. Falls back to the first ``Pretendard*`` file found.
+    """
+    fonts = _scan_bundled_fonts()
+    for path in fonts:
+        stem = path.stem.lower()
+        if "pretendard" in stem and "regular" in stem:
+            return path
+    for path in fonts:
+        if "pretendard" in path.stem.lower():
             return path
     return None
 
@@ -239,6 +268,34 @@ def _match_tk_family(families: Optional[set[str]], desired: str) -> Optional[str
     for family in families:
         if family.casefold() == desired_folded:
             return family
+    return None
+
+
+def _tk_renders_family(desired: str) -> Optional[str]:
+    """Return the family Tk's RENDER layer resolves ``desired`` to, or None.
+
+    This is the authoritative check, not :func:`tkfont.families`. After
+    ``AddFontResourceExW(FR_PRIVATE)`` registers a font for the current
+    process, Windows' GDI sees it immediately (Tk uses GDI for rendering),
+    but ``tkfont.families()`` caches its first-call output and may not list
+    the new font. Creating a ``tkfont.Font`` with ``family=desired`` and
+    inspecting its ``actual('family')`` exercises the render path: when Tk
+    can render with the requested family, ``actual`` returns that family
+    verbatim; otherwise it returns whatever Tk fell back to (e.g. the
+    system default like Malgun Gothic), which we treat as a miss.
+
+    This was the bug behind issue #87 follow-up: ``setup_pretendard_font``
+    bailed to ``None`` because ``families()`` lacked Pretendard even though
+    GDI / Tk render layer would have used it. CTk widgets then defaulted
+    to the system font (Malgun Gothic / 명조 fallback on Korean Windows).
+    """
+    try:
+        probe = tkfont.Font(family=desired, size=10)
+        actual = probe.actual("family")
+        if actual and actual.casefold() == desired.casefold():
+            return actual
+    except (RuntimeError, TclError):
+        pass
     return None
 
 
@@ -317,10 +374,42 @@ def _register_font_file_for_tk(font_path: Path) -> bool:
     return False
 
 
+_bundled_fonts_registered_for_tk = False
+
+
+def register_all_bundled_fonts_for_tk() -> list[Path]:
+    """Register every ``font/*.otf|*.ttf|*.ttc`` for the current Tk process.
+
+    Idempotent — subsequent calls are no-ops. Returns the list of paths that
+    were successfully registered the first time. So a Source Han Serif (or
+    any other Korean font) the user drops into ``font/`` becomes addressable
+    by family name from CTkFont / Tk widgets without any further code
+    change.
+    """
+    global _bundled_fonts_registered_for_tk
+    if _bundled_fonts_registered_for_tk:
+        return []
+    _bundled_fonts_registered_for_tk = True
+
+    registered: list[Path] = []
+    for path in _scan_bundled_fonts():
+        try:
+            if _register_font_file_for_tk(path):
+                registered.append(path)
+        except Exception:
+            continue
+    return registered
+
+
 def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
     """
     Setup Pretendard font for Korean and English languages.
     Returns font family name to use, or None for system default.
+
+    Side effect: every other font the user has dropped into ``font/`` (e.g.
+    a Source Han Serif "본명조" file) is also registered for Tk via
+    :func:`register_all_bundled_fonts_for_tk`, so the GUI can switch to
+    those families on demand without code changes.
 
     Args:
         current_language: Current language code (e.g., 'ko', 'en')
@@ -337,38 +426,57 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
 
     # Only use Pretendard for Korean and English
     if current_language not in ['ko', 'en']:
+        # Even when we don't pick Pretendard for the language, still register
+        # any bundled font so other code paths (e.g. matplotlib, dialogs that
+        # opt into a different family) can find them.
+        register_all_bundled_fonts_for_tk()
         return _cache_and_return(None)
 
     try:
-        available_fonts = _get_tk_font_families()
-        system_family = _match_tk_family(available_fonts, "Pretendard")
-        if system_family:
-            print(f"Using system-installed Pretendard font: {system_family}")
-            return _cache_and_return(system_family)
+        # Register every bundled font once — Pretendard is the primary, but
+        # any companion files (Source Han Serif, etc.) become addressable
+        # too. This is the place that satisfies "잡도록 수정" for fonts
+        # placed alongside Pretendard.
+        register_all_bundled_fonts_for_tk()
 
+        # PRIMARY check: ask Tk's render layer directly.
+        # tkfont.families() caches at startup and AddFontResourceExW does NOT
+        # always invalidate that cache, but Tk renders via GDI which DOES see
+        # process-private fonts immediately. So we trust actual() resolution
+        # over the families() snapshot.
+        rendered = _tk_renders_family("Pretendard")
+        if rendered:
+            print(f"Tk render layer resolves Pretendard: {rendered}")
+            return _cache_and_return(rendered)
+
+        # If the bundled file wasn't registered yet (e.g. the helper above
+        # short-circuited), force-register it now to fix Tk's render path.
         font_path = _find_pretendard_font_file()
         if font_path:
             family_name = _font_family_from_file(font_path)
             registered = _register_font_file_for_tk(font_path)
+            rendered = _tk_renders_family(family_name)
+            if rendered:
+                print(f"Registered + render-verified Pretendard: {font_path}")
+                return _cache_and_return(rendered)
+
+            # Last-chance fall-back: if registration succeeded and Tk still
+            # can't render the named family (extremely rare — usually means
+            # the font file's family-name metadata diverged from "Pretendard"),
+            # fall back to families() inspection so we at least return a
+            # related family rather than None.
             available_fonts = _get_tk_font_families()
-            tk_family = _match_tk_family(available_fonts, family_name)
-
-            if tk_family:
-                print(f"Successfully registered Pretendard font: {font_path}")
-                return _cache_and_return(tk_family)
-
-            if registered and available_fonts is None:
-                print(f"Registered Pretendard font before Tk font validation: {font_path}")
-                return family_name
-
-            print(f"Pretendard font file was found but is not visible to Tk: {font_path}")
-
-        available_fonts = _get_tk_font_families()
-        if available_fonts:
-            for font_name in available_fonts:
+            for font_name in (available_fonts or set()):
                 if "Pretendard" in font_name:
-                    print(f"Using system-installed Pretendard font: {font_name}")
-                    return _cache_and_return(font_name)
+                    rendered = _tk_renders_family(font_name)
+                    if rendered:
+                        print(f"Using nearby Pretendard variant: {font_name}")
+                        return _cache_and_return(rendered)
+
+            print(
+                f"Pretendard font file was found but Tk cannot render it: {font_path} "
+                f"(registered={registered}, family_name={family_name!r})"
+            )
 
         print("Pretendard font not available, using system default")
         return _cache_and_return(None)

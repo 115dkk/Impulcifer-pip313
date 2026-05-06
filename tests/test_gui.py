@@ -52,51 +52,115 @@ def test_validate_recording_setup_ignores_unknown_filenames() -> None:
     assert validate_recording_setup("recording.wav", 2, True) is None
 
 
-def test_setup_pretendard_font_requires_tk_visible_family(
+def test_setup_pretendard_font_uses_render_layer_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Bundled Pretendard is used only after Tk can see the registered family."""
+    """Bundled Pretendard is used only after Tk's render layer resolves it.
+
+    The previous version of this test gated on ``tkfont.families()``. We now
+    gate on a render-layer probe (``tkfont.Font(family=X).actual('family')``)
+    because ``AddFontResourceExW`` does not always invalidate the families
+    cache, but Windows GDI / Tk render WILL pick up the registered font
+    immediately. That divergence was the root cause of the GUI falling
+    back to Malgun Gothic / 명조 on default Windows machines.
+    """
     font_path = Path("Pretendard-Regular.otf")
-    families = iter([set(), {"Pretendard"}])
+    # First probe: Tk can't render yet (mimics pre-registration). Second
+    # probe: registration succeeded and Tk's render layer reports the
+    # requested family.
+    rendered = iter([None, "Pretendard"])
 
     gui_utils._font_cache.clear()
+    gui_utils._bundled_fonts_registered_for_tk = False
     monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda: font_path)
     monkeypatch.setattr(gui_utils, "_font_family_from_file", lambda _: "Pretendard")
     monkeypatch.setattr(gui_utils, "_register_font_file_for_tk", lambda _: True)
-    monkeypatch.setattr(gui_utils, "_get_tk_font_families", lambda: next(families))
+    monkeypatch.setattr(gui_utils, "_tk_renders_family", lambda _: next(rendered))
 
     assert gui_utils.setup_pretendard_font("ko") == "Pretendard"
 
 
-def test_setup_pretendard_font_falls_back_when_tk_cannot_see_font(
+def test_setup_pretendard_font_falls_back_when_render_layer_cannot_resolve(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A found font file should not be treated as a GUI font unless Tk sees it."""
+    """If Tk's render layer can't resolve Pretendard despite registration,
+    return None so CTk widgets use the system default rather than silently
+    pretending Pretendard is in effect."""
     font_path = Path("Pretendard-Regular.otf")
 
     gui_utils._font_cache.clear()
+    gui_utils._bundled_fonts_registered_for_tk = False
     monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda: font_path)
     monkeypatch.setattr(gui_utils, "_font_family_from_file", lambda _: "Pretendard")
     monkeypatch.setattr(gui_utils, "_register_font_file_for_tk", lambda _: True)
+    monkeypatch.setattr(gui_utils, "_tk_renders_family", lambda _: None)
     monkeypatch.setattr(gui_utils, "_get_tk_font_families", lambda: set())
 
     assert gui_utils.setup_pretendard_font("ko") is None
 
 
-def test_setup_pretendard_font_does_not_cache_unvalidated_family(
+def test_setup_pretendard_font_caches_render_layer_hit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Rootless registration should not poison the language cache."""
+    """Successful render-layer resolution is cached per language, so the
+    next call returns the same family without re-probing Tk."""
     font_path = Path("Pretendard-Regular.otf")
 
     gui_utils._font_cache.clear()
+    gui_utils._bundled_fonts_registered_for_tk = False
+    probe_calls = {"count": 0}
+
+    def fake_renders(_):
+        probe_calls["count"] += 1
+        return "Pretendard"
+
     monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda: font_path)
     monkeypatch.setattr(gui_utils, "_font_family_from_file", lambda _: "Pretendard")
     monkeypatch.setattr(gui_utils, "_register_font_file_for_tk", lambda _: True)
-    monkeypatch.setattr(gui_utils, "_get_tk_font_families", lambda: None)
+    monkeypatch.setattr(gui_utils, "_tk_renders_family", fake_renders)
 
     assert gui_utils.setup_pretendard_font("ko") == "Pretendard"
-    assert "ko" not in gui_utils._font_cache
+    first_count = probe_calls["count"]
+    assert gui_utils.setup_pretendard_font("ko") == "Pretendard"
+    assert probe_calls["count"] == first_count, "second call should hit the cache"
+
+
+def test_set_matplotlib_font_picks_bundled_when_no_system_pretendard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-user simulation: with no system Pretendard, the BUNDLED file must
+    be the one matplotlib applies. Silent fall-through to Malgun / sans-serif
+    is treated as a hard failure here because rendering Korean glyphs without
+    Pretendard is the bug we are guarding against.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.font_manager as fm
+
+    import core.utils as core_utils
+
+    # Drop every Pretendard the dev machine has installed so the loader's
+    # only path to a Pretendard family is the repo's bundled .otf.
+    monkeypatch.setattr(
+        fm.fontManager,
+        "ttflist",
+        [e for e in fm.fontManager.ttflist if "pretendard" not in (e.fname or "").lower()],
+    )
+    # Force re-run (the module memoizes the first call).
+    monkeypatch.setattr(core_utils, "_font_configured", False)
+
+    result = core_utils.set_matplotlib_font()
+
+    assert result["source"] == "bundled", (
+        f"Expected bundled source, got {result['source']!r}. "
+        f"This means the loader couldn't find font/Pretendard-Regular.otf "
+        f"via infra.resource_helper.get_font_path()."
+    )
+    assert result["is_pretendard"], (
+        f"matplotlib didn't resolve a Pretendard file: {result['path']!r}"
+    )
+    assert result["path"] is not None and "pretendard" in str(result["path"]).lower()
 
 
 @pytest.fixture
