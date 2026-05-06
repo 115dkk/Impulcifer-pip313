@@ -4,7 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
-## 2.4.26 - 2026-05-05
+## 2.4.27 - 2026-05-06
+### 🐛 PyPI 100MB 업로드 한도 복구 + 데이터 경로 단일화
+
+#### 🐛 버그 수정
+- **PyPI 업로드 실패 해결 (2.4.19~2.4.26 8개 버전 누적 실패)**: 빌드된 wheel이 ~117 MB로 PyPI의 프로젝트별 100 MB 파일 한도(`400 File too large. Limit for project 'impulcifer-py313' is 100 MB.`)를 넘기면서 8개 버전이 모두 업로드 실패한 것이 원인이었다. wheel 내부에 `data/` 폴더가 두 벌(약 200 MB uncompressed) 들어가 있던 것이 직접 원인:
+  - **사본 1 (실제 사용)**: `[tool.hatch.build] include`로 wheel root의 `data/...`에 들어가, 설치 시 `<site-packages>/data/...`로 풀린다. `infra.resource_helper.get_resource_path()`가 `__file__` 기준 상대 경로로 이 사본을 찾는다.
+  - **사본 2 (dead copy)**: `[tool.hatch.build.targets.wheel.shared-data]`가 `data/` → `impulcifer_py313/data/`로 매핑해 wheel data scheme으로 한 벌 더 묶었다. 설치 시 `<sys.prefix>/impulcifer_py313/data/...`로 풀리지만 그곳에는 `__init__.py`가 없어 Python 패키지가 아니다. 이를 찾던 `core/constants.py:get_data_path()`의 `importlib.resources.files('impulcifer_py313')` 호출은 항상 `ModuleNotFoundError`로 떨어지고 fallback `core/data`(존재하지 않음)를 반환하던 상태였다.
+  - **수정**: `[tool.hatch.build.targets.wheel.shared-data]` 섹션을 제거. 데이터 파일 자체(데모 wav 포함)는 그대로 유지된다. 빌드된 wheel은 117 MB → 약 56 MB로 축소되어 PyPI 한도 여유 충족.
+- **`core/constants.get_data_path()` 단일화**: 위 문제로 인해 사실상 기능하지 않던 `importlib.resources` 기반 lookup을 제거하고, dev/pip-install/Nuitka standalone 세 환경을 모두 정확히 처리하는 `infra.resource_helper.get_resource_path('data')`에 위임하도록 정리. 호출처(`impulcifer.py:851,876`)의 동작은 동일.
+
+
 ### 🔧 Nuitka 빌드 클린업 + 워크플로 통합 + updater_core 분리 (이슈 #87 후속)
 
 #### 🔧 빌드 / 설정 변경

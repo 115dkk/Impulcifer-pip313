@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "2.4.26"
+version = "2.4.27"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13/3.14 호환 버전: 115dkk", email="" },
@@ -96,11 +96,15 @@ exclude = [
     ".gitignore",
 ]
 
-# data 폴더를 패키지 데이터로 포함
-[tool.hatch.build.targets.wheel.shared-data]
-"data" = "impulcifer_py313/data"
-"font" = "impulcifer_py313/font"
-"i18n/locales" = "impulcifer_py313/locales"
+# data 폴더는 [tool.hatch.build].include 화이트리스트로 wheel root에 직접
+# 포함된다. 별도의 [tool.hatch.build.targets.wheel.shared-data] 매핑을 두면
+# `<sys.prefix>/impulcifer_py313/data/...`로 한 벌이 더 설치되지만, 그 경로는
+# `importlib.resources.files('impulcifer_py313')`(존재하지 않는 패키지)로만
+# 닿게 설계돼 항상 ModuleNotFoundError로 떨어진다. 즉 shared-data 사본은
+# 런타임에서 한 번도 참조되지 않는 dead copy이며 wheel 크기를 두 배로
+# 부풀려 PyPI 100MB 한도를 넘기는 원인이었다. 런타임 데이터 접근은
+# `infra.resource_helper.get_resource_path()`를 통한 file-relative 경로가
+# 단일 진실 공급원이다.
 
 # 빌드 훅 — PyPI 빌드 시 infra/_build_info.py에 마커 생성
 [tool.hatch.build.hooks.custom]
