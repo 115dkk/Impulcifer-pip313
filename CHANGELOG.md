@@ -4,6 +4,34 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.28 - 2026-05-06
+### 🐛 Pretendard render-layer 보장 + 일반 폰트 스캐너 + 빠른 로컬 빌드
+
+#### 🐛 버그 수정
+- **GUI Pretendard 적용 누락 회귀 차단 (root cause fix)**: 일반 Windows에서 Modern GUI가 Pretendard 대신 시스템 한글 폰트(맑은 고딕 / 명조계 substitute)로 렌더링되던 회귀를 추적해 수정. MacType을 별도로 사용하는 dev 환경에서는 표면적으로 가려져 있었으나, 일반 Windows에서는 명백히 노출되던 문제다.
+  - **원인**: `gui/utils.py::setup_pretendard_font`가 `tkfont.families()` 캐시에 의존해 Pretendard 등록을 검증했는데, `AddFontResourceExW(FR_PRIVATE)` + `WM_FONTCHANGE`는 Windows GDI에는 즉시 반영되지만 Tk의 families 캐시는 첫 호출 시점 스냅샷이라 항상 갱신되지는 않는다. 결과적으로 setup_pretendard_font가 `None`을 반환 → `CTkFont(family=None)` → Korean Windows의 Tk default(맑은 고딕)로, 글리프 링크에 따라 명조계 substitute가 끼어들었다.
+  - **수정**: families 캐시 대신 Tk 렌더 레이어를 직접 프로빙하는 `_tk_renders_family()` 도입. `tkfont.Font(family=name).actual('family')`가 요청한 family를 verbatim 반환하는지로 판정한다. Tk render는 GDI를 통해 process-private 폰트를 즉시 보므로 등록 직후에도 신뢰 가능하다.
+- **`core/utils.py::set_matplotlib_font()` 결과 노출**: silent fallback이던 함수를 `font_setup_result` 모듈 전역(`source`/`family`/`path`/`is_pretendard`)으로 결과를 보고하도록 리팩토링. 호출 측이 "Pretendard 적용 보장"을 검증할 수 있다.
+- **`gui_main.py --smoke-test` 보장 강화**: 시스템 Pretendard를 마스킹한 상태에서 (1) matplotlib이 번들 파일을 채택하는지, (2) Tk root에서 `setup_pretendard_font('ko')` → `actual('family')`가 'Pretendard'로 해상되는지를 검증한다. 어느 한 경로라도 실패하면 exit 2로 떨어져 정적 빌드 회귀를 잡는다.
+
+#### ⭐ 새로운 기능 / 개선
+- **번들 폰트 일반 스캐너**: `core/utils.py::_scan_bundled_fonts()` / `gui/utils.py::_scan_bundled_fonts()` 가 `font/` 디렉토리의 `.otf`/`.ttf`/`.ttc`를 모두 자동 스캔·등록한다. 사용자가 `font/`에 본명조(SourceHanSerif) 같은 보조 폰트를 떨어뜨리면 wheel/standalone 양쪽에 자동으로 번들·등록되어 코드 변경 없이 family 이름으로 바로 참조 가능. `pyproject.toml`의 force-include는 `font/Pretendard-Regular.otf` → `font/**` glob으로 확장.
+- **`build_scripts/build_local.py` 신설**: 16-core 머신 기준 `--jobs=14`(`max(2, min(cpu_count - 2, 14))`)로 자동 산출. dist/local/ 으로 출력해 CI release 산출물과 충돌하지 않는다. `nuitka_flags.build_nuitka_args(jobs=…)` 파라미터로 CI는 `--jobs=4` 기본값을 유지하면서 로컬은 빠르게 반복 가능.
+
+#### 🔧 빌드 / 설정 변경
+- **검증 (Windows / Nuitka 4.0.8 / Python 3.13.3 / standalone)**:
+  ```
+  python build_scripts/build_local.py
+  ./dist/local/gui_main.dist/ImpulciferGUI.exe --smoke-test
+  → Tk render layer resolves Pretendard: Pretendard
+  → smoke-test OK (imports=18, font.matplotlib=bundled, font.gui='Pretendard',
+                   font.path=...\dist\local\gui_main.dist\font\Pretendard-Regular.otf)
+  ```
+- **BRIR md5 회귀 없음**:
+  - 기본값:                  `cf37a9aaf95e717c04e309fba05fa61d`
+  - --vbass --vbass_freq=250: `07eef9ef89cc0d55313c9c0c18edbc76`
+- **테스트**: 기존 `_match_tk_family` stub 기반 GUI 테스트 3건을 `_tk_renders_family`-기반 3건(render check + cache 안정성)으로 대체. 79건 모두 통과.
+
 ## 2.4.27 - 2026-05-06
 ### 🐛 PyPI 100MB 업로드 한도 복구 + 데이터 경로 단일화
 
