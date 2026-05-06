@@ -89,7 +89,11 @@ include = [
     "README.md",
     "CHANGELOG.md",
     "pyproject.toml",
-    "font/Pretendard-Regular.otf",
+    # Glob the entire ``font/`` directory so any companion font file
+    # (e.g. Source Han Serif "본명조") the user drops in is bundled too.
+    # The runtime loader (`core.utils._scan_bundled_fonts`) registers every
+    # ``.otf``/``.ttf``/``.ttc`` it finds.
+    "font/**",
 ]
 exclude = [
     "research/**/*",

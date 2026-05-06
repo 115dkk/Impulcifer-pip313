@@ -150,6 +150,7 @@ def build_nuitka_args(
     output_dir: Optional[str] = None,
     output_filename: Optional[str] = None,
     entry_point: str = "gui_main.py",
+    jobs: Optional[int] = None,
 ) -> List[str]:
     """Assemble the complete argument list for ``python -m nuitka``.
 
@@ -158,13 +159,27 @@ def build_nuitka_args(
 
     ``project_root`` is used to test for optional assets (icons, README.txt,
     LICENSE) so they are only included when they exist.
+
+    ``jobs`` overrides the canonical ``--jobs=4`` from ``COMMON_FLAGS`` for
+    callers that need a higher core count (e.g. local fast-iteration builds
+    via ``build_scripts/build_local.py``). CI keeps the default of 4 since
+    GitHub runners are not always 16-core.
     """
     if output_dir is None:
         output_dir = PLATFORM_OUTPUT_DIRS.get(target_platform, "dist")
     if output_filename is None:
         output_filename = PLATFORM_OUTPUT_FILENAMES.get(target_platform, "Impulcifer")
 
-    args: List[str] = list(COMMON_FLAGS)
+    if jobs is None:
+        common_args = list(COMMON_FLAGS)
+    else:
+        # Replace the ``--jobs=N`` flag in COMMON_FLAGS so we don't end up
+        # with a duplicated flag on the command line (Nuitka would error).
+        common_args = [
+            f"--jobs={jobs}" if a.startswith("--jobs=") else a
+            for a in COMMON_FLAGS
+        ]
+    args: List[str] = common_args
     args.append(f"--output-dir={output_dir}")
     args.extend(platform_specific_flags(target_platform, project_root))
 
