@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import importlib.resources
 
 # https://en.wikipedia.org/wiki/Surround_sound
 # TrueHD 지원을 위해 확장된 스피커 이름 목록
@@ -121,17 +120,15 @@ TEST_SIGNALS = {
 
 # 패키지 내 데이터 폴더 경로
 def get_data_path():
-    """패키지 내 데이터 폴더 경로를 반환합니다."""
-    try:
-        # 패키지로 설치된 경우
-        if hasattr(importlib.resources, 'files'):
-            return str(importlib.resources.files('impulcifer_py313').joinpath('data'))
-        elif hasattr(importlib.resources, 'path'):
-            with importlib.resources.path('impulcifer_py313', 'data') as data_path:
-                return str(data_path)
-    except (ImportError, ModuleNotFoundError):
-        pass
+    """패키지 내 데이터 폴더 경로를 반환합니다.
 
-    # 폴백: 현재 파일 기준 상대 경로
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(script_dir, 'data')
+    런타임 데이터 위치는 ``infra.resource_helper``가 단일 진실 공급원이다.
+    이전 구현은 ``importlib.resources.files('impulcifer_py313')``로 wheel
+    shared-data 사본을 찾으려 했지만, ``impulcifer_py313``은 Python 패키지가
+    아니어서(어디에도 ``__init__.py``가 없음) 항상 ModuleNotFoundError로
+    떨어졌고, 결과적으로 fallback인 ``core/data``(존재하지 않음)를 반환하는
+    버그가 있었다. dev / pip-install / Nuitka standalone 모두를 처리하는
+    ``infra.resource_helper.get_resource_path('data')``로 위임한다.
+    """
+    from infra.resource_helper import get_resource_path
+    return get_resource_path('data')
