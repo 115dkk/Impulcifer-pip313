@@ -49,12 +49,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, List, Tuple
 
-import updater.updater_core as updater_core
-from updater.updater_core import (
-    UpdateExecutionError,
-    VelopackExecutor,
-    VelopackUpdater,
-)
+# Phase 6 follow-up: updater_core is now a thin re-export shim.
+# Patch sites must point to the modules where the symbols are actually
+# resolved (Python's `from X import Y` rebinds Y in the importer's namespace,
+# so patching the shim wouldn't affect the call site).
+import updater.executors as executors_module
+import updater.velopack as velopack_module
+from updater.executors import UpdateExecutionError, VelopackExecutor
+from updater.velopack import VelopackUpdater
 
 
 PACK_ID = "Impulcifer"
@@ -229,7 +231,7 @@ class VelopackUpdaterDownloadTest(unittest.TestCase):
         with _fake_velopack_install() as (root, update_exe, packages_dir), \
              _release_server(PACKAGE_BYTES, manifest) as (base_url, log):
 
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater(base_url, LATEST_VERSION)
                 self.assertTrue(u.check_and_download(),
@@ -264,7 +266,7 @@ class VelopackUpdaterDownloadTest(unittest.TestCase):
             cached = packages_dir / manifest["Assets"][0]["FileName"]
             cached.write_bytes(PACKAGE_BYTES)
 
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater(base_url, LATEST_VERSION)
                 self.assertTrue(u.check_and_download())
@@ -284,7 +286,7 @@ class VelopackUpdaterDownloadTest(unittest.TestCase):
             cached = packages_dir / manifest["Assets"][0]["FileName"]
             cached.write_bytes(b"wrong-size")  # length 10, manifest expects 624
 
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater(base_url, LATEST_VERSION)
                 self.assertTrue(u.check_and_download())
@@ -299,7 +301,7 @@ class VelopackUpdaterDownloadTest(unittest.TestCase):
         with _fake_velopack_install() as (root, update_exe, packages_dir), \
              _release_server(b"TAMPERED-PAYLOAD", manifest) as (base_url, _):
 
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater(base_url, LATEST_VERSION)
                 self.assertFalse(u.check_and_download(),
@@ -320,7 +322,7 @@ class VelopackUpdaterDownloadTest(unittest.TestCase):
             class _EmptyHandler(_ManifestHandler):
                 pass
 
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater(base_url, LATEST_VERSION)
                 # Empty manifest has no full assets → returns False
@@ -330,7 +332,7 @@ class VelopackUpdaterDownloadTest(unittest.TestCase):
         """Connection refused (port not listening) → False, no exception."""
         with _fake_velopack_install() as (_, update_exe, _):
             unreachable = f"http://127.0.0.1:{_free_port()}"
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater(unreachable, LATEST_VERSION)
                 self.assertFalse(u.check_and_download())
@@ -343,7 +345,7 @@ class VelopackUpdaterDownloadTest(unittest.TestCase):
         with _fake_velopack_install() as (_, update_exe, _), \
              _release_server(PACKAGE_BYTES, manifest) as (base_url, _):
 
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater(base_url, LATEST_VERSION)
                 self.assertTrue(u.check_and_download(progress_callback=lambda d, t: progress_log.append((d, t))))
@@ -367,7 +369,7 @@ class VelopackUpdaterApplyTest(unittest.TestCase):
         with _fake_velopack_install() as (_, update_exe, packages_dir), \
              _release_server(PACKAGE_BYTES, manifest) as (base_url, _):
 
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater(base_url, LATEST_VERSION)
                 self.assertTrue(u.check_and_download())
@@ -376,8 +378,8 @@ class VelopackUpdaterApplyTest(unittest.TestCase):
 
                 # Stub Popen + sys.exit so apply_and_restart returns to the
                 # test harness instead of terminating the interpreter.
-                with mock.patch.object(updater_core.subprocess, "Popen") as popen_mock, \
-                     mock.patch.object(updater_core.sys, "exit",
+                with mock.patch.object(velopack_module.subprocess, "Popen") as popen_mock, \
+                     mock.patch.object(velopack_module.sys, "exit",
                                        side_effect=SystemExit(0)) as exit_mock:
                     with self.assertRaises(SystemExit):
                         u.apply_and_restart()
@@ -403,8 +405,8 @@ class VelopackExecutorTest(unittest.TestCase):
         """Failed download → UpdateExecutionError with manual-download hint."""
         with _fake_velopack_install() as (_, update_exe, _):
             unreachable = f"http://127.0.0.1:{_free_port()}"
-            with mock.patch.object(updater_core, "GITHUB_RELEASES_URL", unreachable), \
-                 mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(executors_module, "GITHUB_RELEASES_URL", unreachable), \
+                 mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 executor = VelopackExecutor(LATEST_VERSION)
                 progress_calls: List[Tuple[float, str]] = []
@@ -425,8 +427,8 @@ class VelopackExecutorTest(unittest.TestCase):
         with _fake_velopack_install() as (_, update_exe, _), \
              _release_server(PACKAGE_BYTES, manifest) as (base_url, _):
 
-            with mock.patch.object(updater_core, "GITHUB_RELEASES_URL", base_url), \
-                 mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(executors_module, "GITHUB_RELEASES_URL", base_url), \
+                 mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 executor = VelopackExecutor(LATEST_VERSION)
                 progress_calls: List[Tuple[float, str]] = []
@@ -455,7 +457,7 @@ class VelopackUpdaterEnvironmentTest(unittest.TestCase):
                     raise PermissionError("simulated read-only install")
                 return original_mkdir(self, *args, **kwargs)
 
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe), \
                  mock.patch.dict(os.environ, {"LOCALAPPDATA": appdata}, clear=False), \
                  mock.patch.object(Path, "mkdir", _failing_mkdir):
@@ -470,14 +472,14 @@ class VelopackUpdaterEnvironmentTest(unittest.TestCase):
     def test_pack_id_read_from_sq_version(self) -> None:
         """``sq.version`` ``id=`` line is the source of truth for pack ID."""
         with _fake_velopack_install() as (_, update_exe, _):
-            with mock.patch.object(updater_core, "get_velopack_update_exe",
+            with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                    return_value=update_exe):
                 u = VelopackUpdater("http://example.invalid", LATEST_VERSION)
                 self.assertEqual(u._get_pack_id(), PACK_ID)
 
     def test_no_update_exe_returns_false_immediately(self) -> None:
         """Missing Update.exe must not crash — return False with a log line."""
-        with mock.patch.object(updater_core, "get_velopack_update_exe",
+        with mock.patch.object(velopack_module, "get_velopack_update_exe",
                                return_value=None):
             u = VelopackUpdater("http://example.invalid", LATEST_VERSION)
             self.assertFalse(u.check_and_download())

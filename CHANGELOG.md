@@ -4,6 +4,66 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.26 - 2026-05-05
+### 🔧 Nuitka 빌드 클린업 + 워크플로 통합 + updater_core 분리 (이슈 #87 후속)
+
+#### 🔧 빌드 / 설정 변경
+- **Nuitka `--include-module` 50+ → 8개 트림**: Nuitka 4.x의 정적/lazy import 자동 추적을 활용해 `core.*`/`gui.*`/`i18n.*`/`infra.*`/`updater.*`/`impulcifer` 및 `nnresample`/`tabulate`/`autoeq`/`soundfile`/`sounddevice`/`seaborn`/top-level `scipy`를 명시 리스트에서 제거. 유지: `scipy.signal`/`scipy.optimize`/`scipy.interpolate`/`scipy.io`/`scipy.fft`/`bokeh`(heavy submodules) + `core.parallel_workers`(ProcessPoolExecutor 자식 import) + `infra._build_info`(빌드 단계 just-in-time 생성). 플러그인은 `tk-inter` 외 `matplotlib`을 추가하고, `multiprocessing`/`pkg-resources`/`anti-bloat`은 Nuitka가 자동 활성화하므로 명시하지 않음.
+- **검증 완료**: Windows / Nuitka 4.0.8 / Python 3.13.3 환경에서 `python build_scripts/build_nuitka.py` exit 0, `ImpulciferGUI.exe`(204MB) 생성, `ImpulciferGUI.exe --smoke-test`로 18개 핵심 모듈 import 체인 검증 통과. 검증을 위해 `gui_main.py`에 비대화형 `--smoke-test` 모드를 추가.
+- **`build_scripts/build_nuitka.py` sys.path 회귀 수정**: `python build_scripts/build_nuitka.py` 직접 실행 시 `from build_scripts.nuitka_flags import …`가 ModuleNotFoundError로 실패하던 문제를 project root를 `sys.path`에 prepend하여 해결.
+- **CI 워크플로 통합**: `build-linux.yml` / `build-macos.yml` / `release-cross-platform.yml`(macOS 잡) 세 곳의 60줄짜리 인라인 `python -m nuitka …` 블록을 모두 `python build_scripts/build_nuitka.py` 한 줄로 줄였다. 플랫폼은 `platform.system()`으로 자동 감지되며, AppImage/DMG 후속 패키징은 영향 없이 그대로 동작한다.
+
+#### ⭐ 새로운 기능 / 개선
+- **`updater/updater_core.py`(770줄) 분리**: 이슈 #87 Phase 5에서 후속으로 미뤄둔 작업을 완료. 5개 모듈로 책임별 분리.
+  - `updater/environment.py`: 런타임 환경 감지(`_is_standalone_build`, `is_velopack_environment`, `get_velopack_update_exe`, `is_pip_environment`)
+  - `updater/velopack.py`: Velopack 다운로드/적용 (`VelopackUpdater`, `VelopackDownloadError`)
+  - `updater/pip_updater.py`: pip-install 환경 업그레이드 (`PipUpdater`)
+  - `updater/legacy.py`: 직접 다운로드/실행 경로 (`LegacyInstallerUpdater`, `Updater` 레거시 호환, `GITHUB_RELEASES_URL`)
+  - `updater/executors.py`: 비-GUI 실행 프레임워크 (`UpdateExecutor` ABC + `PipExecutor`/`VelopackExecutor`/`LegacyExecutor` + `create_update_executor`/`get_updater` 팩토리)
+  - `updater/updater_core.py`: 18개 공개 심볼을 모두 re-export하는 thin shim. 기존 `from updater.updater_core import …` 호출자(`gui/dialogs.py`, `gui/tabs/info_tab.py`, `impulcifer.py`)는 코드 변경 없이 동작.
+- **테스트 patch 대상 정정**: `tests/test_velopack_updater.py` / `tests/test_update_executors.py`가 `mock.patch.object(updater_core, …)` 형태로 shim 네임스페이스를 패치했지만, `from X import Y`로 인해 실제 호출부의 `Y` 바인딩은 새 모듈에 있었기에 patch가 무효였다. 16건 테스트가 모두 통과하도록 patch 대상을 `velopack_module` / `executors_module`로 정정 (`subprocess`, `sys`, `get_velopack_update_exe`, `GITHUB_RELEASES_URL`).
+
+#### 🐛 버그 수정
+- **`tests/test_ffmpeg_lazy_setup.py` patch 대상 정정**: Phase 5에서 FFmpeg 헬퍼가 `core/ffmpeg_utils.py`로 이동했으나, lazy state(`FFMPEG_PATH`/`FFPROBE_PATH`/`_FFMPEG_SETUP_DONE`)와 실제 호출부(`setup_ffmpeg`/`install_ffmpeg`/`find_ffmpeg_in_common_paths`)는 새 모듈에 있는데 테스트가 여전히 `core.utils`를 패치하고 있어 spy가 호출 경로에 닿지 못했다. 결과적으로 Python 3.9~3.14 전 버전에서 3개 테스트(`test_check_ffmpeg_available_with_auto_install_triggers_install`, `test_import_does_not_call_setup_ffmpeg`, `test_truehd_helpers_trigger_lazy_setup`)가 실패하며 CI pytest 전체가 탈락했다. patch/state 접근을 `core.ffmpeg_utils`로 이동하고 setUp의 모듈 캐시 클리어에 `core.ffmpeg_utils`도 추가해 6건 모두 통과하도록 수정. 런타임 동작·BRIR 출력은 변경 없음 (테스트 파일 단독 수정).
+
+## 2.4.25 - 2026-05-05
+### 🔧 책임별 모듈 분리 (이슈 #87 Phase 5)
+
+#### 🔧 빌드 / 설정 변경
+- **`core/utils.py` 분리**: FFmpeg 검색/설치 + TrueHD/MLP 변환 로직(440줄)을 `core/ffmpeg_utils.py`로 분리. 모듈 globals(`FFMPEG_PATH`, `FFPROBE_PATH`, `_FFMPEG_SETUP_DONE`)와 lazy 초기화 패턴은 새 모듈에 그대로 유지된다. `core.utils`는 동일한 12개 공개 심볼(`MIN_FFMPEG_VERSION`, `is_truehd_file`, `convert_truehd_to_wav`, `read_audio` 등)을 re-export하므로 기존 `from core.utils import …` 호출은 코드 변경 없이 그대로 동작한다. `utils.py`: 785→347라인.
+- **`gui/legacy_gui.py` deprecation 정책 명시**: 모듈 docstring에 (1) Modern GUI가 primary, (2) bug-fix-only 모드, (3) 신규 작업은 `gui/modern_gui.py`로, (4) Modern GUI가 한 번의 minor release를 무사히 거친 뒤 major bump(≥3.0.0)에서 제거 가능 — 4개 항목으로 정리. `tests/test_suite.py::test_gui_modules_importable`이 import 안전망 역할.
+- **`updater/updater_core.py` 후속 분리 방향 기록**: `CLAUDE.md`에 `VelopackUpdater` / `PipUpdater` / `LegacyInstallerUpdater` + `UpdateExecutor` 계열을 별도 모듈로 분리할 것을 안내. 현재는 ~770줄을 1파일에 둔 채로 유지(분리는 다음 PR로 미룸).
+- **BRIR md5 회귀 없음**: 기본값 `cf37a9aa…` / `--vbass` `07eef9ef…` 양쪽 무결성이 master와 일치함을 Windows에서 검증. 53건의 빠른 테스트도 모두 통과.
+
+## 2.4.24 - 2026-05-05
+### 🔧 Nuitka 빌드 플래그 단일 소스화 (이슈 #87 Phase 4)
+
+#### 🔧 빌드 / 설정 변경
+- **`build_scripts/nuitka_flags.py` 신설**: `COMMON_FLAGS`, `INCLUDED_PACKAGES`, `INCLUDED_MODULES`, `INCLUDED_DATA_DIRS`, `INCLUDED_DATA_FILES`, `METADATA_TEMPLATE`, `PLATFORM_OUTPUT_DIRS` 등을 모듈 상수로 정의하고, `build_nuitka_args(target_platform, version)`이 platform-conditional 플래그(Windows console-disable, macOS app-bundle, Linux/macOS 아이콘)를 합쳐 완성된 인자 리스트를 반환한다. 또한 `python build_scripts/nuitka_flags.py --platform linux --version X` 형태의 CLI 모드를 제공해 워크플로 한 줄씩 비교에 활용할 수 있다.
+- **`build_scripts/build_nuitka.py` 단순화**: 인라인 100여 줄의 인자 조립 코드를 제거하고 `nuitka_flags.build_nuitka_args(...)`를 호출하도록 변경. Windows 릴리스 워크플로(`release-cross-platform.yml`)는 이 스크립트를 통해 빌드하므로 자동 동기화됨. 인라인 Nuitka 명령이 남은 `build-linux.yml` / `build-macos.yml` / `release-cross-platform.yml`(macOS 잡)은 후속 PR에서 동일하게 정본을 호출하도록 통합 예정.
+- **무결성 가드 `tests/test_nuitka_flags.py` 추가**: 모듈 공개 심볼/플랫폼별 스위치/Phase 1·2의 신규 패키지(`core.plotting`, `core.pipeline`, `core.cli_builder`) 포함 여부/locales 데이터 경로/CLI 출력 형식을 9개 케이스로 검증한다.
+
+## 2.4.23 - 2026-05-05
+### ⭐ argparse 자동 생성 (이슈 #87 Phase 3)
+
+#### ⭐ 새로운 기능 / 개선
+- **`core/cli_builder.py` 신설**: `ProcessingConfig`의 필드 메타데이터(`cli_flag`, `cli_help`, `cli_arg_type`/`cli_arg_action`, `cli_dest`, `cli_suppress_default`, `cli_choices`, `cli_skip`)를 읽어 argparse 인자를 자동 등록한다. `impulcifer.py`의 `create_cli()`는 234라인 → 약 35라인의 thin wrapper로 축소. CLI 정의가 `ProcessingConfig`라는 단일 소스에서 나오므로 향후 GUI 생성기가 같은 메타데이터를 재사용할 수 있다.
+- **수동 처리 잔존**: `--bass_boost`(3개 필드로 split), `--info`(즉시 종료), `-V/--version`은 dataclass 필드와 1:1 대응되지 않으므로 `create_cli()`에 그대로 남는다. `--decay`/`--bass_boost` 후처리(`SPEAKER_NAMES` 분배 / 셸프 파라미터 split)도 보존.
+- **BRIR md5 회귀 없음**: 기본값/`--vbass`/`--bass_boost=4,150,0.69 --decay=300` 세 경로 모두 무결성이 유지됨을 Windows에서 검증.
+
+## 2.4.22 - 2026-05-05
+### ⭐ ProcessingConfig + BRIRPipeline 구조화 (이슈 #87 Phase 2)
+
+#### ⭐ 새로운 기능 / 개선
+- **`core/pipeline.py` 신설**: BRIR 생성 파이프라인을 객체화. `ProcessingConfig` 데이터클래스가 `main()`이 받는 35개 파라미터를 단일 소스로 들고 있고(각 필드에 CLI 메타데이터 — flag, help, action, dest, suppress_default, choices — 부여), `BRIRPipeline`이 실행을 책임진다. `impulcifer.main(**kwargs)`는 `ProcessingConfig.from_kwargs()` → `BRIRPipeline(config).run()` 두 줄짜리 thin wrapper가 됨. Phase 3에서 GUI/argparse 자동 생성을 위한 토대를 놓았다.
+- **레거시 파이프라인 본문 보존**: 알고리즘 본체는 `_run_pipeline_legacy()`로 그대로 옮겨 BRIR md5가 byte-identical하게 유지됨을 확인(기본값 `cf37a9aa…`, `--vbass` `07eef9ef…`).
+
+## 2.4.21 - 2026-05-05
+### 🔧 시각화 코드 분리 (이슈 #87 Phase 1)
+
+#### 🔧 빌드 / 설정 변경
+- **`core/plotting/` 서브패키지 신설**: `core/plotting/hrir_plotter.py`와 `core/plotting/impulse_response_plotter.py`에 `HRIRPlotter`, `ImpulseResponsePlotter` mixin을 도입해 matplotlib/Bokeh 시각화 로직을 데이터 클래스에서 분리. `HRIR(HRIRPlotter)`, `ImpulseResponse(ImpulseResponsePlotter)` 상속 구조로 기존 `hrir.plot(...)` / `ir.plot_fr(...)` 호출 API는 그대로 유지. `core/hrir.py`는 2086→1149라인, `core/impulse_response.py`는 1231→534라인으로 축소(목표 1500라인 미만 달성). BRIR md5는 기본값/`--vbass` 경로 모두 master와 동일(`cf37a9aa…`, `07eef9ef…`)함을 Windows에서 확인.
+
 ## 2.4.20 - 2026-05-05
 ### 🔧 Python 3.14 테스트 확대 + 빌드/GUI 폰트 안정화
 

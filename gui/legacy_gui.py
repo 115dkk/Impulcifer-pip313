@@ -1,3 +1,25 @@
+# -*- coding: utf-8 -*-
+"""Legacy Tkinter GUI — deprecated, kept for backwards compatibility only.
+
+Status (issue #87 Phase 5 deprecation policy):
+
+* The CustomTkinter Modern GUI (``gui/modern_gui.py`` + ``gui/tabs/*``) is the
+  primary user interface and the only one that gets new features.
+* This module is preserved so users who launch ``impulcifer_gui_legacy``
+  (defined in ``[project.scripts]`` of ``pyproject.toml``) continue to work.
+* New work should NOT touch this file. Bug-fix-only mode: critical regressions
+  may be patched, but feature additions belong in ``gui/modern_gui.py``.
+* Removal target: when the Modern GUI has shipped at least one full minor
+  release with Recorder + Impulcifer + Settings + Info tabs functioning at
+  parity, the legacy GUI can be deleted in a major bump (≥3.0.0). Until then
+  it stays guarded by ``tests/test_suite.py::test_gui_modules_importable``.
+
+The implementation lives inside ``main_gui()`` so importing this module is
+side-effect-free; ``import gui.legacy_gui`` is also exercised by the import
+test above.
+"""
+
+
 def main_gui():
     import os
     import tkinter

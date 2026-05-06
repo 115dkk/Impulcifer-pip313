@@ -171,70 +171,18 @@ jobs:
 
       - name: Run Nuitka build for macOS
         run: |
-          echo "Starting Nuitka build for macOS..."
-          python -m nuitka \
-            --standalone \
-            --macos-create-app-bundle \
-            --macos-app-name="Impulcifer" \
-            --output-dir=dist/macos \
-            --remove-output \
-            --jobs=4 \
-            --lto=no \
-            --enable-plugin=tk-inter \
-            --include-package=customtkinter \
-            --include-module=sounddevice \
-            --include-module=soundfile \
-            --include-module=scipy \
-            --include-module=scipy.signal \
-            --include-module=scipy.optimize \
-            --include-module=scipy.interpolate \
-            --include-module=scipy.io \
-            --include-module=scipy.fft \
-            --include-module=nnresample \
-            --include-module=tabulate \
-            --include-module=seaborn \
-            --include-module=bokeh \
-            --include-module=autoeq \
-            --include-module=gui.modern_gui \
-            --include-package=gui \
-            --include-module=i18n.localization \
-            --include-module=infra.logger \
-            --include-module=core.channel_generation \
-            --include-module=updater.update_checker \
-            --include-package=updater \
-            --include-module=core.recorder \
-            --include-module=core.recording_validation \
-            --include-module=impulcifer \
-            --include-module=core.hrir \
-            --include-module=core.impulse_response \
-            --include-module=core.impulse_response_estimator \
-            --include-module=core.room_correction \
-            --include-module=core.microphone_deviation_correction \
-            --include-module=core.utils \
-            --include-module=core.constants \
-            --include-data-dir=data=data \
-            --include-data-dir=font=font \
-            --include-data-dir=img=img \
-            --include-data-dir=i18n/locales=locales \
-            --include-data-file=LICENSE=License.txt \
-            --include-data-file=README.txt=README.txt \
-            --output-filename=Impulcifer \
-            --company-name=115dkk \
-            --product-name=Impulcifer \
-            --file-version=${{ env.APP_VERSION }} \
-            --product-version=${{ env.APP_VERSION }} \
-            --file-description="HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템" \
-            --prefer-source-code \
-            --assume-yes-for-downloads \
-            --show-progress \
-            --show-memory \
-            gui_main.py
+          echo "Starting Nuitka build for macOS via build_scripts/build_nuitka.py..."
+          # Inline Nuitka 명령은 build_scripts/build_nuitka.py로 통합됨.
+          # 플랫폼은 platform.system()으로 자동 감지된다 (Windows job과 동일).
+          python build_scripts/build_nuitka.py
 
           echo "Checking macOS build output:"
           ls -la dist/macos/
 
-          # Rename gui_main.app to Impulcifer.app if needed
-          if [ -d "dist/macos/gui_main.app" ]; then
+          # build_nuitka.py가 --macos-app-name=Impulcifer를 부여하므로
+          # Nuitka 4.x에서는 dist/macos/Impulcifer.app으로 직접 생성된다.
+          # 이전 Nuitka가 gui_main.app으로 떨어뜨리던 경우에 대비한 안전장치:
+          if [ -d "dist/macos/gui_main.app" ] && [ ! -d "dist/macos/Impulcifer.app" ]; then
             echo "Renaming gui_main.app to Impulcifer.app..."
             mv dist/macos/gui_main.app dist/macos/Impulcifer.app
           fi

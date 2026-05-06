@@ -11,6 +11,15 @@ import subprocess  # noqa: E402
 import shutil  # noqa: E402
 import platform  # noqa: E402
 from pathlib import Path  # noqa: E402
+
+# When invoked as `python build_scripts/build_nuitka.py`, sys.path[0] is the
+# `build_scripts/` directory and `from build_scripts.nuitka_flags import …`
+# fails. Insert the project root so the package-qualified import resolves
+# regardless of how this script is launched.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 print("build_nuitka.py: Module level - imports done.", flush=True)
 
 
@@ -100,7 +109,17 @@ VERSION = "{version}"
 
 def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_platform=None):
     print(f"build_nuitka.py: build_impulcifer() called with version={project_version}", flush=True)
-    """Nuitka로 Impulcifer GUI 빌드 (크로스 플랫폼 지원)"""
+    """Nuitka로 Impulcifer GUI 빌드 (크로스 플랫폼 지원).
+
+    Flag definitions live in :mod:`build_scripts.nuitka_flags` (Phase 4 of
+    issue #87). This function only handles platform routing and the
+    ``subprocess.run`` invocation.
+    """
+    from build_scripts.nuitka_flags import (
+        PLATFORM_OUTPUT_DIRS,
+        PLATFORM_OUTPUT_FILENAMES,
+        build_nuitka_args,
+    )
 
     # 플랫폼 감지
     if target_platform is None:
@@ -108,112 +127,31 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
 
     print(f"타겟 플랫폼: {target_platform}", flush=True)
 
-    # 플랫폼별 출력 디렉토리 설정
-    if target_platform == "windows":
-        final_output_dir = Path(output_base_dir) / "Impulcifer_Distribution" / "ImpulciferGUI"
-        output_filename = "ImpulciferGUI"
-    elif target_platform == "macos":
-        final_output_dir = Path(output_base_dir) / "macos"
-        output_filename = "Impulcifer"
-    elif target_platform == "linux":
-        final_output_dir = Path(output_base_dir) / "linux"
-        output_filename = "Impulcifer"
-    else:
+    if target_platform not in PLATFORM_OUTPUT_DIRS:
         print(f"✗ 지원하지 않는 플랫폼: {target_platform}", flush=True)
         return False
 
+    # 플랫폼별 출력 디렉토리 — output_base_dir이 기본 'dist'와 다르면 그것을
+    # 우선하고, 그 아래에 플랫폼별 서브디렉토리를 둔다.
+    canonical_subdir = PLATFORM_OUTPUT_DIRS[target_platform]
+    if output_base_dir != "dist":
+        # canonical_subdir은 "dist/..." 로 시작하므로 prefix 치환
+        relative_sub = canonical_subdir[len("dist/") :] if canonical_subdir.startswith("dist/") else canonical_subdir
+        final_output_dir = Path(output_base_dir) / relative_sub
+    else:
+        final_output_dir = Path(canonical_subdir)
+    output_filename = PLATFORM_OUTPUT_FILENAMES[target_platform]
+
     print(f"최종 빌드 결과물은 다음 폴더에 생성됩니다: {final_output_dir.resolve()}", flush=True)
 
-    nuitka_cmd_base = [sys.executable, "-m", "nuitka"]
-
-    # 공통 옵션
-    nuitka_cmd_args = [
-        "--standalone",
-        f"--output-dir={final_output_dir}",
-        "--remove-output",
-        "--jobs=4",
-        "--lto=no",
-        "--enable-plugin=tk-inter",
-        "--include-package=customtkinter",
-    ]
-
-    # 플랫폼별 옵션
-    if target_platform == "windows":
-        nuitka_cmd_args.append("--windows-console-mode=disable")
-    elif target_platform == "macos":
-        nuitka_cmd_args.extend([
-            "--macos-create-app-bundle",
-            "--macos-app-name=Impulcifer",
-        ])
-        # macOS 아이콘이 있다면 추가
-        if os.path.exists("img/icon.icns"):
-            nuitka_cmd_args.append("--macos-app-icon=img/icon.icns")
-    elif target_platform == "linux":
-        # Linux 아이콘이 있다면 추가
-        if os.path.exists("img/icon.png"):
-            nuitka_cmd_args.append("--linux-icon=img/icon.png")
-
-    # 공통 모듈 포함
-    common_modules = [
-        "sounddevice", "soundfile", "scipy", "scipy.signal", "scipy.optimize",
-        "scipy.interpolate", "scipy.io", "scipy.fft", "nnresample", "tabulate",
-        "seaborn", "bokeh", "autoeq",
-        # Project packages
-        "core", "core.constants", "core.utils", "core.impulse_response",
-        "core.impulse_response_estimator", "core.hrir", "core.room_correction",
-        "core.microphone_deviation_correction", "core.virtual_bass",
-        "core.channel_generation", "core.recorder", "core.recording_validation",
-        "core.parallel_processing", "core.parallel_utils", "core.parallel_workers",
-        "gui", "gui.modern_gui", "gui.legacy_gui",
-        "gui.constants", "gui.utils", "gui.dialogs", "gui.event_bus",
-        "gui.tabs", "gui.tabs.recorder_tab", "gui.tabs.impulcifer_tab",
-        "gui.tabs.settings_tab", "gui.tabs.info_tab",
-        "i18n", "i18n.localization",
-        "infra", "infra.logger", "infra.resource_helper", "infra.get_version",
-        "infra._build_info",
-        "updater", "updater.update_checker", "updater.updater_core",
-        "impulcifer",
-    ]
-
-    for module in common_modules:
-        nuitka_cmd_args.append(f"--include-module={module}")
-
-    # 데이터 디렉토리 포함
-    data_dirs = ["data", "font", "img"]
-    for data_dir in data_dirs:
-        if os.path.exists(data_dir):
-            nuitka_cmd_args.append(f"--include-data-dir={data_dir}={data_dir}")
-
-    # i18n/locales directory (localization data)
-    if os.path.exists("i18n/locales"):
-        nuitka_cmd_args.append("--include-data-dir=i18n/locales=i18n/locales")
-
-    # LICENSE 파일 포함
-    if os.path.exists("LICENSE"):
-        nuitka_cmd_args.append("--include-data-file=LICENSE=License.txt")
-        print("정보: LICENSE 파일을 License.txt로 빌드에 포함합니다.", flush=True)
-
-    # README.txt 파일 포함
-    if os.path.exists("README.txt"):
-        nuitka_cmd_args.append("--include-data-file=README.txt=README.txt")
-        print("정보: README.txt 파일을 빌드에 포함합니다.", flush=True)
-
-    # 메타데이터
-    nuitka_cmd_args.extend([
-        f"--output-filename={output_filename}",
-        "--company-name=115dkk",
-        "--product-name=Impulcifer",
-        f"--file-version={project_version}",
-        f"--product-version={project_version}",
-        "--file-description=HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템",
-        "--prefer-source-code",
-        "--assume-yes-for-downloads",
-        "--show-progress",
-        "--show-memory",
-        "gui_main.py"
-    ])
-
-    nuitka_cmd = nuitka_cmd_base + [cmd for cmd in nuitka_cmd_args if cmd]
+    nuitka_args = build_nuitka_args(
+        target_platform=target_platform,
+        version=project_version,
+        project_root=".",
+        output_dir=str(final_output_dir),
+        output_filename=output_filename,
+    )
+    nuitka_cmd = [sys.executable, "-m", "nuitka", *nuitka_args]
 
     print("\n빌드 명령어:", flush=True)
     print(" ".join(nuitka_cmd), flush=True)

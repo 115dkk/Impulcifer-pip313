@@ -7,8 +7,11 @@ from typing import Optional
 
 import pytest
 
-from updater import updater_core
-from updater.updater_core import PipExecutor, UpdateExecutionError
+# Phase 6 follow-up: PipExecutor lives in updater.executors after the
+# updater_core split. Patch the subprocess module where execute() actually
+# resolves it (i.e. inside updater.executors), not the re-export shim.
+from updater import executors as executors_module
+from updater.executors import PipExecutor, UpdateExecutionError
 
 
 class FakeProcess:
@@ -32,7 +35,7 @@ class FakeProcess:
 def test_pip_executor_success(monkeypatch: pytest.MonkeyPatch) -> None:
     """PipExecutor returns a structured success result."""
     monkeypatch.setattr(
-        updater_core.subprocess,
+        executors_module.subprocess,
         "Popen",
         lambda *args, **kwargs: FakeProcess(returncode=0),
     )
@@ -49,7 +52,7 @@ def test_pip_executor_success(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_pip_executor_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """PipExecutor raises a typed error when pip exits nonzero."""
     monkeypatch.setattr(
-        updater_core.subprocess,
+        executors_module.subprocess,
         "Popen",
         lambda *args, **kwargs: FakeProcess(returncode=2, stderr=b"boom"),
     )
@@ -66,7 +69,7 @@ def test_pip_executor_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
         raise subprocess.TimeoutExpired("pip", timeout)
 
     process.communicate = raise_timeout  # type: ignore[method-assign]
-    monkeypatch.setattr(updater_core.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(executors_module.subprocess, "Popen", lambda *args, **kwargs: process)
 
     with pytest.raises(UpdateExecutionError, match="timed out"):
         PipExecutor(timeout=1).execute(lambda value, message: None)
