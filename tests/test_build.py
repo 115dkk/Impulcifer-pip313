@@ -86,9 +86,14 @@ def check_dependencies():
     else:
         print("✓ 모든 데이터 파일이 존재합니다.")
     
-    # font 폴더 확인
-    if os.path.exists("font/Pretendard-Regular.otf"):
-        print("✓ 폰트 파일이 존재합니다.")
+    # font 폴더 확인 (PretendardVariable.ttf 우선, legacy 정적 cut도 허용)
+    font_candidates = [
+        "font/PretendardVariable.ttf",
+        "font/Pretendard-Regular.otf",
+    ]
+    found = next((p for p in font_candidates if os.path.exists(p)), None)
+    if found:
+        print(f"✓ 폰트 파일이 존재합니다: {found}")
     else:
         print("✗ 폰트 파일이 없습니다.")
 

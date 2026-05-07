@@ -82,7 +82,7 @@ def main() -> int:
         return 2
 
     version = _read_project_version()
-    print(f"=== build_local.py ===", flush=True)
+    print("=== build_local.py ===", flush=True)
     print(f"  platform: {target_platform}", flush=True)
     print(f"  version:  {version}", flush=True)
 

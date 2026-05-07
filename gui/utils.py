@@ -219,11 +219,19 @@ def _scan_bundled_fonts() -> list[Path]:
 def _find_pretendard_font_file() -> Optional[Path]:
     """Return the bundled Pretendard font path when it is available.
 
-    Looks for any ``Pretendard*Regular*.otf`` so a renamed / weight-suffixed
-    file (e.g. ``Pretendard-Regular.otf``, ``PretendardRegular.otf``) still
-    resolves. Falls back to the first ``Pretendard*`` file found.
+    Priority order:
+      1. ``PretendardVariable*.ttf`` — gives Tk/GDI access to every fvar
+         weight (Thin~Black) from a single file, so ``weight="bold"`` resolves
+         to the real wght=700 instance instead of GDI synthetic-bold (which
+         garbles Hangul glyphs and can fall through to system serifs under
+         MacType-style font hooks).
+      2. ``Pretendard*Regular*`` static cut.
+      3. Any ``Pretendard*`` file as last resort.
     """
     fonts = _scan_bundled_fonts()
+    for path in fonts:
+        if "pretendard" in path.stem.lower() and "variable" in path.stem.lower():
+            return path
     for path in fonts:
         stem = path.stem.lower()
         if "pretendard" in stem and "regular" in stem:
@@ -444,10 +452,17 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
         # always invalidate that cache, but Tk renders via GDI which DOES see
         # process-private fonts immediately. So we trust actual() resolution
         # over the families() snapshot.
-        rendered = _tk_renders_family("Pretendard")
-        if rendered:
-            print(f"Tk render layer resolves Pretendard: {rendered}")
-            return _cache_and_return(rendered)
+        #
+        # We try "Pretendard Variable" FIRST: the bundled file's family-name
+        # (name table id 1) is "Pretendard Variable", not "Pretendard".
+        # Hitting this directly avoids one render-probe miss + lets Win32 GDI
+        # auto-map weight="bold" to the fvar wght=700 instance instead of
+        # falling through to synthetic bold.
+        for candidate in ("Pretendard Variable", "Pretendard"):
+            rendered = _tk_renders_family(candidate)
+            if rendered:
+                print(f"Tk render layer resolves {candidate}: {rendered}")
+                return _cache_and_return(rendered)
 
         # If the bundled file wasn't registered yet (e.g. the helper above
         # short-circuited), force-register it now to fix Tk's render path.
@@ -457,7 +472,7 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
             registered = _register_font_file_for_tk(font_path)
             rendered = _tk_renders_family(family_name)
             if rendered:
-                print(f"Registered + render-verified Pretendard: {font_path}")
+                print(f"Registered + render-verified {family_name}: {font_path}")
                 return _cache_and_return(rendered)
 
             # Last-chance fall-back: if registration succeeded and Tk still
