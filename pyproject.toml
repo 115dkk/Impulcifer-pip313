@@ -57,6 +57,11 @@ include = [
     "autoeq/**/*.py",
     "core/**/*.py",
     "gui/**/*.py",
+    # CTk custom theme JSON (Pulse audio-equipment palette). Without
+    # this entry the wheel ships gui/theme/ as a Python-only package and
+    # `set_default_color_theme(pulse.json)` silently falls back to the
+    # built-in "blue" theme on pip-installed environments.
+    "gui/theme/pulse.json",
     "i18n/**/*.py",
     "i18n/locales/**/*.json",
     "infra/**/*.py",
@@ -85,6 +90,14 @@ include = [
     "data/demo/BL,SL.wav",
     "data/demo/SR,BR.wav",
     "img/**/*",
+    # Pulse logo bundle — multi-resolution .ico (Windows iconbitmap),
+    # PNG series (Tk iconphoto + CTkImage), .icns (macOS bundle), and
+    # the SVG masters. Dropping any of these breaks setup_app_icon() on
+    # pip installs and falls the title bar / taskbar back to the Tk
+    # generic icon. Globbing the whole directory keeps companion files
+    # (e.g. an optional pulse-light variant) bundled without further
+    # config.
+    "logo/**/*",
     "LICENSE",
     "README.md",
     "CHANGELOG.md",
