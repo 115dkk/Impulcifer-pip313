@@ -163,7 +163,20 @@ def add_disclosure(
 
     Returns a ``(outer, body)`` tuple. ``outer`` is the framed disclosure
     box; ``body`` is a CTkFrame inside it that the caller fills with
-    fields. The body is shown/hidden when ``state_var`` toggles.
+    fields.
+
+    The head row carries:
+
+    * a ``CTkSwitch`` bound to ``state_var`` (turns the option on/off),
+    * the ``label`` and ``desc`` lines describing what the toggle does,
+    * a right-aligned caret indicator (``▾`` open / ``▸`` closed) that
+      makes the "this row expands" affordance explicit. Without the
+      caret the previous build looked like a flat info row whose ``desc``
+      text (e.g. ``hp_response.wav 사용``) read as a fixed file pin
+      instead of "toggle me to pick a file".
+
+    Clicking anywhere on the head row also flips the toggle, so the
+    caret area is hot-zoned the same way the design's ``.dt-head`` is.
     """
     outer = ctk.CTkFrame(
         parent,
@@ -196,13 +209,24 @@ def add_disclosure(
         text_col, text=desc, font=desc_font, text_color=COLORS["fg-2"], anchor="w"
     ).grid(row=1, column=0, sticky="w")
 
+    caret = ctk.CTkLabel(
+        head,
+        text="▸",
+        font=ctk.CTkFont(size=12),
+        text_color=COLORS["fg-2"],
+        width=20,
+    )
+    caret.grid(row=0, column=2, sticky="e", padx=(8, 0))
+
     def _toggle() -> None:
         if state_var.get():
             body.grid(row=1, column=0, sticky="ew", padx=24, pady=(0, 12))
             outer.configure(border_color=COLORS["accent-soft"])
+            caret.configure(text="▾", text_color=COLORS["accent"])
         else:
             body.grid_remove()
             outer.configure(border_color=COLORS["line-soft"])
+            caret.configure(text="▸", text_color=COLORS["fg-2"])
 
     switch = ctk.CTkSwitch(
         head,
@@ -214,6 +238,17 @@ def add_disclosure(
         switch_height=18,
     )
     switch.grid(row=0, column=0, sticky="w")
+
+    # Also flip on click of the head row text (improves the affordance —
+    # the previous layout looked clickable but only the switch handle
+    # actually responded). Bind on the head + text_col + caret + the two
+    # text labels so the entire row hot-zone works uniformly.
+    def _flip_from_click(_event: object = None) -> None:
+        state_var.set(not state_var.get())
+        _toggle()
+
+    for widget in (head, text_col, caret, *text_col.winfo_children()):
+        widget.bind("<Button-1>", _flip_from_click)
 
     _toggle()  # Apply initial state
 
