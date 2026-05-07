@@ -4,6 +4,27 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.5.0 - 2026-05-07
+### ⭐ Pulse 리디자인 — 앱 아이콘 + 오디오 장비 톤 다크 팔레트 + about-hero 정보 탭
+
+#### ⭐ 새로운 기능 / 개선
+- **앱 아이콘 (Pulse mark) — 타이틀바 + 윈도우 작업 표시줄 양쪽 적용 (issue: 사용자 보고)**: 기존에는 `iconbitmap()`/`iconphoto()` 호출 자체가 없어 Tk가 기본 Tcl/Tk 깃털 아이콘으로 폴백, 사용자가 "이상한 로고"라 지적한 그것이 그대로 노출되었다. `gui/utils.py::setup_app_icon(root)` 신규 함수가 `logo/pulse.ico`(16/24/32/48/64/128/256 멀티 해상도)로 `iconbitmap`을, `logo/pulse-{32,48,64,128,256}.png`로 `iconphoto`를 각각 호출해 Win32 / X11 / Aqua 모든 경로에서 Pulse mark가 그려진다. Windows에서는 `SetCurrentProcessExplicitAppUserModelID("Impulcifer.115dkk.HRIR.1")`까지 호출해 작업 표시줄 그룹화 키를 `python.exe`에서 우리 앱으로 분리.
+- **CTk 커스텀 테마 — Pulse audio-equipment dark palette**: 디자인 토큰(`oklch(0.14..0.97 / hue 240)`)을 sRGB hex로 변환해 `gui/theme/pulse.json`으로 정본화. `bg-0/1/2/3/4` 5단계 레이어 + 정밀 청색 액센트(`#3B82F6` / `#2563EB`). `ctk.set_default_color_theme(pulse.json)`로 모든 CTk 위젯(`CTkButton`, `CTkOptionMenu`, `CTkSegmentedButton`, `CTkSwitch` 등 19개 클래스)이 일관된 검은 베이스 + 청색 액센트를 받는다. 기존 builtin "blue" 테마가 던져주던 회청색 톤보다 아웃보드 EQ/컨버터 페시아 느낌이 분명히 살아남.
+- **헤더 — Pulse mark 32px + 타이틀/서브타이틀 수직 스택**: 기존에는 타이틀("🎧 Impulcifer")과 서브타이틀이 column 0/1로 가로 배치되어 두 개 별개 라벨처럼 읽혔다. 디자인의 `cv-brand` 패턴(좌측 32px 마크 + 우측 22px 타이틀 / 12px 보조 텍스트 수직 스택)으로 재배치. `gui/modern_gui.py::create_header()`에서 `logo/pulse-64.png`를 `CTkImage`로 32×32로 리사이즈해 좌측에 배치.
+- **Info 탭 — about-hero 카드 + KV 그리드**: `gui/tabs/info_tab.py`를 디자인의 `.about-hero` 패턴으로 재구성. 88px Pulse 로고 + "Impulcifer" 24pt bold + `VERSION 2.5.0 · PYTHON 3.X.Y · {설치 방식}` 모노스페이스 청색 pill + 서브타이틀 + (License 보기 / 버그 제보) 액션 행. 시스템 정보는 1열 라벨/값 나열에서 2열 KV 그리드(`fg_color=COLORS['bg-2']` 카드)로 위계 정리. 정보 탭만 봐도 디자인의 의도가 가장 잘 드러남.
+- **Pulse 디자인 토큰 모듈 (`gui/theme/__init__.py`)**: 색 토큰 19개를 `(light, dark)` 튜플로 단일 정본화 (`COLORS['accent']`, `COLORS['bg-2']` 등) — 차후 다른 화면이 디자인 색을 직접 참조할 때 hardcode hex 흩어짐을 방지. 로고 / 테마 JSON 경로 헬퍼(`get_ico_path()`, `get_png_path(size)`, `get_ctk_theme_json_path()`)도 dev / pip-install / Nuitka standalone 세 런타임 모드에서 동일하게 동작하도록 `infra.resource_helper.get_resource_path` 위임.
+
+#### 🔧 빌드 / 설정 변경
+- **Nuitka 번들에 `logo/` + `gui/theme/` 추가**: `build_scripts/nuitka_flags.py::INCLUDED_DATA_DIRS`에 `("logo", "logo")`, `("gui/theme", "gui/theme")` 두 entry 추가. `release-cross-platform.yml`의 Linux 인라인 명령에도 동일 entry 반영(`build-linux.yml`/`build-macos.yml`/Windows + macOS 릴리스 잡은 `build_nuitka.py` → `nuitka_flags.py`로 단일화되어 자동 동기화됨).
+- **Windows .exe 아이콘**: `--windows-icon-from-ico=logo/pulse.ico` 플래그 추가(`platform_specific_flags("windows")`). Linux/macOS는 `logo/pulse-256.png` / `logo/pulse.icns`(존재 시) 우선 + `img/icon.*` 폴백.
+- **smoke-test에 Pulse 자산 검증 추가**: `gui_main.py::_smoke_test()`가 `get_ico_path()`, `get_png_path(256)`, `get_ctk_theme_json_path()` 세 경로를 모두 확인. 패키징에서 자산이 누락되면 빌드 단계에서 즉시 실패.
+- **테스트 갱신**: `tests/test_nuitka_flags.py`에 `test_data_dirs_bundle_pulse_logo_and_theme`(logo/ + gui/theme 매핑 검증) + `test_platform_specific_flags_windows_includes_pulse_icon`(`--windows-icon-from-ico=logo/pulse.ico` 검증) 두 케이스 추가. `tests/test_build.py::check_dependencies()`도 `logo/{pulse.ico, pulse-256.png, pulse-32.png, pulse-16.png}` + `gui/theme/pulse.json` 존재 검사 추가.
+- **검증 (Windows / Python 3.14.4 / CTk 5.2.2)**:
+  - `pytest tests/ -v -m "not slow"` → 107 passed, 1 skipped, 3 deselected.
+  - `python gui_main.py --smoke-test` → import 18개 + Pretendard render-layer + Pulse 3종 자산 모두 OK.
+  - End-to-end GUI 인스턴스화 + 4개 탭(녹음기/Impulcifer/UI 설정/정보) 순회 → 예외 0건. ImageGrab으로 4개 탭 스크린샷 캡처해 디자인 mockup과 시각 비교.
+- **버전 bump 2.4.29 → 2.5.0 (MINOR)**: 새 기능 추가(앱 아이콘 + Pulse 테마)이며 기존 동작은 유지되므로 SemVer minor 증가.
+
 ## 2.4.29 - 2026-05-07
 ### 🐛 PyPI "버전: standard" 회귀 수정 + Pretendard Variable 전환으로 한글 fake-bold 제거
 

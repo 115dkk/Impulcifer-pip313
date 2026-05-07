@@ -341,9 +341,12 @@ jobs:
             --include-data-dir=data=data \
             --include-data-dir=font=font \
             --include-data-dir=img=img \
+            --include-data-dir=logo=logo \
+            --include-data-dir=gui/theme=gui/theme \
             --include-data-dir=i18n/locales=locales \
             --include-data-file=LICENSE=License.txt \
             --include-data-file=README.txt=README.txt \
+            --linux-icon=logo/pulse-256.png \
             --output-filename=Impulcifer \
             --company-name=115dkk \
             --product-name=Impulcifer \

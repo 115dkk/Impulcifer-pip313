@@ -17,12 +17,19 @@ from gui.tabs.impulcifer_tab import ImpulciferTab
 from gui.tabs.info_tab import InfoTab
 from gui.tabs.recorder_tab import RecorderTab
 from gui.tabs.settings_tab import SettingsTab
-from gui.utils import build_fonts, setup_pretendard_font
+from gui.theme import get_ctk_theme_json_path
+from gui.utils import build_fonts, setup_app_icon, setup_pretendard_font
 from i18n.localization import get_localization_manager
 from updater.update_checker import UpdateChecker
 
-# Default theme setting (will be overridden by user preference)
-ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
+# Apply the Pulse audio-equipment palette when the bundled theme JSON is
+# present (set_default_color_theme silently falls back to "blue" if the
+# file is missing, e.g. when running from an unusual layout).
+_pulse_theme_path = get_ctk_theme_json_path()
+if _pulse_theme_path is not None:
+    ctk.set_default_color_theme(str(_pulse_theme_path))
+else:
+    ctk.set_default_color_theme("blue")
 
 
 class ModernImpulciferGUI:
@@ -47,6 +54,12 @@ class ModernImpulciferGUI:
 
         self.root = ctk.CTk()
         self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
+
+        # Apply the Pulse logo to title bar + Windows taskbar before any
+        # child widget gets a chance to resolve its own icon. Failures are
+        # non-fatal (logged) — the GUI works without the icon, just less
+        # branded.
+        setup_app_icon(self.root)
 
         # Setup font after Tk exists so bundled font registration can be
         # verified against Tk-visible font families.
@@ -96,30 +109,56 @@ class ModernImpulciferGUI:
         self.info_tab = InfoTab(self)
 
     def create_header(self) -> None:
-        """Create the localized app header."""
-        header = ctk.CTkFrame(self.root, corner_radius=0, height=60)
-        header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
-        header.grid_columnconfigure(1, weight=1)
+        """Create the localized app header.
 
-        # App title
+        Layout follows the Pulse redesign's ``cv-brand`` pattern: 32px Pulse
+        mark on the left, then a vertical stack with the app name (22px
+        bold) over the subtitle (12px secondary). The previous header put
+        title and subtitle side-by-side which read like two unrelated
+        labels.
+        """
+        header = ctk.CTkFrame(self.root, corner_radius=0, height=72)
+        header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
+        header.grid_columnconfigure(2, weight=1)
+
+        # Pulse logo (32px) — best effort. CTkImage uses tk.PhotoImage which
+        # only reads PNG/GIF natively; we feed it the pre-rendered 64px PNG
+        # and let CTk size it down for HiDPI sharpness.
+        try:
+            from PIL import Image
+            from gui.theme import get_png_path
+
+            png_path = get_png_path(64)
+            if png_path is not None:
+                self._header_logo_pil = Image.open(str(png_path))
+                self._header_logo_image = ctk.CTkImage(
+                    light_image=self._header_logo_pil,
+                    dark_image=self._header_logo_pil,
+                    size=(32, 32),
+                )
+                logo_label = ctk.CTkLabel(header, image=self._header_logo_image, text="")
+                logo_label.grid(row=0, column=0, rowspan=2, padx=(20, 12), pady=14, sticky="w")
+        except Exception as e:
+            print(f"Header logo not loaded: {e}")
+
+        # App title (22px bold)
         self.title_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_title'),
-            font=self.fonts['title']
+            font=self.fonts['title'],
+            anchor="w",
         )
-        self.title_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
+        self.title_label.grid(row=0, column=1, padx=(0, 12), pady=(14, 0), sticky="sw")
 
-        # Subtitle
+        # Subtitle (12px secondary)
         self.subtitle_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_subtitle'),
             font=self.fonts['subtitle'],
-            text_color="gray"
+            text_color=("gray35", "gray60"),
+            anchor="w",
         )
-        self.subtitle_label.grid(row=0, column=1, padx=10, pady=15, sticky="w")
-
-        # Theme toggle button (removed - moved to UI Settings tab)
-        # Now header is cleaner
+        self.subtitle_label.grid(row=1, column=1, padx=(0, 12), pady=(0, 14), sticky="nw")
 
     def toggle_theme(self) -> None:
         """Toggle between dark and light themes (legacy method - kept for compatibility)"""

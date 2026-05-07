@@ -21,6 +21,68 @@ from typing import Any, Optional
 import customtkinter as ctk
 
 from gui.constants import FILETYPES_WAV_SAVE
+from gui.theme import get_ico_path, get_png_path
+
+
+def setup_app_icon(root: ctk.CTk) -> bool:
+    """Apply the bundled pulse logo to the GUI window and Windows taskbar.
+
+    Why this exists. The previous build shipped without an explicit window
+    icon, so Tk fell back to the Tcl/Tk feather icon — what the user
+    described as "이상한 로고" pinned to the title bar and taskbar. The
+    redesign hands off ``logo/pulse.ico`` (multi-resolution 16/24/32/48/64/
+    128/256) and ``logo/pulse-*.png``; this helper wires both paths so the
+    Windows title bar, the Windows taskbar (including pinned shortcuts),
+    and the X11 / macOS dock icons all render the Pulse mark.
+
+    On Windows we also call ``SetCurrentProcessExplicitAppUserModelID`` so
+    the taskbar groups by our AppUserModelID instead of ``python.exe``
+    (matters for dev runs and unsigned standalone builds; signed Velopack
+    installs already provide one via the shortcut).
+
+    Returns True when the icon was applied (any path), False if nothing
+    bundled could be found.
+    """
+    applied = False
+
+    ico_path = get_ico_path()
+    if ico_path is not None:
+        try:
+            root.iconbitmap(default=str(ico_path))
+            applied = True
+        except Exception as e:
+            print(f"iconbitmap failed: {e}")
+
+    try:
+        from tkinter import PhotoImage as _PhotoImage
+
+        photos = []
+        for size in (256, 128, 64, 48, 32):
+            png_path = get_png_path(size)
+            if png_path is None:
+                continue
+            try:
+                photos.append(_PhotoImage(file=str(png_path)))
+            except Exception:
+                continue
+        if photos:
+            root.iconphoto(True, *photos)
+            applied = True
+            root._pulse_icon_photos = photos
+    except Exception as e:
+        print(f"iconphoto failed: {e}")
+
+    if platform.system() == "Windows":
+        try:
+            import ctypes
+
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                "Impulcifer.115dkk.HRIR.1"
+            )
+        except Exception:
+            pass
+
+    return applied
 
 
 def open_data_folder() -> None:

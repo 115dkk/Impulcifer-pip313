@@ -103,7 +103,9 @@ INCLUDED_DATA_DIRS: tuple[tuple[str, str], ...] = (
     ("data", "data"),
     ("font", "font"),
     ("img", "img"),
+    ("logo", "logo"),
     ("i18n/locales", "i18n/locales"),
+    ("gui/theme", "gui/theme"),
 )
 
 INCLUDED_DATA_FILES: tuple[tuple[str, str], ...] = (
@@ -131,15 +133,31 @@ def platform_specific_flags(target_platform: str, project_root: str = ".") -> Li
     flags: List[str] = []
     if target_platform == "windows":
         flags.append("--windows-console-mode=disable")
+        # Bundle the multi-resolution Pulse icon so the .exe + taskbar
+        # tile + pinned shortcut all show the brand mark instead of the
+        # default Windows generic-app icon.
+        ico = os.path.join(project_root, "logo", "pulse.ico")
+        if os.path.exists(ico):
+            flags.append(f"--windows-icon-from-ico={ico}")
     elif target_platform == "macos":
         flags.extend(("--macos-create-app-bundle", "--macos-app-name=Impulcifer"))
-        icns = os.path.join(project_root, "img", "icon.icns")
-        if os.path.exists(icns):
-            flags.append(f"--macos-app-icon={icns}")
+        # Prefer the Pulse logo's icns when present; fall back to the
+        # legacy img/icon.icns.
+        for icns in (
+            os.path.join(project_root, "logo", "pulse.icns"),
+            os.path.join(project_root, "img", "icon.icns"),
+        ):
+            if os.path.exists(icns):
+                flags.append(f"--macos-app-icon={icns}")
+                break
     elif target_platform == "linux":
-        png = os.path.join(project_root, "img", "icon.png")
-        if os.path.exists(png):
-            flags.append(f"--linux-icon={png}")
+        for png in (
+            os.path.join(project_root, "logo", "pulse-256.png"),
+            os.path.join(project_root, "img", "icon.png"),
+        ):
+            if os.path.exists(png):
+                flags.append(f"--linux-icon={png}")
+                break
     return flags
 
 
