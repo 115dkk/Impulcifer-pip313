@@ -94,19 +94,18 @@ jobs:
 
           mkdir -p "$OUTPUT_DIR"
 
-          # Velopack 패키징
-          # 주의: --icon 옵션은 아이콘 파일이 준비되면 활성화
+          # Velopack 패키징 — Pulse 리디자인의 멀티 해상도 아이콘 적용.
+          # logo/pulse.ico는 16/24/32/48/64/128/256 frame을 모두 포함해 vpk가
+          # 인스톨러 / 단축키 / Add-Remove Programs 항목 모두에 같은 마크를 박아준다.
           vpk pack \
             --packId "Impulcifer" \
             --packTitle "Modern Impulcifer" \
             --packVersion "${{ env.APP_VERSION }}" \
             --packDir "$DIST_DIR" \
             --mainExe "ImpulciferGUI.exe" \
+            --icon "${{ github.workspace }}/logo/pulse.ico" \
             --shortcuts Desktop,StartMenuRoot \
             --outputDir "$OUTPUT_DIR"
-
-          # 아이콘이 준비되면 아래 옵션을 vpk pack 명령에 추가:
-          # --icon "${{ github.workspace }}/assets/icon.ico"
 
           echo "VELOPACK_OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_ENV
 

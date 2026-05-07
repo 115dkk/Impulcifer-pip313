@@ -210,6 +210,24 @@ class LocalizationManager:
         """Get theme preference"""
         return self.settings.get('theme', 'dark')
 
+    def set_skin(self, skin: str):
+        """Persist the GUI skin choice (``stable`` or ``studio``).
+
+        Stable is the compact tabview the app has always shipped (now
+        wearing the Pulse palette). Studio is the sidebar + card-based
+        layout introduced alongside the redesign. The choice is stored in
+        the same settings file as language/theme so it survives across
+        launches without an extra file.
+        """
+        if skin not in ('stable', 'studio'):
+            skin = 'stable'
+        self.settings['skin'] = skin
+        self.save_settings()
+
+    def get_skin(self) -> str:
+        """Return the persisted skin choice (default ``stable``)."""
+        return self.settings.get('skin', 'stable')
+
     def is_first_run(self) -> bool:
         """Check if this is the first run (no language setting)"""
         return 'language' not in self.settings or not self.settings.get('language_selected', False)

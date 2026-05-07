@@ -5,9 +5,13 @@ changes there are only new features available and nothing old has broken and whe
 been fixed and old features improved.
 
 ## 2.5.0 - 2026-05-07
-### ⭐ Pulse 리디자인 — 앱 아이콘 + 오디오 장비 톤 다크 팔레트 + about-hero 정보 탭
+### ⭐ Pulse 리디자인 — Stable / Studio 스킨 시스템 + 앱 아이콘 + about-hero 정보 탭
 
 #### ⭐ 새로운 기능 / 개선
+- **레이아웃 프리셋 (스킨) 시스템 — Stable + Studio**: 디자인 핸드오프의 두 변형(원래 "Heritage / Studio")을 실제 위젯 트리로 구현. 기본은 **Stable**(기존 콤팩트 탭뷰가 Pulse 팔레트로 입은 옷); **Studio**는 디자인의 사이드바 + 카드 위계 — 좌측 200px 사이드바(로고 + 버전 + 4개 nav)와 우측 카드 기반 컨텐츠 패널로 분리. UI 설정 탭의 "스킨" 세그먼트(Stable / Studio)로 즉시 전환되며 `i18n.localization`의 settings.json에 `skin` 키로 영속화. 스킨 전환 시 root 윈도우는 유지하면서 body만 tear-down + rebuild되어 빠르게 응답.
+- **gui/skins/ 패키지 신설**: Studio 스킨 전용 위젯 컴포지션 헬퍼(`make_card`, `add_card_header`, `add_disclosure`, `add_inline_metric`, `make_page_header` — 디자인의 `.card`/`.dt`/`.fld-std`/`.nf` CSS 토큰을 CTk frame 트리로 표현)와 4개 Studio 탭 클래스(`StudioRecorderTab` / `StudioImpulciferTab` / `StudioSettingsTab` / `StudioInfoTab`). Stable 탭들은 기존 `gui/tabs/`에 그대로 두고 Studio는 병렬 구현체로 분리.
+- **Studio 처리 탭 — disclosure 패턴**: 룸 보정 / 헤드폰 보상 / 이퀄라이제이션 각각이 토글 ON일 때만 옵션 패널을 펼치는 disclosure 토글로. 디자인의 의도(focused experience)대로 advanced 옵션(target_level, bass_boost, tilt, channel balance, decay 등)은 Stable에만 노출 — Studio는 디자인의 카드 컨텐츠와 1:1 매칭.
+- **i18n 키 37개 추가 (9 locale)**: `section_skin`, `label_select_skin`, `option_skin_stable/studio`, `tooltip_skin_studio`, `sidebar_*`, `studio_card_*`, `studio_*_title/subtitle`, `studio_change_button`, `studio_disclosure_*_desc`, `studio_brir_generate`, `studio_record_start` 등. ko/en은 직접 번역, 나머지 7개 locale은 영어 fallback. `zh-cn.json`/`zh-tw.json` legacy alias 파일도 `zh_CN`/`zh_TW`와 동기화 보장.
 - **앱 아이콘 (Pulse mark) — 타이틀바 + 윈도우 작업 표시줄 양쪽 적용 (issue: 사용자 보고)**: 기존에는 `iconbitmap()`/`iconphoto()` 호출 자체가 없어 Tk가 기본 Tcl/Tk 깃털 아이콘으로 폴백, 사용자가 "이상한 로고"라 지적한 그것이 그대로 노출되었다. `gui/utils.py::setup_app_icon(root)` 신규 함수가 `logo/pulse.ico`(16/24/32/48/64/128/256 멀티 해상도)로 `iconbitmap`을, `logo/pulse-{32,48,64,128,256}.png`로 `iconphoto`를 각각 호출해 Win32 / X11 / Aqua 모든 경로에서 Pulse mark가 그려진다. Windows에서는 `SetCurrentProcessExplicitAppUserModelID("Impulcifer.115dkk.HRIR.1")`까지 호출해 작업 표시줄 그룹화 키를 `python.exe`에서 우리 앱으로 분리.
 - **CTk 커스텀 테마 — Pulse audio-equipment dark palette**: 디자인 토큰(`oklch(0.14..0.97 / hue 240)`)을 sRGB hex로 변환해 `gui/theme/pulse.json`으로 정본화. `bg-0/1/2/3/4` 5단계 레이어 + 정밀 청색 액센트(`#3B82F6` / `#2563EB`). `ctk.set_default_color_theme(pulse.json)`로 모든 CTk 위젯(`CTkButton`, `CTkOptionMenu`, `CTkSegmentedButton`, `CTkSwitch` 등 19개 클래스)이 일관된 검은 베이스 + 청색 액센트를 받는다. 기존 builtin "blue" 테마가 던져주던 회청색 톤보다 아웃보드 EQ/컨버터 페시아 느낌이 분명히 살아남.
 - **헤더 — Pulse mark 32px + 타이틀/서브타이틀 수직 스택**: 기존에는 타이틀("🎧 Impulcifer")과 서브타이틀이 column 0/1로 가로 배치되어 두 개 별개 라벨처럼 읽혔다. 디자인의 `cv-brand` 패턴(좌측 32px 마크 + 우측 22px 타이틀 / 12px 보조 텍스트 수직 스택)으로 재배치. `gui/modern_gui.py::create_header()`에서 `logo/pulse-64.png`를 `CTkImage`로 32×32로 리사이즈해 좌측에 배치.
@@ -15,14 +19,24 @@ been fixed and old features improved.
 - **Pulse 디자인 토큰 모듈 (`gui/theme/__init__.py`)**: 색 토큰 19개를 `(light, dark)` 튜플로 단일 정본화 (`COLORS['accent']`, `COLORS['bg-2']` 등) — 차후 다른 화면이 디자인 색을 직접 참조할 때 hardcode hex 흩어짐을 방지. 로고 / 테마 JSON 경로 헬퍼(`get_ico_path()`, `get_png_path(size)`, `get_ctk_theme_json_path()`)도 dev / pip-install / Nuitka standalone 세 런타임 모드에서 동일하게 동작하도록 `infra.resource_helper.get_resource_path` 위임.
 
 #### 🔧 빌드 / 설정 변경
+- **Velopack 인스톨러 아이콘 적용**: `release-cross-platform.yml`의 `vpk pack` 명령에 `--icon "${{ github.workspace }}/logo/pulse.ico"` 추가. 이전에는 `# 아이콘이 준비되면 활성화` 주석으로 비활성화되어 인스톨러 / Add-Remove Programs / 시작 메뉴 단축키가 모두 기본 generic 아이콘이었다. 이제 Pulse mark가 모든 OS-level 노출 지점에 일관되게 박힌다.
+- **macOS .icns 생성 (`logo/pulse.icns`)**: 기존 PNG 시리즈(16/32/64/128/256)를 Apple ICNS 컨테이너 포맷(magic `icns` + `icp4`/`icp5`/`icp6`/`ic07`/`ic08`/`ic11`/`ic12`/`ic13` 8개 type entry)으로 묶어 22.5KB 단일 파일로. `nuitka_flags.py::platform_specific_flags("macos")`가 이 파일을 잡아 `--macos-app-icon=logo/pulse.icns`를 부여 — 이전에는 `img/icon.icns`가 없어 macOS 빌드의 .app 번들이 generic icon으로 떨어졌다.
 - **Nuitka 번들에 `logo/` + `gui/theme/` 추가**: `build_scripts/nuitka_flags.py::INCLUDED_DATA_DIRS`에 `("logo", "logo")`, `("gui/theme", "gui/theme")` 두 entry 추가. `release-cross-platform.yml`의 Linux 인라인 명령에도 동일 entry 반영(`build-linux.yml`/`build-macos.yml`/Windows + macOS 릴리스 잡은 `build_nuitka.py` → `nuitka_flags.py`로 단일화되어 자동 동기화됨).
-- **Windows .exe 아이콘**: `--windows-icon-from-ico=logo/pulse.ico` 플래그 추가(`platform_specific_flags("windows")`). Linux/macOS는 `logo/pulse-256.png` / `logo/pulse.icns`(존재 시) 우선 + `img/icon.*` 폴백.
+- **Windows .exe 아이콘**: `--windows-icon-from-ico=logo/pulse.ico` 플래그 추가(`platform_specific_flags("windows")`). Linux/macOS는 `logo/pulse-256.png` / `logo/pulse.icns` 우선 + `img/icon.*` 폴백.
 - **smoke-test에 Pulse 자산 검증 추가**: `gui_main.py::_smoke_test()`가 `get_ico_path()`, `get_png_path(256)`, `get_ctk_theme_json_path()` 세 경로를 모두 확인. 패키징에서 자산이 누락되면 빌드 단계에서 즉시 실패.
 - **테스트 갱신**: `tests/test_nuitka_flags.py`에 `test_data_dirs_bundle_pulse_logo_and_theme`(logo/ + gui/theme 매핑 검증) + `test_platform_specific_flags_windows_includes_pulse_icon`(`--windows-icon-from-ico=logo/pulse.ico` 검증) 두 케이스 추가. `tests/test_build.py::check_dependencies()`도 `logo/{pulse.ico, pulse-256.png, pulse-32.png, pulse-16.png}` + `gui/theme/pulse.json` 존재 검사 추가.
 - **검증 (Windows / Python 3.14.4 / CTk 5.2.2)**:
   - `pytest tests/ -v -m "not slow"` → 107 passed, 1 skipped, 3 deselected.
   - `python gui_main.py --smoke-test` → import 18개 + Pretendard render-layer + Pulse 3종 자산 모두 OK.
-  - End-to-end GUI 인스턴스화 + 4개 탭(녹음기/Impulcifer/UI 설정/정보) 순회 → 예외 0건. ImageGrab으로 4개 탭 스크린샷 캡처해 디자인 mockup과 시각 비교.
+  - End-to-end GUI 인스턴스화 + 2개 스킨 동적 전환 + 8개 화면(2 skins × 4 tabs) 순회 → 예외 0건. ImageGrab으로 모두 스크린샷 캡처해 디자인 mockup과 시각 비교.
+
+#### 🐛 버그 수정 (Pulse 리디자인 후속)
+- **명시 `font=` 없이 만들어진 위젯이 굴림체로 폴백되던 문제 (`gui/modern_gui.py::_sync_ctk_font_default`)**: `pulse.json::CTkFont.family = "Pretendard"`로 박았으나 번들된 가변 폰트의 family-name(name table id 1)이 `"Pretendard Variable"`이라, theme JSON default를 잡는 위젯들(`CTkOptionMenu`, `CTkComboBox`, dropdown 메뉴 등)이 family를 못 찾고 한국 Windows의 시스템 default = 굴림으로 폴백. probe로 확인:
+  ```
+  Before: CTkFont() family='Pretendard'         actual='굴림'
+  After:  CTkFont() family='Pretendard Variable' actual='Pretendard Variable'
+  ```
+  `setup_pretendard_font()`가 반환한 실제 family로 `ctk.ThemeManager.theme["CTkFont"]`를 동적 갱신하는 헬퍼 추가. `__init__` + `refresh_localized_ui` 양쪽에서 호출.
 - **버전 bump 2.4.29 → 2.5.0 (MINOR)**: 새 기능 추가(앱 아이콘 + Pulse 테마)이며 기존 동작은 유지되므로 SemVer minor 증가.
 
 ## 2.4.29 - 2026-05-07

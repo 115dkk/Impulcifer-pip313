@@ -13,6 +13,7 @@ import customtkinter as ctk
 from gui.constants import WINDOW_MAIN_SIZE
 from gui.dialogs import LanguageSelectionDialog, UpdateDialog
 from gui.event_bus import EventBus
+from gui.skins import SKIN_STABLE, SKIN_STUDIO
 from gui.tabs.impulcifer_tab import ImpulciferTab
 from gui.tabs.info_tab import InfoTab
 from gui.tabs.recorder_tab import RecorderTab
@@ -43,7 +44,12 @@ class ModernImpulciferGUI:
         self.bus = EventBus()
         self.bus.on('language_changed', self._handle_language_changed)
         self.bus.on('theme_changed', self._handle_theme_changed)
+        self.bus.on('skin_changed', self._handle_skin_changed)
 
+        # Active skin (Stable = compact tabview, Studio = sidebar + cards).
+        # Persisted via LocalizationManager so it survives across launches.
+        self.skin = self.loc.get_skin()
+        self.studio_shell = None
         self.font_family = None
 
         # Apply saved theme
@@ -64,6 +70,7 @@ class ModernImpulciferGUI:
         # Setup font after Tk exists so bundled font registration can be
         # verified against Tk-visible font families.
         self.font_family = setup_pretendard_font(self.loc.current_language)
+        self._sync_ctk_font_default(self.font_family)
 
         # Shared CTkFont instances — reused across all tabs and dialogs to avoid
         # rebuilding identical font specs for every label/button (was a major
@@ -99,14 +106,8 @@ class ModernImpulciferGUI:
         # Create header frame
         self.create_header()
 
-        # Create main tab view
-        self.create_tabs()
-
-        # Instantiate tab classes (each builds its own widgets in __init__)
-        self.recorder_tab = RecorderTab(self)
-        self.impulcifer_tab = ImpulciferTab(self)
-        self.settings_tab = SettingsTab(self)
-        self.info_tab = InfoTab(self)
+        # Build the body in the active skin's layout.
+        self._build_body()
 
     def create_header(self) -> None:
         """Create the localized app header.
@@ -166,6 +167,27 @@ class ModernImpulciferGUI:
             self.bus.emit('theme_changed', code="light")
         else:
             self.bus.emit('theme_changed', code="dark")
+
+    def _build_body(self) -> None:
+        """Construct the body region in the active skin's layout.
+
+        - Stable: existing CTkTabview + four tab classes.
+        - Studio: sidebar + content panel via :class:`StudioShell`.
+
+        Each call assumes the previous body (if any) has already been torn
+        down by the caller. ``_handle_skin_changed`` does that before
+        invoking us again.
+        """
+        if self.skin == SKIN_STUDIO:
+            from gui.skins.studio_shell import StudioShell
+
+            self.studio_shell = StudioShell(self)
+        else:
+            self.create_tabs()
+            self.recorder_tab = RecorderTab(self)
+            self.impulcifer_tab = ImpulciferTab(self)
+            self.settings_tab = SettingsTab(self)
+            self.info_tab = InfoTab(self)
 
     def create_tabs(self) -> None:
         """Create the localized tab view."""
@@ -257,6 +279,59 @@ class ModernImpulciferGUI:
             ),
         )
 
+    @staticmethod
+    def _sync_ctk_font_default(family: str | None) -> None:
+        """Patch ``ctk.ThemeManager.theme["CTkFont"]`` to the live family.
+
+        Why this exists. Widgets that don't pass an explicit ``font=``
+        (``CTkOptionMenu``, ``CTkComboBox``, dropdown menus, internal
+        labels) construct their own ``CTkFont()`` from the theme JSON.
+        ``pulse.json`` ships ``"Pretendard"`` as a static fallback name,
+        but the bundled variable file's family-name (name table id 1) is
+        ``Pretendard Variable`` — on Korean Windows Tk silently falls
+        through ``Pretendard`` to Gulim (굴림). The probe at
+        ``CTkFont().cget('family')='Pretendard' -> tkfont.actual='굴림'``
+        confirmed the regression. Patching the theme dict *before* any
+        widget is built makes every subsequent ``CTkFont()`` instance
+        adopt the resolved family.
+
+        Idempotent and safe when ``family`` is None — leaves the JSON
+        defaults in place so widgets fall back to system defaults
+        cleanly.
+        """
+        if not family:
+            return
+        try:
+            font_section = ctk.ThemeManager.theme.get("CTkFont", {})
+            font_section["family"] = family
+            for plat_key in ("Windows", "macOS", "Linux"):
+                plat_entry = font_section.get(plat_key)
+                if isinstance(plat_entry, dict):
+                    plat_entry["family"] = family
+        except Exception as e:
+            print(f"CTkFont theme patch failed: {e}")
+
+    def _handle_skin_changed(self, code: str) -> None:
+        """Persist the skin choice and rebuild the body in the new layout.
+
+        Mirrors ``refresh_localized_ui`` but only tears down the body
+        region (header stays so the rebuild is fast and the user keeps
+        the same window position). Tab state is not preserved across
+        skins because Stable and Studio expose different option subsets
+        — copying state across them would surface incomplete data.
+        """
+        if code not in (SKIN_STABLE, SKIN_STUDIO):
+            return
+        if code == self.skin:
+            return
+        self.loc.set_skin(code)
+        self.skin = code
+        # Tear down current body — header is at row=0, body lives at row=1
+        for child in self.root.grid_slaves(row=1, column=0):
+            child.destroy()
+        self.studio_shell = None
+        self._build_body()
+
     def _handle_theme_changed(self, code: str) -> None:
         """Apply and persist a theme change event."""
         if code == 'system':
@@ -279,23 +354,29 @@ class ModernImpulciferGUI:
         self.refresh_localized_ui(selected_tab_key=selected_tab_key)
 
     def refresh_localized_ui(self, selected_tab_key: str = 'settings') -> None:
-        """Rebuild localized widgets while preserving tab input state."""
-        state = self._collect_tab_state()
+        """Rebuild localized widgets while preserving tab input state.
+
+        Tab state preservation only applies to the Stable skin (whose
+        Recorder + Impulcifer tabs implement ``get_state`` / ``apply_state``).
+        Studio rebuilds without restoring user-typed values — its widgets
+        are different objects and copying state across structurally
+        different forms would surface incomplete data.
+        """
+        state = self._collect_tab_state() if self.skin == SKIN_STABLE else {}
         for child in self.root.winfo_children():
             child.destroy()
 
         self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
         self.font_family = setup_pretendard_font(self.loc.current_language)
+        self._sync_ctk_font_default(self.font_family)
         self.fonts = build_fonts(self.font_family)
 
         self.create_header()
-        self.create_tabs()
-        self.recorder_tab = RecorderTab(self)
-        self.impulcifer_tab = ImpulciferTab(self)
-        self.settings_tab = SettingsTab(self)
-        self.info_tab = InfoTab(self)
-        self._restore_tab_state(state)
-        self.select_tab(selected_tab_key)
+        self.studio_shell = None
+        self._build_body()
+        if self.skin == SKIN_STABLE:
+            self._restore_tab_state(state)
+            self.select_tab(selected_tab_key)
 
     def _collect_tab_state(self) -> dict[str, dict]:
         """Collect state snapshots from tabs that support it."""

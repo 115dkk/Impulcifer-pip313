@@ -14,6 +14,7 @@ from tkinter import messagebox
 import customtkinter as ctk
 
 from gui.constants import WIDGET_BUTTON_WIDTH_MEDIUM
+from gui.skins import SKIN_STABLE, SKIN_STUDIO
 from gui.utils import install_smooth_scrolling, open_data_folder
 from i18n.localization import SUPPORTED_LANGUAGES
 
@@ -51,6 +52,47 @@ class SettingsTab:
         install_smooth_scrolling(scroll)
 
         row = 0
+
+        # === Skin / Layout Preset Section ===
+        skin_frame = ctk.CTkFrame(scroll, corner_radius=0)
+        skin_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        skin_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        ctk.CTkLabel(
+            skin_frame,
+            text=self.loc.get('section_skin'),
+            font=self.fonts['heading']
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        ctk.CTkLabel(
+            skin_frame,
+            text=self.loc.get('label_select_skin')
+        ).grid(row=1, column=0, sticky="w", padx=15, pady=5)
+
+        # Map between display label and internal skin code so the
+        # CTkSegmentedButton can show localized text but emit the stable
+        # internal code.
+        stable_label = self.loc.get('option_skin_stable')
+        studio_label = self.loc.get('option_skin_studio')
+        self._skin_label_map = {stable_label: SKIN_STABLE, studio_label: SKIN_STUDIO}
+        self._skin_code_map = {v: k for k, v in self._skin_label_map.items()}
+
+        self.skin_var = ctk.StringVar(value=self._skin_code_map.get(self.loc.get_skin(), stable_label))
+        skin_segment = ctk.CTkSegmentedButton(
+            skin_frame,
+            values=[stable_label, studio_label],
+            variable=self.skin_var,
+            command=self.change_skin,
+        )
+        skin_segment.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
+
+        ctk.CTkLabel(
+            skin_frame,
+            text=self.loc.get('tooltip_skin_studio'),
+            font=self.fonts['small'],
+            text_color="gray"
+        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 15))
 
         # === Language Section ===
         lang_frame = ctk.CTkFrame(scroll, corner_radius=0)
@@ -164,6 +206,16 @@ class SettingsTab:
                 self.loc.get('message_info'),
                 self.loc.get('message_language_changed', language=language_name)
             )
+
+    def change_skin(self, skin_label: str) -> None:
+        """Publish a skin change event.
+
+        The Settings tab itself will be torn down and rebuilt as part of
+        the skin swap (the Studio shell reuses the same root window with
+        a different body), so we don't need to update local state here.
+        """
+        skin_code = self._skin_label_map.get(skin_label, SKIN_STABLE)
+        self.app.bus.emit('skin_changed', code=skin_code)
 
     def change_theme(self, theme_name: str) -> None:
         """Publish a theme change event."""
