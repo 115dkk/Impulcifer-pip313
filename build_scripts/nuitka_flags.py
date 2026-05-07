@@ -22,7 +22,7 @@ platform and version.
 from __future__ import annotations
 
 import os
-from typing import Iterable, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 
 # ---------------------------------------------------------------------------

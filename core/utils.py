@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import subprocess
-import tempfile
-import json
 import numpy as np
 import soundfile as sf
 from scipy import signal
@@ -12,7 +9,6 @@ import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import platform
-import shutil
 from pathlib import Path
 
 plt.rcParams['axes.unicode_minus'] = False
@@ -87,18 +83,21 @@ def _scan_bundled_fonts() -> "list[Path]":
 
 
 def _resolve_bundled_pretendard_path() -> "Path | None":
-    """Find the bundled Pretendard regular weight (legacy compat name).
+    """Find the bundled Pretendard font (legacy compat name).
 
     Kept as a thin wrapper over :func:`_scan_bundled_fonts` so existing tests
-    and old callers keep working. New code should prefer the scan-all helper
-    so user-dropped fonts (e.g. a Source Han Serif placed alongside
-    Pretendard) are also picked up.
+    and old callers keep working. Priority: PretendardVariable.ttf →
+    Pretendard-Regular.* → any Pretendard-shaped file.
     """
-    for path in _scan_bundled_fonts():
+    fonts = _scan_bundled_fonts()
+    for path in fonts:
+        stem = path.stem.lower()
+        if "pretendard" in stem and "variable" in stem:
+            return path
+    for path in fonts:
         if "pretendard-regular" in path.stem.lower():
             return path
-    # Pretendard not present? Return whatever Pretendard-shaped file we have.
-    for path in _scan_bundled_fonts():
+    for path in fonts:
         if "pretendard" in path.stem.lower():
             return path
     return None

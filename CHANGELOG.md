@@ -4,6 +4,30 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.4.29 - 2026-05-07
+### 🐛 PyPI "버전: standard" 회귀 수정 + Pretendard Variable 전환으로 한글 fake-bold 제거
+
+#### 🐛 버그 수정
+- **PyPI 빌드 정보탭 "버전: standard" 표기 + UpdateChecker `Invalid version: 'standard'` 에러 (root cause fix)**: `hatch_build.py::CustomBuildHook.initialize(version, build_data)`에서 `version` 파라미터를 패키지 버전으로 오인해 `infra/_build_info.py`에 `VERSION = "{version}"` 형태로 박았다. 그러나 hatchling의 `version` 파라미터는 **빌드 타깃 종류**("standard"/"editable")이지 패키지 버전이 아니다. 결과적으로 PyPI wheel의 마커가 `VERSION = "standard"`가 되어 정보 탭에 그대로 노출되고, `updater/update_checker.py::_normalize_version("standard")` → `version.parse("standard")`가 `Invalid version: 'standard'`로 실패하면서 백그라운드 업데이트 체크도 동시에 깨졌다. `self.metadata.version`으로 교체.
+- **Modern GUI 한글 글리프 fake-bold 글리치 (root cause fix)**: `font/`에 `Pretendard-Regular.otf` 단일 cut만 번들되어 있는데 `gui/utils.py::build_fonts()`가 11개 폰트 슬롯 중 7개에 `weight="bold"`를 지정해, 같은 family의 진짜 Bold cut을 못 찾은 GDI가 **synthetic bold**(글리프 stroke를 굵게 그리는 알고리즘) 경로로 폴백했다. 한글 글리프는 이 합성 두께 처리에서 자획이 뭉개지고, MacType이 활성화된 환경에서는 합성 경로가 후킹되어 시스템 한글 serif(Noto Serif KR / 명조계)로 substitute되는 회귀까지 유발했다. `font/PretendardVariable.ttf`(fvar wght 45–930, 9개 named instance)로 교체하면 Win32 GDI / Pango / CoreText가 같은 family 내에서 `weight="bold"` → fvar wght=700 instance를 자동 매핑해 진짜 Bold cut으로 렌더링한다.
+
+#### ⭐ 새로운 기능 / 개선
+- **`gui/utils.py::_find_pretendard_font_file()` 우선순위 확장**: PretendardVariable*.ttf → Pretendard*Regular* → Pretendard* 순. 가변 폰트 단일 파일이 모든 weight를 커버하는 것을 우선으로 둔다.
+- **`gui/utils.py::setup_pretendard_font()` 1차 후보 다중화**: 기존 `_tk_renders_family("Pretendard")` 단일 시도를 `("Pretendard Variable", "Pretendard")` 순회로 확장. 가변 폰트의 family-name(name table id 1)이 `Pretendard Variable`이라 직접 잡히게 되어 한 번의 render-probe miss를 줄이고 weight 매핑 경로도 곧바로 가변 폰트로 진입.
+- **`core/utils.py::_resolve_bundled_pretendard_path()` 동일 우선순위 적용**: matplotlib 경로도 가변 폰트를 먼저 잡도록 확장.
+
+#### 🔧 빌드 / 설정 변경
+- **`tests/test_build.py` font 존재 체크 갱신**: hardcoded `Pretendard-Regular.otf` → `[PretendardVariable.ttf, Pretendard-Regular.otf]` 후보 리스트.
+- **검증 (Windows / Tk 8.6.16 / Python 3.14.4)**:
+  ```
+  Tk render layer resolves Pretendard Variable: Pretendard Variable
+  setup_pretendard_font('ko') = 'Pretendard Variable'
+  weight='bold': actual family='Pretendard Variable', weight='bold'
+  ```
+- **PyPI wheel 재빌드 검증**: `pip wheel . -w /tmp/wheel_test` → 생성된 `infra/_build_info.py`에 `VERSION = "2.4.29"` 정확히 기록 확인.
+- **테스트**: 전체 스위트 106 passed, 3 skipped 통과.
+- **부산물 — ruff lint 청소**: 기존 unused import 5건(`core/utils.py` subprocess/tempfile/json/shutil, `core/constants.py` os, `core/pipeline.py` MISSING, `build_scripts/nuitka_flags.py` Iterable), f-string-without-placeholders 3건(`build_scripts/build_local.py:85`, `gui_main.py:135-136`) 모두 제거. `ruff check . --output-format=concise` → `All checks passed!`.
+
 ## 2.4.28 - 2026-05-06
 ### 🐛 Pretendard render-layer 보장 + 일반 폰트 스캐너 + 빠른 로컬 빌드
 

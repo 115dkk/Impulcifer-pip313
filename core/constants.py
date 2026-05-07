@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import os
-
 # https://en.wikipedia.org/wiki/Surround_sound
 # TrueHD 지원을 위해 확장된 스피커 이름 목록
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'WL', 'WR', 'TFL', 'TFR', 'TSL', 'TSR', 'TBL', 'TBR']

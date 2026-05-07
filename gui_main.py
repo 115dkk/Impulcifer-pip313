@@ -132,8 +132,8 @@ def _smoke_test():
         gui_family = setup_pretendard_font("ko")
         if not gui_family:
             print(
-                f"smoke-test FAIL: setup_pretendard_font returned None — "
-                f"Tk render layer cannot resolve bundled Pretendard."
+                "smoke-test FAIL: setup_pretendard_font returned None — "
+                "Tk render layer cannot resolve bundled Pretendard."
             )
             sys.exit(2)
         actual = tkfont_mod.Font(family=gui_family, size=12).actual("family")
