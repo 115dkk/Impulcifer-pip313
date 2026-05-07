@@ -139,6 +139,31 @@ def test_data_dirs_route_locales_into_i18n_subfolder():
     )
 
 
+def test_data_dirs_bundle_pulse_logo_and_theme():
+    """Pulse redesign assets must reach the standalone bundle."""
+    mod = _flags_module()
+    pairs = dict(mod.INCLUDED_DATA_DIRS)
+    assert pairs.get("logo") == "logo", (
+        "logo/ must be bundled at the same path so iconbitmap()/iconphoto() resolve at runtime."
+    )
+    assert pairs.get("gui/theme") == "gui/theme", (
+        "gui/theme must be bundled so set_default_color_theme(pulse.json) works in the .exe."
+    )
+
+
+def test_platform_specific_flags_windows_includes_pulse_icon(tmp_path):
+    """On Windows the .exe must adopt the bundled pulse.ico via Nuitka flag."""
+    mod = _flags_module()
+    # Stage a fake project root with the icon present.
+    (tmp_path / "logo").mkdir()
+    icon = tmp_path / "logo" / "pulse.ico"
+    icon.write_bytes(b"")  # presence is all the helper checks
+    flags = mod.platform_specific_flags("windows", project_root=str(tmp_path))
+    assert any(f.startswith("--windows-icon-from-ico=") and "pulse.ico" in f for f in flags), (
+        f"--windows-icon-from-ico=logo/pulse.ico missing from windows flags: {flags}"
+    )
+
+
 def test_cli_emits_one_flag_per_line(capsys):
     mod = _flags_module()
     rc = mod.main(["--platform", "linux", "--version", "1.2.3"])

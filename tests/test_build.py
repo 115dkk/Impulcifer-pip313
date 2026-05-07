@@ -97,6 +97,25 @@ def check_dependencies():
     else:
         print("✗ 폰트 파일이 없습니다.")
 
+    # logo 폴더 확인 — Pulse 리디자인의 멀티 해상도 아이콘 번들
+    logo_files = [
+        "logo/pulse.ico",
+        "logo/pulse-256.png",
+        "logo/pulse-32.png",
+        "logo/pulse-16.png",
+    ]
+    missing_logo = [p for p in logo_files if not os.path.exists(p)]
+    if missing_logo:
+        print(f"✗ 누락된 로고 파일: {', '.join(missing_logo)}")
+    else:
+        print("✓ 모든 로고 파일이 존재합니다.")
+
+    # CTk 테마 JSON 확인 — Pulse audio-equipment palette
+    if os.path.exists("gui/theme/pulse.json"):
+        print("✓ Pulse CTk 테마 JSON이 존재합니다.")
+    else:
+        print("✗ gui/theme/pulse.json이 없습니다.")
+
 def main():
     """메인 테스트 함수"""
     # 의존성 확인

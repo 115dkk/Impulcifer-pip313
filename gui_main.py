@@ -62,6 +62,7 @@ def _smoke_test():
         "gui.tabs.recorder_tab",
         "gui.tabs.settings_tab",
         "gui.tabs.info_tab",
+        "gui.theme",
         "impulcifer",
         "core.hrir",
         "core.impulse_response",
@@ -77,6 +78,22 @@ def _smoke_test():
         "infra.logger",
     ):
         importlib.import_module(mod)
+
+    # Pulse redesign assets — verify the bundle ships logo + CTk theme JSON.
+    # If a packaging change drops these, the GUI silently falls back to a
+    # generic icon and the default blue theme, which is exactly the
+    # regression the redesign was meant to fix.
+    from gui.theme import get_ctk_theme_json_path, get_ico_path, get_png_path
+
+    if get_ico_path() is None:
+        print("smoke-test FAIL: logo/pulse.ico missing from bundle")
+        sys.exit(2)
+    if get_png_path(256) is None:
+        print("smoke-test FAIL: logo/pulse-256.png missing from bundle")
+        sys.exit(2)
+    if get_ctk_theme_json_path() is None:
+        print("smoke-test FAIL: gui/theme/pulse.json missing from bundle")
+        sys.exit(2)
 
     # Pretendard guarantee — simulate an end-user without system-installed
     # Pretendard so the bundled file is the ONLY way to reach the font.

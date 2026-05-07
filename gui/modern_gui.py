@@ -13,16 +13,24 @@ import customtkinter as ctk
 from gui.constants import WINDOW_MAIN_SIZE
 from gui.dialogs import LanguageSelectionDialog, UpdateDialog
 from gui.event_bus import EventBus
+from gui.skins import SKIN_STABLE, SKIN_STUDIO
 from gui.tabs.impulcifer_tab import ImpulciferTab
 from gui.tabs.info_tab import InfoTab
 from gui.tabs.recorder_tab import RecorderTab
 from gui.tabs.settings_tab import SettingsTab
-from gui.utils import build_fonts, setup_pretendard_font
+from gui.theme import get_ctk_theme_json_path
+from gui.utils import build_fonts, setup_app_icon, setup_pretendard_font
 from i18n.localization import get_localization_manager
 from updater.update_checker import UpdateChecker
 
-# Default theme setting (will be overridden by user preference)
-ctk.set_default_color_theme("blue")  # Themes: "blue" (default), "green", "dark-blue"
+# Apply the Pulse audio-equipment palette when the bundled theme JSON is
+# present (set_default_color_theme silently falls back to "blue" if the
+# file is missing, e.g. when running from an unusual layout).
+_pulse_theme_path = get_ctk_theme_json_path()
+if _pulse_theme_path is not None:
+    ctk.set_default_color_theme(str(_pulse_theme_path))
+else:
+    ctk.set_default_color_theme("blue")
 
 
 class ModernImpulciferGUI:
@@ -36,7 +44,12 @@ class ModernImpulciferGUI:
         self.bus = EventBus()
         self.bus.on('language_changed', self._handle_language_changed)
         self.bus.on('theme_changed', self._handle_theme_changed)
+        self.bus.on('skin_changed', self._handle_skin_changed)
 
+        # Active skin (Stable = compact tabview, Studio = sidebar + cards).
+        # Persisted via LocalizationManager so it survives across launches.
+        self.skin = self.loc.get_skin()
+        self.studio_shell = None
         self.font_family = None
 
         # Apply saved theme
@@ -48,9 +61,16 @@ class ModernImpulciferGUI:
         self.root = ctk.CTk()
         self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
 
+        # Apply the Pulse logo to title bar + Windows taskbar before any
+        # child widget gets a chance to resolve its own icon. Failures are
+        # non-fatal (logged) — the GUI works without the icon, just less
+        # branded.
+        setup_app_icon(self.root)
+
         # Setup font after Tk exists so bundled font registration can be
         # verified against Tk-visible font families.
         self.font_family = setup_pretendard_font(self.loc.current_language)
+        self._sync_ctk_font_default(self.font_family)
 
         # Shared CTkFont instances — reused across all tabs and dialogs to avoid
         # rebuilding identical font specs for every label/button (was a major
@@ -86,40 +106,60 @@ class ModernImpulciferGUI:
         # Create header frame
         self.create_header()
 
-        # Create main tab view
-        self.create_tabs()
-
-        # Instantiate tab classes (each builds its own widgets in __init__)
-        self.recorder_tab = RecorderTab(self)
-        self.impulcifer_tab = ImpulciferTab(self)
-        self.settings_tab = SettingsTab(self)
-        self.info_tab = InfoTab(self)
+        # Build the body in the active skin's layout.
+        self._build_body()
 
     def create_header(self) -> None:
-        """Create the localized app header."""
-        header = ctk.CTkFrame(self.root, corner_radius=0, height=60)
-        header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
-        header.grid_columnconfigure(1, weight=1)
+        """Create the localized app header.
 
-        # App title
+        Layout follows the Pulse redesign's ``cv-brand`` pattern: 32px Pulse
+        mark on the left, then a vertical stack with the app name (22px
+        bold) over the subtitle (12px secondary). The previous header put
+        title and subtitle side-by-side which read like two unrelated
+        labels.
+        """
+        header = ctk.CTkFrame(self.root, corner_radius=0, height=72)
+        header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
+        header.grid_columnconfigure(2, weight=1)
+
+        # Pulse logo (32px) — best effort. CTkImage uses tk.PhotoImage which
+        # only reads PNG/GIF natively; we feed it the pre-rendered 64px PNG
+        # and let CTk size it down for HiDPI sharpness.
+        try:
+            from PIL import Image
+            from gui.theme import get_png_path
+
+            png_path = get_png_path(64)
+            if png_path is not None:
+                self._header_logo_pil = Image.open(str(png_path))
+                self._header_logo_image = ctk.CTkImage(
+                    light_image=self._header_logo_pil,
+                    dark_image=self._header_logo_pil,
+                    size=(32, 32),
+                )
+                logo_label = ctk.CTkLabel(header, image=self._header_logo_image, text="")
+                logo_label.grid(row=0, column=0, rowspan=2, padx=(20, 12), pady=14, sticky="w")
+        except Exception as e:
+            print(f"Header logo not loaded: {e}")
+
+        # App title (22px bold)
         self.title_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_title'),
-            font=self.fonts['title']
+            font=self.fonts['title'],
+            anchor="w",
         )
-        self.title_label.grid(row=0, column=0, padx=20, pady=15, sticky="w")
+        self.title_label.grid(row=0, column=1, padx=(0, 12), pady=(14, 0), sticky="sw")
 
-        # Subtitle
+        # Subtitle (12px secondary)
         self.subtitle_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_subtitle'),
             font=self.fonts['subtitle'],
-            text_color="gray"
+            text_color=("gray35", "gray60"),
+            anchor="w",
         )
-        self.subtitle_label.grid(row=0, column=1, padx=10, pady=15, sticky="w")
-
-        # Theme toggle button (removed - moved to UI Settings tab)
-        # Now header is cleaner
+        self.subtitle_label.grid(row=1, column=1, padx=(0, 12), pady=(0, 14), sticky="nw")
 
     def toggle_theme(self) -> None:
         """Toggle between dark and light themes (legacy method - kept for compatibility)"""
@@ -127,6 +167,27 @@ class ModernImpulciferGUI:
             self.bus.emit('theme_changed', code="light")
         else:
             self.bus.emit('theme_changed', code="dark")
+
+    def _build_body(self) -> None:
+        """Construct the body region in the active skin's layout.
+
+        - Stable: existing CTkTabview + four tab classes.
+        - Studio: sidebar + content panel via :class:`StudioShell`.
+
+        Each call assumes the previous body (if any) has already been torn
+        down by the caller. ``_handle_skin_changed`` does that before
+        invoking us again.
+        """
+        if self.skin == SKIN_STUDIO:
+            from gui.skins.studio_shell import StudioShell
+
+            self.studio_shell = StudioShell(self)
+        else:
+            self.create_tabs()
+            self.recorder_tab = RecorderTab(self)
+            self.impulcifer_tab = ImpulciferTab(self)
+            self.settings_tab = SettingsTab(self)
+            self.info_tab = InfoTab(self)
 
     def create_tabs(self) -> None:
         """Create the localized tab view."""
@@ -218,6 +279,59 @@ class ModernImpulciferGUI:
             ),
         )
 
+    @staticmethod
+    def _sync_ctk_font_default(family: str | None) -> None:
+        """Patch ``ctk.ThemeManager.theme["CTkFont"]`` to the live family.
+
+        Why this exists. Widgets that don't pass an explicit ``font=``
+        (``CTkOptionMenu``, ``CTkComboBox``, dropdown menus, internal
+        labels) construct their own ``CTkFont()`` from the theme JSON.
+        ``pulse.json`` ships ``"Pretendard"`` as a static fallback name,
+        but the bundled variable file's family-name (name table id 1) is
+        ``Pretendard Variable`` — on Korean Windows Tk silently falls
+        through ``Pretendard`` to Gulim (굴림). The probe at
+        ``CTkFont().cget('family')='Pretendard' -> tkfont.actual='굴림'``
+        confirmed the regression. Patching the theme dict *before* any
+        widget is built makes every subsequent ``CTkFont()`` instance
+        adopt the resolved family.
+
+        Idempotent and safe when ``family`` is None — leaves the JSON
+        defaults in place so widgets fall back to system defaults
+        cleanly.
+        """
+        if not family:
+            return
+        try:
+            font_section = ctk.ThemeManager.theme.get("CTkFont", {})
+            font_section["family"] = family
+            for plat_key in ("Windows", "macOS", "Linux"):
+                plat_entry = font_section.get(plat_key)
+                if isinstance(plat_entry, dict):
+                    plat_entry["family"] = family
+        except Exception as e:
+            print(f"CTkFont theme patch failed: {e}")
+
+    def _handle_skin_changed(self, code: str) -> None:
+        """Persist the skin choice and rebuild the body in the new layout.
+
+        Mirrors ``refresh_localized_ui`` but only tears down the body
+        region (header stays so the rebuild is fast and the user keeps
+        the same window position). Tab state is not preserved across
+        skins because Stable and Studio expose different option subsets
+        — copying state across them would surface incomplete data.
+        """
+        if code not in (SKIN_STABLE, SKIN_STUDIO):
+            return
+        if code == self.skin:
+            return
+        self.loc.set_skin(code)
+        self.skin = code
+        # Tear down current body — header is at row=0, body lives at row=1
+        for child in self.root.grid_slaves(row=1, column=0):
+            child.destroy()
+        self.studio_shell = None
+        self._build_body()
+
     def _handle_theme_changed(self, code: str) -> None:
         """Apply and persist a theme change event."""
         if code == 'system':
@@ -240,23 +354,29 @@ class ModernImpulciferGUI:
         self.refresh_localized_ui(selected_tab_key=selected_tab_key)
 
     def refresh_localized_ui(self, selected_tab_key: str = 'settings') -> None:
-        """Rebuild localized widgets while preserving tab input state."""
-        state = self._collect_tab_state()
+        """Rebuild localized widgets while preserving tab input state.
+
+        Tab state preservation only applies to the Stable skin (whose
+        Recorder + Impulcifer tabs implement ``get_state`` / ``apply_state``).
+        Studio rebuilds without restoring user-typed values — its widgets
+        are different objects and copying state across structurally
+        different forms would surface incomplete data.
+        """
+        state = self._collect_tab_state() if self.skin == SKIN_STABLE else {}
         for child in self.root.winfo_children():
             child.destroy()
 
         self.root.title(self.loc.get('app_title') + " - " + self.loc.get('app_subtitle'))
         self.font_family = setup_pretendard_font(self.loc.current_language)
+        self._sync_ctk_font_default(self.font_family)
         self.fonts = build_fonts(self.font_family)
 
         self.create_header()
-        self.create_tabs()
-        self.recorder_tab = RecorderTab(self)
-        self.impulcifer_tab = ImpulciferTab(self)
-        self.settings_tab = SettingsTab(self)
-        self.info_tab = InfoTab(self)
-        self._restore_tab_state(state)
-        self.select_tab(selected_tab_key)
+        self.studio_shell = None
+        self._build_body()
+        if self.skin == SKIN_STABLE:
+            self._restore_tab_state(state)
+            self.select_tab(selected_tab_key)
 
     def _collect_tab_state(self) -> dict[str, dict]:
         """Collect state snapshots from tabs that support it."""
