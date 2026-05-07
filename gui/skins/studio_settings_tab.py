@@ -120,7 +120,7 @@ class StudioSettingsTab:
         ctk.CTkLabel(
             text_col,
             text=description,
-            font=self.fonts["small"],
+            font=ctk.CTkFont(family=self.app.font_family, size=12),
             text_color=COLORS["fg-2"],
             anchor="w",
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
@@ -222,7 +222,7 @@ class StudioSettingsTab:
             body,
             text=self.loc.get("label_data_folder_description",
                               default="Access reference files, test signals, and recordings"),
-            font=self.fonts["small"],
+            font=ctk.CTkFont(family=self.app.font_family, size=12),
             text_color=COLORS["fg-2"],
             anchor="w",
         ).grid(row=0, column=0, sticky="w", pady=(0, 10))

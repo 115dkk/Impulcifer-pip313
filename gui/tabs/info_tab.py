@@ -21,7 +21,7 @@ import customtkinter as ctk
 import impulcifer
 from core.parallel_processing import get_python_threading_info
 from gui.constants import WIDGET_BUTTON_WIDTH_MEDIUM, WIDGET_BUTTON_WIDTH_WIDE
-from gui.theme import COLORS, get_png_path
+from gui.theme import COLORS, get_mono_font_family, get_png_path
 from gui.utils import install_smooth_scrolling
 from updater.updater_core import is_pip_environment, is_velopack_environment
 
@@ -205,7 +205,7 @@ class InfoTab:
         ctk.CTkLabel(
             hero,
             text=version_pill,
-            font=ctk.CTkFont(family="JetBrains Mono", size=11, weight="bold"),
+            font=ctk.CTkFont(family=get_mono_font_family(), size=11, weight="bold"),
             text_color=COLORS['accent'],
             anchor="w",
         ).grid(row=1, column=1, sticky="nw", padx=(0, 20), pady=(4, 0))

@@ -17,17 +17,29 @@ from gui.constants import FILETYPES_AUDIO
 from gui.skins.studio_widgets import (
     add_card_header,
     add_field_row,
-    add_inline_metric,
     make_card,
     make_card_body,
     make_page_header,
 )
-from gui.theme import COLORS
+from gui.theme import COLORS, get_mono_font_family
 from gui.utils import (
     browse_file,
     install_smooth_scrolling,
     safe_get_int,
 )
+
+
+# Channel layouts the project knows how to record. The label reads to
+# the user; the int is what gets passed to ``recorder.play_and_record``.
+# Keep this in sync with ``RecorderTab.update_channel_guidance`` over in
+# the Stable skin — the two skins should accept the same set of presets.
+CHANNEL_PRESETS: tuple[tuple[str, int], ...] = (
+    ("2 (Stereo)", 2),
+    ("14 (7.1.4 Atmos)", 14),
+    ("22 (7.0.4 Atmos)", 22),
+    ("26 (7.0.6 Atmos)", 26),
+)
+_CUSTOM_CHANNEL_KEY = "기타…"
 
 if TYPE_CHECKING:
     from gui.modern_gui import ModernImpulciferGUI
@@ -51,6 +63,13 @@ class StudioRecorderTab:
         )
         self.record_var = ctk.StringVar(value=os.path.join("data", "my_hrir", "FL,FR.wav"))
         self.channels_var = ctk.IntVar(value=2)
+        # Channel selector state — preset dropdown vs free-form custom entry.
+        # ``channels_preset_var`` carries the dropdown label; when it's
+        # ``_CUSTOM_CHANNEL_KEY`` the custom row appears and writes into
+        # ``channels_var``.
+        self.channels_preset_var = ctk.StringVar(value=CHANNEL_PRESETS[0][0])
+        self.channels_custom_entry: ctk.CTkEntry | None = None
+        self.channels_custom_row: ctk.CTkFrame | None = None
 
         self.host_api_menu: ctk.CTkOptionMenu | None = None
         self.input_device_menu: ctk.CTkOptionMenu | None = None
@@ -121,11 +140,37 @@ class StudioRecorderTab:
         )
         self.input_device_menu.grid(row=0, column=1, sticky="ew", padx=0, pady=4)
 
-        # Channels metric
-        metric_row = ctk.CTkFrame(body, fg_color="transparent")
-        metric_row.grid(row=3, column=0, sticky="ew", pady=(8, 0))
-        metric_row.grid_columnconfigure((0, 1, 2), weight=1, uniform="rec_m")
-        add_inline_metric(metric_row, row=0, column=0, label=self.loc.get("label_force_channels"), value_var=self.channels_var, unit="ch")
+        # Channels selector — preset dropdown + optional custom entry.
+        ch_row = self._labelled_row(body, row=3, label=self.loc.get("label_force_channels"))
+        ch_values = [label for label, _ in CHANNEL_PRESETS] + [_CUSTOM_CHANNEL_KEY]
+        ctk.CTkOptionMenu(
+            ch_row,
+            variable=self.channels_preset_var,
+            values=ch_values,
+            command=self._on_channel_preset,
+        ).grid(row=0, column=1, sticky="ew", pady=4)
+
+        # Custom row appears below when the user picks 기타…
+        custom_row = ctk.CTkFrame(body, fg_color="transparent")
+        custom_row.grid(row=4, column=0, sticky="ew", pady=4)
+        custom_row.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(
+            custom_row,
+            text=self.loc.get("label_force_channels_custom"),
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["fg-2"],
+            anchor="w",
+            width=140,
+        ).grid(row=0, column=0, sticky="w", padx=(0, 16))
+        self.channels_custom_entry = ctk.CTkEntry(
+            custom_row,
+            textvariable=self.channels_var,
+            font=ctk.CTkFont(family=get_mono_font_family(), size=13),
+            width=120,
+        )
+        self.channels_custom_entry.grid(row=0, column=1, sticky="w")
+        self.channels_custom_row = custom_row
+        custom_row.grid_remove()  # hidden until 기타… is chosen
 
     def _labelled_row(self, parent: ctk.CTkBaseClass, *, row: int, label: str) -> ctk.CTkFrame:
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -134,12 +179,32 @@ class StudioRecorderTab:
         ctk.CTkLabel(
             frame,
             text=label,
-            font=self.fonts["small"],
+            font=ctk.CTkFont(size=12),
             text_color=COLORS["fg-2"],
             anchor="w",
             width=140,
         ).grid(row=0, column=0, sticky="w", padx=(0, 16))
         return frame
+
+    def _on_channel_preset(self, label: str) -> None:
+        """React to the channels preset dropdown.
+
+        Mapping label → int is straight; the special ``기타…`` entry
+        instead reveals the custom IntVar entry so power users can type
+        any number that ``recorder.play_and_record`` is willing to
+        accept (some surround interfaces report unusual layouts).
+        """
+        for preset_label, value in CHANNEL_PRESETS:
+            if preset_label == label:
+                self.channels_var.set(value)
+                if self.channels_custom_row:
+                    self.channels_custom_row.grid_remove()
+                return
+        # Custom path
+        if self.channels_custom_row:
+            self.channels_custom_row.grid()
+        if self.channels_custom_entry:
+            self.channels_custom_entry.focus_set()
 
     # ------------------------------------------------------------------
     # Card 02 — Files

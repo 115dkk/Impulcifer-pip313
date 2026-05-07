@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import customtkinter as ctk
 
-from gui.theme import COLORS, get_png_path
+from gui.theme import COLORS, get_mono_font_family, get_png_path
 
 if TYPE_CHECKING:
     from gui.modern_gui import ModernImpulciferGUI
@@ -107,7 +107,7 @@ class StudioShell:
         ctk.CTkLabel(
             brand,
             text=f"v{self._current_version()}",
-            font=ctk.CTkFont(family="JetBrains Mono", size=10),
+            font=ctk.CTkFont(family=get_mono_font_family(), size=11),
             text_color=COLORS["fg-3"],
             anchor="w",
         ).grid(row=1, column=1, sticky="nw")

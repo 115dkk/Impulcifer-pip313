@@ -16,7 +16,7 @@ import customtkinter as ctk
 import impulcifer
 from core.parallel_processing import get_python_threading_info
 from gui.skins.studio_widgets import add_card_header, make_card, make_card_body, make_page_header
-from gui.theme import COLORS, get_png_path
+from gui.theme import COLORS, get_mono_font_family, get_png_path
 from gui.utils import install_smooth_scrolling
 from updater.updater_core import is_pip_environment, is_velopack_environment
 
@@ -109,7 +109,7 @@ class StudioInfoTab:
         ctk.CTkLabel(
             hero,
             text=version_pill,
-            font=ctk.CTkFont(family="JetBrains Mono", size=11, weight="bold"),
+            font=ctk.CTkFont(family=get_mono_font_family(), size=11, weight="bold"),
             text_color=COLORS["accent"],
             anchor="w",
         ).grid(row=1, column=1, sticky="nw", padx=(0, 20), pady=(4, 0))
@@ -197,7 +197,7 @@ class StudioInfoTab:
             ctk.CTkLabel(
                 cell,
                 text=value,
-                font=ctk.CTkFont(family="JetBrains Mono", size=11),
+                font=ctk.CTkFont(family=get_mono_font_family(), size=12),
                 text_color=COLORS["fg-0"],
                 anchor="e",
             ).grid(row=0, column=1, padx=10, pady=8, sticky="e")
@@ -233,7 +233,7 @@ class StudioInfoTab:
             ctk.CTkLabel(
                 text_col,
                 text=sub,
-                font=ctk.CTkFont(family="JetBrains Mono", size=11),
+                font=ctk.CTkFont(family=get_mono_font_family(), size=12),
                 text_color=COLORS["fg-2"],
                 anchor="w",
             ).grid(row=1, column=0, sticky="w", pady=(2, 0))

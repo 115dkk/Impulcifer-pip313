@@ -13,11 +13,11 @@ tabs each compose a few cards rather than re-deriving the styling.
 """
 from __future__ import annotations
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Sequence
 
 import customtkinter as ctk
 
-from gui.theme import COLORS
+from gui.theme import COLORS, get_mono_font_family
 
 
 def make_card(parent: ctk.CTkBaseClass) -> ctk.CTkFrame:
@@ -46,10 +46,11 @@ def add_card_header(
     header.grid(row=0, column=0, sticky="ew")
     header.grid_columnconfigure(2, weight=1)
 
+    mono = get_mono_font_family()
     pill = ctk.CTkLabel(
         header,
         text=number,
-        font=ctk.CTkFont(family="JetBrains Mono", size=11, weight="bold"),
+        font=ctk.CTkFont(family=mono, size=11, weight="bold"),
         text_color=COLORS["accent"],
         fg_color=COLORS["accent-soft"],
         corner_radius=3,
@@ -62,7 +63,7 @@ def add_card_header(
     title_label.grid(row=0, column=1, sticky="w", pady=10)
 
     if right_meta:
-        meta_font = ctk.CTkFont(family="JetBrains Mono", size=11)
+        meta_font = ctk.CTkFont(family=mono, size=11)
         meta_label = ctk.CTkLabel(
             header, text=right_meta, font=meta_font, text_color=COLORS["fg-2"], anchor="e"
         )
@@ -119,8 +120,10 @@ def add_field_row(
     value_frame.grid_columnconfigure(0, weight=1)
     value_frame.grid_propagate(False)
 
-    val_font = ctk.CTkFont(family="JetBrains Mono", size=12) if mono else (
-        (fonts or {}).get("label") or ctk.CTkFont(size=13)
+    val_font = (
+        ctk.CTkFont(family=get_mono_font_family(), size=13)
+        if mono
+        else ((fonts or {}).get("label") or ctk.CTkFont(size=13))
     )
     entry = ctk.CTkEntry(
         value_frame,
@@ -199,8 +202,8 @@ def add_disclosure(
     )
     body.grid_columnconfigure(0, weight=1)
 
-    label_font = ctk.CTkFont(size=12, weight="bold")
-    desc_font = ctk.CTkFont(size=10)
+    label_font = ctk.CTkFont(size=13, weight="bold")
+    desc_font = ctk.CTkFont(size=11)
 
     text_col = ctk.CTkFrame(head, fg_color="transparent")
     text_col.grid(row=0, column=1, sticky="w", padx=(10, 0))
@@ -278,7 +281,7 @@ def add_inline_metric(
     ctk.CTkLabel(
         box,
         text=label,
-        font=ctk.CTkFont(size=10),
+        font=ctk.CTkFont(size=11),
         text_color=COLORS["fg-2"],
         anchor="w",
     ).grid(row=0, column=0, sticky="w", padx=10, pady=(6, 0))
@@ -290,7 +293,7 @@ def add_inline_metric(
     entry = ctk.CTkEntry(
         val_row,
         textvariable=value_var,
-        font=ctk.CTkFont(family="JetBrains Mono", size=12),
+        font=ctk.CTkFont(family=get_mono_font_family(), size=13),
         fg_color=COLORS["bg-3"],
         border_width=0,
         text_color=COLORS["fg-0"],
@@ -302,10 +305,65 @@ def add_inline_metric(
         ctk.CTkLabel(
             val_row,
             text=unit,
-            font=ctk.CTkFont(size=10),
+            font=ctk.CTkFont(size=11),
             text_color=COLORS["fg-2"],
         ).grid(row=0, column=1, padx=(4, 0))
 
+    return box
+
+
+def add_inline_dropdown(
+    parent: ctk.CTkBaseClass,
+    *,
+    row: int,
+    column: int,
+    label: str,
+    value_var: ctk.StringVar,
+    values: Sequence[str],
+    on_change: Optional[Callable[[str], None]] = None,
+) -> ctk.CTkFrame:
+    """Render an `.nf`-style pill that wraps a CTkOptionMenu instead of an entry.
+
+    Used for finite-option fields (FR combination = average / conservative,
+    polarity = auto / normal / invert) so the user picks a valid value
+    instead of free-typing one that the backend will silently coerce.
+    """
+    box = ctk.CTkFrame(
+        parent,
+        corner_radius=4,
+        fg_color=COLORS["bg-3"],
+        border_width=1,
+        border_color=COLORS["line"],
+    )
+    box.grid(row=row, column=column, sticky="ew", padx=4, pady=4)
+    box.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(
+        box,
+        text=label,
+        font=ctk.CTkFont(size=11),
+        text_color=COLORS["fg-2"],
+        anchor="w",
+    ).grid(row=0, column=0, sticky="w", padx=10, pady=(6, 0))
+
+    if value_var.get() not in values:
+        value_var.set(values[0])
+
+    menu = ctk.CTkOptionMenu(
+        box,
+        variable=value_var,
+        values=list(values),
+        command=on_change,
+        font=ctk.CTkFont(size=12, weight="bold"),
+        height=26,
+        corner_radius=3,
+        fg_color=COLORS["bg-2"],
+        button_color=COLORS["bg-2"],
+        button_hover_color=COLORS["accent-soft"],
+        text_color=COLORS["fg-0"],
+        dropdown_font=ctk.CTkFont(size=12),
+    )
+    menu.grid(row=1, column=0, sticky="ew", padx=10, pady=(2, 6))
     return box
 
 

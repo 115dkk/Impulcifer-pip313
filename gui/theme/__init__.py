@@ -88,6 +88,81 @@ def get_png_path(size: int) -> Optional[Path]:
 # ---------------------------------------------------------------------------
 # CTk theme JSON path
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Monospace font fallback chain
+# ---------------------------------------------------------------------------
+_mono_family_cache: Optional[str] = None
+
+
+def get_mono_font_family() -> str:
+    """Return the best available monospace family Tk can actually render.
+
+    Why this exists. The redesign tokens spell out ``JetBrains Mono`` as
+    the mono font, but it is NOT bundled with Windows / macOS / Linux —
+    on a default Korean Windows install Tk's ``family="JetBrains Mono"``
+    request misses, and the render layer falls through to the system
+    default which is **Gulim (굴림)** in CP949 locales. That's the same
+    fake-bold-Hangul regression we already fought once for the proportional
+    font; it manifests for any user input that the redesign labelled as
+    "mono" (file paths, numeric pills, version strings).
+
+    This helper probes Tk's render layer (``tkfont.Font().actual()``) for
+    a chain of cross-platform candidates and returns the first one that
+    actually resolves. Result is cached at module level so widget builds
+    don't re-probe.
+
+    Priority order (best legibility first):
+
+    1. ``JetBrains Mono``      — design token, only if user has it installed
+    2. ``Cascadia Code``        — Windows 11 default + Office bundle
+    3. ``Cascadia Mono``        — same family without ligatures
+    4. ``Consolas``             — every Windows since Vista
+    5. ``Menlo``                — macOS default
+    6. ``DejaVu Sans Mono``     — Linux default
+    7. ``Courier New``          — universal Tk fallback
+    """
+    global _mono_family_cache
+    if _mono_family_cache is not None:
+        return _mono_family_cache
+
+    try:
+        from tkinter import font as tkfont
+    except Exception:
+        # No Tk yet — return a safe default WITHOUT caching so a later
+        # call (after ctk.CTk() exists) gets a real probe.
+        return "Courier New"
+
+    candidates = (
+        "JetBrains Mono",
+        "Cascadia Code",
+        "Cascadia Mono",
+        "Consolas",
+        "Menlo",
+        "DejaVu Sans Mono",
+        "Courier New",
+    )
+    found_any_real_match = False
+    for name in candidates:
+        try:
+            actual = tkfont.Font(family=name, size=10).actual("family")
+        except Exception:
+            # No default Tk root yet — Tk needs one to construct fonts.
+            # Return a safe default but DON'T cache it; next call (after
+            # the GUI builds its root) will re-probe and pick the real best.
+            return "Courier New"
+        if actual and actual.casefold() == name.casefold():
+            _mono_family_cache = name
+            return name
+        if actual:
+            found_any_real_match = True
+
+    # We probed every candidate and none matched verbatim, but Tk did
+    # respond to font queries — cache the safest universal fallback.
+    if found_any_real_match:
+        _mono_family_cache = "Courier New"
+    return "Courier New"
+
+
 def get_ctk_theme_json_path() -> Optional[Path]:
     """Return absolute path to the bundled CTk theme JSON, or None when absent."""
     candidates: list[Path] = []

@@ -28,6 +28,7 @@ from gui.skins.studio_widgets import (
     add_card_header,
     add_disclosure,
     add_field_row,
+    add_inline_dropdown,
     add_inline_metric,
     make_card,
     make_card_body,
@@ -185,7 +186,12 @@ class StudioImpulciferTab:
         rc_inline.grid_columnconfigure((0, 1, 2), weight=1, uniform="rcm")
         add_inline_metric(rc_inline, row=0, column=0, label="Specific limit", value_var=self.specific_limit_var, unit="Hz")
         add_inline_metric(rc_inline, row=0, column=1, label="Generic limit", value_var=self.generic_limit_var, unit="Hz")
-        add_inline_metric(rc_inline, row=0, column=2, label="FR combination", value_var=self.fr_combination_var)
+        add_inline_dropdown(
+            rc_inline, row=0, column=2,
+            label="FR combination",
+            value_var=self.fr_combination_var,
+            values=("average", "conservative"),
+        )
 
         # 2. Headphone compensation
         _, hp_body = add_disclosure(
@@ -296,7 +302,12 @@ class StudioImpulciferTab:
         vb_inline.grid_columnconfigure((0, 1, 2), weight=1, uniform="vbm")
         add_inline_metric(vb_inline, row=0, column=0, label="Crossover", value_var=self.vbass_freq_var, unit="Hz")
         add_inline_metric(vb_inline, row=0, column=1, label="Sub HP", value_var=self.vbass_hp_var, unit="Hz")
-        add_inline_metric(vb_inline, row=0, column=2, label="Polarity", value_var=self.vbass_polarity_var)
+        add_inline_dropdown(
+            vb_inline, row=0, column=2,
+            label="Polarity",
+            value_var=self.vbass_polarity_var,
+            values=("auto", "normal", "invert"),
+        )
 
     # ------------------------------------------------------------------
     # Generate

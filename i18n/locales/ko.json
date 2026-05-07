@@ -309,5 +309,6 @@
   "studio_disclosure_headphone_comp_desc": "참조 WAV로 헤드폰 응답 보정 적용",
   "studio_disclosure_custom_eq_desc": "사용자 EQ 파일 적용 (공통 / 좌 / 우)",
   "studio_disclosure_virtual_bass_desc": "저역 확장 합성",
-  "studio_toggle_plot_desc": "그래프 생성 (처리 시간 증가)"
+  "studio_toggle_plot_desc": "그래프 생성 (처리 시간 증가)",
+  "label_force_channels_custom": "직접 입력:"
 }

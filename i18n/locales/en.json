@@ -309,5 +309,6 @@
   "studio_disclosure_headphone_comp_desc": "Apply headphone compensation from a reference WAV",
   "studio_disclosure_custom_eq_desc": "Apply user-supplied EQ files (common / left / right)",
   "studio_disclosure_virtual_bass_desc": "Synthesise low-frequency extension",
-  "studio_toggle_plot_desc": "Generate graphs (longer processing)"
+  "studio_toggle_plot_desc": "Generate graphs (longer processing)",
+  "label_force_channels_custom": "Custom value:"
 }
