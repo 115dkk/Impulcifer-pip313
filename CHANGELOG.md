@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.0 - 2026-05-09
+### ⭐ Recorder 내부 진행 이벤트 + 현재 스피커 표시
+
+#### ⭐ 새로운 기능 / 개선
+- **`play_and_record()` 진행 이벤트 추가**: 기존 블로킹 재생/녹음 구조는 유지하되 선택적 `progress_callback`을 추가해 loading, devices, recording, saving, complete/error 단계와 현재 sweep speaker(`FL`, `FR` 등)를 외부로 전달한다.
+- **Stable 녹음 다이얼로그**: Stable Recorder에서 녹음 시작 시 별도 진행 다이얼로그를 띄워 현재 스피커, sweep 진행률, 장치 준비/저장 상태를 표시한다. 기존 inline 상태 영역은 완료 요약을 계속 남긴다.
+- **Studio Capture session 강화**: Studio Recorder 카드에 speaker segment chip을 추가해 현재 녹음 중인 스피커를 강조 표시한다.
+- **CLI 진행 표시**: `core/recorder.py` CLI 실행 시 같은 progress event를 사용해 현재 단계와 현재 스피커를 콘솔에 출력한다.
+- **무결성 검증 대상 분리**: 새 `core.recording_progress` 모듈로 segmented sweep timeline 추정 로직을 분리하고 단위 테스트를 추가했다.
+- **CI 녹음 테스트 안정화**: PortAudio가 없는 CI 환경에서도 recorder progress 테스트가 수집 단계에서 실패하지 않도록 테스트 내부에서 `sounddevice`를 대체한다.
+
 ## 2.5.1 - 2026-05-09
 ### 🐛 Recorder 녹음 진행 상태 표시 보강
 

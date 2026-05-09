@@ -14,11 +14,13 @@ import customtkinter as ctk
 from gui.constants import (
     DIALOG_LANGUAGE_SIZE,
     DIALOG_PROCESSING_SIZE,
+    DIALOG_RECORDING_SIZE,
     DIALOG_UPDATE_SIZE,
     WIDGET_LOG_TEXTBOX_WIDTH,
     WIDGET_NOTES_TEXTBOX_WIDTH,
     WIDGET_PROGRESS_BAR_WIDTH,
 )
+from gui.recording_status import format_duration
 from gui.utils import build_fonts, setup_pretendard_font
 from i18n.localization import SUPPORTED_LANGUAGES
 from updater.updater_core import (
@@ -63,6 +65,138 @@ class BaseDialog(ctk.CTkToplevel):
         x = (self.winfo_screenwidth() // 2) - (width // 2)
         y = (self.winfo_screenheight() // 2) - (height // 2)
         self.geometry(f"{width}x{height}+{x}+{y}")
+
+
+class RecordingProgressDialog(BaseDialog):
+    """Dialog showing live recorder playback/capture progress."""
+
+    def __init__(
+        self,
+        parent: object,
+        loc_manager,
+        fonts: Optional[dict[str, ctk.CTkFont]] = None,
+    ) -> None:
+        super().__init__(
+            parent,
+            loc_manager,
+            fonts,
+            loc_manager.get("dialog_recording_title", default="Recording"),
+            DIALOG_RECORDING_SIZE,
+        )
+        self.recording_complete = False
+        self.protocol("WM_DELETE_WINDOW", self.on_window_close)
+
+        self.grid_columnconfigure(0, weight=1)
+
+        self.title_label = ctk.CTkLabel(
+            self,
+            text=self.loc.get("dialog_recording_message", default="Recording sweep..."),
+            font=self.fonts["heading"],
+            anchor="w",
+        )
+        self.title_label.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 8))
+
+        self.current_label = ctk.CTkLabel(
+            self,
+            text=self.loc.get("recording_status_preparing"),
+            font=self.fonts["dialog_title"],
+            anchor="w",
+        )
+        self.current_label.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 8))
+
+        self.progress_bar = ctk.CTkProgressBar(self)
+        self.progress_bar.set(0)
+        self.progress_bar.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 8))
+
+        self.detail_label = ctk.CTkLabel(
+            self,
+            text="",
+            font=self.fonts["dialog_small"],
+            text_color="gray",
+            anchor="w",
+            justify="left",
+            wraplength=DIALOG_RECORDING_SIZE[0] - 40,
+        )
+        self.detail_label.grid(row=3, column=0, sticky="ew", padx=20, pady=(0, 16))
+
+        button_frame = ctk.CTkFrame(self)
+        button_frame.grid(row=4, column=0, sticky="ew", padx=20, pady=(0, 16))
+
+        self.close_button = ctk.CTkButton(
+            button_frame,
+            text=self.loc.get("button_close", default="Close"),
+            command=self.on_close,
+            state="disabled",
+        )
+        self.close_button.pack(side="right", padx=5)
+
+    def handle_event(self, event) -> None:
+        """Apply a recorder progress event from the UI thread."""
+        progress = max(0.0, min(1.0, event.progress))
+        self.progress_bar.set(progress)
+
+        if event.phase == "recording" and event.speaker:
+            current = self.loc.get(
+                "recording_status_recording_speaker",
+                speaker=event.speaker,
+                index=event.segment_index or 0,
+                total=event.segment_total,
+            )
+            detail = self.loc.get(
+                "recording_status_recording",
+                elapsed=format_duration(event.elapsed),
+                duration=format_duration(event.duration),
+            )
+        elif event.phase == "recording":
+            current = self.loc.get("recording_status_recording_gap")
+            detail = self.loc.get(
+                "recording_status_recording",
+                elapsed=format_duration(event.elapsed),
+                duration=format_duration(event.duration),
+            )
+        elif event.phase == "devices":
+            current = self.loc.get("recording_status_devices_ready")
+            detail = event.message
+        elif event.phase == "saving":
+            current = self.loc.get("recording_status_saving")
+            detail = ""
+        elif event.phase == "complete":
+            current = self.loc.get("recording_status_complete")
+            detail = ""
+        elif event.phase == "error":
+            current = self.loc.get("recording_status_error")
+            detail = event.message
+        else:
+            current = self.loc.get("recording_status_preparing")
+            detail = event.message
+
+        self.current_label.configure(text=current)
+        self.detail_label.configure(text=detail)
+
+    def mark_complete(self, summary_text: str = "") -> None:
+        """Enable closing and optionally show the saved recording summary."""
+        self.recording_complete = True
+        self.progress_bar.set(1.0)
+        self.current_label.configure(text=self.loc.get("recording_status_complete"))
+        self.detail_label.configure(text=summary_text)
+        self.close_button.configure(state="normal")
+
+    def mark_error(self, error_msg: str) -> None:
+        """Enable closing after an error."""
+        self.recording_complete = True
+        self.current_label.configure(text=self.loc.get("recording_status_error"))
+        self.detail_label.configure(text=error_msg)
+        self.close_button.configure(state="normal")
+
+    def on_window_close(self) -> None:
+        """Ignore close attempts while the recorder is still running."""
+        if self.recording_complete:
+            self.on_close()
+
+    def on_close(self) -> None:
+        """Close the dialog."""
+        self.grab_release()
+        self.destroy()
 
 
 class ProcessingDialog(BaseDialog):

@@ -1,0 +1,91 @@
+"""Tests for recorder progress events and segmented sweep inference."""
+
+from __future__ import annotations
+
+import importlib
+import sys
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from core.recording_progress import event_for_elapsed, infer_sweep_segments
+
+
+def test_infer_sweep_segments_from_segmented_file_name() -> None:
+    """Segmented sweep names should map to active speaker time windows."""
+    segments = infer_sweep_segments(
+        "data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
+        total_duration=18.3,
+    )
+
+    assert [segment.speaker for segment in segments] == ["FL", "FR"]
+    assert segments[0].start == pytest.approx(2.0)
+    assert segments[0].end == pytest.approx(8.15)
+    assert segments[1].start == pytest.approx(10.15)
+    assert segments[1].end == pytest.approx(16.3)
+
+
+def test_event_for_elapsed_reports_active_speaker() -> None:
+    """Progress events should name the currently active speaker when possible."""
+    segments = infer_sweep_segments(
+        "sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
+        total_duration=18.3,
+    )
+
+    fl_event = event_for_elapsed(elapsed=3.0, duration=18.3, segments=segments)
+    assert fl_event.speaker == "FL"
+    assert fl_event.segment_index == 1
+    assert fl_event.segment_total == 2
+
+    gap_event = event_for_elapsed(elapsed=9.0, duration=18.3, segments=segments)
+    assert gap_event.speaker is None
+    assert gap_event.segment_total == 2
+
+
+def test_play_and_record_emits_lifecycle_events(monkeypatch) -> None:
+    """The recorder callback should expose lifecycle events without audio hardware."""
+    core_package = sys.modules.get("core")
+    previous_recorder_module = sys.modules.pop("core.recorder", None)
+    had_recorder_attr = core_package is not None and hasattr(core_package, "recorder")
+    previous_recorder_attr = (
+        getattr(core_package, "recorder") if had_recorder_attr else None
+    )
+
+    fake_sounddevice = SimpleNamespace(play=lambda *_args, **_kwargs: None)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
+    try:
+        recorder = importlib.import_module("core.recorder")
+    finally:
+        sys.modules.pop("core.recorder", None)
+        if previous_recorder_module is not None:
+            sys.modules["core.recorder"] = previous_recorder_module
+        if core_package is not None:
+            if had_recorder_attr:
+                setattr(core_package, "recorder", previous_recorder_attr)
+            elif hasattr(core_package, "recorder"):
+                delattr(core_package, "recorder")
+
+    events = []
+    fake_input = {"name": "Input", "hostapi": 0, "max_input_channels": 2}
+    fake_output = {"name": "Output", "hostapi": 0, "max_output_channels": 2}
+
+    monkeypatch.setattr(recorder, "is_truehd_file", lambda _path: False)
+    monkeypatch.setattr(recorder, "read_wav", lambda _path: (10, np.zeros((2, 10))))
+    monkeypatch.setattr(recorder, "get_devices", lambda **_kwargs: (fake_input, fake_output))
+    monkeypatch.setattr(recorder, "set_default_devices", lambda *_args: ("Input API", "Output API"))
+    monkeypatch.setattr(recorder, "record_target", lambda *_args, **_kwargs: None)
+
+    recorder.play_and_record(
+        play="sweep.wav",
+        record="out.wav",
+        channels=2,
+        progress_callback=events.append,
+        progress_interval=0.01,
+    )
+
+    phases = [event.phase for event in events]
+    assert phases[0] == "loading"
+    assert "devices" in phases
+    assert "recording" in phases
+    assert phases[-2:] == ["saving", "complete"]
