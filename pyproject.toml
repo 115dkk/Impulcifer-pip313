@@ -83,12 +83,12 @@ include = [
     "data/demo/README.md",
     "data/demo/headphones.wav",
     "data/demo/room-mic-calibration.txt",
-    "data/demo/room-responses.wav",
     "data/demo/room-target.csv",
     "data/demo/FC.wav",
     "data/demo/FL,FR.wav",
     "data/demo/BL,SL.wav",
     "data/demo/SR,BR.wav",
+    "data/demo/room-*.wav",
     "img/**/*",
     # Pulse logo bundle — multi-resolution .ico (Windows iconbitmap),
     # PNG series (Tk iconphoto + CTkImage), .icns (macOS bundle), and
@@ -102,11 +102,12 @@ include = [
     "README.md",
     "CHANGELOG.md",
     "pyproject.toml",
-    # Glob the entire ``font/`` directory so any companion font file
-    # (e.g. Source Han Serif "본명조") the user drops in is bundled too.
-    # The runtime loader (`core.utils._scan_bundled_fonts`) registers every
-    # ``.otf``/``.ttf``/``.ttc`` it finds.
-    "font/**",
+    # Bundle only the top-level fonts that the runtime scanner can see.
+    # Recursive font globs pull in optional CJK serif families that are not
+    # used at runtime and push PyPI artifacts over the 100 MB limit.
+    "font/*.otf",
+    "font/*.ttc",
+    "font/*.ttf",
 ]
 exclude = [
     "research/**/*",
