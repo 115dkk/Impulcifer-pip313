@@ -159,13 +159,23 @@ class RecordingStatusController:
         self,
         record_file: str,
         summary: RecordingSummary | None | object = _SUMMARY_NOT_PROVIDED,
-    ) -> None:
+    ) -> str:
         """Stop progress and show a summary for the saved recording."""
         self._cancel_timer()
         self._active = False
         self._safe_set_progress(1.0)
         self._safe_set_status(self.loc.get("recording_status_complete"))
 
+        detail = self.summary_text(record_file, summary)
+        self._safe_set_detail(detail)
+        return detail
+
+    def summary_text(
+        self,
+        record_file: str,
+        summary: RecordingSummary | None | object = _SUMMARY_NOT_PROVIDED,
+    ) -> str:
+        """Return localized summary text for a completed recording."""
         recording_summary = (
             analyze_recording(record_file)
             if summary is _SUMMARY_NOT_PROVIDED
@@ -174,21 +184,16 @@ class RecordingStatusController:
 
         basename = os.path.basename(record_file)
         if recording_summary is None:
-            self._safe_set_detail(
-                self.loc.get("recording_status_summary_unavailable", file=basename)
-            )
-            return
+            return self.loc.get("recording_status_summary_unavailable", file=basename)
 
-        self._safe_set_detail(
-            self.loc.get(
-                "recording_status_summary",
-                file=basename,
-                channels=recording_summary.channels,
-                duration=format_duration(recording_summary.duration),
-                peak_db=f"{recording_summary.peak_db:.1f}",
-                active=recording_summary.active_channels,
-                total=recording_summary.channels,
-            )
+        return self.loc.get(
+            "recording_status_summary",
+            file=basename,
+            channels=recording_summary.channels,
+            duration=format_duration(recording_summary.duration),
+            peak_db=f"{recording_summary.peak_db:.1f}",
+            active=recording_summary.active_channels,
+            total=recording_summary.channels,
         )
 
     def error(self, error_msg: str) -> None:
@@ -198,6 +203,52 @@ class RecordingStatusController:
         self._safe_set_progress(0.0)
         self._safe_set_status(self.loc.get("recording_status_error"))
         self._safe_set_detail(error_msg)
+
+    def handle_event(self, event: Any) -> None:
+        """Apply a core recorder progress event to the status widgets."""
+        self._cancel_timer()
+        self._active = event.phase == "recording"
+        self._safe_set_progress(event.progress)
+
+        if event.phase == "recording" and event.speaker:
+            self._safe_set_status(
+                self.loc.get(
+                    "recording_status_recording_speaker",
+                    speaker=event.speaker,
+                    index=event.segment_index or 0,
+                    total=event.segment_total,
+                )
+            )
+            self._safe_set_detail(
+                self.loc.get(
+                    "recording_status_recording",
+                    elapsed=format_duration(event.elapsed),
+                    duration=format_duration(event.duration),
+                )
+            )
+        elif event.phase == "recording":
+            self._safe_set_status(self.loc.get("recording_status_recording_gap"))
+            self._safe_set_detail(
+                self.loc.get(
+                    "recording_status_recording",
+                    elapsed=format_duration(event.elapsed),
+                    duration=format_duration(event.duration),
+                )
+            )
+        elif event.phase == "devices":
+            self._safe_set_status(self.loc.get("recording_status_devices_ready"))
+            self._safe_set_detail(event.message)
+        elif event.phase == "saving":
+            self._safe_set_status(self.loc.get("recording_status_saving"))
+            self._safe_set_detail("")
+        elif event.phase == "complete":
+            self._safe_set_status(self.loc.get("recording_status_complete"))
+            self._safe_set_detail("")
+        elif event.phase == "error":
+            self.error(event.message)
+        else:
+            self._safe_set_status(self.loc.get("recording_status_preparing"))
+            self._safe_set_detail(event.message)
 
     def _schedule_tick(self, *, delay_ms: int = 500) -> None:
         try:

@@ -9,6 +9,7 @@ dialog, widget, and file filter values never drift between call sites.
 # Window sizes (width, height)
 WINDOW_MAIN_SIZE = (1000, 700)
 DIALOG_PROCESSING_SIZE = (700, 500)
+DIALOG_RECORDING_SIZE = (560, 280)
 DIALOG_UPDATE_SIZE = (600, 500)
 DIALOG_LANGUAGE_SIZE = (400, 550)
 

@@ -80,6 +80,9 @@ class StudioRecorderTab:
         self.recording_status_text = ctk.StringVar()
         self.recording_detail_text = ctk.StringVar()
         self.recording_feedback: RecordingStatusController | None = None
+        self.segment_chip_frame: ctk.CTkFrame | None = None
+        self.segment_chips: dict[str, ctk.CTkLabel] = {}
+        self.segment_speakers: tuple[str, ...] = ()
 
         self._build()
         self._refresh_devices()
@@ -270,6 +273,9 @@ class StudioRecorderTab:
             wraplength=720,
         ).grid(row=2, column=0, sticky="ew")
 
+        self.segment_chip_frame = ctk.CTkFrame(body, fg_color="transparent")
+        self.segment_chip_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+
         self.recording_feedback = RecordingStatusController(
             root=self.root,
             loc=self.loc,
@@ -332,6 +338,9 @@ class StudioRecorderTab:
         if self.recording_feedback:
             self.recording_feedback.start(play_file)
 
+        def report_progress(event):
+            self.root.after(0, lambda event=event: self._on_progress_event(event))
+
         input_device = self.input_device_var.get()
         output_device = self.output_device_var.get()
         host_api = self.host_api_var.get()
@@ -346,6 +355,7 @@ class StudioRecorderTab:
                     host_api=host_api,
                     channels=channels,
                     append=False,
+                    progress_callback=report_progress,
                 )
                 summary = analyze_recording(record_file)
                 self.root.after(0, lambda: self._on_complete(record_file, summary))
@@ -355,11 +365,49 @@ class StudioRecorderTab:
 
         threading.Thread(target=_run, daemon=True).start()
 
+    def _on_progress_event(self, event: object) -> None:
+        if self.recording_feedback:
+            self.recording_feedback.handle_event(event)
+        speakers = tuple(getattr(event, "speakers", ()) or ())
+        self._render_segment_chips(speakers)
+        self._highlight_segment_chip(getattr(event, "speaker", None))
+
+    def _render_segment_chips(self, speakers: tuple[str, ...]) -> None:
+        if self.segment_chip_frame is None or speakers == self.segment_speakers:
+            return
+
+        for child in self.segment_chip_frame.winfo_children():
+            child.destroy()
+        self.segment_chips.clear()
+        self.segment_speakers = speakers
+
+        for column, speaker in enumerate(speakers):
+            chip = ctk.CTkLabel(
+                self.segment_chip_frame,
+                text=speaker,
+                font=ctk.CTkFont(family=get_mono_font_family(), size=12, weight="bold"),
+                fg_color=COLORS["bg-3"],
+                text_color=COLORS["fg-1"],
+                corner_radius=4,
+                padx=10,
+                height=26,
+            )
+            chip.grid(row=0, column=column, sticky="w", padx=(0, 8), pady=2)
+            self.segment_chips[speaker] = chip
+
+    def _highlight_segment_chip(self, active_speaker: str | None) -> None:
+        for speaker, chip in self.segment_chips.items():
+            if speaker == active_speaker:
+                chip.configure(fg_color=COLORS["accent"], text_color="#ffffff")
+            else:
+                chip.configure(fg_color=COLORS["bg-3"], text_color=COLORS["fg-1"])
+
     def _on_complete(self, record_file: str, summary: object) -> None:
         if self.record_button:
             self.record_button.configure(state="normal", text=self.loc.get("studio_record_start"))
         if self.recording_feedback:
             self.recording_feedback.complete(record_file, summary)
+        self._highlight_segment_chip(None)
         messagebox.showinfo(
             self.loc.get("message_recording_complete_title"),
             self.loc.get("message_recording_complete", file=record_file),
@@ -370,4 +418,5 @@ class StudioRecorderTab:
             self.record_button.configure(state="normal", text=self.loc.get("studio_record_start"))
         if self.recording_feedback:
             self.recording_feedback.error(error_msg)
+        self._highlight_segment_chip(None)
         messagebox.showerror(self.loc.get("message_error"), error_msg)

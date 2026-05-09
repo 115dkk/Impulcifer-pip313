@@ -2,15 +2,92 @@
 
 import os
 import re
+import time
 import sounddevice as sd
 from core.utils import read_wav, write_wav, read_audio, is_truehd_file
+from core.recording_progress import (
+    RecorderProgressEvent,
+    event_for_elapsed,
+    infer_sweep_segments,
+)
 import numpy as np
-from threading import Thread
+from threading import Event, Thread
 import argparse
 
 
 class DeviceNotFoundError(Exception):
     pass
+
+
+def _emit_progress(progress_callback, event):
+    """Call the optional progress callback without letting UI errors affect audio."""
+    if progress_callback is None:
+        return
+    try:
+        progress_callback(event)
+    except Exception:
+        pass
+
+
+def _monitor_recording_progress(
+        progress_callback,
+        stop_event,
+        start_time,
+        duration,
+        segments,
+        interval):
+    """Emit wall-clock playback progress while ``sd.play(blocking=True)`` runs."""
+    if progress_callback is None:
+        return
+
+    _emit_progress(
+        progress_callback,
+        event_for_elapsed(
+            elapsed=0.0,
+            duration=duration,
+            segments=segments,
+        ),
+    )
+    while not stop_event.wait(interval):
+        elapsed = time.monotonic() - start_time
+        _emit_progress(
+            progress_callback,
+            event_for_elapsed(
+                elapsed=elapsed,
+                duration=duration,
+                segments=segments,
+            ),
+        )
+
+
+def print_cli_progress(event):
+    """Default CLI progress renderer for recorder sessions."""
+    if event.phase == "recording" and event.speaker:
+        label = (
+            f"Now recording {event.speaker} "
+            f"({event.segment_index}/{event.segment_total})"
+        )
+    elif event.phase == "recording":
+        label = "Recording silence / waiting for the next sweep"
+    elif event.phase == "loading":
+        label = "Loading playback file"
+    elif event.phase == "devices":
+        label = "Audio devices are ready"
+    elif event.phase == "saving":
+        label = "Saving recording"
+    elif event.phase == "complete":
+        label = "Recording complete"
+    elif event.phase == "error":
+        label = f"Recording error: {event.message}"
+    else:
+        label = event.message or event.phase
+
+    key = (event.phase, event.speaker, event.segment_index, label)
+    if getattr(print_cli_progress, "_last_key", None) == key:
+        return
+    print_cli_progress._last_key = key
+    progress = f"{event.progress * 100:5.1f}%" if event.progress else "  -- "
+    print(f"[Recorder] {progress} | {label}", flush=True)
 
 
 def record_target(file_path, length, fs, channels=2, append=False):
@@ -214,7 +291,9 @@ def play_and_record(
         output_device=None,
         host_api=None,
         channels=2,
-        append=False):
+        append=False,
+        progress_callback=None,
+        progress_interval=0.25):
     """Plays one file and records another at the same time
     
     Now supports TrueHD/MLP files in addition to WAV
@@ -222,6 +301,11 @@ def play_and_record(
     # Create output directory
     out_dir, out_file = os.path.split(os.path.abspath(record))
     os.makedirs(out_dir, exist_ok=True)
+
+    _emit_progress(
+        progress_callback,
+        RecorderProgressEvent(phase="loading", message=str(play or "")),
+    )
 
     # Read playback file (now supports TrueHD)
     channel_info = None
@@ -240,8 +324,10 @@ def play_and_record(
         fs, data = read_wav(play)
     
     n_channels = data.shape[0]
+    duration = data.shape[1] / fs
+    segments = infer_sweep_segments(play, duration)
     print(f"Audio info: {fs}Hz, {n_channels} channels, {data.shape[1]} samples")
-    print(f"Duration: {data.shape[1] / fs:.2f} seconds")
+    print(f"Duration: {duration:.2f} seconds")
 
     # Find and set devices as default
     try:
@@ -262,6 +348,15 @@ def play_and_record(
 
     print(f'Input device:  "{input_device_str}"')
     print(f'Output device: "{output_device_str}" (max {output_device["max_output_channels"]} channels)')
+    _emit_progress(
+        progress_callback,
+        RecorderProgressEvent(
+            phase="devices",
+            duration=duration,
+            speakers=tuple(segment.speaker for segment in segments),
+            message=f'{input_device_str} → {output_device_str}',
+        ),
+    )
 
     # If recording with TrueHD source, save channel info
     if channel_info and record:
@@ -282,15 +377,66 @@ def play_and_record(
         kwargs={'channels': channels, 'append': append}
     )
     recorder.start()
-    
+
+    progress_stop_event = Event()
+    progress_thread = None
+    if progress_callback is not None:
+        progress_thread = Thread(
+            target=_monitor_recording_progress,
+            args=(
+                progress_callback,
+                progress_stop_event,
+                time.monotonic(),
+                duration,
+                segments,
+                max(0.05, progress_interval),
+            ),
+            daemon=True,
+        )
+        progress_thread.start()
+
     try:
         sd.play(np.transpose(data), samplerate=fs, blocking=True)
     except Exception as e:
         print(f"Playback error: {e}")
+        progress_stop_event.set()
+        _emit_progress(
+            progress_callback,
+            RecorderProgressEvent(
+                phase="error",
+                duration=duration,
+                progress=0.0,
+                message=str(e),
+            ),
+        )
         raise
-    
+    finally:
+        progress_stop_event.set()
+        if progress_thread is not None:
+            progress_thread.join(timeout=1.0)
+
+    _emit_progress(
+        progress_callback,
+        RecorderProgressEvent(
+            phase="saving",
+            elapsed=duration,
+            duration=duration,
+            progress=0.99,
+            speakers=tuple(segment.speaker for segment in segments),
+        ),
+    )
     recorder.join()
     print("Recording completed.")
+    _emit_progress(
+        progress_callback,
+        RecorderProgressEvent(
+            phase="complete",
+            elapsed=duration,
+            duration=duration,
+            progress=1.0,
+            speakers=tuple(segment.speaker for segment in segments),
+        ),
+    )
 
 
 def create_cli():
@@ -334,4 +480,6 @@ def create_cli():
 
 
 if __name__ == '__main__':
-    play_and_record(**create_cli())
+    cli_args = create_cli()
+    cli_args["progress_callback"] = print_cli_progress
+    play_and_record(**cli_args)

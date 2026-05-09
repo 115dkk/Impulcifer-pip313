@@ -24,6 +24,7 @@ from gui.constants import (
     WIDGET_BUTTON_WIDTH_BROWSE,
     WIDGET_ENTRY_WIDTH_DEFAULT,
 )
+from gui.dialogs import RecordingProgressDialog
 from gui.recording_status import RecordingStatusController, analyze_recording
 from gui.utils import (
     browse_file,
@@ -400,6 +401,13 @@ class RecorderTab:
             text=self.loc.get('button_start_recording_active')
         )
         self.recording_feedback.start(play_file)
+        recording_dialog = RecordingProgressDialog(self.root, self.loc, fonts=self.fonts)
+
+        def report_progress(event):
+            self.root.after(
+                0,
+                lambda event=event: self._on_recording_progress(event, recording_dialog),
+            )
 
         def run_recording():
             try:
@@ -410,36 +418,58 @@ class RecorderTab:
                     output_device=output_device,
                     host_api=host_api,
                     channels=selected_channels,
-                    append=append
+                    append=append,
+                    progress_callback=report_progress,
                 )
                 summary = analyze_recording(record_file)
-                self.root.after(0, lambda: self._on_recording_complete(record_file, summary))
+                self.root.after(
+                    0,
+                    lambda: self._on_recording_complete(record_file, summary, recording_dialog),
+                )
             except Exception as e:
                 err = str(e)
-                self.root.after(0, lambda: self._on_recording_error(err))
+                self.root.after(0, lambda: self._on_recording_error(err, recording_dialog))
 
         thread = threading.Thread(target=run_recording, daemon=True)
         thread.start()
 
-    def _on_recording_complete(self, record_file: str, summary: object) -> None:
+    def _on_recording_progress(self, event: object, dialog: RecordingProgressDialog) -> None:
+        """Update Stable recorder progress surfaces from a core progress event."""
+        self.recording_feedback.handle_event(event)
+        dialog.handle_event(event)
+
+    def _on_recording_complete(
+        self,
+        record_file: str,
+        summary: object,
+        dialog: RecordingProgressDialog | None = None,
+    ) -> None:
         """Re-enable record button and show success message on main thread."""
         self.record_button.configure(
             state="normal",
             text=self.loc.get('button_start_recording')
         )
-        self.recording_feedback.complete(record_file, summary)
+        summary_text = self.recording_feedback.complete(record_file, summary)
+        if dialog is not None:
+            dialog.mark_complete(summary_text)
         messagebox.showinfo(
             self.loc.get('message_recording_complete_title'),
             self.loc.get('message_recording_complete', file=record_file)
         )
 
-    def _on_recording_error(self, error_msg: str) -> None:
+    def _on_recording_error(
+        self,
+        error_msg: str,
+        dialog: RecordingProgressDialog | None = None,
+    ) -> None:
         """Re-enable record button and show error message on main thread."""
         self.record_button.configure(
             state="normal",
             text=self.loc.get('button_start_recording')
         )
         self.recording_feedback.error(error_msg)
+        if dialog is not None:
+            dialog.mark_error(error_msg)
         messagebox.showerror(
             self.loc.get('message_recording_error_title'),
             self.loc.get('message_recording_error', error=error_msg)
