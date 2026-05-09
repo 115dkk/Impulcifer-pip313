@@ -35,7 +35,7 @@ from gui.utils import (
 # the Stable skin — the two skins should accept the same set of presets.
 CHANNEL_PRESETS: tuple[tuple[str, int], ...] = (
     ("2 (Stereo)", 2),
-    ("14 (7.1.4 Atmos)", 14),
+    ("14 (7ch)", 14),
     ("22 (7.0.4 Atmos)", 22),
     ("26 (7.0.6 Atmos)", 26),
 )
@@ -157,8 +157,8 @@ class StudioRecorderTab:
         ctk.CTkLabel(
             custom_row,
             text=self.loc.get("label_force_channels_custom"),
-            font=ctk.CTkFont(size=12),
-            text_color=COLORS["fg-2"],
+            font=ctk.CTkFont(size=13),
+            text_color=COLORS["fg-1"],
             anchor="w",
             width=140,
         ).grid(row=0, column=0, sticky="w", padx=(0, 16))
@@ -179,8 +179,8 @@ class StudioRecorderTab:
         ctk.CTkLabel(
             frame,
             text=label,
-            font=ctk.CTkFont(size=12),
-            text_color=COLORS["fg-2"],
+            font=ctk.CTkFont(size=13),
+            text_color=COLORS["fg-1"],
             anchor="w",
             width=140,
         ).grid(row=0, column=0, sticky="w", padx=(0, 16))

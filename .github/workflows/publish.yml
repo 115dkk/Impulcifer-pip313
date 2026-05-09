@@ -109,4 +109,7 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
       # No API token needed - uses OIDC Trusted Publisher
       with:
+        # Rekor is an external transparency log; transient 5xx responses
+        # should not block package publication.
+        attestations: false
         verbose: true

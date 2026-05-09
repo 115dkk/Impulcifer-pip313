@@ -109,6 +109,9 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          # Rekor is an external transparency log; transient 5xx responses
+          # should not block package publication.
+          attestations: false
 
   # TestPyPI 발행 비활성화 (v2.2.5+)
   # TestPyPI는 실제 사용에 도움이 되지 않아 제거함

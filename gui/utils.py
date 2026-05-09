@@ -576,7 +576,7 @@ def build_fonts(family: Optional[str]) -> dict[str, ctk.CTkFont]:
         'label':         ctk.CTkFont(family=family, size=13),
         'value':         ctk.CTkFont(family=family, size=13, weight="bold"),
         'button_large':  ctk.CTkFont(family=family, size=16, weight="bold"),
-        'small':         ctk.CTkFont(family=family, size=11),
+        'small':         ctk.CTkFont(family=family, size=12),
         'small_bold':    ctk.CTkFont(family=family, size=12, weight="bold"),
         'dialog_title':  ctk.CTkFont(family=family, size=18, weight="bold"),
         'dialog_body':   ctk.CTkFont(family=family, size=14),

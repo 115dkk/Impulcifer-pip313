@@ -277,8 +277,8 @@
   "label_select_skin": "레이아웃 프리셋:",
   "option_skin_stable": "Stable",
   "option_skin_studio": "Studio",
-  "tooltip_skin_stable": "콤팩트한 탭 기반 레이아웃 — 기본값.",
-  "tooltip_skin_studio": "사이드바 네비게이션 + 카드형 컨텐츠.",
+  "tooltip_skin_stable": "기본 탭 화면입니다. 좁은 창에서도 안정적으로 사용할 수 있습니다.",
+  "tooltip_skin_studio": "넓은 화면에서 녹음과 처리를 카드로 정리해 보여주는 Studio 화면입니다.",
   "message_skin_changed": "레이아웃 프리셋이 변경되었습니다. UI를 재시작하면 적용됩니다.",
   "sidebar_recorder": "녹음기",
   "sidebar_processing": "처리",
@@ -306,9 +306,10 @@
   "studio_record_start": "녹음 시작",
   "studio_change_button": "변경",
   "studio_disclosure_room_correction_desc": "측정 환경의 잔향/모드 보정",
-  "studio_disclosure_headphone_comp_desc": "참조 WAV로 헤드폰 응답 보정 적용",
+  "studio_disclosure_headphone_comp_desc": "헤드폰의 응답이 담긴 WAV로 보정",
   "studio_disclosure_custom_eq_desc": "사용자 EQ 파일 적용 (공통 / 좌 / 우)",
-  "studio_disclosure_virtual_bass_desc": "저역 확장 합성",
+  "studio_disclosure_advanced_desc": "리샘플링, 레벨, 밸런스, 감쇠와 출력 형식을 조정합니다",
+  "studio_disclosure_virtual_bass_desc": "부족한 저역에 이상적인 응답을 덧붙입니다",
   "studio_toggle_plot_desc": "그래프 생성 (처리 시간 증가)",
   "label_force_channels_custom": "직접 입력:"
 }

@@ -89,7 +89,7 @@ class SettingsTab:
 
         ctk.CTkLabel(
             skin_frame,
-            text=self.loc.get('tooltip_skin_studio'),
+            text=self._current_skin_description(),
             font=self.fonts['small'],
             text_color="gray"
         ).grid(row=2, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 15))
@@ -216,6 +216,11 @@ class SettingsTab:
         """
         skin_code = self._skin_label_map.get(skin_label, SKIN_STABLE)
         self.app.bus.emit('skin_changed', code=skin_code)
+
+    def _current_skin_description(self) -> str:
+        if self.loc.get_skin() == SKIN_STUDIO:
+            return self.loc.get('tooltip_skin_studio')
+        return self.loc.get('tooltip_skin_stable')
 
     def change_theme(self, theme_name: str) -> None:
         """Publish a theme change event."""

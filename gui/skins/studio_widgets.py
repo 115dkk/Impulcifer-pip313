@@ -63,7 +63,7 @@ def add_card_header(
     title_label.grid(row=0, column=1, sticky="w", pady=10)
 
     if right_meta:
-        meta_font = ctk.CTkFont(family=mono, size=11)
+        meta_font = ctk.CTkFont(family=mono, size=12)
         meta_label = ctk.CTkLabel(
             header, text=right_meta, font=meta_font, text_color=COLORS["fg-2"], anchor="e"
         )
@@ -104,7 +104,7 @@ def add_field_row(
         parent,
         text=label,
         font=label_font,
-        text_color=COLORS["fg-2"],
+        text_color=COLORS["fg-1"],
         anchor="w",
     ).grid(row=row, column=0, sticky="w", padx=(0, 16), pady=6)
 
@@ -146,7 +146,7 @@ def add_field_row(
             fg_color="transparent",
             hover_color=COLORS["accent-soft"],
             text_color=COLORS["accent"],
-            font=ctk.CTkFont(size=11, weight="bold"),
+            font=ctk.CTkFont(size=12, weight="bold"),
         )
         link.grid(row=0, column=1, padx=(0, 8), pady=4, sticky="e")
 
@@ -203,7 +203,7 @@ def add_disclosure(
     body.grid_columnconfigure(0, weight=1)
 
     label_font = ctk.CTkFont(size=13, weight="bold")
-    desc_font = ctk.CTkFont(size=11)
+    desc_font = ctk.CTkFont(size=12)
 
     text_col = ctk.CTkFrame(head, fg_color="transparent")
     text_col.grid(row=0, column=1, sticky="w", padx=(10, 0))
@@ -281,7 +281,7 @@ def add_inline_metric(
     ctk.CTkLabel(
         box,
         text=label,
-        font=ctk.CTkFont(size=11),
+        font=ctk.CTkFont(size=12),
         text_color=COLORS["fg-2"],
         anchor="w",
     ).grid(row=0, column=0, sticky="w", padx=10, pady=(6, 0))
@@ -305,7 +305,7 @@ def add_inline_metric(
         ctk.CTkLabel(
             val_row,
             text=unit,
-            font=ctk.CTkFont(size=11),
+            font=ctk.CTkFont(size=12),
             text_color=COLORS["fg-2"],
         ).grid(row=0, column=1, padx=(4, 0))
 
@@ -341,7 +341,7 @@ def add_inline_dropdown(
     ctk.CTkLabel(
         box,
         text=label,
-        font=ctk.CTkFont(size=11),
+        font=ctk.CTkFont(size=12),
         text_color=COLORS["fg-2"],
         anchor="w",
     ).grid(row=0, column=0, sticky="w", padx=10, pady=(6, 0))

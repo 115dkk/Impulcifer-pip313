@@ -66,7 +66,7 @@ class StudioSettingsTab:
             body,
             row=0,
             label=self.loc.get("section_skin"),
-            description=self.loc.get("tooltip_skin_studio"),
+            description=self._current_skin_description(),
             make_control=self._make_skin_segment,
         )
 
@@ -136,6 +136,11 @@ class StudioSettingsTab:
         # Hairline below row
         rule = ctk.CTkFrame(parent, fg_color=COLORS["line-soft"], height=1, corner_radius=0)
         rule.grid(row=row * 2 + 1, column=0, sticky="sew", padx=4)
+
+    def _current_skin_description(self) -> str:
+        if self.loc.get_skin() == SKIN_STUDIO:
+            return self.loc.get("tooltip_skin_studio")
+        return self.loc.get("tooltip_skin_stable")
 
     def _make_skin_segment(self, parent: ctk.CTkBaseClass) -> ctk.CTkSegmentedButton:
         current = self.loc.get_skin()

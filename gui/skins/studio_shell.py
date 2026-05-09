@@ -107,8 +107,8 @@ class StudioShell:
         ctk.CTkLabel(
             brand,
             text=f"v{self._current_version()}",
-            font=ctk.CTkFont(family=get_mono_font_family(), size=11),
-            text_color=COLORS["fg-3"],
+            font=ctk.CTkFont(family=get_mono_font_family(), size=12),
+            text_color=COLORS["fg-2"],
             anchor="w",
         ).grid(row=1, column=1, sticky="nw")
 

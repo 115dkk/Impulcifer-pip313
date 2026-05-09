@@ -278,7 +278,7 @@
   "option_skin_stable": "Stable",
   "option_skin_studio": "Studio",
   "tooltip_skin_stable": "Compact tabbed layout — the default.",
-  "tooltip_skin_studio": "Sidebar navigation + card-based content.",
+  "tooltip_skin_studio": "A wider Studio view that organizes recording and processing into cards.",
   "message_skin_changed": "Layout preset changed. Restart UI to apply.",
   "sidebar_recorder": "Recorder",
   "sidebar_processing": "Processing",
@@ -306,9 +306,10 @@
   "studio_record_start": "Start recording",
   "studio_change_button": "Change",
   "studio_disclosure_room_correction_desc": "Compensate room reflections / modes",
-  "studio_disclosure_headphone_comp_desc": "Apply headphone compensation from a reference WAV",
+  "studio_disclosure_headphone_comp_desc": "Correct using a WAV that contains the headphone response",
   "studio_disclosure_custom_eq_desc": "Apply user-supplied EQ files (common / left / right)",
-  "studio_disclosure_virtual_bass_desc": "Synthesise low-frequency extension",
+  "studio_disclosure_advanced_desc": "Adjust resampling, level, balance, decay, and output formats",
+  "studio_disclosure_virtual_bass_desc": "Add an idealized low-frequency response where bass is lacking",
   "studio_toggle_plot_desc": "Generate graphs (longer processing)",
   "label_force_channels_custom": "自訂值:"
 }
