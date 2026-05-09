@@ -52,6 +52,39 @@ def test_validate_recording_setup_ignores_unknown_filenames() -> None:
     assert validate_recording_setup("recording.wav", 2, True) is None
 
 
+def test_recording_status_helpers_summarize_saved_wav(tmp_path: Path) -> None:
+    """Recording status summaries should detect duration, peak, and active channels."""
+    import numpy as np
+    import soundfile as sf
+
+    from gui.recording_status import (
+        analyze_recording,
+        format_duration,
+        inspect_playback_file,
+    )
+
+    sample_rate = 48_000
+    samples = sample_rate // 10
+    audio = np.zeros((samples, 2), dtype=np.float32)
+    audio[:, 0] = 0.5
+
+    wav_path = tmp_path / "FL,FR.wav"
+    sf.write(wav_path, audio, sample_rate, subtype="FLOAT")
+
+    playback_info = inspect_playback_file(str(wav_path))
+    assert playback_info is not None
+    assert playback_info.channels == 2
+    assert playback_info.duration == pytest.approx(0.1)
+
+    summary = analyze_recording(str(wav_path))
+    assert summary is not None
+    assert summary.channels == 2
+    assert summary.active_channels == 1
+    assert summary.duration == pytest.approx(0.1)
+    assert summary.peak_db == pytest.approx(-6.02, abs=0.02)
+    assert format_duration(summary.duration) == "0:00"
+
+
 def test_setup_pretendard_font_uses_render_layer_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

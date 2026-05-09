@@ -24,6 +24,7 @@ from gui.constants import (
     WIDGET_BUTTON_WIDTH_BROWSE,
     WIDGET_ENTRY_WIDTH_DEFAULT,
 )
+from gui.recording_status import RecordingStatusController, analyze_recording
 from gui.utils import (
     browse_file,
     install_smooth_scrolling,
@@ -200,6 +201,52 @@ class RecorderTab:
             variable=self.append_var
         ).grid(row=3, column=0, sticky="w", padx=15, pady=(5, 15))
 
+        # === Recording Status Section ===
+        status_frame = ctk.CTkFrame(scroll, corner_radius=0)
+        status_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        status_frame.grid_columnconfigure(0, weight=1)
+        row += 1
+
+        ctk.CTkLabel(
+            status_frame,
+            text=self.loc.get('section_recording_status'),
+            font=self.fonts['heading']
+        ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 8))
+
+        self.recording_progress = ctk.CTkProgressBar(status_frame)
+        self.recording_progress.grid(row=1, column=0, sticky="ew", padx=15, pady=(0, 8))
+
+        self.recording_status_text = ctk.StringVar()
+        self.recording_status_label = ctk.CTkLabel(
+            status_frame,
+            textvariable=self.recording_status_text,
+            font=self.fonts['small_bold'],
+            anchor="w",
+            justify="left",
+        )
+        self.recording_status_label.grid(row=2, column=0, sticky="ew", padx=15, pady=(0, 2))
+
+        self.recording_detail_text = ctk.StringVar()
+        self.recording_detail_label = ctk.CTkLabel(
+            status_frame,
+            textvariable=self.recording_detail_text,
+            font=self.fonts['small'],
+            text_color="gray",
+            wraplength=800,
+            anchor="w",
+            justify="left",
+        )
+        self.recording_detail_label.grid(row=3, column=0, sticky="ew", padx=15, pady=(0, 15))
+
+        self.recording_feedback = RecordingStatusController(
+            root=self.root,
+            loc=self.loc,
+            set_status=self.recording_status_text.set,
+            set_detail=self.recording_detail_text.set,
+            set_progress=self.recording_progress.set,
+        )
+        self.recording_feedback.reset()
+
         # === Record Button ===
         self.record_button = ctk.CTkButton(
             scroll,
@@ -352,6 +399,7 @@ class RecorderTab:
             state="disabled",
             text=self.loc.get('button_start_recording_active')
         )
+        self.recording_feedback.start(play_file)
 
         def run_recording():
             try:
@@ -364,7 +412,8 @@ class RecorderTab:
                     channels=selected_channels,
                     append=append
                 )
-                self.root.after(0, lambda: self._on_recording_complete(record_file))
+                summary = analyze_recording(record_file)
+                self.root.after(0, lambda: self._on_recording_complete(record_file, summary))
             except Exception as e:
                 err = str(e)
                 self.root.after(0, lambda: self._on_recording_error(err))
@@ -372,12 +421,13 @@ class RecorderTab:
         thread = threading.Thread(target=run_recording, daemon=True)
         thread.start()
 
-    def _on_recording_complete(self, record_file: str) -> None:
+    def _on_recording_complete(self, record_file: str, summary: object) -> None:
         """Re-enable record button and show success message on main thread."""
         self.record_button.configure(
             state="normal",
             text=self.loc.get('button_start_recording')
         )
+        self.recording_feedback.complete(record_file, summary)
         messagebox.showinfo(
             self.loc.get('message_recording_complete_title'),
             self.loc.get('message_recording_complete', file=record_file)
@@ -389,6 +439,7 @@ class RecorderTab:
             state="normal",
             text=self.loc.get('button_start_recording')
         )
+        self.recording_feedback.error(error_msg)
         messagebox.showerror(
             self.loc.get('message_recording_error_title'),
             self.loc.get('message_recording_error', error=error_msg)

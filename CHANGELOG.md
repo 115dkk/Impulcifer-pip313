@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.5.1 - 2026-05-09
+### 🐛 Recorder 녹음 진행 상태 표시 보강
+
+#### ⭐ 새로운 기능 / 개선
+- **Recorder 상태 표시 추가 (Stable / Studio)**: 녹음 중 앱이 멈춘 것처럼 보이지 않도록 재생 sweep 길이를 기준으로 예상 진행률과 상태 문구(장치 준비 → sweep 녹음 → 저장 대기)를 표시. 완료 후에는 저장된 WAV를 읽어 채널 수, 길이, peak dBFS, 활성 채널 수를 인라인 요약으로 남긴다.
+- **공통 녹음 상태 헬퍼 추가**: Stable 탭의 compact 상태 영역과 Studio 탭의 Capture session 카드가 `gui.recording_status`의 동일한 길이 추정/녹음 요약 로직을 공유한다. `core.recorder.play_and_record()`의 블로킹 동작은 변경하지 않았다.
+- **i18n / 문서 갱신**: 녹음 상태 문구 키를 9개 locale 및 legacy zh alias 파일에 동기화하고, README의 Recorder 설명에 진행 상태/완료 요약 안내를 추가.
+
 ## 2.5.0 - 2026-05-07
 ### ⭐ Pulse 리디자인 — Stable / Studio 스킨 시스템 + 앱 아이콘 + about-hero 정보 탭
 

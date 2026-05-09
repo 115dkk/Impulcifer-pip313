@@ -14,6 +14,7 @@ import sounddevice
 
 from core import recorder
 from gui.constants import FILETYPES_AUDIO
+from gui.recording_status import RecordingStatusController, analyze_recording
 from gui.skins.studio_widgets import (
     add_card_header,
     add_field_row,
@@ -75,6 +76,10 @@ class StudioRecorderTab:
         self.input_device_menu: ctk.CTkOptionMenu | None = None
         self.output_device_menu: ctk.CTkOptionMenu | None = None
         self.record_button: ctk.CTkButton | None = None
+        self.recording_progress: ctk.CTkProgressBar | None = None
+        self.recording_status_text = ctk.StringVar()
+        self.recording_detail_text = ctk.StringVar()
+        self.recording_feedback: RecordingStatusController | None = None
 
         self._build()
         self._refresh_devices()
@@ -105,6 +110,7 @@ class StudioRecorderTab:
 
         self._build_devices_card(scroll, row=1)
         self._build_files_card(scroll, row=2)
+        self._build_capture_status_card(scroll, row=3)
 
     # ------------------------------------------------------------------
     # Card 01 — Devices
@@ -233,6 +239,47 @@ class StudioRecorderTab:
         )
 
     # ------------------------------------------------------------------
+    # Card 03 — Capture status
+    # ------------------------------------------------------------------
+    def _build_capture_status_card(self, parent: ctk.CTkBaseClass, *, row: int) -> None:
+        card = make_card(parent)
+        card.grid(row=row, column=0, sticky="ew", pady=(0, 14))
+        add_card_header(card, number="03", title=self.loc.get("studio_card_capture_session"), fonts=self.fonts)
+        body = make_card_body(card)
+        body.grid_columnconfigure(0, weight=1)
+
+        self.recording_progress = ctk.CTkProgressBar(body)
+        self.recording_progress.grid(row=0, column=0, sticky="ew", pady=(2, 10))
+
+        ctk.CTkLabel(
+            body,
+            textvariable=self.recording_status_text,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=COLORS["fg-0"],
+            anchor="w",
+            justify="left",
+        ).grid(row=1, column=0, sticky="ew", pady=(0, 4))
+
+        ctk.CTkLabel(
+            body,
+            textvariable=self.recording_detail_text,
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["fg-2"],
+            anchor="w",
+            justify="left",
+            wraplength=720,
+        ).grid(row=2, column=0, sticky="ew")
+
+        self.recording_feedback = RecordingStatusController(
+            root=self.root,
+            loc=self.loc,
+            set_status=self.recording_status_text.set,
+            set_detail=self.recording_detail_text.set,
+            set_progress=self.recording_progress.set,
+        )
+        self.recording_feedback.reset()
+
+    # ------------------------------------------------------------------
     # Devices
     # ------------------------------------------------------------------
     def _refresh_devices(self) -> None:
@@ -282,6 +329,8 @@ class StudioRecorderTab:
 
         if self.record_button:
             self.record_button.configure(state="disabled", text=self.loc.get("button_start_recording_active"))
+        if self.recording_feedback:
+            self.recording_feedback.start(play_file)
 
         input_device = self.input_device_var.get()
         output_device = self.output_device_var.get()
@@ -298,16 +347,19 @@ class StudioRecorderTab:
                     channels=channels,
                     append=False,
                 )
-                self.root.after(0, lambda: self._on_complete(record_file))
+                summary = analyze_recording(record_file)
+                self.root.after(0, lambda: self._on_complete(record_file, summary))
             except Exception as e:
                 err = str(e)
                 self.root.after(0, lambda: self._on_error(err))
 
         threading.Thread(target=_run, daemon=True).start()
 
-    def _on_complete(self, record_file: str) -> None:
+    def _on_complete(self, record_file: str, summary: object) -> None:
         if self.record_button:
             self.record_button.configure(state="normal", text=self.loc.get("studio_record_start"))
+        if self.recording_feedback:
+            self.recording_feedback.complete(record_file, summary)
         messagebox.showinfo(
             self.loc.get("message_recording_complete_title"),
             self.loc.get("message_recording_complete", file=record_file),
@@ -316,4 +368,6 @@ class StudioRecorderTab:
     def _on_error(self, error_msg: str) -> None:
         if self.record_button:
             self.record_button.configure(state="normal", text=self.loc.get("studio_record_start"))
+        if self.recording_feedback:
+            self.recording_feedback.error(error_msg)
         messagebox.showerror(self.loc.get("message_error"), error_msg)
