@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import importlib
+import sys
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
-from core import recorder
 from core.recording_progress import event_for_elapsed, infer_sweep_segments
 
 
@@ -42,6 +45,27 @@ def test_event_for_elapsed_reports_active_speaker() -> None:
 
 def test_play_and_record_emits_lifecycle_events(monkeypatch) -> None:
     """The recorder callback should expose lifecycle events without audio hardware."""
+    core_package = sys.modules.get("core")
+    previous_recorder_module = sys.modules.pop("core.recorder", None)
+    had_recorder_attr = core_package is not None and hasattr(core_package, "recorder")
+    previous_recorder_attr = (
+        getattr(core_package, "recorder") if had_recorder_attr else None
+    )
+
+    fake_sounddevice = SimpleNamespace(play=lambda *_args, **_kwargs: None)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
+    try:
+        recorder = importlib.import_module("core.recorder")
+    finally:
+        sys.modules.pop("core.recorder", None)
+        if previous_recorder_module is not None:
+            sys.modules["core.recorder"] = previous_recorder_module
+        if core_package is not None:
+            if had_recorder_attr:
+                setattr(core_package, "recorder", previous_recorder_attr)
+            elif hasattr(core_package, "recorder"):
+                delattr(core_package, "recorder")
+
     events = []
     fake_input = {"name": "Input", "hostapi": 0, "max_input_channels": 2}
     fake_output = {"name": "Output", "hostapi": 0, "max_output_channels": 2}
@@ -51,7 +75,6 @@ def test_play_and_record_emits_lifecycle_events(monkeypatch) -> None:
     monkeypatch.setattr(recorder, "get_devices", lambda **_kwargs: (fake_input, fake_output))
     monkeypatch.setattr(recorder, "set_default_devices", lambda *_args: ("Input API", "Output API"))
     monkeypatch.setattr(recorder, "record_target", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(recorder.sd, "play", lambda *_args, **_kwargs: None)
 
     recorder.play_and_record(
         play="sweep.wav",

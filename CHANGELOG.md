@@ -13,6 +13,7 @@ been fixed and old features improved.
 - **Studio Capture session 강화**: Studio Recorder 카드에 speaker segment chip을 추가해 현재 녹음 중인 스피커를 강조 표시한다.
 - **CLI 진행 표시**: `core/recorder.py` CLI 실행 시 같은 progress event를 사용해 현재 단계와 현재 스피커를 콘솔에 출력한다.
 - **무결성 검증 대상 분리**: 새 `core.recording_progress` 모듈로 segmented sweep timeline 추정 로직을 분리하고 단위 테스트를 추가했다.
+- **CI 녹음 테스트 안정화**: PortAudio가 없는 CI 환경에서도 recorder progress 테스트가 수집 단계에서 실패하지 않도록 테스트 내부에서 `sounddevice`를 대체한다.
 
 ## 2.5.1 - 2026-05-09
 ### 🐛 Recorder 녹음 진행 상태 표시 보강
