@@ -237,12 +237,21 @@ class TestConfigurationFiles:
             pytest.fail(f"pyproject.toml 파싱 실패: {e}")
 
     def test_processing_config_matches_main_room_limits(self):
-        """ProcessingConfig defaults should match impulcifer.main defaults."""
+        """ProcessingConfig defaults should match impulcifer.main defaults.
+
+        ProcessingConfig is the source of truth: ``core.cli_builder`` derives
+        argparse CLI defaults directly from these dataclass field defaults, so
+        changing them changes the CLI default behavior (and BRIR md5).
+        ``impulcifer.main()``'s signature defaults must follow the dataclass.
+        """
+        import inspect
+        import impulcifer
         from core.pipeline import ProcessingConfig
 
         config = ProcessingConfig()
-        assert config.specific_limit == 20000
-        assert config.generic_limit == 1000
+        signature = inspect.signature(impulcifer.main)
+        assert signature.parameters["specific_limit"].default == config.specific_limit
+        assert signature.parameters["generic_limit"].default == config.generic_limit
 
 
 class TestVersionConsistency:
