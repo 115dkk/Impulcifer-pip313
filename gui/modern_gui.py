@@ -316,9 +316,8 @@ class ModernImpulciferGUI:
 
         Mirrors ``refresh_localized_ui`` but only tears down the body
         region (header stays so the rebuild is fast and the user keeps
-        the same window position). Tab state is not preserved across
-        skins because Stable and Studio expose different option subsets
-        — copying state across them would surface incomplete data.
+        the same window position). Tab state is not preserved across the
+        rebuild because the widget tree is recreated for the selected skin.
         """
         if code not in (SKIN_STABLE, SKIN_STUDIO):
             return
@@ -358,9 +357,8 @@ class ModernImpulciferGUI:
 
         Tab state preservation only applies to the Stable skin (whose
         Recorder + Impulcifer tabs implement ``get_state`` / ``apply_state``).
-        Studio rebuilds without restoring user-typed values — its widgets
-        are different objects and copying state across structurally
-        different forms would surface incomplete data.
+        Studio rebuilds its sidebar/card widgets from the current localization
+        state without attempting a cross-widget state transfer.
         """
         state = self._collect_tab_state() if self.skin == SKIN_STABLE else {}
         for child in self.root.winfo_children():
