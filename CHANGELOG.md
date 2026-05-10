@@ -4,6 +4,20 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.1 - 2026-05-10
+### Recorder FFmpeg lazy path + safety polish
+
+#### 버그 수정
+- **WAV 녹음의 FFmpeg 선탐색 제거**: `core.recorder.play_and_record()`가 더 이상 `is_truehd_file()`을 먼저 호출하지 않고 `read_audio()`만 사용한다. 일반 WAV는 `read_audio()` 내부의 soundfile fast-path를 타며, `.mlp`/`.thd`/`.truehd`에서만 FFmpeg/ffprobe 탐색과 자동 설치 경로로 들어간다.
+- **FFmpeg lazy setup cache poison 수정**: 정보 조회용 `auto_install=False` 탐색 실패와 실제 TrueHD 사용 시 `auto_install=True` 설치 시도를 별도 캐시로 분리했다. 지원 포맷 표시가 먼저 실패해도 이후 TrueHD 파일을 열 때 자동 설치 기회를 잃지 않는다.
+- **ProcessingConfig ↔ main 시그니처 동기화 (방향 정정)**: `ProcessingConfig.specific_limit`/`generic_limit`은 `core.cli_builder`가 argparse 기본값을 그대로 읽어 쓰는 정본이므로 master의 400/300을 그대로 둔다. 대신 비활성 코드처럼 어긋나 있던 `impulcifer.main()` 시그니처 기본값(20000/1000)을 dataclass에 맞춰 400/300으로 내린다. CLI/GUI 모두 항상 명시값을 넘기므로 실행 결과는 변하지 않으며, BRIR md5도 master와 일치한다.
+
+#### 사용성 개선
+- **Studio Recorder 채널 검증 추가**: Studio Recorder도 Stable과 동일한 `validate_recording_setup()` 경고를 사용해, 파일명으로 예상되는 스피커/채널 수와 사용자가 선택한 입력 채널 수가 다를 때 확인을 받는다. 사용자가 직접 켠 force-channels 토글이 있을 때만 mismatch 확인 다이얼로그를 띄우며, 기본 캡처 경로(예: `FL,FR.wav` + 2채널)에서는 더 이상 매번 확인을 묻지 않는다.
+- **Recorder 디버그 플롯 옵션 추가**: Stable/Studio Recorder와 CLI에 `Debug plots` 옵션을 추가했다. 녹음 대상 파일, 채널 RMS, headroom 등 verbose 진단 출력은 이 옵션을 켰을 때만 표시된다.
+- **GUI 스크롤 프레임 페이싱 추가**: `CTkScrollableFrame`의 wheel-driven canvas 이동을 사용자 모니터 주사율 기반 interval로 coalesce해 고해상도 휠/터치패드 이벤트 폭주가 Tk/DWM repaint를 디스플레이보다 빠르게 밀어붙이지 않도록 했다. 기존 scrollregion 재계산 제거에 더해 실제 view 이동 빈도도 50Hz 목표 이상으로 유지한다.
+- **회귀 테스트 강화**: WAV 녹음이 TrueHD 정밀 판별을 호출하지 않는지, detection-only FFmpeg 실패 후에도 auto-install 경로가 재시도되는지 테스트를 추가했다.
+
 ## 2.6.0 - 2026-05-09
 ### ⭐ Recorder 내부 진행 이벤트 + 현재 스피커 표시
 

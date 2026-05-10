@@ -1,17 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Studio Impulcifer tab — card-based BRIR generator.
-
-Mirrors the focused option set from the Pulse redesign mockup:
-
-    Card 01  Input files          (recordings dir + test signal)
-    Card 02  Processing options   (room / headphone / custom EQ / plot)
-    Card 03  Virtual bass         (crossover / sub HP / polarity)
-
-Users who need the full advanced options (resample, target_level, bass
-boost, tilt, channel balance, decay, etc.) should switch back to the
-Stable skin. By design the Studio variant is the focused experience.
-"""
+"""Studio Impulcifer tab - card-based BRIR generator."""
 from __future__ import annotations
 
 import os

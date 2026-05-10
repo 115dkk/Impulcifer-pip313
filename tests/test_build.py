@@ -5,6 +5,7 @@ Impulcifer 빌드 테스트 스크립트
 
 import os
 import subprocess
+import sys
 import time
 import pytest
 
@@ -29,6 +30,9 @@ def test_executable():
 
     if not exe_path:
         pytest.skip("실행 파일을 찾을 수 없습니다. 먼저 build_nuitka.py를 실행하여 빌드하세요.")
+
+    if not sys.stdin.isatty():
+        pytest.skip("실행 파일 smoke test는 대화형 터미널에서만 실행합니다.")
     
     print(f"✓ 실행 파일 발견: {exe_path}")
     
@@ -138,4 +142,4 @@ def main():
         print("3. 바이러스 백신 예외 설정")
 
 if __name__ == "__main__":
-    main() 
+    main()

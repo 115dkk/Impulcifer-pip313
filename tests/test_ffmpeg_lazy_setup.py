@@ -11,9 +11,9 @@ TrueHD detection.
 
 Issue #87 Phase 5 split the FFmpeg helpers out into ``core.ffmpeg_utils``;
 ``core.utils`` re-exports them for backward compatibility, but the lazy
-module-level state (``FFMPEG_PATH``, ``FFPROBE_PATH``, ``_FFMPEG_SETUP_DONE``)
-and the actual call sites (``setup_ffmpeg`` / ``install_ffmpeg``) live in
-``core.ffmpeg_utils`` — that is the module the spies must target.
+module-level state lives in ``core.ffmpeg_utils``. Detection-only lookups and
+auto-install attempts are cached separately so informational probes do not
+consume the later install opportunity.
 """
 
 from __future__ import annotations
@@ -65,6 +65,8 @@ class FfmpegLazySetupTest(unittest.TestCase):
         # Reset the lazy gate so subsequent calls trigger setup_ffmpeg again.
         ffmpeg_utils.FFMPEG_PATH = None
         ffmpeg_utils.FFPROBE_PATH = None
+        ffmpeg_utils._FFMPEG_DETECTION_DONE = False
+        ffmpeg_utils._FFMPEG_AUTO_INSTALL_ATTEMPTED = False
         ffmpeg_utils._FFMPEG_SETUP_DONE = False
         return fresh, setup_spy, install_spy
 
@@ -97,21 +99,43 @@ class FfmpegLazySetupTest(unittest.TestCase):
                               "FFMPEG_PATH must be None until ensure_ffmpeg_available() runs")
             self.assertIsNone(ffmpeg_utils.FFPROBE_PATH,
                               "FFPROBE_PATH must be None until ensure_ffmpeg_available() runs")
-            self.assertFalse(ffmpeg_utils._FFMPEG_SETUP_DONE,
-                             "_FFMPEG_SETUP_DONE must be False until ensure runs")
+            self.assertFalse(ffmpeg_utils._FFMPEG_DETECTION_DONE,
+                             "_FFMPEG_DETECTION_DONE must be False until ensure runs")
+            self.assertFalse(ffmpeg_utils._FFMPEG_AUTO_INSTALL_ATTEMPTED,
+                             "_FFMPEG_AUTO_INSTALL_ATTEMPTED must be False until ensure runs")
 
-    def test_ensure_runs_setup_only_once(self):
-        """ensure_ffmpeg_available() must call setup_ffmpeg only on first invocation."""
+    def test_detection_only_path_is_cached(self):
+        """Repeated detection-only checks should not repeat setup work."""
         utils, setup_spy, _ = self._import_with_spies()
 
         utils.ensure_ffmpeg_available(auto_install=False)
         first_calls = setup_spy.call_count
 
         utils.ensure_ffmpeg_available(auto_install=False)
-        utils.ensure_ffmpeg_available(auto_install=True)
         utils.ensure_ffmpeg_available(auto_install=False)
         self.assertEqual(setup_spy.call_count, first_calls,
-                         "setup_ffmpeg must be cached after the first ensure call")
+                         "setup_ffmpeg detection must be cached after the first ensure call")
+
+    def test_auto_install_true_can_retry_after_detection_only_failure(self):
+        """A detection miss with auto_install=False must not poison install later."""
+        utils, setup_spy, install_spy = self._import_with_spies()
+        import core.ffmpeg_utils as ffmpeg_utils
+
+        with mock.patch("shutil.which", return_value=None), \
+             mock.patch.object(ffmpeg_utils, "find_ffmpeg_in_common_paths",
+                               return_value=(None, None)):
+            self.assertFalse(utils.ensure_ffmpeg_available(auto_install=False))
+            self.assertFalse(install_spy.called,
+                             "detection-only lookup must not install FFmpeg")
+
+            self.assertFalse(utils.ensure_ffmpeg_available(auto_install=True))
+            self.assertGreaterEqual(
+                setup_spy.call_count,
+                2,
+                "auto_install=True must retry setup after detection miss",
+            )
+            self.assertTrue(install_spy.called,
+                            "auto_install=True must still get one install opportunity")
 
     def test_check_ffmpeg_available_does_not_auto_install_by_default(self):
         """check_ffmpeg_available() defaults to auto_install=False."""

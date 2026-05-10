@@ -13,6 +13,7 @@ import customtkinter as ctk
 import sounddevice
 
 from core import recorder
+from core.recording_validation import validate_recording_setup
 from gui.constants import FILETYPES_AUDIO
 from gui.recording_status import RecordingStatusController, analyze_recording
 from gui.skins.studio_widgets import (
@@ -64,6 +65,7 @@ class StudioRecorderTab:
         )
         self.record_var = ctk.StringVar(value=os.path.join("data", "my_hrir", "FL,FR.wav"))
         self.channels_var = ctk.IntVar(value=2)
+        self.debug_plots_var = ctk.BooleanVar(value=False)
         # Channel selector state — preset dropdown vs free-form custom entry.
         # ``channels_preset_var`` carries the dropdown label; when it's
         # ``_CUSTOM_CHANNEL_KEY`` the custom row appears and writes into
@@ -180,6 +182,12 @@ class StudioRecorderTab:
         self.channels_custom_entry.grid(row=0, column=1, sticky="w")
         self.channels_custom_row = custom_row
         custom_row.grid_remove()  # hidden until 기타… is chosen
+
+        ctk.CTkCheckBox(
+            body,
+            text=self.loc.get("checkbox_debug_plots"),
+            variable=self.debug_plots_var,
+        ).grid(row=5, column=0, sticky="w", padx=0, pady=(8, 2))
 
     def _labelled_row(self, parent: ctk.CTkBaseClass, *, row: int, label: str) -> ctk.CTkFrame:
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -333,6 +341,22 @@ class StudioRecorderTab:
             )
             return
 
+        # Stable's force-channels checkbox is replaced here by the channel
+        # preset itself: keep the auto-stereo (channels == 2) path silent,
+        # and only warn when the user explicitly picks a different channel
+        # count that disagrees with the speaker-list filename.
+        validation = validate_recording_setup(record_file, channels, channels != 2)
+        if validation and validation.has_mismatch:
+            warning_msg = self.loc.get(
+                "message_channel_mismatch_body",
+                expected_speakers=len(validation.expected_speakers),
+                speaker_names=", ".join(validation.expected_speakers),
+                expected_channels=validation.expected_channels,
+                selected_channels=validation.selected_channels,
+            )
+            if not messagebox.askyesno(self.loc.get("message_channel_mismatch_warning_title"), warning_msg):
+                return
+
         if self.record_button:
             self.record_button.configure(state="disabled", text=self.loc.get("button_start_recording_active"))
         if self.recording_feedback:
@@ -344,6 +368,7 @@ class StudioRecorderTab:
         input_device = self.input_device_var.get()
         output_device = self.output_device_var.get()
         host_api = self.host_api_var.get()
+        debug_plots = self.debug_plots_var.get()
 
         def _run() -> None:
             try:
@@ -355,6 +380,7 @@ class StudioRecorderTab:
                     host_api=host_api,
                     channels=channels,
                     append=False,
+                    debug_plots=debug_plots,
                     progress_callback=report_progress,
                 )
                 summary = analyze_recording(record_file)

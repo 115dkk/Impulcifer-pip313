@@ -19,9 +19,10 @@ Public surface:
     - ``read_audio(file_path, expand=False)`` (TrueHD-aware audio reader)
     - ``get_supported_audio_formats()``
 
-Module globals ``FFMPEG_PATH`` / ``FFPROBE_PATH`` / ``_FFMPEG_SETUP_DONE`` are
-intentionally module-private so the lazy-init pattern stays scoped to one
-file. ``ensure_ffmpeg_available`` is the only entry point that mutates them.
+Module globals ``FFMPEG_PATH`` / ``FFPROBE_PATH`` and the FFmpeg lazy-init
+flags are intentionally module-private so the setup policy stays scoped to
+one file. ``ensure_ffmpeg_available`` is the only entry point that mutates
+them.
 """
 
 import json
@@ -281,15 +282,19 @@ def setup_ffmpeg(auto_install=True):
 
 # FFmpeg 경로는 lazy하게 초기화한다. 모듈 import 시점에 setup_ffmpeg()를 실행
 # 하면 일반 WAV 처리, ProcessPool 워커 import, unit test에서도 ffmpeg/ffprobe
-# 탐색과 subprocess 호출이 발생해 시작 비용이 누적된다. 실제로 TrueHD/MLP
-# 기능을 사용하는 경로에서만 ensure_ffmpeg_available()를 통해 1회 초기화된다.
+# 탐색과 subprocess 호출이 발생해 시작 비용이 누적된다. 조회용 탐색 실패와
+# 실제 TrueHD/MLP 사용 시 자동 설치 시도는 별도 캐시로 관리한다.
 FFMPEG_PATH = None
 FFPROBE_PATH = None
+_FFMPEG_DETECTION_DONE = False
+_FFMPEG_AUTO_INSTALL_ATTEMPTED = False
+# Backward-compatible state name for older tests/importers. It mirrors whether
+# any detection/install path has already been attempted.
 _FFMPEG_SETUP_DONE = False
 
 
 def ensure_ffmpeg_available(auto_install=True):
-    """Lazy 초기화. 최초 호출 시 ``setup_ffmpeg()``를 실행하고 결과 캐시.
+    """Lazy 초기화. 필요 시 FFmpeg 탐색/자동 설치를 단계별로 수행한다.
 
     Args:
         auto_install: 자동 설치 시도 여부. TrueHD/MLP 실제 사용 경로에서는
@@ -299,19 +304,28 @@ def ensure_ffmpeg_available(auto_install=True):
     Returns:
         FFmpeg/ffprobe 경로가 모두 설정되어 있으면 ``True``, 아니면 ``False``.
     """
-    global FFMPEG_PATH, FFPROBE_PATH, _FFMPEG_SETUP_DONE
+    global FFMPEG_PATH, FFPROBE_PATH
+    global _FFMPEG_DETECTION_DONE, _FFMPEG_AUTO_INSTALL_ATTEMPTED, _FFMPEG_SETUP_DONE
 
-    if _FFMPEG_SETUP_DONE:
-        return FFMPEG_PATH is not None and FFPROBE_PATH is not None
+    if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
+        return True
 
-    _FFMPEG_SETUP_DONE = True
-    FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=auto_install)
+    if not _FFMPEG_DETECTION_DONE:
+        _FFMPEG_DETECTION_DONE = True
+        _FFMPEG_SETUP_DONE = True
+        FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=False)
+        if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
+            return True
 
-    if FFMPEG_PATH is None or FFPROBE_PATH is None:
-        if auto_install:
-            print("FFmpeg를 찾거나 설치할 수 없습니다. TrueHD/MLP 지원이 비활성화됩니다.")
-        return False
-    return True
+    if auto_install and not _FFMPEG_AUTO_INSTALL_ATTEMPTED:
+        _FFMPEG_AUTO_INSTALL_ATTEMPTED = True
+        _FFMPEG_SETUP_DONE = True
+        FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=True)
+        if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
+            return True
+        print("FFmpeg를 찾거나 설치할 수 없습니다. TrueHD/MLP 지원이 비활성화됩니다.")
+
+    return False
 
 
 def is_truehd_file(file_path):

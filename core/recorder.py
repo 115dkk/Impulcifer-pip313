@@ -4,7 +4,7 @@ import os
 import re
 import time
 import sounddevice as sd
-from core.utils import read_wav, write_wav, read_audio, is_truehd_file
+from core.utils import read_wav, write_wav, read_audio
 from core.recording_progress import (
     RecorderProgressEvent,
     event_for_elapsed,
@@ -90,7 +90,13 @@ def print_cli_progress(event):
     print(f"[Recorder] {progress} | {label}", flush=True)
 
 
-def record_target(file_path, length, fs, channels=2, append=False):
+def _debug_recording(debug_plots, message):
+    """Print verbose recorder diagnostics only when the debug option is enabled."""
+    if debug_plots:
+        print(message)
+
+
+def record_target(file_path, length, fs, channels=2, append=False, debug_plots=False):
     """Records audio and writes it to a file.
 
     Args:
@@ -100,66 +106,69 @@ def record_target(file_path, length, fs, channels=2, append=False):
         channels: Number of channels in the recording
         append: Add track(s) to an existing file? Silence will be added to end of each track to make all equal in
                 length
+        debug_plots: Print detailed recording diagnostics for troubleshooting
 
     Returns:
         None
     """
-    print(">>>>>>>>> Recording Target Debug Info:")
-    print(f"  File: {file_path}")
-    print(f"  Length: {length} samples ({length/fs:.2f} seconds)")
-    print(f"  Sample rate: {fs} Hz")
-    print(f"  Channels: {channels}")
-    print(f"  Append mode: {append}")
+    _debug_recording(debug_plots, ">>>>>>>>> Recording Target Debug Info:")
+    _debug_recording(debug_plots, f"  File: {file_path}")
+    _debug_recording(debug_plots, f"  Length: {length} samples ({length/fs:.2f} seconds)")
+    _debug_recording(debug_plots, f"  Sample rate: {fs} Hz")
+    _debug_recording(debug_plots, f"  Channels: {channels}")
+    _debug_recording(debug_plots, f"  Append mode: {append}")
     
     recording = sd.rec(length, samplerate=fs, channels=channels, blocking=True)
-    print(f"  Raw recording shape: {recording.shape}")
+    _debug_recording(debug_plots, f"  Raw recording shape: {recording.shape}")
     
     # Analyze recording content
-    print("  Recording content analysis:")
-    for ch in range(recording.shape[1] if len(recording.shape) > 1 else 1):
-        if len(recording.shape) > 1:
-            ch_data = recording[:, ch]
-        else:
-            ch_data = recording
-        max_val = np.max(np.abs(ch_data))
-        rms_val = np.sqrt(np.mean(ch_data ** 2))
-        print(f"    Channel {ch}: Max={max_val:.6f}, RMS={rms_val:.6f}, {'ACTIVE' if max_val > 1e-6 else 'EMPTY'}")
+    if debug_plots:
+        print("  Recording content analysis:")
+        for ch in range(recording.shape[1] if len(recording.shape) > 1 else 1):
+            if len(recording.shape) > 1:
+                ch_data = recording[:, ch]
+            else:
+                ch_data = recording
+            max_val = np.max(np.abs(ch_data))
+            rms_val = np.sqrt(np.mean(ch_data ** 2))
+            state = "ACTIVE" if max_val > 1e-6 else "EMPTY"
+            print(f"    Channel {ch}: Max={max_val:.6f}, RMS={rms_val:.6f}, {state}")
     
     # Transpose to have channels as rows (soundfile expects columns, but our system uses rows)
-    if recording.shape[1] == channels and len(recording.shape) == 2:
+    if len(recording.shape) == 2 and recording.shape[1] == channels:
         recording = np.transpose(recording)
-        print(f"  After transpose: {recording.shape}")
+        _debug_recording(debug_plots, f"  After transpose: {recording.shape}")
     elif len(recording.shape) == 1:
         # Mono recording, expand dimensions
         recording = np.expand_dims(recording, axis=0)
-        print(f"  Mono expanded to: {recording.shape}")
+        _debug_recording(debug_plots, f"  Mono expanded to: {recording.shape}")
     
     max_gain = 20 * np.log10(np.max(np.abs(recording) + 1e-10))
-    print(f"  Maximum gain: {max_gain:.2f} dB (headroom: {-1.0*max_gain:.1f} dB)")
+    _debug_recording(debug_plots, f"  Maximum gain: {max_gain:.2f} dB (headroom: {-1.0*max_gain:.1f} dB)")
     
     if append and os.path.isfile(file_path):
         # Adding to existing file, read the file
-        print("  Appending to existing file...")
+        _debug_recording(debug_plots, "  Appending to existing file...")
         _fs, data = read_wav(file_path, expand=True)
-        print(f"  Existing file shape: {data.shape}")
+        _debug_recording(debug_plots, f"  Existing file shape: {data.shape}")
         
         # Zero pad shorter to the length of the longer
         if recording.shape[1] > data.shape[1]:
             n = recording.shape[1] - data.shape[1]
             data = np.pad(data, [(0, 0), (0, n)])
-            print(f"  Padded existing data by {n} samples")
+            _debug_recording(debug_plots, f"  Padded existing data by {n} samples")
         elif data.shape[1] > recording.shape[1]:
             padding = data.shape[1] - recording.shape[1]
             recording = np.pad(recording, [(0, 0), (0, padding)])
-            print(f"  Padded new recording by {padding} samples")
+            _debug_recording(debug_plots, f"  Padded new recording by {padding} samples")
         
         # Add recording to the end of the existing data
         recording = np.vstack([data, recording])
-        print(f"  Final appended shape: {recording.shape}")
+        _debug_recording(debug_plots, f"  Final appended shape: {recording.shape}")
     
     write_wav(file_path, fs, recording)
-    print("  File written successfully")
-    print(f'>>>>>>>>> Headroom: {-1.0*max_gain:.1f} dB')
+    _debug_recording(debug_plots, "  File written successfully")
+    _debug_recording(debug_plots, f'>>>>>>>>> Headroom: {-1.0*max_gain:.1f} dB')
 
 
 def get_host_api_names():
@@ -293,7 +302,8 @@ def play_and_record(
         channels=2,
         append=False,
         progress_callback=None,
-        progress_interval=0.25):
+        progress_interval=0.25,
+        debug_plots=False):
     """Plays one file and records another at the same time
     
     Now supports TrueHD/MLP files in addition to WAV
@@ -307,21 +317,17 @@ def play_and_record(
         RecorderProgressEvent(phase="loading", message=str(play or "")),
     )
 
-    # Read playback file (now supports TrueHD)
-    channel_info = None
-    if is_truehd_file(play):
+    # read_audio keeps WAV on a fast soundfile path and only probes FFmpeg for
+    # .mlp/.thd/.truehd inputs.
+    fs, data, channel_info = read_audio(play)
+    if channel_info:
         print(f"Detected TrueHD/MLP file: {play}")
-        fs, data, channel_info = read_audio(play)
-        if channel_info:
-            print(f"Channel layout ({len(channel_info)} channels): {', '.join(channel_info)}")
-            
-            # 채널 수가 많은 경우 경고
-            if len(channel_info) > 8:
-                print("WARNING: This file contains more than 8 channels.")
-                print("Make sure your audio interface supports this many output channels.")
-    else:
-        # Original WAV reading
-        fs, data = read_wav(play)
+        print(f"Channel layout ({len(channel_info)} channels): {', '.join(channel_info)}")
+
+        # 채널 수가 많은 경우 경고
+        if len(channel_info) > 8:
+            print("WARNING: This file contains more than 8 channels.")
+            print("Make sure your audio interface supports this many output channels.")
     
     n_channels = data.shape[0]
     duration = data.shape[1] / fs
@@ -374,7 +380,7 @@ def play_and_record(
     recorder = Thread(
         target=record_target,
         args=(record, data.shape[1], fs),
-        kwargs={'channels': channels, 'append': append}
+        kwargs={'channels': channels, 'append': append, 'debug_plots': debug_plots}
     )
     recorder.start()
 
@@ -475,6 +481,8 @@ def create_cli():
     arg_parser.add_argument('--append', action='store_true',
                             help='Add track(s) to existing file? Silence will be added to the end of all tracks to '
                                  'make the equal in length.')
+    arg_parser.add_argument('--debug_plots', action='store_true',
+                            help='Print detailed recorder diagnostics for troubleshooting.')
     args = vars(arg_parser.parse_args())
     return args
 

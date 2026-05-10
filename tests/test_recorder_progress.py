@@ -12,6 +12,42 @@ import pytest
 from core.recording_progress import event_for_elapsed, infer_sweep_segments
 
 
+def _import_recorder_without_portaudio(monkeypatch):
+    """Import core.recorder with a fake sounddevice module for CI."""
+    core_package = sys.modules.get("core")
+    previous_recorder_module = sys.modules.pop("core.recorder", None)
+    had_recorder_attr = core_package is not None and hasattr(core_package, "recorder")
+    previous_recorder_attr = (
+        getattr(core_package, "recorder") if had_recorder_attr else None
+    )
+
+    fake_sounddevice = SimpleNamespace(
+        play=lambda *_args, **_kwargs: None,
+        rec=lambda *_args, **_kwargs: np.zeros((10, 2)),
+    )
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
+    try:
+        recorder = importlib.import_module("core.recorder")
+    finally:
+        sys.modules.pop("core.recorder", None)
+        if previous_recorder_module is not None:
+            sys.modules["core.recorder"] = previous_recorder_module
+        if core_package is not None:
+            if had_recorder_attr:
+                setattr(core_package, "recorder", previous_recorder_attr)
+            elif hasattr(core_package, "recorder"):
+                delattr(core_package, "recorder")
+    return recorder
+
+
+def _patch_recorder_hardware(monkeypatch, recorder):
+    fake_input = {"name": "Input", "hostapi": 0, "max_input_channels": 2}
+    fake_output = {"name": "Output", "hostapi": 0, "max_output_channels": 2}
+    monkeypatch.setattr(recorder, "get_devices", lambda **_kwargs: (fake_input, fake_output))
+    monkeypatch.setattr(recorder, "set_default_devices", lambda *_args: ("Input API", "Output API"))
+    monkeypatch.setattr(recorder, "record_target", lambda *_args, **_kwargs: None)
+
+
 def test_infer_sweep_segments_from_segmented_file_name() -> None:
     """Segmented sweep names should map to active speaker time windows."""
     segments = infer_sweep_segments(
@@ -45,36 +81,11 @@ def test_event_for_elapsed_reports_active_speaker() -> None:
 
 def test_play_and_record_emits_lifecycle_events(monkeypatch) -> None:
     """The recorder callback should expose lifecycle events without audio hardware."""
-    core_package = sys.modules.get("core")
-    previous_recorder_module = sys.modules.pop("core.recorder", None)
-    had_recorder_attr = core_package is not None and hasattr(core_package, "recorder")
-    previous_recorder_attr = (
-        getattr(core_package, "recorder") if had_recorder_attr else None
-    )
-
-    fake_sounddevice = SimpleNamespace(play=lambda *_args, **_kwargs: None)
-    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
-    try:
-        recorder = importlib.import_module("core.recorder")
-    finally:
-        sys.modules.pop("core.recorder", None)
-        if previous_recorder_module is not None:
-            sys.modules["core.recorder"] = previous_recorder_module
-        if core_package is not None:
-            if had_recorder_attr:
-                setattr(core_package, "recorder", previous_recorder_attr)
-            elif hasattr(core_package, "recorder"):
-                delattr(core_package, "recorder")
-
+    recorder = _import_recorder_without_portaudio(monkeypatch)
     events = []
-    fake_input = {"name": "Input", "hostapi": 0, "max_input_channels": 2}
-    fake_output = {"name": "Output", "hostapi": 0, "max_output_channels": 2}
 
-    monkeypatch.setattr(recorder, "is_truehd_file", lambda _path: False)
-    monkeypatch.setattr(recorder, "read_wav", lambda _path: (10, np.zeros((2, 10))))
-    monkeypatch.setattr(recorder, "get_devices", lambda **_kwargs: (fake_input, fake_output))
-    monkeypatch.setattr(recorder, "set_default_devices", lambda *_args: ("Input API", "Output API"))
-    monkeypatch.setattr(recorder, "record_target", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(recorder, "read_audio", lambda _path: (10, np.zeros((2, 10)), None))
+    _patch_recorder_hardware(monkeypatch, recorder)
 
     recorder.play_and_record(
         play="sweep.wav",
@@ -89,3 +100,22 @@ def test_play_and_record_emits_lifecycle_events(monkeypatch) -> None:
     assert "devices" in phases
     assert "recording" in phases
     assert phases[-2:] == ["saving", "complete"]
+
+
+def test_play_and_record_wav_does_not_probe_truehd(monkeypatch) -> None:
+    """Regular WAV playback must not trigger eager TrueHD probing."""
+    recorder = _import_recorder_without_portaudio(monkeypatch)
+
+    def fail_if_called(_path):
+        raise AssertionError("WAV path must not call is_truehd_file")
+
+    monkeypatch.setattr(recorder, "is_truehd_file", fail_if_called, raising=False)
+    monkeypatch.setattr(recorder, "read_audio", lambda _path: (10, np.zeros((2, 10)), None))
+    _patch_recorder_hardware(monkeypatch, recorder)
+
+    recorder.play_and_record(
+        play="sweep.wav",
+        record="out.wav",
+        channels=2,
+        progress_interval=0.01,
+    )

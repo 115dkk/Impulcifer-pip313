@@ -23,6 +23,7 @@
   "message_channel_guidance_custom": "Recording with {channels} channels ({speakers} speakers × 2 ears). Make sure your filename matches the speaker configuration.",
   "message_channel_guidance_invalid": "Enter valid channel count (recommended: 14, 22, or 26)",
   "checkbox_append_to_file": "Append to existing file (silence will be added to equalize track lengths)",
+  "checkbox_debug_plots": "Debug plots",
   "button_start_recording": "🔴 START RECORDING",
   "button_start_recording_active": "🔴 RECORDING...",
   "section_input_files": "Input Files",

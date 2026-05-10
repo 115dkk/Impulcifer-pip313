@@ -200,7 +200,14 @@ class RecorderTab:
             options_frame,
             text=self.loc.get('checkbox_append_to_file'),
             variable=self.append_var
-        ).grid(row=3, column=0, sticky="w", padx=15, pady=(5, 15))
+        ).grid(row=3, column=0, sticky="w", padx=15, pady=5)
+
+        self.debug_plots_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            options_frame,
+            text=self.loc.get('checkbox_debug_plots'),
+            variable=self.debug_plots_var,
+        ).grid(row=4, column=0, sticky="w", padx=15, pady=(5, 15))
 
         # === Recording Status Section ===
         status_frame = ctk.CTkFrame(scroll, corner_radius=0)
@@ -395,6 +402,7 @@ class RecorderTab:
         output_device = self.output_device_var.get()
         host_api = self.host_api_var.get()
         append = self.append_var.get()
+        debug_plots = self.debug_plots_var.get()
 
         self.record_button.configure(
             state="disabled",
@@ -419,6 +427,7 @@ class RecorderTab:
                     host_api=host_api,
                     channels=selected_channels,
                     append=append,
+                    debug_plots=debug_plots,
                     progress_callback=report_progress,
                 )
                 summary = analyze_recording(record_file)
