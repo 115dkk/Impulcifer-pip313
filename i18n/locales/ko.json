@@ -23,6 +23,7 @@
   "message_channel_guidance_custom": "{channels}채널 녹음 ({speakers}개 스피커 × 양 귀). 파일명이 스피커 구성과 일치하는지 확인하세요.",
   "message_channel_guidance_invalid": "유효한 채널 수를 입력하세요 (권장: 14, 22, 26)",
   "checkbox_append_to_file": "기존 파일에 추가 (트랙 길이 맞추기 위해 무음 추가됨)",
+  "checkbox_debug_plots": "디버그 플롯",
   "button_start_recording": "🔴 녹음 시작",
   "button_start_recording_active": "🔴 녹음 중...",
   "section_input_files": "입력 파일",

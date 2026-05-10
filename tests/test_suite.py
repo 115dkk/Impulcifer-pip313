@@ -236,6 +236,14 @@ class TestConfigurationFiles:
         except Exception as e:
             pytest.fail(f"pyproject.toml 파싱 실패: {e}")
 
+    def test_processing_config_matches_main_room_limits(self):
+        """ProcessingConfig defaults should match impulcifer.main defaults."""
+        from core.pipeline import ProcessingConfig
+
+        config = ProcessingConfig()
+        assert config.specific_limit == 20000
+        assert config.generic_limit == 1000
+
 
 class TestVersionConsistency:
     """버전 일관성 테스트"""

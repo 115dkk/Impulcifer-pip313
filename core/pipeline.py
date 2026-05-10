@@ -183,7 +183,7 @@ class ProcessingConfig:
         },
     )
     specific_limit: float = field(
-        default=400,
+        default=20000,
         metadata={
             "cli_flag": "--specific_limit",
             "cli_help": (
@@ -195,7 +195,7 @@ class ProcessingConfig:
         },
     )
     generic_limit: float = field(
-        default=300,
+        default=1000,
         metadata={
             "cli_flag": "--generic_limit",
             "cli_help": (

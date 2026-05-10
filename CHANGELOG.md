@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.1 - 2026-05-10
+### Recorder FFmpeg lazy path + safety polish
+
+#### 버그 수정
+- **WAV 녹음의 FFmpeg 선탐색 제거**: `core.recorder.play_and_record()`가 더 이상 `is_truehd_file()`을 먼저 호출하지 않고 `read_audio()`만 사용한다. 일반 WAV는 `read_audio()` 내부의 soundfile fast-path를 타며, `.mlp`/`.thd`/`.truehd`에서만 FFmpeg/ffprobe 탐색과 자동 설치 경로로 들어간다.
+- **FFmpeg lazy setup cache poison 수정**: 정보 조회용 `auto_install=False` 탐색 실패와 실제 TrueHD 사용 시 `auto_install=True` 설치 시도를 별도 캐시로 분리했다. 지원 포맷 표시가 먼저 실패해도 이후 TrueHD 파일을 열 때 자동 설치 기회를 잃지 않는다.
+- **ProcessingConfig 기본값 동기화**: `ProcessingConfig()`의 `specific_limit`/`generic_limit` 기본값을 `impulcifer.main()`의 기본값인 20000Hz/1000Hz와 맞춰, 직접 config 경로에서도 동일한 방 룸 보정 한계를 사용한다.
+
+#### 사용성 개선
+- **Studio Recorder 채널 검증 추가**: Studio Recorder도 Stable과 동일한 `validate_recording_setup()` 경고를 사용해, 파일명으로 예상되는 스피커/채널 수와 사용자가 선택한 입력 채널 수가 다를 때 확인을 받는다.
+- **Recorder 디버그 플롯 옵션 추가**: Stable/Studio Recorder와 CLI에 `Debug plots` 옵션을 추가했다. 녹음 대상 파일, 채널 RMS, headroom 등 verbose 진단 출력은 이 옵션을 켰을 때만 표시된다.
+- **회귀 테스트 강화**: WAV 녹음이 TrueHD 정밀 판별을 호출하지 않는지, detection-only FFmpeg 실패 후에도 auto-install 경로가 재시도되는지 테스트를 추가했다.
+
 ## 2.6.0 - 2026-05-09
 ### ⭐ Recorder 내부 진행 이벤트 + 현재 스피커 표시
 
