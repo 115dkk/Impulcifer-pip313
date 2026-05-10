@@ -436,6 +436,52 @@ if __name__ == "__main__":
 | 빌드 설정만 | 필수 | 불필요 | 권장 |
 | 의존성 변경 | 필수 | 전체 + 동기화 확인 | 권장 |
 
+## PR push 이후 CI 감시 및 회귀 대응
+
+`git push` 후 작업이 끝났다고 보고하지 말 것. 로컬 검증이 통과해도 CI에서만 재현되는 회귀가 있으므로, 푸시 직후 CI 결과까지 확인하고 실패가 있으면 같은 세션에서 후속 커밋으로 수정한 뒤 다시 그린이 될 때까지 따라간다.
+
+### 감시 절차
+
+푸시 직후 다음 명령으로 PR의 모든 체크가 끝날 때까지 기다린다.
+
+```bash
+gh pr checks <PR번호> --watch --fail-fast
+```
+
+`--fail-fast`는 한 체크가 실패하는 즉시 종료시켜 빠르게 다음 단계(수정)로 넘어가게 한다. 비대화 환경에서는 30초 폴링 루프로도 같은 효과를 낼 수 있다.
+
+```bash
+prev=""
+while true; do
+  s=$(gh pr checks <PR번호> --json name,bucket 2>/dev/null || echo "[]")
+  cur=$(echo "$s" | jq -r '.[] | select(.bucket!="pending") | "\(.name): \(.bucket)"' | sort)
+  comm -13 <(echo "$prev") <(echo "$cur")
+  prev=$cur
+  echo "$s" | jq -e 'all(.bucket!="pending")' >/dev/null && break
+  sleep 30
+done
+```
+
+### 실패 시 대응
+
+CI 실패가 보고되면 다음 순서로 대응한다.
+
+1. **실패한 체크의 로그를 끝까지 읽는다.** `gh run view <run-id> --log-failed` 또는 체크 페이지의 stdout/stderr를 받아온다. 첫 번째 traceback / assertion 메시지뿐 아니라 그 위 컨텍스트까지 본다.
+2. **로컬에서 재현되는지 확인한다.** 같은 테스트를 동일한 환경 변수와 함께 돌려본다. Windows에서는 `tests/test_brir_integrity.py`처럼 Linux/Python 3.13만 동작하도록 skipif가 걸린 테스트가 있으므로, 재현이 안 되면 CI 환경 의존성을 의심한다.
+3. **회귀 원인을 코드 차원에서 특정한다.** "테스트가 깐깐해서"라고 결론 내리지 말 것. 거의 모든 경우 진짜 회귀(미처 인지하지 못한 사이드이펙트)다. 특히 `core/cli_builder.py`가 `core/pipeline.py`의 dataclass field default를 그대로 argparse default로 옮긴다는 점에 주의한다 — `ProcessingConfig` field의 default를 만지면 CLI default 동작이 바뀌고 BRIR md5가 깨진다.
+4. **수정은 같은 PR에 후속 커밋으로 올린다.** 별도 PR을 만들지 말고, 같은 브랜치에 fixup commit을 올린 뒤 다시 CI를 따라간다. 커밋 메시지에 실패한 체크 이름과 원인을 한 줄로 적어둔다.
+5. **CHANGELOG도 같이 갱신한다.** 회귀 원인과 수정 방향이 처음 PR에 적힌 의도와 다르다면, CHANGELOG의 해당 항목을 새 의도에 맞게 다시 쓴다(잘못 적힌 채로 release되는 것을 막기 위해).
+
+### "작업 완료" 기준
+
+다음 셋이 모두 충족될 때만 보고한다.
+
+- 로컬 Tier 1+2(런타임 변경이면 + Tier 3) 통과
+- `gh pr checks <PR번호>`의 모든 required 체크가 `pass`
+- `gh pr view <PR번호> --json mergeStateStatus`가 `CLEAN` 또는 `UNSTABLE`(non-required 체크만 실패) 상태
+
+체크가 `pending`/`queued`인 상태로 보고하지 말 것 — 사용자가 추가로 모니터링해야 할 짐이 된다.
+
 ## 빌드 참고
 
 Nuitka standalone 빌드의 엔트리포인트는 `gui_main.py`다. `pyproject.toml`의 `[project.scripts]`에 정의된 콘솔 스크립트(`impulcifer`, `impulcifer_gui`, `impulcifer_gui_legacy`)는 pip 설치 전용이며 standalone 빌드와 무관하다.
