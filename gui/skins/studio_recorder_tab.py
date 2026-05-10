@@ -341,7 +341,11 @@ class StudioRecorderTab:
             )
             return
 
-        validation = validate_recording_setup(record_file, channels, True)
+        # Stable's force-channels checkbox is replaced here by the channel
+        # preset itself: keep the auto-stereo (channels == 2) path silent,
+        # and only warn when the user explicitly picks a different channel
+        # count that disagrees with the speaker-list filename.
+        validation = validate_recording_setup(record_file, channels, channels != 2)
         if validation and validation.has_mismatch:
             warning_msg = self.loc.get(
                 "message_channel_mismatch_body",

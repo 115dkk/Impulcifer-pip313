@@ -13,7 +13,7 @@ been fixed and old features improved.
 - **ProcessingConfig 기본값 동기화**: `ProcessingConfig()`의 `specific_limit`/`generic_limit` 기본값을 `impulcifer.main()`의 기본값인 20000Hz/1000Hz와 맞춰, 직접 config 경로에서도 동일한 방 룸 보정 한계를 사용한다.
 
 #### 사용성 개선
-- **Studio Recorder 채널 검증 추가**: Studio Recorder도 Stable과 동일한 `validate_recording_setup()` 경고를 사용해, 파일명으로 예상되는 스피커/채널 수와 사용자가 선택한 입력 채널 수가 다를 때 확인을 받는다.
+- **Studio Recorder 채널 검증 추가**: Studio Recorder도 Stable과 동일한 `validate_recording_setup()` 경고를 사용해, 파일명으로 예상되는 스피커/채널 수와 사용자가 선택한 입력 채널 수가 다를 때 확인을 받는다. 사용자가 직접 켠 force-channels 토글이 있을 때만 mismatch 확인 다이얼로그를 띄우며, 기본 캡처 경로(예: `FL,FR.wav` + 2채널)에서는 더 이상 매번 확인을 묻지 않는다.
 - **Recorder 디버그 플롯 옵션 추가**: Stable/Studio Recorder와 CLI에 `Debug plots` 옵션을 추가했다. 녹음 대상 파일, 채널 RMS, headroom 등 verbose 진단 출력은 이 옵션을 켰을 때만 표시된다.
 - **GUI 스크롤 프레임 페이싱 추가**: `CTkScrollableFrame`의 wheel-driven canvas 이동을 사용자 모니터 주사율 기반 interval로 coalesce해 고해상도 휠/터치패드 이벤트 폭주가 Tk/DWM repaint를 디스플레이보다 빠르게 밀어붙이지 않도록 했다. 기존 scrollregion 재계산 제거에 더해 실제 view 이동 빈도도 50Hz 목표 이상으로 유지한다.
 - **회귀 테스트 강화**: WAV 녹음이 TrueHD 정밀 판별을 호출하지 않는지, detection-only FFmpeg 실패 후에도 auto-install 경로가 재시도되는지 테스트를 추가했다.
