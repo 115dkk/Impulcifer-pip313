@@ -10,7 +10,8 @@ every scroll step (each ``yview_moveto`` call) re-walks the canvas item
 tree and rewrites the scrollregion — pushing the GPU to ~30% during scroll.
 
 The fix in ``gui.utils.install_smooth_scrolling`` rebinds the handler to a
-size-change-only variant. These tests pin two contracts:
+size-change-only variant and coalesces wheel-driven canvas movement to the
+active monitor's refresh cadence. These tests pin three contracts:
 
   1. **Static (always-runnable):** every ``CTkScrollableFrame`` constructed
      inside a tab module is followed by a call to
@@ -23,6 +24,11 @@ size-change-only variant. These tests pin two contracts:
      ``CTkScrollableFrame`` and the frame is scrolled programmatically, the
      ``bbox`` and ``configure(scrollregion=...)`` calls during scroll are
      **zero**. Without the fix, they fire ~once per ``yview_moveto`` step.
+
+  3. **Frame pacing (always-runnable):** wheel ``xview/yview("scroll", ...)``
+     calls are accumulated and flushed at the detected display refresh
+     interval, so bursty wheel input cannot ask Tk/DWM to repaint faster
+     than the user's monitor.
 
 The functional test creates a real Tk root, so it skips silently in
 headless environments (CI without an X server). The static test runs
@@ -38,6 +44,7 @@ import unittest
 from collections import Counter
 from pathlib import Path
 from typing import List, Set
+from unittest import mock
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -142,6 +149,103 @@ class StaticScrollFixTest(unittest.TestCase):
             "canvas.configure(scrollregion=...) calls (~30% GPU spike). Offenders:\n  "
             + "\n  ".join(offenders),
         )
+
+
+class ScrollFrameLimiterTest(unittest.TestCase):
+    """Unit-test the wheel scroll coalescer without creating a Tk root."""
+
+    class FakeCanvas:
+        def __init__(self) -> None:
+            self.calls = []
+            self.after_ms = []
+            self._callbacks = {}
+            self._cancelled = set()
+            self._next_after_id = 0
+
+        def xview(self, *args):
+            if not args:
+                return (0.0, 0.5)
+            self.calls.append(("x", args))
+            return None
+
+        def yview(self, *args):
+            if not args:
+                return (0.0, 0.5)
+            self.calls.append(("y", args))
+            return None
+
+        def after(self, delay_ms, callback):
+            self._next_after_id += 1
+            after_id = f"after-{self._next_after_id}"
+            self.after_ms.append(delay_ms)
+            self._callbacks[after_id] = callback
+            return after_id
+
+        def after_cancel(self, after_id):
+            self._cancelled.add(after_id)
+
+        def run_pending(self):
+            callbacks = list(self._callbacks.items())
+            self._callbacks.clear()
+            for after_id, callback in callbacks:
+                if after_id not in self._cancelled:
+                    callback()
+
+    def test_wheel_scroll_is_coalesced_to_frame_cadence(self) -> None:
+        from gui.utils import (
+            _install_frame_limited_canvas_scroll,
+            _refresh_rate_to_frame_interval_ms,
+        )
+
+        canvas = self.FakeCanvas()
+        frame_interval_ms = _refresh_rate_to_frame_interval_ms(144)
+        _install_frame_limited_canvas_scroll(canvas, frame_interval_ms=frame_interval_ms)
+
+        self.assertLessEqual(
+            frame_interval_ms,
+            20,
+            "Scroll frame limiter must keep visual cadence at or above 50 Hz.",
+        )
+        self.assertEqual(frame_interval_ms, 7)
+        self.assertEqual(canvas.yview(), (0.0, 0.5))
+
+        canvas.yview("scroll", 2, "units")
+        canvas.yview("scroll", 3, "units")
+        canvas.xview("scroll", -1, "units")
+
+        self.assertEqual(canvas.calls, [])
+        self.assertEqual(canvas.after_ms, [frame_interval_ms, frame_interval_ms])
+
+        canvas.run_pending()
+
+        self.assertEqual(
+            canvas.calls,
+            [
+                ("y", ("scroll", 5, "units")),
+                ("x", ("scroll", -1, "units")),
+            ],
+        )
+
+    def test_scroll_interval_uses_detected_monitor_refresh_rate(self) -> None:
+        from gui import utils
+
+        with mock.patch.object(utils, "_get_display_refresh_rate_hz", return_value=75):
+            self.assertEqual(utils._get_scroll_frame_interval_ms(), 14)
+
+        with mock.patch.object(utils, "_get_display_refresh_rate_hz", return_value=240):
+            self.assertEqual(utils._get_scroll_frame_interval_ms(), 5)
+
+    def test_direct_view_command_cancels_pending_wheel_scroll(self) -> None:
+        from gui.utils import _install_frame_limited_canvas_scroll
+
+        canvas = self.FakeCanvas()
+        _install_frame_limited_canvas_scroll(canvas)
+
+        canvas.yview("scroll", 5, "units")
+        canvas.yview("moveto", 0.25)
+        canvas.run_pending()
+
+        self.assertEqual(canvas.calls, [("y", ("moveto", 0.25))])
 
 
 class FunctionalScrollFixTest(unittest.TestCase):

@@ -10,7 +10,9 @@ accessors, file dialog wrappers) that were previously colocated in
 from __future__ import annotations
 
 import os
+import math
 import platform
+import re
 import sys
 from ctypes.util import find_library
 from pathlib import Path
@@ -682,6 +684,270 @@ def browse_directory(var: Any) -> None:
         var.set(dirname)
 
 
+_DEFAULT_SCROLL_REFRESH_RATE_HZ = 60.0
+_MIN_SCROLL_REFRESH_RATE_HZ = 30.0
+_MAX_SCROLL_REFRESH_RATE_HZ = 1000.0
+_SCROLL_REFRESH_ENV_VAR = "IMPULCIFER_SCROLL_REFRESH_HZ"
+
+
+def _refresh_rate_to_frame_interval_ms(refresh_rate_hz: float) -> int:
+    """Convert a display refresh rate to a conservative frame interval."""
+    if refresh_rate_hz < _MIN_SCROLL_REFRESH_RATE_HZ:
+        refresh_rate_hz = _DEFAULT_SCROLL_REFRESH_RATE_HZ
+    return max(1, int(math.ceil(1000.0 / refresh_rate_hz)))
+
+
+def _valid_refresh_rate(value: Any) -> Optional[float]:
+    try:
+        refresh_rate = float(value)
+    except (TypeError, ValueError):
+        return None
+    if _MIN_SCROLL_REFRESH_RATE_HZ <= refresh_rate <= _MAX_SCROLL_REFRESH_RATE_HZ:
+        return refresh_rate
+    return None
+
+
+def _get_windows_refresh_rate_hz(canvas: Any | None = None) -> Optional[float]:
+    """Return the nearest Windows monitor refresh rate when available."""
+    try:
+        import ctypes
+    except Exception:
+        return None
+
+    try:
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+    except Exception:
+        return None
+
+    class PointL(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    class Rect(ctypes.Structure):
+        _fields_ = [
+            ("left", ctypes.c_long),
+            ("top", ctypes.c_long),
+            ("right", ctypes.c_long),
+            ("bottom", ctypes.c_long),
+        ]
+
+    class MonitorInfoExW(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", ctypes.c_ulong),
+            ("rcMonitor", Rect),
+            ("rcWork", Rect),
+            ("dwFlags", ctypes.c_ulong),
+            ("szDevice", ctypes.c_wchar * 32),
+        ]
+
+    class DevModeW(ctypes.Structure):
+        _fields_ = [
+            ("dmDeviceName", ctypes.c_wchar * 32),
+            ("dmSpecVersion", ctypes.c_ushort),
+            ("dmDriverVersion", ctypes.c_ushort),
+            ("dmSize", ctypes.c_ushort),
+            ("dmDriverExtra", ctypes.c_ushort),
+            ("dmFields", ctypes.c_ulong),
+            ("dmPosition", PointL),
+            ("dmDisplayOrientation", ctypes.c_ulong),
+            ("dmDisplayFixedOutput", ctypes.c_ulong),
+            ("dmColor", ctypes.c_short),
+            ("dmDuplex", ctypes.c_short),
+            ("dmYResolution", ctypes.c_short),
+            ("dmTTOption", ctypes.c_short),
+            ("dmCollate", ctypes.c_short),
+            ("dmFormName", ctypes.c_wchar * 32),
+            ("dmLogPixels", ctypes.c_ushort),
+            ("dmBitsPerPel", ctypes.c_ulong),
+            ("dmPelsWidth", ctypes.c_ulong),
+            ("dmPelsHeight", ctypes.c_ulong),
+            ("dmDisplayFlags", ctypes.c_ulong),
+            ("dmDisplayFrequency", ctypes.c_ulong),
+            ("dmICMMethod", ctypes.c_ulong),
+            ("dmICMIntent", ctypes.c_ulong),
+            ("dmMediaType", ctypes.c_ulong),
+            ("dmDitherType", ctypes.c_ulong),
+            ("dmReserved1", ctypes.c_ulong),
+            ("dmReserved2", ctypes.c_ulong),
+            ("dmPanningWidth", ctypes.c_ulong),
+            ("dmPanningHeight", ctypes.c_ulong),
+        ]
+
+    device_name = None
+    if canvas is not None:
+        try:
+            hwnd = int(canvas.winfo_toplevel().winfo_id())
+            monitor = user32.MonitorFromWindow(ctypes.c_void_p(hwnd), 2)
+            if monitor:
+                monitor_info = MonitorInfoExW()
+                monitor_info.cbSize = ctypes.sizeof(MonitorInfoExW)
+                if user32.GetMonitorInfoW(monitor, ctypes.byref(monitor_info)):
+                    device_name = monitor_info.szDevice
+        except Exception:
+            device_name = None
+
+    dev_mode = DevModeW()
+    dev_mode.dmSize = ctypes.sizeof(DevModeW)
+    try:
+        ok = user32.EnumDisplaySettingsW(device_name, -1, ctypes.byref(dev_mode))
+    except Exception:
+        return None
+    if not ok:
+        return None
+    return _valid_refresh_rate(dev_mode.dmDisplayFrequency)
+
+
+def _get_macos_refresh_rate_hz() -> Optional[float]:
+    """Return the macOS main display refresh rate when CoreGraphics reports it."""
+    try:
+        import ctypes
+    except Exception:
+        return None
+
+    core_graphics_path = find_library("CoreGraphics")
+    if not core_graphics_path:
+        return None
+
+    try:
+        core_graphics = ctypes.CDLL(core_graphics_path)
+        core_graphics.CGMainDisplayID.restype = ctypes.c_uint32
+        display_id = core_graphics.CGMainDisplayID()
+        core_graphics.CGDisplayCopyDisplayMode.restype = ctypes.c_void_p
+        core_graphics.CGDisplayCopyDisplayMode.argtypes = [ctypes.c_uint32]
+        mode = core_graphics.CGDisplayCopyDisplayMode(display_id)
+        if not mode:
+            return None
+        try:
+            core_graphics.CGDisplayModeGetRefreshRate.restype = ctypes.c_double
+            core_graphics.CGDisplayModeGetRefreshRate.argtypes = [ctypes.c_void_p]
+            return _valid_refresh_rate(core_graphics.CGDisplayModeGetRefreshRate(mode))
+        finally:
+            core_graphics.CGDisplayModeRelease.argtypes = [ctypes.c_void_p]
+            core_graphics.CGDisplayModeRelease(mode)
+    except Exception:
+        return None
+
+
+def _get_xrandr_refresh_rate_hz() -> Optional[float]:
+    """Return the active X11 refresh rate from xrandr output when available."""
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["xrandr", "--current"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=1,
+            check=False,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+
+    for line in result.stdout.splitlines():
+        if "*" not in line:
+            continue
+        match = re.search(r"(\d+(?:\.\d+)?)\*", line)
+        refresh_rate = _valid_refresh_rate(match.group(1) if match else None)
+        if refresh_rate is not None:
+            return refresh_rate
+    return None
+
+
+def _get_display_refresh_rate_hz(canvas: Any | None = None) -> float:
+    """Best-effort monitor refresh-rate detection with a safe 60 Hz fallback."""
+    refresh_rate = _valid_refresh_rate(os.environ.get(_SCROLL_REFRESH_ENV_VAR))
+    if refresh_rate is not None:
+        return refresh_rate
+
+    system = platform.system()
+    if system == "Windows":
+        refresh_rate = _get_windows_refresh_rate_hz(canvas)
+    elif system == "Darwin":
+        refresh_rate = _get_macos_refresh_rate_hz()
+    else:
+        refresh_rate = _get_xrandr_refresh_rate_hz()
+
+    return refresh_rate or _DEFAULT_SCROLL_REFRESH_RATE_HZ
+
+
+def _get_scroll_frame_interval_ms(canvas: Any | None = None) -> int:
+    """Return the scroll frame interval for the display containing the canvas."""
+    return _refresh_rate_to_frame_interval_ms(_get_display_refresh_rate_hz(canvas))
+
+
+def _install_frame_limited_canvas_scroll(
+    canvas: Any,
+    frame_interval_ms: int | None = None,
+) -> None:
+    """Coalesce wheel-driven canvas scroll calls to one update per frame."""
+    if getattr(canvas, "_impulcifer_frame_limited_scroll", False):
+        return
+    if frame_interval_ms is None:
+        frame_interval_ms = _get_scroll_frame_interval_ms(canvas)
+
+    original_xview = canvas.xview
+    original_yview = canvas.yview
+    pending_units = {"x": 0, "y": 0}
+    after_ids: dict[str, Any] = {"x": None, "y": None}
+
+    def _flush(axis: str, original_view: Any) -> None:
+        after_ids[axis] = None
+        amount = pending_units[axis]
+        pending_units[axis] = 0
+        if amount == 0:
+            return
+        try:
+            original_view("scroll", amount, "units")
+        except TclError:
+            pass
+
+    def _schedule(axis: str, original_view: Any) -> None:
+        if after_ids[axis] is not None:
+            return
+        try:
+            after_ids[axis] = canvas.after(
+                frame_interval_ms,
+                lambda: _flush(axis, original_view),
+            )
+        except TclError:
+            _flush(axis, original_view)
+
+    def _cancel_pending(axis: str) -> None:
+        after_id = after_ids[axis]
+        if after_id is not None:
+            try:
+                canvas.after_cancel(after_id)
+            except (TclError, ValueError):
+                pass
+        after_ids[axis] = None
+        pending_units[axis] = 0
+
+    def _make_frame_limited_view(axis: str, original_view: Any):
+        def _frame_limited_view(*args):
+            if len(args) == 3 and args[0] == "scroll" and args[2] == "units":
+                try:
+                    amount = int(args[1])
+                except (TypeError, ValueError):
+                    return original_view(*args)
+                if amount != 0:
+                    pending_units[axis] += amount
+                    _schedule(axis, original_view)
+                return None
+
+            if args:
+                _cancel_pending(axis)
+            return original_view(*args)
+
+        return _frame_limited_view
+
+    canvas.xview = _make_frame_limited_view("x", original_xview)
+    canvas.yview = _make_frame_limited_view("y", original_yview)
+    canvas._impulcifer_frame_limited_scroll = True
+
+
 def install_smooth_scrolling(scroll_frame: ctk.CTkScrollableFrame) -> None:
     """Patch a ``CTkScrollableFrame`` to skip redundant scrollregion updates.
 
@@ -701,13 +967,17 @@ def install_smooth_scrolling(scroll_frame: ctk.CTkScrollableFrame) -> None:
     changes (children added / removed / resized — e.g. on language change or
     advanced-options toggle). Position-only Configure events from scrolling
     are no-ops, so the scrollregion bookkeeping stays in sync with the
-    canvas content but the per-step cost goes from O(N) to O(1).
+    canvas content but the per-step cost goes from O(N) to O(1). Wheel-driven
+    ``xview/yview("scroll", ..., "units")`` calls are also coalesced to the
+    active monitor's refresh interval, which keeps scroll paint cadence above
+    the 50 Hz target without hard-coding a 60 Hz display.
 
     The fix is reversible: the size-change branch still calls the same
     ``bbox + configure(scrollregion)`` so layout-driven sizing still works
     exactly like the upstream CustomTkinter behavior.
     """
     canvas = scroll_frame._parent_canvas  # type: ignore[attr-defined]
+    _install_frame_limited_canvas_scroll(canvas)
 
     # Drop the lambda installed by CTkScrollableFrame.__init__. ``unbind``
     # without a binding ID removes ALL bindings for the sequence on this
