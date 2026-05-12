@@ -122,7 +122,7 @@ impulcifer_gui
 
 GUI를 통해 대부분의 기능을 직관적으로 설정하고 실행할 수 있습니다.
 
-- **Recorder 창**: 오디오 녹음 관련 설정을 하며, 스윕 녹음 중 현재 녹음 중인 스피커와 진행 상태, 완료 후 저장 요약을 확인할 수 있습니다. Stable UI는 진행 다이얼로그를 함께 표시하고, Studio UI는 Capture session 카드에서 스피커 segment를 강조합니다. 상세 녹음 진단 출력이 필요할 때는 `Debug plots` 옵션을 켤 수 있습니다.
+- **Recorder 창**: 오디오 녹음 관련 설정을 하며, 스윕 녹음 중 현재 녹음 중인 스피커와 진행 상태, 완료 후 저장 요약을 확인할 수 있습니다. 녹음 결과는 직접 파일명을 정해주는 대신 **녹음 폴더**를 지정하면 재생할 sweep 파일을 보고 임펄사이퍼 본편이 받을 수 있는 형태(`FL,FR.wav`, `FC.wav` 등)로 자동 명명되어 저장됩니다 — 폴더 위 라벨에 실제 저장 경로 미리보기가 함께 표시됩니다. **헤드폰 보정 녹음은 별도 버튼("🎧 Record headphones...")으로 분리**되어 있습니다 — 출력 파일명을 `headphones.wav`로 고정하고, 재생 sweep을 모노 또는 스테레오로만 허용합니다(모노 재생은 L=R 드라이버를 동시에 울려 per-driver 측정이 불가하므로 경고가 함께 표시됩니다). 7스피커 ground-plane HRIR 측정에 필요한 14채널(7.1.6 Atmos) sweep 세트는 `Recorder` 탭의 "14채널 sweep 세트 생성..." 버튼(또는 `python -m core.sweep_set_generator --dir_path=...` CLI)으로 4개 그룹(FL,FR / FC / SL,SR / BL,BR)을 한 번에 만들 수 있습니다. Stable UI는 진행 다이얼로그를 함께 표시하고, Studio UI는 Capture session 카드에서 스피커 segment를 강조합니다. 상세 녹음 진단 출력이 필요할 때는 `Debug plots` 옵션을 켤 수 있습니다.
 - **Impulcifer 창**: HRIR 생성 및 보정 관련 설정을 하며, 처리 중 Cancel 버튼으로 단계 경계에서 생성 작업을 중단할 수 있습니다.
 - **UI Settings 창**: 언어와 테마를 변경합니다. 언어 변경은 재시작 없이 즉시 반영됩니다.
 

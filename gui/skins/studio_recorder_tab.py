@@ -13,7 +13,10 @@ import customtkinter as ctk
 import sounddevice
 
 from core import recorder
+from core.headphones_recording import inspect_headphones_playback
+from core.recording_naming import resolve_headphones_record_path, resolve_record_path
 from core.recording_validation import validate_recording_setup
+from core.sweep_set_generator import generate_sweep_set
 from gui.constants import FILETYPES_AUDIO
 from gui.recording_status import RecordingStatusController, analyze_recording
 from gui.skins.studio_widgets import (
@@ -25,6 +28,7 @@ from gui.skins.studio_widgets import (
 )
 from gui.theme import COLORS, get_mono_font_family
 from gui.utils import (
+    browse_directory,
     browse_file,
     install_smooth_scrolling,
     safe_get_int,
@@ -63,7 +67,10 @@ class StudioRecorderTab:
         self.play_var = ctk.StringVar(
             value=os.path.join("data", "sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
         )
-        self.record_var = ctk.StringVar(value=os.path.join("data", "my_hrir", "FL,FR.wav"))
+        # Studio writes into a folder and derives the canonical filename
+        # from the play file (e.g. ``sweep-seg-FL,FR-…wav`` → ``FL,FR.wav``).
+        self.record_dir_var = ctk.StringVar(value=os.path.join("data", "my_hrir"))
+        self.resolved_record_var = ctk.StringVar()
         self.channels_var = ctk.IntVar(value=2)
         self.debug_plots_var = ctk.BooleanVar(value=False)
         # Channel selector state — preset dropdown vs free-form custom entry.
@@ -78,6 +85,7 @@ class StudioRecorderTab:
         self.input_device_menu: ctk.CTkOptionMenu | None = None
         self.output_device_menu: ctk.CTkOptionMenu | None = None
         self.record_button: ctk.CTkButton | None = None
+        self.record_headphones_button: ctk.CTkButton | None = None
         self.recording_progress: ctk.CTkProgressBar | None = None
         self.recording_status_text = ctk.StringVar()
         self.recording_detail_text = ctk.StringVar()
@@ -231,6 +239,7 @@ class StudioRecorderTab:
         card.grid(row=row, column=0, sticky="ew", pady=(0, 14))
         add_card_header(card, number="02", title=self.loc.get("section_files"), fonts=self.fonts)
         body = make_card_body(card)
+        body.grid_columnconfigure(0, weight=1)
 
         add_field_row(
             body, row=0,
@@ -240,14 +249,40 @@ class StudioRecorderTab:
             change_label=self.loc.get("studio_change_button"),
             fonts=self.fonts,
         )
+        self.play_var.trace_add('write', lambda *_: self._refresh_resolved_record_path())
+
         add_field_row(
             body, row=1,
-            label=self.loc.get("label_record_to_file"),
-            value_var=self.record_var,
-            on_change=lambda: browse_file(self.record_var, "save"),
+            label=self.loc.get("label_record_to_folder"),
+            value_var=self.record_dir_var,
+            on_change=lambda: browse_directory(self.record_dir_var),
             change_label=self.loc.get("studio_change_button"),
             fonts=self.fonts,
         )
+        self.record_dir_var.trace_add('write', lambda *_: self._refresh_resolved_record_path())
+
+        # Resolved file preview — derived ``<folder>/<speakers>.wav``
+        # path so the user can confirm before pressing record.
+        ctk.CTkLabel(
+            body,
+            textvariable=self.resolved_record_var,
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["fg-2"],
+            anchor="w",
+            justify="left",
+            wraplength=720,
+        ).grid(row=2, column=0, sticky="ew", pady=(2, 6))
+        self._refresh_resolved_record_path()
+
+        # 14-channel surround sweep set generator. Drops four
+        # ``sweep-seg-…-7.1.6-…wav`` files into a folder of the user's
+        # choice (defaults near the existing play file). Materialized
+        # on demand because each file is ~47 MB at PCM_32.
+        ctk.CTkButton(
+            body,
+            text=self.loc.get("button_generate_14ch_sweep_set"),
+            command=self._generate_sweep_set,
+        ).grid(row=3, column=0, sticky="w", pady=(2, 0))
 
     # ------------------------------------------------------------------
     # Card 03 — Capture status
@@ -283,6 +318,16 @@ class StudioRecorderTab:
 
         self.segment_chip_frame = ctk.CTkFrame(body, fg_color="transparent")
         self.segment_chip_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+
+        # Secondary "Record headphones" affordance — distinct code path
+        # from the page-header CTA so it can lock the filename to
+        # ``headphones.wav`` and gate the play file to mono/stereo.
+        self.record_headphones_button = ctk.CTkButton(
+            body,
+            text=self.loc.get("button_record_headphones"),
+            command=self.start_recording_headphones,
+        )
+        self.record_headphones_button.grid(row=4, column=0, sticky="w", pady=(12, 0))
 
         self.recording_feedback = RecordingStatusController(
             root=self.root,
@@ -329,9 +374,77 @@ class StudioRecorderTab:
     # ------------------------------------------------------------------
     # Recording
     # ------------------------------------------------------------------
+    def _generate_sweep_set(self) -> None:
+        """Generate the bundled 14-channel surround sweep set on demand.
+
+        Defaults the target folder to the play file's parent so the new
+        WAVs land next to the existing bundled sweeps. After writing,
+        the play picker is auto-pointed at the FL,FR group.
+        """
+        from tkinter.filedialog import askdirectory
+
+        play_file = self.play_var.get().strip()
+        initial_dir = os.path.dirname(play_file) if play_file else os.getcwd()
+        if not os.path.isdir(initial_dir):
+            initial_dir = os.getcwd()
+
+        target_dir = askdirectory(
+            initialdir=initial_dir,
+            title=self.loc.get("dialog_choose_sweep_set_folder"),
+        )
+        if not target_dir:
+            return
+
+        try:
+            paths = generate_sweep_set(target_dir)
+        except Exception as exc:
+            messagebox.showerror(
+                self.loc.get("message_error"),
+                self.loc.get("message_sweep_set_error", error=str(exc)),
+            )
+            return
+
+        if paths:
+            try:
+                self.play_var.set(os.path.relpath(paths[0]))
+            except ValueError:
+                self.play_var.set(paths[0])
+
+        messagebox.showinfo(
+            self.loc.get("message_sweep_set_complete_title"),
+            self.loc.get(
+                "message_sweep_set_complete",
+                count=len(paths),
+                folder=target_dir,
+            ),
+        )
+
+    def _refresh_resolved_record_path(self) -> None:
+        """Recompute the read-only ``<folder>/<derived>.wav`` hint label."""
+        record_dir = self.record_dir_var.get().strip()
+        play_file = self.play_var.get().strip()
+        if not record_dir or not play_file:
+            self.resolved_record_var.set("")
+            return
+        try:
+            resolved = resolve_record_path(record_dir, play_file)
+        except Exception:
+            self.resolved_record_var.set("")
+            return
+        self.resolved_record_var.set(
+            self.loc.get("label_record_resolved_path", path=resolved)
+        )
+
     def start_recording(self) -> None:
         play_file = self.play_var.get()
-        record_file = self.record_var.get()
+        record_dir = self.record_dir_var.get().strip()
+        if not record_dir:
+            messagebox.showerror(
+                self.loc.get("message_error"),
+                self.loc.get("message_record_folder_required"),
+            )
+            return
+        record_file = resolve_record_path(record_dir, play_file)
         channels = max(2, safe_get_int(self.channels_var, 2))
 
         if not os.path.exists(play_file):
@@ -357,8 +470,7 @@ class StudioRecorderTab:
             if not messagebox.askyesno(self.loc.get("message_channel_mismatch_warning_title"), warning_msg):
                 return
 
-        if self.record_button:
-            self.record_button.configure(state="disabled", text=self.loc.get("button_start_recording_active"))
+        self._set_recording_busy(True)
         if self.recording_feedback:
             self.recording_feedback.start(play_file)
 
@@ -428,9 +540,27 @@ class StudioRecorderTab:
             else:
                 chip.configure(fg_color=COLORS["bg-3"], text_color=COLORS["fg-1"])
 
-    def _on_complete(self, record_file: str, summary: object) -> None:
+    def _set_recording_busy(self, busy: bool) -> None:
+        """Toggle both record buttons together while one capture is in flight."""
+        state = "disabled" if busy else "normal"
         if self.record_button:
-            self.record_button.configure(state="normal", text=self.loc.get("studio_record_start"))
+            self.record_button.configure(
+                state=state,
+                text=self.loc.get(
+                    "button_start_recording_active" if busy else "studio_record_start"
+                ),
+            )
+        if self.record_headphones_button:
+            if busy:
+                self.record_headphones_button.configure(state=state)
+            else:
+                self.record_headphones_button.configure(
+                    state=state,
+                    text=self.loc.get("button_record_headphones"),
+                )
+
+    def _on_complete(self, record_file: str, summary: object) -> None:
+        self._set_recording_busy(False)
         if self.recording_feedback:
             self.recording_feedback.complete(record_file, summary)
         self._highlight_segment_chip(None)
@@ -440,9 +570,86 @@ class StudioRecorderTab:
         )
 
     def _on_error(self, error_msg: str) -> None:
-        if self.record_button:
-            self.record_button.configure(state="normal", text=self.loc.get("studio_record_start"))
+        self._set_recording_busy(False)
         if self.recording_feedback:
             self.recording_feedback.error(error_msg)
         self._highlight_segment_chip(None)
         messagebox.showerror(self.loc.get("message_error"), error_msg)
+
+    def start_recording_headphones(self) -> None:
+        """Dedicated headphone-compensation capture path (Studio).
+
+        Mirrors :class:`gui.tabs.recorder_tab.RecorderTab.start_recording_headphones`:
+        locks the output to ``headphones.wav``, gates the play file to
+        mono or stereo, and warns when a true mono playback is used
+        (L=R simultaneous = generic EQ, not per-driver).
+        """
+        play_file = self.play_var.get()
+        record_dir = self.record_dir_var.get().strip()
+        if not record_dir:
+            messagebox.showerror(
+                self.loc.get("message_error"),
+                self.loc.get("message_record_folder_required"),
+            )
+            return
+
+        playback = inspect_headphones_playback(play_file)
+        if not playback.is_valid:
+            messagebox.showerror(
+                self.loc.get("message_error"),
+                self.loc.get(playback.reason_key, file=play_file, channels=playback.channels),
+            )
+            return
+
+        if playback.is_mono:
+            if not messagebox.askyesno(
+                self.loc.get("message_headphones_mono_warning_title"),
+                self.loc.get("message_headphones_mono_warning"),
+            ):
+                return
+
+        record_file = resolve_headphones_record_path(record_dir)
+
+        info_msg = self.loc.get(
+            "message_record_headphones_confirm",
+            play_file=os.path.basename(play_file),
+            record_file=os.path.basename(record_file),
+            input_device=self.input_device_var.get() or "Default",
+            output_device=self.output_device_var.get() or "Default",
+            host_api=self.host_api_var.get() or "Auto",
+        )
+        if not messagebox.askyesno(self.loc.get("message_record_headphones_title"), info_msg):
+            return
+
+        input_device = self.input_device_var.get()
+        output_device = self.output_device_var.get()
+        host_api = self.host_api_var.get()
+        debug_plots = self.debug_plots_var.get()
+
+        self._set_recording_busy(True)
+        if self.recording_feedback:
+            self.recording_feedback.start(play_file)
+
+        def report_progress(event):
+            self.root.after(0, lambda event=event: self._on_progress_event(event))
+
+        def _run() -> None:
+            try:
+                recorder.play_and_record(
+                    play=play_file,
+                    record=record_file,
+                    input_device=input_device,
+                    output_device=output_device,
+                    host_api=host_api,
+                    channels=2,
+                    append=False,
+                    debug_plots=debug_plots,
+                    progress_callback=report_progress,
+                )
+                summary = analyze_recording(record_file)
+                self.root.after(0, lambda: self._on_complete(record_file, summary))
+            except Exception as e:
+                err = str(e)
+                self.root.after(0, lambda: self._on_error(err))
+
+        threading.Thread(target=_run, daemon=True).start()

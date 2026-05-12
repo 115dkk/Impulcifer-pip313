@@ -84,7 +84,7 @@ def test_play_and_record_emits_lifecycle_events(monkeypatch) -> None:
     recorder = _import_recorder_without_portaudio(monkeypatch)
     events = []
 
-    monkeypatch.setattr(recorder, "read_audio", lambda _path: (10, np.zeros((2, 10)), None))
+    monkeypatch.setattr(recorder, "read_audio", lambda _path, expand=False: (10, np.zeros((2, 10)), None))
     _patch_recorder_hardware(monkeypatch, recorder)
 
     recorder.play_and_record(
@@ -110,7 +110,7 @@ def test_play_and_record_wav_does_not_probe_truehd(monkeypatch) -> None:
         raise AssertionError("WAV path must not call is_truehd_file")
 
     monkeypatch.setattr(recorder, "is_truehd_file", fail_if_called, raising=False)
-    monkeypatch.setattr(recorder, "read_audio", lambda _path: (10, np.zeros((2, 10)), None))
+    monkeypatch.setattr(recorder, "read_audio", lambda _path, expand=False: (10, np.zeros((2, 10)), None))
     _patch_recorder_hardware(monkeypatch, recorder)
 
     recorder.play_and_record(
@@ -119,3 +119,65 @@ def test_play_and_record_wav_does_not_probe_truehd(monkeypatch) -> None:
         channels=2,
         progress_interval=0.01,
     )
+
+
+def test_play_and_record_handles_mono_sweep_without_index_error(monkeypatch) -> None:
+    """A 1-D mono sweep must not raise ``IndexError`` on shape probing.
+
+    Regression: ``data/sweep-6.15s-...wav`` is the bundled headphone-comp
+    sweep and lands on the soundfile fast path as a 1-D ``(samples,)``
+    array. The recorder previously asked for ``data.shape[1]`` directly
+    and crashed with "tuple index out of range" before any audio I/O.
+    """
+    recorder = _import_recorder_without_portaudio(monkeypatch)
+
+    def fake_read_audio(_path, expand=False):
+        # Only ``expand=True`` callers should reach the recorder math —
+        # the fix in core.recorder must pass that explicitly.
+        assert expand is True, "play_and_record must call read_audio(expand=True)"
+        return 10, np.zeros((1, 16)), None
+
+    monkeypatch.setattr(recorder, "read_audio", fake_read_audio)
+    _patch_recorder_hardware(monkeypatch, recorder)
+
+    events = []
+    recorder.play_and_record(
+        play="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
+        record="out.wav",
+        channels=2,
+        progress_callback=events.append,
+        progress_interval=0.01,
+    )
+
+    phases = [event.phase for event in events]
+    assert phases[-1] == "complete"
+
+
+def test_play_and_record_rejects_truehd_atmos_with_unknown_layout(monkeypatch) -> None:
+    """MLP files whose layout isn't recognized should fail with a clear error.
+
+    The bundled ``11cmaster.mlp`` / ``13cmaster.mlp`` files are
+    TrueHD+Atmos masters whose extra channels live in object metadata
+    that FFmpeg can't decode — the recorder gets a 7.1 bed (8 ch) and
+    no channel layout. Recording it silently would discard the height
+    speakers; instead we tell the user to pick a real multi-channel
+    sweep WAV.
+    """
+    recorder = _import_recorder_without_portaudio(monkeypatch)
+
+    def fake_read_audio(_path, expand=False):
+        # Mimic ``read_audio`` for an Atmos MLP: 8 channels, no layout.
+        return 48000, np.zeros((8, 16)), None
+
+    monkeypatch.setattr(recorder, "read_audio", fake_read_audio)
+    _patch_recorder_hardware(monkeypatch, recorder)
+
+    import pytest
+
+    with pytest.raises(ValueError, match="Atmos object channels"):
+        recorder.play_and_record(
+            play="data/11cmaster.mlp",
+            record="out.wav",
+            channels=2,
+            progress_interval=0.01,
+        )
