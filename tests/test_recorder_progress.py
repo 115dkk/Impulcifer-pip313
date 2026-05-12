@@ -153,6 +153,85 @@ def test_play_and_record_handles_mono_sweep_without_index_error(monkeypatch) -> 
     assert phases[-1] == "complete"
 
 
+def test_speaker_side_mono_sweep_stays_single_channel(monkeypatch) -> None:
+    """Speaker-side capture must NOT broadcast mono to stereo.
+
+    Regression (Codex review on PR #98): for files like
+    ``sweep-seg-FL-mono-…wav`` the mono sweep is meant to drive output
+    channel 0 alone (= the FL speaker in a standard surround mapping).
+    Auto-broadcasting to stereo would also fire output channel 1 (= FR),
+    contaminating the FL impulse response with FR's response. The
+    speaker-side path defaults ``mono_to_stereo=False`` so the mono
+    signal goes through ``sd.play`` untouched.
+    """
+    recorder = _import_recorder_without_portaudio(monkeypatch)
+
+    played: list[np.ndarray] = []
+
+    def capture_play(data, *_args, **_kwargs):
+        played.append(np.asarray(data))
+
+    monkeypatch.setattr(recorder.sd, "play", capture_play)
+    monkeypatch.setattr(
+        recorder, "read_audio",
+        lambda _path, expand=False: (10, np.zeros((1, 16)), None),
+    )
+    _patch_recorder_hardware(monkeypatch, recorder)
+
+    recorder.play_and_record(
+        play="data/sweep-seg-FL-mono-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
+        record="out.wav",
+        channels=2,
+        progress_interval=0.01,
+    )
+
+    assert len(played) == 1
+    # ``play_and_record`` transposes ``(channels, samples)`` → ``(samples,
+    # channels)`` before calling ``sd.play``, so the second dim is the
+    # channel count.
+    assert played[0].shape == (16, 1), (
+        f"speaker mono playback must stay 1-channel, got shape {played[0].shape}"
+    )
+
+
+def test_headphones_path_broadcasts_mono_to_stereo(monkeypatch) -> None:
+    """Headphone-comp capture opts into the mono → stereo broadcast.
+
+    The dedicated headphones GUI button passes ``mono_to_stereo=True``
+    so a true mono playback file excites both headphone drivers. The
+    user has already been warned that this only produces a generic
+    L=R EQ.
+    """
+    recorder = _import_recorder_without_portaudio(monkeypatch)
+
+    played: list[np.ndarray] = []
+
+    def capture_play(data, *_args, **_kwargs):
+        played.append(np.asarray(data))
+
+    monkeypatch.setattr(recorder.sd, "play", capture_play)
+    monkeypatch.setattr(
+        recorder, "read_audio",
+        lambda _path, expand=False: (10, np.zeros((1, 16)), None),
+    )
+    _patch_recorder_hardware(monkeypatch, recorder)
+
+    recorder.play_and_record(
+        play="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
+        record="out.wav",
+        channels=2,
+        progress_interval=0.01,
+        mono_to_stereo=True,
+    )
+
+    assert len(played) == 1
+    assert played[0].shape == (16, 2), (
+        f"headphones mono playback must broadcast to 2 channels, got {played[0].shape}"
+    )
+    # Both channels must carry the same signal (mono duplicated).
+    np.testing.assert_array_equal(played[0][:, 0], played[0][:, 1])
+
+
 def test_play_and_record_rejects_truehd_atmos_with_unknown_layout(monkeypatch) -> None:
     """MLP files whose layout isn't recognized should fail with a clear error.
 

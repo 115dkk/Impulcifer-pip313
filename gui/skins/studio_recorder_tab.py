@@ -635,6 +635,10 @@ class StudioRecorderTab:
 
         def _run() -> None:
             try:
+                # ``mono_to_stereo=True`` only matters when the play file
+                # is mono: it duplicates the sweep onto both headphone
+                # drivers so the user gets an L=R generic EQ. The user
+                # has already been warned about this trade-off above.
                 recorder.play_and_record(
                     play=play_file,
                     record=record_file,
@@ -645,6 +649,7 @@ class StudioRecorderTab:
                     append=False,
                     debug_plots=debug_plots,
                     progress_callback=report_progress,
+                    mono_to_stereo=True,
                 )
                 summary = analyze_recording(record_file)
                 self.root.after(0, lambda: self._on_complete(record_file, summary))

@@ -696,7 +696,10 @@ class RecorderTab:
             try:
                 # Always 2-channel recording for headphone compensation —
                 # the two in-ear mics. Speaker-side ``force channels`` is
-                # not relevant here so we hard-pin it.
+                # not relevant here so we hard-pin it. ``mono_to_stereo``
+                # only matters when the play file is mono: it duplicates
+                # the sweep onto both headphone drivers so the user gets
+                # an L=R generic EQ (warned about above).
                 recorder.play_and_record(
                     play=play_file,
                     record=record_file,
@@ -707,6 +710,7 @@ class RecorderTab:
                     append=False,
                     debug_plots=debug_plots,
                     progress_callback=report_progress,
+                    mono_to_stereo=True,
                 )
                 summary = analyze_recording(record_file)
                 self.root.after(
