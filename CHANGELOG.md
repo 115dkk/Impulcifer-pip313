@@ -30,6 +30,7 @@ been fixed and old features improved.
 - **14ch sweep 세트 생성 버튼 (Stable + Studio)**: Recorder 탭의 파일 영역에 한 번 클릭으로 4개 sweep WAV를 만들어내는 버튼 추가. 폴더를 묻는 dialog가 뜨고, 완료 시 재생 파일 picker가 첫 그룹으로 자동 이동.
 - **i18n 동기화**: 폴더 모드용 3개 + 14ch sweep 세트용 5개 + 헤드폰 녹음용 8개 등 신규 16개 키를 ko/en 직접 번역과 나머지 7개 locale 번역으로 추가했다(`zh-cn.json` / `zh-tw.json` legacy alias 포함 11개 파일 모두 동기화).
 - **회귀 테스트 강화**: 녹음 파일명 도출 규칙(`tests/test_recording_naming.py` — plain mono sweep이 더 이상 `headphones.wav`로 가지 않는 것까지 포함), 모노 sweep 인덱스 에러 회귀, Atmos MLP 차단, 14채널 sweep 세트 생성과 그룹별 라우팅 검증(`tests/test_sweep_set_generator.py`), 헤드폰 재생 파일 검증(`tests/test_headphones_recording.py`)을 단위 테스트로 고정.
+- **스크롤 성능 정적 가드를 Studio 스킨까지 확대**: `tests/test_scroll_perf.py`의 `install_smooth_scrolling` 정적 검사가 그동안 Stable 탭 4개(`gui/tabs/`)만 커버하고 Studio 탭 4개(`gui/skins/`)는 빠져 있었다. Studio 탭들은 런타임에 이미 `install_smooth_scrolling`(size-change-only `<Configure>` 핸들러 + 모니터 주사율 기반 휠 스크롤 coalescing)을 호출하고 있어 개선 자체는 적용돼 있었지만, 향후 Studio 탭 리팩터에서 호출이 누락돼도 잡아낼 테스트가 없었다. `GUI_TABS`에 `studio_{recorder,impulcifer,settings,info}_tab.py`를 추가해 두 스킨 모두 동일하게 보호된다(현재 4개 Studio 탭 모두 통과 확인).
 
 ## 2.6.1 - 2026-05-10
 ### Recorder FFmpeg lazy path + safety polish
