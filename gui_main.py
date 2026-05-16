@@ -4,6 +4,8 @@
 
 import sys
 
+from _impulcifer_entrypoint import prefer_distribution_root
+
 
 def _handle_velopack_lifecycle():
     """Velopack 설치/업데이트/제거 훅 처리.
@@ -54,6 +56,7 @@ def _smoke_test():
        file — silent fall-through to Malgun / sans-serif is an explicit
        failure here.
     """
+    prefer_distribution_root()
     import importlib
 
     for mod in (
@@ -174,5 +177,6 @@ if __name__ == "__main__":
     if "--smoke-test" in sys.argv[1:]:
         _smoke_test()
         sys.exit(0)
+    prefer_distribution_root()
     from gui.modern_gui import main_gui
     main_gui()

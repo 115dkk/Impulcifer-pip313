@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.4 - 2026-05-16
+### PyPI GUI entry point shadowing fix
+
+#### Fixed
+- **`impulcifer_gui` import failure on PyPI installs**: console scripts now enter through unique
+  `impulcifer_gui` / `impulcifer_gui_legacy` bootstrap modules instead of importing
+  `gui.modern_gui` directly. The bootstrap prefers the installed distribution root before
+  loading project packages, so stale or third-party top-level modules such as
+  `Python313/gui.py` no longer shadow the bundled `gui` package.
+
 ## 2.6.3 - 2026-05-16
 ### ⚡ DSP hot path optimization + Nuitka 4.1 build refresh
 
