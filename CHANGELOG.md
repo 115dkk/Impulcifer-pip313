@@ -4,6 +4,20 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.5 - 2026-05-16
+### 🐛 PyPI 로케일 해석 버그 수정 — GUI가 i18n 키 원문으로 표시되던 문제
+
+#### 🐛 버그 수정
+- **PyPI 업그레이드 환경에서 모든 GUI 문자열이 번역되지 않던 치명적 버그**: `_find_locales_dir()`가
+  존재하지 않는 패키지명 `impulcifer_py313`으로 `importlib.resources.files()`를 호출해 항상
+  `ModuleNotFoundError`로 실패했고, 그 뒤 후보 경로를 단순히 `.exists()`로만 검사했다. 이 때문에
+  2.4.27 이전 shared-data 설치에서 업그레이드 시 남는 **빈** `<sys.prefix>/impulcifer_py313/locales`
+  디렉터리가 선택되어, `app_title`·`sidebar_recorder` 등 모든 라벨이 i18n 키 원문 그대로 노출됐다.
+  실제 패키지명 `i18n`으로 `importlib.resources.files('i18n')/'locales'`를 1순위로 사용하도록
+  고치고, 모든 후보 디렉터리를 `en.json` 존재 여부로 내용 검증하도록 변경했다. 빈 디렉터리를
+  생성해 성공으로 위장하던 폴백도 제거했다. 미업그레이드 구버전 호환을 위해 legacy shared-data
+  경로는 실제 JSON이 남아 있을 때만 인정한다.
+
 ## 2.6.4 - 2026-05-16
 ### PyPI GUI entry point shadowing fix
 

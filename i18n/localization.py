@@ -40,51 +40,81 @@ LOCALE_MAPPING = {
 class LocalizationManager:
     """Manages translations and user preferences"""
 
+    @staticmethod
+    def _is_valid_locales_dir(path: Path) -> bool:
+        """A locales directory only counts if it actually holds the base
+        translation (``en.json``).
+
+        Pre-2.4.27 wheels shipped the JSON via a ``shared-data`` mapping that
+        installed a copy to ``<sys.prefix>/impulcifer_py313/locales``. Upgrading
+        removes those files but leaves the now-empty directory behind. The old
+        resolver accepted any directory that merely ``.exists()``, so that stale
+        empty folder won — and every GUI string rendered as its raw i18n key on
+        pip-upgraded environments. Validating by content rejects the decoy.
+        """
+        try:
+            return (path / 'en.json').is_file()
+        except OSError:
+            return False
+
     def _find_locales_dir(self) -> Path:
-        """Find the locales directory in multiple possible locations"""
-        # Try different possible locations
-        possible_paths = [
-            Path(__file__).parent / 'locales',  # Development environment (i18n/locales)
-            Path(__file__).parent.parent / 'i18n' / 'locales',  # Alternative: project root
-            Path(__file__).parent.parent / 'impulcifer_py313' / 'locales',  # PyPI package structure
-        ]
+        """Find the locales directory, preferring the actually-imported
+        ``i18n`` package's own data.
 
-        # Also try using sys.prefix for installed packages
-        import sys
-        if hasattr(sys, 'prefix'):
-            possible_paths.extend([
-                Path(sys.prefix) / 'impulcifer_py313' / 'locales',
-                Path(sys.prefix) / 'share' / 'impulcifer_py313' / 'locales',
-                Path(sys.prefix) / 'lib' / 'impulcifer_py313' / 'locales',
-            ])
+        ``importlib.resources.files('i18n')`` anchors to wherever the running
+        ``i18n`` package physically lives — the exact same install as this
+        module — so it cannot be fooled by a stale ``impulcifer_py313`` folder
+        under ``sys.prefix``. (The previous code queried the package name
+        ``'impulcifer_py313'``, which does not exist and always raised
+        ``ModuleNotFoundError``, defeating the only robust lookup.)
+        """
+        candidates = []
 
-        # Try importlib.resources for Python 3.9+
+        # 1. The real package's bundled data — canonical, install-agnostic.
         try:
             import importlib.resources as importlib_resources
-            try:
-                # Try to get the locales directory from package resources
-                if hasattr(importlib_resources, 'files'):  # Python 3.9+
-                    try:
-                        package_path = importlib_resources.files('impulcifer_py313')
-                        locales_path = package_path / 'locales'
-                        if locales_path.is_dir():
-                            return Path(str(locales_path))
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-        except ImportError:
+            if hasattr(importlib_resources, 'files'):  # Python 3.9+
+                candidates.append(Path(str(importlib_resources.files('i18n'))) / 'locales')
+        except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
             pass
 
-        # Find the first existing directory
-        for path in possible_paths:
-            if path.exists() and path.is_dir():
+        # 2. File-relative — sibling of this module (source checkout & wheel).
+        candidates.append(Path(__file__).resolve().parent / 'locales')
+
+        # 3. Same root that infra.resource_helper uses for every other bundled
+        #    resource, so locale resolution matches data/font/img in both pip
+        #    and Nuitka standalone builds.
+        try:
+            from infra.resource_helper import get_resource_path
+            candidates.append(Path(get_resource_path('i18n/locales')))
+        except Exception:
+            pass
+
+        # 4. Project-root layout (running from a source tree).
+        candidates.append(Path(__file__).resolve().parent.parent / 'i18n' / 'locales')
+
+        # 5. Legacy pre-2.4.27 shared-data location. Honoured only if it still
+        #    holds the JSON (an old install that was never upgraded); the empty
+        #    leftover from an upgrade fails the content check above.
+        import sys
+        for base in {Path(sys.prefix), Path(getattr(sys, 'base_prefix', sys.prefix))}:
+            candidates.append(base / 'impulcifer_py313' / 'locales')
+            candidates.append(base / 'share' / 'impulcifer_py313' / 'locales')
+            candidates.append(base / 'lib' / 'impulcifer_py313' / 'locales')
+
+        seen = set()
+        for path in candidates:
+            key = str(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            if self._is_valid_locales_dir(path):
                 return path
 
-        # If nothing found, create in current directory as fallback
-        fallback_path = Path(__file__).parent / 'locales'
-        fallback_path.mkdir(exist_ok=True)
-        return fallback_path
+        # Nothing valid found. Return the package-relative path (without
+        # creating an empty decoy) so the diagnostic in load_translations
+        # points at the real expected location.
+        return Path(__file__).resolve().parent / 'locales'
 
     def __init__(self):
         self.current_language = 'en'
