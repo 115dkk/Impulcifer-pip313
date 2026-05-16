@@ -73,6 +73,10 @@ class StudioRecorderTab:
         self.resolved_record_var = ctk.StringVar()
         self.channels_var = ctk.IntVar(value=2)
         self.debug_plots_var = ctk.BooleanVar(value=False)
+        # Parity with Stable: append the new sweep onto an existing
+        # recording file instead of overwriting it (silence is padded so
+        # every track ends up equal length).
+        self.append_var = ctk.BooleanVar(value=False)
         # Channel selector state — preset dropdown vs free-form custom entry.
         # ``channels_preset_var`` carries the dropdown label; when it's
         # ``_CUSTOM_CHANNEL_KEY`` the custom row appears and writes into
@@ -202,6 +206,15 @@ class StudioRecorderTab:
             text=self.loc.get("checkbox_debug_plots"),
             variable=self.debug_plots_var,
         ).grid(row=5, column=0, sticky="w", padx=0, pady=(8, 2))
+
+        # Parity with Stable's recorder: append onto an existing
+        # recording file instead of overwriting. Not exposed on the
+        # headphones path (that always writes a fresh headphones.wav).
+        ctk.CTkCheckBox(
+            body,
+            text=self.loc.get("checkbox_append_to_file"),
+            variable=self.append_var,
+        ).grid(row=6, column=0, sticky="w", padx=0, pady=(2, 2))
 
     def _labelled_row(self, parent: ctk.CTkBaseClass, *, row: int, label: str) -> ctk.CTkFrame:
         frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -487,6 +500,7 @@ class StudioRecorderTab:
         output_device = self.output_device_var.get()
         host_api = self.host_api_var.get()
         debug_plots = self.debug_plots_var.get()
+        append = self.append_var.get()
 
         def _run() -> None:
             try:
@@ -497,7 +511,7 @@ class StudioRecorderTab:
                     output_device=output_device,
                     host_api=host_api,
                     channels=channels,
-                    append=False,
+                    append=append,
                     debug_plots=debug_plots,
                     progress_callback=report_progress,
                 )
