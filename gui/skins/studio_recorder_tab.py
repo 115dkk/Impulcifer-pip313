@@ -101,7 +101,13 @@ class StudioRecorderTab:
         self.parent.grid_columnconfigure(0, weight=1)
         self.parent.grid_rowconfigure(0, weight=1)
 
-        scroll = ctk.CTkScrollableFrame(self.parent, fg_color="transparent")
+        # Opaque background (matches the Studio content host's bg-1) — a
+        # ``transparent`` scrollable frame leaves the inner tk.Canvas with
+        # no solid backing, so on Win32 the embedded child windows smear
+        # ("잔상"/ghosting) during scroll because nothing repaints the
+        # vacated region. Stable avoids this by using the theme's opaque
+        # default fg_color; mirror that here.
+        scroll = ctk.CTkScrollableFrame(self.parent, fg_color=COLORS["bg-1"])
         scroll.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
         scroll.grid_columnconfigure(0, weight=1)
         install_smooth_scrolling(scroll)

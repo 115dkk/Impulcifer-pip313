@@ -232,31 +232,75 @@ def test_headphones_path_broadcasts_mono_to_stereo(monkeypatch) -> None:
     np.testing.assert_array_equal(played[0][:, 0], played[0][:, 1])
 
 
-def test_play_and_record_rejects_truehd_atmos_with_unknown_layout(monkeypatch) -> None:
-    """MLP files whose layout isn't recognized should fail with a clear error.
+def test_play_and_record_rejects_truehd_atmos_object_master(monkeypatch) -> None:
+    """Atmos-object MLP masters fail with a clear error.
 
-    The bundled ``11cmaster.mlp`` / ``13cmaster.mlp`` files are
-    TrueHD+Atmos masters whose extra channels live in object metadata
-    that FFmpeg can't decode — the recorder gets a 7.1 bed (8 ch) and
-    no channel layout. Recording it silently would discard the height
-    speakers; instead we tell the user to pick a real multi-channel
-    sweep WAV.
+    The bundled ``11cmaster.mlp`` / ``13cmaster.mlp`` files have
+    profile ``Dolby TrueHD + Dolby Atmos``: FFmpeg decodes only the
+    7.1 bed (8 ch) and the height/wide objects are lost. Recording
+    them silently would discard the promised speakers; instead we tell
+    the user to pick a real multi-channel sweep WAV.
     """
     recorder = _import_recorder_without_portaudio(monkeypatch)
 
     def fake_read_audio(_path, expand=False):
-        # Mimic ``read_audio`` for an Atmos MLP: 8 channels, no layout.
+        # Mimic ``read_audio`` for an Atmos MLP: 8-channel bed, no layout.
         return 48000, np.zeros((8, 16)), None
 
     monkeypatch.setattr(recorder, "read_audio", fake_read_audio)
+    monkeypatch.setattr(
+        recorder, "is_truehd_atmos_object_master", lambda _path: True
+    )
     _patch_recorder_hardware(monkeypatch, recorder)
 
     import pytest
 
-    with pytest.raises(ValueError, match="Atmos object channels"):
+    with pytest.raises(ValueError, match="Dolby Atmos object master"):
         recorder.play_and_record(
             play="data/11cmaster.mlp",
             record="out.wav",
             channels=2,
             progress_interval=0.01,
         )
+
+
+def test_play_and_record_allows_plain_71_truehd(monkeypatch) -> None:
+    """Regression (Codex PR #98): ordinary 5.1/7.1 TrueHD must NOT be rejected.
+
+    ``get_truehd_channel_info`` only maps the custom 11/13-channel
+    surround orders, so a normal ``Dolby TrueHD`` 7.1 stream comes back
+    with ``channel_info=None`` even though all 8 channels decoded fine.
+    The earlier branch rejected every ``.mlp/.thd/.truehd`` with no
+    custom layout — this verifies a non-Atmos TrueHD file now plays
+    through to completion instead.
+    """
+    recorder = _import_recorder_without_portaudio(monkeypatch)
+
+    def fake_read_audio(_path, expand=False):
+        # Plain 7.1 TrueHD: 8 channels decoded, no custom layout map.
+        return 48000, np.zeros((8, 16)), None
+
+    monkeypatch.setattr(recorder, "read_audio", fake_read_audio)
+    # Not an Atmos object master — ordinary TrueHD profile.
+    monkeypatch.setattr(
+        recorder, "is_truehd_atmos_object_master", lambda _path: False
+    )
+    fake_output = {"name": "Output", "hostapi": 0, "max_output_channels": 8}
+    fake_input = {"name": "Input", "hostapi": 0, "max_input_channels": 2}
+    monkeypatch.setattr(recorder, "get_devices", lambda **_kwargs: (fake_input, fake_output))
+    monkeypatch.setattr(recorder, "set_default_devices", lambda *_args: ("Input API", "Output API"))
+    monkeypatch.setattr(recorder, "record_target", lambda *_args, **_kwargs: None)
+
+    events = []
+    recorder.play_and_record(
+        play="data/some-plain-71.thd",
+        record="out.wav",
+        channels=2,
+        progress_callback=events.append,
+        progress_interval=0.01,
+    )
+
+    phases = [event.phase for event in events]
+    assert phases[-1] == "complete", (
+        f"plain 7.1 TrueHD should play to completion, got phases {phases}"
+    )
