@@ -411,6 +411,51 @@ def get_truehd_channel_info(file_path):
     except Exception:
         return None
 
+
+def get_truehd_profile(file_path):
+    """Return the TrueHD/MLP codec profile string, or ``None``.
+
+    Used to tell ordinary TrueHD layouts apart from Atmos-object
+    masters. ffprobe reports ``profile`` as e.g. ``"Dolby TrueHD"`` for
+    a plain 5.1/7.1 stream, or ``"Dolby TrueHD + Dolby Atmos"`` for an
+    Atmos master whose height/wide objects FFmpeg cannot decode into
+    discrete channels (it only emits the 7.1 bed). Callers reject the
+    Atmos case while letting ordinary TrueHD play with its decoded PCM.
+    """
+    if not ensure_ffmpeg_available(auto_install=True):
+        return None
+
+    try:
+        result = subprocess.run(
+            [FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
+             '-show_entries', 'stream=profile',
+             '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
+            capture_output=True, text=True, timeout=10,
+            encoding='utf-8', errors='replace'
+        )
+        if result.returncode != 0:
+            return None
+        profile = result.stdout.strip()
+        return profile or None
+    except Exception:
+        return None
+
+
+def is_truehd_atmos_object_master(file_path):
+    """``True`` when the file carries Atmos object content over a bed.
+
+    These files (the bundled ``11cmaster.mlp`` / ``13cmaster.mlp``)
+    decode to only the 7.1 bed under FFmpeg — the extra height/wide
+    objects the file name promises are lost, so they're unsuitable as
+    a discrete-channel sweep source. Plain ``Dolby TrueHD`` 5.1/7.1
+    streams return ``False`` and remain playable.
+    """
+    profile = get_truehd_profile(file_path)
+    if not profile:
+        return False
+    return 'atmos' in profile.lower()
+
+
 # TrueHD/MLP 확장자 집합 — read_audio()의 fast-path 분기에 사용한다.
 _TRUEHD_EXTENSIONS = frozenset({'.mlp', '.thd', '.truehd'})
 

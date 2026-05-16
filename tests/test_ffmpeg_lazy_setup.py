@@ -175,6 +175,40 @@ class FfmpegLazySetupTest(unittest.TestCase):
             self.assertTrue(install_spy.called,
                             "is_truehd_file must use auto_install=True")
 
+    def test_atmos_object_master_detected_by_profile(self):
+        """``is_truehd_atmos_object_master`` keys off the codec profile.
+
+        Regression (Codex PR #98): rejecting *every* TrueHD file without
+        a custom 11/13-channel layout map also nuked ordinary 5.1/7.1
+        TrueHD. The discriminator must be the ffprobe ``profile``:
+        ``Dolby TrueHD + Dolby Atmos`` → object master (reject);
+        plain ``Dolby TrueHD`` → ordinary stream (allow).
+        """
+        import core.ffmpeg_utils as ffmpeg_utils
+
+        with mock.patch.object(
+            ffmpeg_utils, "get_truehd_profile",
+            return_value="Dolby TrueHD + Dolby Atmos",
+        ):
+            self.assertTrue(
+                ffmpeg_utils.is_truehd_atmos_object_master("11cmaster.mlp")
+            )
+
+        with mock.patch.object(
+            ffmpeg_utils, "get_truehd_profile", return_value="Dolby TrueHD"
+        ):
+            self.assertFalse(
+                ffmpeg_utils.is_truehd_atmos_object_master("plain-71.thd")
+            )
+
+        # No profile (ffprobe failed / not TrueHD) → not an object master.
+        with mock.patch.object(
+            ffmpeg_utils, "get_truehd_profile", return_value=None
+        ):
+            self.assertFalse(
+                ffmpeg_utils.is_truehd_atmos_object_master("whatever.mlp")
+            )
+
     def test_read_audio_wav_skips_ffmpeg_setup(self):
         """Reading a regular .wav must not trigger FFmpeg setup at all."""
         utils, setup_spy, install_spy = self._import_with_spies()

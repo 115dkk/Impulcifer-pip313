@@ -33,7 +33,11 @@ class StudioSettingsTab:
         self.parent.grid_columnconfigure(0, weight=1)
         self.parent.grid_rowconfigure(0, weight=1)
 
-        scroll = ctk.CTkScrollableFrame(self.parent, fg_color="transparent")
+        # Opaque bg-1 backing — a transparent scrollable frame leaves the
+        # inner tk.Canvas without a solid background, causing Win32 scroll
+        # ghosting ("잔상") of the embedded widgets. Stable's tabs use the
+        # theme's opaque default; mirror that here.
+        scroll = ctk.CTkScrollableFrame(self.parent, fg_color=COLORS["bg-1"])
         scroll.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
         scroll.grid_columnconfigure(0, weight=1)
         install_smooth_scrolling(scroll)

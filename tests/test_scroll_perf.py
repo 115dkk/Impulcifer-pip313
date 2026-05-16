@@ -2,7 +2,8 @@
 """Regression tests for the GUI scroll performance optimization.
 
 The Impulcifer GUI's BRIR/recorder/settings/info tabs each host a
-``CTkScrollableFrame`` containing ~50–100 widgets. CustomTkinter installs
+``CTkScrollableFrame`` containing ~50–100 widgets — in *both* the Stable
+(``gui/tabs/``) and Studio (``gui/skins/``) skins. CustomTkinter installs
 an unconditional ``<Configure>`` handler that calls
 ``canvas.bbox('all')`` and ``canvas.configure(scrollregion=...)`` on every
 event. On Win32, Tk fires ``<Configure>`` for *position* changes too, so
@@ -14,10 +15,11 @@ size-change-only variant and coalesces wheel-driven canvas movement to the
 active monitor's refresh cadence. These tests pin three contracts:
 
   1. **Static (always-runnable):** every ``CTkScrollableFrame`` constructed
-     inside a tab module is followed by a call to
-     ``install_smooth_scrolling``. If a future tab forgets the call, the
-     scroll regression returns silently — this static check catches it in
-     CI without needing a display.
+     inside a tab module — across both the Stable and Studio skins — is
+     followed by a call to ``install_smooth_scrolling``. If a future tab
+     (in either skin) forgets the call, the scroll regression returns
+     silently — this static check catches it in CI without needing a
+     display.
 
   2. **Functional (skipped without a display):** when
      ``install_smooth_scrolling`` is applied to a real
@@ -48,11 +50,22 @@ from unittest import mock
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Both skins must keep every CTkScrollableFrame wired to the smooth
+# scrolling fix. The Stable tabs (gui/tabs/) had this guard from the
+# start; the Studio tabs (gui/skins/) were added later in the Pulse
+# redesign and call install_smooth_scrolling at runtime too, but were
+# never covered here — so a future Studio refactor could silently drop
+# the call (re-introducing the ~30% GPU scroll spike) without any test
+# catching it. Cover both skins so the guarantee is symmetric.
 GUI_TABS = [
     PROJECT_ROOT / "gui" / "tabs" / "impulcifer_tab.py",
     PROJECT_ROOT / "gui" / "tabs" / "recorder_tab.py",
     PROJECT_ROOT / "gui" / "tabs" / "settings_tab.py",
     PROJECT_ROOT / "gui" / "tabs" / "info_tab.py",
+    PROJECT_ROOT / "gui" / "skins" / "studio_impulcifer_tab.py",
+    PROJECT_ROOT / "gui" / "skins" / "studio_recorder_tab.py",
+    PROJECT_ROOT / "gui" / "skins" / "studio_settings_tab.py",
+    PROJECT_ROOT / "gui" / "skins" / "studio_info_tab.py",
 ]
 
 

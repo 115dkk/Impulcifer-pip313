@@ -247,6 +247,8 @@ from core.ffmpeg_utils import (  # noqa: E402,F401  (intentional re-export)
     is_truehd_file,
     convert_truehd_to_wav,
     get_truehd_channel_info,
+    get_truehd_profile,
+    is_truehd_atmos_object_master,
     read_audio,
     check_ffmpeg_available,
     get_supported_audio_formats,

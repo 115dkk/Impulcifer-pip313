@@ -4,6 +4,38 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.2 - 2026-05-11
+### Recorder 폴더 모드 + 14채널 sweep 세트 + 헤드폰 보정 분리 + 모노 sweep 지원 + Atmos MLP 차단
+
+#### 🐛 버그 수정
+- **모노 sweep WAV에서 `tuple index out of range` 해소**: `data/sweep-6.15s-...wav` 같은 1채널 sweep을 `core/recorder.py::play_and_record()`가 `read_audio()`를 `expand=False` 기본값으로 호출해 1D `(samples,)` 배열을 받고 `data.shape[1]`에서 `IndexError`를 일으키던 회귀를 수정. `expand=True`로 호출해 항상 2D `(channels, samples)` 형태로 정규화한다. 회귀 테스트 추가.
+- **(Codex 리뷰 반영) 스피커 측 모노 sweep을 양쪽 출력에 broadcast하지 않음**: 초기 수정안에서는 1채널 입력을 항상 스테레오로 broadcast했지만, 이는 `sweep-seg-FL-mono-...wav`처럼 출력 ch0(=FL 스피커)에만 가야 할 모노 sweep을 ch1(=FR 스피커)에도 흘려보내 FL 임펄스 응답에 FR 응답이 섞이는 회귀였다. `play_and_record()`에 `mono_to_stereo: bool = False` 플래그를 추가해 broadcast를 옵트인으로 전환했다. 스피커 측 경로(`start_recording`)는 기본값 그대로 두어 모노 sweep은 ch0에만 흐른다. 헤드폰 보정 경로(`start_recording_headphones`)만 `mono_to_stereo=True`를 명시적으로 넘겨, 모노 재생일 때 양쪽 드라이버가 같이 울리도록 한다(이때는 L=R 일반 EQ만 얻을 수 있다는 다이얼로그 경고가 이미 표시된다). 양쪽 경로 모두 회귀 테스트로 고정.
+- **TrueHD+Atmos MLP 무성 녹음 방지 (Codex 리뷰 반영해 범위 정밀화)**: 번들된 `data/11cmaster.mlp` / `data/13cmaster.mlp`는 `profile = "Dolby TrueHD + Dolby Atmos"`인 Atmos 오브젝트 마스터라 ffmpeg가 7.1 베드 8채널만 디코드하고 height/wide 오브젝트는 복원 불가(파일명과 달리 디스크리트 출력 불가). **초기 구현은 `channel_info is None`인 모든 `.mlp/.thd/.truehd`를 거부**했는데, `get_truehd_channel_info()`는 `CHANNEL_LAYOUT_MAP`(커스텀 11/13ch만)에 없으면 정상 5.1/7.1 TrueHD에도 `None`을 반환하므로 **재생 가능한 일반 7.1 TrueHD까지 잘못 거부**하는 회귀였다. `core/ffmpeg_utils.py`에 `get_truehd_profile()` + `is_truehd_atmos_object_master()`를 추가해, ffprobe `profile`에 "atmos"가 포함된 오브젝트 마스터만 거부하고 일반 "Dolby TrueHD" 5.1/7.1은 디코드된 PCM으로 정상 재생되도록 분기를 좁혔다. 에러 메시지도 "is a Dolby Atmos object master; FFmpeg decodes only its N-channel bed …"로 구체화. Atmos 거부 + 일반 7.1 통과 양쪽 회귀 테스트 추가(`tests/test_recorder_progress.py`, `tests/test_ffmpeg_lazy_setup.py`).
+
+#### ⭐ 새로운 기능 / 개선
+- **14채널 (7.1.6 Atmos) sweep 세트 생성기 추가**: 7개 ground-plane 스피커(FL/FR/FC/SL/SR/BL/BR) HRIR 측정을 4개 그룹으로 나눠 녹음할 수 있도록, 14채널 Atmos 레이아웃에 라우팅된 sweep WAV 4개를 만들어주는 `core/sweep_set_generator.py`를 추가. 그룹 분할은 임펄사이퍼 정석 그대로 — `FL,FR` / `FC` / `SL,SR` / `BL,BR`. CLI(`python -m core.sweep_set_generator --dir_path=...`)와 GUI 버튼("14채널 sweep 세트 생성...") 양쪽에서 호출 가능하며, 생성 후 재생 파일 picker가 자동으로 첫 그룹(`FL,FR`)으로 이동해 곧바로 녹음에 들어갈 수 있다. 파일은 한 번만 생성하면 되므로 repo에 번들하지 않고 사용자 환경에서 만드는 방식 — PCM_32에서 4개 합 ~167MB라 무게 비용을 피하기 위함.
+- **`sweep_sequence()`가 `7.1.6` 레이아웃 지원**: `core/impulse_response_estimator.py`의 sweep 시퀀스 빌더에 14채널 7.1.6 Atmos 트랙 구성(`FL FR FC LFE BL BR SL SR TFL TFR TBL TBR TSL TSR`)을 추가했다. 기존 `mono` / `stereo` / `5.1` / `7.1` 옵션은 그대로 유지된다. CLI `--tracks=7.1.6`도 함께 가능.
+- **헤드폰 보정 녹음 경로 분리 (Stable + Studio)**: 스피커 측 녹음과 헤드폰 보정 녹음이 의미상 다른 작업이라 GUI 버튼을 분리했다 — 기본 "🔴 START RECORDING" 옆에 "🎧 Record headphones..." 버튼이 새로 붙는다. 헤드폰 버튼은:
+  1. 출력 파일명을 항상 `headphones.wav`로 고정 (재생 sweep 파일명과 무관).
+  2. 재생 파일을 **모노 또는 스테레오로만** 허용 (`core/headphones_recording.py::inspect_headphones_playback()`이 검사). 7.1 / 7.1.6 같은 다채널 sweep을 헤드폰 보정에 쓰지 못하게 차단.
+  3. 모노 재생일 경우 "L=R 동시 재생은 L/R 드라이버 개별 측정이 불가하므로 일반적 EQ만 얻을 수 있다"는 경고 다이얼로그를 띄우고, 사용자가 명시적으로 동의해야만 진행. 정확한 per-driver 보정에는 `sweep-seg-FL,FR-stereo-...wav` 같은 스테레오 분절 sweep을 쓰라고 가이드.
+  4. 녹음 입력 채널을 2로 고정 (양쪽 인이어 마이크). 스피커 측 force-channels 토글은 헤드폰 경로에 영향 없음.
+
+#### 🐛 추가 버그 수정
+- **모노 sweep이 자동으로 `headphones.wav`가 되는 잘못된 매핑 제거**: 기존에는 plain mono sweep을 재생 파일로 고르면 `derive_record_filename()`이 자동으로 `headphones.wav`로 매핑했다. 하지만 양쪽 헤드폰 드라이버에 같은 신호를 동시에 재생해서는 L/R 드라이버 응답을 구분할 수 없어 결과가 부정확하다. 이제 plain mono sweep은 파일명 stem을 그대로 사용(`sweep-6.15s-...wav` → `sweep-6.15s-...wav`)하고, `headphones.wav` 출력은 **반드시 명시적 헤드폰 녹음 버튼을 거쳐야만** 생성된다.
+
+#### ⭐ 사용성 개선
+- **녹음 대상이 "파일" → "폴더"로 전환 (Stable + Studio)**: Recorder 탭이 더 이상 사용자가 직접 출력 파일명을 적도록 하지 않고, 녹음 폴더만 받는다. 폴더 안에 들어갈 파일명은 재생 sweep 파일에서 자동 도출 — `sweep-seg-FL,FR-...wav` → `FL,FR.wav`, `sweep-seg-FC-...wav` → `FC.wav`, 일반 `sweep-6.15s-...wav` → `headphones.wav`. 파일명 정책의 정본은 새 `core/recording_naming.py` 모듈(`derive_record_filename` / `resolve_record_path`)로, Stable / Studio / 향후 CLI 모두 같은 규칙을 따른다. 결과적으로 임펄사이퍼 본편이 dir_path를 스캔할 때 그대로 인식되는 형태(`<speakers>.wav` / `headphones.wav`)가 보장된다.
+- **저장 경로 미리보기 라벨 추가 (Stable + Studio)**: 폴더와 sweep 입력에 대한 Tk variable trace로 "저장 위치: data/my_hrir/FL,FR.wav" 같은 read-only 미리보기를 즉시 갱신해, 녹음 시작 전에 실제 출력 경로를 확인할 수 있다.
+- **14ch sweep 세트 생성 버튼 (Stable + Studio)**: Recorder 탭의 파일 영역에 한 번 클릭으로 4개 sweep WAV를 만들어내는 버튼 추가. 폴더를 묻는 dialog가 뜨고, 완료 시 재생 파일 picker가 첫 그룹으로 자동 이동.
+- **Studio에 "기존 파일에 추가" 옵션 추가 (Stable 대비 누락분 보완)**: Stable Recorder에만 있던 append-to-file 체크박스를 Studio Recorder 디바이스 카드에도 추가했다. 체크 시 `recorder.play_and_record(append=True)`로 전달돼, 기존 녹음 WAV를 덮어쓰지 않고 새 sweep을 뒤에 이어 붙인다(트랙 길이는 묵음 패딩으로 맞춤). 헤드폰 보정 경로는 Stable과 동일하게 항상 fresh `headphones.wav`를 쓰므로 append를 노출하지 않는다. i18n는 기존 `checkbox_append_to_file` 키 재사용(신규 키 없음). `append_var`는 `*_var` 규칙을 따르므로 언어/스킨 전환 시 상태 보존(`snapshot_tk_vars`)에 자동 포함된다.
+- **i18n 동기화**: 폴더 모드용 3개 + 14ch sweep 세트용 5개 + 헤드폰 녹음용 8개 등 신규 16개 키를 ko/en 직접 번역과 나머지 7개 locale 번역으로 추가했다(`zh-cn.json` / `zh-tw.json` legacy alias 포함 11개 파일 모두 동기화).
+- **회귀 테스트 강화**: 녹음 파일명 도출 규칙(`tests/test_recording_naming.py` — plain mono sweep이 더 이상 `headphones.wav`로 가지 않는 것까지 포함), 모노 sweep 인덱스 에러 회귀, Atmos MLP 차단, 14채널 sweep 세트 생성과 그룹별 라우팅 검증(`tests/test_sweep_set_generator.py`), 헤드폰 재생 파일 검증(`tests/test_headphones_recording.py`)을 단위 테스트로 고정.
+- **스크롤 성능 정적 가드를 Studio 스킨까지 확대**: `tests/test_scroll_perf.py`의 `install_smooth_scrolling` 정적 검사가 그동안 Stable 탭 4개(`gui/tabs/`)만 커버하고 Studio 탭 4개(`gui/skins/`)는 빠져 있었다. Studio 탭들은 런타임에 이미 `install_smooth_scrolling`(size-change-only `<Configure>` 핸들러 + 모니터 주사율 기반 휠 스크롤 coalescing)을 호출하고 있어 개선 자체는 적용돼 있었지만, 향후 Studio 탭 리팩터에서 호출이 누락돼도 잡아낼 테스트가 없었다. `GUI_TABS`에 `studio_{recorder,impulcifer,settings,info}_tab.py`를 추가해 두 스킨 모두 동일하게 보호된다(현재 4개 Studio 탭 모두 통과 확인).
+
+#### 🐛 Studio 스크롤 잔상(ghosting) 수정
+- **Studio 4개 탭의 `CTkScrollableFrame`를 불투명 배경으로 전환**: Stable 탭은 `ctk.CTkScrollableFrame(tab, corner_radius=10)`처럼 테마 기본 **불투명** fg_color를 쓰는 반면, Studio 탭 4개는 모두 `fg_color="transparent"`로 만들고 있었다. 투명 scrollable frame은 내부 `tk.Canvas`에 solid 배경이 없어, Win32에서 스크롤 시 embedded child window들이 비워진 영역을 다시 칠하지 못해 **잔상(ghosting)**이 남는다(`install_smooth_scrolling`이 잡는 GPU 스파이크와는 별개의 렌더링 결함). Stable이 깨끗한 이유가 바로 불투명 배경이었다. 4개 Studio 탭(`studio_{recorder,impulcifer,settings,info}_tab.py`)의 scroll frame `fg_color`를 Studio content host와 동일한 `COLORS["bg-1"]`로 바꿔 — 시각적으로는 동일하지만 canvas 배경이 solid가 되어 매 스크롤 스텝마다 정상 repaint, 잔상 제거.
+
 ## 2.6.1 - 2026-05-10
 ### Recorder FFmpeg lazy path + safety polish
 
