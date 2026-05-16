@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -64,7 +64,7 @@ jobs:
       - name: Install build requirements and project dependencies
         run: |
           echo "[1/4] Installing required packages with uv (ultra-fast Python package installer)..."
-          uv pip install --system nuitka ordered-set patchelf
+          uv pip install --system "nuitka>=4.1" ordered-set patchelf
           if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
             echo "Python 3.11+ detected, tomllib is available."
           else

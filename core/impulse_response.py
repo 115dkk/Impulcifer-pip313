@@ -47,10 +47,8 @@ class ImpulseResponse(ImpulseResponsePlotter):
             end = len(self.data)
 
         # Peak height threshold, relative to the data maximum value
-        # Copy to avoid manipulating the original data here
-        data = self.data.copy()
-        # Limit search to given range
-        data = data[start:end]
+        # Copy only the searched range, because normalization mutates it below.
+        data = self.data[start:end].copy()
 
         if len(data) == 0:
             return start
@@ -95,16 +93,19 @@ class ImpulseResponse(ImpulseResponsePlotter):
         peak_index = self.peak_index()
 
         # Analyze from the peak to at most two seconds after it.
-        data = self.data.copy()
         analysis_end = min(peak_index + int(2 * self.fs), len(self))
         if peak_index >= analysis_end:
             if peak_index >= len(self.data):
                 peak_index = len(self.data) - 1
             if peak_index < 0:
                 peak_index = 0
-            data = data[peak_index : peak_index + 1] if peak_index < len(data) else np.array([EPSILON])
+            data = (
+                self.data[peak_index : peak_index + 1].copy()
+                if peak_index < len(self.data)
+                else np.array([EPSILON])
+            )
         else:
-            data = data[peak_index:analysis_end]
+            data = self.data[peak_index:analysis_end].copy()
 
         if len(data) == 0:
             data = np.array([EPSILON])
@@ -324,8 +325,7 @@ class ImpulseResponse(ImpulseResponsePlotter):
         t = np.linspace(0, self.duration(), len(self))
 
         knee_point_ind -= peak_ind + 0
-        data = self.data.copy()
-        data = data[peak_ind - 0 * self.fs // 1000 :]
+        data = self.data[peak_ind - 0 * self.fs // 1000 :].copy()
         data /= np.max(np.abs(data))
         # analytical = np.abs(signal.hilbert(data))  # Hilbert doesn't work will with broadband signa
         analytical = np.abs(data)
@@ -337,17 +337,16 @@ class ImpulseResponse(ImpulseResponsePlotter):
         schroeder = 10 * np.log10(schroeder)
 
         # Moving average of the squared impulse response
-        avg = self.data.copy()
         # Truncate data to avoid unnecessary computations
         # Ideally avg_head is the half window size but this might not be possible if the IR has been truncated already
         # and the peak is closer to the start than half window
         avg_head = min((window_size // 2), peak_ind)
-        avg_tail = min((window_size // 2), len(avg) - (peak_ind + knee_point_ind))
+        avg_tail = min((window_size // 2), len(self.data) - (peak_ind + knee_point_ind))
         # We need an index offset for average curve if the avg_head is not half window
         avg_offset = window_size // 2 - avg_head
-        avg = avg[
+        avg = self.data[
             peak_ind - avg_head : peak_ind + knee_point_ind + avg_tail
-        ]  # Truncate
+        ].copy()  # Truncate
         avg /= np.max(np.abs(avg))  # Normalize
         avg = avg**2
         avg = running_mean(avg, window_size)

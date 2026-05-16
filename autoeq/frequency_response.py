@@ -322,8 +322,7 @@ class FrequencyResponse:
         q_column = np.expand_dims(np.abs(q), axis=1)
         gain_column = np.expand_dims(gain, axis=1)
         a0, a1, a2, b0, b1, b2 = biquad.peaking(fc_column, q_column, gain_column, fs=fs)
-        frequency_rows = np.repeat(np.expand_dims(frequency, axis=0), len(fc_column), axis=0)
-        eq = np.sum(biquad.digital_coeffs(frequency_rows, fs, a0, a1, a2, b0, b1, b2), axis=0)
+        eq = np.sum(biquad.digital_coeffs(frequency, fs, a0, a1, a2, b0, b1, b2), axis=0)
         coeffs_a = np.hstack((np.tile(a0, a1.shape), a1, a2))
         coeffs_b = np.hstack((b0, b1, b2))
         return eq, coeffs_a, coeffs_b
@@ -1071,13 +1070,15 @@ class FrequencyResponse:
             # Savgol filter uses array indexing which is not future proof, ignoring the warning and trusting that this
             # will be fixed in the future release
             warnings.simplefilter("ignore")
-            for i in range(iterations):
-                y_normal = savgol_filter(y_normal, self._window_size(window_size), 2)
+            normal_window_size = self._window_size(window_size)
+            for _ in range(iterations):
+                y_normal = savgol_filter(y_normal, normal_window_size, 2)
 
             # Treble filter
             y_treble = data
+            treble_window_size = self._window_size(treble_window_size)
             for _ in range(treble_iterations):
-                y_treble = savgol_filter(y_treble, self._window_size(treble_window_size), 2)
+                y_treble = savgol_filter(y_treble, treble_window_size, 2)
 
         # Transition weighted with sigmoid
         k_treble = self._sigmoid(treble_f_lower, treble_f_upper)
@@ -1164,9 +1165,8 @@ class FrequencyResponse:
         Returns:
             None
         """
-        light = self.copy()
-        light.name = 'Light'
-        light.smoothen_fractional_octave(
+        light_error_smoothed = self._smoothen_fractional_octave(
+            self.error,
             window_size=1 / 6,
             iterations=1,
             treble_f_lower=100,
@@ -1175,9 +1175,8 @@ class FrequencyResponse:
             treble_iterations=1
         )
 
-        heavy = self.copy()
-        heavy.name = 'Heavy'
-        heavy.smoothen_fractional_octave(
+        heavy_error_smoothed = self._smoothen_fractional_octave(
+            self.error,
             window_size=1 / 3,
             iterations=1,
             treble_f_lower=1000,
@@ -1186,10 +1185,9 @@ class FrequencyResponse:
             treble_iterations=1
         )
 
-        combination = self.copy()
-        combination.name = 'Combination'
-        combination.error = np.max(np.vstack([light.error_smoothed, heavy.error_smoothed]), axis=0)
-        combination.smoothen_fractional_octave(
+        combination_error = np.max(np.vstack([light_error_smoothed, heavy_error_smoothed]), axis=0)
+        self.smoothed = self._smoothen_fractional_octave(
+            self.raw,
             window_size=1 / 3,
             iterations=1,
             treble_f_lower=100,
@@ -1197,9 +1195,15 @@ class FrequencyResponse:
             treble_window_size=1 / 3,
             treble_iterations=1
         )
-
-        self.smoothed = combination.smoothed.copy()
-        self.error_smoothed = combination.error_smoothed.copy()
+        self.error_smoothed = self._smoothen_fractional_octave(
+            combination_error,
+            window_size=1 / 3,
+            iterations=1,
+            treble_f_lower=100,
+            treble_f_upper=10000,
+            treble_window_size=1 / 3,
+            treble_iterations=1
+        )
 
         # Equalization is affected by smoothing, reset equalization results
         self.reset(

@@ -26,7 +26,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@v4
@@ -49,7 +49,7 @@ jobs:
       - name: Install build requirements and project dependencies
         run: |
           echo "[1/3] Installing required packages with uv (ultra-fast Python package installer)..."
-          uv pip install --system nuitka
+          uv pip install --system "nuitka>=4.1"
           if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
             echo "Python 3.11+ detected, tomllib is available."
           else
@@ -136,7 +136,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -154,7 +154,7 @@ jobs:
       - name: Install build requirements and project dependencies
         run: |
           echo "Installing required packages with uv..."
-          uv pip install --system nuitka ordered-set
+          uv pip install --system "nuitka>=4.1" ordered-set
           if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
             echo "Python 3.11+ detected, tomllib is available."
           else
@@ -245,7 +245,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -282,7 +282,7 @@ jobs:
       - name: Install build requirements and project dependencies
         run: |
           echo "Installing required packages with uv..."
-          uv pip install --system nuitka ordered-set patchelf
+          uv pip install --system "nuitka>=4.1" ordered-set patchelf
           if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
             echo "Python 3.11+ detected, tomllib is available."
           else
@@ -298,65 +298,9 @@ jobs:
 
       - name: Run Nuitka build for Linux
         run: |
-          echo "Starting Nuitka build for Linux (standalone for AppImage)..."
-          python -m nuitka \
-            --standalone \
-            --output-dir=dist/linux \
-            --remove-output \
-            --jobs=4 \
-            --lto=no \
-            --enable-plugin=tk-inter \
-            --include-package=customtkinter \
-            --include-module=sounddevice \
-            --include-module=soundfile \
-            --include-module=scipy \
-            --include-module=scipy.signal \
-            --include-module=scipy.optimize \
-            --include-module=scipy.interpolate \
-            --include-module=scipy.io \
-            --include-module=scipy.fft \
-            --include-module=nnresample \
-            --include-module=tabulate \
-            --include-module=seaborn \
-            --include-module=bokeh \
-            --include-module=autoeq \
-            --include-module=gui.modern_gui \
-            --include-package=gui \
-            --include-module=i18n.localization \
-            --include-module=infra.logger \
-            --include-module=core.channel_generation \
-            --include-module=updater.update_checker \
-            --include-package=updater \
-            --include-module=core.recorder \
-            --include-module=core.recording_validation \
-            --include-module=impulcifer \
-            --include-module=core.hrir \
-            --include-module=core.impulse_response \
-            --include-module=core.impulse_response_estimator \
-            --include-module=core.room_correction \
-            --include-module=core.microphone_deviation_correction \
-            --include-module=core.utils \
-            --include-module=core.constants \
-            --include-data-dir=data=data \
-            --include-data-dir=font=font \
-            --include-data-dir=img=img \
-            --include-data-dir=logo=logo \
-            --include-data-dir=gui/theme=gui/theme \
-            --include-data-dir=i18n/locales=locales \
-            --include-data-file=LICENSE=License.txt \
-            --include-data-file=README.txt=README.txt \
-            --linux-icon=logo/pulse-256.png \
-            --output-filename=Impulcifer \
-            --company-name=115dkk \
-            --product-name=Impulcifer \
-            --file-version=${{ env.APP_VERSION }} \
-            --product-version=${{ env.APP_VERSION }} \
-            --file-description="HRIR 측정 및 헤드폰 바이노럴 헤드트래킹 HRTF 시스템" \
-            --prefer-source-code \
-            --assume-yes-for-downloads \
-            --show-progress \
-            --show-memory \
-            gui_main.py
+          echo "Starting Nuitka build for Linux via build_scripts/build_nuitka.py..."
+          echo "Single source of truth: build_scripts/nuitka_flags.py"
+          python build_scripts/build_nuitka.py
 
           echo "Checking Linux build output:"
           ls -la dist/linux/

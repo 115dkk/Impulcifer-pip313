@@ -11,7 +11,8 @@
 ## 사전 요구사항
 
 ### 1. Python 설치
-- Python 3.9 ~ 3.13 버전 필요
+- 런타임은 Python 3.9 ~ 3.14를 지원합니다.
+- Nuitka standalone 릴리스 빌드는 일반 CPython 3.14 + Nuitka 4.1 이상을 권장합니다. free-threaded 빌드는 아직 Nuitka 배포 경로에서 사용하지 않습니다.
 - [Python 공식 사이트](https://www.python.org/downloads/)에서 다운로드
 
 ### 2. Visual Studio 또는 Build Tools
@@ -44,7 +45,7 @@ build.bat
 python install_requirements.py
 
 # 2. Nuitka 빌드 실행
-python build_nuitka.py
+python build_scripts/build_nuitka.py
 
 # 3. 빌드 옵션 선택
 # - 옵션 1: 단일 실행 파일 (배포 편리, 실행 느림)
@@ -76,7 +77,7 @@ python build_nuitka.py
    python -m pip install --upgrade pip
    
    # 개별 패키지 수동 설치
-   pip install nuitka
+   pip install "nuitka>=4.1"
    ```
 
 3. **메모리 부족**
@@ -90,7 +91,7 @@ python build_nuitka.py
 
 2. **리소스 파일 오류**
    - data, font, img 폴더가 포함되었는지 확인
-   - `build_nuitka.py`의 include 옵션 확인
+   - `build_scripts/nuitka_flags.py`의 include 옵션 확인
 
 3. **권한 오류**
    - 관리자 권한으로 실행
@@ -100,7 +101,7 @@ python build_nuitka.py
 
 ### 빌드 시간 단축
 ```python
-# build_nuitka.py 수정
+# build_scripts/nuitka_flags.py 수정
 "--jobs=4",  # CPU 코어 수에 맞게 조정
 "--lto=no",  # Link Time Optimization 비활성화
 ```
@@ -139,7 +140,7 @@ python build_nuitka.py
 
 #### 사전 요구사항
 - macOS 11+ (Big Sur 이상)
-- Python 3.9 이상
+- Python 3.14 권장 (일반 GIL 빌드)
 - Xcode Command Line Tools
 
 ```bash
@@ -153,11 +154,11 @@ xcode-select --install
 cd /path/to/Impulcifer-pip313
 
 # 2. 필수 패키지 설치
-pip install nuitka ordered-set
+pip install "nuitka>=4.1" ordered-set
 pip install -r requirements.txt
 
 # 3. Nuitka 빌드 실행 (자동으로 macOS 감지)
-python build_nuitka.py
+python build_scripts/build_nuitka.py
 
 # 4. 빌드 결과 확인
 # dist/macos/Impulcifer.app 생성됨
@@ -185,7 +186,7 @@ create-dmg \
 
 #### 사전 요구사항
 - Ubuntu 20.04+ / Debian 11+ / Fedora 35+ 또는 호환 배포판
-- Python 3.9 이상
+- Python 3.14 권장 (일반 GIL 빌드)
 - 시스템 라이브러리
 
 ```bash
@@ -214,11 +215,11 @@ sudo dnf install -y \
 cd /path/to/Impulcifer-pip313
 
 # 2. 필수 패키지 설치
-pip install nuitka ordered-set patchelf
+pip install "nuitka>=4.1" ordered-set patchelf
 pip install -r requirements.txt
 
 # 3. Nuitka 빌드 실행 (자동으로 Linux 감지)
-python build_nuitka.py
+python build_scripts/build_nuitka.py
 
 # 4. 빌드 결과 확인
 # dist/linux/Impulcifer 생성됨
@@ -303,4 +304,4 @@ EOF
 - PortAudio 라이브러리 필수 설치
 
 ### 지원
-문제가 발생하면 GitHub Issues에 문의하세요. 
+문제가 발생하면 GitHub Issues에 문의하세요.

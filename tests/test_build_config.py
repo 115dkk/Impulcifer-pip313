@@ -24,3 +24,45 @@ def test_nuitka_build_configs_do_not_use_onefile() -> None:
     ]
 
     assert offenders == []
+
+
+def test_nuitka_build_workflows_use_python_314_and_nuitka_41() -> None:
+    """Standalone release builders target regular CPython 3.14 with Nuitka 4.1+."""
+    direct_workflows = [
+        ".github/workflows/build-linux.yml",
+        ".github/workflows/build-macos.yml",
+    ]
+    for path in direct_workflows:
+        text = (PROJECT_ROOT / path).read_text(encoding="utf-8")
+        assert "python-version: '3.14'" in text, path
+        assert '"nuitka>=4.1"' in text, path
+
+    release_text = (PROJECT_ROOT / ".github/workflows/release-cross-platform.yml").read_text(encoding="utf-8")
+    assert release_text.count("python-version: '3.14'") >= 3
+    assert release_text.count('"nuitka>=4.1"') >= 3
+
+
+def test_nuitka_build_workflows_do_not_request_free_threaded_python() -> None:
+    """Nuitka builds stay on the regular GIL-enabled 3.14 runtime."""
+    config_paths = [
+        ".github/workflows/build-linux.yml",
+        ".github/workflows/build-macos.yml",
+        ".github/workflows/release-cross-platform.yml",
+        "build_scripts/build_nuitka.py",
+        "build_scripts/nuitka_flags.py",
+    ]
+    forbidden = ("--disable-gil", "3.14t", "free-threaded")
+    offenders = []
+    for path in config_paths:
+        text = (PROJECT_ROOT / path).read_text(encoding="utf-8").lower()
+        if any(marker in text for marker in forbidden):
+            offenders.append(path)
+
+    assert offenders == []
+
+
+def test_release_linux_build_uses_canonical_nuitka_script() -> None:
+    """The release Linux job should not drift from build_scripts/nuitka_flags.py."""
+    text = (PROJECT_ROOT / ".github/workflows/release-cross-platform.yml").read_text(encoding="utf-8")
+    assert "python build_scripts/build_nuitka.py" in text
+    assert "python -m nuitka \\" not in text

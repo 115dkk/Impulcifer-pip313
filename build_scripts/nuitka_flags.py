@@ -71,7 +71,7 @@ INCLUDED_PACKAGES: tuple[str, ...] = (
 # Nuitka in --standalone mode follows static (and lazy) imports automatically,
 # so the project tree (`core.*`, `gui.*`, `i18n.*`, `infra.*`, `updater.*`,
 # `impulcifer`) does NOT need to be enumerated here — those entries were
-# verified redundant against Nuitka 4.0's import tracer and removed.
+# verified redundant against Nuitka 4.x's import tracer and removed.
 #
 # We keep explicit entries only for:
 #   1. Heavyweight third-party packages that historically tripped Nuitka's

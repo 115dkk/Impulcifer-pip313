@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.3 - 2026-05-16
+### ⚡ DSP hot path optimization + Nuitka 4.1 build refresh
+
+#### ⚡ 성능 개선
+- **AutoEQ smoothing allocation reduction**: `smoothen_heavy_light()`의 copy-heavy 중간 `FrequencyResponse` 객체 생성을 배열 기반 계산으로 대체하고, 반복 smoothing 중 동일한 Savitzky-Golay 윈도우 크기를 재계산하지 않도록 최적화했다.
+- **Biquad response memory reduction**: biquad 응답 합산에서 주파수 행렬을 필터 수만큼 반복 생성하던 경로를 NumPy broadcasting으로 대체해 동일 출력에서 임시 배열 할당을 줄였다.
+- **ImpulseResponse slice-copy 최적화**: peak/decay 분석에서 전체 IR 배열을 먼저 복사하지 않고 분석 구간만 복사하도록 바꿔 긴 녹음 처리 시 메모리 사용량을 낮췄다.
+
+#### 🔧 빌드 / 설정 변경
+- **Nuitka 4.1 + Python 3.14 빌드 경로**: 활성 standalone 빌드 워크플로를 일반 CPython 3.14와 `nuitka>=4.1`로 갱신했다. Nuitka의 free-threaded 지원은 아직 제외하고, release Linux 빌드도 정본 `build_scripts/build_nuitka.py`/`nuitka_flags.py` 경로를 사용하도록 통합했다.
+
 ## 2.6.2 - 2026-05-11
 ### Recorder 폴더 모드 + 14채널 sweep 세트 + 헤드폰 보정 분리 + 모노 sweep 지원 + Atmos MLP 차단
 

@@ -1,6 +1,6 @@
 """
 Nuitka를 사용한 Impulcifer GUI 빌드 스크립트
-Python 3.13 호환 버전
+Python 3.14 + Nuitka 4.1 호환 빌드 경로
 크로스 플랫폼 지원: Windows, macOS, Linux
 """
 
