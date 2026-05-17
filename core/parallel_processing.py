@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Python 3.14 Free-Threaded 병렬 처리 유틸리티
-Python 3.13+ 호환 (하위 버전은 concurrent.futures 폴백)
+Free-threaded Python 대응 병렬 처리 유틸리티.
 
-Python 3.14의 Free-Threaded Python (PEP 703)을 활용하여
-GIL 없이 진정한 병렬 처리를 수행합니다.
+``core.parallel_utils.is_gil_disabled()``를 공유해 Python 3.13+의
+free-threaded 빌드를 감지합니다. 일반 Python에서는 기존
+``concurrent.futures`` executor로 동작합니다.
 
 주요 기능:
 - Free-Threaded Python 자동 감지
@@ -20,6 +20,8 @@ from typing import Callable, Iterable, List, TypeVar, Optional, Any
 from functools import wraps
 import time
 
+from core.parallel_utils import is_gil_disabled
+
 # 타입 변수 정의
 T = TypeVar('T')
 R = TypeVar('R')
@@ -27,16 +29,7 @@ R = TypeVar('R')
 # Python 버전 및 Free-Threaded 지원 확인
 PYTHON_VERSION = sys.version_info
 IS_PYTHON_314_PLUS = PYTHON_VERSION >= (3, 14)
-IS_FREE_THREADED = False
-
-# Python 3.14+ Free-Threaded 지원 확인
-if IS_PYTHON_314_PLUS:
-    try:
-        # sys._is_gil_enabled()가 False면 Free-Threaded 모드
-        # PEP 703: Free-Threaded Python
-        IS_FREE_THREADED = hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled()
-    except AttributeError:
-        IS_FREE_THREADED = False
+IS_FREE_THREADED = is_gil_disabled()
 
 
 def get_optimal_worker_count() -> int:
@@ -84,10 +77,10 @@ def get_python_threading_info() -> dict:
         'cpu_count': os.cpu_count() or 'unknown'
     }
 
-    if IS_PYTHON_314_PLUS and hasattr(sys, '_is_gil_enabled'):
+    if hasattr(sys, '_is_gil_enabled'):
         info['gil_enabled'] = sys._is_gil_enabled()
     else:
-        info['gil_enabled'] = 'unknown (pre-3.14)'
+        info['gil_enabled'] = 'unknown'
 
     return info
 
@@ -103,9 +96,9 @@ def parallel_map(
     """
     함수를 iterable의 각 항목에 병렬로 적용합니다.
 
-    Python 3.14 Free-Threaded 모드에서는 ThreadPoolExecutor를 사용하여
-    진정한 병렬 처리를 수행하고, 이전 버전에서는 ProcessPoolExecutor로
-    폴백하여 병렬 처리를 수행합니다.
+    ``use_threads``가 True이거나 free-threaded 런타임이면
+    ThreadPoolExecutor를 사용합니다. 그 외에는 ProcessPoolExecutor를
+    사용합니다.
 
     Args:
         func: 적용할 함수

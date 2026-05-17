@@ -1,272 +1,223 @@
-# Impulcifer-py313: Python 3.13/3.14 호환 및 최적화 버전
+# Impulcifer-py313
 
 [![PyPI version](https://badge.fury.io/py/impulcifer-py313.svg)](https://badge.fury.io/py/impulcifer-py313)
 
-이 프로젝트는 [Jaakko Pasanen의 원본 Impulcifer](https://github.com/jaakkopasanen/impulcifer) 프로젝트를 기반으로 하여, **Python 3.13/3.14 환경과의 완벽한 호환성 및 성능 최적화**를 제공하는 포크 버전입니다.
+Impulcifer-py313은 [Jaakko Pasanen의 Impulcifer](https://github.com/jaakkopasanen/impulcifer)를 바탕으로 한 포크입니다. 스피커와 헤드폰 측정 파일에서 개인 BRIR WAV를 만들고, HeSuVi, JamesDSP, Hangloose Convolver 같은 컨볼버에서 쓸 수 있는 출력을 만듭니다.
 
-## 🌟 프로젝트 목표 및 주요 변경 사항
+이 포크는 원본 Impulcifer의 측정과 보정 흐름을 유지하면서, Python 3.13/3.14, PyPI 배포, standalone 빌드, Modern GUI에서 쓰기 쉽게 정리하는 데 초점을 둡니다. 세부 변경 내역은 [CHANGELOG.md](CHANGELOG.md)를 보세요.
 
-원본 Impulcifer는 훌륭한 도구이지만, 최신 Python 환경에서의 호환성 문제가 있었습니다. `Impulcifer-py313`은 다음을 목표로 합니다:
+## 지원 범위
 
-- **Python 3.13/3.14 완벽 지원**: 최신 Python 버전(3.13.x, 3.14.x)에서 문제없이 작동하도록 의존성 및 내부 코드를 수정했습니다.
-- **Python 3.13+ free-threaded (no-GIL) 최적화**: GIL이 비활성화된 환경에서 자동으로 감지하여 최적의 병렬 처리를 수행합니다 (3-7배 속도 향상).
-- **성능 최적화**: 메모리 사용량 10-20% 감소, 벡터화된 알고리즘으로 전체 4-8배 성능 향상.
-- **간편한 설치**: PyPI를 통해 단 한 줄의 명령어로 쉽게 설치할 수 있습니다.
+- Python 3.9 이상에서 실행합니다. Python 3.13/3.14 경로를 계속 확인합니다.
+- PyPI 패키지, standalone 릴리스, Modern GUI를 제공합니다.
+- CLI와 GUI에서 BRIR 생성, 룸 보정, 헤드폰 보정, Custom EQ, Virtual Bass, TrueHD 레이아웃 출력, 마이크 착용 편차 보정을 다룹니다.
+- 일반 Python에서는 process 기반 병렬 처리를, free-threaded Python에서는 thread 기반 병렬 처리를 우선 사용합니다. standalone 빌드는 free-threaded Python을 대상으로 하지 않습니다.
 
-  ```bash
-  pip install impulcifer-py313
-  ```
-  
-  또는 요즘 떠오르는 최신 기술인 uv를 이용해서 같은 방식으로 설치하실 수 있습니다.
+## 설치
 
-  ```bash
-  uv pip install impulcifer-py313 --system
-  ```
+### Python 패키지
 
-- **테스트 신호 지정 간소화**: 기존의 파일 경로 직접 지정 방식 외에, 미리 정의된 이름(예: "default", "stereo")이나 숫자(예: "1", "3")로 간편하게 테스트 신호를 선택할 수 있는 기능을 추가했습니다.
-- **지속적인 유지보수**: Python 및 관련 라이브러리 업데이트에 맞춰 지속적으로 호환성을 유지하고 사용자 피드백을 반영할 예정입니다.
-
-## 💿 설치 방법
-
-Impulcifer-py313은 두 가지 방법으로 설치할 수 있습니다:
-
-### 방법 1: 최종 사용자용 독립 실행 파일 (권장)
-
-**Python 설치 없이** 바로 실행 가능한 독립 실행 파일을 제공합니다. [GitHub Releases](https://github.com/115dkk/Impulcifer-pip313/releases) 페이지에서 운영체제에 맞는 파일을 다운로드하세요.
-
-#### Windows
-1. `Impulcifer_Setup.exe` 다운로드
-2. 인스톨러 실행 후 설치 마법사 따라가기
-3. 시작 메뉴 또는 바탕화면 아이콘으로 실행
-
-#### macOS
-1. `Impulcifer-*-macOS.dmg` 다운로드
-2. DMG 파일 열기
-3. Impulcifer 아이콘을 Applications 폴더로 드래그
-4. Applications 폴더에서 실행
-
-#### Linux
-
-**AppImage (권장):**
-```bash
-# 실행 권한 부여
-chmod +x Impulcifer-*.AppImage
-
-# 실행
-./Impulcifer-*.AppImage
-```
-
-**Tarball:**
-```bash
-# 압축 해제
-tar xzf Impulcifer-*-linux-x86_64.tar.gz
-
-# 디렉토리 이동
-cd Impulcifer-linux
-
-# 실행
-./run.sh
-```
-
-### 방법 2: Python 개발 환경에서 설치
-
-Python 개발자이거나 최신 개발 버전을 사용하려는 경우 pip 또는 uv를 통해 설치할 수 있습니다.
-
-#### 사전 요구 사항
-- Python 3.9 이상, **3.13.x 또는 3.14.x 권장** (최신 버전에서 테스트 및 최적화되었습니다)
-- Python 3.13+ free-threaded 빌드 사용 시 최대 성능 (GIL 없이 3-7배 빠름)
-- `pip` (Python 패키지 설치 프로그램)
-
-#### 설치 명령어
-
-터미널 또는 명령 프롬프트에서 다음 명령어를 실행하여 `impulcifer-py313`을 설치합니다:
+가상 환경 안에 설치하는 방식을 권합니다.
 
 ```bash
-pip install impulcifer-py313
-```
-
-또는
-
-```bash
-uv pip install impulcifer-py313 --system
-```
-
-가상 환경(virtual environment) 내에 설치하는 것을 권장합니다:
-
-```bash
-# 가상 환경 생성 (예: venv 이름 사용)
 python -m venv venv
+```
 
-# 가상 환경 활성화
-# Windows:
-venv\\Scripts\\activate
-# macOS/Linux:
-source venv/bin/activate
+Windows:
 
-# Impulcifer-py313 설치
+```bash
+venv\Scripts\activate
 pip install impulcifer-py313
 ```
 
-## 🚀 사용 방법
+macOS 또는 Linux:
 
-설치가 완료되면 `impulcifer` 명령어를 사용하여 프로그램을 실행할 수 있습니다.
+```bash
+source venv/bin/activate
+pip install impulcifer-py313
+```
 
-### GUI (그래픽 사용자 인터페이스) 사용법
+`uv`를 쓴다면 다음처럼 설치할 수 있습니다.
 
-`impulcifer-py313`은 사용 편의성을 위해 그래픽 사용자 인터페이스(GUI)도 제공합니다.
-GUI를 실행하려면 터미널 또는 명령 프롬프트에서 다음 명령어를 입력하세요:
+```bash
+uv pip install impulcifer-py313
+```
+
+### Standalone 릴리스
+
+Python을 따로 설치하지 않고 쓰려면 [GitHub Releases](https://github.com/115dkk/Impulcifer-pip313/releases)에서 운영체제에 맞는 파일을 받으세요. 릴리스 파일 이름과 구성은 버전마다 달라질 수 있으므로, 각 릴리스의 설명을 확인해 주세요.
+
+## 실행
+
+GUI를 쓰려면 다음 명령을 실행합니다.
 
 ```bash
 impulcifer_gui
 ```
 
-GUI를 통해 대부분의 기능을 직관적으로 설정하고 실행할 수 있습니다.
+CLI를 쓰려면 측정 폴더를 지정합니다.
 
-- **Recorder 창**: 오디오 녹음 관련 설정을 하며, 스윕 녹음 중 현재 녹음 중인 스피커와 진행 상태, 완료 후 저장 요약을 확인할 수 있습니다. 녹음 결과는 직접 파일명을 정해주는 대신 **녹음 폴더**를 지정하면 재생할 sweep 파일을 보고 임펄사이퍼 본편이 받을 수 있는 형태(`FL,FR.wav`, `FC.wav` 등)로 자동 명명되어 저장됩니다 — 폴더 위 라벨에 실제 저장 경로 미리보기가 함께 표시됩니다. **헤드폰 보정 녹음은 별도 버튼("🎧 Record headphones...")으로 분리**되어 있습니다 — 출력 파일명을 `headphones.wav`로 고정하고, 재생 sweep을 모노 또는 스테레오로만 허용합니다(모노 재생은 L=R 드라이버를 동시에 울려 per-driver 측정이 불가하므로 경고가 함께 표시됩니다). 7스피커 ground-plane HRIR 측정에 필요한 14채널(7.1.6 Atmos) sweep 세트는 `Recorder` 탭의 "14채널 sweep 세트 생성..." 버튼(또는 `python -m core.sweep_set_generator --dir_path=...` CLI)으로 4개 그룹(FL,FR / FC / SL,SR / BL,BR)을 한 번에 만들 수 있습니다. Stable UI는 진행 다이얼로그를 함께 표시하고, Studio UI는 Capture session 카드에서 스피커 segment를 강조합니다. 상세 녹음 진단 출력이 필요할 때는 `Debug plots` 옵션을 켤 수 있습니다.
-- **Impulcifer 창**: HRIR 생성 및 보정 관련 설정을 하며, 처리 중 Cancel 버튼으로 단계 경계에서 생성 작업을 중단할 수 있습니다.
-- **UI Settings 창**: 언어와 테마를 변경합니다. 언어 변경은 재시작 없이 즉시 반영됩니다.
+```bash
+impulcifer --dir_path "data/demo" --test_signal default --plot
+```
 
-각 옵션에 마우스를 올리면 간단한 설명을 확인할 수 있습니다.
-
-### CLI (명령줄 인터페이스) 사용법
-
-기존의 명령줄 인터페이스도 동일하게 지원합니다. `core/recorder.py` CLI 녹음 실행 시에는 장치 준비, 현재 스피커, 저장/완료 상태가 콘솔에 표시됩니다. 녹음 대상 파일과 채널별 RMS/headroom 같은 상세 진단은 `--debug_plots`를 켰을 때만 출력됩니다.
-
-#### 기본 명령어
+사용 가능한 CLI 옵션은 다음 명령으로 확인할 수 있습니다.
 
 ```bash
 impulcifer --help
 ```
 
-사용 가능한 모든 옵션과 설명을 확인할 수 있습니다.
+## 입력 파일
 
-### 주요 개선 기능 사용 예시
+`--dir_path`로 지정한 폴더에 측정 파일과 보정 파일을 둡니다.
 
-#### 1. 간편한 테스트 신호 지정
+| 파일 | 설명 |
+| --- | --- |
+| `FL,FR.wav`, `FC.wav`, `SL,SR.wav` 등 | 스피커 측정 파일입니다. 파일 이름의 스피커 이름을 보고 채널을 판단합니다. |
+| `headphones.wav` | 기본 헤드폰 보정 측정 파일입니다. `--headphone_compensation_file`로 다른 파일을 지정할 수 있습니다. |
+| `room-target.csv` | 룸 보정 목표 응답입니다. 없으면 flat target을 씁니다. |
+| `room-mic-calibration.csv` 또는 `room-mic-calibration.txt` | 룸 측정 마이크 보정 파일입니다. 없으면 마이크 보정을 건너뜁니다. |
+| `eq.csv`, `eq-left.csv`, `eq-right.csv` | Custom EQ 파일입니다. `eq.csv`는 양쪽 공통, `eq-left.csv`와 `eq-right.csv`는 좌우 개별 EQ입니다. |
 
-`--test_signal` 옵션을 사용하여 미리 정의된 이름이나 숫자로 테스트 신호를 지정할 수 있습니다.
+Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전에 이 파일들이 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`로 복사됩니다.
 
-- **이름으로 지정**:
+## CLI 옵션
 
-  ```bash
-  impulcifer --test_signal="default" --dir_path="data/my_hrir"
-  impulcifer --test_signal="stereo" --dir_path="data/my_hrir"
-  ```
+### 입력과 파일
 
-- **숫자로 지정**:
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--dir_path PATH` | 필수 | 측정 파일을 읽고 결과를 저장할 폴더입니다. |
+| `--test_signal VALUE` | `test.pkl`, `test.wav`, 없으면 내장 `default` | 측정에 쓴 sweep WAV, estimator pickle, TrueHD/MLP 파일 또는 미리 정한 이름입니다. |
+| `--room_target PATH` | `dir_path/room-target.csv` | 룸 보정 목표 응답 CSV입니다. 파일이 없으면 flat target을 씁니다. |
+| `--room_mic_calibration PATH` | `dir_path/room-mic-calibration.csv`, 없으면 `.txt` | 룸 측정 마이크 보정 파일입니다. |
+| `--headphone_compensation_file PATH` | `dir_path/headphones.wav` | 헤드폰 보정 측정 WAV입니다. 폴더를 주면 흔히 쓰는 파일명을 찾아봅니다. |
+| `--fs HZ` | 측정 신호의 샘플레이트 | 출력 샘플레이트입니다. 지정하면 결과를 해당 샘플레이트로 맞춥니다. |
 
-  ```bash
-  impulcifer --test_signal="1" --dir_path="data/my_hrir" # "default"와 동일
-  impulcifer --test_signal="3" --dir_path="data/my_hrir" # "stereo"와 동일
-  ```
+`--test_signal`에는 다음 약칭을 쓸 수 있습니다.
 
-  사용 가능한 미리 정의된 테스트 신호:
-  - `"default"` / `"1"`: 기본 Pickle 테스트 신호 (`sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl`)
-  - `"sweep"` / `"2"`: 기본 WAV 테스트 신호 (`sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav`)
-  - `"stereo"` / `"3"`: FL,FR 스테레오 WAV 테스트 신호
-  - `"mono-left"` / `"4"`: FL 모노 WAV 테스트 신호
-  - `"left"` / `"5"`: FL 스테레오 WAV 테스트 신호 (채널 1만 사용)
-  - `"right"` / `"6"`: FR 스테레오 WAV 테스트 신호 (채널 2만 사용)
+| 값 | 의미 |
+| --- | --- |
+| `default`, `1` | 내장 pickle sweep estimator입니다. |
+| `sweep`, `2` | 내장 기본 sweep WAV입니다. |
+| `stereo`, `3` | `FL,FR` 스테레오 분절 sweep입니다. |
+| `mono-left`, `4` | `FL` 모노 분절 sweep입니다. |
+| `left`, `5` | `FL` 스테레오 분절 sweep입니다. |
+| `right`, `6` | `FR` 스테레오 분절 sweep입니다. |
 
-#### 2. 데모 실행
+### 보정과 목표 응답
 
-프로젝트에 포함된 데모 데이터를 사용하여 Impulcifer의 기능을 테스트해볼 수 있습니다. `Impulcifer`가 설치된 환경에서, 데모 데이터가 있는 경로를 지정하여 실행합니다. (데모 데이터는 원본 프로젝트 저장소의 `data/demo` 폴더를 참고하거나, 직접 유사한 구조로 준비해야 합니다.)
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--channel_balance VALUE` | 사용 안 함 | 좌우 레벨이나 응답 차이를 보정합니다. `trend`, `left`, `right`, `avg`, `min`, `mids` 또는 dB 값을 받습니다. |
+| `--decay VALUE` | 사용 안 함 | 잔향 꼬리를 줄입니다. `300`처럼 전체 ms 값을 주거나 `FL:500,FC:100`처럼 채널별 ms 값을 줄 수 있습니다. |
+| `--target_level DB` | 사용 안 함 | 좌우 평균 레벨을 지정한 dB로 맞춥니다. 클리핑을 피하려면 보통 음수 값을 씁니다. |
+| `--fr_combination_method average|conservative` | `average` | 여러 룸 측정 응답을 합치는 방식입니다. |
+| `--specific_limit HZ` | `400` | speaker-ear specific 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. |
+| `--generic_limit HZ` | `300` | generic 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. |
+| `--bass_boost DB` | 사용 안 함 | 저역 shelf boost입니다. `6` 또는 `6,150,0.69`처럼 gain, Fc, Q를 줄 수 있습니다. |
+| `--tilt DB_PER_OCT` | `0.0` | 목표 응답 기울기입니다. 양수는 밝게, 음수는 어둡게 맞춥니다. |
+| `--no_room_correction` | 룸 보정 켜짐 | 룸 보정을 건너뜁니다. |
+| `--no_headphone_compensation` | 헤드폰 보정 켜짐 | 헤드폰 보정을 건너뜁니다. |
+| `--no_equalization` | EQ 켜짐 | Custom EQ를 건너뜁니다. |
 
-만약 로컬에 원본 Impulcifer 프로젝트를 클론하여 `data/demo` 폴더가 있다면:
+### 출력과 진단
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--plot` | 꺼짐 | 처리 그래프를 PNG로 저장합니다. |
+| `--interactive_plots` | 꺼짐 | Bokeh 기반 HTML 플롯을 저장합니다. |
+| `--c MS` | `1.0` | IR 앞부분을 자를 때 남길 headroom입니다. 단위는 ms입니다. |
+| `--jamesdsp` | 꺼짐 | `FL/FR` 기반의 `jamesdsp.wav`를 추가로 만듭니다. |
+| `--hangloose` | 꺼짐 | Hangloose Convolver용 스피커별 stereo IR 파일을 만듭니다. |
+| `--output_truehd_layouts` | 꺼짐 | TrueHD용 레이아웃 출력을 추가로 만듭니다. |
+| `--info` | 꺼짐 | 버전, Python, 운영체제, 주요 의존성 정보를 출력하고 종료합니다. |
+| `-V`, `--version` | 꺼짐 | Impulcifer 버전을 출력하고 종료합니다. |
+
+### Virtual Bass
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--vbass` | 꺼짐 | Virtual Bass 합성을 켭니다. |
+| `--vbass_freq HZ` | `250` | Virtual Bass crossover 주파수입니다. |
+| `--vbass_hp HZ` | `15.0` | 합성 저역에 적용할 high-pass 주파수입니다. |
+| `--vbass_polarity auto|normal|invert` | `auto` | 합성 저역 polarity 처리 방식입니다. |
+
+### 마이크 착용 편차 보정
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--microphone_deviation_correction` | 꺼짐 | 좌우 귀 마이크 착용 차이를 보정합니다. |
+| `--mic_deviation_strength VALUE` | `0.7` | 보정 강도입니다. `0.0`은 보정 없음, `1.0`은 전체 보정입니다. |
+| `--no_mic_deviation_phase_correction` | phase 보정 켜짐 | phase 보정을 끕니다. |
+| `--no_mic_deviation_adaptive_correction` | adaptive 보정 켜짐 | 좌우 비대칭 adaptive 보정을 끕니다. |
+| `--no_mic_deviation_anatomical_validation` | anatomical 검증 켜짐 | ITD/ILD anatomical validation을 끕니다. |
+| `--mic_deviation_debug_plots` | 꺼짐 | 마이크 착용 편차 보정 진단 그래프를 저장합니다. |
+
+## CLI 예시
+
+데모 폴더를 처리하고 그래프를 저장합니다.
 
 ```bash
-# Impulcifer 프로젝트 루트 디렉토리로 이동했다고 가정
-impulcifer --test_signal="default" --dir_path="data/demo" --plot
+impulcifer --dir_path "data/demo" --test_signal default --plot
 ```
 
-또는 `impulcifer-py313` 패키지 내부에 포함된 데모용 테스트 신호를 사용하고, 측정 파일만 `my_measurements` 폴더에 준비했다면:
+룸 보정과 헤드폰 보정을 끄고 측정 IR만 정리합니다.
 
 ```bash
-impulcifer --test_signal="default" --dir_path="path/to/your/my_measurements" --plot
+impulcifer --dir_path "measurements" --no_room_correction --no_headphone_compensation
 ```
 
-#### 인터랙티브 플롯 생성
-
-`--interactive_plots` 옵션을 사용하면 Bokeh 기반의 인터랙티브 플롯을 HTML 파일로 생성합니다.
+Virtual Bass와 JamesDSP 출력을 함께 만듭니다.
 
 ```bash
-impulcifer --dir_path="path/to/your/my_measurements" --interactive_plots
+impulcifer --dir_path "measurements" --vbass --vbass_freq 250 --jamesdsp
 ```
 
-이 명령은 `path/to/your/my_measurements/interactive_plots/interactive_summary.html`에 플롯을 저장합니다.
+채널별 decay를 지정합니다.
 
-### 기타 옵션
+```bash
+impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
+```
 
-다른 모든 옵션(룸 보정, 헤드폰 보정, 채널 밸런스 등)은 원본 Impulcifer와 거의 동일하게 작동합니다. `--help` 명령어를 통해 자세한 내용을 확인하세요.
+## GUI에서 할 수 있는 일
 
-## 📚 추가 가이드
+- Recorder에서 sweep 재생과 녹음을 진행합니다. 스피커 측정은 `FL,FR.wav` 같은 이름으로 저장하고, 헤드폰 보정은 별도 버튼으로 `headphones.wav`를 만듭니다.
+- Impulcifer 탭에서 BRIR 생성 옵션을 지정하고 처리 중 취소할 수 있습니다.
+- Studio skin에서는 같은 작업을 더 넓은 화면 구성으로 다룹니다.
+- UI Settings에서 언어와 테마를 바꿀 수 있습니다.
 
-이 프로젝트에는 특정 기능에 대한 상세한 가이드 문서들이 제공됩니다:
+각 옵션 위에 마우스를 올리면 짧은 설명을 확인할 수 있습니다.
 
-### 🎵 [TrueHD/MLP 지원 및 자동 채널 생성 가이드](README_TrueHD.md)
-- TrueHD/MLP 오디오 파일 지원
-- 자동 채널 생성 기능 (FC, TSL, TSR)
-- 11채널/13채널 TrueHD 레이아웃 출력
-- GUI 및 CLI 사용법 상세 설명
-- 측정 예시 및 문제 해결
+## 추가 문서
 
-### 🎧 [마이크 착용 편차 보정 가이드](README_microphone_deviation_correction.md)
-- 바이노럴 측정 시 마이크 위치 편차 보정
-- MTW(Minimum Time Window) 기반 분석
-- 주파수 대역별 가변 게이팅
-- 사용법 및 파라미터 설명
-- 분석 결과 및 시각화
+- [TrueHD/MLP 지원 및 레이아웃 출력](README_TrueHD.md)
+- [마이크 착용 편차 보정](README_microphone_deviation_correction.md)
+- [Python 3.14 및 Nuitka 빌드 메모](README_PYTHON314.md)
 
-## ⚠️ 주의 사항
+## 주의 사항
 
-- 이 버전은 GitHub CI에서 **Python 3.9~3.14** 대상으로 테스트됩니다. 최신 기능과 성능 검증은 Python 3.13/3.14 환경을 기준으로 유지합니다.
-- 원본 Impulcifer의 핵심 기능은 대부분 유지하려고 노력했지만, 내부 코드 수정으로 인해 미세한 동작 차이가 있을 수 있습니다.
-- `autoeq-py313` 등 Python 3.13.2 호환성을 위해 수정된 버전에 의존합니다.
+- `.mlp`, `.thd`, `.truehd` 입력은 FFmpeg가 필요합니다. FFmpeg가 없으면 실행 중 설치 안내가 나올 수 있습니다.
+- Custom EQ는 처리 시점에 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`를 기준으로 읽습니다.
+- 원본 Impulcifer와 같은 입력을 쓰더라도 Python, NumPy, SciPy, 보정 옵션 차이로 결과가 달라질 수 있습니다. 주요 경로는 회귀 테스트로 확인합니다.
 
-## 🔄 업데이트
-
-새로운 버전이 PyPI에 배포되면 다음 명령어로 업데이트할 수 있습니다:
+## 업데이트
 
 ```bash
 pip install --upgrade impulcifer-py313
 ```
 
-## 📄 라이선스 및 저작권
+## 라이선스
 
-이 프로젝트는 원본 Impulcifer와 동일하게 **MIT 라이선스**를 따릅니다.
+이 프로젝트는 MIT License를 따릅니다. 전체 문구는 [LICENSE](LICENSE)를 보세요.
 
-- **원본 프로젝트 저작자**: Jaakko Pasanen ([GitHub 프로필](https://github.com/jaakkopasanen))
-- **Impulcifer-py313 포크 버전 기여자**: 115dkk ([GitHub 프로필](https://github.com/115dkk))
+저작권 표기는 `LICENSE`와 맞췄습니다.
 
-```text
-MIT License
+- Copyright (c) 2018- Jaakko Pasanen
+- Copyright (c) 2024- 115dkk
+- Copyright (c) 2025- LionLion123
+- Copyright (c) 2025- SDC (DCinside)
 
-Copyright (c) 2018-2022 Jaakko Pasanen
-Copyright (c) 2024- 115dkk (For the Python 3.13.2 compatibility modifications and enhancements)
+## 기여와 문의
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-## 🛠️ 기여 및 문의
-
-버그를 발견하거나 개선 아이디어가 있다면, 이 저장소의 [이슈 트래커](https://github.com/115dkk/Impulcifer-pip313/issues)를 통해 알려주세요.
-
-## 📋 변경사항
-
-전체 변경 이력은 [CHANGELOG.md](CHANGELOG.md)를 참고하세요.
+버그를 찾았거나 개선할 점이 있으면 [이슈 트래커](https://github.com/115dkk/Impulcifer-pip313/issues)에 남겨 주세요.

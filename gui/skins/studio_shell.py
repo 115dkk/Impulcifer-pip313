@@ -194,6 +194,33 @@ class StudioShell:
 
         self.active_key = key
 
+    def get_state(self) -> dict:
+        """Return state snapshots for built Studio tabs."""
+        tabs_state: dict[str, dict] = {}
+        for key, tab in self.tabs.items():
+            if hasattr(tab, "get_state"):
+                tabs_state[key] = tab.get_state()
+        return {
+            "active_key": self.active_key,
+            "tabs": tabs_state,
+        }
+
+    def apply_state(self, state: dict) -> None:
+        """Restore Studio tab state after a skin or language rebuild."""
+        tabs_state = state.get("tabs", {})
+        for key, tab_state in tabs_state.items():
+            if key not in self.content_frames:
+                continue
+            if key not in self.tabs:
+                self._build_tab(key, self.content_frames[key])
+            tab = self.tabs.get(key)
+            if tab is not None and hasattr(tab, "apply_state"):
+                tab.apply_state(tab_state)
+
+        active_key = state.get("active_key", self.active_key)
+        if active_key in self.content_frames:
+            self.select(active_key)
+
     def _build_tab(self, key: str, parent: ctk.CTkFrame) -> None:
         """Instantiate the appropriate Studio tab class."""
         # Local imports avoid a circular import at module load time

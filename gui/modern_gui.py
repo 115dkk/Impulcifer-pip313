@@ -316,13 +316,14 @@ class ModernImpulciferGUI:
 
         Mirrors ``refresh_localized_ui`` but only tears down the body
         region (header stays so the rebuild is fast and the user keeps
-        the same window position). Tab state is not preserved across the
-        rebuild because the widget tree is recreated for the selected skin.
+        the same window position). Recorder and Impulcifer input state is
+        transferred when the two skins expose matching Tk variables.
         """
         if code not in (SKIN_STABLE, SKIN_STUDIO):
             return
         if code == self.skin:
             return
+        state = self._collect_input_state()
         self.loc.set_skin(code)
         self.skin = code
         # Tear down current body — header is at row=0, body lives at row=1
@@ -330,6 +331,7 @@ class ModernImpulciferGUI:
             child.destroy()
         self.studio_shell = None
         self._build_body()
+        self._restore_input_state(state)
 
     def _handle_theme_changed(self, code: str) -> None:
         """Apply and persist a theme change event."""
@@ -355,12 +357,11 @@ class ModernImpulciferGUI:
     def refresh_localized_ui(self, selected_tab_key: str = 'settings') -> None:
         """Rebuild localized widgets while preserving tab input state.
 
-        Tab state preservation only applies to the Stable skin (whose
-        Recorder + Impulcifer tabs implement ``get_state`` / ``apply_state``).
-        Studio rebuilds its sidebar/card widgets from the current localization
-        state without attempting a cross-widget state transfer.
+        Recorder + Impulcifer tabs in both skins implement ``get_state`` /
+        ``apply_state`` so language changes can rebuild labels without
+        dropping user input.
         """
-        state = self._collect_tab_state() if self.skin == SKIN_STABLE else {}
+        state = self._collect_input_state()
         for child in self.root.winfo_children():
             child.destroy()
 
@@ -372,25 +373,57 @@ class ModernImpulciferGUI:
         self.create_header()
         self.studio_shell = None
         self._build_body()
-        if self.skin == SKIN_STABLE:
-            self._restore_tab_state(state)
-            self.select_tab(selected_tab_key)
+        self._restore_input_state(state, selected_tab_key=selected_tab_key)
 
-    def _collect_tab_state(self) -> dict[str, dict]:
-        """Collect state snapshots from tabs that support it."""
-        state: dict[str, dict] = {}
-        for name in ('recorder_tab', 'impulcifer_tab'):
+    def _collect_input_state(self) -> dict:
+        """Collect input snapshots from the active skin."""
+        if self.skin == SKIN_STUDIO and self.studio_shell is not None:
+            return self.studio_shell.get_state()
+
+        tabs_state: dict[str, dict] = {}
+        for key, name in (('recorder', 'recorder_tab'), ('impulcifer', 'impulcifer_tab')):
             tab = getattr(self, name, None)
             if tab is not None and hasattr(tab, 'get_state'):
-                state[name] = tab.get_state()
-        return state
+                tabs_state[key] = tab.get_state()
+        return {
+            "active_key": self._current_stable_tab_key(),
+            "tabs": tabs_state,
+        }
 
-    def _restore_tab_state(self, state: dict[str, dict]) -> None:
-        """Restore state snapshots after rebuilding tabs."""
-        for name, tab_state in state.items():
+    def _restore_input_state(self, state: dict, selected_tab_key: str | None = None) -> None:
+        """Restore input snapshots after rebuilding the active skin."""
+        tabs_state = state.get("tabs", {})
+        active_key = selected_tab_key or state.get("active_key")
+
+        if self.skin == SKIN_STUDIO:
+            if self.studio_shell is not None:
+                self.studio_shell.apply_state({
+                    "active_key": active_key or "recorder",
+                    "tabs": tabs_state,
+                })
+            return
+
+        for key, name in (('recorder', 'recorder_tab'), ('impulcifer', 'impulcifer_tab')):
+            tab_state = tabs_state.get(key)
             tab = getattr(self, name, None)
-            if tab is not None and hasattr(tab, 'apply_state'):
+            if tab_state is not None and tab is not None and hasattr(tab, 'apply_state'):
                 tab.apply_state(tab_state)
+        if active_key in self.tab_keys:
+            self.select_tab(active_key)
+
+    def _current_stable_tab_key(self) -> str:
+        """Return the Stable tab key currently selected in the CTkTabview."""
+        tabview = getattr(self, "tabview", None)
+        if tabview is None:
+            return "recorder"
+        try:
+            selected_label = tabview.get()
+        except Exception:
+            return "recorder"
+        for key, loc_key in self.tab_keys.items():
+            if selected_label == self.loc.get(loc_key):
+                return key
+        return "recorder"
 
     def select_tab(self, tab_key: str) -> None:
         """Select a tab by stable internal key."""

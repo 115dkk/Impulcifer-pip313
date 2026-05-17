@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import builtins
 import os
 import warnings
 import numpy as np
@@ -76,7 +77,21 @@ class HRIR(HRIRPlotter):
             }
         return hrir
 
-    def open_recording(self, file_path, speakers, side=None, silence_length=2.0):
+    def subset(self, speakers, copy_irs=False):
+        """Return an HRIR view/copy with only the requested speakers."""
+        hrir = HRIR(self.estimator)
+        hrir.irs = {}
+        for speaker in speakers:
+            pair = self.irs.get(speaker)
+            if pair is None:
+                continue
+            hrir.irs[speaker] = {
+                side: ir.copy() if copy_irs else ir
+                for side, ir in pair.items()
+            }
+        return hrir
+
+    def open_recording(self, file_path, speakers, side=None, silence_length=2.0, debug=False):
         """Open combined recording and splits it into separate speaker-ear pairs.
 
         Args:
@@ -93,6 +108,8 @@ class HRIR(HRIRPlotter):
                 "Refusing to open recording because HRIR's sampling rate doesn't match impulse response "
                 "estimator's sampling rate."
             )
+
+        print = builtins.print if debug else lambda *args, **kwargs: None
 
         fs, recording = read_wav(file_path, expand=True)
         if fs != self.fs:
@@ -398,23 +415,22 @@ class HRIR(HRIRPlotter):
         if track_order is None:
             track_order = HEXADECAGONAL_TRACK_ORDER
 
-        # Add all impulse responses to a list and save channel names
-        irs = []
-        ir_order = []
+        # Add only the requested impulse responses in output order. Previous
+        # code stacked every channel first, even for two-channel subset outputs.
+        irs_by_name = {}
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
-                irs.append(ir.data)
-                ir_order.append(f"{speaker}-{side}")
+                irs_by_name[f"{speaker}-{side}"] = ir.data
 
-        # Add silent tracks
+        if not irs_by_name:
+            raise ValueError("No impulse responses available for WAV output.")
+
+        reference_len = len(next(iter(irs_by_name.values())))
+        rows = []
+
         for ch in track_order:
-            if ch not in ir_order:
-                irs.append(np.zeros(len(irs[0])))
-                ir_order.append(ch)
-        irs = np.vstack(irs)
-
-        # Sort to output order
-        irs = irs[[ir_order.index(ch) for ch in track_order], :]
+            rows.append(irs_by_name.get(ch, np.zeros(reference_len)))
+        irs = np.vstack(rows)
 
         # Write to file
         write_wav(file_path, self.fs, irs, bit_depth=bit_depth)
@@ -824,23 +840,17 @@ class HRIR(HRIRPlotter):
         plot_dir=None,
     ):
         """
-        마이크 착용 편차 보정 (v2.0)
+        마이크 착용 편차 보정 (v3.0)
 
         바이노럴 임펄스 응답 측정 시 좌우 귀에 착용된 마이크의 위치/깊이 차이로 인한
-        주파수 응답 편차를 보정합니다. REW의 MTW(Minimum Time Window) 개념을 활용하여
-        직접음 구간만을 분석하고 보정합니다.
-
-        v2.0 개선사항:
-        - 적응형 비대칭 보정: 좌우 응답의 품질을 평가하여 더 나은 쪽을 참조로 사용
-        - 위상 보정: ITD(Interaural Time Difference) 정보를 FIR 필터에 반영
-        - ITD/ILD 해부학적 검증: 인간의 머리 크기로 예상되는 범위 검증
-        - 주파수 대역별 보정 전략: 저주파(ITD), 중간주파(혼합), 고주파(ILD) 차별화
+        반복적인 주파수 응답 편차를 보정합니다. v3.0은 여러 스피커의 좌우 편차를
+        모아 스피커 방향에 따른 정상 HRTF 차이와 마이크 오차를 나눠 추정합니다.
 
         Args:
             correction_strength (float): 보정 강도 (0.0~1.0). 0.0은 보정 없음, 1.0은 완전 보정
-            enable_phase_correction (bool): 위상 보정 활성화 (v2.0, 기본: True)
-            enable_adaptive_correction (bool): 적응형 비대칭 보정 활성화 (v2.0, 기본: True)
-            enable_anatomical_validation (bool): ITD/ILD 해부학적 검증 활성화 (v2.0, 기본: True)
+            enable_phase_correction (bool): v2.0 호환 인자. v3.0에서는 무시됨
+            enable_adaptive_correction (bool): v2.0 호환 인자. v3.0에서는 무시됨
+            enable_anatomical_validation (bool): v2.0 호환 인자. v3.0에서는 무시됨
             plot_analysis (bool): 분석 결과 플롯 생성 여부
             plot_dir (str): 플롯 저장 디렉토리 경로
 
@@ -851,7 +861,7 @@ class HRIR(HRIRPlotter):
             apply_microphone_deviation_correction_to_hrir,
         )
 
-        print("마이크 착용 편차 보정 v2.0 중...")
+        print("마이크 착용 편차 보정 v3.0 중...")
 
         # 플롯 디렉토리 설정
         if plot_analysis and plot_dir:
@@ -860,7 +870,7 @@ class HRIR(HRIRPlotter):
         else:
             mic_deviation_plot_dir = None
 
-        # 보정 적용 (v2.0 파라미터 포함)
+        # v2.0 호환 파라미터는 하위 함수에서 받지만 v3.0 구현에서는 무시된다.
         analysis_results = apply_microphone_deviation_correction_to_hrir(
             self,
             correction_strength=correction_strength,

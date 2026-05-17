@@ -253,6 +253,7 @@ def add_disclosure(
     for widget in (head, text_col, caret, *text_col.winfo_children()):
         widget.bind("<Button-1>", _flip_from_click)
 
+    state_var.trace_add("write", lambda *_: _toggle())
     _toggle()  # Apply initial state
 
     return outer, body

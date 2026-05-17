@@ -4,13 +4,17 @@
 from __future__ import annotations
 
 import os
-import shutil
 import threading
 from typing import TYPE_CHECKING
 
 import customtkinter as ctk
 
 import impulcifer
+from gui.brir_args import (
+    build_brir_args,
+    sync_custom_eq_files,
+    sync_headphone_compensation_file,
+)
 from gui.constants import FILETYPES_AUDIO_WITH_PKL, FILETYPES_TEXT, FILETYPES_WAV
 from gui.dialogs import ProcessingDialog
 from gui.skins.studio_widgets import (
@@ -28,9 +32,8 @@ from gui.utils import (
     browse_directory,
     browse_file,
     install_smooth_scrolling,
-    safe_get_double,
-    safe_get_int,
-    safe_get_string,
+    restore_tk_vars,
+    snapshot_tk_vars,
 )
 from infra.logger import get_logger, set_gui_callbacks
 
@@ -212,7 +215,7 @@ class StudioImpulciferTab:
             rc_inline,
             row=0,
             column=0,
-            label="Specific limit",
+            label=self.loc.get("label_specific_limit"),
             value_var=self.specific_limit_var,
             unit="Hz",
         )
@@ -220,13 +223,13 @@ class StudioImpulciferTab:
             rc_inline,
             row=0,
             column=1,
-            label="Generic limit",
+            label=self.loc.get("label_generic_limit"),
             value_var=self.generic_limit_var,
             unit="Hz",
         )
         add_inline_dropdown(
             rc_inline, row=0, column=2,
-            label="FR combination",
+            label=self.loc.get("label_fr_combination"),
             value_var=self.fr_combination_var,
             values=("average", "conservative"),
         )
@@ -571,113 +574,53 @@ class StudioImpulciferTab:
         vb_inline = ctk.CTkFrame(vb_body, fg_color="transparent")
         vb_inline.grid(row=0, column=0, sticky="ew")
         vb_inline.grid_columnconfigure((0, 1, 2), weight=1, uniform="vbm")
-        add_inline_metric(vb_inline, row=0, column=0, label="Crossover", value_var=self.vbass_freq_var, unit="Hz")
-        add_inline_metric(vb_inline, row=0, column=1, label="Sub HP", value_var=self.vbass_hp_var, unit="Hz")
+        add_inline_metric(
+            vb_inline,
+            row=0,
+            column=0,
+            label=self.loc.get("vbass_crossover_freq"),
+            value_var=self.vbass_freq_var,
+            unit="Hz",
+        )
+        add_inline_metric(
+            vb_inline,
+            row=0,
+            column=1,
+            label=self.loc.get("vbass_hp_freq"),
+            value_var=self.vbass_hp_var,
+            unit="Hz",
+        )
         add_inline_dropdown(
             vb_inline, row=0, column=2,
-            label="Polarity",
+            label=self.loc.get("vbass_polarity"),
             value_var=self.vbass_polarity_var,
             values=("auto", "normal", "invert"),
         )
+
+    def get_state(self) -> dict:
+        """Return a snapshot of user-editable Tk variables."""
+        return snapshot_tk_vars(self)
+
+    def apply_state(self, state: dict) -> None:
+        """Restore user-editable Tk variables after a UI rebuild."""
+        restore_tk_vars(self, state)
+        self.update_balance_entry()
+        self.toggle_decay_per_channel()
+        self.toggle_mic_deviation()
 
     # ------------------------------------------------------------------
     # Generate
     # ------------------------------------------------------------------
     def generate_brir(self) -> None:
         """Run :func:`impulcifer.main` in a worker thread with progress dialog."""
-        args = {
-            "dir_path": self.dir_path_var.get(),
-            "test_signal": self.test_signal_var.get(),
-            "plot": self.plot_var.get(),
-            "do_room_correction": self.do_room_correction_var.get(),
-            "do_headphone_compensation": self.do_headphone_compensation_var.get(),
-            "do_equalization": self.do_equalization_var.get(),
-        }
-
-        if self.do_room_correction_var.get():
-            args["room_target"] = self.room_target_var.get() or None
-            args["room_mic_calibration"] = self.room_mic_calibration_var.get() or None
-            args["specific_limit"] = safe_get_int(self.specific_limit_var, 20000)
-            args["generic_limit"] = safe_get_int(self.generic_limit_var, 1000)
-            args["fr_combination_method"] = self.fr_combination_var.get()
-
-        if self.do_headphone_compensation_var.get() and self.headphone_compensation_file_var.get():
-            source_file = self.headphone_compensation_file_var.get()
-            if not os.path.isabs(source_file):
-                source_file = os.path.join(self.dir_path_var.get(), source_file)
-            target_file = os.path.join(self.dir_path_var.get(), "headphones.wav")
-            if os.path.exists(source_file):
-                try:
-                    shutil.copy2(source_file, target_file)
-                except Exception as e:
-                    print(f"Error copying headphone file: {e}")
-
-        if self.show_advanced_var.get():
-            args["fs"] = safe_get_int(self.fs_var, 48000) if self.fs_check_var.get() else None
-
-            target_level_str = safe_get_string(self.target_level_var, "")
-            if target_level_str.strip():
-                try:
-                    args["target_level"] = float(target_level_str)
-                except ValueError:
-                    args["target_level"] = None
-            else:
-                args["target_level"] = None
-
-            if self.channel_balance_var.get() == "number":
-                args["channel_balance"] = safe_get_int(self.channel_balance_db_var, 0)
-            elif self.channel_balance_var.get() != "none":
-                args["channel_balance"] = self.channel_balance_var.get()
-
-            bass_gain = safe_get_double(self.bass_boost_gain_var, 0.0)
-            if bass_gain:
-                args["bass_boost_gain"] = bass_gain
-                args["bass_boost_fc"] = safe_get_int(self.bass_boost_fc_var, 105)
-                args["bass_boost_q"] = safe_get_double(self.bass_boost_q_var, 0.76)
-
-            tilt_val = safe_get_double(self.tilt_var, 0.0)
-            if tilt_val:
-                args["tilt"] = tilt_val
-
-            if self.decay_per_channel_var.get():
-                decay_dict = {}
-                for ch, var in self.decay_channel_vars.items():
-                    val_str = safe_get_string(var, "")
-                    if val_str.strip():
-                        try:
-                            decay_dict[ch] = float(val_str) / 1000
-                        except ValueError:
-                            pass
-                if decay_dict:
-                    args["decay"] = decay_dict
-            else:
-                decay_str = safe_get_string(self.decay_var, "")
-                if decay_str.strip():
-                    try:
-                        decay_val = float(decay_str) / 1000
-                        args["decay"] = {
-                            ch: decay_val for ch in ("FL", "FC", "FR", "SL", "SR", "BL", "BR")
-                        }
-                    except ValueError:
-                        pass
-
-            args["head_ms"] = safe_get_double(self.pre_response_var, 1.0)
-            args["jamesdsp"] = self.jamesdsp_var.get()
-            args["hangloose"] = self.hangloose_var.get()
-            args["interactive_plots"] = self.interactive_plots_var.get()
-            args["microphone_deviation_correction"] = self.microphone_deviation_correction_var.get()
-            args["mic_deviation_strength"] = safe_get_double(self.mic_deviation_strength_var, 0.7)
-            args["mic_deviation_phase_correction"] = True
-            args["mic_deviation_adaptive_correction"] = True
-            args["mic_deviation_anatomical_validation"] = True
-            args["mic_deviation_debug_plots"] = self.mic_deviation_debug_plots_var.get()
-            args["output_truehd_layouts"] = self.output_truehd_layouts_var.get()
-
-        if self.vbass_enable_var.get():
-            args["vbass"] = True
-            args["vbass_freq"] = max(30, min(500, safe_get_int(self.vbass_freq_var, 250)))
-            args["vbass_hp"] = safe_get_double(self.vbass_hp_var, 15.0)
-            args["vbass_polarity"] = self.vbass_polarity_var.get() or "auto"
+        try:
+            sync_headphone_compensation_file(self)
+            sync_custom_eq_files(self)
+            args = build_brir_args(self, self.loc)
+        except Exception as e:
+            logger = get_logger()
+            logger.error(f"Processing failed: {e}")
+            return
 
         # Disable CTA during processing
         if self.generate_button:

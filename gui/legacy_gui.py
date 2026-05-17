@@ -51,54 +51,13 @@ def main_gui():
     import sounddevice
     import platform
     import matplotlib.font_manager as fm
-    import importlib.resources
+    from infra.resource_helper import find_pretendard_font_path
 
     # GUI용 Pretendard 폰트 설정 함수
     def setup_gui_font():
         """GUI에서 사용할 Pretendard 폰트를 설정합니다."""
         try:
-            # 1. 패키지 내 폰트 시도
-            font_path = None
-            try:
-                if hasattr(importlib.resources, "files"):
-                    try:
-                        font_resource = (
-                            importlib.resources.files("impulcifer_py313")
-                            .joinpath("font")
-                            .joinpath("Pretendard-Regular.otf")
-                        )
-                        with importlib.resources.as_file(
-                            font_resource
-                        ) as font_file_path:
-                            font_path = str(font_file_path)
-                    except (FileNotFoundError, ModuleNotFoundError):
-                        pass
-
-                elif hasattr(importlib.resources, "path"):
-                    try:
-                        with importlib.resources.path(
-                            "impulcifer_py313.font", "Pretendard-Regular.otf"
-                        ) as font_file_path:
-                            font_path = str(font_file_path)
-                    except (FileNotFoundError, ModuleNotFoundError):
-                        pass
-            except ImportError:
-                pass
-
-            # 2. 로컬 개발 환경에서 시도
-            if font_path is None:
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                local_font_paths = [
-                    os.path.join(script_dir, "font", "Pretendard-Regular.otf"),
-                    os.path.join(script_dir, "fonts", "Pretendard-Regular.otf"),
-                    os.path.join(script_dir, "..", "font", "Pretendard-Regular.otf"),
-                    os.path.join(script_dir, "..", "fonts", "Pretendard-Regular.otf"),
-                ]
-
-                for local_path in local_font_paths:
-                    if os.path.exists(local_path):
-                        font_path = local_path
-                        break
+            font_path = find_pretendard_font_path()
 
             # 폰트를 시스템에 등록하고 설정
             if font_path and os.path.exists(font_path):

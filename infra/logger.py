@@ -82,11 +82,15 @@ class ImpulciferLogger:
         Returns:
             Translated and formatted message
         """
-        if not self.localization:
-            return message
-
         # If message starts with common prefixes, treat as translation key
         if message.startswith(('cli_', 'message_', 'error_', 'warning_', 'success_', 'info_', 'vbass_')):
+            if self.localization is None:
+                try:
+                    from i18n.localization import get_localization_manager
+
+                    self.localization = get_localization_manager()
+                except Exception:
+                    return message
             return self.localization.get(message, **kwargs)
 
         # Otherwise return as-is (allows mixing translated and non-translated messages)

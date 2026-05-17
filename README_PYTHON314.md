@@ -1,357 +1,133 @@
-# Impulcifer Python 3.14 최적화 가이드
+# Python 3.14 및 Nuitka 빌드 메모
 
-## 개요
+이 문서는 Python 3.14 지원, free-threaded 런타임 감지, Nuitka standalone 빌드 경로를 현재 코드 기준으로 정리합니다. 고정된 성능 배속은 적지 않습니다. 입력 데이터, 채널 수, CPU, 디스크 I/O, Python 빌드 방식에 따라 결과가 달라집니다.
 
-Impulcifer 2.0.0은 Python 3.14의 혁신적인 기능들을 활용하여 성능을 대폭 향상시켰습니다. 이 문서는 Python 3.14의 새로운 기능과 Impulcifer가 이를 어떻게 활용하는지 설명합니다.
+## 현재 기준
 
-## Python 3.14 주요 신규 기능
+| 항목 | 현재 상태 | 기준 코드 |
+| --- | --- | --- |
+| Python 테스트 범위 | CI에서 Python 3.9부터 3.14까지 확인합니다. | `.github/workflows/test.yml` |
+| Nuitka 릴리스 빌드 | 일반 CPython 3.14와 `nuitka>=4.1`을 씁니다. | `.github/workflows/build-linux.yml`, `.github/workflows/build-macos.yml`, `.github/workflows/release-cross-platform.yml` |
+| free-threaded standalone | 대상에서 제외합니다. `--disable-gil`, `3.14t`를 쓰지 않습니다. | `tests/test_build_config.py` |
+| Nuitka 플래그 | `build_scripts/nuitka_flags.py`가 단일 기준입니다. | `build_scripts/build_nuitka.py`, `build_scripts/nuitka_flags.py` |
+| 런타임 병렬 정책 | GIL 비활성화 여부를 보고 ThreadPool 또는 ProcessPool을 고릅니다. | `core/parallel_utils.py` |
 
-### 1. Free-Threaded Python (PEP 703/779) ⭐
+## Python 3.14 지원 범위
 
-Python 3.14의 가장 혁명적인 변화입니다. **GIL(Global Interpreter Lock) 제거**로 인해 진정한 병렬 처리가 가능해졌습니다.
+Python 3.14는 패키지 테스트와 standalone 빌드에서 지원합니다. 다만 standalone 릴리스 빌드는 free-threaded Python을 쓰지 않습니다. Nuitka의 free-threaded 지원이 충분히 안정화되기 전까지 일반 CPython 3.14를 기준으로 둡니다.
 
-**기존 Python (GIL 존재):**
-```
-Thread 1: [====]     [====]     [====]
-Thread 2:      [====]     [====]     [====]
-실제 실행: 순차적 (한 번에 하나의 스레드만 실행)
-```
-
-**Python 3.14 Free-Threaded (GIL 제거):**
-```
-Thread 1: [====]  [====]  [====]
-Thread 2: [====]  [====]  [====]
-Thread 3: [====]  [====]  [====]
-실제 실행: 병렬 (모든 스레드가 동시 실행)
-```
-
-### 2. Deferred Evaluation of Annotations (PEP 649)
-
-타입 어노테이션이 더 이상 모듈 로드 시 즉시 평가되지 않습니다. 이는 메모리 사용량과 임포트 시간을 줄여줍니다.
-
-### 3. Experimental JIT Compiler
-
-공식 macOS 및 Windows 릴리스 바이너리에 실험적 JIT 컴파일러가 포함되어 있습니다. CPU 집약적인 코드의 성능을 향상시킵니다.
-
-### 4. Multiple Interpreters (PEP 734)
-
-단일 프로세스 내에서 여러 Python 인터프리터를 생성할 수 있어 더 나은 동시성과 병렬성을 제공합니다.
-
-### 5. Enhanced REPL
-
-실시간 문법 강조 및 스마트 자동 완성 기능이 있는 향상된 대화형 셸입니다.
-
-## Impulcifer의 Python 3.14 최적화
-
-### 병렬 처리 모듈 (`parallel_processing.py`)
-
-Impulcifer 2.0.0은 새로운 병렬 처리 모듈을 포함하여 CPU 집약적인 작업을 자동으로 병렬화합니다.
-
-**주요 기능:**
-- Python 3.14 Free-Threaded 자동 감지
-- 하위 호환성 보장 (Python 3.9+)
-- 최적 워커 수 자동 계산
-- 진행 상황 표시
-
-**사용 예시:**
-
-```python
-from parallel_processing import parallel_map, get_python_threading_info
-
-# 스레딩 정보 확인
-info = get_python_threading_info()
-print(f"Free-Threaded: {info['is_free_threaded']}")
-print(f"최적 워커 수: {info['optimal_workers']}")
-
-# 병렬 처리
-def process_speaker(ir):
-    # HRIR 처리 로직
-    return processed_ir
-
-results = parallel_map(process_speaker, speaker_irs, show_progress=True)
-```
-
-### 최적화된 작업들
-
-다음 작업들이 Python 3.14 Free-Threaded 모드에서 자동으로 병렬 처리됩니다:
-
-1. **HRIR 정규화** - 각 스피커 채널의 게인 정규화
-2. **IR 크로핑** - 헤드/테일 크롭
-3. **이퀄라이제이션** - 각 채널에 대한 EQ 적용
-4. **리샘플링** - 샘플링 레이트 변환
-5. **룸 보정** - 여러 마이크 위치의 응답 처리
-
-## Python 3.14 설치 및 활성화
-
-### Windows
-
-```powershell
-# Python 3.14 다운로드 및 설치
-# https://www.python.org/downloads/
-
-# Free-Threaded 빌드 다운로드 (별도 링크)
-# Python 3.14t (t = threaded) 버전 설치
-
-# 설치 확인
-python3.14t --version
-
-# Impulcifer 설치
-pip install impulcifer-py313
-```
-
-### macOS
-
-```bash
-# Homebrew를 통한 설치
-brew install python@3.14
-
-# 또는 공식 사이트에서 다운로드
-# Free-Threaded 빌드는 별도로 제공됨
-
-# 설치 확인
-python3.14 --version
-
-# Impulcifer 설치
-pip3.14 install impulcifer-py313
-```
-
-### Linux (Ubuntu/Debian)
-
-```bash
-# Python 3.14 소스 빌드 (Free-Threaded)
-sudo apt-get update
-sudo apt-get install -y build-essential zlib1g-dev libncurses5-dev \
-    libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev
-
-# Python 3.14 다운로드
-wget https://www.python.org/ftp/python/3.14.0/Python-3.14.0.tgz
-tar -xf Python-3.14.0.tgz
-cd Python-3.14.0
-
-# Free-Threaded 빌드 구성
-./configure --enable-experimental-jit --disable-gil --prefix=/usr/local
-
-# 빌드 및 설치
-make -j$(nproc)
-sudo make altinstall
-
-# 설치 확인
-python3.14 --version
-
-# Impulcifer 설치
-pip3.14 install impulcifer-py313
-```
-
-## Free-Threaded 모드 확인
-
-Python이 Free-Threaded 모드로 실행 중인지 확인하려면:
+현재 프로젝트가 Python 3.14 기능을 직접 활용하는 부분은 런타임 감지입니다.
 
 ```python
 import sys
 
-# Python 3.14+에서만 사용 가능
-if hasattr(sys, '_is_gil_enabled'):
+if hasattr(sys, "_is_gil_enabled"):
     gil_enabled = sys._is_gil_enabled()
-    print(f"GIL 활성화: {gil_enabled}")
-    print(f"Free-Threaded 모드: {not gil_enabled}")
-else:
-    print("Python 3.14 미만 또는 Free-Threaded 빌드 아님")
 ```
 
-또는 Impulcifer의 병렬 처리 모듈 사용:
+이 감지는 Python 3.13 이상의 free-threaded 빌드에서도 동작합니다. 그래서 코드는 "Python 3.14 전용 최적화"가 아니라 "GIL 비활성화 런타임 대응"으로 보는 편이 맞습니다.
+
+## 병렬 처리 정책
+
+`core.parallel_utils`는 BRIR 처리 중 무거운 작업에 쓰는 기본 병렬 유틸입니다.
+
+| 런타임 | executor | 이유 |
+| --- | --- | --- |
+| GIL이 켜진 일반 Python | `ProcessPoolExecutor` | CPU 작업에서 GIL을 피합니다. |
+| GIL이 꺼진 free-threaded Python | `ThreadPoolExecutor` | pickle 비용 없이 스레드 병렬 실행을 씁니다. |
+
+현재 병렬 처리와 메모리 절감이 들어간 경로는 다음입니다.
+
+| 경로 | 현재 동작 |
+| --- | --- |
+| Equalization worker | `parallel_map()`을 쓰고, room/headphone/EQ/target 공통 데이터는 worker initializer로 한 번 전달합니다. task에는 `(speaker, side)`만 넘깁니다. |
+| Decay 조정 | 스피커/귀별 task를 `parallel_map()`으로 처리합니다. |
+| Normalize | 스피커가 5개 이상이면 `parallel_process_dict(..., use_threads=True)`로 gain 적용을 나눕니다. 일반 Python에서는 CPU-bound 이득이 제한될 수 있습니다. |
+| Resample | 스피커가 5개 이상이면 `parallel_process_dict(..., use_threads=True)`로 스피커별 리샘플링을 나눕니다. |
+| Plot용 convolution | ProcessPool 비용과 메모리 잔류가 커서 직렬 처리로 유지합니다. |
+| `HRIR.write_wav()` | `track_order`가 있으면 요청된 채널만 쌓습니다. JamesDSP, Hangloose, TrueHD 부분 출력에서 전체 HRIR을 먼저 쌓지 않습니다. |
+| JamesDSP 출력 | `HRIR.subset(["FL", "FR"], copy_irs=True)`로 필요한 네 IR만 복사합니다. |
+| Hangloose 출력 | HRIR 전체 deep copy 없이 `write_wav(track_order=...)`로 스피커별 파일을 씁니다. |
+
+## 런타임 확인
+
+설치된 명령으로 확인할 수 있습니다.
 
 ```bash
-python -c "from parallel_processing import get_python_threading_info; import json; print(json.dumps(get_python_threading_info(), indent=2))"
+impulcifer --info
 ```
 
-## 성능 벤치마크
-
-### 테스트 환경
-- CPU: Intel i9-13900K (24 cores)
-- RAM: 64GB DDR5
-- OS: Ubuntu 24.04
-- 테스트: 16채널 HRIR 처리 (48kHz, 6.15초)
-
-### 결과
-
-| Python 버전 | GIL | 처리 시간 | 속도 향상 |
-|------------|-----|----------|---------|
-| 3.13.0 | 활성화 | 45.2초 | 1.0x (기준) |
-| 3.14.0 | 활성화 | 43.8초 | 1.03x |
-| 3.14.0 (JIT) | 활성화 | 38.9초 | 1.16x |
-| 3.14.0 Free-Threaded | **비활성화** | **18.3초** | **2.47x** ⭐ |
-| 3.14.0 Free-Threaded (JIT) | **비활성화** | **15.1초** | **2.99x** ⭐⭐ |
-
-**결론:**
-- Python 3.14 Free-Threaded 모드 + JIT 컴파일러 사용 시 **약 3배 빠른 처리 속도**
-- 채널 수가 많을수록 (더 많은 병렬 작업) 성능 향상 폭이 더 큼
-
-## JIT 컴파일러 활성화
-
-### Python 3.14 JIT 사용
+병렬 정책만 확인하려면 다음 코드를 실행합니다.
 
 ```bash
-# 환경 변수로 JIT 활성화 (실험적 기능)
-export PYTHON_JIT=1
-
-# Impulcifer 실행
-impulcifer --dir_path=data/demo --plot
+python -c "from core.parallel_utils import get_parallelization_info; print(get_parallelization_info())"
 ```
 
-### JIT 최적화 팁
+`executor_type`이 `ThreadPoolExecutor`이면 현재 런타임에서 GIL이 꺼져 있다고 판단한 것입니다. 일반 Python에서는 `ProcessPoolExecutor`가 나옵니다.
 
-1. **반복 연산이 많은 코드**에서 가장 효과적
-2. **numpy, scipy** 연산은 이미 C로 최적화되어 있어 JIT 효과 제한적
-3. **순수 Python 루프**에서 가장 큰 성능 향상
+## Nuitka standalone 빌드
 
-## 병렬 처리 활용 예제
+릴리스 빌드는 standalone folder 방식을 씁니다. onefile 모드는 쓰지 않습니다.
 
-### 예제 1: 여러 HRIR 세트 일괄 처리
+공통 플래그는 `build_scripts/nuitka_flags.py`에서 만듭니다.
 
-```python
-from parallel_processing import parallel_map
-from impulcifer import main as impulcifer_main
+주요 기준은 다음입니다.
 
-# 여러 측정 데이터 경로
-data_paths = [
-    'data/measurement1',
-    'data/measurement2',
-    'data/measurement3',
-    'data/measurement4'
-]
+| 항목 | 값 |
+| --- | --- |
+| 모드 | `--standalone` |
+| 출력 정리 | `--remove-output` |
+| jobs 기본값 | `--jobs=4` |
+| LTO | `--lto=no` |
+| 플러그인 | `tk-inter`, `matplotlib` |
+| 포함 데이터 | `data`, `font`, `img`, `logo`, `i18n/locales`, `gui/theme`, `LICENSE`, `README.txt` |
+| 명시 포함 모듈 | `scipy.*`, `bokeh`, `core.parallel_workers`, `infra._build_info` |
 
-def process_hrir(path):
-    impulcifer_main(
-        dir_path=path,
-        test_signal='default',
-        plot=True
-    )
-    return f"Completed: {path}"
-
-# 병렬 처리 (Python 3.14 Free-Threaded에서 진정한 병렬 실행)
-results = parallel_map(
-    process_hrir,
-    data_paths,
-    show_progress=True
-)
-
-for result in results:
-    print(result)
-```
-
-### 예제 2: 사용자 정의 병렬 HRIR 처리
-
-```python
-from parallel_processing import parallel_process_dict
-import numpy as np
-
-# 각 스피커에 대한 사용자 정의 처리
-def custom_process(speaker_name, ir_pair):
-    left_ir = ir_pair['left']
-    right_ir = ir_pair['right']
-
-    # 사용자 정의 처리 (예: 고급 필터링)
-    processed_left = np.convolve(left_ir, custom_filter, mode='same')
-    processed_right = np.convolve(right_ir, custom_filter, mode='same')
-
-    return {
-        'left': processed_left,
-        'right': processed_right
-    }
-
-# 병렬 처리
-processed_irs = parallel_process_dict(
-    custom_process,
-    hrir.irs,
-    show_progress=True
-)
-```
-
-## 마이그레이션 가이드
-
-### Python 3.13에서 3.14로
-
-Impulcifer 2.0.0은 Python 3.9-3.14를 모두 지원합니다. 별도의 코드 변경 없이 Python 3.14로 업그레이드하면 자동으로 최적화가 적용됩니다.
-
-**단계:**
-
-1. **Python 3.14 Free-Threaded 설치**
-   ```bash
-   # 공식 사이트에서 Free-Threaded 빌드 다운로드
-   ```
-
-2. **가상 환경 재생성**
-   ```bash
-   python3.14 -m venv venv_314
-   source venv_314/bin/activate  # Windows: venv_314\Scripts\activate
-   ```
-
-3. **Impulcifer 설치**
-   ```bash
-   pip install impulcifer-py313
-   ```
-
-4. **성능 확인**
-   ```python
-   from parallel_processing import get_python_threading_info
-   import json
-   print(json.dumps(get_python_threading_info(), indent=2))
-   ```
-
-### 호환성 매트릭스
-
-| 기능 | Python 3.9-3.13 | Python 3.14 (GIL) | Python 3.14 (Free-Threaded) |
-|------|----------------|-------------------|----------------------------|
-| 기본 HRIR 처리 | ✅ | ✅ | ✅ |
-| 병렬 처리 (제한적) | ✅ (ProcessPool) | ✅ (ProcessPool) | ⚡ **진정한 병렬 (ThreadPool)** |
-| JIT 컴파일러 | ❌ | ✅ (실험적) | ✅ (실험적) |
-| 타입 어노테이션 최적화 | ❌ | ✅ (PEP 649) | ✅ (PEP 649) |
-
-## 문제 해결
-
-### Free-Threaded 모드가 감지되지 않음
+로컬에서 빌드하려면 다음 명령을 씁니다.
 
 ```bash
-# Python 버전 확인
-python --version
-
-# sys._is_gil_enabled() 함수 존재 여부 확인
-python -c "import sys; print(hasattr(sys, '_is_gil_enabled'))"
-
-# Free-Threaded 빌드인지 확인 (Python 3.14t 표시 확인)
+python build_scripts/build_nuitka.py
 ```
 
-### 성능 향상이 미미함
-
-1. **CPU 코어 수 확인**: 병렬 처리는 멀티코어 CPU에서만 효과적
-2. **데이터 크기 확인**: 작은 데이터셋은 병렬 처리 오버헤드로 인해 느릴 수 있음
-3. **I/O 바운드 작업**: 디스크 I/O가 병목인 경우 병렬 처리 효과 제한적
-
-### 의존성 호환성 문제
-
-일부 라이브러리가 Python 3.14를 아직 지원하지 않을 수 있습니다:
+플래그만 확인하려면 다음 명령을 쓸 수 있습니다.
 
 ```bash
-# 의존성 확인
-pip check
-
-# 문제가 있는 패키지 개별 업그레이드
-pip install --upgrade numpy scipy matplotlib
+python -m build_scripts.nuitka_flags --platform linux --version 0.0.0
 ```
 
-## 추가 리소스
+## 성능 문서 기준
 
-- [PEP 703 - Making the Global Interpreter Lock Optional](https://peps.python.org/pep-0703/)
-- [PEP 779 - Free-Threaded CPython](https://peps.python.org/pep-0779/)
-- [PEP 649 - Deferred Evaluation Of Annotations](https://peps.python.org/pep-0649/)
-- [PEP 750 - Template Strings](https://peps.python.org/pep-0750/)
-- [Python 3.14 공식 릴리스 노트](https://docs.python.org/3/whatsnew/3.14.html)
+예전 문서에는 특정 CPU에서 몇 배 빨라졌다는 벤치마크 표가 있었습니다. 현재 문서에서는 그 수치를 제거했습니다. 프로젝트 안에 그런 숫자를 계속 보장하는 회귀 테스트가 없고, 현재 성능 개선은 여러 작은 경로로 나뉘어 있기 때문입니다.
 
-## 기여
+앞으로 성능 수치를 문서에 넣으려면 다음 조건을 같이 남겨야 합니다.
 
-Python 3.14 최적화와 관련하여 개선 아이디어나 버그 리포트가 있다면:
-- [GitHub Issues](https://github.com/115dkk/Impulcifer-pip313/issues)
+- 사용한 commit 해시
+- Python 버전과 GIL 상태
+- NumPy, SciPy, nnresample 버전
+- CPU, RAM, 저장 장치
+- 측정 데이터의 채널 수와 샘플레이트
+- 실행 명령과 반복 횟수
+- 비교 기준이 되는 commit 또는 릴리스
 
----
+숫자를 재현할 수 없으면 changelog에는 "어떤 경로를 줄였는지"만 적고, 배속 표현은 피합니다.
 
-**Impulcifer 2.0.0** - Python 3.14 Free-Threaded로 더 빠르게, 더 효율적으로! 🚀
+## free-threaded Python 사용 시 주의
+
+- PyPI 패키지 실행에서는 free-threaded Python을 직접 쓸 수 있습니다.
+- standalone 릴리스는 일반 CPython 3.14 기준입니다.
+- no-GIL 런타임에서 ThreadPool 경로는 pickle 비용을 줄일 수 있지만, 모든 작업이 빨라진다고 보장할 수는 없습니다.
+- NumPy와 SciPy 내부 구현, BLAS 설정, 배열 크기에 따라 결과가 달라집니다.
+
+## 관련 테스트
+
+빌드 설정 drift는 다음 테스트가 막습니다.
+
+```bash
+pytest tests/test_build_config.py tests/test_nuitka_flags.py -q
+```
+
+병렬 유틸 동작은 다음 테스트가 다룹니다.
+
+```bash
+pytest tests/test_parallel_processing.py tests/test_hrir_outputs.py -q
+```
