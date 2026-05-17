@@ -29,6 +29,7 @@ been fixed and old features improved.
 - **Stable/Studio BRIR 인자 조립 통합**: 두 skin의 `impulcifer.main()` kwargs 조립을 `gui/brir_args.py`로 모아 option drift를 줄였다.
 - **CHANGELOG release heading 정리**: 중복된 2.5.0/2.4.18 heading과 날짜 순서를 정리하고 이를 static test로 고정했다.
 - **README 정리**: 성능 홍보식 문구와 오래된 안내를 걷어내고, 실제 CLI 옵션과 `LICENSE` 저작권 표기에 맞춰 문서를 다시 정리했다.
+- **README 연결 문서 정리**: TrueHD/MLP, 마이크 착용 편차 보정, Python 3.14/Nuitka 문서를 현재 코드 기준으로 다시 작성하고 오래된 성능 배속 주장과 v2 보정 설명을 제거했다.
 
 ## 2.6.5 - 2026-05-16
 ### 🐛 PyPI 로케일 해석 버그 수정 — GUI가 i18n 키 원문으로 표시되던 문제

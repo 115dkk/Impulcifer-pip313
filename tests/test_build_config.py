@@ -96,3 +96,24 @@ def test_changelog_versions_are_unique_and_date_ordered() -> None:
 
     dates = [date for _, date in headings]
     assert dates == sorted(dates, reverse=True)
+
+
+def test_linked_readmes_match_current_feature_names() -> None:
+    """README-linked docs should not drift back to stale option names or claims."""
+    truehd = (PROJECT_ROOT / "README_TrueHD.md").read_text(encoding="utf-8")
+    mic = (PROJECT_ROOT / "README_microphone_deviation_correction.md").read_text(encoding="utf-8")
+    py314 = (PROJECT_ROOT / "README_PYTHON314.md").read_text(encoding="utf-8")
+
+    assert "--output_truehd_layouts" in truehd
+    assert "--truehd-layouts" not in truehd
+    assert "python recorder.py" not in truehd
+    assert "자동 채널 생성" not in truehd
+
+    assert "v3.0 교차검증" in mic
+    assert "v2.0의 4가지 핵심 개선" not in mic
+    assert "위상 보정 추가 (ITD 반영)" not in mic
+
+    assert "nuitka>=4.1" in py314
+    assert "free-threaded standalone" in py314
+    for stale_claim in ("2.99x", "약 3배", "성능 벤치마크", "JIT 컴파일러 활성화"):
+        assert stale_claim not in py314

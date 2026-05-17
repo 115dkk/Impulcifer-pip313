@@ -479,7 +479,7 @@ def _run_pipeline_legacy(
         )
         _check_cancelled()
 
-    # 마이크 착용 편차 보정 v2.0
+    # 마이크 착용 편차 보정 v3.0
     if microphone_deviation_correction:
         logger.step("cli_correcting_deviation")
         mic_deviation_plot_dir = os.path.join(dir_path, "plots") if mic_deviation_debug_plots else None

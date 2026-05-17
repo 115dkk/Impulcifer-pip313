@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Python 3.14 Free-Threaded 병렬 처리 유틸리티
-Python 3.13+ 호환 (하위 버전은 concurrent.futures 폴백)
+Free-threaded Python 대응 병렬 처리 유틸리티.
 
-Python 3.14의 Free-Threaded Python (PEP 703)을 활용하여
-GIL 없이 진정한 병렬 처리를 수행합니다.
+``core.parallel_utils.is_gil_disabled()``를 공유해 Python 3.13+의
+free-threaded 빌드를 감지합니다. 일반 Python에서는 기존
+``concurrent.futures`` executor로 동작합니다.
 
 주요 기능:
 - Free-Threaded Python 자동 감지
@@ -96,9 +96,9 @@ def parallel_map(
     """
     함수를 iterable의 각 항목에 병렬로 적용합니다.
 
-    Python 3.14 Free-Threaded 모드에서는 ThreadPoolExecutor를 사용하여
-    진정한 병렬 처리를 수행하고, 이전 버전에서는 ProcessPoolExecutor로
-    폴백하여 병렬 처리를 수행합니다.
+    ``use_threads``가 True이거나 free-threaded 런타임이면
+    ThreadPoolExecutor를 사용합니다. 그 외에는 ProcessPoolExecutor를
+    사용합니다.
 
     Args:
         func: 적용할 함수

@@ -295,7 +295,10 @@ class ProcessingConfig:
         default=False,
         metadata={
             "cli_flag": "--microphone_deviation_correction",
-            "cli_help": "Enable microphone deviation correction v2.0 to compensate for microphone placement variations between left and right ears.",
+            "cli_help": (
+                "Enable v3.0 cross-validated microphone deviation correction to "
+                "compensate for repeated left/right microphone placement differences."
+            ),
             "cli_arg_action": "store_true",
         },
     )
@@ -311,7 +314,10 @@ class ProcessingConfig:
         default=True,
         metadata={
             "cli_flag": "--no_mic_deviation_phase_correction",
-            "cli_help": "Disable phase correction in microphone deviation correction v2.0. (Default: enabled)",
+            "cli_help": (
+                "Compatibility no-op for legacy v2.0 phase correction. "
+                "v3.0 performs magnitude-only minimum-phase correction."
+            ),
             "cli_arg_action": "store_false",
             "cli_dest": "mic_deviation_phase_correction",
         },
@@ -320,7 +326,10 @@ class ProcessingConfig:
         default=True,
         metadata={
             "cli_flag": "--no_mic_deviation_adaptive_correction",
-            "cli_help": "Disable adaptive asymmetric correction in microphone deviation correction v2.0. (Default: enabled)",
+            "cli_help": (
+                "Compatibility no-op for legacy v2.0 adaptive correction. "
+                "v3.0 estimates microphone error with cross-speaker validation."
+            ),
             "cli_arg_action": "store_false",
             "cli_dest": "mic_deviation_adaptive_correction",
         },
@@ -329,7 +338,10 @@ class ProcessingConfig:
         default=True,
         metadata={
             "cli_flag": "--no_mic_deviation_anatomical_validation",
-            "cli_help": "Disable ITD/ILD anatomical validation in microphone deviation correction v2.0. (Default: enabled)",
+            "cli_help": (
+                "Compatibility no-op for legacy v2.0 anatomical validation. "
+                "v3.0 uses expected speaker ILD signs and consistency checks."
+            ),
             "cli_arg_action": "store_false",
             "cli_dest": "mic_deviation_anatomical_validation",
         },
