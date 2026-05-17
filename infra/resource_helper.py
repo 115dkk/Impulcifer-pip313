@@ -5,6 +5,7 @@ Nuitka 빌드와 개발 환경 모두에서 작동하도록 처리
 
 import os
 import sys
+from pathlib import Path
 
 def get_resource_path(relative_path):
     """리소스 파일의 절대 경로를 반환
@@ -37,6 +38,32 @@ def get_font_path(filename):
     """font 폴더 내 파일의 경로를 반환"""
     return get_resource_path(os.path.join("font", filename))
 
+def iter_font_paths():
+    """Return bundled font files in deterministic preference order."""
+    font_dir = Path(get_resource_path("font"))
+    if not font_dir.is_dir():
+        return []
+    suffixes = {".otf", ".ttf", ".ttc"}
+    return sorted(
+        (path for path in font_dir.iterdir() if path.suffix.lower() in suffixes),
+        key=lambda path: path.name.casefold(),
+    )
+
+def find_pretendard_font_path():
+    """Find the bundled Pretendard font, preferring the shipped variable font."""
+    fonts = iter_font_paths()
+    for path in fonts:
+        stem = path.stem.lower()
+        if "pretendard" in stem and "variable" in stem:
+            return str(path)
+    for path in fonts:
+        if "pretendard-regular" in path.stem.lower():
+            return str(path)
+    for path in fonts:
+        if "pretendard" in path.stem.lower():
+            return str(path)
+    return None
+
 def get_img_path(filename):
     """img 폴더 내 파일의 경로를 반환"""
     return get_resource_path(os.path.join("img", filename))
@@ -49,7 +76,7 @@ IMG_DIR = get_resource_path("img")
 # 자주 사용되는 파일들
 DEFAULT_SWEEP_FILE = get_data_path("sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
 DEFAULT_SWEEP_PICKLE = get_data_path("sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl")
-DEFAULT_FONT_FILE = get_font_path("Pretendard-Regular.otf")
+DEFAULT_FONT_FILE = find_pretendard_font_path() or get_font_path("PretendardVariable.ttf")
 
 def ensure_dir_exists(directory):
     """디렉토리가 존재하지 않으면 생성"""

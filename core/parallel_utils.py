@@ -30,7 +30,11 @@ def is_gil_disabled() -> bool:
     return False
 
 
-def get_optimal_executor(max_workers: Optional[int] = None):
+def get_optimal_executor(
+    max_workers: Optional[int] = None,
+    initializer: Optional[Callable] = None,
+    initargs: tuple = (),
+):
     """
     Get the optimal executor based on Python version and GIL status.
 
@@ -42,13 +46,19 @@ def get_optimal_executor(max_workers: Optional[int] = None):
     """
     if is_gil_disabled():
         # Python 3.13+ free-threaded: Use threads (much faster, no pickling overhead)
-        return ThreadPoolExecutor(max_workers=max_workers)
+        return ThreadPoolExecutor(max_workers=max_workers, initializer=initializer, initargs=initargs)
     else:
         # Standard Python with GIL: Use processes to bypass GIL
-        return ProcessPoolExecutor(max_workers=max_workers)
+        return ProcessPoolExecutor(max_workers=max_workers, initializer=initializer, initargs=initargs)
 
 
-def parallel_map(func: Callable, items: List[Any], max_workers: Optional[int] = None) -> List[Any]:
+def parallel_map(
+    func: Callable,
+    items: List[Any],
+    max_workers: Optional[int] = None,
+    initializer: Optional[Callable] = None,
+    initargs: tuple = (),
+) -> List[Any]:
     """
     Execute function on items in parallel using optimal executor.
 
@@ -75,7 +85,11 @@ def parallel_map(func: Callable, items: List[Any], max_workers: Optional[int] = 
         max_workers = min(os.cpu_count() or 4, len(items))
 
     try:
-        with get_optimal_executor(max_workers=max_workers) as executor:
+        with get_optimal_executor(
+            max_workers=max_workers,
+            initializer=initializer,
+            initargs=initargs,
+        ) as executor:
             # Submit all tasks and maintain order
             futures = [executor.submit(func, item) for item in items]
             # Collect results in order
@@ -86,7 +100,11 @@ def parallel_map(func: Callable, items: List[Any], max_workers: Optional[int] = 
             raise
         # Free-threaded Python can safely keep CPU-bound fallback work in threads.
         # Standard GIL builds must keep CPU-bound parallelism in process workers.
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with ThreadPoolExecutor(
+            max_workers=max_workers,
+            initializer=initializer,
+            initargs=initargs,
+        ) as executor:
             futures = [executor.submit(func, item) for item in items]
             results = [future.result() for future in futures]
         return results

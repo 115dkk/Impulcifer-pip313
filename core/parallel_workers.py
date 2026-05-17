@@ -38,6 +38,33 @@ def process_decay_worker(args):
     return (speaker, side, temp_ir.data)
 
 
+_EQUALIZATION_CONTEXT = None
+
+
+def init_equalization_worker(
+    room_frs,
+    hp_left,
+    hp_right,
+    eq_left,
+    eq_right,
+    target,
+    common_freq,
+    estimator_fs,
+):
+    """Install equalization data once per worker process/thread."""
+    global _EQUALIZATION_CONTEXT
+    _EQUALIZATION_CONTEXT = (
+        room_frs,
+        hp_left,
+        hp_right,
+        eq_left,
+        eq_right,
+        target,
+        common_freq,
+        estimator_fs,
+    )
+
+
 def process_equalization_worker(args):
     """이퀄라이제이션 워커.
 
@@ -48,8 +75,23 @@ def process_equalization_worker(args):
     Returns:
         Tuple of (speaker, side, fir_filter)
     """
-    (speaker, side, room_frs, hp_left, hp_right,
-     eq_left, eq_right, target, common_freq, estimator_fs) = args
+    if len(args) == 2:
+        if _EQUALIZATION_CONTEXT is None:
+            raise RuntimeError("Equalization worker context was not initialized.")
+        speaker, side = args
+        (
+            room_frs,
+            hp_left,
+            hp_right,
+            eq_left,
+            eq_right,
+            target,
+            common_freq,
+            estimator_fs,
+        ) = _EQUALIZATION_CONTEXT
+    else:
+        (speaker, side, room_frs, hp_left, hp_right,
+         eq_left, eq_right, target, common_freq, estimator_fs) = args
 
     # Lazy import to keep module-level imports minimal
     from autoeq.frequency_response import FrequencyResponse

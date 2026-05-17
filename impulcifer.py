@@ -58,7 +58,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import matplotlib.font_manager as fm
-import importlib.resources
 from autoeq.frequency_response import FrequencyResponse
 from core.impulse_response_estimator import ImpulseResponseEstimator
 from core.hrir import HRIR, _get_center_value
@@ -89,7 +88,6 @@ from core.channel_generation import (
 from infra.logger import get_logger
 
 # PR3에서 추가된 import 문들
-import copy
 import contextlib
 import io
 
@@ -138,56 +136,23 @@ except ImportError:
 
 
 def get_pretendard_font_for_gui():
-    """GUI에서 사용할 Pretendard 폰트 경로를 반환합니다."""
+    """Return the bundled or system Pretendard font for legacy callers."""
     try:
-        # 1. 패키지 내 폰트 시도
-        try:
-            if hasattr(importlib.resources, "files"):
-                try:
-                    font_resource = (
-                        importlib.resources.files("impulcifer_py313")
-                        .joinpath("font")
-                        .joinpath("Pretendard-Regular.otf")
-                    )
-                    with importlib.resources.as_file(font_resource) as font_file_path:
-                        return str(font_file_path)
-                except (FileNotFoundError, ModuleNotFoundError):
-                    pass
+        from infra.resource_helper import find_pretendard_font_path
 
-            elif hasattr(importlib.resources, "path"):
-                try:
-                    with importlib.resources.path(
-                        "impulcifer_py313.font", "Pretendard-Regular.otf"
-                    ) as font_file_path:
-                        return str(font_file_path)
-                except (FileNotFoundError, ModuleNotFoundError):
-                    pass
-        except ImportError:
-            pass
+        font_path = find_pretendard_font_path()
+        if font_path:
+            return font_path
 
-        # 2. 로컬 개발 환경에서 시도
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        local_font_paths = [
-            os.path.join(script_dir, "font", "Pretendard-Regular.otf"),
-            os.path.join(script_dir, "fonts", "Pretendard-Regular.otf"),
-            os.path.join(script_dir, "..", "font", "Pretendard-Regular.otf"),
-            os.path.join(script_dir, "..", "fonts", "Pretendard-Regular.otf"),
-        ]
-
-        for local_path in local_font_paths:
-            if os.path.exists(local_path):
-                return local_path
-
-        # 3. 시스템에 설치된 Pretendard 사용
         try:
             available_fonts = [f.name for f in fm.fontManager.ttflist]
             if "Pretendard" in available_fonts:
-                return "Pretendard"  # 시스템 폰트 이름 반환
+                return "Pretendard"
         except Exception:
             pass
 
     except Exception:
-        pass  # GUI font search error (not critical)
+        pass
 
     return None
 
@@ -201,6 +166,7 @@ set_matplotlib_font()  # 함수 호출하여 폰트 설정 실행
 # ProcessPoolExecutor 워커가 impulcifer.py 전체를 import하지 않도록 분리.
 # ============================================================================
 from core.parallel_workers import (
+    init_equalization_worker,
     process_equalization_worker,
     process_decay_worker,
 )
@@ -464,7 +430,7 @@ def _run_pipeline_legacy(
 
     # HRIR measurements
     logger.step("cli_opening_measurements")
-    hrir = open_binaural_measurements(estimator, dir_path)
+    hrir = open_binaural_measurements(estimator, dir_path, debug=plot)
     _check_cancelled()
 
     if plot:
@@ -551,16 +517,25 @@ def _run_pipeline_legacy(
         eq_tasks = []
         for speaker, pair in hrir.irs.items():
             for side in pair.keys():
-                eq_tasks.append((
-                    speaker, side,
-                    room_frs, hp_left, hp_right,
-                    eq_left, eq_right, target,
-                    common_freq, estimator.fs
-                ))
+                eq_tasks.append((speaker, side))
 
         # Execute equalization in parallel
         logger.info("cli_info_parallel_eq", count=len(eq_tasks))
-        eq_results = parallel_map(process_equalization_worker, eq_tasks)
+        eq_results = parallel_map(
+            process_equalization_worker,
+            eq_tasks,
+            initializer=init_equalization_worker,
+            initargs=(
+                room_frs,
+                hp_left,
+                hp_right,
+                eq_left,
+                eq_right,
+                target,
+                common_freq,
+                estimator.fs,
+            ),
+        )
 
         # Apply FIR filters to impulse responses
         for speaker, side, fir in eq_results:
@@ -751,10 +726,7 @@ def _run_pipeline_legacy(
         logger.step("cli_generating_jamesdsp")
 
         # 전체 HRIR 복사 후 FL/FR 외 모든 채널 제거
-        dsp_hrir = copy.deepcopy(hrir)
-        for sp in list(dsp_hrir.irs.keys()):
-            if sp not in ["FL", "FR"]:
-                del dsp_hrir.irs[sp]
+        dsp_hrir = hrir.subset(["FL", "FR"], copy_irs=True)
 
         # normalize 내부의 print문 출력을 숨기기 위해 stdout 리디렉션
         # target_level 변수가 main 함수 스코프에 있어야 함
@@ -784,18 +756,9 @@ def _run_pipeline_legacy(
         processed_speakers = [sp for sp in SPEAKER_NAMES if sp in hrir.irs]
 
         for sp in processed_speakers:
-            single_hrir = copy.deepcopy(hrir)
-            for other_sp in list(single_hrir.irs.keys()):
-                if other_sp != sp:
-                    del single_hrir.irs[other_sp]
-
-            # 각 스피커에 대해 normalize를 다시 수행할지 여부는 PR의 의도에 따라 결정.
-            # 여기서는 생략하고 원본 hrir의 정규화 상태를 따름.
-
             track_order = [f"{sp}-left", f"{sp}-right"]
             out_path = os.path.join(output_dir, f"{sp}.wav")
-            single_hrir.write_wav(out_path, track_order=track_order)
-            del single_hrir
+            hrir.write_wav(out_path, track_order=track_order)
             logger.info("cli_success_hangloose_file", file=f"{sp}.wav")
 
         logger.success("cli_success_hangloose", path=output_dir)
@@ -1167,7 +1130,7 @@ def create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt)
     return target
 
 
-def open_binaural_measurements(estimator, dir_path):
+def open_binaural_measurements(estimator, dir_path, debug=False):
     """Opens binaural measurement WAV files.
 
     Args:
@@ -1185,7 +1148,7 @@ def open_binaural_measurements(estimator, dir_path):
         # Form absolute path
         file_path = os.path.join(dir_path, file_name)
         # Open the file and add tracks to HRIR
-        hrir.open_recording(file_path, speakers=speakers)
+        hrir.open_recording(file_path, speakers=speakers, debug=debug)
     if len(hrir.irs) == 0:
         raise ValueError("No HRIR recordings found in the directory.")
     return hrir

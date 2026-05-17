@@ -36,6 +36,49 @@ def test_event_bus_emits_and_unsubscribes() -> None:
     assert calls == [{"code": "ko"}]
 
 
+class DummyVar:
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+    def get(self) -> object:
+        return self.value
+
+
+class DummyEqTab:
+    def __init__(self, recording_dir: Path, eq_file: Path) -> None:
+        self.do_equalization_var = DummyVar(True)
+        self.dir_path_var = DummyVar(str(recording_dir))
+        self.eq_file_var = DummyVar(str(eq_file))
+        self.eq_left_file_var = DummyVar("eq-left.csv")
+        self.eq_right_file_var = DummyVar("eq-right.csv")
+
+
+def test_studio_custom_eq_selection_is_synced_to_recording_dir(tmp_path: Path) -> None:
+    """A selected Studio EQ file must be the file the backend reads."""
+    from gui.brir_args import sync_custom_eq_files
+
+    recording_dir = tmp_path / "recordings"
+    source_dir = tmp_path / "external"
+    recording_dir.mkdir()
+    source_dir.mkdir()
+    selected_eq = source_dir / "my-eq.csv"
+    selected_eq.write_text("frequency,raw\n20,0\n", encoding="utf-8")
+
+    sync_custom_eq_files(DummyEqTab(recording_dir, selected_eq))
+
+    assert (recording_dir / "eq.csv").read_text(encoding="utf-8") == "frequency,raw\n20,0\n"
+
+
+def test_studio_processing_labels_are_localized() -> None:
+    """Studio should not regress to raw English labels for shared controls."""
+    studio_source = (Path(__file__).resolve().parents[1] / "gui/skins/studio_impulcifer_tab.py").read_text(
+        encoding="utf-8"
+    )
+
+    for hardcoded in ("Specific limit", "Generic limit", "FR combination", "Crossover", "Sub HP", "Polarity"):
+        assert f'label="{hardcoded}"' not in studio_source
+
+
 def test_validate_recording_setup_detects_channel_mismatch() -> None:
     """Filename speaker lists are converted into expected stereo channel counts."""
     result = validate_recording_setup("data/my_hrir/FL,FR,FC.wav", 4, True)

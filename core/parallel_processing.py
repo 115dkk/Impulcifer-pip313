@@ -20,6 +20,8 @@ from typing import Callable, Iterable, List, TypeVar, Optional, Any
 from functools import wraps
 import time
 
+from core.parallel_utils import is_gil_disabled
+
 # 타입 변수 정의
 T = TypeVar('T')
 R = TypeVar('R')
@@ -27,16 +29,7 @@ R = TypeVar('R')
 # Python 버전 및 Free-Threaded 지원 확인
 PYTHON_VERSION = sys.version_info
 IS_PYTHON_314_PLUS = PYTHON_VERSION >= (3, 14)
-IS_FREE_THREADED = False
-
-# Python 3.14+ Free-Threaded 지원 확인
-if IS_PYTHON_314_PLUS:
-    try:
-        # sys._is_gil_enabled()가 False면 Free-Threaded 모드
-        # PEP 703: Free-Threaded Python
-        IS_FREE_THREADED = hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled()
-    except AttributeError:
-        IS_FREE_THREADED = False
+IS_FREE_THREADED = is_gil_disabled()
 
 
 def get_optimal_worker_count() -> int:
@@ -84,10 +77,10 @@ def get_python_threading_info() -> dict:
         'cpu_count': os.cpu_count() or 'unknown'
     }
 
-    if IS_PYTHON_314_PLUS and hasattr(sys, '_is_gil_enabled'):
+    if hasattr(sys, '_is_gil_enabled'):
         info['gil_enabled'] = sys._is_gil_enabled()
     else:
-        info['gil_enabled'] = 'unknown (pre-3.14)'
+        info['gil_enabled'] = 'unknown'
 
     return info
 

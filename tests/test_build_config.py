@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -66,3 +67,32 @@ def test_release_linux_build_uses_canonical_nuitka_script() -> None:
     text = (PROJECT_ROOT / ".github/workflows/release-cross-platform.yml").read_text(encoding="utf-8")
     assert "python build_scripts/build_nuitka.py" in text
     assert "python -m nuitka \\" not in text
+
+
+def test_source_archives_exclude_local_verification_worktrees() -> None:
+    """Large local verification and worktree folders must stay out of releases."""
+    gitignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
+    pyproject = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    for marker in ("_verification/", ".worktrees/", ".claude/worktrees/"):
+        assert marker in gitignore
+
+    for marker in (
+        '"_verification/**/*"',
+        '".worktrees/**/*"',
+        '".claude/worktrees/**/*"',
+    ):
+        assert marker in pyproject
+
+
+def test_changelog_versions_are_unique_and_date_ordered() -> None:
+    """Release history headings should be unambiguous and newest first."""
+    text = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    headings = re.findall(r"^## (\d+\.\d+\.\d+) - (\d{4}-\d{2}-\d{2})", text, re.MULTILINE)
+
+    versions = [version for version, _ in headings]
+    duplicate_versions = sorted({version for version in versions if versions.count(version) > 1})
+    assert duplicate_versions == []
+
+    dates = [date for _, date in headings]
+    assert dates == sorted(dates, reverse=True)

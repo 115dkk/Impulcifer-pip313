@@ -31,7 +31,9 @@ from gui.utils import (
     browse_directory,
     browse_file,
     install_smooth_scrolling,
+    restore_tk_vars,
     safe_get_int,
+    snapshot_tk_vars,
 )
 
 
@@ -100,6 +102,16 @@ class StudioRecorderTab:
 
         self._build()
         self._refresh_devices()
+
+    def get_state(self) -> dict:
+        """Return a snapshot of user-editable Tk variables."""
+        return snapshot_tk_vars(self)
+
+    def apply_state(self, state: dict) -> None:
+        """Restore user-editable Tk variables after a UI rebuild."""
+        restore_tk_vars(self, state)
+        self._refresh_resolved_record_path()
+        self._on_channel_preset(self.channels_preset_var.get())
 
     def _build(self) -> None:
         self.parent.grid_columnconfigure(0, weight=1)

@@ -41,7 +41,7 @@ def room_correction(
     # Open files
     target = open_room_target(estimator, dir_path, target=target)
     mic_calibration = open_mic_calibration(estimator, dir_path, mic_calibration=mic_calibration)
-    rir = open_room_measurements(estimator, dir_path)
+    rir = open_room_measurements(estimator, dir_path, debug=plot)
     missing = [ch for ch in SPEAKER_NAMES if ch not in rir.irs]
     room_fr = open_generic_room_measurement(
         estimator,
@@ -146,7 +146,7 @@ def room_correction(
     return rir, frs
 
 
-def open_room_measurements(estimator, dir_path):
+def open_room_measurements(estimator, dir_path, debug=False):
     """Opens speaker-ear specific room measurements.
 
     Args:
@@ -172,7 +172,7 @@ def open_room_measurements(estimator, dir_path):
         if side is not None:
             side = side[0]
         # Read file
-        rir.open_recording(file_path, speakers, side=side)
+        rir.open_recording(file_path, speakers, side=side, debug=debug)
     return rir
 
 
