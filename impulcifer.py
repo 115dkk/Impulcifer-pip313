@@ -220,7 +220,7 @@ def main(
     jamesdsp=False,
     hangloose=False,
     interactive_plots=False,
-    # 마이크 편차 보정 파라미터 추가 (v2.0)
+    # 마이크 편차 보정 호환 파라미터
     microphone_deviation_correction=False,
     mic_deviation_strength=0.7,
     mic_deviation_phase_correction=True,
@@ -1348,7 +1348,7 @@ def _print_info():
     if hasattr(sys, '_is_gil_enabled'):
         gil = "Disabled (Free-Threaded)" if not sys._is_gil_enabled() else "Enabled"
     else:
-        gil = "N/A (pre-3.14)"
+        gil = "Unavailable (GIL status API missing)"
     lines.append(f"GIL: {gil}")
 
     # Optimal workers

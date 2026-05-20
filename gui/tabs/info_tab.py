@@ -106,7 +106,7 @@ class InfoTab:
         cpu_cores = str(threading_info.get('cpu_count', os.cpu_count() or '?'))
         optimal_workers = str(threading_info.get('optimal_workers', '?'))
 
-        gil_raw = threading_info.get('gil_enabled', 'unknown (pre-3.14)')
+        gil_raw = threading_info.get('gil_enabled', 'unknown')
         if gil_raw is True:
             gil_text = self.loc.get('info_gil_enabled')
         elif gil_raw is False:

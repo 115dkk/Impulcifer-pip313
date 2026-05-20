@@ -4,6 +4,21 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.7 - 2026-05-20
+### i18n 문구와 업데이트 완료 상태 정리
+
+#### 버그 수정
+- **자동 업데이트 완료 표시 수정**: pip 업데이트가 끝난 뒤에도 완료 대화상자와 상태 표시줄에 “업데이트 시작됨”으로 나오던 문구를 “업데이트 완료”로 고쳤습니다.
+- **업데이트 상태 키 분리**: pip 설치 완료, Velopack 재시작 준비, 레거시 설치 프로그램 열림을 서로 다른 i18n 키로 분리했습니다. 이제 진행 단계마다 맞는 제목과 안내문을 표시합니다.
+- **GIL 상태 안내 수정**: GIL 상태 API를 확인할 수 없는 경우를 “3.14 이전”으로 단정하지 않고, API를 사용할 수 없다고 안내합니다.
+
+#### 정리
+- **locale 번역 보강**: 영어 원문으로 남아 있던 녹음 상태, Studio 화면, 처리 옵션, 업데이트 완료 문구를 독일어, 스페인어, 프랑스어, 일본어, 한국어, 러시아어, 중국어 간체/번체에 맞춰 정리했습니다.
+- **마이크 편차 보정 문구 갱신**: 사용자에게 보이는 v2.0 표기를 v3.0 교차 검증 기반 구현에 맞게 고쳤습니다.
+
+#### 검증
+- **i18n 무결성 테스트 강화**: 모든 locale 파일의 키 일치 여부뿐 아니라 placeholder 보존, 업데이트 완료 문구 회귀, 영어 fallback 잔여 여부를 확인하도록 테스트를 넓혔습니다.
+
 ## 2.6.6 - 2026-05-17
 ### 패키징 정리, CLI/Studio 회귀 수정, subset 출력 최적화
 

@@ -168,7 +168,7 @@ class StudioInfoTab:
         os_name = f"{platform.system()} {platform.release()}"
         cpu_cores = str(threading_info.get("cpu_count", os.cpu_count() or "?"))
         optimal_workers = str(threading_info.get("optimal_workers", "?"))
-        gil_raw = threading_info.get("gil_enabled", "unknown (pre-3.14)")
+        gil_raw = threading_info.get("gil_enabled", "unknown")
         gil_text = (
             self.loc.get("info_gil_enabled")
             if gil_raw is True
@@ -183,7 +183,7 @@ class StudioInfoTab:
             (self.loc.get("label_cpu_cores"), cpu_cores),
             (self.loc.get("label_gil_status"), gil_text),
             (self.loc.get("label_optimal_workers"), optimal_workers),
-            ("Version", impulcifer.__version__),
+            (self.loc.get("label_version").rstrip(":：").strip(), impulcifer.__version__),
         ]
         for i, (label, value) in enumerate(items):
             cell = ctk.CTkFrame(
