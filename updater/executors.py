@@ -116,12 +116,12 @@ class PipExecutor(UpdateExecutor):
 
         return UpdateExecutionResult(
             status_key="update_success",
-            status_default="Update started! Please restart the application.",
+            status_default="Update complete. Please restart the application.",
             title_key="update_complete_title",
             title_default="Update Complete",
             message_key="update_complete_message",
             message_default=(
-                "The update has been started in the background.\n"
+                "The update has been installed.\n"
                 "Please restart the application to use the new version."
             ),
             close_delay_ms=2000,
@@ -160,7 +160,7 @@ class VelopackExecutor(UpdateExecutor):
         return UpdateExecutionResult(
             status_key="update_installing",
             status_default="Applying update...",
-            title_key="update_complete_title",
+            title_key="update_ready_title",
             title_default="Update Ready",
             message_key="update_restart_message",
             message_default=(
@@ -200,15 +200,15 @@ class LegacyExecutor(UpdateExecutor):
         if not updater.download(progress_callback=download_progress):
             raise UpdateExecutionError("Failed to download update")
 
-        progress_callback(0.9, "update_installing")
+        progress_callback(0.9, "update_opening_installer")
         if not updater.install():
             raise UpdateExecutionError("Failed to open installer")
 
         return UpdateExecutionResult(
-            status_key="update_installing",
+            status_key="update_opening_installer",
             status_default="Opening installer...",
-            title_key="update_complete_title",
-            title_default="Update Started",
+            title_key="update_manual_title",
+            title_default="Installer Opened",
             message_key="update_manual_complete",
             message_default="Please follow the installer prompts to complete the update.",
             close_delay_ms=1000,
