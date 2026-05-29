@@ -148,7 +148,7 @@ def test_setup_pretendard_font_uses_render_layer_check(
 
     gui_utils._font_cache.clear()
     gui_utils._bundled_fonts_registered_for_tk = False
-    monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda: font_path)
+    monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda *a, **k: font_path)
     monkeypatch.setattr(gui_utils, "_font_family_from_file", lambda _: "Pretendard")
     monkeypatch.setattr(gui_utils, "_register_font_file_for_tk", lambda _: True)
     monkeypatch.setattr(gui_utils, "_tk_renders_family", lambda _: next(rendered))
@@ -166,7 +166,7 @@ def test_setup_pretendard_font_falls_back_when_render_layer_cannot_resolve(
 
     gui_utils._font_cache.clear()
     gui_utils._bundled_fonts_registered_for_tk = False
-    monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda: font_path)
+    monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda *a, **k: font_path)
     monkeypatch.setattr(gui_utils, "_font_family_from_file", lambda _: "Pretendard")
     monkeypatch.setattr(gui_utils, "_register_font_file_for_tk", lambda _: True)
     monkeypatch.setattr(gui_utils, "_tk_renders_family", lambda _: None)
@@ -190,7 +190,7 @@ def test_setup_pretendard_font_caches_render_layer_hit(
         probe_calls["count"] += 1
         return "Pretendard"
 
-    monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda: font_path)
+    monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda *a, **k: font_path)
     monkeypatch.setattr(gui_utils, "_font_family_from_file", lambda _: "Pretendard")
     monkeypatch.setattr(gui_utils, "_register_font_file_for_tk", lambda _: True)
     monkeypatch.setattr(gui_utils, "_tk_renders_family", fake_renders)
@@ -199,6 +199,65 @@ def test_setup_pretendard_font_caches_render_layer_hit(
     first_count = probe_calls["count"]
     assert gui_utils.setup_pretendard_font("ko") == "Pretendard"
     assert probe_calls["count"] == first_count, "second call should hit the cache"
+
+
+def test_setup_pretendard_font_japanese_uses_jp_cut(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Japanese must resolve to the Pretendard JP family.
+
+    The standard Pretendard build ships no kanji, so Japanese has to land on
+    ``Pretendard JP Variable`` — the only bundled cut that renders ideographs.
+    """
+    gui_utils._font_cache.clear()
+    gui_utils._bundled_fonts_registered_for_tk = False
+    probed: list[str] = []
+
+    def fake_renders(family):
+        probed.append(family)
+        return family if "JP" in family else None
+
+    monkeypatch.setattr(gui_utils, "register_all_bundled_fonts_for_tk", lambda: [])
+    monkeypatch.setattr(gui_utils, "_tk_renders_family", fake_renders)
+
+    assert gui_utils.setup_pretendard_font("ja") == "Pretendard JP Variable"
+    # The first family probed for Japanese must be the JP cut, never the
+    # kanji-less standard "Pretendard Variable".
+    assert probed[0] == "Pretendard JP Variable"
+    assert all("JP" in family for family in probed)
+
+
+def test_setup_pretendard_font_japanese_refuses_kanji_less_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the JP cut can't render, Japanese falls back to the OS font (None),
+    never to the standard Pretendard that would tofu every kanji."""
+    gui_utils._font_cache.clear()
+    gui_utils._bundled_fonts_registered_for_tk = False
+
+    monkeypatch.setattr(gui_utils, "register_all_bundled_fonts_for_tk", lambda: [])
+    monkeypatch.setattr(gui_utils, "_tk_renders_family", lambda _: None)
+    monkeypatch.setattr(gui_utils, "_find_pretendard_font_file", lambda *a, **k: None)
+    # A standard (non-JP) Pretendard is visible to Tk, but Japanese must NOT
+    # accept it as a fallback.
+    monkeypatch.setattr(gui_utils, "_get_tk_font_families", lambda: {"Pretendard Variable"})
+
+    assert gui_utils.setup_pretendard_font("ja") is None
+
+
+def test_find_pretendard_font_file_selects_cut_by_variant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_find_pretendard_font_file`` returns the JP file only when asked, and
+    skips JP files for the standard (ko/en) path."""
+    fonts = [
+        Path("font/PretendardJPVariable.ttf"),
+        Path("font/PretendardVariable.ttf"),
+    ]
+    monkeypatch.setattr(gui_utils, "_scan_bundled_fonts", lambda: fonts)
+
+    assert gui_utils._find_pretendard_font_file(prefer_jp=True).name == "PretendardJPVariable.ttf"
+    assert gui_utils._find_pretendard_font_file(prefer_jp=False).name == "PretendardVariable.ttf"
 
 
 def test_set_matplotlib_font_picks_bundled_when_no_system_pretendard(

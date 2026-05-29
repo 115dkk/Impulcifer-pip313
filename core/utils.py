@@ -108,10 +108,9 @@ def _register_bundled_fonts_with_matplotlib() -> "list[Path]":
 
     matplotlib's ``fontManager.addfont`` is idempotent (it deduplicates by
     file path), so this is safe to call multiple times. Used by
-    :func:`set_matplotlib_font` so that BOTH Pretendard AND any extra Korean
-    serif (e.g. Source Han Serif) the user drops into ``font/`` are
-    available to matplotlib code that may want to reference them by family
-    name.
+    :func:`set_matplotlib_font` so that BOTH Pretendard AND any extra font
+    the user drops into ``font/`` are available to matplotlib code that may
+    want to reference them by family name.
     """
     registered: list[Path] = []
     for path in _scan_bundled_fonts():
@@ -151,10 +150,10 @@ def set_matplotlib_font():
 
     system = platform.system()
 
-    # Register EVERY bundled font (Pretendard + any user-dropped extras such
-    # as Source Han Serif). matplotlib only renders text in the family set on
-    # rcParams, but registering the others makes them addressable when code
-    # explicitly opts-in via FontProperties(family=...).
+    # Register EVERY bundled font (Pretendard + any user-dropped extras).
+    # matplotlib only renders text in the family set on rcParams, but
+    # registering the others makes them addressable when code explicitly
+    # opts-in via FontProperties(family=...).
     registered = _register_bundled_fonts_with_matplotlib()
     bundled_pretendard = next(
         (p for p in registered if "pretendard" in p.stem.lower()),

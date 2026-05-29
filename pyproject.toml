@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "2.6.8"
+version = "2.6.9"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13/3.14 호환 버전: 115dkk", email="" },
@@ -102,9 +102,9 @@ include = [
     "README.md",
     "CHANGELOG.md",
     "pyproject.toml",
-    # Bundle only the top-level fonts that the runtime scanner can see.
-    # Recursive font globs pull in optional CJK serif families that are not
-    # used at runtime and push PyPI artifacts over the 100 MB limit.
+    # Bundle only the top-level fonts that the runtime scanner can see
+    # (the scanner is non-recursive, so any future font/<subdir> stays out
+    # of the wheel rather than silently bloating PyPI artifacts).
     "font/*.otf",
     "font/*.ttc",
     "font/*.ttf",

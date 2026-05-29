@@ -243,6 +243,20 @@ def safe_get_string(var: Any, default: str = "") -> str:
 # repeated tkfont.families() scans across dialog construction.
 _font_cache: dict[str, Optional[str]] = {}
 
+# Languages that ship a bundled Pretendard cut. Everything else falls back to
+# the OS UI font (the system already carries a localized face for it).
+_PRETENDARD_LANGUAGES = frozenset({"ko", "en", "ja"})
+
+# Per-language Pretendard family preference. Japanese MUST use the JP cut:
+# the standard Pretendard build ships kana + Latin + Cyrillic + Hangul but
+# NO kanji (日 語 国 気 … are all absent), so Japanese text rendered with it
+# would tofu every ideograph. PretendardJPVariable.ttf carries the full kanji
+# set with Japanese-convention glyphs. ko/en use the standard cut.
+_PRETENDARD_DEFAULT_FAMILIES: tuple[str, ...] = ("Pretendard Variable", "Pretendard")
+_PRETENDARD_FAMILIES_BY_LANG: dict[str, tuple[str, ...]] = {
+    "ja": ("Pretendard JP Variable", "Pretendard JP"),
+}
+
 
 def _resolve_bundled_font_dir() -> Optional[Path]:
     """Return the bundled ``font/`` directory across runtime modes."""
@@ -280,11 +294,17 @@ def _scan_bundled_fonts() -> list[Path]:
     )
 
 
-def _find_pretendard_font_file() -> Optional[Path]:
+def _find_pretendard_font_file(prefer_jp: bool = False) -> Optional[Path]:
     """Return the bundled Pretendard font path when it is available.
 
-    Priority order:
-      1. ``PretendardVariable*.ttf`` — gives Tk/GDI access to every fvar
+    When ``prefer_jp`` is set the Japanese cut (``PretendardJP*``) is
+    returned — it carries the full kanji set the standard build omits.
+    Otherwise the standard cut is returned and JP files are skipped, so
+    Korean/English never accidentally resolve to the JP family (whose
+    ideographs follow Japanese rather than Korean conventions).
+
+    Priority order (within the selected cut):
+      1. ``Pretendard*Variable*.ttf`` — gives Tk/GDI access to every fvar
          weight (Thin~Black) from a single file, so ``weight="bold"`` resolves
          to the real wght=700 instance instead of GDI synthetic-bold (which
          garbles Hangul glyphs and can fall through to system serifs under
@@ -293,15 +313,22 @@ def _find_pretendard_font_file() -> Optional[Path]:
       3. Any ``Pretendard*`` file as last resort.
     """
     fonts = _scan_bundled_fonts()
+
+    def _matches(stem: str) -> bool:
+        if "pretendard" not in stem:
+            return False
+        return ("jp" in stem) if prefer_jp else ("jp" not in stem)
+
     for path in fonts:
-        if "pretendard" in path.stem.lower() and "variable" in path.stem.lower():
+        stem = path.stem.lower()
+        if _matches(stem) and "variable" in stem:
             return path
     for path in fonts:
         stem = path.stem.lower()
-        if "pretendard" in stem and "regular" in stem:
+        if _matches(stem) and "regular" in stem:
             return path
     for path in fonts:
-        if "pretendard" in path.stem.lower():
+        if _matches(path.stem.lower()):
             return path
     return None
 
@@ -453,10 +480,9 @@ def register_all_bundled_fonts_for_tk() -> list[Path]:
     """Register every ``font/*.otf|*.ttf|*.ttc`` for the current Tk process.
 
     Idempotent — subsequent calls are no-ops. Returns the list of paths that
-    were successfully registered the first time. So a Source Han Serif (or
-    any other Korean font) the user drops into ``font/`` becomes addressable
-    by family name from CTkFont / Tk widgets without any further code
-    change.
+    were successfully registered the first time. So any font the user drops
+    into ``font/`` becomes addressable by family name from CTkFont / Tk
+    widgets without any further code change.
     """
     global _bundled_fonts_registered_for_tk
     if _bundled_fonts_registered_for_tk:
@@ -475,16 +501,18 @@ def register_all_bundled_fonts_for_tk() -> list[Path]:
 
 def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
     """
-    Setup Pretendard font for Korean and English languages.
+    Setup Pretendard font for Korean, English and Japanese languages.
     Returns font family name to use, or None for system default.
 
-    Side effect: every other font the user has dropped into ``font/`` (e.g.
-    a Source Han Serif "본명조" file) is also registered for Tk via
-    :func:`register_all_bundled_fonts_for_tk`, so the GUI can switch to
-    those families on demand without code changes.
+    Korean/English resolve to the standard Pretendard cut; Japanese resolves
+    to the bundled Pretendard JP cut (the only bundled face carrying kanji).
+
+    Side effect: every other font the user has dropped into ``font/`` is also
+    registered for Tk via :func:`register_all_bundled_fonts_for_tk`, so the
+    GUI can switch to those families on demand without code changes.
 
     Args:
-        current_language: Current language code (e.g., 'ko', 'en')
+        current_language: Current language code (e.g., 'ko', 'en', 'ja')
 
     Returns:
         Font family name to use, or None for system default
@@ -496,17 +524,22 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
         _font_cache[current_language] = value
         return value
 
-    # Only use Pretendard for Korean and English
-    if current_language not in ['ko', 'en']:
+    # Only use Pretendard for the languages we bundle a cut for (ko/en/ja).
+    if current_language not in _PRETENDARD_LANGUAGES:
         # Even when we don't pick Pretendard for the language, still register
         # any bundled font so other code paths (e.g. matplotlib, dialogs that
         # opt into a different family) can find them.
         register_all_bundled_fonts_for_tk()
         return _cache_and_return(None)
 
+    prefer_jp = current_language == "ja"
+    family_candidates = _PRETENDARD_FAMILIES_BY_LANG.get(
+        current_language, _PRETENDARD_DEFAULT_FAMILIES
+    )
+
     try:
         # Register every bundled font once — Pretendard is the primary, but
-        # any companion files (Source Han Serif, etc.) become addressable
+        # any companion font the user drops into ``font/`` becomes addressable
         # too. This is the place that satisfies "잡도록 수정" for fonts
         # placed alongside Pretendard.
         register_all_bundled_fonts_for_tk()
@@ -517,12 +550,12 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
         # process-private fonts immediately. So we trust actual() resolution
         # over the families() snapshot.
         #
-        # We try "Pretendard Variable" FIRST: the bundled file's family-name
-        # (name table id 1) is "Pretendard Variable", not "Pretendard".
-        # Hitting this directly avoids one render-probe miss + lets Win32 GDI
-        # auto-map weight="bold" to the fvar wght=700 instance instead of
-        # falling through to synthetic bold.
-        for candidate in ("Pretendard Variable", "Pretendard"):
+        # We try the "* Variable" family FIRST: the bundled file's family-name
+        # (name table id 1) is "Pretendard Variable" / "Pretendard JP Variable",
+        # not the plain "Pretendard". Hitting this directly avoids one
+        # render-probe miss + lets Win32 GDI auto-map weight="bold" to the fvar
+        # wght=700 instance instead of falling through to synthetic bold.
+        for candidate in family_candidates:
             rendered = _tk_renders_family(candidate)
             if rendered:
                 print(f"Tk render layer resolves {candidate}: {rendered}")
@@ -530,7 +563,7 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
 
         # If the bundled file wasn't registered yet (e.g. the helper above
         # short-circuited), force-register it now to fix Tk's render path.
-        font_path = _find_pretendard_font_file()
+        font_path = _find_pretendard_font_file(prefer_jp=prefer_jp)
         if font_path:
             family_name = _font_family_from_file(font_path)
             registered = _register_font_file_for_tk(font_path)
@@ -546,11 +579,17 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
             # related family rather than None.
             available_fonts = _get_tk_font_families()
             for font_name in (available_fonts or set()):
-                if "Pretendard" in font_name:
-                    rendered = _tk_renders_family(font_name)
-                    if rendered:
-                        print(f"Using nearby Pretendard variant: {font_name}")
-                        return _cache_and_return(rendered)
+                if "Pretendard" not in font_name:
+                    continue
+                # For Japanese only accept a JP cut — the standard Pretendard
+                # has no kanji, so the OS font is a better fallback than a
+                # Pretendard that would tofu every ideograph.
+                if prefer_jp != ("JP" in font_name):
+                    continue
+                rendered = _tk_renders_family(font_name)
+                if rendered:
+                    print(f"Using nearby Pretendard variant: {font_name}")
+                    return _cache_and_return(rendered)
 
             print(
                 f"Pretendard font file was found but Tk cannot render it: {font_path} "
