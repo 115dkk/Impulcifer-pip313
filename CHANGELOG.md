@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.10 - 2026-05-29
+### 내장 AutoEQ 임포트/연산 경량화
+
+#### ⚡ 성능 개선
+- **AutoEQ 임포트에서 matplotlib/Pillow/tabulate 지연 로딩**: `autoeq/frequency_response.py`와 `autoeq/biquad.py`가 모듈 최상위에서 `matplotlib.pyplot`·`PIL.Image`·`tabulate`를 끌어오던 것을, 실제로 사용하는 메서드(`plot_graph`·`write_readme`·`main`) 안으로 옮겨 지연 import로 전환했다. 특히 `biquad.py`가 데모용 `main()`만을 위해 matplotlib을 최상위에서 import하던 탓에, 플롯과 무관한 EQ 워커가 `FrequencyResponse`만 import해도 matplotlib까지 강제로 로드되던 문제를 해소했다. 그 결과 EQ 전용 ProcessPool 워커(`core/parallel_workers.py`)의 신규 프로세스 import 비용이 약 1.07s → 0.82s로 감소하며, spawn 시작 방식(Python 3.14 기본, macOS/Windows)에서 워커 수에 비례한 시작 지연이 줄어든다.
+- **`_init_data` 벡터화**: 모든 `FrequencyResponse` 생성 시 데이터 배열을 원소 단위 파이썬 루프(`[None if ... for x in data]`)로 재구성하던 것을, NaN이 없는 숫자형 배열은 `np.asarray` 빠른 경로로 처리하도록 바꿨다. None/NaN을 포함한 배열은 기존 경로를 그대로 유지해 dtype·값이 비트 단위로 동일하다.
+- **`_sort` 중복 주파수 검사 벡터화**: 정렬 후 인접 주파수 중복을 파이썬 루프로 검사하던 것을 `np.diff` 기반 벡터 비교로 교체했다. 중복이 있을 때 보고하는 주파수 값과 예외 동작은 동일하다.
+
+#### 검증
+- **BRIR 출력 무결성 유지**: 데모 데이터로 생성한 `hesuvi.wav`의 md5가 기본값 경로·`--vbass --vbass_freq=250` 경로 모두에서 master와 비트 단위로 동일함을 확인했다(vbass: `d295982d021a6d16ab2c194c3517c162`). `_init_data`는 None/NaN/정수/object 배열 등 엣지 케이스에서도 원본 구현과 dtype·값이 일치함을 별도 검증했다.
+
 ## 2.6.9 - 2026-05-29
 ### 일본어 GUI 폰트 적용 + 미사용 세리프 폰트 정리
 

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
+
+# matplotlib is only used by the ``main()`` demo below; it is imported lazily
+# there so importing this module (e.g. from ProcessPool workers) stays cheap.
 
 
 def numpyfy(fc, Q, gain, fs):
@@ -135,6 +136,8 @@ def impulse_response(a0, a1, a2, b0, b1, b2, n=250):
 
 
 def main():
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
     fc = [20, 220, 450, 1280, 2200, 3000, 5700, 6600, 7600]
     Q = [1.1, 0.9, 1.0, 1.5, 4.0, 2.0, 6.0, 7.0, 5.0]
     gain = [2.1, -3.8, -2.0, 4.0, -3.5, 4.5, -5.0, 0.4, -2.4]
