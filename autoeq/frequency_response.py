@@ -101,9 +101,13 @@ class FrequencyResponse:
         # unaffected by the None/NaN replacement below, so it can be wrapped
         # directly. ``np.array`` makes a fresh copy, matching the original
         # ``np.array(list_comprehension)`` semantics (no input aliasing).
-        arr = np.asarray(data)
-        if arr.dtype.kind in 'fiub' and not (arr.dtype.kind == 'f' and np.isnan(arr).any()):
-            return np.array(arr)
+        # Masked arrays are excluded: ``np.asarray`` would silently drop the
+        # mask, whereas the original element-wise path turned masked samples
+        # into ``None`` (via ``math.isnan``), so they must use the slow path.
+        if not np.ma.isMaskedArray(data):
+            arr = np.asarray(data)
+            if arr.dtype.kind in 'fiub' and not (arr.dtype.kind == 'f' and np.isnan(arr).any()):
+                return np.array(arr)
 
         # Slow path preserves the original element-wise None/NaN handling for
         # object arrays and arrays that actually contain NaN values.
