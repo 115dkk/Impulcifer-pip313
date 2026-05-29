@@ -2,8 +2,6 @@
 
 import os
 import csv
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import math
 from io import StringIO
 from scipy.interpolate import InterpolatedUnivariateSpline
@@ -13,9 +11,6 @@ from scipy.special import expit
 from scipy.stats import linregress
 from scipy.fftpack import next_fast_len
 import numpy as np
-import urllib
-from tabulate import tabulate
-from PIL import Image
 import re
 import warnings
 from autoeq import biquad
@@ -27,10 +22,20 @@ from autoeq.constants import DEFAULT_F_MIN, DEFAULT_F_MAX, DEFAULT_STEP, DEFAULT
     DEFAULT_BASS_BOOST_Q, DEFAULT_GRAPHIC_EQ_STEP, HARMAN_INEAR_PREFENCE_FREQUENCIES, \
     HARMAN_ONEAR_PREFERENCE_FREQUENCIES
 
-try:
-    ADAPTIVE_PALETTE = Image.Palette.ADAPTIVE
-except AttributeError:
-    ADAPTIVE_PALETTE = getattr(Image, 'ADAPTIVE')
+# matplotlib, Pillow and tabulate are only needed for plotting / README / image
+# export. They are imported lazily inside the methods that use them so that the
+# hot processing path (and lightweight ProcessPool workers that only call
+# smoothen/equalize/minimum_phase_impulse_response) does not pay their import
+# cost. See core/parallel_workers.py for the worker design this enables.
+
+
+def _adaptive_palette():
+    """Returns Pillow's adaptive palette constant, importing Pillow lazily."""
+    from PIL import Image
+    try:
+        return Image.Palette.ADAPTIVE
+    except AttributeError:
+        return getattr(Image, 'ADAPTIVE')
 
 
 class FrequencyResponse:
@@ -87,11 +92,25 @@ class FrequencyResponse:
         """Initializes data to a clean format. If None is passed and empty array is created. Non-numbers are removed."""
         if data is None:
             # None means empty array
-            data = []
+            return np.array([])
         elif isinstance(data, (float, int)) and not isinstance(data, bool):
             # Scalar means all values are that, same shape as frequency
             data = np.ones(self.frequency.shape) * data
-        # Replace nans with Nones
+
+        # Fast path: a numeric (non-object) ndarray/list without NaNs is
+        # unaffected by the None/NaN replacement below, so it can be wrapped
+        # directly. ``np.array`` makes a fresh copy, matching the original
+        # ``np.array(list_comprehension)`` semantics (no input aliasing).
+        # Masked arrays are excluded: ``np.asarray`` would silently drop the
+        # mask, whereas the original element-wise path turned masked samples
+        # into ``None`` (via ``math.isnan``), so they must use the slow path.
+        if not np.ma.isMaskedArray(data):
+            arr = np.asarray(data)
+            if arr.dtype.kind in 'fiub' and not (arr.dtype.kind == 'f' and np.isnan(arr).any()):
+                return np.array(arr)
+
+        # Slow path preserves the original element-wise None/NaN handling for
+        # object arrays and arrays that actually contain NaN values.
         data = [None if x is None or math.isnan(x) else x for x in data]
         # Wrap in Numpy array
         data = np.array(data)
@@ -100,11 +119,11 @@ class FrequencyResponse:
     def _sort(self):
         sorted_inds = self.frequency.argsort()
         self.frequency = self.frequency[sorted_inds]
-        for i in range(1, len(self.frequency)):
-            if self.frequency[i] == self.frequency[i - 1]:
-                raise ValueError('Duplicate values found at frequency {}. Remove duplicates manually.'.format(
-                    self.frequency[i])
-                )
+        if len(self.frequency) > 1 and np.any(self.frequency[1:] == self.frequency[:-1]):
+            dup_ind = int(np.flatnonzero(self.frequency[1:] == self.frequency[:-1])[0]) + 1
+            raise ValueError('Duplicate values found at frequency {}. Remove duplicates manually.'.format(
+                self.frequency[dup_ind])
+            )
         if len(self.raw):
             self.raw = self.raw[sorted_inds]
         if len(self.error):
@@ -688,6 +707,8 @@ class FrequencyResponse:
 
     def write_readme(self, file_path, max_filters=None, max_gains=None):
         """Writes README.md with picture and Equalizer APO settings."""
+        import urllib
+        from tabulate import tabulate
         file_path = os.path.abspath(file_path)
         dir_path = os.path.dirname(file_path)
         model = self.name
@@ -1331,6 +1352,8 @@ class FrequencyResponse:
                    target_plot_kwargs=None,
                    close=False):
         """Plots frequency response graph."""
+        import matplotlib.pyplot as plt
+        import matplotlib.ticker as ticker
         if fig is None:
             fig, ax = plt.subplots()
             fig.set_size_inches(12, 8)
@@ -1405,10 +1428,11 @@ class FrequencyResponse:
         ax.grid(True, which='minor')
         ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
         if file_path is not None:
+            from PIL import Image
             file_path = os.path.abspath(file_path)
             fig.savefig(file_path, dpi=120)
             im = Image.open(file_path)
-            im = im.convert('P', palette=ADAPTIVE_PALETTE, colors=60)
+            im = im.convert('P', palette=_adaptive_palette(), colors=60)
             im.save(file_path, optimize=True)
         if show:
             plt.show()
