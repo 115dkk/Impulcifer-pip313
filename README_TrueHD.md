@@ -27,7 +27,7 @@ TrueHD/MLP 파일을 실제로 열 때 FFmpeg가 필요합니다. 코드는 FFmp
 
 Dolby TrueHD + Dolby Atmos 오브젝트 마스터는 discrete height/wide sweep으로 쓸 수 없습니다. FFmpeg가 보통 7.1 bed만 디코드하고 오브젝트 채널은 일반 오디오 인터페이스의 개별 출력으로 복원하지 못하기 때문입니다.
 
-이 경우 Recorder는 에러를 내고 중단합니다. 7.1.6 같은 다채널 측정이 필요하면 Impulcifer의 sweep 세트 생성 기능으로 WAV sweep을 만들어 쓰세요.
+이 경우 Recorder는 에러를 내고 중단합니다. 7.1 같은 다채널 측정이 필요하면 Impulcifer의 sweep 세트 생성 기능으로 WAV sweep을 만들어 쓰세요.
 
 일반 Dolby TrueHD 5.1/7.1 파일은 오브젝트 마스터가 아니면 거부하지 않습니다. 다만 현재 `CHANNEL_LAYOUT_MAP`은 11채널과 13채널 커스텀 순서만 이름으로 매핑합니다. 보통의 5.1/7.1 TrueHD는 PCM 채널 수로 재생되지만 `_channels.txt`에 커스텀 채널명이 저장되지 않을 수 있습니다.
 

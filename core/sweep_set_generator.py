@@ -1,27 +1,37 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Generate the canonical 14-channel surround sweep set.
+"""Generate the canonical surround sweep set for HRIR capture.
 
-The set is four sweep WAV files routed to a 7.1.6 (14-channel) layout, one
-per recording group:
+The set covers all seven main surround speakers (FL, FR, FC, SL, SR, BL,
+BR) and is written in two complementary forms so both real multichannel
+rigs and stereo-only setups can measure a full surround layout:
 
-* ``sweep-seg-FL,FR-7.1.6-…wav`` — FL then FR sequential, others silent.
-* ``sweep-seg-FC-7.1.6-…wav`` — FC alone (single speaker, single sweep).
-* ``sweep-seg-SL,SR-7.1.6-…wav`` — SL then SR sequential.
-* ``sweep-seg-BL,BR-7.1.6-…wav`` — BL then BR sequential.
+* One **combined** 8-channel (7.1) file that plays every speaker in
+  sequence on its own physical channel:
+  ``sweep-seg-FL,FR,FC,SL,SR,BL,BR-7.1-…wav``. A user with a real 7.1
+  output device records this once and Impulcifer splits the single
+  ``FL,FR,FC,SL,SR,BL,BR.wav`` recording into per-speaker responses.
 
-The recordings produced by these sweeps land in
-``<speakers>.wav`` files (``FL,FR.wav`` / ``FC.wav`` / ``SL,SR.wav`` /
-``BL,BR.wav``) which Impulcifer's BRIR pipeline scans natively. With the
-typical 2-ear-mic setup, recordings are 2-channel (time-segmented for
-the stereo groups). Users with a 14-channel parallel-mic rig instead get
-4-channel files for the stereo groups and a 2-channel file for FC, for a
-total of 14 simultaneous mic channels (4 + 2 + 4 + 4) — both modes are
-accepted by ``HRIR.open_recording``.
+* Several **stereo** 2-channel files, one per recording group:
+  ``sweep-seg-FL,FR-stereo-…wav`` / ``sweep-seg-FC-stereo-…wav`` /
+  ``sweep-seg-SL,SR-stereo-…wav`` / ``sweep-seg-BL,BR-stereo-…wav``.
+  A user with only a stereo pair physically repositions the two speakers
+  to each group's location and records the groups one at a time on
+  ordinary 2-channel hardware — no multichannel sound card required.
 
-Why a generator instead of bundled WAVs: at PCM_32 the four 14-channel
-files weigh ~167 MB, more than doubling the repo's tracked data size.
-This module is invoked once per user environment to materialize them.
+Both forms derive Impulcifer-native recording filenames (``<speakers>.wav``)
+through :mod:`core.recording_naming`, so either workflow drops straight
+into the BRIR pipeline. The two forms are alternatives — record *either*
+the combined file *or* the stereo groups into a capture folder, not both
+(the same speaker must not appear in two recordings of one session).
+
+The filenames intentionally tag only the playback layout (``7.1`` /
+``stereo``); they no longer advertise height channels, because this set
+measures the seven ground speakers only.
+
+Why a generator instead of bundled WAVs: the combined 8-channel file
+alone is tens of MB at PCM_32. These are materialized once per user
+environment rather than tracked in the repo.
 """
 
 from __future__ import annotations
@@ -34,16 +44,24 @@ from core.impulse_response_estimator import ImpulseResponseEstimator
 from core.utils import write_wav
 
 
-# Canonical recording groups for the 14-channel split. ``open_recording``
-# accepts each via the speaker-list filename pattern (``FL,FR.wav`` etc.).
-SWEEP_SET_GROUPS: tuple[tuple[str, ...], ...] = (
+# Combined file: all seven ground speakers played sequentially on a 7.1
+# (8-channel) layout. The order here is the playback/time order and is
+# echoed in the filename, so ``open_recording`` splits the recording's
+# time segments back onto these speakers in the same order.
+COMBINED_SPEAKERS: tuple[str, ...] = ("FL", "FR", "FC", "SL", "SR", "BL", "BR")
+COMBINED_TRACKS = "7.1"
+
+# Per-group stereo files for stereo-only capture. Each group is written as
+# a 2-channel sweep; the user repositions a stereo pair to the group's
+# physical location before recording. ``open_recording`` accepts each via
+# the speaker-list filename pattern (``FL,FR.wav`` / ``FC.wav`` / …).
+STEREO_GROUPS: tuple[tuple[str, ...], ...] = (
     ("FL", "FR"),
     ("FC",),
     ("SL", "SR"),
     ("BL", "BR"),
 )
 
-DEFAULT_TRACKS = "7.1.6"  # 14-channel Atmos layout
 DEFAULT_DURATION = 5.0
 DEFAULT_FS = 48000
 DEFAULT_BIT_DEPTH = 32
@@ -57,18 +75,20 @@ def _format_filename(speakers: Sequence[str], tracks: str, ire: ImpulseResponseE
 def generate_sweep_set(
     dir_path: str,
     *,
-    tracks: str = DEFAULT_TRACKS,
     duration: float = DEFAULT_DURATION,
     fs: int = DEFAULT_FS,
     bit_depth: int = DEFAULT_BIT_DEPTH,
-    groups: Sequence[Sequence[str]] = SWEEP_SET_GROUPS,
 ) -> list[str]:
     """Write the surround sweep set into ``dir_path`` and return the file paths.
 
-    Reuses one ``ImpulseResponseEstimator`` so every group shares the same
+    Produces the per-group stereo files first (so a caller can default the
+    play picker to the universally playable ``FL,FR`` stereo sweep) and the
+    combined 7.1 file last.
+
+    Reuses one ``ImpulseResponseEstimator`` so every file shares the same
     underlying sweep — important because Impulcifer's deconvolution stage
-    needs every recording in the directory to be paired with the same
-    test signal.
+    needs every recording in a directory to be paired with the same test
+    signal.
     """
     if not os.path.isdir(dir_path):
         raise NotADirectoryError(f"Sweep output directory does not exist: {dir_path}")
@@ -76,21 +96,32 @@ def generate_sweep_set(
     ire = ImpulseResponseEstimator(min_duration=duration, fs=fs)
 
     output_paths: list[str] = []
-    for speakers in groups:
-        speakers = list(speakers)
-        data = ire.sweep_sequence(speakers, tracks)
-        filename = _format_filename(speakers, tracks, ire, bit_depth)
+
+    # Stereo per-group files (2-channel) for stereo-only capture.
+    for group in STEREO_GROUPS:
+        speakers = list(group)
+        data = ire.sweep_sequence(speakers, "stereo")
+        filename = _format_filename(speakers, "stereo", ire, bit_depth)
         path = os.path.join(dir_path, filename)
         write_wav(path, ire.fs, data, bit_depth=bit_depth)
         output_paths.append(path)
+
+    # Combined 7.1 (8-channel) file for a real multichannel output device.
+    combined = list(COMBINED_SPEAKERS)
+    data = ire.sweep_sequence(combined, COMBINED_TRACKS)
+    filename = _format_filename(combined, COMBINED_TRACKS, ire, bit_depth)
+    path = os.path.join(dir_path, filename)
+    write_wav(path, ire.fs, data, bit_depth=bit_depth)
+    output_paths.append(path)
+
     return output_paths
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Generate the canonical 14-channel surround sweep set "
-            "(FL,FR / FC / SL,SR / BL,BR) at the requested layout."
+            "Generate the surround sweep set: a combined 7.1 file plus "
+            "per-group stereo files (FL,FR / FC / SL,SR / BL,BR)."
         )
     )
     parser.add_argument(
@@ -98,16 +129,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         type=str,
         required=True,
         help="Output directory for the generated sweep WAV files.",
-    )
-    parser.add_argument(
-        "--tracks",
-        type=str,
-        default=DEFAULT_TRACKS,
-        help=(
-            "Track layout passed to sweep_sequence(). Defaults to "
-            "'7.1.6' (14-channel Atmos). Other valid values: '7.1' (8-ch), "
-            "'5.1' (6-ch), 'stereo' (2-ch)."
-        ),
     )
     parser.add_argument(
         "--duration",
@@ -131,7 +152,6 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     paths = generate_sweep_set(
         args.dir_path,
-        tracks=args.tracks,
         duration=args.duration,
         fs=args.fs,
         bit_depth=args.bit_depth,

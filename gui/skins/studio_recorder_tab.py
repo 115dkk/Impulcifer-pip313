@@ -305,10 +305,11 @@ class StudioRecorderTab:
         ).grid(row=2, column=0, sticky="ew", pady=(2, 6))
         self._refresh_resolved_record_path()
 
-        # 14-channel surround sweep set generator. Drops four
-        # ``sweep-seg-…-7.1.6-…wav`` files into a folder of the user's
-        # choice (defaults near the existing play file). Materialized
-        # on demand because each file is ~47 MB at PCM_32.
+        # Surround sweep set generator. Drops per-group stereo
+        # ``sweep-seg-…-stereo-…wav`` files plus one combined
+        # ``sweep-seg-…-7.1-…wav`` file into a folder of the user's choice
+        # (defaults near the existing play file). Materialized on demand
+        # because the combined 8-channel file is tens of MB at PCM_32.
         ctk.CTkButton(
             body,
             text=self.loc.get("button_generate_14ch_sweep_set"),
@@ -406,11 +407,12 @@ class StudioRecorderTab:
     # Recording
     # ------------------------------------------------------------------
     def _generate_sweep_set(self) -> None:
-        """Generate the bundled 14-channel surround sweep set on demand.
+        """Generate the surround sweep set on demand.
 
-        Defaults the target folder to the play file's parent so the new
-        WAVs land next to the existing bundled sweeps. After writing,
-        the play picker is auto-pointed at the FL,FR group.
+        Writes per-group stereo files plus one combined 7.1 file. Defaults
+        the target folder to the play file's parent so the new WAVs land
+        next to the existing bundled sweeps. After writing, the play picker
+        is auto-pointed at the universally playable FL,FR stereo sweep.
         """
         from tkinter.filedialog import askdirectory
 
