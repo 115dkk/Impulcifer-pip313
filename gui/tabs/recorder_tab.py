@@ -171,11 +171,11 @@ class RecorderTab:
         ).grid(row=3, column=1, columnspan=2, sticky="ew", padx=15, pady=(0, 5))
         self._refresh_resolved_record_path()
 
-        # 14-channel sweep set generator. Bundling the four 14-ch sweep
-        # WAVs would add ~167 MB to the repo (mostly silence on the 12
-        # inactive channels of each file). The button runs the same
-        # ImpulseResponseEstimator path on demand and drops the files
-        # alongside the existing sweeps in ``data/``.
+        # Surround sweep set generator. Produces a combined 7.1 file (for
+        # real multichannel rigs) plus per-group stereo files (for
+        # stereo-only users who reposition a speaker pair). Bundling these
+        # WAVs would add tens of MB to the repo, so the button materializes
+        # them on demand alongside the existing sweeps in ``data/``.
         ctk.CTkButton(
             files_frame,
             text=self.loc.get('button_generate_14ch_sweep_set'),
@@ -408,12 +408,13 @@ class RecorderTab:
         self.channel_guidance.configure(text=text)
 
     def generate_sweep_set(self) -> None:
-        """Materialize the four 14-channel sweep WAVs in a user-chosen folder.
+        """Materialize the surround sweep WAVs in a user-chosen folder.
 
-        Picks the play-file's directory as the default target so the
-        result lands beside the rest of Impulcifer's bundled sweeps
-        (``data/``). Once the files are written, the play-file picker
-        is auto-pointed at the first group (``FL,FR``) so the user can
+        Writes per-group stereo files plus one combined 7.1 file. Picks
+        the play-file's directory as the default target so the result
+        lands beside the rest of Impulcifer's bundled sweeps (``data/``).
+        Once the files are written, the play-file picker is auto-pointed
+        at the universally playable ``FL,FR`` stereo sweep so the user can
         immediately start recording.
         """
         from tkinter.filedialog import askdirectory

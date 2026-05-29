@@ -4,6 +4,21 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.8 - 2026-05-29
+### Sweep 세트를 통합 7.1 + 그룹별 스테레오 파일로 재정비
+
+#### 버그 수정
+- **Sweep 세트 결과물 수정**: 기존 sweep 세트 생성 기능이 그룹별로 14채널(7.1.6) 파일을 내놓아 대부분의 출력 장치에서 재생조차 되지 않던 문제를 고쳤다. 이제 한 번의 생성으로 두 가지 형태를 함께 내놓는다.
+  1. **통합 7.1 파일 1개** (`sweep-seg-FL,FR,FC,SL,SR,BL,BR-7.1-…wav`, 8채널): 진짜 멀티채널 출력 장치 보유자가 한 번에 녹음하면 Impulcifer가 단일 `FL,FR,FC,SL,SR,BL,BR.wav` 녹음을 스피커별로 분할한다.
+  2. **그룹별 2채널 스테레오 파일들** (`sweep-seg-FL,FR-stereo-…wav` / `FC` / `SL,SR` / `BL,BR`): 스테레오만 있는 사용자가 스피커 한 쌍을 각 그룹 위치로 옮겨가며 일반 2채널 장치로 멀티채널 측정을 흉내 낼 수 있다.
+- **파일명에서 하이트 채널 암시 제거**: 생성되는 모든 sweep 파일명에서 `7.1.6` 태그를 없애고 `7.1` / `stereo`만 남겨, 측정 대상이 7개 지상 스피커뿐임을 분명히 했다. `sweep_sequence()`의 `7.1.6`(14채널) 분기도 함께 제거했다.
+
+#### 개선
+- **`sweep_sequence()`의 `stereo` 일반화**: `core/impulse_response_estimator.py`의 `stereo` 트랙 구성이 이제 임의의 한/두 스피커를 좌/우 채널에 위치 순서대로 매핑한다(`speakers[0]`→좌, `speakers[1]`→우). 기존 `[FL, FR]` 동작은 그대로 유지되며, `[SL, SR]` / `[BL, BR]` / `[FC]` 같은 그룹도 스테레오 파일로 생성할 수 있다.
+
+#### 검증
+- **회귀 테스트 갱신**: `tests/test_sweep_set_generator.py`를 새 결과물(스테레오 그룹 + 통합 7.1)에 맞게 다시 작성하고, 파일명에 `7.1.6`이 남지 않는지, 녹음 파일명 도출이 올바른지(`FL,FR,FC,SL,SR,BL,BR.wav` 포함), 스테레오 sweep이 재배치 그룹을 지원하는지 검증한다.
+
 ## 2.6.7 - 2026-05-20
 ### i18n 문구와 업데이트 완료 상태 정리
 
