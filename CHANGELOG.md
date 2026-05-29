@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.6.9 - 2026-05-29
+### 일본어 GUI 폰트 적용 + 미사용 세리프 폰트 정리
+
+#### 버그 수정
+- **일본어에서 Pretendard 적용**: 일본어(`ja`)로 전환하면 GUI가 번들된 `PretendardJPVariable.ttf`(Pretendard JP) 대신 OS 기본 폰트로 떨어지던 문제를 고쳤다. 일본어는 이제 한국어/영어와 동일하게 Pretendard 계열(JP 컷)로 렌더된다. 표준 Pretendard 빌드에는 한자(日 語 国 気 …)가 전혀 들어 있지 않아 일본어 본문이 전부 두부(豆腐) 글리프로 깨졌기 때문에, 한자까지 포함한 유일한 번들 폰트인 Pretendard JP를 일본어 전용으로 선택하도록 했다.
+
+#### 정리
+- **미사용 세리프 폰트 제거**: 어떤 런타임 코드도 참조하지 않던 `font/Serif/`(Source Han Serif VF 5종 + Subset 5종, 약 348MB)를 저장소에서 삭제했다. 폰트 스캐너는 `font/` 최상위만 비재귀로 훑으므로 이 폴더는 등록되지도 사용되지도 않은 채 git과 Nuitka standalone 빌드만 부풀리고 있었다.
+- **JP 컷 선택 로직 정리**: `_find_pretendard_font_file(prefer_jp=...)`로 일본어/그 외 언어가 각각 JP 컷·표준 컷을 명시적으로 고르게 하여, 한국어/영어가 실수로 JP 패밀리에 매칭되거나 일본어가 한자 없는 표준 Pretendard로 폴백하는 경로를 차단했다.
+
+#### 검증
+- **폰트 선택 테스트 추가**: `tests/test_gui.py`에 일본어가 `Pretendard JP Variable`로 해석되는지, JP 컷을 못 쓸 때 표준 Pretendard가 아니라 OS 폰트(None)로 폴백하는지, `_find_pretendard_font_file`이 `prefer_jp`에 따라 올바른 컷을 고르는지 검증하는 케이스를 추가했다.
+
 ## 2.6.8 - 2026-05-29
 ### Sweep 세트를 통합 7.1 + 그룹별 스테레오 파일로 재정비
 
