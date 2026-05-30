@@ -420,7 +420,7 @@ class ImpulciferTab:
         self.mic_deviation_strength_entry = ctk.CTkEntry(mic_dev_frame, textvariable=self.mic_deviation_strength_var, width=WIDGET_ENTRY_WIDTH_NARROW, state="disabled")
         self.mic_deviation_strength_entry.pack(side="left", padx=2)
 
-        # Mic deviation v3.0 options (debug plots only - phase/adaptive/anatomical removed in v3.0)
+        # Mic deviation v4.0 options (debug plots only)
         self.mic_deviation_debug_plots_var = ctk.BooleanVar(value=False)
         self.mic_dev_debug_plots_check = ctk.CTkCheckBox(
             mic_dev_frame,

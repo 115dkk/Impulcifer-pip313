@@ -833,35 +833,32 @@ class HRIR(HRIRPlotter):
     def correct_microphone_deviation(
         self,
         correction_strength=0.7,
-        enable_phase_correction=False,
-        enable_adaptive_correction=False,
-        enable_anatomical_validation=False,
+        anchor="auto",
         plot_analysis=False,
         plot_dir=None,
     ):
         """
-        마이크 착용 편차 보정 (v3.0)
+        마이크 착용 편차 보정 (v4.0)
 
-        바이노럴 임펄스 응답 측정 시 좌우 귀에 착용된 마이크의 위치/깊이 차이로 인한
-        반복적인 주파수 응답 편차를 보정합니다. v3.0은 여러 스피커의 좌우 편차를
-        모아 스피커 방향에 따른 정상 HRTF 차이와 마이크 오차를 나눠 추정합니다.
+        바이노럴 임펄스 응답 측정 시 좌우 귀에 착용된 마이크의 위치/깊이/감도
+        차이로 인한 방향 무관 좌우 크기 불일치를 보정합니다. v4.0은 여러 스피커의
+        직접음을 모아 확산음장(CTF) 평균 또는 정면(FC) 측정을 기준으로 방향 무관
+        성분만 추정하고, 좌우를 ±Δ/2 최소위상 FIR로 보정합니다(ITD 보존).
 
         Args:
             correction_strength (float): 보정 강도 (0.0~1.0). 0.0은 보정 없음, 1.0은 완전 보정
-            enable_phase_correction (bool): v2.0 호환 인자. v3.0에서는 무시됨
-            enable_adaptive_correction (bool): v2.0 호환 인자. v3.0에서는 무시됨
-            enable_anatomical_validation (bool): v2.0 호환 인자. v3.0에서는 무시됨
+            anchor (str): 'auto'|'diffuse'|'frontal' 추정 기준
             plot_analysis (bool): 분석 결과 플롯 생성 여부
             plot_dir (str): 플롯 저장 디렉토리 경로
 
         Returns:
-            dict: 각 스피커별 분석 결과
+            dict: 분석 요약
         """
         from core.microphone_deviation_correction import (
             apply_microphone_deviation_correction_to_hrir,
         )
 
-        print("마이크 착용 편차 보정 v3.0 중...")
+        print("마이크 착용 편차 보정 v4.0 중...")
 
         # 플롯 디렉토리 설정
         if plot_analysis and plot_dir:
@@ -870,13 +867,10 @@ class HRIR(HRIRPlotter):
         else:
             mic_deviation_plot_dir = None
 
-        # v2.0 호환 파라미터는 하위 함수에서 받지만 v3.0 구현에서는 무시된다.
         analysis_results = apply_microphone_deviation_correction_to_hrir(
             self,
             correction_strength=correction_strength,
-            enable_phase_correction=enable_phase_correction,
-            enable_adaptive_correction=enable_adaptive_correction,
-            enable_anatomical_validation=enable_anatomical_validation,
+            anchor=anchor,
             plot_analysis=plot_analysis,
             plot_dir=mic_deviation_plot_dir,
         )

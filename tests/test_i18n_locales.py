@@ -67,14 +67,16 @@ def test_update_completion_copy_describes_completion() -> None:
             assert locale[key] not in old_completion_values, f"{locale_file.name}:{key}"
 
 
-def test_mic_deviation_copy_tracks_current_v3() -> None:
-    """Microphone deviation labels should match the v3 implementation."""
+def test_mic_deviation_copy_tracks_current_v4() -> None:
+    """Microphone deviation labels should match the v4 implementation."""
     _locale_dir, _english, locales = _load_locales()
 
     for locale_file, locale in locales:
         assert "v2.0" not in locale["label_v2_options"], locale_file.name
-        assert "v2.0" not in locale["cli_correcting_deviation"], locale_file.name
-        assert "v3.0" in locale["cli_correcting_deviation"], locale_file.name
+        assert "v3.0" not in locale["cli_correcting_deviation"], locale_file.name
+        assert "v4.0" in locale["cli_correcting_deviation"], locale_file.name
+        # 헤드폰 보상 시 건너뛴다는 안내 문구가 존재해야 함
+        assert locale["cli_mic_deviation_skipped_hpcomp"].strip(), locale_file.name
 
 
 def test_visible_locale_strings_are_not_english_fallbacks() -> None:

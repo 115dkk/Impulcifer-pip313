@@ -1,6 +1,6 @@
 # 마이크 착용 편차 보정
 
-마이크 착용 편차 보정은 좌우 귀 마이크의 삽입 깊이, 각도, 감도 차이 때문에 생기는 공통적인 좌우 레벨 차이를 줄이는 기능입니다. 현재 구현은 v3.0 교차검증 방식입니다.
+마이크 착용 편차 보정은 좌우 귀 마이크의 삽입 깊이, 각도, 감도 차이 때문에 생기는 **방향과 무관한** 좌우 크기 차이를 줄이는 기능입니다. 현재 구현은 v4.0 양이(interaural) 불일치 보정입니다.
 
 이 문서는 코드 기준으로 정리했습니다.
 
@@ -12,36 +12,40 @@
 | CLI 옵션 정의 | `core/pipeline.py` |
 | GUI 인자 조립 | `gui/brir_args.py` |
 
-## 현재 구현 요약
+## 핵심: 헤드폰 보상이 켜져 있으면 자동으로 건너뜁니다
 
-v3.0은 단일 스피커의 좌우 차이를 바로 마이크 오차로 보지 않습니다. 여러 스피커에서 반복되는 좌우 차이를 모아, 스피커 방향 때문에 생기는 정상적인 HRTF 차이와 마이크 착용 오차를 나눠 추정합니다.
+같은 인이어 마이크를 같은 위치에 둔 채 스피커와 헤드폰을 모두 측정하고 헤드폰 보상을 적용하면, 마이크 전달함수 `M(f)`가 귀별로 분자·분모에 함께 들어가 소거됩니다(`out = HRTF/HpTF`). 즉 표준 워크플로(헤드폰 보상 ON, 기본값)에서는 마이크 좌우 차이가 이미 제거되므로 별도 보정이 불필요하며, 보상 이전에 보정을 적용하면 좌우 밸런스를 이중으로 건드립니다.
+
+그래서 `impulcifer.py`는 **`do_headphone_compensation`이 켜져 있으면 마이크 보정을 건너뛰고 안내 로그(`cli_mic_deviation_skipped_hpcomp`)를 출력**합니다. 이 보정은 헤드폰 보상을 끈 경우, 또는 측정 사이에 마이크를 다시 착용해 소거가 깨진 경우를 위한 것입니다.
+
+(근거: Hammershøi & Møller 2005; Møller 1992. 정면 ILD≈0 및 방향·주파수 의존 ILD: Cai/Rakerd/Hartmann 2015. 분수옥타브 평활: Tylka/Boren/Choueiri 2017. 최소위상+지연 근사와 위상 둔감성: Kistler & Wightman 1992, Kulkarni/Isabelle/Colburn 1999. 규제화: Kirkeby & Nelson 1999, Gomez Bolaños/Mäkivirta/Pulkki 2016.)
+
+## 현재 구현 요약 (v4.0)
+
+단일 스피커의 좌우 차이를 그대로 마이크 오차로 보지 않습니다. 오프센터 스피커의 좌우 차이는 대부분 실제 ILD(양이 레벨차)이며 방향·주파수에 따라 변하기 때문입니다. v4.0은 **방향 무관 성분**만 추정합니다.
 
 처리 흐름은 다음과 같습니다.
 
-1. 각 스피커의 좌우 IR peak를 찾습니다.
-2. 250, 500, 1000, 2000, 4000, 8000 Hz 대역에서 1/3 octave band-pass와 짧은 time gate를 적용합니다.
-3. 대역별 `left - right` 레벨 차이를 수집합니다.
-4. 스피커 방향별 기대 ILD 부호를 기준으로 마이크 오차를 추정합니다.
-5. 추정값의 일관성을 검증합니다. 신뢰도가 낮으면 보정 강도를 절반으로 낮춥니다.
-6. 크기 보정용 minimum-phase FIR을 만들고 좌우 IR에 적용합니다.
+1. 각 스피커의 좌우 IR에서 직접음을 짧은 창(기본 약 5 ms)으로 잘라 풀 FFT 크기응답을 구합니다.
+2. 추정 기준(anchor)을 정합니다.
+   - `auto`(기본): 정면(FC) 측정이 있으면 정면(`frontal`), 없으면 확산음장 평균(`diffuse`).
+   - `frontal`: 정면 측정의 좌우 차이만 사용(기대 ILD≈0).
+   - `diffuse`: 모든 방향의 파워 평균(CTF)으로 좌우 차이를 구함(대칭 레이아웃에서 방향성 ILD가 상쇄).
+3. 방향 무관 좌우 크기 차이 Δ(f)를 구하고 분수옥타브(기본 1/6 octave)로 평활합니다.
+4. 보정 대역(기본 200 Hz ~ 16 kHz) 밖은 raised-cosine으로 0이 되도록 테이퍼링하고, 최대 보정량으로 클램프합니다(노치 역전 방지).
+5. 좌우를 ±Δ/2 최소위상 FIR로 보정합니다. 크기만 보정하므로 ITD(양이 지연)는 보존됩니다.
 
-기본 분석 대역은 샘플레이트의 Nyquist 주파수를 넘지 않는 범위로 제한됩니다. 최대 보정량은 기본 6 dB입니다.
+최대 보정량은 한쪽 귀 기준 기본 6 dB입니다.
 
-## v2 옵션에 대한 정리
+## 이전 구현과의 차이
 
-예전 문서에는 위상 보정, adaptive 보정, anatomical validation이 v2.0 핵심 기능으로 설명되어 있었습니다. 현재 코드는 다릅니다.
+이전 구현(v3.0)은 스피커별 기대 ILD 부호표(FL=+1, FR=−1, FC=0 …)와 "기대와 반대 방향 편차의 중앙값" 휴리스틱으로 마이크 오차를 추정하고, 250 Hz~8 kHz의 6개 옥타브 점만 사용했습니다. 이는 실제 방향·주파수 의존 ILD를 단순화해 편향이 있었고, 3.7 kHz 이상의 협대역 개인차를 담기에 해상도가 부족했습니다. v4.0은 이를 방향 무관 추정 + 풀 FFT + 분수옥타브 평활로 교체했습니다.
 
-| 예전 옵션 | 현재 동작 |
-| --- | --- |
-| `--no_mic_deviation_phase_correction` | 호환용 옵션입니다. v3.0은 위상을 직접 보정하지 않습니다. |
-| `--no_mic_deviation_adaptive_correction` | 호환용 옵션입니다. v3.0은 교차검증으로 마이크 오차를 추정합니다. |
-| `--no_mic_deviation_anatomical_validation` | 호환용 옵션입니다. v3.0은 스피커 방향별 기대 ILD 부호와 일관성 검증을 씁니다. |
-
-이 옵션들은 CLI 호환성을 위해 남아 있지만, 현재 보정 결과를 바꾸지 않습니다.
+v2.0 호환용으로 남아 있던 옵션 `--no_mic_deviation_phase_correction`, `--no_mic_deviation_adaptive_correction`, `--no_mic_deviation_anatomical_validation`은 **제거**되었습니다(이미 동작에 영향이 없는 no-op였습니다).
 
 ## CLI 사용
 
-기본 보정은 다음처럼 켭니다.
+기본 보정은 다음처럼 켭니다. 단, 헤드폰 보상이 켜져 있으면 자동으로 건너뜁니다.
 
 ```bash
 impulcifer --dir_path "measurements" --microphone_deviation_correction
@@ -67,26 +71,19 @@ impulcifer --dir_path "measurements" \
 
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
-| `--microphone_deviation_correction` | 꺼짐 | v3.0 교차검증 기반 보정을 켭니다. |
-| `--mic_deviation_strength VALUE` | `0.7` | 보정 강도입니다. |
+| `--microphone_deviation_correction` | 꺼짐 | v4.0 양이 불일치 보정을 켭니다. 헤드폰 보상이 켜져 있으면 자동 생략됩니다. |
+| `--mic_deviation_strength VALUE` | `0.7` | 보정 강도입니다. `0.0`은 보정 없음, `1.0`은 전체 보정입니다. |
 | `--mic_deviation_debug_plots` | 꺼짐 | `plots/microphone_deviation/` 아래에 진단 그래프를 저장합니다. |
-| `--no_mic_deviation_phase_correction` | 호환용 | v3.0에서는 보정 결과를 바꾸지 않습니다. |
-| `--no_mic_deviation_adaptive_correction` | 호환용 | v3.0에서는 보정 결과를 바꾸지 않습니다. |
-| `--no_mic_deviation_anatomical_validation` | 호환용 | v3.0에서는 보정 결과를 바꾸지 않습니다. |
 
 ## GUI 사용
 
 Stable GUI와 Studio GUI 모두 Advanced Options에서 마이크 착용 편차 보정을 켤 수 있습니다.
-
-현재 GUI에서 조정하는 항목은 다음입니다.
 
 | 항목 | 설명 |
 | --- | --- |
 | Mic Deviation Correction | 기능을 켭니다. |
 | Strength | 보정 강도입니다. 기본값은 `0.7`입니다. |
 | Debug plots | 진단 플롯 저장을 켭니다. |
-
-v2 세부 옵션은 GUI에서 제거되어 있습니다.
 
 ## Python API
 
@@ -102,15 +99,16 @@ hrir.open_recording("measurements/FL,FR.wav", speakers=["FL", "FR"])
 
 summary = hrir.correct_microphone_deviation(
     correction_strength=0.7,
+    anchor="auto",
     plot_analysis=True,
     plot_dir="measurements/plots",
 )
 
-print(summary["v3_cross_validation"])
+print(summary["anchor"])         # 'frontal' 또는 'diffuse'
 print(summary.get("avg_error_db"))
 ```
 
-`HRIR.correct_microphone_deviation()`은 기존 호출 코드와 맞추기 위해 v2 인자를 아직 받습니다. 새 코드에서는 `correction_strength`, `plot_analysis`, `plot_dir`만 의미가 있습니다.
+`HRIR.correct_microphone_deviation()`의 인자는 `correction_strength`, `anchor`, `plot_analysis`, `plot_dir`입니다.
 
 ## 파이프라인 위치
 
@@ -120,50 +118,31 @@ BRIR 생성 중 마이크 착용 편차 보정은 다음 순서로 실행됩니�
 2. ipsilateral alignment와 onset group alignment를 적용합니다.
 3. 꼬리를 자릅니다.
 4. Virtual Bass를 켰다면 먼저 적용합니다.
-5. 마이크 착용 편차 보정을 적용합니다.
+5. 마이크 착용 편차 보정을 적용합니다. **(헤드폰 보상이 켜져 있으면 건너뜀)**
 6. `responses.wav`를 저장합니다.
 7. 룸 보정, 헤드폰 보정, Custom EQ, decay, channel balance, normalize를 진행합니다.
 
-## 출력과 플롯
-
-보정이 끝나면 콘솔에 처리된 스피커 수, 평균 보정량, 최대 보정량을 출력합니다.
-
-`--mic_deviation_debug_plots`를 켠 경우에는 보통 다음 파일이 생성됩니다.
-
-| 파일 | 설명 |
-| --- | --- |
-| `plots/microphone_deviation/microphone_deviation_cross_validation_v3.png` | 스피커별 좌우 편차와 추정된 마이크 오차를 보여줍니다. |
-| `plots/microphone_deviation/microphone_deviation_analysis_v3.png` | 단일 스피커 fallback 경로에서 편차 분석을 보여줍니다. |
-| `plots/microphone_deviation/microphone_deviation_correction_comparison_v2.png` | 단일 스피커 fallback 경로의 보정 전후 비교입니다. 파일명은 v2로 남아 있습니다. |
-
 ## 결과 딕셔너리
-
-교차검증 경로에서는 요약 딕셔너리가 반환됩니다.
 
 ```python
 {
-    "mic_error_estimate": {250: 0.4, 500: 0.6},
+    "method": "interaural_v4",
+    "anchor": "frontal",            # 또는 "diffuse"
     "avg_error_db": 0.5,
     "max_error_db": 0.8,
     "speakers_analyzed": ["FL", "FR", "FC"],
-    "validation": {
-        "consistency_score": 0.75,
-        "is_valid": True,
-        "confidence": "high",
-    },
     "correction_strength": 0.7,
-    "v3_cross_validation": True,
     "speakers_processed": ["FL", "FR", "FC"],
 }
 ```
 
-스피커가 2개 미만이면 단일 스피커 fallback으로 전환합니다. 이 경우 `v3_cross_validation`은 `False`이고, 수집된 편차를 직접 마이크 오차로 보고 보정합니다.
+유의미한 좌우 불일치가 없으면 보정을 건너뛰고 `speakers_processed`는 빈 리스트가 됩니다.
 
 ## 주의 사항
 
-- 이 기능은 측정 오차를 줄이기 위한 보정입니다. 실제 HRTF 차이를 완전히 없애는 기능이 아닙니다.
-- 여러 방향의 스피커 측정이 있을수록 교차검증이 안정적입니다.
-- 보정 강도를 높이면 좌우 차이를 더 줄이지만, 실제 방향감까지 줄일 수 있습니다.
+- 이 기능은 측정 오차(마이크 좌우 불일치)를 줄이기 위한 보정입니다. 실제 HRTF 방향 차이를 없애는 기능이 아닙니다.
+- 방향 무관 성분과 피험자의 해부학적 좌우 비대칭을 완벽히 분리할 수는 없으므로, 보정 강도를 너무 높이면 실제 방향감을 줄일 수 있습니다.
+- 대칭 레이아웃(FL/FR, SL/SR …) 측정이 많을수록 확산음장 추정이 안정적입니다.
 - 기본 측정 품질이 낮으면 보정 결과도 믿기 어렵습니다. 배경 소음, 클리핑, 잘못된 sweep 파일을 먼저 확인하세요.
 
 ## 테스트
@@ -171,5 +150,5 @@ BRIR 생성 중 마이크 착용 편차 보정은 다음 순서로 실행됩니�
 관련 테스트는 다음 파일에 있습니다.
 
 ```bash
-pytest tests/test_microphone_deviation.py tests/test_suite.py -q
+pytest tests/test_microphone_deviation.py tests/test_suite.py tests/test_integration.py -q
 ```

@@ -274,9 +274,6 @@ def main(
         interactive_plots=interactive_plots,
         microphone_deviation_correction=microphone_deviation_correction,
         mic_deviation_strength=mic_deviation_strength,
-        mic_deviation_phase_correction=mic_deviation_phase_correction,
-        mic_deviation_adaptive_correction=mic_deviation_adaptive_correction,
-        mic_deviation_anatomical_validation=mic_deviation_anatomical_validation,
         mic_deviation_debug_plots=mic_deviation_debug_plots,
         output_truehd_layouts=output_truehd_layouts,
         vbass=vbass,
@@ -314,9 +311,6 @@ def _run_pipeline_legacy(
     interactive_plots=False,
     microphone_deviation_correction=False,
     mic_deviation_strength=0.7,
-    mic_deviation_phase_correction=True,
-    mic_deviation_adaptive_correction=True,
-    mic_deviation_anatomical_validation=True,
     mic_deviation_debug_plots=False,
     output_truehd_layouts=False,
     vbass=False,
@@ -350,7 +344,9 @@ def _run_pipeline_legacy(
         total_steps += 1
     if plot:
         total_steps += 5  # Pre/post plots + additional plots
-    if microphone_deviation_correction:
+    # 헤드폰 보상이 켜져 있으면 마이크 보정은 보상 단계에서 이미 상쇄되므로
+    # 건너뛴다(아래 게이팅 참조). 진행 단계 수도 그에 맞춰 센다.
+    if microphone_deviation_correction and not do_headphone_compensation:
         total_steps += 1
     if vbass:
         total_steps += 1
@@ -479,19 +475,23 @@ def _run_pipeline_legacy(
         )
         _check_cancelled()
 
-    # 마이크 착용 편차 보정 v3.0
+    # 마이크 착용 편차 보정 v4.0
+    # 같은 인이어 마이크를 같은 위치에 두고 스피커와 헤드폰을 모두 측정한 경우,
+    # 마이크 전달함수는 헤드폰 보상 단계(out = HRTF/HpTF)에서 귀별로 소거된다
+    # (Hammershøi & Møller 2005). 보상 이전에 마이크 보정을 적용하면 잉여이자
+    # 좌우 밸런스를 이중 보정하므로, 헤드폰 보상이 켜져 있으면 건너뛴다.
     if microphone_deviation_correction:
-        logger.step("cli_correcting_deviation")
-        mic_deviation_plot_dir = os.path.join(dir_path, "plots") if mic_deviation_debug_plots else None
-        hrir.correct_microphone_deviation(
-            correction_strength=mic_deviation_strength,
-            enable_phase_correction=mic_deviation_phase_correction,
-            enable_adaptive_correction=mic_deviation_adaptive_correction,
-            enable_anatomical_validation=mic_deviation_anatomical_validation,
-            plot_analysis=mic_deviation_debug_plots,
-            plot_dir=mic_deviation_plot_dir,
-        )
-        _check_cancelled()
+        if do_headphone_compensation:
+            logger.warning("cli_mic_deviation_skipped_hpcomp")
+        else:
+            logger.step("cli_correcting_deviation")
+            mic_deviation_plot_dir = os.path.join(dir_path, "plots") if mic_deviation_debug_plots else None
+            hrir.correct_microphone_deviation(
+                correction_strength=mic_deviation_strength,
+                plot_analysis=mic_deviation_debug_plots,
+                plot_dir=mic_deviation_plot_dir,
+            )
+            _check_cancelled()
 
     # Write multi-channel WAV file with sine sweeps for debugging
     _check_cancelled()

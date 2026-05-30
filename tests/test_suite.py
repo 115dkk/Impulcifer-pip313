@@ -23,7 +23,7 @@ except ImportError:
 
 
 class TestMicrophoneDeviationCorrector:
-    """마이크 편차 보정 v3.0 테스트"""
+    """마이크 편차 보정 v4.0 테스트 (방향 무관 양이 불일치)"""
 
     @pytest.fixture
     def corrector(self):
@@ -33,95 +33,97 @@ class TestMicrophoneDeviationCorrector:
             correction_strength=0.7
         )
 
+    @staticmethod
+    def _impulse_pair(left_gain=1.0, right_gain=1.0, length=4800, peak=1000):
+        left = np.zeros(length)
+        right = np.zeros(length)
+        left[peak] = left_gain
+        right[peak] = right_gain
+        return left, right
+
     def test_corrector_initialization(self, corrector):
         """초기화 테스트"""
         assert corrector.fs == 48000
         assert corrector.correction_strength == 0.7
-        assert len(corrector.octave_bands) > 0, "옥타브 밴드가 비어있음"
-        assert hasattr(corrector, 'expected_ild_sign'), "기대 ILD 부호 딕셔너리가 없음"
+        assert len(corrector.frequency) > 0, "주파수 그리드가 비어있음"
+        assert corrector.f_min < corrector.f_max
+        assert corrector.anchor == "auto"
 
-    def test_expected_ild_sign(self, corrector):
-        """스피커별 기대 ILD 부호 테스트"""
-        # 왼쪽 스피커는 양수
-        assert corrector.expected_ild_sign.get('FL', 0) > 0, "FL은 양수여야 함"
-        assert corrector.expected_ild_sign.get('SL', 0) > 0, "SL은 양수여야 함"
-        # 오른쪽 스피커는 음수
-        assert corrector.expected_ild_sign.get('FR', 0) < 0, "FR은 음수여야 함"
-        assert corrector.expected_ild_sign.get('SR', 0) < 0, "SR은 음수여야 함"
-        # 중앙 스피커는 0
-        assert corrector.expected_ild_sign.get('FC', 0) == 0, "FC는 0이어야 함"
+    def test_collect_speaker(self, corrector):
+        """스피커 직접음 파워 수집 테스트"""
+        left, right = self._impulse_pair(1.0, 0.8)
+        data = corrector.collect_speaker('FL', left, right, 1000, 1000)
+        assert 'left' in data and 'right' in data
+        assert len(data['left']) == len(corrector.frequency)
+        assert 'FL' in corrector.speaker_power
 
-    def test_gate_length_calculation(self, corrector):
-        """게이트 길이 계산 테스트"""
-        assert len(corrector.gate_lengths) == len(corrector.octave_bands)
+    def test_estimate_mismatch_sign(self, corrector):
+        """왼쪽이 ~3dB 큰 경우 Δ는 대역에서 양수여야 함"""
+        gain = 10 ** (-3.0 / 20.0)
+        left, right = self._impulse_pair(1.0, gain)
+        corrector.collect_speaker('FL', left, right, 1000, 1000)
+        delta = corrector.estimate_interaural_mismatch()
+        assert len(delta) == len(corrector.frequency)
+        f = corrector.frequency
+        mid = (f >= 800) & (f <= 1200)
+        assert np.mean(delta[mid]) > 1.0, "마이크 불일치 방향(양수)이 아님"
 
-        # 고주파일수록 짧은 게이트
-        freqs = sorted(corrector.gate_lengths.keys())
-        for i in range(len(freqs) - 1):
-            # 주파수가 높아질수록 게이트 길이가 짧아지거나 같아야 함
-            assert corrector.gate_lengths[freqs[i]] >= corrector.gate_lengths[freqs[i+1]], \
-                   "게이트 길이가 주파수에 따라 올바르게 감소하지 않음"
+    def test_band_limit_taper(self, corrector):
+        """보정 대역 밖은 0으로 테이퍼되어야 함"""
+        gain = 10 ** (-3.0 / 20.0)
+        left, right = self._impulse_pair(1.0, gain)
+        corrector.collect_speaker('FL', left, right, 1000, 1000)
+        delta = corrector.estimate_interaural_mismatch()
+        f = corrector.frequency
+        low_idx = int(np.argmin(np.abs(f - 30.0)))
+        assert abs(delta[low_idx]) < 0.5, "저역이 테이퍼되지 않음"
+        very_high = f >= corrector.fs / 2 * 0.99
+        if np.any(very_high):
+            assert np.all(np.abs(delta[very_high]) < 0.5), "초고역이 테이퍼되지 않음"
 
-    def test_collect_speaker_deviation(self, corrector):
-        """스피커 편차 수집 테스트"""
-        # 테스트 IR 생성
-        length = 4800
-        left_ir = np.zeros(length)
-        right_ir = np.zeros(length)
-        left_ir[1000] = 1.0
-        right_ir[1000] = 0.8
+    def test_frontal_anchor_preferred(self):
+        """FC가 있으면 정면(frontal) 앵커를 사용해야 함"""
+        c = MicrophoneDeviationCorrector(sample_rate=48000, anchor='auto')
+        gain = 10 ** (-3.0 / 20.0)
+        # FC: 왼쪽이 큼 / FL: 오른쪽이 큼(반대 방향)
+        l1, r1 = self._impulse_pair(1.0, gain)
+        l2, r2 = self._impulse_pair(gain, 1.0)
+        c.collect_speaker('FC', l1, r1, 1000, 1000)
+        c.collect_speaker('FL', l2, r2, 1000, 1000)
+        delta = c.estimate_interaural_mismatch()
+        assert c.anchor_used == 'frontal'
+        f = c.frequency
+        mid = (f >= 800) & (f <= 1200)
+        assert np.mean(delta[mid]) > 1.0, "FC(양수)를 따르지 않음"
 
-        deviations = corrector.collect_speaker_deviation(
-            'FL', left_ir, right_ir,
-            left_peak_index=1000, right_peak_index=1000
+    def test_design_correction_filters(self, corrector):
+        """불일치가 있으면 좌/우 FIR이 생성되어야 함"""
+        gain = 10 ** (-3.0 / 20.0)
+        left, right = self._impulse_pair(1.0, gain)
+        corrector.collect_speaker('FL', left, right, 1000, 1000)
+        corrector.estimate_interaural_mismatch()
+        left_fir, right_fir = corrector.design_correction_filters()
+        assert len(left_fir) > 1 and len(right_fir) > 1
+
+    def test_single_pair_correction(self, corrector):
+        """단일 스피커 쌍 보정 (호환 API), 길이 보존"""
+        gain = 10 ** (-3.0 / 20.0)
+        left, right = self._impulse_pair(1.0, gain)
+        cl, cr, analysis = corrector.correct_microphone_deviation(
+            left, right, left_peak_index=1000, right_peak_index=1000
         )
+        assert cl.shape == left.shape
+        assert cr.shape == right.shape
+        assert analysis['correction_applied'] is True
+        assert analysis['method'] == 'interaural_v4'
 
-        assert isinstance(deviations, dict), "편차는 딕셔너리여야 함"
-        assert len(deviations) > 0, "편차가 비어있음"
-        assert 'FL' in corrector.all_speaker_deviations, "스피커 데이터가 저장되지 않음"
-
-    def test_separate_microphone_error(self, corrector):
-        """마이크 오차 분리 테스트"""
-        # 여러 스피커 데이터 수집
-        length = 4800
-        for speaker, expected_sign in [('FL', 1.0), ('FR', -1.0), ('FC', 0.0)]:
-            left_ir = np.zeros(length)
-            right_ir = np.zeros(length)
-            left_ir[1000] = 1.0
-            # 기대 방향과 반대로 편차 추가 (마이크 오차 시뮬레이션)
-            right_ir[1000] = 1.2 if expected_sign >= 0 else 0.8
-
-            corrector.collect_speaker_deviation(
-                speaker, left_ir, right_ir,
-                left_peak_index=1000, right_peak_index=1000
-            )
-
-        mic_error = corrector.separate_microphone_error()
-        assert isinstance(mic_error, dict), "마이크 오차는 딕셔너리여야 함"
-
-    def test_deviation_correction_basic(self, corrector):
-        """기본 편차 보정 테스트"""
-        # 간단한 임펄스 응답 생성
-        length = 4800
-        left_ir = np.zeros(length)
-        right_ir = np.zeros(length)
-
-        # 피크 추가
-        left_ir[1000] = 1.0
-        right_ir[1000] = 0.8  # 우측이 20% 작음
-
-        # 보정 수행
-        corrected_left, corrected_right, analysis = corrector.correct_microphone_deviation(
-            left_ir, right_ir,
-            left_peak_index=1000,
-            right_peak_index=1000
+    def test_no_correction_when_matched(self, corrector):
+        """좌우가 동일하면 보정을 건너뛴다"""
+        left, right = self._impulse_pair(1.0, 1.0)
+        _cl, _cr, analysis = corrector.correct_microphone_deviation(
+            left, right, left_peak_index=1000, right_peak_index=1000
         )
-
-        # 결과 검증
-        assert corrected_left.shape == left_ir.shape
-        assert corrected_right.shape == right_ir.shape
-        assert 'deviation_results' in analysis
-        assert 'v3_cross_validation' in analysis
+        assert analysis['correction_applied'] is False
 
 
 class TestImpulseResponse:

@@ -120,9 +120,6 @@ def build_brir_args(tab: Any, loc: Any) -> dict:
         args["interactive_plots"] = tab.interactive_plots_var.get()
         args["microphone_deviation_correction"] = tab.microphone_deviation_correction_var.get()
         args["mic_deviation_strength"] = safe_get_double(tab.mic_deviation_strength_var, 0.7)
-        args["mic_deviation_phase_correction"] = True
-        args["mic_deviation_adaptive_correction"] = True
-        args["mic_deviation_anatomical_validation"] = True
         args["mic_deviation_debug_plots"] = tab.mic_deviation_debug_plots_var.get()
         args["output_truehd_layouts"] = tab.output_truehd_layouts_var.get()
 

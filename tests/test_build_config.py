@@ -109,7 +109,8 @@ def test_linked_readmes_match_current_feature_names() -> None:
     assert "python recorder.py" not in truehd
     assert "자동 채널 생성" not in truehd
 
-    assert "v3.0 교차검증" in mic
+    assert "v4.0" in mic
+    assert "v3.0 교차검증" not in mic
     assert "v2.0의 4가지 핵심 개선" not in mic
     assert "위상 보정 추가 (ITD 반영)" not in mic
 
