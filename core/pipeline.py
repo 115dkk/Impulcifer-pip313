@@ -296,8 +296,10 @@ class ProcessingConfig:
         metadata={
             "cli_flag": "--microphone_deviation_correction",
             "cli_help": (
-                "Enable v3.0 cross-validated microphone deviation correction to "
-                "compensate for repeated left/right microphone placement differences."
+                "Enable v4.0 interaural microphone mismatch correction "
+                "(direction-independent left/right level mismatch from mic "
+                "placement/sensitivity). Skipped automatically when headphone "
+                "compensation is enabled, since the mic response already cancels there."
             ),
             "cli_arg_action": "store_true",
         },
@@ -308,42 +310,6 @@ class ProcessingConfig:
             "cli_flag": "--mic_deviation_strength",
             "cli_help": "Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction. Default is 0.7.",
             "cli_arg_type": "float",
-        },
-    )
-    mic_deviation_phase_correction: bool = field(
-        default=True,
-        metadata={
-            "cli_flag": "--no_mic_deviation_phase_correction",
-            "cli_help": (
-                "Compatibility no-op for legacy v2.0 phase correction. "
-                "v3.0 performs magnitude-only minimum-phase correction."
-            ),
-            "cli_arg_action": "store_false",
-            "cli_dest": "mic_deviation_phase_correction",
-        },
-    )
-    mic_deviation_adaptive_correction: bool = field(
-        default=True,
-        metadata={
-            "cli_flag": "--no_mic_deviation_adaptive_correction",
-            "cli_help": (
-                "Compatibility no-op for legacy v2.0 adaptive correction. "
-                "v3.0 estimates microphone error with cross-speaker validation."
-            ),
-            "cli_arg_action": "store_false",
-            "cli_dest": "mic_deviation_adaptive_correction",
-        },
-    )
-    mic_deviation_anatomical_validation: bool = field(
-        default=True,
-        metadata={
-            "cli_flag": "--no_mic_deviation_anatomical_validation",
-            "cli_help": (
-                "Compatibility no-op for legacy v2.0 anatomical validation. "
-                "v3.0 uses expected speaker ILD signs and consistency checks."
-            ),
-            "cli_arg_action": "store_false",
-            "cli_dest": "mic_deviation_anatomical_validation",
         },
     )
     mic_deviation_debug_plots: bool = field(

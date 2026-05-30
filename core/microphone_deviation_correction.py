@@ -1,847 +1,528 @@
 # -*- coding: utf-8 -*-
-"""
-교차검증 기반 마이크 착용 편차 보정 (v3.0)
+"""마이크 착용 편차 보정 (v4.0) — 양이(interaural) 마이크 불일치 보정.
 
-핵심 원리:
-- 마이크 오차: 모든 스피커 방향에서 일관되게 나타나는 좌우 차이
-- HRTF 비대칭: 스피커 방향에 따라 체계적으로 변하는 좌우 차이
+음향학적 근거 (코드베이스 + 문헌 검토 기반):
 
-이 두 성분을 통계적으로 분리하여 마이크 오차만 보정합니다.
+- 인이어/차폐 외이도(blocked-ear) 바이노럴 측정에서 좌우 채널의 "방향 무관"
+  크기 차이는 주로 마이크 좌우 불일치(삽입 깊이·착용·감도)에서 비롯된다.
+  반면 특정 스피커 방향에서 나타나는 좌우 차이는 실제 ILD(양이 레벨차)이며
+  방향·주파수에 따라 비단조적으로 변한다(Cai/Rakerd/Hartmann 2015).
+  따라서 "방향 평균(확산음장/CTF)" 또는 "정면(FC, 기대 ILD≈0)"을 기준으로
+  방향 무관 성분만 추정해야 한다. 스피커별 기대 ILD 부호표는 부적절하다.
 
-v3.0 변경사항:
-- 교차검증 로직 도입: 모든 스피커 데이터를 종합하여 마이크 오차 추정
-- 위상 보정 제거: minimum_phase + 위상 보정의 구조적 모순 해결
-- 해부학적 선험 지식 활용: 스피커 방향별 기대 ILD 부호 사용
-- 일관성 검증: 추정된 마이크 오차의 물리적 타당성 검증
+- 개인차 스펙트럼 특징은 ~3.7 kHz 이상 협대역에 몰려 있으므로(Denk 2021;
+  Middlebrooks 1999) 6개 옥타브 점이 아니라 풀 FFT 크기를 분수옥타브로
+  평활해 추정한다(Tylka/Boren/Choueiri 2017).
+
+- HRTF는 "최소위상 + 단일 지연"으로 잘 근사되고 청자는 저역 ITD만 맞으면
+  위상 디테일에 둔감하다(Kistler & Wightman 1992; Kulkarni/Isabelle/Colburn
+  1999). 따라서 크기 전용(minimum-phase) 보정을 적용하되 ITD는 건드리지
+  않는다. 좌우를 ±Δ/2로 대칭 분할해 모노 합 레벨을 보존한다.
+
+- 깊은 노치를 역으로 부스트하면 고-Q 공진이 생겨 청감상 거슬리므로
+  (Bücklein 1981; Gomez Bolaños/Mäkivirta/Pulkki 2016) 분수옥타브 평활 +
+  최대 보정량 클램프로 규제화한다.
+
+중요: 같은 마이크를 같은 위치에 둔 채 스피커와 헤드폰을 모두 측정하고
+헤드폰 보상을 적용하면 마이크 전달함수가 귀별로 소거된다(Hammershøi &
+Møller 2005). 그 경우 이 보정은 잉여이므로 파이프라인에서 헤드폰 보상이
+켜져 있으면 건너뛴다(impulcifer.py 참조).
+
+v4.0 변경사항:
+- 방향 무관 양이 불일치 추정(확산음장/CTF 평균, 정면 FC 앵커)으로 교체.
+  v3.0의 기대 ILD 부호표 + "이상 편차 중앙값" 휴리스틱 제거.
+- 옥타브 6점/단일 빈 측정 → 풀 FFT + 분수옥타브 평활.
+- 보정 적용을 ``ImpulseResponse.equalize`` 검증 경로(또는 동등 컨볼루션)로
+  통일, 대역 제한 테이퍼 추가.
 """
 
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy import signal
-from scipy.fft import fft, fftfreq
-from scipy.interpolate import interp1d
-from autoeq.frequency_response import FrequencyResponse
-from core.utils import set_matplotlib_font
 import warnings
 
+import numpy as np
+from scipy import signal
+from scipy.fft import next_fast_len, rfft, rfftfreq
 
-class CrossValidatedMicrophoneCorrector:
-    """
-    다중 스피커 교차검증 기반 마이크 편차 보정 (v3.0)
+from autoeq.frequency_response import FrequencyResponse
 
-    핵심 원리:
-    - 마이크 오차: 모든 스피커 방향에서 일관되게 나타나는 좌우 차이
-    - HRTF 비대칭: 스피커 방향에 따라 체계적으로 변하는 좌우 차이
 
-    이 두 성분을 통계적으로 분리하여 마이크 오차만 보정합니다.
+# 정면(기대 ILD≈0) 앵커로 쓸 수 있는 스피커 이름들
+_CENTER_SPEAKERS = ("FC", "TFC", "BC")
+# 단일 스피커 보정 시 사용하는 가상 이름
+_SINGLE_SPEAKER = "SINGLE"
+
+
+class MicrophoneMatchingCorrector:
+    """방향 무관 양이(interaural) 마이크 불일치 보정기 (v4.0).
+
+    여러 스피커의 직접음 크기응답을 모아, 방향 무관한 좌우 크기 차이 Δ(f)를
+    추정한다. Δ는 확산음장(CTF) 파워 평균 또는 정면(FC) 측정으로 구한다.
+    Δ를 분수옥타브로 평활하고 대역 제한·클램프한 뒤, 좌우를 ±Δ/2 최소위상
+    FIR로 보정한다(ITD 불변).
     """
 
     def __init__(self, sample_rate,
                  correction_strength=0.7,
-                 octave_bands=None,
                  max_correction_db=6.0,
-                 min_gate_cycles=2,
-                 max_gate_cycles=8):
+                 smoothing_octave=1.0 / 6.0,
+                 f_min=200.0,
+                 f_max=16000.0,
+                 window_ms=5.0,
+                 pre_ms=0.5,
+                 anchor="auto"):
         """
         Args:
             sample_rate (int): 샘플링 레이트 (Hz)
             correction_strength (float): 보정 강도 (0.0~1.0)
-            octave_bands (list): 분석할 옥타브 밴드 중심 주파수들 (Hz)
-            max_correction_db (float): 최대 보정량 (dB)
-            min_gate_cycles (float): 최소 게이트 길이 (사이클 수)
-            max_gate_cycles (float): 최대 게이트 길이 (사이클 수)
+            max_correction_db (float): 한쪽 귀 최대 보정량 절댓값 (dB)
+            smoothing_octave (float): 분수옥타브 평활 폭 (옥타브 단위, 예: 1/6)
+            f_min (float): 보정 하한 주파수 (Hz). 이하로 테이퍼링되어 0이 됨
+            f_max (float): 보정 상한 주파수 (Hz). 이상으로 테이퍼링되어 0이 됨
+            window_ms (float): 직접음 분석 창 길이 (ms, 피크 이후)
+            pre_ms (float): 피크 이전 포함 길이 (ms)
+            anchor (str): 'auto' | 'diffuse' | 'frontal'
+                - 'auto': 정면(FC) 측정이 있으면 사용, 없으면 확산음장 평균
+                - 'diffuse': 항상 확산음장(CTF) 파워 평균
+                - 'frontal': 정면(FC) 측정만 사용(없으면 확산음장으로 폴백)
         """
-        self.fs = sample_rate
-        self.correction_strength = np.clip(correction_strength, 0.0, 1.0)
-        self.max_correction_db = max_correction_db
-        self.min_gate_cycles = min_gate_cycles
-        self.max_gate_cycles = max_gate_cycles
+        self.fs = int(sample_rate)
+        self.correction_strength = float(np.clip(correction_strength, 0.0, 1.0))
+        self.max_correction_db = float(max_correction_db)
+        self.smoothing_octave = float(smoothing_octave)
+        nyq = self.fs / 2.0
+        self.f_min = float(np.clip(f_min, 1.0, nyq * 0.5))
+        self.f_max = float(np.clip(f_max, self.f_min * 2.0, nyq * 0.98))
+        self.window_ms = float(window_ms)
+        self.pre_ms = float(pre_ms)
+        self.anchor = anchor
 
-        # 기본 옥타브 밴드 설정 (250Hz ~ 8kHz - 마이크 편차가 주로 나타나는 대역)
-        if octave_bands is None:
-            self.octave_bands = [250, 500, 1000, 2000, 4000, 8000]
-        else:
-            self.octave_bands = octave_bands
+        self.win_samples = max(int(round(self.window_ms * self.fs / 1000.0)), 32)
+        self.pre_samples = max(int(round(self.pre_ms * self.fs / 1000.0)), 0)
 
-        # 나이퀴스트 주파수 이하로 제한
-        self.octave_bands = [f for f in self.octave_bands if f < self.fs / 2]
+        # 공통 로그 주파수 그리드 (autoeq와 동일 규약)
+        self.frequency = FrequencyResponse.generate_frequencies(
+            f_step=1.01, f_min=20.0, f_max=nyq
+        )
 
-        # 스피커별 기대 ILD 부호 (왼쪽 스피커는 양수, 오른쪽은 음수)
-        # 양수: 왼쪽 귀가 더 큰 신호를 받음 (정상)
-        # 음수: 오른쪽 귀가 더 큰 신호를 받음 (정상)
-        # 0: 좌우 대칭에 가까움
-        self.expected_ild_sign = {
-            # 기본 스피커
-            'FL': +1.0, 'FC': 0.0, 'FR': -1.0,
-            'SL': +1.0, 'SR': -1.0,
-            'BL': +0.8, 'BC': 0.0, 'BR': -0.8,
-            # 천장 스피커 (좌우 대칭에 가까움)
-            'TFL': +0.5, 'TFC': 0.0, 'TFR': -0.5,
-            'TBL': +0.5, 'TBC': 0.0, 'TBR': -0.5,
-            'TSL': +0.5, 'TSR': -0.5,
-            # 서브우퍼 (좌우 무관)
-            'LFE': 0.0, 'SW': 0.0,
+        # 수집 데이터: speaker -> {'left': power[], 'right': power[]}
+        self.speaker_power = {}
+        # 추정 결과 (공통 그리드의 dB 곡선)
+        self.mismatch_db = None
+        self.anchor_used = None
+
+    # ------------------------------------------------------------------
+    # 측정
+    # ------------------------------------------------------------------
+    def _windowed_power(self, ir, peak_index):
+        """피크 주변 직접음을 창으로 잘라 공통 그리드의 파워 스펙트럼을 반환."""
+        ir = np.asarray(ir, dtype=float)
+        n = len(ir)
+        if n == 0:
+            return np.zeros_like(self.frequency)
+
+        if peak_index is None:
+            peak_index = int(np.argmax(np.abs(ir)))
+        peak_index = int(np.clip(peak_index, 0, n - 1))
+
+        start = max(peak_index - self.pre_samples, 0)
+        end = min(peak_index + self.win_samples, n)
+        seg = ir[start:end]
+        if len(seg) < 8:
+            return np.zeros_like(self.frequency)
+
+        # 양 끝 테이퍼 (Tukey 유사): 앞 pre, 뒤 1/4 페이드
+        w = np.ones(len(seg))
+        fade_in = min(self.pre_samples, len(seg) // 4)
+        if fade_in > 1:
+            w[:fade_in] = np.hanning(2 * fade_in)[:fade_in]
+        fade_out = max(len(seg) // 4, 1)
+        if fade_out > 1:
+            w[-fade_out:] = np.hanning(2 * fade_out)[fade_out:]
+        seg = seg * w
+
+        nfft = next_fast_len(max(len(seg), 8192))
+        spec = rfft(seg, n=nfft)
+        fft_freq = rfftfreq(nfft, 1.0 / self.fs)
+        mag = np.abs(spec)
+
+        # 공통 로그 그리드로 보간 (선형 주파수 → 로그 그리드)
+        mag_grid = np.interp(self.frequency, fft_freq, mag, left=mag[0], right=mag[-1])
+        return mag_grid ** 2
+
+    def collect_speaker(self, speaker_name, left_ir, right_ir,
+                        left_peak_index=None, right_peak_index=None):
+        """단일 스피커의 좌우 직접음 파워 스펙트럼을 수집."""
+        left_power = self._windowed_power(left_ir, left_peak_index)
+        right_power = self._windowed_power(right_ir, right_peak_index)
+        self.speaker_power[speaker_name] = {
+            "left": left_power,
+            "right": right_power,
         }
+        return self.speaker_power[speaker_name]
 
-        # 각 밴드별 게이트 길이 계산
-        self._calculate_gate_lengths()
-
-        # 수집된 편차 데이터 저장
-        self.all_speaker_deviations = {}
-        self.mic_error_estimate = {}
-        self.validation_result = {}
-
-    def _calculate_gate_lengths(self):
-        """각 주파수 밴드별 최적 게이트 길이 계산"""
-        self.gate_lengths = {}
-
-        for center_freq in self.octave_bands:
-            # 주파수가 높을수록 짧은 게이트 사용
-            if len(self.octave_bands) > 1:
-                log_freq_ratio = np.log10(center_freq / self.octave_bands[0]) / \
-                                np.log10(self.octave_bands[-1] / self.octave_bands[0])
-            else:
-                log_freq_ratio = 0.5
-            cycles = self.max_gate_cycles - (self.max_gate_cycles - self.min_gate_cycles) * log_freq_ratio
-
-            # 사이클 수를 샘플 수로 변환
-            samples_per_cycle = self.fs / center_freq
-            gate_samples = int(cycles * samples_per_cycle)
-
-            # 최소 16샘플, 최대 fs/10 샘플로 제한
-            gate_samples = np.clip(gate_samples, 16, self.fs // 10)
-
-            self.gate_lengths[center_freq] = gate_samples
-
-    def _apply_frequency_gate(self, ir_data, center_freq, peak_index):
-        """특정 주파수 밴드에 대해 시간 게이팅 적용"""
-        gate_length = self.gate_lengths[center_freq]
-
-        start_idx = peak_index
-        end_idx = min(start_idx + gate_length, len(ir_data))
-
-        if end_idx <= start_idx:
-            return np.zeros(gate_length)
-
-        gated_segment = ir_data[start_idx:end_idx]
-
-        if len(gated_segment) < gate_length:
-            gated_segment = np.pad(gated_segment, (0, gate_length - len(gated_segment)), 'constant')
-
-        # 테이퍼 윈도우 적용
-        window = np.ones(gate_length)
-        fade_length = min(gate_length // 4, 32)
-        if fade_length > 0:
-            window[-fade_length:] = np.linspace(1, 0, fade_length)
-
-        return gated_segment * window
-
-    def _measure_band_level(self, ir_data, center_freq, peak_index):
-        """특정 주파수 밴드의 레벨(dB) 측정"""
-        # 밴드패스 필터 설계 (1/3 옥타브)
-        lower_freq = center_freq / (2**(1/6))
-        upper_freq = center_freq * (2**(1/6))
-        upper_freq = min(upper_freq, self.fs / 2 * 0.95)
-
-        if lower_freq >= upper_freq:
-            return -100.0  # 유효하지 않은 대역
-
-        try:
-            sos = signal.butter(4, [lower_freq, upper_freq], btype='band', fs=self.fs, output='sos')
-            filtered_ir = signal.sosfilt(sos, ir_data)
-        except ValueError:
-            filtered_ir = ir_data
-
-        # 게이팅 적용
-        gated_ir = self._apply_frequency_gate(filtered_ir, center_freq, peak_index)
-
-        # FFT로 레벨 계산
-        fft_length = max(len(gated_ir) * 2, 512)
-        fft_result = fft(gated_ir, n=fft_length)
-        freqs = fftfreq(fft_length, 1/self.fs)
-
-        # 중심 주파수에 가장 가까운 빈 찾기
-        center_bin = np.argmin(np.abs(freqs - center_freq))
-        magnitude = np.abs(fft_result[center_bin])
-
-        if magnitude > 0:
-            return 20 * np.log10(magnitude)
-        else:
-            return -100.0
-
+    # 하위 호환 별칭 (v3.0 명칭)
     def collect_speaker_deviation(self, speaker_name, left_ir, right_ir,
                                   left_peak_index=None, right_peak_index=None):
-        """
-        단일 스피커의 좌우 편차를 수집
+        self.collect_speaker(speaker_name, left_ir, right_ir,
+                             left_peak_index, right_peak_index)
+        # v3.0 호환: 대표 대역의 dB 편차 dict 반환
+        p = self.speaker_power[speaker_name]
+        eps = 1e-20
+        delta = 10.0 * np.log10((p["left"] + eps) / (p["right"] + eps))
+        bands = [250, 500, 1000, 2000, 4000, 8000]
+        out = {}
+        for b in bands:
+            if b < self.fs / 2:
+                out[b] = float(np.interp(b, self.frequency, delta))
+        return out
 
-        Args:
-            speaker_name (str): 스피커 이름 (예: 'FL', 'FR', 'FC')
-            left_ir (np.array): 좌측 귀 임펄스 응답
-            right_ir (np.array): 우측 귀 임펄스 응답
-            left_peak_index (int): 좌측 피크 인덱스
-            right_peak_index (int): 우측 피크 인덱스
-        """
-        if left_peak_index is None:
-            left_peak_index = np.argmax(np.abs(left_ir))
-        if right_peak_index is None:
-            right_peak_index = np.argmax(np.abs(right_ir))
+    # ------------------------------------------------------------------
+    # 추정
+    # ------------------------------------------------------------------
+    def _band_weight(self):
+        """[f_min, f_max] 안은 1, 밖은 로그축 raised-cosine으로 0이 되는 가중치."""
+        f = self.frequency
+        w = np.ones_like(f)
+        logf = np.log10(f)
 
-        speaker_deviations = {}
+        lo2, lo1 = np.log10(self.f_min), np.log10(max(self.f_min / 2.0, 1.0))
+        hi1 = np.log10(self.f_max)
+        hi2 = np.log10(min(self.f_max * 2.0, self.fs / 2.0 * 0.999))
 
-        for freq in self.octave_bands:
-            left_level = self._measure_band_level(left_ir, freq, left_peak_index)
-            right_level = self._measure_band_level(right_ir, freq, right_peak_index)
+        # 저역 테이퍼
+        low_band = (logf >= lo1) & (logf < lo2)
+        w[logf < lo1] = 0.0
+        if np.any(low_band):
+            x = (logf[low_band] - lo1) / max(lo2 - lo1, 1e-9)
+            w[low_band] = 0.5 - 0.5 * np.cos(np.pi * x)
 
-            # 편차: 양수면 왼쪽이 더 큼
-            deviation_db = left_level - right_level
-            speaker_deviations[freq] = deviation_db
+        # 고역 테이퍼
+        high_band = (logf > hi1) & (logf <= hi2)
+        w[logf > hi2] = 0.0
+        if np.any(high_band):
+            x = (logf[high_band] - hi1) / max(hi2 - hi1, 1e-9)
+            w[high_band] = 0.5 + 0.5 * np.cos(np.pi * x)
 
-        self.all_speaker_deviations[speaker_name] = speaker_deviations
-        return speaker_deviations
+        return w
 
-    def separate_microphone_error(self):
-        """
-        마이크 오차와 HRTF 비대칭을 분리
+    def estimate_interaural_mismatch(self):
+        """방향 무관 양이 크기 불일치 Δ(f) [dB, 양수=왼쪽이 큼]를 추정."""
+        if not self.speaker_power:
+            warnings.warn("수집된 스피커 데이터가 없습니다. collect_speaker를 먼저 호출하세요.")
+            self.mismatch_db = np.zeros_like(self.frequency)
+            self.anchor_used = "none"
+            return self.mismatch_db
 
-        마이크 오차 추정: 기대 ILD 부호를 고려한 분석
-        - FL에서 +3dB, FR에서 +1dB가 나왔다면,
-          FL은 원래 양수가 기대되므로 일부는 HRTF
-          FR은 원래 음수가 기대되므로 +1dB 전체가 이상함
-        - 이런 "기대와 반대 방향" 편차들의 평균이 마이크 오차
+        eps = 1e-20
+        anchor = self.anchor
+        center = [s for s in self.speaker_power if s in _CENTER_SPEAKERS]
 
-        Returns:
-            dict: 주파수별 추정 마이크 오차 (dB)
-        """
-        if not self.all_speaker_deviations:
-            warnings.warn("수집된 스피커 데이터가 없습니다. 먼저 collect_speaker_deviation을 호출하세요.")
-            return {}
+        use_frontal = (anchor == "frontal" and center) or (anchor == "auto" and center)
 
-        mic_error_estimate = {}
-
-        for freq in self.octave_bands:
-            # 기대 방향과 반대되는 편차들 수집
-            anomalous_deviations = []
-            neutral_deviations = []  # 중앙 스피커 편차
-
-            for speaker, deviations in self.all_speaker_deviations.items():
-                if freq not in deviations:
-                    continue
-
-                deviation = deviations[freq]
-                expected_sign = self.expected_ild_sign.get(speaker, 0)
-
-                if expected_sign > 0.5 and deviation < 0:
-                    # 왼쪽 스피커인데 오른쪽이 더 큼 -> 이상
-                    anomalous_deviations.append(deviation)
-                elif expected_sign < -0.5 and deviation > 0:
-                    # 오른쪽 스피커인데 왼쪽이 더 큼 -> 이상
-                    anomalous_deviations.append(deviation)
-                elif abs(expected_sign) <= 0.5:
-                    # 중앙/천장 스피커는 원래 0에 가까워야 함
-                    neutral_deviations.append(deviation)
-
-            # 마이크 오차 추정
-            if anomalous_deviations:
-                # 이상 편차들의 중앙값 = 마이크 오차 추정
-                mic_error_estimate[freq] = np.median(anomalous_deviations)
-            elif neutral_deviations:
-                # 중앙 스피커 편차의 중앙값 사용
-                mic_error_estimate[freq] = np.median(neutral_deviations)
-            else:
-                # 모든 편차가 기대 방향이면 전체 중앙값의 일부를 마이크 오차로 추정
-                all_devs = [d[freq] for d in self.all_speaker_deviations.values() if freq in d]
-                if all_devs:
-                    # 전체 중앙값의 30%만 마이크 오차로 간주 (보수적 추정)
-                    mic_error_estimate[freq] = np.median(all_devs) * 0.3
-                else:
-                    mic_error_estimate[freq] = 0.0
-
-        self.mic_error_estimate = mic_error_estimate
-        return mic_error_estimate
-
-    def validate_consistency(self):
-        """
-        추정된 마이크 오차의 일관성 검증
-
-        마이크 오차를 빼고 나면 남은 편차가 물리적으로 타당해야 함:
-        - FL, SL, BL에서는 양수 (왼쪽 귀가 가까움)
-        - FR, SR, BR에서는 음수 (오른쪽 귀가 가까움)
-        - FC에서는 0에 가까움
-
-        Returns:
-            dict: 검증 결과
-        """
-        if not self.mic_error_estimate or not self.all_speaker_deviations:
-            return {'valid': False, 'reason': '데이터 부족'}
-
-        validation_scores = []
-        details = []
-
-        for freq in self.octave_bands:
-            if freq not in self.mic_error_estimate:
-                continue
-
-            mic_error = self.mic_error_estimate[freq]
-
-            for speaker, deviations in self.all_speaker_deviations.items():
-                if freq not in deviations:
-                    continue
-
-                raw_deviation = deviations[freq]
-                corrected_deviation = raw_deviation - mic_error
-                expected_sign = self.expected_ild_sign.get(speaker, 0)
-
-                # 보정 후 편차가 기대 방향과 일치하는지 확인
-                if abs(expected_sign) > 0.3:
-                    # 부호 일치: +1, 불일치: -1
-                    if corrected_deviation * expected_sign > 0:
-                        sign_match = 1.0
-                    elif abs(corrected_deviation) < 1.0:  # 1dB 미만은 중립
-                        sign_match = 0.5
-                    else:
-                        sign_match = 0.0
-
-                    validation_scores.append(sign_match)
-                    details.append({
-                        'speaker': speaker,
-                        'freq': freq,
-                        'raw': raw_deviation,
-                        'corrected': corrected_deviation,
-                        'expected_sign': expected_sign,
-                        'match': sign_match
-                    })
-
-        # 평균 점수 계산
-        if validation_scores:
-            consistency = np.mean(validation_scores)
+        if use_frontal:
+            # 정면 스피커들의 좌우 파워 평균 → Δ
+            left = np.mean([self.speaker_power[s]["left"] for s in center], axis=0)
+            right = np.mean([self.speaker_power[s]["right"] for s in center], axis=0)
+            self.anchor_used = "frontal"
         else:
-            consistency = 0.5  # 데이터 부족 시 중립
+            # 확산음장(CTF): 모든 방향의 파워 평균 → 좌우 비교
+            left = np.mean([p["left"] for p in self.speaker_power.values()], axis=0)
+            right = np.mean([p["right"] for p in self.speaker_power.values()], axis=0)
+            self.anchor_used = "diffuse"
 
-        self.validation_result = {
-            'consistency_score': consistency,
-            'is_valid': consistency > 0.4,  # 40% 이상 일치하면 유효
-            'confidence': 'high' if consistency > 0.7 else 'medium' if consistency > 0.5 else 'low',
-            'details': details
-        }
+        raw_delta = 10.0 * np.log10((left + eps) / (right + eps))
 
-        return self.validation_result
-
-    def design_correction_filters(self):
-        """
-        마이크 오차 보정 필터 설계
-
-        크기 보정만 수행, 위상은 건드리지 않음
-        (위상 보정 + minimum_phase 모순 회피)
-
-        Returns:
-            tuple: (left_fir, right_fir) 보정 필터들
-        """
-        if not self.mic_error_estimate:
-            warnings.warn("마이크 오차 추정이 필요합니다. 먼저 separate_microphone_error를 호출하세요.")
-            return np.array([1.0]), np.array([1.0])
-
-        frequencies = FrequencyResponse.generate_frequencies(
-            f_step=1.01, f_min=20, f_max=self.fs/2
-        )
-
-        # 옥타브 밴드의 마이크 오차를 연속 곡선으로 보간
-        band_freqs = np.array(sorted(self.mic_error_estimate.keys()))
-        band_errors = np.array([self.mic_error_estimate[f] for f in band_freqs])
-
-        if len(band_freqs) < 2:
-            # 데이터 부족 시 단일 값으로 보정
-            correction_curve = np.full(len(frequencies), band_errors[0] if len(band_errors) > 0 else 0.0)
-        else:
-            # 로그 주파수 공간에서 선형 보간
-            interpolator = interp1d(
-                np.log10(band_freqs),
-                band_errors,
-                kind='linear',
-                bounds_error=False,
-                fill_value=(band_errors[0], band_errors[-1])
-            )
-            correction_curve = interpolator(np.log10(frequencies))
-
-        # 보정 강도 적용
-        correction_curve *= self.correction_strength
-
-        # 최대 보정량 제한
-        correction_curve = np.clip(correction_curve, -self.max_correction_db, self.max_correction_db)
-
-        # FrequencyResponse 객체로 FIR 생성
-        # 왼쪽에는 -correction/2, 오른쪽에는 +correction/2 적용
-        # (총 correction만큼 상대적 차이 보정)
-        left_correction = -correction_curve / 2
-        right_correction = correction_curve / 2
-        left_fr = FrequencyResponse(
-            name='left_mic_correction',
-            frequency=frequencies.copy(),
-            raw=left_correction
-        )
-        left_fr.equalization = left_correction.copy()
-        right_fr = FrequencyResponse(
-            name='right_mic_correction',
-            frequency=frequencies.copy(),
-            raw=right_correction
-        )
-        right_fr.equalization = right_correction.copy()
-
-        # 최소 위상 FIR 생성 (크기만 보정하므로 minimum_phase 사용이 적절함)
+        # 분수옥타브 평활
+        fr = FrequencyResponse(name="interaural_mismatch",
+                               frequency=self.frequency.copy(),
+                               raw=raw_delta)
         try:
-            left_fir = left_fr.minimum_phase_impulse_response(fs=self.fs, normalize=False)
-            right_fir = right_fr.minimum_phase_impulse_response(fs=self.fs, normalize=False)
+            fr.smoothen(window_size=self.smoothing_octave,
+                        treble_window_size=self.smoothing_octave)
+            smoothed = fr.smoothed if len(fr.smoothed) else raw_delta
+        except Exception:
+            smoothed = raw_delta
 
-            # FIR 길이 제한
-            max_fir_length = min(1024, self.fs // 10)
-            if len(left_fir) > max_fir_length:
-                left_fir = left_fir[:max_fir_length]
-            if len(right_fir) > max_fir_length:
-                right_fir = right_fir[:max_fir_length]
+        # 대역 제한 테이퍼 + 클램프
+        smoothed = smoothed * self._band_weight()
+        smoothed = np.clip(smoothed, -2.0 * self.max_correction_db, 2.0 * self.max_correction_db)
 
-        except Exception as e:
-            warnings.warn(f"FIR 필터 생성 실패: {e}. 단위 임펄스 반환.")
-            left_fir = np.array([1.0])
-            right_fir = np.array([1.0])
+        self.mismatch_db = smoothed
+        return self.mismatch_db
 
+    # v3.0 호환 별칭
+    def separate_microphone_error(self):
+        delta = self.estimate_interaural_mismatch()
+        bands = [250, 500, 1000, 2000, 4000, 8000]
+        return {b: float(np.interp(b, self.frequency, delta))
+                for b in bands if b < self.fs / 2}
+
+    # ------------------------------------------------------------------
+    # 필터 설계
+    # ------------------------------------------------------------------
+    def design_correction_filters(self):
+        """좌/우 최소위상 보정 FIR을 생성. (좌 -Δ/2, 우 +Δ/2)"""
+        if self.mismatch_db is None:
+            self.estimate_interaural_mismatch()
+
+        # 보정 강도 적용 후 한쪽 귀 보정량을 ±max_correction_db로 제한
+        delta = self.mismatch_db * self.correction_strength
+        half = delta / 2.0
+        half = np.clip(half, -self.max_correction_db, self.max_correction_db)
+
+        left_corr = -half
+        right_corr = half
+
+        left_fir = self._fir_from_curve(left_corr, "left_mic_correction")
+        right_fir = self._fir_from_curve(right_corr, "right_mic_correction")
         return left_fir, right_fir
 
+    def _fir_from_curve(self, curve_db, name):
+        fr = FrequencyResponse(name=name, frequency=self.frequency.copy(),
+                               raw=curve_db.copy())
+        fr.equalization = curve_db.copy()
+        try:
+            fir = fr.minimum_phase_impulse_response(fs=self.fs, normalize=False)
+        except Exception as exc:  # pragma: no cover - 방어적
+            warnings.warn(f"FIR 생성 실패: {exc}. 단위 임펄스 반환.")
+            return np.array([1.0])
+        max_len = min(2048, self.fs // 10)
+        if len(fir) > max_len:
+            fir = fir[:max_len]
+        return fir
+
     def get_analysis_summary(self):
-        """분석 결과 요약 반환"""
-        if not self.mic_error_estimate:
-            return {'error': '분석 미완료'}
-
-        # 평균/최대 마이크 오차
-        errors = list(self.mic_error_estimate.values())
-        avg_error = np.mean(np.abs(errors)) if errors else 0.0
-        max_error = np.max(np.abs(errors)) if errors else 0.0
-
+        if self.mismatch_db is None:
+            return {"error": "분석 미완료"}
+        # 보정 강도가 반영된 실제 한쪽 귀 보정량
+        applied = np.clip((self.mismatch_db * self.correction_strength) / 2.0,
+                          -self.max_correction_db, self.max_correction_db)
+        nz = np.abs(applied[self._band_weight() > 0])
         return {
-            'mic_error_estimate': self.mic_error_estimate.copy(),
-            'avg_error_db': avg_error,
-            'max_error_db': max_error,
-            'speakers_analyzed': list(self.all_speaker_deviations.keys()),
-            'validation': self.validation_result.copy() if self.validation_result else {},
-            'correction_strength': self.correction_strength
+            "method": "interaural_v4",
+            "anchor": self.anchor_used,
+            "avg_error_db": float(np.mean(nz)) if len(nz) else 0.0,
+            "max_error_db": float(np.max(nz)) if len(nz) else 0.0,
+            "speakers_analyzed": list(self.speaker_power.keys()),
+            "correction_strength": self.correction_strength,
         }
 
 
-# 기존 API 호환성을 위한 래퍼 클래스
-class MicrophoneDeviationCorrector(CrossValidatedMicrophoneCorrector):
-    """
-    기존 API 호환성을 위한 래퍼 클래스
+# ----------------------------------------------------------------------
+# 하위 호환 래퍼 (v2.0/v3.0 API)
+# ----------------------------------------------------------------------
+class MicrophoneDeviationCorrector(MicrophoneMatchingCorrector):
+    """기존 임포트/호출 호환용 래퍼.
 
-    v2.0 API를 v3.0 교차검증 기반 구현으로 매핑합니다.
-    enable_phase_correction, enable_adaptive_correction 등의 파라미터는
-    더 이상 사용되지 않으며 무시됩니다.
+    v2.0/v3.0의 사용되지 않는 파라미터(octave_bands, gate_cycles,
+    enable_* 등)는 무시된다.
     """
 
     def __init__(self, sample_rate,
-                 octave_bands=None,
-                 min_gate_cycles=2,
-                 max_gate_cycles=8,
                  correction_strength=0.7,
-                 smoothing_window=1/3,
                  max_correction_db=6.0,
-                 enable_phase_correction=False,  # 무시됨 (v3.0에서 제거)
-                 enable_adaptive_correction=False,  # 무시됨 (v3.0에서 제거)
-                 enable_anatomical_validation=False,  # 무시됨 (v3.0에서 통합)
-                 itd_range_ms=(-0.7, 0.7),  # 무시됨
-                 head_radius_cm=8.75):  # 무시됨
-        """
-        Args:
-            sample_rate (int): 샘플링 레이트 (Hz)
-            octave_bands (list): 분석할 옥타브 밴드 중심 주파수들 (Hz)
-            min_gate_cycles (float): 최소 게이트 길이 (사이클 수)
-            max_gate_cycles (float): 최대 게이트 길이 (사이클 수)
-            correction_strength (float): 보정 강도 (0.0~1.0)
-            smoothing_window (float): 사용되지 않음 (v3.0에서 제거)
-            max_correction_db (float): 최대 보정량 (dB)
-            enable_phase_correction (bool): 사용되지 않음 (v3.0에서 제거됨)
-            enable_adaptive_correction (bool): 사용되지 않음 (v3.0에서 제거됨)
-            enable_anatomical_validation (bool): 사용되지 않음 (v3.0에서 통합)
-            itd_range_ms (tuple): 사용되지 않음
-            head_radius_cm (float): 사용되지 않음
-        """
-        # v3.0 부모 클래스 초기화
+                 smoothing_octave=1.0 / 6.0,
+                 f_min=200.0,
+                 f_max=16000.0,
+                 window_ms=5.0,
+                 anchor="auto",
+                 **legacy_kwargs):
         super().__init__(
             sample_rate=sample_rate,
             correction_strength=correction_strength,
-            octave_bands=octave_bands,
             max_correction_db=max_correction_db,
-            min_gate_cycles=min_gate_cycles,
-            max_gate_cycles=max_gate_cycles
+            smoothing_octave=smoothing_octave,
+            f_min=f_min,
+            f_max=f_max,
+            window_ms=window_ms,
+            anchor=anchor,
         )
-
-        # 사용되지 않는 파라미터 경고
-        if enable_phase_correction:
+        if legacy_kwargs.get("enable_phase_correction"):
             warnings.warn(
-                "enable_phase_correction은 v3.0에서 제거되었습니다. "
-                "위상 보정은 minimum_phase와 구조적으로 모순되어 "
-                "크기 보정만 수행됩니다.",
-                DeprecationWarning
+                "enable_phase_correction은 제거되었습니다. v4.0은 크기 전용 "
+                "최소위상 보정만 수행하며 ITD는 보존합니다.",
+                DeprecationWarning,
             )
 
     def correct_microphone_deviation(self, left_ir, right_ir,
                                      left_peak_index=None, right_peak_index=None,
                                      plot_analysis=False, plot_dir=None):
-        """
-        단일 스피커에 대한 마이크 착용 편차 보정 (기존 API 호환)
-
-        주의: 이 메서드는 단일 스피커만 분석하므로 교차검증이 제한됩니다.
-        더 정확한 보정을 위해서는 apply_microphone_deviation_correction_to_hrir를
-        사용하세요.
-        """
-        # 입력 검증
+        """단일 스피커 쌍 보정 (진단/호환용). 길이를 보존해 반환한다."""
+        left_ir = np.asarray(left_ir, dtype=float)
+        right_ir = np.asarray(right_ir, dtype=float)
         if len(left_ir) != len(right_ir):
             min_len = min(len(left_ir), len(right_ir))
             left_ir = left_ir[:min_len]
             right_ir = right_ir[:min_len]
 
-        if left_peak_index is None:
-            left_peak_index = np.argmax(np.abs(left_ir))
-        if right_peak_index is None:
-            right_peak_index = np.argmax(np.abs(right_ir))
+        self.speaker_power.clear()
+        self.collect_speaker(_SINGLE_SPEAKER, left_ir, right_ir,
+                             left_peak_index, right_peak_index)
+        # 단일 쌍은 확산음장과 동일(스피커 1개) → 그대로 Δ 추정
+        self.anchor = "diffuse"
+        self.estimate_interaural_mismatch()
 
-        # 단일 스피커 데이터 수집 (교차검증 없이)
-        self.collect_speaker_deviation('SINGLE', left_ir, right_ir,
-                                       left_peak_index, right_peak_index)
+        applied = np.clip((self.mismatch_db * self.correction_strength) / 2.0,
+                          -self.max_correction_db, self.max_correction_db)
+        significant = float(np.max(np.abs(applied))) if len(applied) else 0.0
 
-        # 마이크 오차 추정 (단일 스피커의 경우 그대로 사용)
-        # 교차검증 없이 단순 편차를 마이크 오차로 간주
-        self.mic_error_estimate = self.all_speaker_deviations.get('SINGLE', {})
-
-        # 유의미한 편차 확인
-        significant_deviations = [abs(d) for d in self.mic_error_estimate.values() if abs(d) > 0.5]
-
-        if not significant_deviations:
-            print("유의미한 마이크 편차가 감지되지 않았습니다. 보정을 건너뜁니다.")
-            analysis_results = {
-                'deviation_results': {'frequency_deviations': self.mic_error_estimate},
-                'correction_filters': {'left_fir': np.array([1.0]), 'right_fir': np.array([1.0])},
-                'correction_applied': False,
-                'v3_cross_validation': False
-            }
-            return left_ir.copy(), right_ir.copy(), analysis_results
-
-        # 보정 필터 생성
-        left_fir, right_fir = self.design_correction_filters()
-
-        # 보정 적용
-        try:
-            if len(left_fir) > 1 and len(right_fir) > 1:
-                corrected_left = signal.convolve(left_ir, left_fir, mode='same')
-                corrected_right = signal.convolve(right_ir, right_fir, mode='same')
-            else:
-                corrected_left = left_ir.copy()
-                corrected_right = right_ir.copy()
-        except Exception as e:
-            print(f"보정 필터 적용 실패: {e}. 원본 반환.")
-            corrected_left = left_ir.copy()
-            corrected_right = right_ir.copy()
-
-        analysis_results = {
-            'deviation_results': {'frequency_deviations': self.mic_error_estimate},
-            'correction_filters': {'left_fir': left_fir, 'right_fir': right_fir},
-            'correction_applied': True,
-            'avg_deviation_db': np.mean(significant_deviations),
-            'max_deviation_db': np.max(significant_deviations),
-            'v3_cross_validation': False
+        analysis = {
+            "method": "interaural_v4",
+            "anchor": self.anchor_used,
+            "mismatch_db": self.mismatch_db,
+            "frequency": self.frequency,
         }
 
+        if significant < 0.05:
+            analysis["correction_applied"] = False
+            return left_ir.copy(), right_ir.copy(), analysis
+
+        left_fir, right_fir = self.design_correction_filters()
+        try:
+            corrected_left = signal.convolve(left_ir, left_fir, mode="same")
+            corrected_right = signal.convolve(right_ir, right_fir, mode="same")
+        except Exception as exc:
+            warnings.warn(f"보정 적용 실패: {exc}. 원본 반환.")
+            corrected_left, corrected_right = left_ir.copy(), right_ir.copy()
+
+        analysis.update({
+            "correction_applied": True,
+            "correction_filters": {"left_fir": left_fir, "right_fir": right_fir},
+            "avg_error_db": self.get_analysis_summary()["avg_error_db"],
+            "max_error_db": self.get_analysis_summary()["max_error_db"],
+        })
+
         if plot_analysis and plot_dir:
-            self._plot_analysis_results(left_ir, right_ir, corrected_left, corrected_right,
-                                        analysis_results, plot_dir)
+            try:
+                _plot_single_pair(self, left_ir, right_ir,
+                                  corrected_left, corrected_right, plot_dir)
+            except Exception as exc:  # pragma: no cover
+                warnings.warn(f"플롯 생성 실패: {exc}")
 
-        return corrected_left, corrected_right, analysis_results
-
-    def _plot_analysis_results(self, original_left, original_right,
-                               corrected_left, corrected_right,
-                               analysis_results, plot_dir):
-        """분석 결과 플롯 생성"""
-        set_matplotlib_font()
-        os.makedirs(plot_dir, exist_ok=True)
-
-        # 1. 편차 분석 결과 플롯
-        fig, ax = plt.subplots(figsize=(12, 6))
-
-        deviations = analysis_results['deviation_results']['frequency_deviations']
-        freqs = sorted(deviations.keys())
-        values = [deviations[f] for f in freqs]
-
-        ax.semilogx(freqs, values, 'o-', linewidth=2, markersize=8, label='측정된 편차 (L-R)')
-        ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-        ax.set_xlabel('주파수 (Hz)', fontsize=11)
-        ax.set_ylabel('편차 (dB)', fontsize=11)
-        ax.set_title('마이크 착용 편차 분석 (v3.0 - 크기만 보정)', fontsize=13)
-        ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=10)
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(plot_dir, 'microphone_deviation_analysis_v3.png'),
-                    dpi=150, bbox_inches='tight')
-        plt.close()
-
-        # 2. 보정 전후 비교 플롯
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8))
-
-        fft_len = max(len(original_left) * 2, 8192)
-        freqs_fft = np.fft.fftfreq(fft_len, 1/self.fs)[:fft_len//2]
-
-        orig_left_fft = np.fft.fft(original_left, n=fft_len)[:fft_len//2]
-        orig_right_fft = np.fft.fft(original_right, n=fft_len)[:fft_len//2]
-        corr_left_fft = np.fft.fft(corrected_left, n=fft_len)[:fft_len//2]
-        corr_right_fft = np.fft.fft(corrected_right, n=fft_len)[:fft_len//2]
-
-        orig_left_db = 20 * np.log10(np.abs(orig_left_fft) + 1e-12)
-        orig_right_db = 20 * np.log10(np.abs(orig_right_fft) + 1e-12)
-        corr_left_db = 20 * np.log10(np.abs(corr_left_fft) + 1e-12)
-        corr_right_db = 20 * np.log10(np.abs(corr_right_fft) + 1e-12)
-
-        ax1.semilogx(freqs_fft, orig_left_db, alpha=0.6, label='원본 좌측', color='blue')
-        ax1.semilogx(freqs_fft, orig_right_db, alpha=0.6, label='원본 우측', color='red')
-        ax1.semilogx(freqs_fft, corr_left_db, '--', label='보정 좌측', color='darkblue')
-        ax1.semilogx(freqs_fft, corr_right_db, '--', label='보정 우측', color='darkred')
-        ax1.set_ylabel('크기 (dB)', fontsize=11)
-        ax1.set_title('마이크 편차 보정 전후 비교 (v3.0)', fontsize=13)
-        ax1.set_xlim([20, self.fs/2])
-        ax1.grid(True, alpha=0.3)
-        ax1.legend(fontsize=10)
-
-        orig_diff = orig_left_db - orig_right_db
-        corr_diff = corr_left_db - corr_right_db
-
-        ax2.semilogx(freqs_fft, orig_diff, alpha=0.7, label='원본 L-R 차이', color='purple')
-        ax2.semilogx(freqs_fft, corr_diff, '--', label='보정 후 L-R 차이', color='green')
-        ax2.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-        ax2.set_xlabel('주파수 (Hz)', fontsize=11)
-        ax2.set_ylabel('좌우 차이 (dB)', fontsize=11)
-        ax2.set_xlim([20, self.fs/2])
-        ax2.grid(True, alpha=0.3)
-        ax2.legend(fontsize=10)
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(plot_dir, 'microphone_deviation_correction_comparison_v2.png'),
-                    dpi=150, bbox_inches='tight')
-        plt.close()
-
-        print(f"✅ 마이크 편차 보정 분석 플롯이 {plot_dir}에 저장되었습니다.")
+        return corrected_left, corrected_right, analysis
 
 
 def apply_microphone_deviation_correction_to_hrir(hrir,
                                                   correction_strength=0.7,
-                                                  enable_phase_correction=False,  # 무시됨
-                                                  enable_adaptive_correction=False,  # 무시됨
-                                                  enable_anatomical_validation=False,  # 무시됨
+                                                  anchor="auto",
                                                   plot_analysis=False,
                                                   plot_dir=None):
-    """
-    HRIR 객체에 교차검증 기반 마이크 착용 편차 보정 적용 (v3.0)
+    """HRIR 객체에 방향 무관 양이 마이크 불일치 보정 적용 (v4.0).
 
-    이 함수는 모든 스피커의 데이터를 먼저 수집한 후,
-    교차검증을 통해 마이크 오차와 HRTF 비대칭을 분리합니다.
-
-    Args:
-        hrir (HRIR): HRIR 객체
-        correction_strength (float): 보정 강도 (0.0~1.0)
-        enable_phase_correction (bool): 무시됨 (v3.0에서 제거)
-        enable_adaptive_correction (bool): 무시됨 (v3.0에서 제거)
-        enable_anatomical_validation (bool): 무시됨 (v3.0에서 통합)
-        plot_analysis (bool): 분석 결과 플롯 생성 여부
-        plot_dir (str): 플롯 저장 디렉토리
+    모든 스피커의 직접음을 모아 방향 무관 좌우 크기 차이를 추정하고,
+    좌우를 ±Δ/2 최소위상 FIR로 보정한다. ITD는 보존된다.
 
     Returns:
-        dict: 분석 결과
+        dict: 분석 요약
     """
-    corrector = CrossValidatedMicrophoneCorrector(
+    corrector = MicrophoneMatchingCorrector(
         sample_rate=hrir.fs,
-        correction_strength=correction_strength
+        correction_strength=correction_strength,
+        anchor=anchor,
     )
 
-    print("\n🎧 마이크 편차 보정 v3.0 시작 (교차검증 기반)")
+    print("\n🎧 마이크 편차 보정 v4.0 시작 (방향 무관 양이 불일치)")
     print(f"  - 보정 강도: {correction_strength}")
     print(f"  - 분석 대상 스피커: {len(hrir.irs)}개")
-    print()
 
-    # 1단계: 모든 스피커에서 좌우 편차 수집
-    print("📊 1단계: 모든 스피커에서 편차 수집 중...")
-
-    speaker_data = {}  # IR 데이터 저장 (나중에 보정 적용용)
-
+    speaker_data = {}
     for speaker, pair in hrir.irs.items():
-        left_ir = pair['left']
-        right_ir = pair['right']
-
+        left_ir = pair["left"]
+        right_ir = pair["right"]
         left_peak = left_ir.peak_index()
         right_peak = right_ir.peak_index()
-
         if left_peak is None or right_peak is None:
             print(f"  ⚠️ {speaker}: 피크를 찾을 수 없어 건너뜁니다.")
             continue
+        corrector.collect_speaker(speaker, left_ir.data, right_ir.data,
+                                  left_peak, right_peak)
+        speaker_data[speaker] = {"left_ir": left_ir, "right_ir": right_ir}
 
-        # 편차 수집
-        corrector.collect_speaker_deviation(
-            speaker, left_ir.data, right_ir.data, left_peak, right_peak
-        )
+    if not speaker_data:
+        print("  ⚠️ 보정에 사용할 스피커가 없습니다.")
+        return {"error": "스피커 데이터 없음"}
 
-        # IR 데이터 저장
-        speaker_data[speaker] = {
-            'left_ir': left_ir,
-            'right_ir': right_ir,
-            'left_peak': left_peak,
-            'right_peak': right_peak
-        }
+    corrector.estimate_interaural_mismatch()
+    summary = corrector.get_analysis_summary()
+    print(f"  - 추정 기준(anchor): {summary['anchor']}")
+    print(f"  - 평균 보정량: {summary['avg_error_db']:.2f} dB, "
+          f"최대 보정량: {summary['max_error_db']:.2f} dB")
 
-        print(f"  ✓ {speaker}: 편차 수집 완료")
+    if summary["max_error_db"] < 0.05:
+        print("  ℹ️ 유의미한 좌우 불일치가 없어 보정을 건너뜁니다.")
+        summary["speakers_processed"] = []
+        return summary
 
-    if len(corrector.all_speaker_deviations) < 2:
-        print("\n⚠️ 교차검증에 충분한 스피커 데이터가 없습니다 (최소 2개 필요).")
-        print("   단일 스피커 보정 모드로 전환합니다.")
-        # 단일 스피커 모드로 폴백
-        return _apply_single_speaker_fallback(hrir, corrector, speaker_data, plot_analysis, plot_dir)
-
-    # 2단계: 마이크 오차와 HRTF 비대칭 분리
-    print("\n📊 2단계: 교차검증으로 마이크 오차 분리 중...")
-    mic_error = corrector.separate_microphone_error()
-
-    if not mic_error:
-        print("  ⚠️ 마이크 오차를 추정할 수 없습니다.")
-        return {'error': '마이크 오차 추정 실패'}
-
-    # 추정된 마이크 오차 출력
-    print("\n  📈 추정된 마이크 오차 (양수 = 왼쪽이 더 큼):")
-    for freq in sorted(mic_error.keys()):
-        print(f"     {freq:5d} Hz: {mic_error[freq]:+.2f} dB")
-
-    # 3단계: 일관성 검증
-    print("\n📊 3단계: 일관성 검증 중...")
-    validation = corrector.validate_consistency()
-
-    print(f"  일관성 점수: {validation['consistency_score']:.2f}")
-    print(f"  신뢰도: {validation['confidence']}")
-
-    if not validation['is_valid']:
-        print("  ⚠️ 일관성 검증 실패. 보정을 약하게 적용합니다.")
-        # 신뢰도가 낮으면 보정 강도를 줄임
-        corrector.correction_strength *= 0.5
-
-    # 4단계: 보정 필터 생성 및 적용
-    print("\n📊 4단계: 보정 필터 생성 및 적용 중...")
     left_fir, right_fir = corrector.design_correction_filters()
-
-    # 각 스피커에 보정 적용
     for speaker, data in speaker_data.items():
         try:
-            if len(left_fir) > 1 and len(right_fir) > 1:
-                corrected_left = signal.convolve(data['left_ir'].data, left_fir, mode='same')
-                corrected_right = signal.convolve(data['right_ir'].data, right_fir, mode='same')
+            data["left_ir"].equalize(left_fir)
+            data["right_ir"].equalize(right_fir)
+        except Exception as exc:
+            print(f"  ⚠️ {speaker}: 보정 적용 실패 ({exc})")
 
-                data['left_ir'].data = corrected_left
-                data['right_ir'].data = corrected_right
-
-                print(f"  ✓ {speaker}: 보정 적용 완료")
-            else:
-                print(f"  ℹ️ {speaker}: 보정 필터 없음, 원본 유지")
-        except Exception as e:
-            print(f"  ⚠️ {speaker}: 보정 적용 실패 ({e})")
-
-    # 플롯 생성
     if plot_analysis and plot_dir:
-        _plot_cross_validation_results(corrector, plot_dir)
+        try:
+            _plot_mismatch(corrector, plot_dir)
+        except Exception as exc:  # pragma: no cover
+            warnings.warn(f"플롯 생성 실패: {exc}")
 
-    # 분석 결과 반환
-    summary = corrector.get_analysis_summary()
-    summary['v3_cross_validation'] = True
-    summary['speakers_processed'] = list(speaker_data.keys())
-
-    print("\n✅ 마이크 편차 보정 v3.0 완료")
-    print(f"   평균 보정량: {summary['avg_error_db']:.2f} dB")
-    print(f"   최대 보정량: {summary['max_error_db']:.2f} dB")
-
+    summary["speakers_processed"] = list(speaker_data.keys())
+    print("✅ 마이크 편차 보정 v4.0 완료")
     return summary
 
 
-def _apply_single_speaker_fallback(hrir, corrector, speaker_data, plot_analysis, plot_dir):
-    """단일 스피커 데이터만 있을 때 폴백 처리"""
-    print("   (단일 스피커 모드: 교차검증 없이 직접 보정)")
+# ----------------------------------------------------------------------
+# 플롯 (디버그)
+# ----------------------------------------------------------------------
+def _plot_mismatch(corrector, plot_dir):
+    import matplotlib.pyplot as plt
+    from core.utils import set_matplotlib_font
 
-    # 수집된 편차를 그대로 마이크 오차로 간주
-    if corrector.all_speaker_deviations:
-        speaker_name = list(corrector.all_speaker_deviations.keys())[0]
-        corrector.mic_error_estimate = corrector.all_speaker_deviations[speaker_name]
-
-    # 보정 적용
-    left_fir, right_fir = corrector.design_correction_filters()
-
-    for speaker, data in speaker_data.items():
-        try:
-            if len(left_fir) > 1:
-                data['left_ir'].data = signal.convolve(data['left_ir'].data, left_fir, mode='same')
-                data['right_ir'].data = signal.convolve(data['right_ir'].data, right_fir, mode='same')
-        except Exception as e:
-            print(f"  ⚠️ {speaker}: 보정 적용 실패 ({e})")
-
-    return {
-        'v3_cross_validation': False,
-        'single_speaker_fallback': True,
-        'mic_error_estimate': corrector.mic_error_estimate
-    }
-
-
-def _plot_cross_validation_results(corrector, plot_dir):
-    """교차검증 결과 플롯 생성"""
     set_matplotlib_font()
     os.makedirs(plot_dir, exist_ok=True)
 
-    fig, axes = plt.subplots(2, 1, figsize=(14, 10))
-
-    # 1. 스피커별 편차 비교
-    ax1 = axes[0]
-
-    speakers = list(corrector.all_speaker_deviations.keys())
-    freqs = sorted(corrector.octave_bands)
-
-    for speaker in speakers:
-        deviations = corrector.all_speaker_deviations[speaker]
-        values = [deviations.get(f, 0) for f in freqs]
-        expected_sign = corrector.expected_ild_sign.get(speaker, 0)
-
-        linestyle = '-' if expected_sign >= 0 else '--'
-        ax1.semilogx(freqs, values, linestyle, marker='o', label=f'{speaker} (기대부호: {expected_sign:+.1f})')
-
-    ax1.axhline(y=0, color='gray', linestyle=':', alpha=0.5)
-    ax1.set_xlabel('주파수 (Hz)', fontsize=11)
-    ax1.set_ylabel('편차 (dB) [양수=왼쪽>오른쪽]', fontsize=11)
-    ax1.set_title('스피커별 좌우 편차 (교차검증 v3.0)', fontsize=13)
-    ax1.legend(fontsize=9, loc='best', ncol=2)
-    ax1.grid(True, alpha=0.3)
-
-    # 2. 추정된 마이크 오차
-    ax2 = axes[1]
-
-    mic_error = corrector.mic_error_estimate
-    mic_freqs = sorted(mic_error.keys())
-    mic_values = [mic_error[f] for f in mic_freqs]
-
-    ax2.semilogx(mic_freqs, mic_values, 'k-', marker='s', linewidth=2,
-                 markersize=10, label='추정된 마이크 오차')
-    ax2.axhline(y=0, color='gray', linestyle=':', alpha=0.5)
-
-    # 보정 후 예상 편차 (각 스피커에 대해)
-    for speaker in speakers:
-        deviations = corrector.all_speaker_deviations[speaker]
-        corrected = [deviations.get(f, 0) - mic_error.get(f, 0) for f in mic_freqs]
-        ax2.semilogx(mic_freqs, corrected, '--', alpha=0.5, label=f'{speaker} 보정 후 예상')
-
-    ax2.set_xlabel('주파수 (Hz)', fontsize=11)
-    ax2.set_ylabel('편차 (dB)', fontsize=11)
-    ax2.set_title('추정된 마이크 오차 및 보정 후 예상 편차', fontsize=13)
-    ax2.legend(fontsize=9, loc='best', ncol=2)
-    ax2.grid(True, alpha=0.3)
-
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.semilogx(corrector.frequency, corrector.mismatch_db, "k-", linewidth=2,
+                label="추정 좌우 불일치 Δ (양수=왼쪽이 큼)")
+    applied = np.clip((corrector.mismatch_db * corrector.correction_strength) / 2.0,
+                      -corrector.max_correction_db, corrector.max_correction_db)
+    ax.semilogx(corrector.frequency, applied, "C0--", label="좌측 보정량 (-Δ/2)")
+    ax.semilogx(corrector.frequency, -applied, "C3--", label="우측 보정량 (+Δ/2)")
+    ax.axhline(y=0, color="gray", linestyle=":", alpha=0.5)
+    ax.axvline(x=corrector.f_min, color="gray", linestyle=":", alpha=0.3)
+    ax.axvline(x=corrector.f_max, color="gray", linestyle=":", alpha=0.3)
+    ax.set_xlim([20, corrector.fs / 2])
+    ax.set_xlabel("주파수 (Hz)")
+    ax.set_ylabel("크기 (dB)")
+    ax.set_title(f"마이크 편차 보정 v4.0 (anchor={corrector.anchor_used})")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=9)
     plt.tight_layout()
-    plt.savefig(os.path.join(plot_dir, 'microphone_deviation_cross_validation_v3.png'),
-                dpi=150, bbox_inches='tight')
+    plt.savefig(os.path.join(plot_dir, "microphone_deviation_v4.png"),
+                dpi=150, bbox_inches="tight")
     plt.close()
+    print(f"✅ 마이크 편차 보정 플롯이 {plot_dir}에 저장되었습니다.")
 
-    print(f"✅ 교차검증 분석 플롯이 {plot_dir}에 저장되었습니다.")
+
+def _plot_single_pair(corrector, original_left, original_right,
+                      corrected_left, corrected_right, plot_dir):
+    import matplotlib.pyplot as plt
+    from core.utils import set_matplotlib_font
+
+    set_matplotlib_font()
+    os.makedirs(plot_dir, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    ax.semilogx(corrector.frequency, corrector.mismatch_db, "k-",
+                label="추정 좌우 불일치 Δ")
+    ax.axhline(y=0, color="gray", linestyle=":", alpha=0.5)
+    ax.set_xlim([20, corrector.fs / 2])
+    ax.set_xlabel("주파수 (Hz)")
+    ax.set_ylabel("좌우 차이 (dB)")
+    ax.set_title("마이크 편차 보정 v4.0 (단일 스피커)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+    plt.savefig(os.path.join(plot_dir, "microphone_deviation_v4_single.png"),
+                dpi=150, bbox_inches="tight")
+    plt.close()

@@ -4,6 +4,24 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.0 - 2026-05-30
+### 마이크 착용 편차 보정 음향학 기반 재설계 (v4.0)
+
+#### ⭐ 새로운 기능 / 개선
+- **방향 무관 양이(interaural) 불일치 추정으로 교체**: 기존 v3.0은 스피커별 기대 ILD 부호표(FL=+1, FR=−1, FC=0 …)와 "기대와 반대 방향 편차의 중앙값" 휴리스틱으로 마이크 오차를 추정했다. 그러나 오프센터 스피커의 좌우 차이는 대부분 실제 ILD(양이 레벨차)이며 방향·주파수에 따라 비단조적으로 변하므로(Cai/Rakerd/Hartmann 2015), 이 방식은 진짜 ILD를 마이크 오차로 오인하는 편향이 있었다. v4.0은 정면(FC, 기대 ILD≈0) 또는 확산음장(CTF) 파워 평균을 기준으로 **방향 무관 성분만** 추정한다(`anchor='auto'`).
+- **풀 FFT + 분수옥타브 평활**: 250 Hz~8 kHz의 6개 옥타브 점만 쓰던 것을, 직접음의 풀 FFT 크기응답을 1/6 옥타브로 평활하는 방식으로 바꿨다. 3.7 kHz 이상 협대역 개인차(Denk 2021; Middlebrooks 1999)를 담을 수 있다. 보정 대역(기본 200 Hz~16 kHz) 밖은 raised-cosine으로 테이퍼링하고 최대 보정량으로 클램프해 노치 역전을 방지한다(Bücklein 1981).
+- **ITD 보존 + 검증된 적용 경로**: 좌우를 ±Δ/2 최소위상 FIR로 크기만 보정해 ITD(양이 지연)를 보존한다(Kistler & Wightman 1992; Kulkarni/Isabelle/Colburn 1999). 적용은 `signal.convolve(mode='same')` 대신 검증된 `ImpulseResponse.equalize`를 사용한다.
+
+#### 🐛 버그 수정
+- **헤드폰 보상과의 이중 보정 차단**: 같은 인이어 마이크를 같은 위치에 두고 측정하면 마이크 전달함수는 헤드폰 보상(`out = HRTF/HpTF`)에서 귀별로 소거된다(Hammershøi & Møller 2005). 기존에는 보상 *이전*에 마이크 보정이 돌아 좌우 밸런스를 이중으로 건드렸다. 이제 `do_headphone_compensation`이 켜져 있으면 마이크 보정을 건너뛰고 안내 로그(`cli_mic_deviation_skipped_hpcomp`)를 출력한다.
+
+#### 🔧 빌드 / 설정 변경
+- **무력화(no-op) CLI 옵션 제거**: 동작에 영향이 없던 v2.0 호환 플래그 `--no_mic_deviation_phase_correction`, `--no_mic_deviation_adaptive_correction`, `--no_mic_deviation_anatomical_validation`을 `core/pipeline.py`·`gui/brir_args.py`에서 제거했다. `impulcifer.main()` 시그니처는 GUI 호환을 위해 인자를 받기만 하고 무시한다.
+- **i18n**: `cli_correcting_deviation`을 v4.0으로 갱신하고 `cli_mic_deviation_skipped_hpcomp` 키를 11개 로케일에 추가, `tooltip_mic_deviation` 문구를 갱신했다.
+
+#### 검증
+- **기본 BRIR 출력 무결성 유지**: 이 기능은 기본값이 꺼짐이며 헤드폰 보상이 켜진 기본 경로에서는 실행되지 않으므로, 데모 `hesuvi.wav`의 md5는 기본값 경로·`--vbass --vbass_freq=250` 경로 모두 master와 동일하다(vbass: `d295982d021a6d16ab2c194c3517c162`).
+
 ## 2.6.10 - 2026-05-29
 ### 내장 AutoEQ 임포트/연산 경량화
 

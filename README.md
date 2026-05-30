@@ -145,13 +145,12 @@ Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전�
 
 ### 마이크 착용 편차 보정
 
+방향과 무관한 좌우 마이크 불일치(착용·감도)를 보정합니다(v4.0). 헤드폰 보상을 같은 마이크로 측정하면 마이크 응답이 보상 단계에서 이미 소거되므로, **헤드폰 보상이 켜져 있으면 이 보정은 자동으로 생략**됩니다. 자세한 내용은 [마이크 착용 편차 보정](README_microphone_deviation_correction.md) 문서를 참고하세요.
+
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
-| `--microphone_deviation_correction` | 꺼짐 | 좌우 귀 마이크 착용 차이를 보정합니다. |
+| `--microphone_deviation_correction` | 꺼짐 | 좌우 마이크 불일치를 보정합니다. 헤드폰 보상이 켜져 있으면 생략됩니다. |
 | `--mic_deviation_strength VALUE` | `0.7` | 보정 강도입니다. `0.0`은 보정 없음, `1.0`은 전체 보정입니다. |
-| `--no_mic_deviation_phase_correction` | phase 보정 켜짐 | phase 보정을 끕니다. |
-| `--no_mic_deviation_adaptive_correction` | adaptive 보정 켜짐 | 좌우 비대칭 adaptive 보정을 끕니다. |
-| `--no_mic_deviation_anatomical_validation` | anatomical 검증 켜짐 | ITD/ILD anatomical validation을 끕니다. |
 | `--mic_deviation_debug_plots` | 꺼짐 | 마이크 착용 편차 보정 진단 그래프를 저장합니다. |
 
 ## CLI 예시
