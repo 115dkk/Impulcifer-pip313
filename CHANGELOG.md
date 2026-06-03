@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.0 - 2026-06-03
+### GitHub Actions Node.js 24 마이그레이션
+
+#### 🔧 빌드 / 설정 변경
+- **Node.js 20 기반 액션 일괄 업그레이드**: GitHub이 2026년 9월 16일 러너에서 Node.js 20을 제거하고 6월부터 Node.js 24를 기본값으로 강제함에 따라, 모든 워크플로(`test.yml`, `release-cross-platform.yml`, `build-linux.yml`, `build-macos.yml`, `publish.yml`, `python-publish.yml`)의 액션을 Node.js 24를 지원하는 첫 메이저 버전으로 올렸다. `actions/checkout` v4→v5, `actions/setup-python` v5→v6, `actions/cache` v4→v5, `actions/upload-artifact` v4→v5, `actions/download-artifact` v4→v6, `actions/setup-dotnet` v4→v5, `astral-sh/setup-uv` v5→v7, `softprops/action-gh-release` v2→v3. 기존 동작을 보존하기 위해 최신 메이저가 아니라 "Node 24를 처음 지원하는" 메이저를 선택했다(예: setup-uv는 v6이 아직 node20이라 v7 채택, download-artifact는 v5가 node20이라 v6 채택).
+- **codecov-action v4→v6 + 입력명 갱신**: `codecov/codecov-action`을 node20인 v4/v5에서 node24 composite 액션인 v6으로 올리고, v5에서 제거된 단수형 입력 `file:`을 복수형 `files:`로 교체했다(`fail_ci_if_error: false`라 업로드 실패가 CI를 막지 않는 best-effort 동작은 유지).
+- Docker 액션인 `pypa/gh-action-pypi-publish@release/v1`은 Node 런타임 대상이 아니라 경고가 발생하지 않으므로 그대로 두었다.
+
 ## 2.7.0 - 2026-05-30
 ### 마이크 착용 편차 보정 음향학 기반 재설계 (v4.0)
 
