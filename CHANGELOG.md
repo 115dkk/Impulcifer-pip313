@@ -4,7 +4,7 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
-## 2.7.0 - 2026-06-03
+## 2.7.1 - 2026-06-03
 ### GitHub Actions Node.js 24 마이그레이션
 
 #### 🔧 빌드 / 설정 변경
