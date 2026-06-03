@@ -19,27 +19,27 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.14'
 
       - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
       - name: Cache Nuitka compilation
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~\AppData\Local\Nuitka\Nuitka\Cache
           key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
@@ -116,7 +116,7 @@ jobs:
           DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
       - name: Upload Velopack releases
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: windows-velopack
           path: ${{ env.VELOPACK_OUTPUT_DIR }}/*
@@ -129,22 +129,22 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.14'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
       - name: Cache Nuitka compilation
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/Library/Caches/Nuitka
           key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
@@ -224,7 +224,7 @@ jobs:
             "dist/dmg/"
 
       - name: Upload macOS DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: macos-dmg
           path: dist/Impulcifer-*.dmg
@@ -238,17 +238,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.14'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -272,7 +272,7 @@ jobs:
             libopenblas-dev
 
       - name: Cache Nuitka compilation
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/Nuitka
           key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
@@ -460,7 +460,7 @@ jobs:
           echo "Tarball created: dist/Impulcifer-${{ env.APP_VERSION }}-linux-x86_64.tar.gz"
 
       - name: Upload Linux AppImage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: linux-appimage
           path: Impulcifer-*.AppImage
@@ -468,7 +468,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload Linux tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: linux-tarball
           path: dist/Impulcifer-*.tar.gz
@@ -484,12 +484,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -500,7 +500,7 @@ jobs:
           echo "Version: $APP_VERSION"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           path: artifacts
 
@@ -534,7 +534,7 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG_NAME }}
           name: "Impulcifer ${{ env.APP_VERSION }} - Cross-Platform Release"
