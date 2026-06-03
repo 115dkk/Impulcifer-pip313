@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.3 - 2026-06-03
+### download-artifact를 실제 Node.js 24 메이저(v7)로 정정
+
+#### 🔧 빌드 / 설정 변경
+- **`actions/download-artifact` v6→v7**: GitHub 러너의 체크런 어노테이션을 전수 조회한 결과 download-artifact v6 역시 `node20`임이 확인됐다(upload-artifact v5와 동일한 함정). download-artifact가 `node24`로 전환된 첫 메이저는 v7이므로, 활성 사용처 3곳(`publish.yml`, `python-publish.yml`, `release-cross-platform.yml`)을 v7로 정정했다. 이름·경로·전체 다운로드 의미는 v6과 동일하다. 이로써 9개 액션 전부 각 태그의 `action.yml` `runs.using`이 `node24`임을 직접 검증했으며(checkout v5·setup-python v6·cache v5·upload-artifact v6·download-artifact v7·setup-dotnet v5·setup-uv v7·action-gh-release v3, codecov v6은 composite), 커밋의 모든 체크런 어노테이션에 Node.js 20 경고가 0건임을 확인했다.
+
 ## 2.7.2 - 2026-06-03
 ### upload-artifact를 실제 Node.js 24 메이저(v6)로 정정
 
