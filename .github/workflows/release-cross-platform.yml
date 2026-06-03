@@ -116,7 +116,7 @@ jobs:
           DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
       - name: Upload Velopack releases
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: windows-velopack
           path: ${{ env.VELOPACK_OUTPUT_DIR }}/*
@@ -224,7 +224,7 @@ jobs:
             "dist/dmg/"
 
       - name: Upload macOS DMG
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: macos-dmg
           path: dist/Impulcifer-*.dmg
@@ -460,7 +460,7 @@ jobs:
           echo "Tarball created: dist/Impulcifer-${{ env.APP_VERSION }}-linux-x86_64.tar.gz"
 
       - name: Upload Linux AppImage
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: linux-appimage
           path: Impulcifer-*.AppImage
@@ -468,7 +468,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload Linux tarball
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: linux-tarball
           path: dist/Impulcifer-*.tar.gz

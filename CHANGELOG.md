@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.2 - 2026-06-03
+### upload-artifact를 실제 Node.js 24 메이저(v6)로 정정
+
+#### 🔧 빌드 / 설정 변경
+- **`actions/upload-artifact` v5→v6**: 2.7.1에서 upload-artifact를 v5로 올렸으나, GitHub 러너의 런타임 어노테이션 결과 v5는 여전히 `node20`임이 확인됐다(`runs.using: node20`). upload-artifact가 `node24`로 전환된 첫 메이저는 v6이므로, 8개 사용처(`build-linux.yml`, `build-macos.yml`, `release-cross-platform.yml`×4, `publish.yml`, `python-publish.yml`)를 모두 v6으로 정정했다. v6은 v4/v5와 업로드 의미(이름·경로·`if-no-files-found`·`retention-days`)가 동일하며 GitHub-hosted 러너의 최소 러너 버전(2.327.1)을 충족한다. 나머지 8개 액션(checkout v5, setup-python v6, cache v5, download-artifact v6, setup-dotnet v5, setup-uv v7, action-gh-release v3, codecov v6)은 각 태그의 `action.yml`에서 `node24`임을 재검증했다.
+
 ## 2.7.1 - 2026-06-03
 ### GitHub Actions Node.js 24 마이그레이션
 
