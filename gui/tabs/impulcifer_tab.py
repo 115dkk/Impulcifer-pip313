@@ -30,6 +30,7 @@ from gui.constants import (
 )
 from gui.brir_args import (
     build_brir_args,
+    processing_default,
     sync_custom_eq_files,
     sync_headphone_compensation_file,
 )
@@ -152,11 +153,11 @@ class ImpulciferTab:
         room_opt_row += 1
 
         ctk.CTkLabel(limits_frame, text=self.loc.get('label_specific_limit')).pack(side="left", padx=5)
-        self.specific_limit_var = ctk.IntVar(value=20000)
+        self.specific_limit_var = ctk.IntVar(value=int(processing_default("specific_limit")))
         ctk.CTkEntry(limits_frame, textvariable=self.specific_limit_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).pack(side="left", padx=5)
 
         ctk.CTkLabel(limits_frame, text=self.loc.get('label_generic_limit')).pack(side="left", padx=(20, 5))
-        self.generic_limit_var = ctk.IntVar(value=1000)
+        self.generic_limit_var = ctk.IntVar(value=int(processing_default("generic_limit")))
         ctk.CTkEntry(limits_frame, textvariable=self.generic_limit_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).pack(side="left", padx=5)
 
         # FR combination method

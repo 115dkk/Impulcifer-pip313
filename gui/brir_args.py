@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import fields
 import os
 import shutil
 from typing import Any
 
+from core.pipeline import ProcessingConfig
 from gui.utils import safe_get_double, safe_get_int, safe_get_string
+
+_PROCESSING_DEFAULTS = {field.name: field.default for field in fields(ProcessingConfig)}
+
+
+def processing_default(name: str) -> Any:
+    """Return the canonical default for a processing parameter."""
+    return _PROCESSING_DEFAULTS[name]
 
 
 def _copy_to_recording_dir(source_value: str, dir_path: str, target_name: str) -> None:
@@ -61,8 +70,14 @@ def build_brir_args(tab: Any, loc: Any) -> dict:
     if tab.do_room_correction_var.get():
         args["room_target"] = tab.room_target_var.get() or None
         args["room_mic_calibration"] = tab.room_mic_calibration_var.get() or None
-        args["specific_limit"] = safe_get_int(tab.specific_limit_var, 20000)
-        args["generic_limit"] = safe_get_int(tab.generic_limit_var, 1000)
+        args["specific_limit"] = safe_get_int(
+            tab.specific_limit_var,
+            int(processing_default("specific_limit")),
+        )
+        args["generic_limit"] = safe_get_int(
+            tab.generic_limit_var,
+            int(processing_default("generic_limit")),
+        )
         args["fr_combination_method"] = tab.fr_combination_var.get()
 
     if tab.show_advanced_var.get():
