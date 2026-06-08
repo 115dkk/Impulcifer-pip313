@@ -58,7 +58,7 @@ updater/
 
 ## 수정 시 주의사항
 
-`impulcifer.py`의 `main()` 함수 시그니처(208-248행)를 변경하지 말 것. GUI의 `generate_brir()`가 이 시그니처에 1:1 대응하는 인자 딕셔너리를 조립한다.
+`impulcifer.py`의 `main()`은 `**kwargs`를 받아 `core.pipeline.ProcessingConfig.from_kwargs()`로 전달하는 얇은 래퍼다(이슈 #113/#115 audit에서 기존의 32개 명시적 인자 시그니처를 통합). GUI의 `generate_brir()`/`gui.brir_args.build_brir_args`와 CLI(`create_cli`)가 인자 딕셔너리를 조립해 넘기며, `ProcessingConfig`에 없는 키(예: 폐기된 호환 플래그)는 `from_kwargs`가 무시한다. 따라서 파라미터의 정본 기본값은 `ProcessingConfig` 필드에만 존재하므로, 새 파라미터는 `ProcessingConfig`에 필드를 추가하면 CLI·GUI·파이프라인에 자동 반영된다. 실제 BRIR 파이프라인 단계 시퀀스는 `core.pipeline.BRIRPipeline.run()`이 보유한다(DSP 단계 헬퍼는 여전히 `impulcifer.py`에 있고 `run()` 내부에서 지연 import한다).
 
 `core/recorder.py`의 `play_and_record()`는 `sd.play(blocking=True)` + `Thread.join()`으로 완전한 블로킹 함수다. 이 동작을 변경하지 말 것.
 
