@@ -1,53 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from core.constants import AUTO_GENERATABLE_CHANNELS
-
-def generate_missing_channels(hrir, auto_generate_config):
-    """자동으로 누락된 채널들을 생성합니다.
-    
-    Args:
-        hrir: HRIR 객체
-        auto_generate_config: 자동 생성할 채널들의 설정 딕셔너리
-        
-    Returns:
-        생성된 채널들의 리스트
-    """
-    generated_channels = []
-    
-    for channel_name, should_generate in auto_generate_config.items():
-        # FC, TSL, TSR 채널은 강제 생성하지 않도록 조건 추가
-        if should_generate and channel_name in AUTO_GENERATABLE_CHANNELS and channel_name not in ['FC', 'TSL', 'TSR']:
-            config = AUTO_GENERATABLE_CHANNELS[channel_name]
-            sources = config['sources']
-            weights = config['weights']
-            
-            # 소스 채널들이 모두 존재하는지 확인
-            if all(src in hrir.irs for src in sources):
-                print(f'Generating {channel_name} from {sources} with weights {weights}')
-                
-                # 새 채널 생성
-                hrir.irs[channel_name] = {}
-                for side in ['left', 'right']:
-                    # 가중 평균으로 새 채널 생성
-                    mixed_data = None
-                    for i, src in enumerate(sources):
-                        src_data = hrir.irs[src][side].data * weights[i]
-                        if mixed_data is None:
-                            mixed_data = src_data
-                        else:
-                            mixed_data += src_data
-                    
-                    # 새 IR 객체 생성
-                    from core.impulse_response import ImpulseResponse
-                    new_ir = ImpulseResponse(mixed_data, hrir.fs)
-                    hrir.irs[channel_name][side] = new_ir
-                
-                generated_channels.append(channel_name)
-            else:
-                missing_sources = [src for src in sources if src not in hrir.irs]
-                print(f'Cannot generate {channel_name}: missing source channels {missing_sources}')
-    
-    return generated_channels
 
 def get_available_channels_for_layout(hrir, layout_channels):
     """특정 레이아웃에 사용 가능한 채널들을 반환합니다.

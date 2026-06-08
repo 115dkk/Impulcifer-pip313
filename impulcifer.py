@@ -688,12 +688,6 @@ def _run_pipeline_legacy(
     if output_truehd_layouts:
         logger.step("cli_generating_truehd")
 
-        # 필요한 채널들이 있는지 확인하고 없으면 자동 생성하는 로직 제거
-        # if auto_generate_channels:
-        #     generated_channels = generate_missing_channels(hrir, auto_generate_channels)
-        #     if generated_channels:
-        #         logger.info(f'Generated channels: {generated_channels}')
-
         # 11채널 (7.0.4) 레이아웃 생성
         valid_11ch, count_11ch, msg_11ch = validate_channel_requirements(
             hrir, TRUEHD_11CH_ORDER, min_channels=8
