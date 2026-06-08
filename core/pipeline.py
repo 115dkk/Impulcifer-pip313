@@ -312,18 +312,6 @@ class ProcessingConfig:
             "cli_arg_type": "float",
         },
     )
-    mic_deviation_phase_correction: bool = field(
-        default=True,
-        metadata={"cli_skip": True},
-    )
-    mic_deviation_adaptive_correction: bool = field(
-        default=True,
-        metadata={"cli_skip": True},
-    )
-    mic_deviation_anatomical_validation: bool = field(
-        default=True,
-        metadata={"cli_skip": True},
-    )
     mic_deviation_debug_plots: bool = field(
         default=False,
         metadata={
