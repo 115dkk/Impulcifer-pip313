@@ -78,6 +78,7 @@ from core.constants import (
     get_data_path,
     TRUEHD_11CH_ORDER,
     TRUEHD_13CH_ORDER,
+    IPSILATERAL_PAIRS,
 )
 from core.parallel_utils import parallel_map, get_parallelization_info
 from core.channel_generation import (
@@ -447,18 +448,9 @@ def _run_pipeline_legacy(
     hrir.crop_heads(head_ms=head_ms)
 
     # PR3에서 추가된 align_ipsilateral_all 호출 (항목 2)
-    # SPEAKER_NAMES를 사용하므로 constants.py의 변경이 선행되어야 함
+    # 페어 목록은 core.constants.IPSILATERAL_PAIRS로 통합되었다(단일 정의).
     hrir.align_ipsilateral_all(
-        speaker_pairs=[
-            ("FL", "FR"),
-            ("SL", "SR"),
-            ("BL", "BR"),
-            ("TFL", "TFR"),
-            ("TSL", "TSR"),
-            ("TBL", "TBR"),
-            ("FC", "FC"),
-            ("WL", "WR"),
-        ],  # FC, WL, WR 쌍은 적절히 수정 필요할 수 있음
+        speaker_pairs=list(IPSILATERAL_PAIRS),
         segment_ms=30,
     )
     hrir.align_onset_groups_peak_leftref()

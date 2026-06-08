@@ -42,6 +42,25 @@ SPEAKER_DELAYS = {
     _speaker: 0 for _speaker in SPEAKER_NAMES
 }
 
+# Ipsilateral (left/right) speaker pairs used for onset alignment in
+# ``HRIR.align_ipsilateral_all``. ``FC`` is paired with itself so its own
+# left/right ears are aligned. Single source of truth shared by
+# ``impulcifer.main`` and the ``align_ipsilateral_all`` default — these two
+# lists were previously hand-duplicated and had already drifted in order.
+# (This is the alignment *pair* list; the *group* list in
+# ``align_onset_groups_peak_leftref`` uses a 1-tuple ``("FC",)`` and is a
+# deliberately different structure — do not merge it here.)
+IPSILATERAL_PAIRS = (
+    ("FL", "FR"),
+    ("SL", "SR"),
+    ("BL", "BR"),
+    ("TFL", "TFR"),
+    ("TSL", "TSR"),
+    ("TBL", "TBR"),
+    ("FC", "FC"),
+    ("WL", "WR"),
+)
+
 # Each channel, left and right
 IR_ORDER = []
 # SPL change relative to middle of the head - PR3에서는 이부분이 비활성화됨
