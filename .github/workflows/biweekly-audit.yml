@@ -1,0 +1,236 @@
+# ──────────────────────────────────────────────────────────────
+# Biweekly Architecture & Tech Debt Audit (통합 워크플로)
+# ──────────────────────────────────────────────────────────────
+#
+# 격주로 /improve-codebase-architecture + /tech-debt-audit를
+# 단일 claude -p 세션에서 실행합니다.
+# 직전 감사 이후 코드 변경이 없으면(문서 등 제외) 실행하지 않습니다.
+#
+# 모델: Opus 4.8 (1M 컨텍스트, 기본 제공)
+# Effort: xhigh
+#
+# 필요 사항:
+#   1. Settings > Secrets에 ANTHROPIC_API_KEY 등록
+#   2. Settings > Actions > Workflow permissions를
+#      "Read and write permissions"로 설정
+#   3. 프로젝트에 두 스킬이 설치되어 있어야 합니다
+#
+# Codex 전환 시:
+#   claude 명령을 codex -q로 교체하고,
+#   ANTHROPIC_API_KEY를 OPENAI_API_KEY로 변경하십시오.
+# ──────────────────────────────────────────────────────────────
+
+name: Biweekly Audit
+
+on:
+  schedule:
+    - cron: '0 9 1,15 * *'
+  workflow_dispatch:
+    inputs:
+      force_run:
+        description: '변경 없어도 강제 실행'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  # ── 1단계: 코드 변경 감지 ──────────────────────────────────
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_audit: ${{ steps.detect.outputs.should_audit }}
+      last_audit_ref: ${{ steps.detect.outputs.last_audit_ref }}
+      changed_files_count: ${{ steps.detect.outputs.changed_files_count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Detect code changes since last audit
+        id: detect
+        run: |
+          if [ "${{ inputs.force_run }}" = "true" ]; then
+            echo "Force run requested."
+            echo "should_audit=true" >> "$GITHUB_OUTPUT"
+            echo "last_audit_ref=HEAD~50" >> "$GITHUB_OUTPUT"
+            echo "changed_files_count=forced" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LAST_AUDIT=$(git tag -l 'audit/*' --sort=-creatordate | head -1)
+
+          if [ -z "$LAST_AUDIT" ]; then
+            echo "첫 감사입니다."
+            echo "should_audit=true" >> "$GITHUB_OUTPUT"
+            echo "last_audit_ref=" >> "$GITHUB_OUTPUT"
+            echo "changed_files_count=initial" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Last audit: $LAST_AUDIT"
+          echo "last_audit_ref=$LAST_AUDIT" >> "$GITHUB_OUTPUT"
+
+          # 문서·설정·노트북 파일을 제외한 코드 변경 감지
+          CODE_CHANGES=$(git diff --name-only "$LAST_AUDIT"..HEAD \
+            -- '.' \
+            ':!*.md' \
+            ':!*.txt' \
+            ':!*.rst' \
+            ':!*.adoc' \
+            ':!*.ipynb' \
+            ':!docs/**' \
+            ':!doc/**' \
+            ':!wiki/**' \
+            ':!Wiki/**' \
+            ':!LICENSE*' \
+            ':!CHANGELOG*' \
+            ':!CHANGES*' \
+            ':!SECURITY.md' \
+            ':!AGENTS.md' \
+            ':!CLAUDE.md' \
+            ':!CONTEXT.md' \
+            ':!*.mermaid' \
+            ':!.gitignore' \
+            ':!.gitattributes' \
+            | wc -l | tr -d ' ')
+
+          echo "Code files changed: $CODE_CHANGES"
+          echo "changed_files_count=$CODE_CHANGES" >> "$GITHUB_OUTPUT"
+
+          if [ "$CODE_CHANGES" -eq 0 ]; then
+            echo "코드 변경 없음. 종료합니다."
+            echo "should_audit=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_audit=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── 2단계: 통합 감사 실행 ──────────────────────────────────
+  audit:
+    needs: check-changes
+    if: needs.check-changes.outputs.should_audit == 'true'
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate change summary
+        id: changes
+        run: |
+          LAST_REF="${{ needs.check-changes.outputs.last_audit_ref }}"
+          if [ -n "$LAST_REF" ]; then
+            echo "## 변경된 파일 목록" > change-summary.txt
+            echo "" >> change-summary.txt
+            git diff --stat "$LAST_REF"..HEAD \
+              -- '.' ':!*.md' ':!*.txt' ':!*.rst' ':!*.ipynb' ':!docs/**' \
+              >> change-summary.txt 2>/dev/null || true
+          else
+            echo "첫 감사 실행입니다." > change-summary.txt
+          fi
+
+      - name: Run combined audit
+        run: |
+          claude \
+            --model claude-opus-4-8 \
+            --effort xhigh \
+            --permission-mode auto \
+            --max-turns 50 \
+            -p "
+          You will perform two analyses in sequence within this
+          single session. Output everything to stdout.
+
+          GLOBAL RULES:
+          - Completely ignore all .ipynb (Jupyter notebook) files.
+            They are retained legacy artifacts, not active code.
+          - Cite file paths for every finding.
+          - Do not suggest full rewrites.
+          - Do not pad categories with filler findings.
+
+          ── PART 1: Architecture Analysis ──
+          Run /improve-codebase-architecture.
+          Identify specific consolidation and deepening opportunities.
+          When done, print a Markdown horizontal rule (---) as a
+          separator, then proceed immediately to Part 2.
+
+          ── PART 2: Tech Debt Audit ──
+          Run /tech-debt-audit.
+          Produce the full TECH_DEBT_AUDIT.md content with severity,
+          effort estimates, and the required 'looks bad but is
+          actually fine' section.
+          " > combined-audit-report.md 2>&1 || true
+
+          if [ ! -s combined-audit-report.md ]; then
+            echo "Audit produced no output." > combined-audit-report.md
+          fi
+
+      - name: Create GitHub Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+          COUNT="${{ needs.check-changes.outputs.changed_files_count }}"
+
+          {
+            echo "# Biweekly Audit: ${DATE}"
+            echo ""
+            echo "변경된 코드 파일: **${COUNT}개**"
+            echo "모델: Opus 4.8 · Effort: xhigh · 1M context"
+            echo ""
+            cat change-summary.txt
+            echo ""
+            echo "---"
+            echo ""
+            head -c 60000 combined-audit-report.md
+          } > issue-body.md
+
+          LABEL_ARGS=()
+          if gh label view audit >/dev/null 2>&1 || \
+            gh label create audit \
+              --color "5319e7" \
+              --description "Architecture and tech debt audit" \
+              >/dev/null 2>&1; then
+            LABEL_ARGS+=(--label audit)
+          fi
+
+          if gh label view maintenance >/dev/null 2>&1 || \
+            gh label create maintenance \
+              --color "fbca04" \
+              --description "Maintenance work" \
+              >/dev/null 2>&1; then
+            LABEL_ARGS+=(--label maintenance)
+          fi
+
+          gh issue create \
+            --title "Biweekly Audit: ${DATE}" \
+            --body-file issue-body.md \
+            "${LABEL_ARGS[@]}"
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "audit-report-${{ github.run_id }}"
+          path: |
+            combined-audit-report.md
+            change-summary.txt
+          retention-days: 90
+
+      - name: Tag audit checkpoint
+        run: |
+          AUDIT_TAG="audit/$(date +%Y%m%d-%H%M%S)"
+          git tag "$AUDIT_TAG"
+          git push origin "$AUDIT_TAG"
+          echo "Tagged: $AUDIT_TAG"
