@@ -243,12 +243,71 @@ jobs:
             echo "변경된 코드 파일: **${COUNT}개**"
             echo "모델: Opus 4.8 · Effort: xhigh · 1M context"
             echo ""
-            cat change-summary.txt
+            echo "이 이슈 본문은 artifact의 \`issue-body.md\`에 해당합니다."
+            echo "나머지 감사 산출물은 아래 댓글에 파일별로 전체 게시됩니다."
             echo ""
-            echo "---"
-            echo ""
-            head -c 60000 combined-audit-report.md
+            echo "이 이슈에서 읽을 수 있는 파일:"
+            echo "- \`issue-body.md\` - 이 본문"
+            echo "- \`change-summary.txt\` - 댓글"
+            echo "- \`combined-audit-report.md\` - 댓글"
+            echo "- \`TECH_DEBT_AUDIT.md\` - 댓글"
           } > issue-body.md
+
+          post_file_comments() {
+            local issue_number="$1"
+            local file_path="$2"
+            local title="$3"
+
+            if [ ! -s "$file_path" ]; then
+              echo "Skipping empty or missing file: $file_path"
+              return 0
+            fi
+
+            local comment_dir
+            comment_dir=$(mktemp -d)
+            awk -v prefix="$comment_dir/part-" -v limit=18000 '
+              BEGIN {
+                part = 0
+                size = 0
+                file = sprintf("%s%04d", prefix, part)
+              }
+              {
+                line = $0 ORS
+                line_size = length(line)
+                if (size > 0 && size + line_size > limit) {
+                  close(file)
+                  part++
+                  file = sprintf("%s%04d", prefix, part)
+                  size = 0
+                }
+                printf "%s", line >> file
+                size += line_size
+              }
+            ' "$file_path"
+
+            local total
+            total=$(find "$comment_dir" -type f -name 'part-*' | wc -l | tr -d ' ')
+            local index=1
+
+            for part in "$comment_dir"/part-*; do
+              {
+                echo "## ${title} (${index}/${total})"
+                echo ""
+                echo "Source file: \`${file_path}\`"
+                echo ""
+                echo '````markdown'
+                cat "$part"
+                echo ""
+                echo '````'
+              } > "$comment_dir/comment.md"
+
+              gh issue comment "$issue_number" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --body-file "$comment_dir/comment.md"
+
+              index=$((index + 1))
+            done
+          }
 
           gh label create audit \
             --repo "${GITHUB_REPOSITORY}" \
@@ -270,6 +329,11 @@ jobs:
             --label maintenance)
 
           echo "Created issue: ${ISSUE_URL}"
+          ISSUE_NUMBER="${ISSUE_URL##*/}"
+
+          post_file_comments "$ISSUE_NUMBER" change-summary.txt "Change summary"
+          post_file_comments "$ISSUE_NUMBER" combined-audit-report.md "Combined audit report"
+          post_file_comments "$ISSUE_NUMBER" TECH_DEBT_AUDIT.md "Tech debt audit"
 
       - name: Upload report artifact
         uses: actions/upload-artifact@v4
@@ -279,6 +343,7 @@ jobs:
             combined-audit-report.md
             change-summary.txt
             TECH_DEBT_AUDIT.md
+            issue-body.md
           retention-days: 90
 
       - name: Tag audit checkpoint
