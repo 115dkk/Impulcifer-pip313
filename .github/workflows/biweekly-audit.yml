@@ -209,6 +209,15 @@ jobs:
           CLAUDE_EXIT=$?
           set -e
 
+          if [ -f TECH_DEBT_AUDIT.md ]; then
+            {
+              echo ""
+              echo "---"
+              echo ""
+              cat TECH_DEBT_AUDIT.md
+            } >> combined-audit-report.md
+          fi
+
           if [ ! -s combined-audit-report.md ]; then
             echo "Audit produced no output." > combined-audit-report.md
             cat combined-audit-report.md
@@ -269,6 +278,7 @@ jobs:
           path: |
             combined-audit-report.md
             change-summary.txt
+            TECH_DEBT_AUDIT.md
           retention-days: 90
 
       - name: Tag audit checkpoint
