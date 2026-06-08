@@ -241,32 +241,26 @@ jobs:
             head -c 60000 combined-audit-report.md
           } > issue-body.md
 
-          ADD_LABEL_ARGS=()
-          if gh label view audit >/dev/null 2>&1 || \
-            gh label create audit \
-              --color "5319e7" \
-              --description "Architecture and tech debt audit" \
-              >/dev/null 2>&1; then
-            ADD_LABEL_ARGS+=(--add-label audit)
-          fi
+          gh label create audit \
+            --repo "${GITHUB_REPOSITORY}" \
+            --color "5319e7" \
+            --description "Architecture and tech debt audit" \
+            >/dev/null 2>&1 || true
 
-          if gh label view maintenance >/dev/null 2>&1 || \
-            gh label create maintenance \
-              --color "fbca04" \
-              --description "Maintenance work" \
-              >/dev/null 2>&1; then
-            ADD_LABEL_ARGS+=(--add-label maintenance)
-          fi
+          gh label create maintenance \
+            --repo "${GITHUB_REPOSITORY}" \
+            --color "fbca04" \
+            --description "Maintenance work" \
+            >/dev/null 2>&1 || true
 
           ISSUE_URL=$(gh issue create \
+            --repo "${GITHUB_REPOSITORY}" \
             --title "Biweekly Audit: ${DATE}" \
-            --body-file issue-body.md)
+            --body-file issue-body.md \
+            --label audit \
+            --label maintenance)
 
           echo "Created issue: ${ISSUE_URL}"
-
-          if [ "${#ADD_LABEL_ARGS[@]}" -gt 0 ]; then
-            gh issue edit "${ISSUE_URL}" "${ADD_LABEL_ARGS[@]}" || true
-          fi
 
       - name: Upload report artifact
         uses: actions/upload-artifact@v4
