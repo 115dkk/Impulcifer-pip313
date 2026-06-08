@@ -7,11 +7,9 @@ and #115 without changing runtime code in this PR.
 
 from __future__ import annotations
 
-import inspect
 from dataclasses import fields
 from typing import Any
 
-import impulcifer
 from core.pipeline import ProcessingConfig
 from gui.brir_args import build_brir_args
 
@@ -67,16 +65,19 @@ def test_gui_room_limit_fallbacks_match_processing_config_defaults() -> None:
 
 
 def test_main_public_kwargs_are_represented_in_processing_config() -> None:
-    """Every public ``main`` kwarg must survive the ``ProcessingConfig`` seam."""
-    main_kwargs = {
-        name
-        for name, parameter in inspect.signature(impulcifer.main).parameters.items()
-        if parameter.kind
-        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
-    }
+    """Every kwarg the GUI assembles for ``main`` must have a ProcessingConfig home.
+
+    ``impulcifer.main`` now takes ``**kwargs`` and forwards them through
+    ``ProcessingConfig.from_kwargs``, which silently drops unknown keys. A
+    signature-based check would be vacuous (main has no named params), so assert
+    the real public surface instead: every key ``build_brir_args`` emits must be
+    a ProcessingConfig field, otherwise a GUI control would be silently ignored.
+    """
+    args = build_brir_args(MinimalBrirTab(), DummyLoc())
     config_fields = {field.name for field in fields(ProcessingConfig)}
 
-    assert main_kwargs <= config_fields
+    assert args, "build_brir_args produced no kwargs; the check would be vacuous"
+    assert set(args) <= config_fields
 
 
 _WORKER_STATE: str | None = None

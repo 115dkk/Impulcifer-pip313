@@ -12,7 +12,7 @@ been fixed and old features improved.
 #### ⭐ 리팩터링 / 개선
 - **`main()` 파라미터 4중 중복 제거 (DEBT-2)**: `impulcifer.main()`을 `**kwargs` → `ProcessingConfig.from_kwargs()` 단일 경로로 통합했다. 명시적 32-인자 시그니처와 수기 forwarding을 제거해 파라미터 정본을 `ProcessingConfig` 한 곳으로 모았다(모든 호출자가 이미 `main(**dict)` 형태였고, 35개 기본값이 dataclass와 일치함을 사전 검증).
 - **`BRIRPipeline` 심화 (DEBT-3/#115-4)**: pass-through에 불과하던 `BRIRPipeline.run()`이 ~450줄 단계 시퀀스를 직접 보유하도록 본문을 이관했다(DSP 헬퍼는 `impulcifer.py`에 두고 지연 import로 단방향 의존 유지). `_run_pipeline_legacy` 자유 함수는 제거.
-- **`parallel_map` 이중 구현 통합 (#115-3)**: `parallel_utils`/`parallel_processing`의 중복 executor 루프를 공유 `_run_parallel_map`으로 합쳤다. 각 진입점의 기존 동작(process-first vs thread-first, worker 수, 단일 항목 단축)은 그대로 보존.
+- **`parallel_map` 이중 구현 통합 (#115-3)**: `parallel_utils`/`parallel_processing`의 중복 executor 루프를 공유 `_run_parallel_map`으로 합쳤다. 각 진입점의 반환값·결과 순서·executor 선택(process-first vs thread-first)·worker 수 기본값·단일 항목 단축은 그대로 보존. (thread-first 경로에서 worker 실패 시 항목별 진단 `print`와 `show_progress=True`일 때의 최종 요약 `print`는 제거됐다 — BRIR 출력과 무관하고 production 호출자/테스트가 사용하지 않는 경로다.)
 - **ipsilateral 페어 상수화 (#113 DEBT-6)**: `align_ipsilateral_all`용 (좌,우) 페어 목록을 `core.constants.IPSILATERAL_PAIRS` 단일 정의로 통합(기존 dead default와 production 호출의 순서 drift 제거). 구조가 다른 onset-group 목록은 의도적으로 분리 유지.
 - **죽은 코드 제거**: 도달 불가능한 `channel_generation.generate_missing_channels`와 빈 `AUTO_GENERATABLE_CHANNELS`(#115-7), `impulcifer_cli.py`와 byte-동일한 고아 파일 `impulcifer-cli.py`(#113 DEBT-8), 사용되지 않던 `mic_deviation_phase/adaptive/anatomical` config 필드(#113 DEBT-7/#115-6)를 삭제.
 - **문서 정정**: `CLAUDE.md`의 `updater_core.py` 설명을 실제 모듈 구성(58줄 re-export shim + 분리된 모듈들)으로 갱신(DEBT-9/#115-10)하고, 폐기된 `main()` 시그니처 규칙을 새 `**kwargs`/`ProcessingConfig` 계약으로 대체했다.

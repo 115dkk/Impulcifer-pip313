@@ -21,7 +21,7 @@ The pipeline preserves the byte-exact BRIR output of the previous monolithic
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -376,10 +376,6 @@ class ProcessingConfig:
         valid_names = {f.name for f in fields(cls)}
         cleaned = {k: v for k, v in kwargs.items() if k in valid_names}
         return cls(**cleaned)
-
-    def to_main_kwargs(self) -> Dict[str, Any]:
-        """Return a dict mirroring :func:`impulcifer.main`'s parameter list."""
-        return {f.name: getattr(self, f.name) for f in fields(self)}
 
 
 class BRIRPipeline:
