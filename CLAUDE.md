@@ -46,16 +46,19 @@ infra/
   _build_info.py          ← 빌드 시 생성되는 버전/타입 마커
 updater/
   update_checker.py       ← GitHub 릴리스 기반 업데이트 확인
-  updater_core.py         ← Velopack/pip/레거시 업데이터 (이슈 #87 Phase 5 후속:
-                            VelopackUpdater/PipUpdater/LegacyInstallerUpdater +
-                            UpdateExecutor 계열을 별도 모듈로 분리 예정. 현재
-                            ~770줄을 1파일에 둔 채로 유지하나, 기능 추가 시에는
-                            분리부터 수행하는 것이 권장된다.)
+  updater_core.py         ← 하위 호환 re-export 셸(이슈 #87 Phase 5에서 분리 완료,
+                            ~58줄). 기존 import 경로를 유지하기 위해 아래 모듈들을
+                            다시 export한다. 신규 코드는 아래 실제 모듈을 직접 import.
+  environment.py          ← 설치 환경/플랫폼 감지
+  velopack.py             ← Velopack 업데이터
+  pip_updater.py          ← pip 기반 업데이터
+  legacy.py               ← 레거시 인스톨러 업데이터
+  executors.py            ← UpdateExecutor 계열(업데이트 실행)
 ```
 
 ## 수정 시 주의사항
 
-`impulcifer.py`의 `main()` 함수 시그니처(208-248행)를 변경하지 말 것. GUI의 `generate_brir()`가 이 시그니처에 1:1 대응하는 인자 딕셔너리를 조립한다.
+`impulcifer.py`의 `main()`은 `**kwargs`를 받아 `core.pipeline.ProcessingConfig.from_kwargs()`로 전달하는 얇은 래퍼다(이슈 #113/#115 audit에서 기존의 32개 명시적 인자 시그니처를 통합). GUI의 `generate_brir()`/`gui.brir_args.build_brir_args`와 CLI(`create_cli`)가 인자 딕셔너리를 조립해 넘기며, `ProcessingConfig`에 없는 키(예: 폐기된 호환 플래그)는 `from_kwargs`가 무시한다. 따라서 파라미터의 정본 기본값은 `ProcessingConfig` 필드에만 존재하므로, 새 파라미터는 `ProcessingConfig`에 필드를 추가하면 CLI·GUI·파이프라인에 자동 반영된다. 실제 BRIR 파이프라인 단계 시퀀스는 `core.pipeline.BRIRPipeline.run()`이 보유한다(DSP 단계 헬퍼는 여전히 `impulcifer.py`에 있고 `run()` 내부에서 지연 import한다).
 
 `core/recorder.py`의 `play_and_record()`는 `sd.play(blocking=True)` + `Thread.join()`으로 완전한 블로킹 함수다. 이 동작을 변경하지 말 것.
 

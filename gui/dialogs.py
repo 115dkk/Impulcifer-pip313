@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from tkinter import messagebox
+from tkinter import TclError, messagebox
 from typing import Optional
 
 import customtkinter as ctk
@@ -23,11 +23,31 @@ from gui.constants import (
 from gui.recording_status import format_duration
 from gui.utils import build_fonts, setup_pretendard_font
 from i18n.localization import SUPPORTED_LANGUAGES
+from infra.logger import get_logger
 from updater.updater_core import (
     UpdateExecutionError,
     UpdateExecutionResult,
     create_update_executor,
 )
+
+logger = get_logger()
+
+
+def _run_ui_safe(action: str, fn: Callable[[], None]) -> None:
+    """Run a Tk widget update, logging failures instead of silently swallowing.
+
+    Worker threads schedule UI updates onto the Tk main loop; by the time they
+    run the dialog may already be tearing down. A destroyed-widget ``TclError``
+    is expected during shutdown and logged at debug level, but any other
+    exception is a real bug in the callback and is surfaced as a warning rather
+    than vanishing into a bare ``except: pass``.
+    """
+    try:
+        fn()
+    except TclError as exc:
+        logger.debug(f"UI update '{action}' skipped (widget unavailable): {exc}")
+    except Exception as exc:  # pragma: no cover - defensive, exercised via tests
+        logger.warning(f"UI update '{action}' failed unexpectedly: {exc}")
 
 
 class BaseDialog(ctk.CTkToplevel):
@@ -270,45 +290,45 @@ class ProcessingDialog(BaseDialog):
         )
         self.cancel_button.pack(side="right", padx=5)
 
+    def _schedule_ui(self, action: str, fn: Callable[[], None]) -> None:
+        """Schedule a Tk-thread UI update from any thread, logging on failure.
+
+        ``after`` raises when the dialog's event loop is already gone (e.g. a
+        worker finishes after the window was closed); that is logged at debug
+        level rather than swallowed by a bare ``except: pass``.
+        """
+        try:
+            self.after(0, lambda: _run_ui_safe(action, fn))
+        except (TclError, RuntimeError) as exc:
+            logger.debug(f"UI update '{action}' could not be scheduled: {exc}")
+
     def update_progress(self, value: int, message: str = "") -> None:
         """Update progress controls from any thread."""
 
         def _update() -> None:
-            try:
-                self.progress_bar.set(value / 100.0)
-                self.progress_label.configure(
-                    text=f"{value}% - {message}" if message else f"{value}%"
-                )
-            except Exception:
-                pass
+            self.progress_bar.set(value / 100.0)
+            self.progress_label.configure(
+                text=f"{value}% - {message}" if message else f"{value}%"
+            )
 
-        try:
-            self.after(0, _update)
-        except Exception:
-            pass
+        self._schedule_ui("update_progress", _update)
 
     def add_log(self, level: str, message: str) -> None:
         """Append a log message from any thread."""
 
         def _add() -> None:
-            try:
-                if level == "ERROR":
-                    prefix = "✗ "
-                elif level == "SUCCESS":
-                    prefix = "✓ "
-                elif level == "WARNING":
-                    prefix = "⚠ "
-                else:
-                    prefix = ""
-                self.log_text.insert("end", f"{prefix}{message}\n")
-                self.log_text.see("end")
-            except Exception:
-                pass
+            if level == "ERROR":
+                prefix = "✗ "
+            elif level == "SUCCESS":
+                prefix = "✓ "
+            elif level == "WARNING":
+                prefix = "⚠ "
+            else:
+                prefix = ""
+            self.log_text.insert("end", f"{prefix}{message}\n")
+            self.log_text.see("end")
 
-        try:
-            self.after(0, _add)
-        except Exception:
-            pass
+        self._schedule_ui("add_log", _add)
 
     def mark_complete(self, success: bool = True) -> None:
         """Mark processing complete and enable closing."""
@@ -316,28 +336,22 @@ class ProcessingDialog(BaseDialog):
         self.processing_error = not success
 
         def _apply() -> None:
-            try:
-                self.close_button.configure(state="normal")
-                self.cancel_button.configure(state="disabled")
-                if success:
-                    self.progress_bar.set(1.0)
-                    self.progress_label.configure(
-                        text="100% - " + self.loc.get(
-                            'message_processing_complete',
-                            default="Complete!",
-                        )
+            self.close_button.configure(state="normal")
+            self.cancel_button.configure(state="disabled")
+            if success:
+                self.progress_bar.set(1.0)
+                self.progress_label.configure(
+                    text="100% - " + self.loc.get(
+                        'message_processing_complete',
+                        default="Complete!",
                     )
-                else:
-                    self.progress_label.configure(
-                        text=self.loc.get('message_processing_error', default="Error occurred")
-                    )
-            except Exception:
-                pass
+                )
+            else:
+                self.progress_label.configure(
+                    text=self.loc.get('message_processing_error', default="Error occurred")
+                )
 
-        try:
-            self.after(0, _apply)
-        except Exception:
-            pass
+        self._schedule_ui("mark_complete", _apply)
 
     def mark_cancelled(self) -> None:
         """Mark processing cancelled and enable closing."""
@@ -345,22 +359,16 @@ class ProcessingDialog(BaseDialog):
         self.processing_error = True
 
         def _apply() -> None:
-            try:
-                self.close_button.configure(state="normal")
-                self.cancel_button.configure(state="disabled")
-                self.progress_label.configure(
-                    text=self.loc.get(
-                        'message_processing_cancelled',
-                        default="Processing cancelled.",
-                    )
+            self.close_button.configure(state="normal")
+            self.cancel_button.configure(state="disabled")
+            self.progress_label.configure(
+                text=self.loc.get(
+                    'message_processing_cancelled',
+                    default="Processing cancelled.",
                 )
-            except Exception:
-                pass
+            )
 
-        try:
-            self.after(0, _apply)
-        except Exception:
-            pass
+        self._schedule_ui("mark_cancelled", _apply)
 
     def on_cancel(self) -> None:
         """Request cooperative cancellation."""
@@ -368,7 +376,8 @@ class ProcessingDialog(BaseDialog):
             return
         self.cancel_requested = True
         self.cancel_event.set()
-        try:
+
+        def _apply() -> None:
             self.cancel_button.configure(state="disabled")
             self.progress_label.configure(
                 text=self.loc.get(
@@ -376,8 +385,8 @@ class ProcessingDialog(BaseDialog):
                     default="Cancelling after the current step...",
                 )
             )
-        except Exception:
-            pass
+
+        _run_ui_safe("on_cancel", _apply)
 
     def on_window_close(self) -> None:
         """Treat close attempts as cancel until processing finishes."""

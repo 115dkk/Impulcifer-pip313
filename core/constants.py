@@ -19,25 +19,6 @@ CHANNEL_LAYOUT_MAP = {
     13: TRUEHD_13CH_ORDER
 }
 
-# 자동 생성 가능한 채널 정의 (FC, TSL, TSR 제거)
-AUTO_GENERATABLE_CHANNELS = {
-    # 'FC': {
-    #     'sources': ['FL', 'FR'],
-    #     'weights': [0.5, 0.5],
-    #     'description': 'Center from Front Left/Right'
-    # },
-    # 'TSL': {
-    #     'sources': ['TFL', 'SL'],
-    #     'weights': [0.6, 0.4],
-    #     'description': 'Top Side Left from Top Front Left and Side Left'
-    # },
-    # 'TSR': {
-    #     'sources': ['TFR', 'SR'],
-    #     'weights': [0.6, 0.4],
-    #     'description': 'Top Side Right from Top Front Right and Side Right'
-    # }
-}
-
 SPEAKER_ANGLES = {
     'FL': 30,
     'FR': -30,
@@ -60,6 +41,25 @@ SPEAKER_ANGLES = {
 SPEAKER_DELAYS = {
     _speaker: 0 for _speaker in SPEAKER_NAMES
 }
+
+# Ipsilateral (left/right) speaker pairs used for onset alignment in
+# ``HRIR.align_ipsilateral_all``. ``FC`` is paired with itself so its own
+# left/right ears are aligned. Single source of truth shared by
+# ``impulcifer.main`` and the ``align_ipsilateral_all`` default — these two
+# lists were previously hand-duplicated and had already drifted in order.
+# (This is the alignment *pair* list; the *group* list in
+# ``align_onset_groups_peak_leftref`` uses a 1-tuple ``("FC",)`` and is a
+# deliberately different structure — do not merge it here.)
+IPSILATERAL_PAIRS = (
+    ("FL", "FR"),
+    ("SL", "SR"),
+    ("BL", "BR"),
+    ("TFL", "TFR"),
+    ("TSL", "TSR"),
+    ("TBL", "TBR"),
+    ("FC", "FC"),
+    ("WL", "WR"),
+)
 
 # Each channel, left and right
 IR_ORDER = []

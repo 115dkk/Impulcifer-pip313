@@ -10,7 +10,7 @@ This module provides adaptive parallelization that uses:
 import os
 import sys
 import concurrent.futures.process
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from typing import Callable, List, Any, Optional
 
 
@@ -52,6 +52,70 @@ def get_optimal_executor(
         return ProcessPoolExecutor(max_workers=max_workers, initializer=initializer, initargs=initargs)
 
 
+def _run_parallel_map(
+    func: Callable,
+    items: List[Any],
+    max_workers: int,
+    *,
+    use_threads: bool,
+    timeout: Optional[float] = None,
+    initializer: Optional[Callable] = None,
+    initargs: tuple = (),
+    show_progress: bool = False,
+) -> List[Any]:
+    """Shared executor loop behind both public ``parallel_map`` entry points.
+
+    ``max_workers`` must already be resolved by the caller. Executor choice:
+    threads when ``use_threads`` is set or the runtime is free-threaded,
+    otherwise processes (to bypass the GIL for CPU-bound work). Results are
+    always returned in input order. On ProcessPool breakage in a free-threaded
+    runtime we retry with threads; standard GIL builds re-raise so CPU-bound
+    work is never silently demoted to threads.
+    """
+    executor_class = (
+        ThreadPoolExecutor if (use_threads or is_gil_disabled()) else ProcessPoolExecutor
+    )
+
+    def _collect(executor) -> List[Any]:
+        if timeout is None and not show_progress:
+            # Fast path: submit in order, read results in order. This is
+            # byte-for-byte the original ordered collection used by both
+            # callers' common (no timeout / no progress) case.
+            futures = [executor.submit(func, item) for item in items]
+            return [future.result() for future in futures]
+        # Timeout / progress path: as-completed with index mapping keeps the
+        # output in input order while supporting a timeout and progress output.
+        future_to_index = {executor.submit(func, item): i for i, item in enumerate(items)}
+        results: List[Any] = [None] * len(items)
+        completed = 0
+        for future in as_completed(future_to_index, timeout=timeout):
+            results[future_to_index[future]] = future.result()
+            completed += 1
+            if show_progress and completed % max(1, len(items) // 10) == 0:
+                progress = completed / len(items) * 100
+                print(f"Progress: {progress:.1f}% ({completed}/{len(items)})")
+        return results
+
+    try:
+        with executor_class(
+            max_workers=max_workers,
+            initializer=initializer,
+            initargs=initargs,
+        ) as executor:
+            return _collect(executor)
+    except (concurrent.futures.process.BrokenProcessPool, RuntimeError):
+        if not is_gil_disabled():
+            raise
+        # Free-threaded Python can safely keep CPU-bound fallback work in threads.
+        # Standard GIL builds must keep CPU-bound parallelism in process workers.
+        with ThreadPoolExecutor(
+            max_workers=max_workers,
+            initializer=initializer,
+            initargs=initargs,
+        ) as executor:
+            return _collect(executor)
+
+
 def parallel_map(
     func: Callable,
     items: List[Any],
@@ -60,7 +124,12 @@ def parallel_map(
     initargs: tuple = (),
 ) -> List[Any]:
     """
-    Execute function on items in parallel using optimal executor.
+    Execute function on items in parallel using the optimal executor.
+
+    Process-first (GIL bypass) unless the runtime is free-threaded. Results are
+    returned in the same order as ``items``. This is the canonical map; the
+    thread-first ``core.parallel_processing.parallel_map`` wraps the same shared
+    loop (:func:`_run_parallel_map`).
 
     Args:
         func: Function to execute on each item
@@ -84,30 +153,14 @@ def parallel_map(
     if max_workers is None:
         max_workers = min(os.cpu_count() or 4, len(items))
 
-    try:
-        with get_optimal_executor(
-            max_workers=max_workers,
-            initializer=initializer,
-            initargs=initargs,
-        ) as executor:
-            # Submit all tasks and maintain order
-            futures = [executor.submit(func, item) for item in items]
-            # Collect results in order
-            results = [future.result() for future in futures]
-        return results
-    except (concurrent.futures.process.BrokenProcessPool, RuntimeError):
-        if not is_gil_disabled():
-            raise
-        # Free-threaded Python can safely keep CPU-bound fallback work in threads.
-        # Standard GIL builds must keep CPU-bound parallelism in process workers.
-        with ThreadPoolExecutor(
-            max_workers=max_workers,
-            initializer=initializer,
-            initargs=initargs,
-        ) as executor:
-            futures = [executor.submit(func, item) for item in items]
-            results = [future.result() for future in futures]
-        return results
+    return _run_parallel_map(
+        func,
+        items,
+        max_workers,
+        use_threads=False,
+        initializer=initializer,
+        initargs=initargs,
+    )
 
 
 def get_parallelization_info() -> dict:

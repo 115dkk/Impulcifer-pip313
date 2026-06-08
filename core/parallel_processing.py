@@ -15,12 +15,11 @@ free-threaded 빌드를 감지합니다. 일반 Python에서는 기존
 
 import sys
 import os
-import concurrent.futures
 from typing import Callable, Iterable, List, TypeVar, Optional, Any
 from functools import wraps
 import time
 
-from core.parallel_utils import is_gil_disabled
+from core.parallel_utils import is_gil_disabled, _run_parallel_map
 
 # 타입 변수 정의
 T = TypeVar('T')
@@ -126,61 +125,29 @@ def parallel_map(
     if not items:
         return []
 
-    # 단일 항목이면 병렬 처리 불필요
+    # 단일 항목이면 병렬 처리 불필요 (initializer가 필요한 경우는 제외)
     if len(items) == 1 and initializer is None:
         return [func(items[0])]
 
-    # 워커 수 결정
+    # 워커 수 결정 (thread-first 호출자용 기본값 유지)
     if max_workers is None:
         max_workers = get_optimal_worker_count()
 
     # 항목 수가 워커 수보다 적으면 조정
     max_workers = min(max_workers, len(items))
 
-    # 병렬 처리 수행
-    executor_class = (
-        concurrent.futures.ThreadPoolExecutor
-        if use_threads or IS_FREE_THREADED
-        else concurrent.futures.ProcessPoolExecutor
-    )
-
-    start_time = time.time()
-    results = []
-
-    with executor_class(
-        max_workers=max_workers,
+    # 실제 실행 루프는 core.parallel_utils와 공유한다. ``use_threads`` 기본값을
+    # True로 두어 기존 thread-first 동작을 그대로 보존한다.
+    return _run_parallel_map(
+        func,
+        items,
+        max_workers,
+        use_threads=use_threads,
+        timeout=timeout,
         initializer=initializer,
         initargs=initargs,
-    ) as executor:
-        # 병렬 실행
-        futures = {executor.submit(func, item): i for i, item in enumerate(items)}
-
-        # 결과 수집
-        completed_count = 0
-        results = [None] * len(items)
-
-        for future in concurrent.futures.as_completed(futures, timeout=timeout):
-            idx = futures[future]
-            try:
-                results[idx] = future.result()
-                completed_count += 1
-
-                if show_progress and completed_count % max(1, len(items) // 10) == 0:
-                    progress = completed_count / len(items) * 100
-                    print(f"Progress: {progress:.1f}% ({completed_count}/{len(items)})")
-
-            except Exception as exc:
-                print(f"Item {idx} generated an exception: {exc}")
-                raise
-
-    elapsed_time = time.time() - start_time
-
-    if show_progress:
-        speedup = len(items) / elapsed_time if elapsed_time > 0 else 0
-        print(f"Completed {len(items)} items in {elapsed_time:.2f}s ({speedup:.1f} items/s)")
-        print(f"Workers used: {max_workers}, Free-threaded: {IS_FREE_THREADED}")
-
-    return results
+        show_progress=show_progress,
+    )
 
 
 def parallel_process_dict(

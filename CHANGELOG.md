@@ -4,6 +4,26 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.5 - 2026-06-09
+### 격주 감사(#113·#115) 해결 — 통합 리팩터링
+
+이슈 #113·#115(같은 날짜의 격주 감사) finding을 통합 검토해 해결했다. `tests/test_audit_contracts.py`의 계약은 그대로 green을 유지하며, BRIR 출력은 동일 머신에서 변경 전후 `hesuvi.wav`를 생성·md5 비교하여 byte-identical임을 확인했다(`07eef9ef…`). 이미 HEAD에서 해결돼 있던 finding(GUI/CLI 기본값 drift, 잔존 임시 파일)은 제외했다.
+
+#### ⭐ 리팩터링 / 개선
+- **`main()` 파라미터 4중 중복 제거 (DEBT-2)**: `impulcifer.main()`을 `**kwargs` → `ProcessingConfig.from_kwargs()` 단일 경로로 통합했다. 명시적 32-인자 시그니처와 수기 forwarding을 제거해 파라미터 정본을 `ProcessingConfig` 한 곳으로 모았다(모든 호출자가 이미 `main(**dict)` 형태였고, 35개 기본값이 dataclass와 일치함을 사전 검증).
+- **`BRIRPipeline` 심화 (DEBT-3/#115-4)**: pass-through에 불과하던 `BRIRPipeline.run()`이 ~450줄 단계 시퀀스를 직접 보유하도록 본문을 이관했다(DSP 헬퍼는 `impulcifer.py`에 두고 지연 import로 단방향 의존 유지). `_run_pipeline_legacy` 자유 함수는 제거.
+- **`parallel_map` 이중 구현 통합 (#115-3)**: `parallel_utils`/`parallel_processing`의 중복 executor 루프를 공유 `_run_parallel_map`으로 합쳤다. 각 진입점의 반환값·결과 순서·executor 선택(process-first vs thread-first)·worker 수 기본값·단일 항목 단축은 그대로 보존. (thread-first 경로에서 worker 실패 시 항목별 진단 `print`와 `show_progress=True`일 때의 최종 요약 `print`는 제거됐다 — BRIR 출력과 무관하고 production 호출자/테스트가 사용하지 않는 경로다.)
+- **ipsilateral 페어 상수화 (#113 DEBT-6)**: `align_ipsilateral_all`용 (좌,우) 페어 목록을 `core.constants.IPSILATERAL_PAIRS` 단일 정의로 통합(기존 dead default와 production 호출의 순서 drift 제거). 구조가 다른 onset-group 목록은 의도적으로 분리 유지.
+- **죽은 코드 제거**: 도달 불가능한 `channel_generation.generate_missing_channels`와 빈 `AUTO_GENERATABLE_CHANNELS`(#115-7), `impulcifer_cli.py`와 byte-동일한 고아 파일 `impulcifer-cli.py`(#113 DEBT-8), 사용되지 않던 `mic_deviation_phase/adaptive/anatomical` config 필드(#113 DEBT-7/#115-6)를 삭제.
+- **문서 정정**: `CLAUDE.md`의 `updater_core.py` 설명을 실제 모듈 구성(58줄 re-export shim + 분리된 모듈들)으로 갱신(DEBT-9/#115-10)하고, 폐기된 `main()` 시그니처 규칙을 새 `**kwargs`/`ProcessingConfig` 계약으로 대체했다.
+
+#### 🐛 버그 수정
+- **GUI 워커 스레드 예외 로깅 (#113 DEBT-4)**: `gui/dialogs.py`의 9개 `except Exception: pass`(진행률·로그·완료/취소 UI 갱신)가 예외를 조용히 삼키던 것을 `_run_ui_safe`/`_schedule_ui`로 교체했다. 종료 중 발생하는 위젯 파괴 `TclError`는 debug, 그 외 예외는 warning으로 남겨 콜백 버그가 보이지 않게 사라지지 않도록 했다(동작은 그대로 non-fatal).
+
+#### 검증
+- 전체 테스트 스위트 통과(181 pass / 0 fail / 3 skip, 유일한 환경 의존 실패는 Tk 미설치로 인한 `test_scroll_perf` flake). A-1은 TDD(red→green)로 진행했다.
+- BRIR md5 byte-exact를 로컬에서 변경 전후 비교로 확인했고, CI `brir-integrity`(Linux/CPython 3.13)로 교차 검증한다.
+
 ## 2.7.4 - 2026-06-08
 ### 감사 RED 테스트 후속 수정
 

@@ -10,7 +10,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from autoeq.frequency_response import FrequencyResponse
 from core.impulse_response import ImpulseResponse
 from core.utils import read_wav, write_wav, magnitude_response
-from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER
+from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS
 from core.plotting.hrir_plotter import HRIRPlotter
 
 # Python 3.14 병렬 처리 지원
@@ -958,16 +958,7 @@ class HRIR(HRIRPlotter):
 
     def align_ipsilateral_all(self, speaker_pairs=None, segment_ms=30):
         if speaker_pairs is None:
-            speaker_pairs = [
-                ("FL", "FR"),
-                ("SL", "SR"),
-                ("BL", "BR"),
-                ("WL", "WR"),
-                ("TFL", "TFR"),
-                ("TSL", "TSR"),
-                ("TBL", "TBR"),
-                ("FC", "FC"),
-            ]
+            speaker_pairs = list(IPSILATERAL_PAIRS)
 
         segment_len = int(self.fs * segment_ms / 1000)
 
