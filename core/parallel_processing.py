@@ -90,6 +90,8 @@ def parallel_map(
     iterable: Iterable[T],
     max_workers: Optional[int] = None,
     timeout: Optional[float] = None,
+    initializer: Optional[Callable[..., Any]] = None,
+    initargs: tuple = (),
     use_threads: bool = True,
     show_progress: bool = False
 ) -> List[R]:
@@ -105,6 +107,8 @@ def parallel_map(
         iterable: 입력 데이터
         max_workers: 최대 워커 수 (None이면 자동)
         timeout: 타임아웃 (초)
+        initializer: 워커 시작 시 1회 실행할 초기화 함수
+        initargs: initializer에 전달할 인자 튜플
         use_threads: True면 스레드 사용, False면 프로세스 사용
         show_progress: 진행 상황 표시 여부
 
@@ -123,7 +127,7 @@ def parallel_map(
         return []
 
     # 단일 항목이면 병렬 처리 불필요
-    if len(items) == 1:
+    if len(items) == 1 and initializer is None:
         return [func(items[0])]
 
     # 워커 수 결정
@@ -143,7 +147,11 @@ def parallel_map(
     start_time = time.time()
     results = []
 
-    with executor_class(max_workers=max_workers) as executor:
+    with executor_class(
+        max_workers=max_workers,
+        initializer=initializer,
+        initargs=initargs,
+    ) as executor:
         # 병렬 실행
         futures = {executor.submit(func, item): i for i, item in enumerate(items)}
 

@@ -4,6 +4,18 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.4 - 2026-06-08
+### 감사 RED 테스트 후속 수정
+
+#### 🐛 버그 수정
+- **GUI room-correction 기본값 단일화**: Stable/Studio GUI의 `specific_limit`·`generic_limit` widget 초기값과 invalid/empty fallback을 `ProcessingConfig` 기본값에서 읽도록 바꿔 CLI와 GUI가 서로 다른 room-EQ limit을 쓰는 drift를 제거했다.
+- **`ProcessingConfig` seam 누락 보정**: `impulcifer.main()`이 GUI 호환을 위해 계속 받는 v4.0 legacy mic-deviation 인자 3개를 `ProcessingConfig`에 `cli_skip` field로 포함하고 legacy runner도 받을 수 있게 하여 공개 kwargs가 config seam에서 조용히 사라지지 않게 했다.
+- **`parallel_processing.parallel_map` 초기화 계약 보강**: `core.parallel_processing.parallel_map`도 `initializer`/`initargs`를 받아 worker 초기화가 필요한 호출을 지원하도록 맞췄다.
+
+#### 검증
+- **감사 회귀 테스트 추가**: 이슈 #113/#115에서 확인된 세 drift를 `tests/test_audit_contracts.py`로 고정했다.
+- **대상 테스트 통과**: `tests/test_audit_contracts.py`, `tests/test_parallel_processing.py`, GUI 인접 테스트, `ProcessingConfig` 기본값 동기화 테스트를 통과했다.
+
 ## 2.7.3 - 2026-06-03
 ### download-artifact를 실제 Node.js 24 메이저(v7)로 정정
 

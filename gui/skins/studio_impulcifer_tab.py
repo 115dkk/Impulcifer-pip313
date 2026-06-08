@@ -12,6 +12,7 @@ import customtkinter as ctk
 import impulcifer
 from gui.brir_args import (
     build_brir_args,
+    processing_default,
     sync_custom_eq_files,
     sync_headphone_compensation_file,
 )
@@ -60,8 +61,8 @@ class StudioImpulciferTab:
         self.do_room_correction_var = ctk.BooleanVar(value=False)
         self.room_target_var = ctk.StringVar()
         self.room_mic_calibration_var = ctk.StringVar()
-        self.specific_limit_var = ctk.IntVar(value=20000)
-        self.generic_limit_var = ctk.IntVar(value=1000)
+        self.specific_limit_var = ctk.IntVar(value=int(processing_default("specific_limit")))
+        self.generic_limit_var = ctk.IntVar(value=int(processing_default("generic_limit")))
         self.fr_combination_var = ctk.StringVar(value="average")
 
         self.do_headphone_compensation_var = ctk.BooleanVar(value=False)
