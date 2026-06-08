@@ -46,11 +46,14 @@ infra/
   _build_info.py          ← 빌드 시 생성되는 버전/타입 마커
 updater/
   update_checker.py       ← GitHub 릴리스 기반 업데이트 확인
-  updater_core.py         ← Velopack/pip/레거시 업데이터 (이슈 #87 Phase 5 후속:
-                            VelopackUpdater/PipUpdater/LegacyInstallerUpdater +
-                            UpdateExecutor 계열을 별도 모듈로 분리 예정. 현재
-                            ~770줄을 1파일에 둔 채로 유지하나, 기능 추가 시에는
-                            분리부터 수행하는 것이 권장된다.)
+  updater_core.py         ← 하위 호환 re-export 셸(이슈 #87 Phase 5에서 분리 완료,
+                            ~58줄). 기존 import 경로를 유지하기 위해 아래 모듈들을
+                            다시 export한다. 신규 코드는 아래 실제 모듈을 직접 import.
+  environment.py          ← 설치 환경/플랫폼 감지
+  velopack.py             ← Velopack 업데이터
+  pip_updater.py          ← pip 기반 업데이터
+  legacy.py               ← 레거시 인스톨러 업데이터
+  executors.py            ← UpdateExecutor 계열(업데이트 실행)
 ```
 
 ## 수정 시 주의사항
