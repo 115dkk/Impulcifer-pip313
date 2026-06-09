@@ -1,118 +1,710 @@
-name: Publish to PyPI
+name: Release Pipeline
 
-# Trigger workflow on push to master branch only
-# PR에서는 테스트를 실행하지 않음 (신경쓰이므로)
+# Consolidated release pipeline (gated):
+#   master push -> gate (auto-bump decision) -> publish to PyPI
+#               -> (only on PyPI success) cross-platform Nuitka build
+#               -> GitHub Release.
+# Pushes that do not change the shipped product (docs / CI / tests only) and
+# that the gate does not bump produce NO publish and NO build — GitHub runners
+# are only spent on real releases.
+#
+# The file is intentionally named publish.yml: the PyPI Trusted Publisher binds
+# OIDC to the workflow filename + environment (`PyPI`). Reusing this filename
+# keeps publishing working without touching the pypi.org configuration.
+
 on:
   push:
     branches:
       - master
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  test:
-    name: Run tests and linting
+  # ---------------------------------------------------------------------------
+  # 1. Gate: decide whether to release, auto-bump PATCH if a shippable change
+  #    was merged without a manual bump.
+  # ---------------------------------------------------------------------------
+  gate:
+    name: Release gate (auto-bump + decision)
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
+    outputs:
+      should_release: ${{ steps.gate.outputs.should_release }}
+      version: ${{ steps.gate.outputs.version }}
+      release_sha: ${{ steps.gate.outputs.release_sha }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v5
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.13'
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Decide release and auto-bump
+        id: gate
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          EVENT_BEFORE: ${{ github.event.before }}
+        run: python .github/scripts/release_gate.py
 
-    - name: Install dependencies with uv
-      run: |
-        uv pip install --system -e .
-        uv pip install --system pytest ruff flake8
-
-    - name: Run linter (ruff)
-      run: |
-        # Run ruff linter (ignores .ipynb files automatically)
-        ruff check . --exclude "*.ipynb" --exclude "research" || true
-        echo "Ruff linting complete"
-
-    - name: Run linter (flake8)
-      run: |
-        # Run flake8 as backup (exclude notebooks and research)
-        flake8 . --exclude="*.ipynb,research" --max-line-length=120 --extend-ignore=E203,W503 || true
-        echo "Flake8 linting complete"
-
-    - name: Run tests
-      run: |
-        # Run pytest
-        pytest tests/ -v || echo "Tests completed with warnings"
-        echo "Tests complete"
-
-  build:
-    name: Build distribution
-    needs: test  # Only build if tests pass
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v5
-
-    - name: Set up Python
-      uses: actions/setup-python@v6
-      with:
-        python-version: '3.13'
-
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-    - name: Install build dependencies with uv
-      run: |
-        uv pip install --system build hatchling
-
-    - name: Build package
-      run: python -m build
-
-    - name: Upload distributions
-      uses: actions/upload-artifact@v6
-      with:
-        name: python-package-distributions
-        path: dist/
-
-  publish-to-pypi:
+  # ---------------------------------------------------------------------------
+  # 2. Publish to PyPI (Trusted Publisher / OIDC). Builds run only after this
+  #    succeeds, so non-release pushes never reach the expensive Nuitka jobs.
+  # ---------------------------------------------------------------------------
+  publish-pypi:
     name: Publish to PyPI
-    needs: build
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
     runs-on: ubuntu-latest
-    # Only publish on push to master
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-
-    # PyPI Trusted Publisher environment
     environment:
       name: PyPI
       url: https://pypi.org/p/impulcifer-py313
-
-    # IMPORTANT: this permission is mandatory for trusted publishing
     permissions:
-      id-token: write  # OIDC token for PyPI Trusted Publisher
-      contents: read   # Read repository contents
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Build distribution
+        run: |
+          uv pip install --system build hatchling
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Rekor is an external transparency log; transient 5xx responses
+          # should not block package publication.
+          attestations: false
+          # Idempotent re-runs: a version already on PyPI is a no-op rather
+          # than a failure. The gate already refuses to release a published
+          # version, so this only guards manual re-dispatch.
+          skip-existing: true
+          verbose: true
+
+  # ---------------------------------------------------------------------------
+  # 3. Cross-platform Nuitka builds. `needs: publish-pypi` (default success
+  #    semantics) is the gate: builds start ONLY after PyPI publish succeeds.
+  #    Steps moved verbatim from the former release-cross-platform.yml; only
+  #    the checkout ref (the bumped commit) and the needs/if guards are new.
+  # ---------------------------------------------------------------------------
+  build-windows:
+    name: Build Windows Distribution
+    needs: [gate, publish-pypi]
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: windows-latest
 
     steps:
-    - name: Download distributions
-      uses: actions/download-artifact@v7
-      with:
-        name: python-package-distributions
-        path: dist/
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+          fetch-depth: 0
 
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      # No API token needed - uses OIDC Trusted Publisher
-      with:
-        # Rekor is an external transparency log; transient 5xx responses
-        # should not block package publication.
-        attestations: false
-        # Master can receive CI/docs-only merges without a version bump.
-        # Keep those pushes green when PyPI already has this exact release.
-        skip-existing: true
-        verbose: true
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Cache Nuitka compilation
+        uses: actions/cache@v5
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-nuitka-
+
+      - name: Install build requirements and project dependencies
+        run: |
+          echo "[1/3] Installing required packages with uv (ultra-fast Python package installer)..."
+          uv pip install --system "nuitka>=4.1"
+          if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
+            echo "Python 3.11+ detected, tomllib is available."
+          else
+            echo "Python < 3.11 detected, installing toml package."
+            uv pip install --system toml
+          fi
+          echo "Installing project dependencies from requirements.txt..."
+          uv pip install --system -r requirements.txt
+          echo "All dependencies installed successfully with uv!"
+        shell: bash
+
+      - name: Read project version and set APP_VERSION
+        run: |
+          APP_VERSION=$(python infra/get_version.py)
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "Building version: $APP_VERSION"
+        shell: bash
+
+      - name: Run Nuitka build using build_nuitka.py
+        run: |
+          echo "[2/3] Starting optimized Nuitka build for Windows..."
+          python build_scripts/build_nuitka.py
+          echo "NUITKA_OUTPUT_DIR=${{ github.workspace }}\dist\Impulcifer_Distribution\ImpulciferGUI" >> $GITHUB_ENV
+          echo "PROJECT_ROOT_FOR_ISS=${{ github.workspace }}" >> $GITHUB_ENV
+          echo "ISS_PATH=${{ github.workspace }}\.github\workflows\Output" >> $GITHUB_ENV
+          echo "Successfully built with Nuitka (optimized)."
+        shell: bash
+        env:
+          PYTHONIOENCODING: UTF-8
+
+      - name: Install Velopack CLI
+        run: |
+          dotnet tool install -g vpk
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+        shell: bash
+
+      - name: Package with Velopack
+        run: |
+          # Nuitka 빌드 결과물 경로
+          DIST_DIR="${{ github.workspace }}/dist/Impulcifer_Distribution/ImpulciferGUI/gui_main.dist"
+          OUTPUT_DIR="${{ github.workspace }}/velopack-releases"
+
+          mkdir -p "$OUTPUT_DIR"
+
+          # Velopack 패키징 — Pulse 리디자인의 멀티 해상도 아이콘 적용.
+          # logo/pulse.ico는 16/24/32/48/64/128/256 frame을 모두 포함해 vpk가
+          # 인스톨러 / 단축키 / Add-Remove Programs 항목 모두에 같은 마크를 박아준다.
+          vpk pack \
+            --packId "Impulcifer" \
+            --packTitle "Modern Impulcifer" \
+            --packVersion "${{ env.APP_VERSION }}" \
+            --packDir "$DIST_DIR" \
+            --mainExe "ImpulciferGUI.exe" \
+            --icon "${{ github.workspace }}/logo/pulse.ico" \
+            --shortcuts Desktop,StartMenuRoot \
+            --outputDir "$OUTPUT_DIR"
+
+          echo "VELOPACK_OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_ENV
+
+          echo "Velopack output files:"
+          ls -la "$OUTPUT_DIR"
+        shell: bash
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+      - name: Upload Velopack releases
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-velopack
+          path: ${{ env.VELOPACK_OUTPUT_DIR }}/*
+          retention-days: 30
+
+  build-macos:
+    name: Build macOS Distribution
+    needs: [gate, publish-pypi]
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Cache Nuitka compilation
+        uses: actions/cache@v5
+        with:
+          path: ~/Library/Caches/Nuitka
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-nuitka-
+
+      - name: Install build requirements and project dependencies
+        run: |
+          echo "Installing required packages with uv..."
+          uv pip install --system "nuitka>=4.1" ordered-set
+          if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
+            echo "Python 3.11+ detected, tomllib is available."
+          else
+            uv pip install --system toml
+          fi
+          uv pip install --system -r requirements.txt
+          echo "All dependencies installed successfully!"
+
+      - name: Read project version
+        run: |
+          APP_VERSION=$(python infra/get_version.py)
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+
+      - name: Run Nuitka build for macOS
+        run: |
+          echo "Starting Nuitka build for macOS via build_scripts/build_nuitka.py..."
+          # Inline Nuitka 명령은 build_scripts/build_nuitka.py로 통합됨.
+          # 플랫폼은 platform.system()으로 자동 감지된다 (Windows job과 동일).
+          python build_scripts/build_nuitka.py
+
+          echo "Checking macOS build output:"
+          ls -la dist/macos/
+
+          # build_nuitka.py가 --macos-app-name=Impulcifer를 부여하므로
+          # Nuitka 4.x에서는 dist/macos/Impulcifer.app으로 직접 생성된다.
+          # 이전 Nuitka가 gui_main.app으로 떨어뜨리던 경우에 대비한 안전장치:
+          if [ -d "dist/macos/gui_main.app" ] && [ ! -d "dist/macos/Impulcifer.app" ]; then
+            echo "Renaming gui_main.app to Impulcifer.app..."
+            mv dist/macos/gui_main.app dist/macos/Impulcifer.app
+          fi
+
+          echo "Final macOS build structure:"
+          ls -la dist/macos/
+        env:
+          PYTHONIOENCODING: UTF-8
+
+      - name: Create DMG installer
+        run: |
+          echo "Creating DMG installer..."
+          brew install create-dmg || true
+          mkdir -p dist/dmg
+
+          # 경로 확인 디버깅용 출력
+          echo "Checking dist/macos contents:"
+          ls -R dist/macos
+
+          # .app 파일 복사 (없으면 에러 발생시키고 종료)
+          if [ -d "dist/macos/Impulcifer.app" ]; then
+            echo "Found Impulcifer.app, copying to dist/dmg/"
+            cp -R dist/macos/Impulcifer.app dist/dmg/
+          else
+            echo "Error: Impulcifer.app not found in dist/macos!"
+            echo "Searching for any .app files..."
+            find dist/macos -name "*.app" -type d
+            exit 1
+          fi
+
+          # DMG 생성
+          create-dmg \
+            --volname "Impulcifer" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --app-drop-link 600 185 \
+            --hdiutil-quiet \
+            "dist/Impulcifer-${{ env.APP_VERSION }}-macOS.dmg" \
+            "dist/dmg/"
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-dmg
+          path: dist/Impulcifer-*.dmg
+          retention-days: 30
+          if-no-files-found: warn
+
+  build-linux:
+    name: Build Linux Distribution
+    needs: [gate, publish-pypi]
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            patchelf \
+            desktop-file-utils \
+            libfuse2 \
+            imagemagick \
+            portaudio19-dev \
+            python3-tk \
+            python3-dev \
+            libasound2-dev \
+            libportaudio2 \
+            libportmidi-dev \
+            libhdf5-dev \
+            libatlas-base-dev \
+            gfortran \
+            libopenblas-dev
+
+      - name: Cache Nuitka compilation
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/Nuitka
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('**/*.py') }}
+          restore-keys: |
+            ${{ runner.os }}-nuitka-
+
+      - name: Install build requirements and project dependencies
+        run: |
+          echo "Installing required packages with uv..."
+          uv pip install --system "nuitka>=4.1" ordered-set patchelf
+          if python -c "import sys; exit(0) if sys.version_info.major == 3 and sys.version_info.minor >= 11 else exit(1)"; then
+            echo "Python 3.11+ detected, tomllib is available."
+          else
+            uv pip install --system toml
+          fi
+          uv pip install --system -r requirements.txt
+          echo "All dependencies installed successfully!"
+
+      - name: Read project version
+        run: |
+          APP_VERSION=$(python infra/get_version.py)
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+
+      - name: Run Nuitka build for Linux
+        run: |
+          echo "Starting Nuitka build for Linux via build_scripts/build_nuitka.py..."
+          echo "Single source of truth: build_scripts/nuitka_flags.py"
+          python build_scripts/build_nuitka.py
+
+          echo "Checking Linux build output:"
+          ls -la dist/linux/
+        env:
+          PYTHONIOENCODING: UTF-8
+
+      - name: Create AppImage
+        run: |
+          echo "Creating AppImage from standalone folder..."
+
+          # Use appimagetool directly (Nuitka standalone already bundles all dependencies)
+          # linuxdeploy causes issues with scipy's internal OpenBLAS libraries
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+          # standalone 폴더 확인
+          STANDALONE_DIR="dist/linux/gui_main.dist"
+          if [ ! -d "$STANDALONE_DIR" ]; then
+            echo "Error: Standalone folder not found at $STANDALONE_DIR"
+            echo "Contents of dist/linux:"
+            ls -la dist/linux/
+            exit 1
+          fi
+
+          echo "Found standalone folder: $STANDALONE_DIR"
+          echo "Contents:"
+          ls -la "$STANDALONE_DIR"
+
+          # AppDir 구조 생성 (standalone 폴더 전체를 포함)
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/lib/impulcifer
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/share/metainfo
+
+          # standalone 폴더 전체를 lib 디렉토리로 복사
+          cp -r "$STANDALONE_DIR"/* AppDir/usr/lib/impulcifer/
+
+          # 실행 파일 찾기
+          EXEC_NAME=""
+          if [ -f "AppDir/usr/lib/impulcifer/Impulcifer" ]; then
+            EXEC_NAME="Impulcifer"
+          elif [ -f "AppDir/usr/lib/impulcifer/Impulcifer.bin" ]; then
+            EXEC_NAME="Impulcifer.bin"
+          elif [ -f "AppDir/usr/lib/impulcifer/gui_main" ]; then
+            EXEC_NAME="gui_main"
+          elif [ -f "AppDir/usr/lib/impulcifer/gui_main.bin" ]; then
+            EXEC_NAME="gui_main.bin"
+          else
+            echo "Error: Executable not found in standalone folder"
+            find AppDir/usr/lib/impulcifer -type f -executable | head -10
+            exit 1
+          fi
+
+          echo "Found executable: $EXEC_NAME"
+
+          # Create AppRun script (required by AppImage)
+          {
+            echo '#!/bin/bash'
+            echo 'SELF=$(readlink -f "$0")'
+            echo 'HERE=${SELF%/*}'
+            echo 'export PATH="${HERE}/usr/bin:${PATH}"'
+            echo 'export LD_LIBRARY_PATH="${HERE}/usr/lib/impulcifer:${LD_LIBRARY_PATH}"'
+            echo 'exec "${HERE}/usr/lib/impulcifer/'"$EXEC_NAME"'" "$@"'
+          } > AppDir/AppRun
+          chmod +x AppDir/AppRun
+
+          # Create desktop file (no indentation - Desktop Entry format requirement)
+          {
+            echo '[Desktop Entry]'
+            echo 'Type=Application'
+            echo 'Name=Impulcifer'
+            echo 'Comment=HRIR Measurement and Binaural Processing System'
+            echo 'Exec=AppRun'
+            echo 'Icon=impulcifer'
+            echo 'Categories=AudioVideo;Audio;'
+            echo 'Terminal=false'
+          } > AppDir/impulcifer.desktop
+          cp AppDir/impulcifer.desktop AppDir/usr/share/applications/
+
+          # Create icon using ImageMagick
+          convert -size 256x256 xc:none -gravity center \
+            -pointsize 72 -fill '#4A90E2' \
+            -draw "circle 128,128 128,28" \
+            -pointsize 48 -fill white \
+            -annotate +0+0 "I" \
+            AppDir/impulcifer.png 2>/dev/null || \
+          convert -size 256x256 xc:'#4A90E2' AppDir/impulcifer.png
+
+          # Copy icon to proper locations
+          cp AppDir/impulcifer.png AppDir/usr/share/icons/hicolor/256x256/apps/
+          cp AppDir/impulcifer.png AppDir/.DirIcon
+
+          echo "AppDir structure:"
+          ls -la AppDir/
+          ls -la AppDir/usr/lib/impulcifer/ | head -20
+
+          # Create AppImage using appimagetool (no dependency resolution - just packaging)
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage AppDir "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+
+          if [ -f "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage" ]; then
+            echo "Successfully created: Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+            ls -lh "Impulcifer-${{ env.APP_VERSION }}-x86_64.AppImage"
+          else
+            echo "Error: AppImage was not created"
+            exit 1
+          fi
+
+      - name: Create tarball distribution
+        run: |
+          echo "Creating tarball distribution from standalone folder..."
+
+          # standalone 폴더 확인
+          STANDALONE_DIR="dist/linux/gui_main.dist"
+          if [ ! -d "$STANDALONE_DIR" ]; then
+            echo "Error: Standalone folder not found"
+            exit 1
+          fi
+
+          # 배포용 디렉토리 생성 (standalone 폴더 전체 복사)
+          mkdir -p dist/Impulcifer-linux
+          cp -r "$STANDALONE_DIR"/* dist/Impulcifer-linux/
+
+          # Copy optional documentation files
+          [ -f "README.txt" ] && cp README.txt dist/Impulcifer-linux/ && echo "Copied README.txt"
+          [ -f "LICENSE" ] && cp LICENSE dist/Impulcifer-linux/ && echo "Copied LICENSE"
+
+          # 실행 파일 이름 찾기
+          EXEC_NAME=""
+          if [ -f "dist/Impulcifer-linux/Impulcifer" ]; then
+            EXEC_NAME="Impulcifer"
+          elif [ -f "dist/Impulcifer-linux/Impulcifer.bin" ]; then
+            EXEC_NAME="Impulcifer.bin"
+          elif [ -f "dist/Impulcifer-linux/gui_main" ]; then
+            EXEC_NAME="gui_main"
+          elif [ -f "dist/Impulcifer-linux/gui_main.bin" ]; then
+            EXEC_NAME="gui_main.bin"
+          fi
+
+          # Create run script
+          {
+            echo '#!/bin/bash'
+            echo 'SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"'
+            echo 'cd "$SCRIPT_DIR"'
+            echo "./$EXEC_NAME \"\$@\""
+          } > dist/Impulcifer-linux/run.sh
+          chmod +x dist/Impulcifer-linux/run.sh
+
+          echo "Tarball contents:"
+          ls -lah dist/Impulcifer-linux/ | head -20
+
+          # Create tarball
+          cd dist
+          tar czf "Impulcifer-${{ env.APP_VERSION }}-linux-x86_64.tar.gz" Impulcifer-linux
+          cd ..
+
+          echo "Tarball created: dist/Impulcifer-${{ env.APP_VERSION }}-linux-x86_64.tar.gz"
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-appimage
+          path: Impulcifer-*.AppImage
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload Linux tarball
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-tarball
+          path: dist/Impulcifer-*.tar.gz
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 4. Aggregate artifacts into a GitHub Release.
+  # ---------------------------------------------------------------------------
+  create-release:
+    name: Create Cross-Platform Release
+    needs: [gate, build-windows, build-macos, build-linux]
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Get version
+        run: |
+          APP_VERSION="${{ needs.gate.outputs.version }}"
+          echo "APP_VERSION=$APP_VERSION" >> $GITHUB_ENV
+          echo "Version: $APP_VERSION"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: |
+          echo "Downloaded artifacts:"
+          ls -R artifacts/
+
+      - name: Generate Release Tag and Notes
+        run: |
+          TAG_NAME="v${{ env.APP_VERSION }}"
+          # Clean vX.Y.Z tags are unique per release (the gate guarantees a
+          # fresh version). Guard against a re-run colliding with an existing
+          # tag rather than silently moving it.
+          if git rev-parse -q --verify "refs/tags/$TAG_NAME" >/dev/null; then
+            echo "TAG_EXISTS=1" >> $GITHUB_ENV
+            echo "Tag $TAG_NAME already exists; release creation will be skipped."
+          else
+            echo "TAG_EXISTS=0" >> $GITHUB_ENV
+          fi
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            COMMIT_RANGE="HEAD"
+          else
+            COMMIT_RANGE="$LAST_TAG..HEAD"
+          fi
+          CHANGELOG_BODY=$(git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $COMMIT_RANGE)
+
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG_BODY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        if: env.TAG_EXISTS == '0'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: "Impulcifer ${{ env.APP_VERSION }} - Cross-Platform Release"
+          body: |
+            # Impulcifer ${{ env.APP_VERSION }} - Cross-Platform Release
+
+            이제 **Windows, macOS, Linux** 모든 플랫폼에서 Impulcifer를 사용할 수 있습니다!
+
+            ## 다운로드
+
+            ### Windows
+            - `Impulcifer-*-win-Setup.exe` - Windows 인스톨러 (권장, 자동 업데이트 지원)
+            - `RELEASES`, `*.nupkg` - 자동 업데이트용 파일
+
+            ### macOS
+            - `Impulcifer-*-macOS.dmg` - macOS DMG 이미지
+
+            ### Linux
+            - `Impulcifer-*-x86_64.AppImage` - AppImage (모든 배포판)
+            - `Impulcifer-*-linux-x86_64.tar.gz` - Tarball 아카이브
+
+            ## 변경사항
+
+            ${{ env.RELEASE_NOTES }}
+
+            ---
+
+            ## Installation Instructions
+
+            ### Windows
+            1. Download `Impulcifer-*-win-Setup.exe`
+            2. Run the installer
+            3. The app will be installed to `%LocalAppData%\Impulcifer`
+            4. Shortcuts will be created on Desktop and Start Menu
+
+            ### macOS
+            1. Download `Impulcifer-*-macOS.dmg`
+            2. Open the DMG file
+            3. Drag Impulcifer to Applications folder
+
+            ### Linux
+
+            **AppImage (권장):**
+            ```bash
+            chmod +x Impulcifer-*.AppImage
+            ./Impulcifer-*.AppImage
+            ```
+
+            **Tarball:**
+            ```bash
+            tar xzf Impulcifer-*-linux-x86_64.tar.gz
+            cd Impulcifer-linux
+            ./run.sh
+            ```
+          files: |
+            artifacts/windows-velopack/*
+            artifacts/macos-dmg/*
+            artifacts/linux-appimage/*
+            artifacts/linux-tarball/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

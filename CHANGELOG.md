@@ -12,6 +12,9 @@ PR #123(2.7.6)에 달린 Codex 자동 리뷰(P2)를 검증한 결과, `core/ffmp
 #### 🐛 버그 수정
 - **`ffmpeg_utils` 셸의 lazy 상태 재노출 복원**: PEP 562 모듈 `__getattr__`로 누락된 속성 읽기를 `core.ffmpeg_discovery`에 위임했다. 단순 `from ... import FFMPEG_PATH` 재노출은 import 시점의 `None`에 고정돼 `ensure_ffmpeg_available()`의 재할당을 추적하지 못하므로(stale `None`), 매 접근 시 discovery 모듈에서 live 값을 해석하는 `__getattr__`가 정답이다. 회귀 테스트(`tests/test_ffmpeg_lazy_setup.py`)로 셸이 discovery의 mutation을 추적함과 미존재 속성의 `AttributeError`를 고정. BRIR 출력 무관(md5 byte-identical 확인).
 
+#### 🔧 빌드 / 설정 변경
+- **자동 버전 bump + PyPI-성공 게이팅 릴리스 파이프라인**: 흩어져 있던 릴리스 워크플로(`publish.yml` + `python-publish.yml` + `release-cross-platform.yml`, master push마다 무조건 3-플랫폼 Nuitka 빌드)를 단일 게이트 파이프라인 `publish.yml` 하나로 통합했다. master push 시 `gate`(→ `.github/scripts/release_gate.py`)가 변경 경로를 검사해, 출하물 변경인데 수동 bump가 누락됐으면 PATCH를 자동 증가(`[skip ci]` 커밋)하고, 수동 bump(특히 MINOR/MAJOR)는 존중한다. 빌드(`build-windows`/`macos`/`linux`)는 `needs: publish-pypi`로 **PyPI 발행 성공 후에만** 시작하므로, docs/CI/tests만 바꾼 push는 PyPI·빌드를 모두 건너뛴다(러너 절약). PyPI Trusted Publisher OIDC 보존을 위해 파일명 `publish.yml` + `environment: PyPI`를 유지. 게이트 결정 로직은 `tests/test_release_gate.py`로 고정. 이중 PyPI publish 위험 제거. (런타임/출하물 무변경 → 버전 bump 없음.)
+
 ## 2.7.6 - 2026-06-09
 ### 격주 감사(#113·#115) 잔여 deferred finding 해결
 

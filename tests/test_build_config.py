@@ -15,7 +15,7 @@ def test_nuitka_build_configs_do_not_use_onefile() -> None:
         "build_scripts/build_nuitka.py",
         ".github/workflows/build-linux.yml",
         ".github/workflows/build-macos.yml",
-        ".github/workflows/release-cross-platform.yml",
+        ".github/workflows/publish.yml",
     ]
 
     offenders = [
@@ -38,7 +38,7 @@ def test_nuitka_build_workflows_use_python_314_and_nuitka_41() -> None:
         assert "python-version: '3.14'" in text, path
         assert '"nuitka>=4.1"' in text, path
 
-    release_text = (PROJECT_ROOT / ".github/workflows/release-cross-platform.yml").read_text(encoding="utf-8")
+    release_text = (PROJECT_ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
     assert release_text.count("python-version: '3.14'") >= 3
     assert release_text.count('"nuitka>=4.1"') >= 3
 
@@ -48,7 +48,7 @@ def test_nuitka_build_workflows_do_not_request_free_threaded_python() -> None:
     config_paths = [
         ".github/workflows/build-linux.yml",
         ".github/workflows/build-macos.yml",
-        ".github/workflows/release-cross-platform.yml",
+        ".github/workflows/publish.yml",
         "build_scripts/build_nuitka.py",
         "build_scripts/nuitka_flags.py",
     ]
@@ -64,7 +64,7 @@ def test_nuitka_build_workflows_do_not_request_free_threaded_python() -> None:
 
 def test_release_linux_build_uses_canonical_nuitka_script() -> None:
     """The release Linux job should not drift from build_scripts/nuitka_flags.py."""
-    text = (PROJECT_ROOT / ".github/workflows/release-cross-platform.yml").read_text(encoding="utf-8")
+    text = (PROJECT_ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
     assert "python build_scripts/build_nuitka.py" in text
     assert "python -m nuitka \\" not in text
 

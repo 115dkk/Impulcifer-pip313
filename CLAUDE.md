@@ -71,7 +71,7 @@ updater/
 
 데모 WAV 파일(`data/demo/*.wav`)은 raw 바이너리로 repo에 포함되어 있다(약 55MB). 일반 `git clone`으로 받아진다. `.gitignore`가 demo 폴더를 기본 무시하면서 화이트리스트로 필요한 파일들만 통과시키므로, 새 데모 파일을 추가할 때는 `.gitignore`의 `!data/demo/...` 라인을 갱신해야 한다.
 
-Nuitka 빌드 플래그의 정본은 `build_scripts/nuitka_flags.py`다. `build_scripts/build_nuitka.py`는 이 모듈에서 import하여 사용하므로, Windows 릴리스 워크플로(`release-cross-platform.yml`)에서 호출되는 경로는 자동으로 동기화된다. 다만 `.github/workflows/build-linux.yml`, `build-macos.yml`, `release-cross-platform.yml`의 macOS 잡은 아직 인라인 Nuitka 명령을 사용한다(이슈 #87 Phase 4 후속). 빌드 플래그를 추가/변경할 때는 우선 `nuitka_flags.py`를 갱신하고, 인라인 명령이 남은 워크플로 3곳에도 같은 플래그가 반영됐는지 확인할 것. `python build_scripts/nuitka_flags.py --platform linux --version X` 으로 정본 플래그 목록을 한 줄씩 출력해 비교에 활용할 수 있다.
+Nuitka 빌드 플래그의 정본은 `build_scripts/nuitka_flags.py`다. 모든 빌드 진입점 — 릴리스 파이프라인(`.github/workflows/publish.yml`의 `build-windows`/`build-macos`/`build-linux` 잡)과 수동 빌드 워크플로(`build-linux.yml`, `build-macos.yml`) — 은 인라인 Nuitka 명령 없이 `python build_scripts/build_nuitka.py`를 호출하고, 이 스크립트가 `nuitka_flags.py`를 import하므로 플래그는 한 곳에서 동기화된다(이슈 #87 Phase 4에서 인라인 명령 제거 완료). 빌드 플래그를 추가/변경할 때는 `nuitka_flags.py`만 갱신하면 된다. `python build_scripts/nuitka_flags.py --platform linux --version X` 으로 정본 플래그 목록을 한 줄씩 출력해 비교에 활용할 수 있다.
 
 `requirements.txt`와 `pyproject.toml`의 `[project] dependencies`는 동기화 상태를 유지해야 한다. 정본은 `pyproject.toml`이다.
 
@@ -112,7 +112,7 @@ en.json과 ko.json의 키는 현재 264개로 완전히 일치한다. 이 동기
 
 ### 2. 런타임 변경 시 버전 bump를 포함할 것
 
-`core/`, `autoeq/`, `impulcifer.py`, 의존성 등 임펄사이퍼 실행에 영향을 주는 변경이 포함된 PR에서는 `pyproject.toml`의 `version` 필드를 반드시 갱신한다. PyPI는 동일 버전의 재업로드를 허용하지 않으므로, 버전 bump 없이는 배포가 불가능하다.
+`core/`, `autoeq/`, `impulcifer.py`, `gui/`, `i18n/`, `infra/`, `updater/`, 번들 자산, 의존성 등 **출하물(PyPI wheel / standalone 앱)에 영향을 주는 변경**이 포함된 PR에서는 `pyproject.toml`의 `version` 필드를 갱신한다. PyPI는 동일 버전의 재업로드를 허용하지 않는다.
 
 SemVer 규칙에 따라 갱신한다.
 
@@ -120,7 +120,15 @@ SemVer 규칙에 따라 갱신한다.
 - MINOR 증가(예: 2.4.11 → 2.5.0): 새 기능 추가, 하위 호환 유지
 - MAJOR 증가(예: 2.4.11 → 3.0.0): 하위 호환이 깨지는 변경
 
-빌드 설정만 변경한 경우, 문서만 수정한 경우에는 버전 bump가 불필요하다.
+빌드 설정만(`.github/`, 빌드 워크플로 등) 변경한 경우, 문서(`*.md`, `docs/`)만 수정한 경우, 테스트(`tests/`)만 추가/수정한 경우에는 버전 bump가 불필요하다.
+
+**자동 bump (안전망).** master에 머지되면 릴리스 파이프라인(`.github/workflows/publish.yml`의 `gate` job, 로직은 `.github/scripts/release_gate.py`)이 변경 경로를 검사한다.
+
+- 출하 변경인데 수동 bump가 누락됐으면 → CI가 **PATCH를 자동 증가**하고 `[skip ci]` 커밋으로 master에 push한 뒤 릴리스를 진행한다. 따라서 PATCH 누락으로 배포가 막히는 일은 없다.
+- 이미 수동으로 bump했으면(특히 MINOR/MAJOR) → **그대로 존중**한다(CI는 추가 bump하지 않음). 즉 MINOR/MAJOR가 필요한 변경은 여전히 손으로 `pyproject.toml`을 올려야 한다.
+- 출하물에 영향이 없는 변경(docs/CI/tests만)이면 → bump도, PyPI publish도, Nuitka 빌드도 **일어나지 않는다**(러너 절약).
+
+경로 판정·제외 목록의 정본은 `.github/scripts/release_gate.py`의 `EXCLUDE`이며, 동작은 `tests/test_release_gate.py`가 고정한다.
 
 ### 3. CHANGELOG에 변경사항을 기록할 것
 
@@ -142,6 +150,8 @@ SemVer 규칙에 따라 갱신한다.
 - 🔧 빌드 / 설정 변경
 
 한국어로 작성하며, 하나의 PR에 여러 카테고리가 포함되면 각각 `####` 소제목으로 분리한다. 버전 bump를 했다면 해당 버전 번호를 사용하고, 버전 bump가 없는 변경(문서, 빌드 설정 등)이면 이전 버전 번호 아래에 날짜만 다르게 추가한다.
+
+출하 변경을 수동 bump 없이 머지해 CI가 PATCH를 자동 증가시킨 경우에는, 자동 bump 커밋이 git log 커밋 제목 기반의 최소 항목을 CHANGELOG에 자동 삽입한다(🔧 카테고리, "CI auto-bump" 명시). 이는 출하 추적용 placeholder이므로, 가능하면 PR에서 수동으로 bump + 의미 있는 CHANGELOG 항목을 직접 작성해 자동 삽입을 피하는 것이 좋다.
 
 ### 4. README.md 갱신 필요성을 확인하고 반영할 것
 
@@ -490,6 +500,29 @@ CI 실패가 보고되면 다음 순서로 대응한다.
 
 체크가 `pending`/`queued`인 상태로 보고하지 말 것 — 사용자가 추가로 모니터링해야 할 짐이 된다.
 
-## 빌드 참고
+## 빌드 / 릴리스 파이프라인
 
 Nuitka standalone 빌드의 엔트리포인트는 `gui_main.py`다. `pyproject.toml`의 `[project.scripts]`에 정의된 콘솔 스크립트(`impulcifer`, `impulcifer_gui`, `impulcifer_gui_legacy`)는 pip 설치 전용이며 standalone 빌드와 무관하다.
+
+릴리스는 단일 게이트 파이프라인 `.github/workflows/publish.yml` 하나로 처리한다(이전의 `publish.yml` + `python-publish.yml` + `release-cross-platform.yml`을 통합). master push 시 다음 순서로 진행한다.
+
+```
+master push
+  └─ gate           : 변경 경로 검사 → 출하 변경이면 (수동 bump 없을 때) PATCH 자동 bump
+  └─ publish-pypi   : (should_release일 때만) wheel 빌드 + PyPI 발행 — environment: PyPI (OIDC)
+  └─ build-*        : (publish-pypi 성공 후에만) Windows/macOS/Linux Nuitka 빌드
+  └─ create-release : 산출물 모아 GitHub Release (태그 vX.Y.Z)
+```
+
+핵심 불변식:
+
+- **파일명은 `publish.yml`을 유지해야 한다.** PyPI Trusted Publisher가 OIDC를 워크플로 파일명 + `environment: PyPI`에 바인딩하므로, 파일명을 바꾸면 pypi.org 설정을 함께 갱신하지 않는 한 발행이 깨진다.
+- **빌드는 PyPI 발행 성공 후에만 돈다**(`build-*` 잡의 `needs: publish-pypi`). 출하물에 영향 없는 push(docs/CI/tests만)는 `gate`가 `should_release=false`로 판정해 PyPI·Nuitka 모두 건너뛴다 — 러너 절약. 모든 post-gate 잡은 명시적 `if: needs.gate.outputs.should_release == 'true'`를 유지하고 `always()`/`!cancelled()`를 쓰지 말 것.
+- `gate`의 auto-bump 커밋은 `[skip ci]`를 달아 push하므로 파이프라인이 재트리거되지 않는다(무한 루프 방지). 후속 잡은 bump 커밋 SHA(`release_sha`)를 checkout한다.
+- 게이트 결정 로직은 `.github/scripts/release_gate.py`(순수 함수는 `tests/test_release_gate.py`로 고정), 빌드 플래그는 `build_scripts/nuitka_flags.py`가 정본이다.
+
+`build-linux.yml`·`build-macos.yml`은 `workflow_dispatch`/`workflow_call` 전용 수동 단일-플랫폼 빌드 도구로, master push에 자동 실행되지 않는다(러너 낭비 없음).
+
+### master 머지 후 릴리스 파이프라인 확인
+
+PR이 master에 머지되면 위 파이프라인이 돈다. 출하 변경이 포함된 PR을 머지한 뒤에는 `publish.yml` 실행 결과까지 확인한다 — `gate`가 의도대로 release/bump를 판정했는지, auto-bump가 발생했다면 master에 `chore(release): auto-bump ...` 커밋이 올라왔는지, PyPI 발행과 3-플랫폼 빌드가 통과했는지 본다. docs/CI/tests만 바꾼 PR이라면 `gate`가 `should_release=false`로 끝나고 빌드 잡들은 skip되는 것이 정상이다.
