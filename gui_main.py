@@ -75,6 +75,8 @@ def _smoke_test():
         "core.plotting.hrir_plotter",
         "core.plotting.impulse_response_plotter",
         "core.ffmpeg_utils",
+        "core.ffmpeg_discovery",
+        "core.audio_truehd",
         "i18n.localization",
         "updater.update_checker",
         "updater.updater_core",
@@ -111,8 +113,12 @@ def _smoke_test():
     ]
 
     import core.utils as core_utils  # noqa: E402
+    import core.font_setup as core_font_setup  # noqa: E402
 
-    core_utils._font_configured = False
+    # Reset the one-shot gate so set_matplotlib_font re-runs for this probe.
+    # The lazy font state lives in core.font_setup after the #115-8 split;
+    # core.utils.set_matplotlib_font is a re-export of the same function.
+    core_font_setup._font_configured = False
     result = core_utils.set_matplotlib_font()
 
     if result.get("source") != "bundled":

@@ -9,11 +9,12 @@ import is side-effect-free, the setup is performed only when something
 actually needs FFmpeg, and the regular WAV reading path no longer triggers
 TrueHD detection.
 
-Issue #87 Phase 5 split the FFmpeg helpers out into ``core.ffmpeg_utils``;
-``core.utils`` re-exports them for backward compatibility, but the lazy
-module-level state lives in ``core.ffmpeg_utils``. Detection-only lookups and
-auto-install attempts are cached separately so informational probes do not
-consume the later install opportunity.
+Issue #87 Phase 5 first split the FFmpeg helpers into ``core.ffmpeg_utils``.
+Audit #115 finding 9 split that further: discovery/install + the lazy
+module-level state now live in ``core.ffmpeg_discovery``, and TrueHD/MLP
+decode + ``read_audio`` in ``core.audio_truehd``. ``core.ffmpeg_utils`` and
+``core.utils`` re-export them for backward compatibility, so the spies below
+are anchored on the modules that actually own the behavior.
 """
 
 from __future__ import annotations
@@ -28,46 +29,58 @@ import unittest.mock as mock
 import numpy as np
 import soundfile as sf
 
+# Modules whose live state / call sites the test reaches into.
+_FFMPEG_MODULES = (
+    "core.utils",
+    "core.ffmpeg_utils",
+    "core.ffmpeg_discovery",
+    "core.audio_truehd",
+)
+
+
+def _purge_ffmpeg_modules() -> None:
+    for module_name in list(sys.modules):
+        if any(
+            module_name == m or module_name.startswith(m + ".")
+            for m in _FFMPEG_MODULES
+        ):
+            del sys.modules[module_name]
+
 
 class FfmpegLazySetupTest(unittest.TestCase):
     """Verify that ``setup_ffmpeg`` is only called when actually needed."""
 
     def setUp(self):
         # Ensure we re-import the FFmpeg modules with the spy in place.
-        for module_name in list(sys.modules):
-            if (
-                module_name == "core.utils"
-                or module_name.startswith("core.utils.")
-                or module_name == "core.ffmpeg_utils"
-                or module_name.startswith("core.ffmpeg_utils.")
-            ):
-                del sys.modules[module_name]
+        _purge_ffmpeg_modules()
 
     def _import_with_spies(self):
-        """Import ``core.utils`` / ``core.ffmpeg_utils`` after patching the
+        """Import ``core.utils`` / the FFmpeg modules after patching the
         setup_ffmpeg + install_ffmpeg call sites.
 
-        Returns a tuple of (core.utils module, setup_spy, install_spy). The
-        spies are anchored on ``core.ffmpeg_utils`` because that is where the
-        lazy initialisation actually runs; ``core.utils`` is only a re-export.
+        Returns (core.utils module, setup_spy, install_spy). The spies are
+        anchored on ``core.ffmpeg_discovery`` because that is where the lazy
+        initialisation actually runs; ``core.utils`` / ``core.ffmpeg_utils``
+        are only re-exports.
         """
         import core.utils as fresh
         importlib.reload(fresh)
-        import core.ffmpeg_utils as ffmpeg_utils
-        importlib.reload(ffmpeg_utils)
+        import core.ffmpeg_discovery as discovery
+        importlib.reload(discovery)
+        import core.audio_truehd  # noqa: F401  (ensure decode layer is loaded)
 
         setup_spy = mock.patch.object(
-            ffmpeg_utils, "setup_ffmpeg", wraps=ffmpeg_utils.setup_ffmpeg
+            discovery, "setup_ffmpeg", wraps=discovery.setup_ffmpeg
         ).start()
         install_spy = mock.patch.object(
-            ffmpeg_utils, "install_ffmpeg", return_value=(None, None)
+            discovery, "install_ffmpeg", return_value=(None, None)
         ).start()
         # Reset the lazy gate so subsequent calls trigger setup_ffmpeg again.
-        ffmpeg_utils.FFMPEG_PATH = None
-        ffmpeg_utils.FFPROBE_PATH = None
-        ffmpeg_utils._FFMPEG_DETECTION_DONE = False
-        ffmpeg_utils._FFMPEG_AUTO_INSTALL_ATTEMPTED = False
-        ffmpeg_utils._FFMPEG_SETUP_DONE = False
+        discovery.FFMPEG_PATH = None
+        discovery.FFPROBE_PATH = None
+        discovery._FFMPEG_DETECTION_DONE = False
+        discovery._FFMPEG_AUTO_INSTALL_ATTEMPTED = False
+        discovery._FFMPEG_SETUP_DONE = False
         return fresh, setup_spy, install_spy
 
     def tearDown(self):
@@ -80,28 +93,21 @@ class FfmpegLazySetupTest(unittest.TestCase):
         # but the side effects (shutil.which, install_ffmpeg) we can.
         with mock.patch("shutil.which") as which_mock, \
              mock.patch("subprocess.run") as run_mock:
-            for module_name in list(sys.modules):
-                if (
-                    module_name == "core.utils"
-                    or module_name.startswith("core.utils.")
-                    or module_name == "core.ffmpeg_utils"
-                    or module_name.startswith("core.ffmpeg_utils.")
-                ):
-                    del sys.modules[module_name]
+            _purge_ffmpeg_modules()
             import core.utils  # noqa: F401
-            import core.ffmpeg_utils as ffmpeg_utils
+            import core.ffmpeg_discovery as discovery
             # No FFmpeg-related work should happen during import.
             self.assertFalse(which_mock.called,
                              "shutil.which must not be called during core.utils import")
             self.assertFalse(run_mock.called,
                              "subprocess.run must not be called during core.utils import")
-            self.assertIsNone(ffmpeg_utils.FFMPEG_PATH,
+            self.assertIsNone(discovery.FFMPEG_PATH,
                               "FFMPEG_PATH must be None until ensure_ffmpeg_available() runs")
-            self.assertIsNone(ffmpeg_utils.FFPROBE_PATH,
+            self.assertIsNone(discovery.FFPROBE_PATH,
                               "FFPROBE_PATH must be None until ensure_ffmpeg_available() runs")
-            self.assertFalse(ffmpeg_utils._FFMPEG_DETECTION_DONE,
+            self.assertFalse(discovery._FFMPEG_DETECTION_DONE,
                              "_FFMPEG_DETECTION_DONE must be False until ensure runs")
-            self.assertFalse(ffmpeg_utils._FFMPEG_AUTO_INSTALL_ATTEMPTED,
+            self.assertFalse(discovery._FFMPEG_AUTO_INSTALL_ATTEMPTED,
                              "_FFMPEG_AUTO_INSTALL_ATTEMPTED must be False until ensure runs")
 
     def test_detection_only_path_is_cached(self):
@@ -119,10 +125,10 @@ class FfmpegLazySetupTest(unittest.TestCase):
     def test_auto_install_true_can_retry_after_detection_only_failure(self):
         """A detection miss with auto_install=False must not poison install later."""
         utils, setup_spy, install_spy = self._import_with_spies()
-        import core.ffmpeg_utils as ffmpeg_utils
+        import core.ffmpeg_discovery as discovery
 
         with mock.patch("shutil.which", return_value=None), \
-             mock.patch.object(ffmpeg_utils, "find_ffmpeg_in_common_paths",
+             mock.patch.object(discovery, "find_ffmpeg_in_common_paths",
                                return_value=(None, None)):
             self.assertFalse(utils.ensure_ffmpeg_available(auto_install=False))
             self.assertFalse(install_spy.called,
@@ -140,10 +146,10 @@ class FfmpegLazySetupTest(unittest.TestCase):
     def test_check_ffmpeg_available_does_not_auto_install_by_default(self):
         """check_ffmpeg_available() defaults to auto_install=False."""
         utils, _, install_spy = self._import_with_spies()
-        import core.ffmpeg_utils as ffmpeg_utils
+        import core.ffmpeg_discovery as discovery
 
         with mock.patch("shutil.which", return_value=None), \
-             mock.patch.object(ffmpeg_utils, "find_ffmpeg_in_common_paths",
+             mock.patch.object(discovery, "find_ffmpeg_in_common_paths",
                                return_value=(None, None)):
             utils.check_ffmpeg_available()
             self.assertFalse(install_spy.called,
@@ -152,10 +158,10 @@ class FfmpegLazySetupTest(unittest.TestCase):
     def test_check_ffmpeg_available_with_auto_install_triggers_install(self):
         """check_ffmpeg_available(auto_install=True) must reach install_ffmpeg()."""
         utils, _, install_spy = self._import_with_spies()
-        import core.ffmpeg_utils as ffmpeg_utils
+        import core.ffmpeg_discovery as discovery
 
         with mock.patch("shutil.which", return_value=None), \
-             mock.patch.object(ffmpeg_utils, "find_ffmpeg_in_common_paths",
+             mock.patch.object(discovery, "find_ffmpeg_in_common_paths",
                                return_value=(None, None)):
             utils.check_ffmpeg_available(auto_install=True)
             self.assertTrue(install_spy.called,
@@ -164,10 +170,10 @@ class FfmpegLazySetupTest(unittest.TestCase):
     def test_truehd_helpers_trigger_lazy_setup(self):
         """is_truehd_file/convert/get_info trigger ensure_ffmpeg_available(True)."""
         utils, setup_spy, install_spy = self._import_with_spies()
-        import core.ffmpeg_utils as ffmpeg_utils
+        import core.ffmpeg_discovery as discovery
 
         with mock.patch("shutil.which", return_value=None), \
-             mock.patch.object(ffmpeg_utils, "find_ffmpeg_in_common_paths",
+             mock.patch.object(discovery, "find_ffmpeg_in_common_paths",
                                return_value=(None, None)):
             self.assertFalse(utils.is_truehd_file("/dev/null/nonexistent.mlp"))
             self.assertTrue(setup_spy.called,
@@ -184,29 +190,29 @@ class FfmpegLazySetupTest(unittest.TestCase):
         ``Dolby TrueHD + Dolby Atmos`` → object master (reject);
         plain ``Dolby TrueHD`` → ordinary stream (allow).
         """
-        import core.ffmpeg_utils as ffmpeg_utils
+        import core.audio_truehd as audio_truehd
 
         with mock.patch.object(
-            ffmpeg_utils, "get_truehd_profile",
+            audio_truehd, "get_truehd_profile",
             return_value="Dolby TrueHD + Dolby Atmos",
         ):
             self.assertTrue(
-                ffmpeg_utils.is_truehd_atmos_object_master("11cmaster.mlp")
+                audio_truehd.is_truehd_atmos_object_master("11cmaster.mlp")
             )
 
         with mock.patch.object(
-            ffmpeg_utils, "get_truehd_profile", return_value="Dolby TrueHD"
+            audio_truehd, "get_truehd_profile", return_value="Dolby TrueHD"
         ):
             self.assertFalse(
-                ffmpeg_utils.is_truehd_atmos_object_master("plain-71.thd")
+                audio_truehd.is_truehd_atmos_object_master("plain-71.thd")
             )
 
         # No profile (ffprobe failed / not TrueHD) → not an object master.
         with mock.patch.object(
-            ffmpeg_utils, "get_truehd_profile", return_value=None
+            audio_truehd, "get_truehd_profile", return_value=None
         ):
             self.assertFalse(
-                ffmpeg_utils.is_truehd_atmos_object_master("whatever.mlp")
+                audio_truehd.is_truehd_atmos_object_master("whatever.mlp")
             )
 
     def test_read_audio_wav_skips_ffmpeg_setup(self):

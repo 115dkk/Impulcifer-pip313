@@ -274,6 +274,7 @@ def test_set_matplotlib_font_picks_bundled_when_no_system_pretendard(
     import matplotlib.font_manager as fm
 
     import core.utils as core_utils
+    import core.font_setup as core_font_setup
 
     # Drop every Pretendard the dev machine has installed so the loader's
     # only path to a Pretendard family is the repo's bundled .otf.
@@ -282,8 +283,10 @@ def test_set_matplotlib_font_picks_bundled_when_no_system_pretendard(
         "ttflist",
         [e for e in fm.fontManager.ttflist if "pretendard" not in (e.fname or "").lower()],
     )
-    # Force re-run (the module memoizes the first call).
-    monkeypatch.setattr(core_utils, "_font_configured", False)
+    # Force re-run (the module memoizes the first call). The memo gate lives in
+    # core.font_setup after the #115-8 split; core_utils.set_matplotlib_font is
+    # a re-export of the same function and reads the gate there.
+    monkeypatch.setattr(core_font_setup, "_font_configured", False)
 
     result = core_utils.set_matplotlib_font()
 

@@ -243,7 +243,7 @@ def print_summary():
         print("  3. pip install impulcifer-py313 재설치")
 
     print()
-    print("상세한 정보는 README_PYTHON314.md를 참고하세요.")
+    print("상세한 정보는 docs/README_PYTHON314.md를 참고하세요.")
     print()
 
 
