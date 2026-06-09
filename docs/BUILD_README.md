@@ -256,18 +256,23 @@ EOF
 
 ## CI/CD 자동 빌드
 
-프로젝트는 GitHub Actions를 통한 자동 크로스 플랫폼 빌드를 지원합니다.
+프로젝트는 GitHub Actions의 단일 게이트 릴리스 파이프라인으로 크로스 플랫폼 빌드를 처리합니다.
 
 ### 워크플로우 파일
-- `.github/workflows/build-macos.yml` - macOS 빌드
-- `.github/workflows/build-linux.yml` - Linux 빌드
-- `.github/workflows/nuitka-distribution.yml` - Windows 빌드
-- `.github/workflows/release-cross-platform.yml` - 통합 릴리스
+- `.github/workflows/publish.yml` - **통합 릴리스 파이프라인** (gate → PyPI 발행 → Windows/macOS/Linux Nuitka 빌드 → GitHub Release). 게이트 로직은 `.github/scripts/release_gate.py`.
+- `.github/workflows/build-macos.yml` / `build-linux.yml` - 수동 단일-플랫폼 빌드(`workflow_dispatch`/`workflow_call` 전용, 자동 트리거 없음).
+- `.github/workflows/test.yml` - 테스트/린트/BRIR 무결성(별도, 빌드와 무관).
 
-### 자동 빌드 트리거
-- `master` 브랜치에 푸시
-- `claude/*` 브랜치에 푸시
-- 수동 실행 (workflow_dispatch)
+### 빌드가 도는 조건 (게이팅)
+크로스 플랫폼 빌드는 **새 버전이 PyPI에 성공적으로 발행된 뒤에만** 실행됩니다. master push 시:
+
+1. `gate`가 변경 경로를 검사한다. 출하물(`core/`, `gui/`, `i18n/`, 의존성, 번들 자산 등) 변경인데 수동 버전 bump가 없으면 **PATCH를 자동 증가**시켜 master에 커밋한다(`[skip ci]`). 수동 bump(특히 MINOR/MAJOR)는 존중한다.
+2. release 대상이면 PyPI에 발행한다(`environment: PyPI`, OIDC Trusted Publisher).
+3. PyPI 발행이 **성공한 경우에만** 3-플랫폼 Nuitka 빌드가 시작된다.
+
+문서/CI/테스트만 바꾼 push는 게이트가 release 대상이 아니라고 판정하므로 PyPI 발행도 빌드도 일어나지 않습니다(러너 절약). 자세한 규칙은 루트 `CLAUDE.md`의 "빌드 / 릴리스 파이프라인" 섹션을 참조하세요.
+
+> ⚠️ `publish.yml` 파일명은 바꾸지 마세요 — PyPI Trusted Publisher가 OIDC를 이 파일명 + `environment: PyPI`에 바인딩합니다.
 
 ### 릴리스 아티팩트
 각 플랫폼별 빌드가 완료되면 다음 파일이 생성됩니다:
