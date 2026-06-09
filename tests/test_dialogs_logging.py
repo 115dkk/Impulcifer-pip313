@@ -22,7 +22,7 @@ def test_run_ui_safe_runs_the_action() -> None:
 def test_run_ui_safe_logs_tclerror_as_debug(monkeypatch) -> None:
     """A destroyed-widget TclError during teardown is expected → debug, swallowed."""
     fake_logger = MagicMock()
-    monkeypatch.setattr(dialogs, "logger", fake_logger)
+    monkeypatch.setattr(dialogs, "ui_lifecycle_logger", fake_logger)
 
     def raise_tcl_error() -> None:
         raise TclError("widget has been destroyed")
@@ -36,7 +36,7 @@ def test_run_ui_safe_logs_tclerror_as_debug(monkeypatch) -> None:
 def test_run_ui_safe_logs_unexpected_as_warning(monkeypatch) -> None:
     """Any other exception is a real bug and must surface as a warning."""
     fake_logger = MagicMock()
-    monkeypatch.setattr(dialogs, "logger", fake_logger)
+    monkeypatch.setattr(dialogs, "ui_lifecycle_logger", fake_logger)
 
     def raise_value_error() -> None:
         raise ValueError("boom")
@@ -44,3 +44,24 @@ def test_run_ui_safe_logs_unexpected_as_warning(monkeypatch) -> None:
     dialogs._run_ui_safe("add_log", raise_value_error)  # must not raise
 
     assert fake_logger.warning.called
+
+
+def test_schedule_ui_uses_non_gui_lifecycle_logger(monkeypatch) -> None:
+    """A closed dialog must not report scheduling failure through add_log again."""
+    fake_logger = MagicMock()
+    monkeypatch.setattr(dialogs, "ui_lifecycle_logger", fake_logger)
+
+    class ClosedDialog:
+        def after(self, *_args, **_kwargs):
+            raise TclError("window has been destroyed")
+
+        def add_log(self, *_args, **_kwargs):
+            raise AssertionError("GUI log callback must not be re-entered")
+
+    dialogs.ProcessingDialog._schedule_ui(
+        ClosedDialog(),
+        "add_log",
+        lambda: None,
+    )
+
+    assert fake_logger.debug.called
