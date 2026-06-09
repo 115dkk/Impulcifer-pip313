@@ -100,9 +100,9 @@ def test_changelog_versions_are_unique_and_date_ordered() -> None:
 
 def test_linked_readmes_match_current_feature_names() -> None:
     """README-linked docs should not drift back to stale option names or claims."""
-    truehd = (PROJECT_ROOT / "README_TrueHD.md").read_text(encoding="utf-8")
-    mic = (PROJECT_ROOT / "README_microphone_deviation_correction.md").read_text(encoding="utf-8")
-    py314 = (PROJECT_ROOT / "README_PYTHON314.md").read_text(encoding="utf-8")
+    truehd = (PROJECT_ROOT / "docs" / "README_TrueHD.md").read_text(encoding="utf-8")
+    mic = (PROJECT_ROOT / "docs" / "README_microphone_deviation_correction.md").read_text(encoding="utf-8")
+    py314 = (PROJECT_ROOT / "docs" / "README_PYTHON314.md").read_text(encoding="utf-8")
 
     assert "--output_truehd_layouts" in truehd
     assert "--truehd-layouts" not in truehd

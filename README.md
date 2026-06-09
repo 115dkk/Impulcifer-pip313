@@ -145,7 +145,7 @@ Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전�
 
 ### 마이크 착용 편차 보정
 
-방향과 무관한 좌우 마이크 불일치(착용·감도)를 보정합니다(v4.0). 헤드폰 보상을 같은 마이크로 측정하면 마이크 응답이 보상 단계에서 이미 소거되므로, **헤드폰 보상이 켜져 있으면 이 보정은 자동으로 생략**됩니다. 자세한 내용은 [마이크 착용 편차 보정](README_microphone_deviation_correction.md) 문서를 참고하세요.
+방향과 무관한 좌우 마이크 불일치(착용·감도)를 보정합니다(v4.0). 헤드폰 보상을 같은 마이크로 측정하면 마이크 응답이 보상 단계에서 이미 소거되므로, **헤드폰 보상이 켜져 있으면 이 보정은 자동으로 생략**됩니다. 자세한 내용은 [마이크 착용 편차 보정](docs/README_microphone_deviation_correction.md) 문서를 참고하세요.
 
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
@@ -190,9 +190,11 @@ impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 
 ## 추가 문서
 
-- [TrueHD/MLP 지원 및 레이아웃 출력](README_TrueHD.md)
-- [마이크 착용 편차 보정](README_microphone_deviation_correction.md)
-- [Python 3.14 및 Nuitka 빌드 메모](README_PYTHON314.md)
+- [TrueHD/MLP 지원 및 레이아웃 출력](docs/README_TrueHD.md)
+- [마이크 착용 편차 보정](docs/README_microphone_deviation_correction.md)
+- [Python 3.14 및 Nuitka 빌드 메모](docs/README_PYTHON314.md)
+- [빌드 가이드 (Nuitka standalone)](docs/BUILD_README.md)
+- [성능 최적화 요약](docs/OPTIMIZATION_SUMMARY.md)
 
 ## 주의 사항
 
