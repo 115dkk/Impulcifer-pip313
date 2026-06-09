@@ -21,7 +21,10 @@ core/
   virtual_bass.py         ← 가상 저음 확장
   microphone_deviation_correction.py  ← 마이크 편차 보정
   recorder.py             ← 녹음/재생
-  utils.py                ← WAV I/O, DSP/플롯 헬퍼 (Phase 5에서 FFmpeg 분리)
+  utils.py                ← audio_io/font_setup/plotting_utils/ffmpeg_utils 재export 셸 (audit #115-8)
+  audio_io.py             ← WAV I/O + DSP 프리미티브 (magnitude_response 등, audit #115-8 분리)
+  font_setup.py           ← matplotlib 한글 폰트 설정 (audit #115-8 분리)
+  plotting_utils.py       ← 플롯/PNG 헬퍼 (audit #115-8 분리)
   ffmpeg_discovery.py     ← FFmpeg 검색/설치 + lazy 초기화 globals (audit #115-9 분리)
   audio_truehd.py         ← TrueHD/MLP 디코드 + read_audio (audit #115-9 분리)
   ffmpeg_utils.py         ← 위 둘의 하위 호환 re-export 셸
