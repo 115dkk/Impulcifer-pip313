@@ -259,39 +259,48 @@ _PRETENDARD_FAMILIES_BY_LANG: dict[str, tuple[str, ...]] = {
 
 
 def _resolve_bundled_font_dir() -> Optional[Path]:
-    """Return the bundled ``font/`` directory across runtime modes."""
-    script_dir = Path(__file__).parent
-    candidates: list[Path] = []
-    try:
-        from infra.resource_helper import get_resource_path
+    """Return the bundled ``font/`` directory across runtime modes.
 
-        candidates.append(Path(get_resource_path("font")))
+    Delegates to :func:`infra.resource_helper.resolve_bundled_font_dir`
+    (resource-path first), passing this module's script-dir / parent-dir
+    fallbacks. The local import keeps a graceful path if ``infra`` is missing.
+    """
+    script_dir = Path(__file__).parent
+    extras = [
+        script_dir / "font",
+        script_dir / "fonts",
+        script_dir.parent / "font",
+        script_dir.parent / "fonts",
+    ]
+    try:
+        from infra.resource_helper import resolve_bundled_font_dir
+
+        return resolve_bundled_font_dir(extras)
     except Exception:
-        pass
-    candidates.extend(
-        [
-            script_dir / "font",
-            script_dir / "fonts",
-            script_dir.parent / "font",
-            script_dir.parent / "fonts",
-        ]
-    )
-    for c in candidates:
-        if c.is_dir():
-            return c
-    return None
+        for c in extras:
+            if c.is_dir():
+                return c
+        return None
 
 
 def _scan_bundled_fonts() -> list[Path]:
-    """Enumerate every ``.otf`` / ``.ttf`` / ``.ttc`` in the bundled font dir."""
-    font_dir = _resolve_bundled_font_dir()
-    if font_dir is None:
+    """Enumerate every ``.otf`` / ``.ttf`` / ``.ttc`` in the bundled font dir.
+
+    Thin wrapper over the shared :func:`infra.resource_helper.scan_bundled_fonts`.
+    """
+    script_dir = Path(__file__).parent
+    extras = [
+        script_dir / "font",
+        script_dir / "fonts",
+        script_dir.parent / "font",
+        script_dir.parent / "fonts",
+    ]
+    try:
+        from infra.resource_helper import scan_bundled_fonts
+
+        return scan_bundled_fonts(extras)
+    except Exception:
         return []
-    suffixes = {".otf", ".ttf", ".ttc"}
-    return sorted(
-        (p for p in font_dir.iterdir() if p.suffix.lower() in suffixes),
-        key=lambda p: p.name.casefold(),
-    )
 
 
 def _find_pretendard_font_file(prefer_jp: bool = False) -> Optional[Path]:

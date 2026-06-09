@@ -38,16 +38,48 @@ def get_font_path(filename):
     """font 폴더 내 파일의 경로를 반환"""
     return get_resource_path(os.path.join("font", filename))
 
-def iter_font_paths():
-    """Return bundled font files in deterministic preference order."""
-    font_dir = Path(get_resource_path("font"))
-    if not font_dir.is_dir():
+def resolve_bundled_font_dir(extra_candidates=()):
+    """Return the bundled ``font/`` directory across all runtime modes.
+
+    Tries :func:`get_resource_path` ``("font")`` first (covers Nuitka
+    standalone, pip-install and dev layouts), then each caller-supplied
+    fallback path in order. Returns ``None`` when no candidate is a directory.
+
+    Single source of truth for bundled-font directory resolution shared by
+    ``core.utils`` (matplotlib backend) and ``gui.utils`` (Tk backend); each
+    passes its own ``extra_candidates`` so their fallback chains are preserved.
+    """
+    candidate = Path(get_resource_path("font"))
+    if candidate.is_dir():
+        return candidate
+    for extra in extra_candidates:
+        extra = Path(extra)
+        if extra.is_dir():
+            return extra
+    return None
+
+
+def scan_bundled_fonts(extra_candidates=()):
+    """List bundled ``.otf``/``.ttf``/``.ttc`` fonts in case-insensitive name order.
+
+    The deterministic casefold sort keeps matplotlib ``findfont`` scoring stable
+    across dev / standalone trees when multiple bundled fonts declare the same
+    family. Shared by ``core.utils`` and ``gui.utils`` (see
+    :func:`resolve_bundled_font_dir`).
+    """
+    font_dir = resolve_bundled_font_dir(extra_candidates)
+    if font_dir is None:
         return []
     suffixes = {".otf", ".ttf", ".ttc"}
     return sorted(
         (path for path in font_dir.iterdir() if path.suffix.lower() in suffixes),
         key=lambda path: path.name.casefold(),
     )
+
+
+def iter_font_paths():
+    """Return bundled font files in deterministic preference order."""
+    return scan_bundled_fonts()
 
 def find_pretendard_font_path():
     """Find the bundled Pretendard font, preferring the shipped variable font."""

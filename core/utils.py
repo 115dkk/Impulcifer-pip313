@@ -43,43 +43,39 @@ font_setup_result: dict = {
 def _resolve_bundled_font_dir() -> "Path | None":
     """Return the bundled ``font/`` directory across all runtime modes.
 
-    Routes through :func:`infra.resource_helper.get_resource_path` first
-    (Nuitka standalone / pip-install / dev), with a last-ditch
-    ``Path(__file__).parent.parent`` fallback for the rare case ``infra``
+    Delegates to :func:`infra.resource_helper.resolve_bundled_font_dir`
+    (resource-path first), passing repo-root ``font``/``fonts`` fallbacks. The
+    local import keeps a graceful degradation path for the rare case ``infra``
     itself can't be imported (e.g. ad-hoc scripts).
     """
-    try:
-        from infra.resource_helper import get_resource_path
-
-        candidate = Path(get_resource_path("font"))
-        if candidate.is_dir():
-            return candidate
-    except Exception:
-        pass
-
     project_root = Path(__file__).parent.parent
-    for legacy in (project_root / "font", project_root / "fonts"):
-        if legacy.is_dir():
-            return legacy
-    return None
+    extras = (project_root / "font", project_root / "fonts")
+    try:
+        from infra.resource_helper import resolve_bundled_font_dir
+
+        return resolve_bundled_font_dir(extras)
+    except Exception:
+        for legacy in extras:
+            if legacy.is_dir():
+                return legacy
+        return None
 
 
 def _scan_bundled_fonts() -> "list[Path]":
     """List every ``.otf`` / ``.ttf`` / ``.ttc`` bundled in the ``font/`` dir.
 
-    Returns the files in case-insensitive name order so the same dev /
-    standalone tree always yields the same registration order — important
-    for matplotlib's ``findfont`` scoring when multiple bundled fonts
-    declare the same family.
+    Thin wrapper over the shared :func:`infra.resource_helper.scan_bundled_fonts`
+    (case-insensitive name order, so matplotlib ``findfont`` scoring stays
+    deterministic across trees).
     """
-    font_dir = _resolve_bundled_font_dir()
-    if font_dir is None:
+    project_root = Path(__file__).parent.parent
+    extras = (project_root / "font", project_root / "fonts")
+    try:
+        from infra.resource_helper import scan_bundled_fonts
+
+        return scan_bundled_fonts(extras)
+    except Exception:
         return []
-    suffixes = {".otf", ".ttf", ".ttc"}
-    return sorted(
-        (p for p in font_dir.iterdir() if p.suffix.lower() in suffixes),
-        key=lambda p: p.name.casefold(),
-    )
 
 
 def _resolve_bundled_pretendard_path() -> "Path | None":
