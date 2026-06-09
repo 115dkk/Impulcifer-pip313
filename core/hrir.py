@@ -61,6 +61,309 @@ def _get_center_value(fr, frequency_range):
     return -diff
 
 
+def _ingest_recording(estimator, fs, file_path, speakers, side=None,
+                       silence_length=2.0, debug=False):
+    """Ingest a combined sweep recording into a {speaker: {side: IR}} map.
+
+    Extracted verbatim from :meth:`HRIR.open_recording` (audit #115 finding 4)
+    so ingestion (WAV load, silence crop, column/segment split, per-speaker IR
+    estimation) is a standalone, unit-testable unit. Byte-identical to the
+    former inline body; the caller merges the returned mapping into ``self.irs``.
+    """
+    irs: dict = {}
+    print = builtins.print if debug else lambda *args, **kwargs: None
+
+    fs, recording = read_wav(file_path, expand=True)
+    if fs != fs:
+        raise ValueError(
+            "Sampling rate of recording must match sampling rate of test signal."
+        )
+
+    # Debug information
+    print(">>>>>>>>> Recording Analysis Debug Info:")
+    print(f"  File: {file_path}")
+    print(f"  Recording shape: {recording.shape}")
+    print(f"  Requested speakers: {speakers}")
+    print(f"  Side: {side}")
+    print(f"  Silence length: {silence_length} seconds")
+    print("  Estimator info:")
+    print(
+        f"    Length: {len(estimator)} samples ({len(estimator) / fs:.2f} seconds)"
+    )
+    print(f"    Sample rate: {estimator.fs} Hz")
+    print(f"    Type: {type(estimator).__name__}")
+    if (
+        hasattr(estimator, "test_signal")
+        and estimator.test_signal is not None
+    ):
+        print(
+            f"    Test signal length: {len(estimator.test_signal)} samples ({len(estimator.test_signal) / estimator.fs:.2f} seconds)"
+        )
+    else:
+        print("    Test signal: Not available or None")
+
+    # Calculate expected recording length
+    expected_length_with_silence = silence_length + len(estimator)
+    print(
+        f"  Expected minimum recording length: {expected_length_with_silence} samples ({expected_length_with_silence / fs:.2f} seconds)"
+    )
+    print(
+        f"  Actual recording length: {recording.shape[1]} samples ({recording.shape[1] / fs:.2f} seconds)"
+    )
+    length_difference = recording.shape[1] - expected_length_with_silence
+    print(
+        f"  Length difference: {length_difference} samples ({length_difference / fs:.2f} seconds)"
+    )
+
+    if length_difference < 0:
+        print(
+            f"  WARNING: Recording is {abs(length_difference)} samples ({abs(length_difference) / fs:.2f} seconds) too short!"
+        )
+        print("  This could be caused by:")
+        print("    1. Recording stopped too early")
+        print("    2. Wrong test signal file used")
+        print("    3. Estimator was created with different parameters")
+
+    # Analyze each channel for actual content
+    print("  Channel content analysis:")
+    for ch in range(recording.shape[0]):
+        max_val = np.max(np.abs(recording[ch, :]))
+        rms_val = np.sqrt(np.mean(recording[ch, :] ** 2))
+        print(
+            f"    Channel {ch}: Max={max_val:.6f}, RMS={rms_val:.6f}, {'ACTIVE' if max_val > 1e-6 else 'EMPTY'}"
+        )
+
+    if silence_length * fs != int(silence_length * fs):
+        raise ValueError(
+            "Silence length must produce full samples with given sampling rate."
+        )
+    silence_length = int(silence_length * fs)
+
+    # 2 tracks per speaker when side is not specified, only 1 track per speaker when it is
+    tracks_k = 2 if side is None else 1
+    print(f"  Tracks per speaker: {tracks_k}")
+
+    # Number of speakers in each track
+    n_columns = round(len(speakers) / (recording.shape[0] // tracks_k))
+    print(f"  Calculated n_columns: {n_columns}")
+    print(f"  Expected total tracks needed: {len(speakers) * tracks_k}")
+    print(f"  Available tracks in recording: {recording.shape[0]}")
+
+    # Warning if mismatch
+    if len(speakers) * tracks_k > recording.shape[0]:
+        print(
+            f"  WARNING: Not enough tracks in recording! Need {len(speakers) * tracks_k}, have {recording.shape[0]}"
+        )
+
+    # Crop out initial silence
+    recording = recording[:, silence_length:]
+    print(f"  After silence crop: {recording.shape}")
+
+    # Split sections in time to columns
+    columns = []
+    column_size = silence_length + len(estimator)
+    print(f"  Column size (silence + estimator): {column_size}")
+    print(f"  Estimator length: {len(estimator)}")
+    print(f"  Available recording length after silence crop: {recording.shape[1]}")
+
+    # Adjust column_size if it exceeds available recording length
+    if column_size > recording.shape[1]:
+        print(
+            f"  WARNING: Calculated column_size ({column_size}) exceeds recording length ({recording.shape[1]})"
+        )
+        print(
+            "  This suggests the recording was too short or estimator is longer than expected"
+        )
+
+        # Try to use the entire available length as a single column
+        if n_columns <= 1:
+            # Single column case - use all available data
+            column_size = recording.shape[1]
+            n_columns = 1
+            print(f"  Adjusted to single column with size: {column_size}")
+        else:
+            # Multiple columns case - divide available length equally
+            column_size = recording.shape[1] // n_columns
+            print(
+                f"  Adjusted column_size to: {column_size} (divided by {n_columns} columns)"
+            )
+            if column_size < len(estimator):
+                print(
+                    f"  ERROR: Even after adjustment, column_size ({column_size}) is smaller than estimator length ({len(estimator)})"
+                )
+                print(
+                    "  This recording is too short for proper impulse response estimation"
+                )
+
+    for i in range(n_columns):
+        start_sample = i * column_size
+        end_sample = min(
+            (i + 1) * column_size, recording.shape[1]
+        )  # Ensure we don't exceed recording length
+
+        if end_sample > start_sample and (end_sample - start_sample) >= len(
+            estimator
+        ):
+            column_data = recording[:, start_sample:end_sample]
+            columns.append(column_data)
+            print(
+                f"  Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
+            )
+        else:
+            print(
+                f"  Column {i}: SKIPPED - insufficient length ({end_sample - start_sample} < {len(estimator)})"
+            )
+
+    if not columns:
+        # Try fallback options for short recordings
+        print("  Attempting fallback solutions for short recording...")
+
+        # Option 1: Reduce silence length
+        if silence_length > 0:
+            min_silence = int(0.5 * fs)  # Minimum 0.5 seconds silence
+            available_for_silence = recording.shape[1] - len(estimator)
+
+            if available_for_silence >= min_silence:
+                adjusted_silence = max(min_silence, available_for_silence)
+                print(
+                    f"  Fallback 1: Reducing silence from {silence_length} to {adjusted_silence} samples"
+                )
+
+                # Recalculate with adjusted silence
+                adjusted_recording = recording[:, adjusted_silence:]
+                column_size = len(estimator)  # No additional silence in column
+
+                for i in range(n_columns):
+                    start_sample = i * column_size
+                    end_sample = min(
+                        (i + 1) * column_size, adjusted_recording.shape[1]
+                    )
+
+                    if end_sample > start_sample and (
+                        end_sample - start_sample
+                    ) >= len(estimator):
+                        column_data = adjusted_recording[:, start_sample:end_sample]
+                        columns.append(column_data)
+                        print(
+                            f"  Fallback Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
+                        )
+                    else:
+                        print(
+                            f"  Fallback Column {i}: SKIPPED - still insufficient length"
+                        )
+
+                if columns:
+                    print(
+                        f"  Fallback 1 successful: Created {len(columns)} columns with reduced silence"
+                    )
+                    # Update the cropped recording for further processing
+                    recording = adjusted_recording
+
+        # Option 2: If still no columns, try using available length even if shorter than estimator
+        if (
+            not columns and recording.shape[1] > len(estimator) * 0.8
+        ):  # At least 80% of estimator length
+            print(
+                "  Fallback 2: Using available recording length even though it's shorter than estimator"
+            )
+            print("  WARNING: This may result in reduced impulse response quality")
+
+            available_length = recording.shape[1]
+            if n_columns == 1:
+                columns.append(recording)
+                print(
+                    f"  Fallback 2: Single column with {available_length} samples"
+                )
+            else:
+                # Divide equally among columns
+                column_size = available_length // n_columns
+                for i in range(n_columns):
+                    start_sample = i * column_size
+                    end_sample = min((i + 1) * column_size, available_length)
+                    if end_sample > start_sample:
+                        column_data = recording[:, start_sample:end_sample]
+                        columns.append(column_data)
+                        print(
+                            f"  Fallback 2 Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
+                        )
+
+        if not columns:
+            raise ValueError(
+                f"No valid columns could be extracted even with fallback methods.\n"
+                f"Recording length ({recording.shape[1]} samples, {recording.shape[1] / fs:.2f}s) is too short "
+                f"for the required estimator length ({len(estimator)} samples, {len(estimator) / fs:.2f}s).\n"
+                f"Solutions:\n"
+                f"  1. Re-record with longer duration (minimum {(len(estimator) + silence_length) / fs:.1f}s)\n"
+                f"  2. Use a shorter test signal\n"
+                f"  3. Check if the correct test signal file was used for recording"
+            )
+
+    print(f"  Successfully created {len(columns)} columns")
+
+    # Split each track by columns
+    i = 0
+    speaker_track_mapping = []
+
+    while i < recording.shape[0]:
+        for j, column in enumerate(columns):
+            n = int(i // 2 * len(columns) + j)
+            if n >= len(speakers):
+                print(
+                    f"  Speaker index {n} exceeds speakers list length {len(speakers)} - skipping"
+                )
+                continue
+
+            speaker = speakers[n]
+            speaker_track_mapping.append(f"Track {i}: Speaker {speaker}")
+
+            if speaker not in SPEAKER_NAMES:
+                print(f"  Skipping non-standard speaker: {speaker}")
+                continue
+
+            if speaker not in irs:
+                irs[speaker] = dict()
+
+            if side is None:
+                # Left first, right then
+                if i + 1 < recording.shape[0]:
+                    left_data = column[i, :]
+                    right_data = column[i + 1, :]
+
+                    print(
+                        f"  Processing {speaker}: Left track {i} (max={np.max(np.abs(left_data)):.6f}), Right track {i + 1} (max={np.max(np.abs(right_data)):.6f})"
+                    )
+
+                    irs[speaker]["left"] = ImpulseResponse(
+                        estimator.estimate(left_data), fs, left_data
+                    )
+                    irs[speaker]["right"] = ImpulseResponse(
+                        estimator.estimate(right_data), fs, right_data
+                    )
+                else:
+                    print(
+                        f"  WARNING: Not enough tracks for stereo processing of {speaker}"
+                    )
+            else:
+                # Only the given side
+                data = column[i, :]
+                print(
+                    f"  Processing {speaker} {side}: Track {i} (max={np.max(np.abs(data)):.6f})"
+                )
+
+                irs[speaker][side] = ImpulseResponse(
+                    estimator.estimate(data), fs, data
+                )
+        i += tracks_k
+
+    print("  Speaker-Track mapping:")
+    for mapping in speaker_track_mapping:
+        print(f"    {mapping}")
+
+    print(f"  Final processed speakers: {list(irs.keys())}")
+    print(">>>>>>>>> Recording Analysis Complete")
+    return irs
+
+
 class HRIR(HRIRPlotter):
     def __init__(self, estimator):
         self.estimator = estimator
@@ -109,296 +412,17 @@ class HRIR(HRIRPlotter):
                 "estimator's sampling rate."
             )
 
-        print = builtins.print if debug else lambda *args, **kwargs: None
-
-        fs, recording = read_wav(file_path, expand=True)
-        if fs != self.fs:
-            raise ValueError(
-                "Sampling rate of recording must match sampling rate of test signal."
-            )
-
-        # Debug information
-        print(">>>>>>>>> Recording Analysis Debug Info:")
-        print(f"  File: {file_path}")
-        print(f"  Recording shape: {recording.shape}")
-        print(f"  Requested speakers: {speakers}")
-        print(f"  Side: {side}")
-        print(f"  Silence length: {silence_length} seconds")
-        print("  Estimator info:")
-        print(
-            f"    Length: {len(self.estimator)} samples ({len(self.estimator) / self.fs:.2f} seconds)"
+        ingested = _ingest_recording(
+            self.estimator,
+            self.fs,
+            file_path,
+            speakers,
+            side=side,
+            silence_length=silence_length,
+            debug=debug,
         )
-        print(f"    Sample rate: {self.estimator.fs} Hz")
-        print(f"    Type: {type(self.estimator).__name__}")
-        if (
-            hasattr(self.estimator, "test_signal")
-            and self.estimator.test_signal is not None
-        ):
-            print(
-                f"    Test signal length: {len(self.estimator.test_signal)} samples ({len(self.estimator.test_signal) / self.estimator.fs:.2f} seconds)"
-            )
-        else:
-            print("    Test signal: Not available or None")
-
-        # Calculate expected recording length
-        expected_length_with_silence = silence_length + len(self.estimator)
-        print(
-            f"  Expected minimum recording length: {expected_length_with_silence} samples ({expected_length_with_silence / self.fs:.2f} seconds)"
-        )
-        print(
-            f"  Actual recording length: {recording.shape[1]} samples ({recording.shape[1] / self.fs:.2f} seconds)"
-        )
-        length_difference = recording.shape[1] - expected_length_with_silence
-        print(
-            f"  Length difference: {length_difference} samples ({length_difference / self.fs:.2f} seconds)"
-        )
-
-        if length_difference < 0:
-            print(
-                f"  WARNING: Recording is {abs(length_difference)} samples ({abs(length_difference) / self.fs:.2f} seconds) too short!"
-            )
-            print("  This could be caused by:")
-            print("    1. Recording stopped too early")
-            print("    2. Wrong test signal file used")
-            print("    3. Estimator was created with different parameters")
-
-        # Analyze each channel for actual content
-        print("  Channel content analysis:")
-        for ch in range(recording.shape[0]):
-            max_val = np.max(np.abs(recording[ch, :]))
-            rms_val = np.sqrt(np.mean(recording[ch, :] ** 2))
-            print(
-                f"    Channel {ch}: Max={max_val:.6f}, RMS={rms_val:.6f}, {'ACTIVE' if max_val > 1e-6 else 'EMPTY'}"
-            )
-
-        if silence_length * self.fs != int(silence_length * self.fs):
-            raise ValueError(
-                "Silence length must produce full samples with given sampling rate."
-            )
-        silence_length = int(silence_length * self.fs)
-
-        # 2 tracks per speaker when side is not specified, only 1 track per speaker when it is
-        tracks_k = 2 if side is None else 1
-        print(f"  Tracks per speaker: {tracks_k}")
-
-        # Number of speakers in each track
-        n_columns = round(len(speakers) / (recording.shape[0] // tracks_k))
-        print(f"  Calculated n_columns: {n_columns}")
-        print(f"  Expected total tracks needed: {len(speakers) * tracks_k}")
-        print(f"  Available tracks in recording: {recording.shape[0]}")
-
-        # Warning if mismatch
-        if len(speakers) * tracks_k > recording.shape[0]:
-            print(
-                f"  WARNING: Not enough tracks in recording! Need {len(speakers) * tracks_k}, have {recording.shape[0]}"
-            )
-
-        # Crop out initial silence
-        recording = recording[:, silence_length:]
-        print(f"  After silence crop: {recording.shape}")
-
-        # Split sections in time to columns
-        columns = []
-        column_size = silence_length + len(self.estimator)
-        print(f"  Column size (silence + estimator): {column_size}")
-        print(f"  Estimator length: {len(self.estimator)}")
-        print(f"  Available recording length after silence crop: {recording.shape[1]}")
-
-        # Adjust column_size if it exceeds available recording length
-        if column_size > recording.shape[1]:
-            print(
-                f"  WARNING: Calculated column_size ({column_size}) exceeds recording length ({recording.shape[1]})"
-            )
-            print(
-                "  This suggests the recording was too short or estimator is longer than expected"
-            )
-
-            # Try to use the entire available length as a single column
-            if n_columns <= 1:
-                # Single column case - use all available data
-                column_size = recording.shape[1]
-                n_columns = 1
-                print(f"  Adjusted to single column with size: {column_size}")
-            else:
-                # Multiple columns case - divide available length equally
-                column_size = recording.shape[1] // n_columns
-                print(
-                    f"  Adjusted column_size to: {column_size} (divided by {n_columns} columns)"
-                )
-                if column_size < len(self.estimator):
-                    print(
-                        f"  ERROR: Even after adjustment, column_size ({column_size}) is smaller than estimator length ({len(self.estimator)})"
-                    )
-                    print(
-                        "  This recording is too short for proper impulse response estimation"
-                    )
-
-        for i in range(n_columns):
-            start_sample = i * column_size
-            end_sample = min(
-                (i + 1) * column_size, recording.shape[1]
-            )  # Ensure we don't exceed recording length
-
-            if end_sample > start_sample and (end_sample - start_sample) >= len(
-                self.estimator
-            ):
-                column_data = recording[:, start_sample:end_sample]
-                columns.append(column_data)
-                print(
-                    f"  Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
-                )
-            else:
-                print(
-                    f"  Column {i}: SKIPPED - insufficient length ({end_sample - start_sample} < {len(self.estimator)})"
-                )
-
-        if not columns:
-            # Try fallback options for short recordings
-            print("  Attempting fallback solutions for short recording...")
-
-            # Option 1: Reduce silence length
-            if silence_length > 0:
-                min_silence = int(0.5 * self.fs)  # Minimum 0.5 seconds silence
-                available_for_silence = recording.shape[1] - len(self.estimator)
-
-                if available_for_silence >= min_silence:
-                    adjusted_silence = max(min_silence, available_for_silence)
-                    print(
-                        f"  Fallback 1: Reducing silence from {silence_length} to {adjusted_silence} samples"
-                    )
-
-                    # Recalculate with adjusted silence
-                    adjusted_recording = recording[:, adjusted_silence:]
-                    column_size = len(self.estimator)  # No additional silence in column
-
-                    for i in range(n_columns):
-                        start_sample = i * column_size
-                        end_sample = min(
-                            (i + 1) * column_size, adjusted_recording.shape[1]
-                        )
-
-                        if end_sample > start_sample and (
-                            end_sample - start_sample
-                        ) >= len(self.estimator):
-                            column_data = adjusted_recording[:, start_sample:end_sample]
-                            columns.append(column_data)
-                            print(
-                                f"  Fallback Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
-                            )
-                        else:
-                            print(
-                                f"  Fallback Column {i}: SKIPPED - still insufficient length"
-                            )
-
-                    if columns:
-                        print(
-                            f"  Fallback 1 successful: Created {len(columns)} columns with reduced silence"
-                        )
-                        # Update the cropped recording for further processing
-                        recording = adjusted_recording
-
-            # Option 2: If still no columns, try using available length even if shorter than estimator
-            if (
-                not columns and recording.shape[1] > len(self.estimator) * 0.8
-            ):  # At least 80% of estimator length
-                print(
-                    "  Fallback 2: Using available recording length even though it's shorter than estimator"
-                )
-                print("  WARNING: This may result in reduced impulse response quality")
-
-                available_length = recording.shape[1]
-                if n_columns == 1:
-                    columns.append(recording)
-                    print(
-                        f"  Fallback 2: Single column with {available_length} samples"
-                    )
-                else:
-                    # Divide equally among columns
-                    column_size = available_length // n_columns
-                    for i in range(n_columns):
-                        start_sample = i * column_size
-                        end_sample = min((i + 1) * column_size, available_length)
-                        if end_sample > start_sample:
-                            column_data = recording[:, start_sample:end_sample]
-                            columns.append(column_data)
-                            print(
-                                f"  Fallback 2 Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
-                            )
-
-            if not columns:
-                raise ValueError(
-                    f"No valid columns could be extracted even with fallback methods.\n"
-                    f"Recording length ({recording.shape[1]} samples, {recording.shape[1] / self.fs:.2f}s) is too short "
-                    f"for the required estimator length ({len(self.estimator)} samples, {len(self.estimator) / self.fs:.2f}s).\n"
-                    f"Solutions:\n"
-                    f"  1. Re-record with longer duration (minimum {(len(self.estimator) + silence_length) / self.fs:.1f}s)\n"
-                    f"  2. Use a shorter test signal\n"
-                    f"  3. Check if the correct test signal file was used for recording"
-                )
-
-        print(f"  Successfully created {len(columns)} columns")
-
-        # Split each track by columns
-        i = 0
-        speaker_track_mapping = []
-
-        while i < recording.shape[0]:
-            for j, column in enumerate(columns):
-                n = int(i // 2 * len(columns) + j)
-                if n >= len(speakers):
-                    print(
-                        f"  Speaker index {n} exceeds speakers list length {len(speakers)} - skipping"
-                    )
-                    continue
-
-                speaker = speakers[n]
-                speaker_track_mapping.append(f"Track {i}: Speaker {speaker}")
-
-                if speaker not in SPEAKER_NAMES:
-                    print(f"  Skipping non-standard speaker: {speaker}")
-                    continue
-
-                if speaker not in self.irs:
-                    self.irs[speaker] = dict()
-
-                if side is None:
-                    # Left first, right then
-                    if i + 1 < recording.shape[0]:
-                        left_data = column[i, :]
-                        right_data = column[i + 1, :]
-
-                        print(
-                            f"  Processing {speaker}: Left track {i} (max={np.max(np.abs(left_data)):.6f}), Right track {i + 1} (max={np.max(np.abs(right_data)):.6f})"
-                        )
-
-                        self.irs[speaker]["left"] = ImpulseResponse(
-                            self.estimator.estimate(left_data), self.fs, left_data
-                        )
-                        self.irs[speaker]["right"] = ImpulseResponse(
-                            self.estimator.estimate(right_data), self.fs, right_data
-                        )
-                    else:
-                        print(
-                            f"  WARNING: Not enough tracks for stereo processing of {speaker}"
-                        )
-                else:
-                    # Only the given side
-                    data = column[i, :]
-                    print(
-                        f"  Processing {speaker} {side}: Track {i} (max={np.max(np.abs(data)):.6f})"
-                    )
-
-                    self.irs[speaker][side] = ImpulseResponse(
-                        self.estimator.estimate(data), self.fs, data
-                    )
-            i += tracks_k
-
-        print("  Speaker-Track mapping:")
-        for mapping in speaker_track_mapping:
-            print(f"    {mapping}")
-
-        print(f"  Final processed speakers: {list(self.irs.keys())}")
-        print(">>>>>>>>> Recording Analysis Complete")
+        for speaker, sides in ingested.items():
+            self.irs.setdefault(speaker, {}).update(sides)
 
     def write_wav(self, file_path, track_order=None, bit_depth=32):
         """Writes impulse responses to a WAV file
