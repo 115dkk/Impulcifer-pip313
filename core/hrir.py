@@ -974,11 +974,9 @@ class HRIR(HRIRPlotter):
                 lag = lags[np.argmax(corr)]
 
                 if lag > 0:
-                    data = self.irs[sp1]["right"].data
-                    self.irs[sp1]["right"].data = np.concatenate((np.zeros(lag), data))[:len(data)]
+                    self.irs[sp1]["right"].shift(lag)
                 elif lag < 0:
-                    data = self.irs[sp1]["left"].data
-                    self.irs[sp1]["left"].data = np.concatenate((np.zeros(-lag), data))[:len(data)]
+                    self.irs[sp1]["left"].shift(-lag)
                 continue
 
             data1 = self.irs[sp1]["left"].data[:segment_len]
@@ -989,12 +987,10 @@ class HRIR(HRIRPlotter):
 
             if lag > 0:
                 for side in ("left", "right"):
-                    data = self.irs[sp2][side].data
-                    self.irs[sp2][side].data = np.concatenate((np.zeros(lag), data))[:len(data)]
+                    self.irs[sp2][side].shift(lag)
             elif lag < 0:
                 for side in ("left", "right"):
-                    data = self.irs[sp1][side].data
-                    self.irs[sp1][side].data = np.concatenate((np.zeros(-lag), data))[:len(data)]
+                    self.irs[sp1][side].shift(-lag)
 
     def align_onset_groups_peak_leftref(self, groups=None):
         """Align speaker groups to FL using each group's left-channel peak.
@@ -1038,16 +1034,9 @@ class HRIR(HRIRPlotter):
                 if speaker not in self.irs:
                     continue
                 for side in ("left", "right"):
-                    data = self.irs[speaker][side].data
-                    n = len(data)
-                    if shift > 0:
-                        trimmed = data[shift:]
-                        if len(trimmed) < n:
-                            trimmed = np.pad(trimmed, (0, n - len(trimmed)))
-                        self.irs[speaker][side].data = trimmed
-                    elif shift < 0:
-                        delay = -shift
-                        self.irs[speaker][side].data = np.concatenate((np.zeros(delay), data))[:n]
+                    # shift>0 advances (peak later than ref), shift<0 delays;
+                    # ImpulseResponse.shift takes the signed sample offset.
+                    self.irs[speaker][side].shift(-shift)
 
     def calculate_reflection_levels(
         self,

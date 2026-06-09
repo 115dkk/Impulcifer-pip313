@@ -140,3 +140,27 @@ def test_align_ipsilateral_preserves_length() -> None:
     for pair in hrir.irs.values():
         for ir in pair.values():
             assert len(ir.data) == n
+
+
+# ── ImpulseResponse.shift() (A4) ─────────────────────────────────────────────
+
+def test_shift_positive_delays_and_truncates() -> None:
+    ir = _ir([1.0, 2.0, 3.0, 4.0])
+    ir.shift(2)  # delay by 2 → prepend 2 zeros, drop the tail to keep length
+    np.testing.assert_array_equal(ir.data, np.array([0.0, 0.0, 1.0, 2.0]))
+
+
+def test_shift_negative_advances_and_zero_pads() -> None:
+    ir = _ir([1.0, 2.0, 3.0, 4.0])
+    ir.shift(-1)  # advance by 1 → drop the leading sample, zero-pad the tail
+    np.testing.assert_array_equal(ir.data, np.array([2.0, 3.0, 4.0, 0.0]))
+
+
+def test_shift_zero_is_noop_and_length_is_preserved() -> None:
+    ir = _ir([1.0, 2.0, 3.0, 4.0])
+    ir.shift(0)
+    np.testing.assert_array_equal(ir.data, np.array([1.0, 2.0, 3.0, 4.0]))
+    ir.shift(3)
+    assert len(ir.data) == 4
+    ir.shift(-3)
+    assert len(ir.data) == 4

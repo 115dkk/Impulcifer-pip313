@@ -420,6 +420,26 @@ class ImpulseResponse(ImpulseResponsePlotter):
             crop_start = 0
         self.data = self.data[crop_start:]
 
+    def shift(self, samples):
+        """Shift the impulse response in time, preserving array length.
+
+        ``samples > 0`` delays the response (prepends ``samples`` zeros and
+        truncates the tail); ``samples < 0`` advances it (drops the leading
+        ``-samples`` samples and zero-pads the tail); ``samples == 0`` is a
+        no-op. This is the single owner of the sample-shift idiom that was
+        previously copy-pasted across :class:`HRIR`'s ipsilateral/onset
+        alignment. The numpy ops are kept byte-identical to those call sites
+        so BRIR output is unchanged.
+        """
+        n = len(self.data)
+        if samples > 0:
+            self.data = np.concatenate((np.zeros(samples), self.data))[:n]
+        elif samples < 0:
+            trimmed = self.data[-samples:]
+            if len(trimmed) < n:
+                trimmed = np.pad(trimmed, (0, n - len(trimmed)))
+            self.data = trimmed
+
     def equalize(self, fir):
         """Equalizes this impulse response with give FIR filter.
 
