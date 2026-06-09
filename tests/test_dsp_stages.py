@@ -164,3 +164,21 @@ def test_shift_zero_is_noop_and_length_is_preserved() -> None:
     assert len(ir.data) == 4
     ir.shift(-3)
     assert len(ir.data) == 4
+
+
+# ── _ingest_recording sample-rate guard (f-4 regression) ─────────────────────
+
+def test_ingest_recording_rejects_mismatched_sample_rate(tmp_path) -> None:
+    """A recording whose rate != the estimator rate must raise (the guard that
+    f-4's extraction must preserve)."""
+    import pytest
+    import soundfile as sf
+    from core.hrir import _ingest_recording
+
+    class _Est:
+        fs = 48_000
+
+    wav = tmp_path / "rec.wav"
+    sf.write(str(wav), np.zeros(4096, dtype=np.float32), 44_100)  # != estimator 48 kHz
+    with pytest.raises(ValueError):
+        _ingest_recording(_Est(), 48_000, str(wav), ["FL"], side="left")

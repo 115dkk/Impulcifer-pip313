@@ -61,20 +61,23 @@ def _get_center_value(fr, frequency_range):
     return -diff
 
 
-def _ingest_recording(estimator, fs, file_path, speakers, side=None,
+def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                        silence_length=2.0, debug=False):
     """Ingest a combined sweep recording into a {speaker: {side: IR}} map.
 
     Extracted verbatim from :meth:`HRIR.open_recording` (audit #115 finding 4)
     so ingestion (WAV load, silence crop, column/segment split, per-speaker IR
-    estimation) is a standalone, unit-testable unit. Byte-identical to the
-    former inline body; the caller merges the returned mapping into ``self.irs``.
+    estimation) is a standalone, unit-testable unit. ``expected_fs`` is the
+    HRIR/estimator sampling rate; the recording's own rate (``fs`` below) must
+    match it. Byte-identical to the former inline body — once the guard passes
+    ``fs == expected_fs``, so the rest reads the same rate the original used.
+    The caller merges the returned mapping into ``self.irs``.
     """
     irs: dict = {}
     print = builtins.print if debug else lambda *args, **kwargs: None
 
     fs, recording = read_wav(file_path, expand=True)
-    if fs != fs:
+    if fs != expected_fs:
         raise ValueError(
             "Sampling rate of recording must match sampling rate of test signal."
         )
