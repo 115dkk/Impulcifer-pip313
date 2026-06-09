@@ -197,6 +197,9 @@ jobs:
           ── PART 1: Architecture Analysis ──
           Run /improve-codebase-architecture.
           Identify specific consolidation and deepening opportunities.
+          Because this is CI, write the complete architecture analysis to
+          ARCHITECTURE_AUDIT.md in the repository root. Do not leave the
+          detailed report only in a temp file or browser-opened HTML file.
           When done, print a Markdown horizontal rule (---) as a
           separator, then proceed immediately to Part 2.
 
@@ -209,10 +212,35 @@ jobs:
           CLAUDE_EXIT=$?
           set -e
 
+          if [ "$CLAUDE_EXIT" -eq 0 ] && [ ! -s ARCHITECTURE_AUDIT.md ]; then
+            echo "::error::Claude audit completed without ARCHITECTURE_AUDIT.md."
+            cat combined-audit-report.md
+            exit 1
+          fi
+
+          if [ "$CLAUDE_EXIT" -eq 0 ] && [ ! -s TECH_DEBT_AUDIT.md ]; then
+            echo "::error::Claude audit completed without TECH_DEBT_AUDIT.md."
+            cat combined-audit-report.md
+            exit 1
+          fi
+
+          if [ -f ARCHITECTURE_AUDIT.md ]; then
+            {
+              echo ""
+              echo "---"
+              echo ""
+              echo "# ARCHITECTURE_AUDIT.md"
+              echo ""
+              cat ARCHITECTURE_AUDIT.md
+            } >> combined-audit-report.md
+          fi
+
           if [ -f TECH_DEBT_AUDIT.md ]; then
             {
               echo ""
               echo "---"
+              echo ""
+              echo "# TECH_DEBT_AUDIT.md"
               echo ""
               cat TECH_DEBT_AUDIT.md
             } >> combined-audit-report.md
@@ -249,6 +277,7 @@ jobs:
             echo "이 이슈에서 읽을 수 있는 파일:"
             echo "- \`issue-body.md\` - 이 본문"
             echo "- \`change-summary.txt\` - 댓글"
+            echo "- \`ARCHITECTURE_AUDIT.md\` - 댓글"
             echo "- \`combined-audit-report.md\` - 댓글"
             echo "- \`TECH_DEBT_AUDIT.md\` - 댓글"
           } > issue-body.md
@@ -332,6 +361,7 @@ jobs:
           ISSUE_NUMBER="${ISSUE_URL##*/}"
 
           post_file_comments "$ISSUE_NUMBER" change-summary.txt "Change summary"
+          post_file_comments "$ISSUE_NUMBER" ARCHITECTURE_AUDIT.md "Architecture audit"
           post_file_comments "$ISSUE_NUMBER" combined-audit-report.md "Combined audit report"
           post_file_comments "$ISSUE_NUMBER" TECH_DEBT_AUDIT.md "Tech debt audit"
 
@@ -342,6 +372,7 @@ jobs:
           path: |
             combined-audit-report.md
             change-summary.txt
+            ARCHITECTURE_AUDIT.md
             TECH_DEBT_AUDIT.md
             issue-body.md
           retention-days: 90

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import threading
+import logging
 from collections.abc import Callable
 from tkinter import TclError, messagebox
 from typing import Optional
@@ -23,14 +24,13 @@ from gui.constants import (
 from gui.recording_status import format_duration
 from gui.utils import build_fonts, setup_pretendard_font
 from i18n.localization import SUPPORTED_LANGUAGES
-from infra.logger import get_logger
 from updater.updater_core import (
     UpdateExecutionError,
     UpdateExecutionResult,
     create_update_executor,
 )
 
-logger = get_logger()
+ui_lifecycle_logger = logging.getLogger(__name__)
 
 
 def _run_ui_safe(action: str, fn: Callable[[], None]) -> None:
@@ -45,9 +45,17 @@ def _run_ui_safe(action: str, fn: Callable[[], None]) -> None:
     try:
         fn()
     except TclError as exc:
-        logger.debug(f"UI update '{action}' skipped (widget unavailable): {exc}")
+        ui_lifecycle_logger.debug(
+            "UI update %r skipped (widget unavailable): %s",
+            action,
+            exc,
+        )
     except Exception as exc:  # pragma: no cover - defensive, exercised via tests
-        logger.warning(f"UI update '{action}' failed unexpectedly: {exc}")
+        ui_lifecycle_logger.warning(
+            "UI update %r failed unexpectedly: %s",
+            action,
+            exc,
+        )
 
 
 class BaseDialog(ctk.CTkToplevel):
@@ -300,7 +308,11 @@ class ProcessingDialog(BaseDialog):
         try:
             self.after(0, lambda: _run_ui_safe(action, fn))
         except (TclError, RuntimeError) as exc:
-            logger.debug(f"UI update '{action}' could not be scheduled: {exc}")
+            ui_lifecycle_logger.debug(
+                "UI update %r could not be scheduled: %s",
+                action,
+                exc,
+            )
 
     def update_progress(self, value: int, message: str = "") -> None:
         """Update progress controls from any thread."""
