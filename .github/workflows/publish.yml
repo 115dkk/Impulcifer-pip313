@@ -112,4 +112,7 @@ jobs:
         # Rekor is an external transparency log; transient 5xx responses
         # should not block package publication.
         attestations: false
+        # Master can receive CI/docs-only merges without a version bump.
+        # Keep those pushes green when PyPI already has this exact release.
+        skip-existing: true
         verbose: true
