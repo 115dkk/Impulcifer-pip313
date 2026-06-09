@@ -25,3 +25,27 @@ from core.audio_truehd import (  # noqa: F401  (intentional re-export)
     read_audio,
     get_supported_audio_formats,
 )
+
+
+def __getattr__(name):
+    """Delegate attribute reads (lazy FFmpeg state) to ``core.ffmpeg_discovery``.
+
+    Before audit #115 finding 9, ``core.ffmpeg_utils`` owned the lazy-init
+    module globals ``FFMPEG_PATH`` / ``FFPROBE_PATH`` / ``_FFMPEG_SETUP_DONE``
+    (and the ``_FFMPEG_DETECTION_DONE`` / ``_FFMPEG_AUTO_INSTALL_ATTEMPTED``
+    flags). ``ensure_ffmpeg_available()`` reassigns them, so a plain
+    ``from core.ffmpeg_discovery import FFMPEG_PATH`` re-export here would bind
+    the import-time value (``None``) forever and never reflect that mutation —
+    leaving direct importers that read ``core.ffmpeg_utils.FFMPEG_PATH`` after
+    setup with a stale ``None``. PEP 562 module ``__getattr__`` resolves the
+    name against the discovery module on every access, so reads stay live and
+    this shim keeps the backward-compatible surface it advertises.
+    """
+    import core.ffmpeg_discovery as _discovery
+
+    try:
+        return getattr(_discovery, name)
+    except AttributeError:
+        raise AttributeError(
+            f"module {__name__!r} has no attribute {name!r}"
+        ) from None

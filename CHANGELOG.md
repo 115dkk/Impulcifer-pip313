@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.7 - 2026-06-09
+### f-9 후속 — ffmpeg_utils 셸 하위호환 복원
+
+PR #123(2.7.6)에 달린 Codex 자동 리뷰(P2)를 검증한 결과, `core/ffmpeg_utils.py`를 `ffmpeg_discovery`/`audio_truehd`로 분할(#115-9)하면서 함수만 재노출하고 lazy 모듈 글로벌(`FFMPEG_PATH`/`FFPROBE_PATH`/`_FFMPEG_SETUP_DONE` 등)을 빠뜨려, 분리 전 `core.ffmpeg_utils.FFMPEG_PATH`를 직접 읽던 코드가 `AttributeError`를 보게 되는 회귀가 사실로 확인됐다. 셸은 스스로 "Backward-compatible re-export shim"을 표방하므로 이는 계약 위반이다.
+
+#### 🐛 버그 수정
+- **`ffmpeg_utils` 셸의 lazy 상태 재노출 복원**: PEP 562 모듈 `__getattr__`로 누락된 속성 읽기를 `core.ffmpeg_discovery`에 위임했다. 단순 `from ... import FFMPEG_PATH` 재노출은 import 시점의 `None`에 고정돼 `ensure_ffmpeg_available()`의 재할당을 추적하지 못하므로(stale `None`), 매 접근 시 discovery 모듈에서 live 값을 해석하는 `__getattr__`가 정답이다. 회귀 테스트(`tests/test_ffmpeg_lazy_setup.py`)로 셸이 discovery의 mutation을 추적함과 미존재 속성의 `AttributeError`를 고정. BRIR 출력 무관(md5 byte-identical 확인).
+
 ## 2.7.6 - 2026-06-09
 ### 격주 감사(#113·#115) 잔여 deferred finding 해결
 

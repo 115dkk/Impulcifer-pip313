@@ -236,6 +236,42 @@ class FfmpegLazySetupTest(unittest.TestCase):
             if os.path.exists(wav_path):
                 os.remove(wav_path)
 
+    def test_ffmpeg_utils_shim_exposes_live_discovery_state(self):
+        """The ``core.ffmpeg_utils`` shim must keep exposing the lazy FFmpeg
+        state that lived on it before the f-9 split, tracking
+        ``core.ffmpeg_discovery`` mutations.
+
+        Regression (Codex PR #123): the shim re-exported only functions, so a
+        direct importer reading ``core.ffmpeg_utils.FFMPEG_PATH`` (documented
+        backward-compatible surface) got an ``AttributeError``. The PEP 562
+        ``__getattr__`` proxy must resolve these against the discovery module
+        *live* — a plain ``from ... import FFMPEG_PATH`` would freeze the
+        import-time ``None`` and miss ``ensure_ffmpeg_available()`` updates.
+        """
+        _purge_ffmpeg_modules()
+        import core.ffmpeg_utils as shim
+        import core.ffmpeg_discovery as discovery
+
+        # Pre-setup: shim mirrors discovery's None state instead of raising.
+        discovery.FFMPEG_PATH = None
+        discovery.FFPROBE_PATH = None
+        discovery._FFMPEG_SETUP_DONE = False
+        self.assertIsNone(shim.FFMPEG_PATH)
+        self.assertIsNone(shim.FFPROBE_PATH)
+        self.assertFalse(shim._FFMPEG_SETUP_DONE)
+
+        # After a (simulated) successful setup, reads reflect the live values.
+        discovery.FFMPEG_PATH = "/usr/bin/ffmpeg"
+        discovery.FFPROBE_PATH = "/usr/bin/ffprobe"
+        discovery._FFMPEG_SETUP_DONE = True
+        self.assertEqual(shim.FFMPEG_PATH, "/usr/bin/ffmpeg")
+        self.assertEqual(shim.FFPROBE_PATH, "/usr/bin/ffprobe")
+        self.assertTrue(shim._FFMPEG_SETUP_DONE)
+
+        # A genuinely unknown attribute still raises AttributeError.
+        with self.assertRaises(AttributeError):
+            _ = shim.this_attribute_does_not_exist
+
 
 if __name__ == "__main__":
     unittest.main()
