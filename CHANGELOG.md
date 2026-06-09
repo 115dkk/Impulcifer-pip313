@@ -4,6 +4,23 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.6 - 2026-06-09
+### 격주 감사(#113·#115) 잔여 deferred finding 해결
+
+2.7.5에서 미뤄둔 deferred finding 8개를 마저 해결했다. 모든 변경은 동작 보존(byte-exact) 리팩터 또는 테스트/문서 추가다. md5 민감 변경은 동일 머신에서 변경 전후 `hesuvi.wav`를 비교해 byte-identical임을 확인했다(`--vbass` `07eef9ef…`, 기본값 `cf37a9aa…`). 감사 액션 아티팩트를 전수 확인한 결과 이슈 본문에 누락된 추가 finding은 없었고(#110 런은 인증 실패로 산출물이 없었음), 본 릴리스는 #113/#115가 제기했으나 PR #119에서 미룬 항목들을 다룬다.
+
+#### ⭐ 리팩터링 / 개선
+- **`core/utils.py` 3-도메인 분할 (#115-8/A5)**: `core/audio_io.py`(WAV I/O + DSP, `magnitude_response`는 verbatim 이동), `core/font_setup.py`(matplotlib 한글 폰트), `core/plotting_utils.py`(플롯/PNG)로 분리하고 `core/utils.py`는 25+ 임포터를 위한 re-export 셸로 유지.
+- **`core/ffmpeg_utils.py` 분할 (#115-9)**: `core/ffmpeg_discovery.py`(검색/설치 + lazy globals)와 `core/audio_truehd.py`(TrueHD 디코드 + `read_audio`)로 분리, `ffmpeg_utils.py`는 re-export 셸. lazy-setup 회귀 테스트는 새 소유 모듈로 재지정(모든 단언 보존).
+- **`ImpulseResponse.shift()` 도입 (#113 A4)**: `hrir.py`에 5번 복붙돼 있던 샘플 시프트 관용구를 단일 signed `shift()` 메서드로 통합(numpy 연산 byte-identical).
+- **`HRIR.open_recording` 적재 로직 추출 (#115-4)**: 309줄 메서드의 적재 본문을 모듈 함수 `_ingest_recording`(→ `{speaker:{side:IR}}` 반환)으로 분리해 단위 테스트 가능하게 만들고, `open_recording`은 전제조건 검사 + 병합만 수행.
+- **번들 폰트 탐색 중복 제거 (#113 A5)**: `core/utils`·`gui/utils`의 폰트 디렉터리 탐색/스캔을 `infra.resource_helper`의 공유 헬퍼로 통합(탐색 순서 byte-identical).
+- **루트 문서 정리 (#113 DEBT-11)**: 장문 문서 5종(README_PYTHON314/TrueHD/microphone_deviation/BUILD_README/OPTIMIZATION_SUMMARY)을 `docs/`로 이동, 링크·테스트·빌드 참조 갱신. 번들되는 `README.txt`는 루트 유지.
+
+#### 검증 / 테스트
+- **DSP 단계별 수치 테스트 추가 (#115-1)**: `tests/test_dsp_stages.py`로 `normalize()` 게인·`align_ipsilateral_all` ITD·`ImpulseResponse.shift()`를 플랫폼 무관하게 고정(런타임 코드 무변경).
+- **AutoEQ 단위 테스트 추가 (#115-5)**: `tests/test_frequency_response_core.py`로 파이프라인이 실제 사용하는 `generate_frequencies`/smoothing/biquad/`equalize`/min-phase 경로를 검증(벤더 모듈 무변경).
+
 ## 2.7.5 - 2026-06-09
 ### 격주 감사(#113·#115) 해결 — 통합 리팩터링
 
