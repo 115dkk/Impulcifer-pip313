@@ -6,7 +6,7 @@
 # 단일 claude -p 세션에서 실행합니다.
 # 직전 감사 이후 코드 변경이 없으면(문서 등 제외) 실행하지 않습니다.
 #
-# 모델: Opus 4.8 (1M 컨텍스트, 기본 제공)
+# 모델: claude-fable-5
 # Effort: xhigh
 #
 # 필요 사항:
@@ -179,7 +179,7 @@ jobs:
 
           set +e
           claude \
-            --model claude-opus-4-8 \
+            --model claude-fable-5 \
             --effort xhigh \
             --permission-mode auto \
             --max-turns 50 \
@@ -269,7 +269,7 @@ jobs:
             echo "# Biweekly Audit: ${DATE}"
             echo ""
             echo "변경된 코드 파일: **${COUNT}개**"
-            echo "모델: Opus 4.8 · Effort: xhigh · 1M context"
+            echo "모델: claude-fable-5 · Effort: xhigh"
             echo ""
             echo "이 이슈 본문은 artifact의 \`issue-body.md\`에 해당합니다."
             echo "나머지 감사 산출물은 아래 댓글에 파일별로 전체 게시됩니다."

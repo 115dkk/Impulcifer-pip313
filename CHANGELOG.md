@@ -14,6 +14,7 @@ PR #123(2.7.6)에 달린 Codex 자동 리뷰(P2)를 검증한 결과, `core/ffmp
 
 #### 🔧 빌드 / 설정 변경
 - **자동 버전 bump + PyPI-성공 게이팅 릴리스 파이프라인**: 흩어져 있던 릴리스 워크플로(`publish.yml` + `python-publish.yml` + `release-cross-platform.yml`, master push마다 무조건 3-플랫폼 Nuitka 빌드)를 단일 게이트 파이프라인 `publish.yml` 하나로 통합했다. master push 시 `gate`(→ `.github/scripts/release_gate.py`)가 변경 경로를 검사해, 출하물 변경인데 수동 bump가 누락됐으면 PATCH를 자동 증가(`[skip ci]` 커밋)하고, 수동 bump(특히 MINOR/MAJOR)는 존중한다. 빌드(`build-windows`/`macos`/`linux`)는 `needs: publish-pypi`로 **PyPI 발행 성공 후에만** 시작하므로, docs/CI/tests만 바꾼 push는 PyPI·빌드를 모두 건너뛴다(러너 절약). PyPI Trusted Publisher OIDC 보존을 위해 파일명 `publish.yml` + `environment: PyPI`를 유지. 게이트 결정 로직은 `tests/test_release_gate.py`로 고정. 이중 PyPI publish 위험 제거. (런타임/출하물 무변경 → 버전 bump 없음.)
+- **격주 감사 모델 변경**: CI 자동감사(`biweekly-audit.yml`)가 사용하는 모델을 `claude-fable-5`로 변경. (CI 설정 변경 → 버전 bump 없음.)
 
 ## 2.7.6 - 2026-06-09
 ### 격주 감사(#113·#115) 잔여 deferred finding 해결
