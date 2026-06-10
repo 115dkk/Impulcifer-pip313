@@ -736,6 +736,10 @@ _DEFAULT_SCROLL_REFRESH_RATE_HZ = 60.0
 _MIN_SCROLL_REFRESH_RATE_HZ = 30.0
 _MAX_SCROLL_REFRESH_RATE_HZ = 1000.0
 _SCROLL_REFRESH_ENV_VAR = "IMPULCIFER_SCROLL_REFRESH_HZ"
+# One full clean repaint fires this long after the last scroll movement.
+# Long enough to stay off the hot path during a wheel gesture, short enough
+# that any leftover blit residue is wiped before the user notices it linger.
+_SCROLL_SETTLE_REPAINT_DELAY_MS = 150
 
 
 def _refresh_rate_to_frame_interval_ms(refresh_rate_hz: float) -> int:
@@ -940,6 +944,35 @@ def _install_frame_limited_canvas_scroll(
     original_yview = canvas.yview
     pending_units = {"x": 0, "y": 0}
     after_ids: dict[str, Any] = {"x": None, "y": None}
+    settle_id: list[Any] = [None]
+
+    def _settle_repaint() -> None:
+        # Re-applying the scrollregion makes Tk schedule a full-window
+        # redisplay (ConfigureCanvas always calls Tk_CanvasEventuallyRedraw,
+        # even for an unchanged value), wiping any blit residue a fast wheel
+        # gesture left behind. Runs once per gesture, after movement stops,
+        # so the O(N) bbox walk stays off the per-frame hot path.
+        settle_id[0] = None
+        try:
+            bbox = canvas.bbox("all")
+            if bbox is not None:
+                canvas.configure(scrollregion=bbox)
+            canvas.update_idletasks()
+        except TclError:
+            pass
+
+    def _schedule_settle() -> None:
+        if settle_id[0] is not None:
+            try:
+                canvas.after_cancel(settle_id[0])
+            except (TclError, ValueError):
+                pass
+        try:
+            settle_id[0] = canvas.after(
+                _SCROLL_SETTLE_REPAINT_DELAY_MS, _settle_repaint
+            )
+        except TclError:
+            settle_id[0] = None
 
     def _flush(axis: str, original_view: Any) -> None:
         after_ids[axis] = None
@@ -949,8 +982,17 @@ def _install_frame_limited_canvas_scroll(
             return
         try:
             original_view("scroll", amount, "units")
+            # Paint the shifted view NOW. The canvas redraw is an idle
+            # callback; a continuous wheel stream keeps the event queue busy
+            # enough to starve it, so successive flushes blit-shift pixels
+            # without ever repainting the exposed strip — the duplicated
+            # half-cut rows seen on Win32. update_idletasks() runs only idle
+            # callbacks (no event reentrancy), pairing each shift with its
+            # repaint.
+            canvas.update_idletasks()
         except TclError:
-            pass
+            return
+        _schedule_settle()
 
     def _schedule(axis: str, original_view: Any) -> None:
         if after_ids[axis] is not None:
@@ -986,7 +1028,13 @@ def _install_frame_limited_canvas_scroll(
                 return None
 
             if args:
+                # Direct movement (scrollbar drag "moveto", page scroll):
+                # passes straight through, but still deserves the settle
+                # repaint — drags can leave the same blit residue.
                 _cancel_pending(axis)
+                result = original_view(*args)
+                _schedule_settle()
+                return result
             return original_view(*args)
 
         return _frame_limited_view
@@ -1020,12 +1068,36 @@ def install_smooth_scrolling(scroll_frame: ctk.CTkScrollableFrame) -> None:
     active monitor's refresh interval, which keeps scroll paint cadence above
     the 50 Hz target without hard-coding a 60 Hz display.
 
+    **Ghosting repair.** Frame-limiting alone is not enough on Win32: the
+    canvas redraw is an idle callback, so a fast wheel stream can starve it
+    and leave blit residue (duplicated, half-cut rows). Each coalesced flush
+    therefore forces the repaint with ``update_idletasks()``, and a one-shot
+    "settle" repaint re-applies the scrollregion ~150 ms after the last
+    movement to wipe anything that still slipped through.
+
     The fix is reversible: the size-change branch still calls the same
     ``bbox + configure(scrollregion)`` so layout-driven sizing still works
     exactly like the upstream CustomTkinter behavior.
     """
     canvas = scroll_frame._parent_canvas  # type: ignore[attr-defined]
     _install_frame_limited_canvas_scroll(canvas)
+
+    # CTkScrollableFrame.__init__ captured the ORIGINAL bound xview/yview in
+    # the scrollbar's command= (and CTkScrollbar's own wheel handler scrolls
+    # through that same command) — both bypass the frame-limited wrapper
+    # installed above. Rebind so drags and wheel-over-scrollbar take the
+    # coalesced path too.
+    scrollbar = getattr(scroll_frame, "_scrollbar", None)
+    if scrollbar is not None:
+        view = (
+            canvas.xview
+            if getattr(scroll_frame, "_orientation", "vertical") == "horizontal"
+            else canvas.yview
+        )
+        try:
+            scrollbar.configure(command=view)
+        except TclError:
+            pass
 
     # Drop the lambda installed by CTkScrollableFrame.__init__. ``unbind``
     # without a binding ID removes ALL bindings for the sequence on this

@@ -171,6 +171,8 @@ class ScrollFrameLimiterTest(unittest.TestCase):
         def __init__(self) -> None:
             self.calls = []
             self.after_ms = []
+            self.update_idletasks_calls = 0
+            self.configure_calls = []
             self._callbacks = {}
             self._cancelled = set()
             self._next_after_id = 0
@@ -186,6 +188,15 @@ class ScrollFrameLimiterTest(unittest.TestCase):
                 return (0.0, 0.5)
             self.calls.append(("y", args))
             return None
+
+        def update_idletasks(self):
+            self.update_idletasks_calls += 1
+
+        def bbox(self, *args):
+            return (0, 0, 400, 2000)
+
+        def configure(self, **kwargs):
+            self.configure_calls.append(kwargs)
 
         def after(self, delay_ms, callback):
             self._next_after_id += 1
@@ -259,6 +270,48 @@ class ScrollFrameLimiterTest(unittest.TestCase):
         canvas.run_pending()
 
         self.assertEqual(canvas.calls, [("y", ("moveto", 0.25))])
+
+    def test_flush_forces_repaint_and_schedules_settle(self) -> None:
+        """Ghosting repair: each flush pairs the scroll with a forced repaint,
+        and a one-shot settle repaint re-applies the scrollregion after the
+        gesture stops (wiping any blit residue left on screen)."""
+        from gui.utils import (
+            _SCROLL_SETTLE_REPAINT_DELAY_MS,
+            _install_frame_limited_canvas_scroll,
+        )
+
+        canvas = self.FakeCanvas()
+        _install_frame_limited_canvas_scroll(canvas, frame_interval_ms=7)
+
+        canvas.yview("scroll", 3, "units")
+        self.assertEqual(canvas.update_idletasks_calls, 0)
+
+        canvas.run_pending()  # flush fires
+
+        self.assertEqual(
+            canvas.calls, [("y", ("scroll", 3, "units"))],
+            "Flush should apply the coalesced scroll exactly once.",
+        )
+        self.assertGreaterEqual(
+            canvas.update_idletasks_calls, 1,
+            "Flush must force the repaint via update_idletasks() — without "
+            "it the idle-time canvas redraw is starved by further wheel "
+            "events, leaving blit residue (duplicated half-cut rows).",
+        )
+        self.assertIn(
+            _SCROLL_SETTLE_REPAINT_DELAY_MS, canvas.after_ms,
+            "Flush must schedule the one-shot settle repaint.",
+        )
+
+        canvas.run_pending()  # settle fires
+
+        self.assertEqual(
+            canvas.configure_calls, [{"scrollregion": (0, 0, 400, 2000)}],
+            "Settle must re-apply the scrollregion to force a full clean "
+            "redisplay once scrolling stops.",
+        )
+        # No further scroll movement was applied by the settle pass.
+        self.assertEqual(canvas.calls, [("y", ("scroll", 3, "units"))])
 
 
 class FunctionalScrollFixTest(unittest.TestCase):
@@ -377,6 +430,26 @@ class FunctionalScrollFixTest(unittest.TestCase):
             f"not fire during scroll. Got {counter['configure_calls']} "
             f"calls — scrollregion churn has returned.",
         )
+
+    def test_fix_rebinds_scrollbar_command_to_wrapper(self) -> None:
+        """Scrollbar drags / wheel-over-scrollbar must take the coalesced path.
+
+        CTkScrollableFrame.__init__ captures the original bound yview in the
+        scrollbar's command= before install_smooth_scrolling replaces it, so
+        without the rebind those two input paths bypass the frame limiter
+        and the ghosting settle repaint entirely.
+        """
+        root, scroll, _counter = self._build_scrollable(fix=True)
+        try:
+            canvas = scroll._parent_canvas  # type: ignore[attr-defined]
+            self.assertIs(
+                scroll._scrollbar.cget("command"),  # type: ignore[attr-defined]
+                canvas.yview,
+                "Scrollbar command must be rebound to the frame-limited "
+                "yview wrapper installed by install_smooth_scrolling.",
+            )
+        finally:
+            root.destroy()
 
 
 if __name__ == "__main__":
