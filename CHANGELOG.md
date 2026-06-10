@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.8 - 2026-06-10
+### GUI 스크롤 잔상(고스팅) 수리
+
+스크롤 성능 최적화(`install_smooth_scrolling`) 이후에도 빠른 휠 스크롤 시 행이 복제되고 글자가 반토막 나는 blit 잔상이 화면에 남는 버그를 수리했다. 원인: Tk 캔버스의 다시 그리기는 idle 콜백이라, 연속 휠 이벤트가 이벤트 큐를 점유하면 "픽셀 밀기(blit)"만 누적되고 "다시 그리기"가 따라붙지 못한다 — 기존 프레임 병합은 밀기 횟수만 줄였을 뿐 밀기-그리기 짝을 보장하지 않았다.
+
+#### 🐛 버그 수정
+- **휠 flush 직후 강제 리페인트**: 프레임당 1회 병합된 스크롤 적용 직후 `update_idletasks()`로 캔버스 리드로우를 즉시 실행해, 모든 픽셀 이동이 자신의 다시 그리기와 짝을 이루도록 했다(`update_idletasks`는 idle 콜백만 처리하므로 이벤트 재진입 없음).
+- **settle 리페인트 보험**: 스크롤 움직임이 멈추고 150ms 후 scrollregion을 재적용해 전체 캔버스 리드로우를 1회 유도(Tk `ConfigureCanvas`는 값이 같아도 항상 전체 redisplay를 스케줄), 그래도 스쳐 지나간 잔상을 마지막에 청소한다. O(N) `bbox` walk는 제스처당 1회뿐이라 hot path 비용 불변.
+- **스크롤바 경로 병합 누락 수리**: `CTkScrollableFrame.__init__`이 스크롤바 `command=`에 **원본** `yview`를 캡처해 두므로, 스크롤바 드래그와 스크롤바 위 휠은 프레임 병합·settle을 모두 우회하고 있었다. `install_smooth_scrolling`이 스크롤바 command를 래퍼로 재배선해 두 입력 경로도 같은 처리를 받는다.
+- 회귀 테스트: flush-리페인트 짝/settle 스케줄(`FakeCanvas` 단위), 스크롤바 command 재배선(실디스플레이 기능 테스트)을 `tests/test_scroll_perf.py`에 고정. 기존 8개 계약(병합 cadence, 스크롤 중 bbox/configure 0회 등) 전부 유지.
+
 ## 2.7.7 - 2026-06-09
 ### f-9 후속 — ffmpeg_utils 셸 하위호환 복원
 
