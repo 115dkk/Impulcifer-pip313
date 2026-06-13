@@ -114,7 +114,7 @@ class StudioInfoTab:
             hero,
             text=version_pill,
             font=ctk.CTkFont(family=get_mono_font_family(), size=11, weight="bold"),
-            text_color=COLORS["accent"],
+            text_color=COLORS["fg-1"],
             anchor="w",
         ).grid(row=1, column=1, sticky="nw", padx=(0, 20), pady=(4, 0))
 
