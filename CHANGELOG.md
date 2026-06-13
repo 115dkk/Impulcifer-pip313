@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.7.9 - 2026-06-13
+### GUI 디자인 적대적 리뷰 + 접근성 명암비 수리
+
+Stable/Studio 두 스킨의 디자인을 실제 렌더링 스크린샷 30장으로 캡처해 6개 렌즈(WCAG 2.2 명암비/타깃 크기, Nielsen 휴리스틱, 시각 위계, dark/light 패리티, 스킨 비교)로 적대적 리뷰하고, 각 결함을 인용 스크린샷의 픽셀로 재검증했다(후보 34건 → 생존 23건/기각 11건). 명암비는 디자인 토큰의 sRGB 상대휘도로 실제 계산했다. 결과는 `docs/design_review/`에 문서화하고, 객관적이고 저위험인 HIGH/MEDIUM 접근성 결함 3건을 코드에 반영했다(테마 토큰·라벨 색만 변경, BRIR 파이프라인 무관).
+
+#### 🐛 버그 수정
+- **드롭다운 흰 텍스트 명암비 AA 미달 수리 (HIGH)**: 모든 `CTkOptionMenu`(Host API·재생/녹음 장치·채널 강제 지정·언어·테마)의 흰 텍스트가 accent `#3B82F6` 채움 위에서 3.37:1로 WCAG 2.2 SC 1.4.3(4.5:1)에 미달했다(양 스킨·양 테마 공통). 채움을 accent-strong `#2563EB`로 darken해 **4.69:1**로 통과시키고, chevron 영역은 `#1d4ed8`/`#1e40af`로 한 단계 더 어둡게 해 분리 어포던스를 유지했다(`gui/theme/pulse.json`).
+- **정보 탭 버전 문자열 명암비 수리 (HIGH)**: `VERSION … PYTHON …` 모노 문자열이 accent 색이라 라이트 카드에서 2.78:1, 다크에서 4.15:1로 둘 다 미달했다. `accent` → `fg-1`로 바꿔 라이트 ~9:1, 다크 ~7.5:1로 통과(`gui/tabs/info_tab.py`, `gui/skins/studio_info_tab.py`).
+- **Studio 활성 사이드바 라벨 명암비 수리 (MEDIUM)**: 활성 nav 항목이 accent-on-accent-soft 약 3.0:1(양 테마 미달)이라 역설적으로 비활성 항목보다 읽기 어려웠다. 활성 텍스트를 `fg-0`(고대비 잉크)로 바꾸고 accent-soft 알약 + bold로 선택 표시를 유지했다(`gui/skins/studio_shell.py`).
+
+#### ⭐ 새로운 기능 / 개선
+- **디자인 리뷰 문서화**: `docs/design_review/`에 방법론·심각도 요약(README), 접근성(WCAG) 상세, 일관성·UX 권고 + 기각 항목("나빠 보이지만 괜찮음") + 거짓 양성 정정을 정리했다. 미반영 MEDIUM/LOW(스킨 간 CTA 색 표준화, 처리옵션 가이드 패리티 등)는 후속 권고로 남겼다.
+
 ## 2.7.8 - 2026-06-10
 ### GUI 스크롤 잔상(고스팅) 수리
 

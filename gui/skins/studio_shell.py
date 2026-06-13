@@ -178,7 +178,12 @@ class StudioShell:
         # Update nav button visual states
         for k, btn in self.nav_buttons.items():
             if k == key:
-                btn.configure(fg_color=COLORS["accent-soft"], text_color=COLORS["accent"])
+                # Active item: keep the accent-soft pill as the selection cue but
+                # use high-contrast fg-0 ink. accent-on-accent-soft was only
+                # ~3.0:1 (fails WCAG 2.2 SC 1.4.3 4.5:1 for this 13px label) in
+                # both themes; fg-0 on the soft pill clears AA comfortably while
+                # the pill fill + bold weight still mark the item as selected.
+                btn.configure(fg_color=COLORS["accent-soft"], text_color=COLORS["fg-0"])
             else:
                 btn.configure(fg_color="transparent", text_color=COLORS["fg-1"])
 
