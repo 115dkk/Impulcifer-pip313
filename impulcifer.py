@@ -75,6 +75,7 @@ from core.constants import (
     TEST_SIGNALS,
     get_data_path,
 )
+from core.eqapo import looks_like_eqapo_config, parse_eqapo_config
 from infra.logger import get_logger
 
 # PR3에서 추가된 import 문들
@@ -189,7 +190,7 @@ def main(**kwargs):
     the old ``mic_deviation_phase_correction`` — are ignored by
     :meth:`~core.pipeline.ProcessingConfig.from_kwargs`, so this call site stays
     stable as the parameter set evolves and no longer hand-mirrors the dataclass.
-    The pipeline executes the legacy stage sequence so the BRIR md5 remains
+    The pipeline executes the legacy stage sequence so the BRIR output remains
     byte-identical to pre-refactor output.
     """
     # Local import to avoid a circular dependency: core.pipeline imports back
@@ -293,8 +294,120 @@ def open_impulse_response_estimator(dir_path, file_path=None):
     return estimator
 
 
+def _find_eq_settings_file(dir_path, base_name):
+    """EQ 설정 파일 경로를 찾는다.
+
+    기존 ``.csv``가 우선이며, EqualizerAPO(-XT)에서 내보낸 ``.txt``도 허용한다.
+    """
+    for ext in (".csv", ".txt"):
+        path = os.path.join(dir_path, base_name + ext)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+# equalization() 로그에서 한 파일당 개별 바이패스 경고를 출력하는 최대 개수
+_EQAPO_MAX_BYPASS_WARNINGS = 20
+
+
+def _read_eq_settings(file_path, estimator):
+    """EQ 설정 파일을 읽어 FrequencyResponse로 변환한다.
+
+    내용이 EqualizerAPO(-XT) 설정 형식이면 지원되는 필터(Filter 바이쿼드/IIR,
+    Preamp, GraphicEQ, Convolution)를 크기 응답으로 합성하고, 지원되지 않는
+    명령은 바이패스하며 경고를 남긴다. 그 외에는 기존 AutoEQ CSV 파서를
+    사용하며, error 열이 없는 평문 gain 곡선 파일은 error = -raw 로 채운다.
+
+    Args:
+        file_path: EQ 설정 파일 경로
+        estimator: ImpulseResponseEstimator (샘플레이트 참조)
+
+    Returns:
+        - FrequencyResponse (양쪽 공통 또는 좌측)
+        - 우측 전용 FrequencyResponse 또는 None (좌우가 동일한 경우)
+    """
+    with open(file_path, "rb") as fh:
+        raw = fh.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp1252", errors="replace")
+
+    logger = get_logger()
+
+    if not looks_like_eqapo_config(text):
+        fr = FrequencyResponse.read_from_csv(file_path)
+        if len(fr.error) == 0 and len(fr.raw) > 0:
+            # error 열이 없는 평문(frequency, gain) 파일: raw를 적용할 EQ
+            # 곡선으로 해석한다. 파이프라인은 error 필드를 소비하므로
+            # error = -raw 로 채워 곡선이 그대로 적용되게 한다. (기존에는
+            # 빈 error 배열이 EQ 워커에서 브로드캐스트 오류를 일으켰다.)
+            logger.info("cli_eq_plain_gain_curve", file=os.path.basename(file_path))
+            fr.error = -fr.raw.copy()
+        return fr, None
+
+    from i18n.localization import get_localization_manager
+
+    loc = get_localization_manager()
+    name = ".".join(os.path.split(file_path)[1].split(".")[:-1])
+    frequency = FrequencyResponse.generate_frequencies(
+        f_step=1.01, f_min=10, f_max=estimator.fs / 2
+    )
+    result = parse_eqapo_config(
+        text, estimator.fs, frequency, base_dir=os.path.dirname(file_path)
+    )
+
+    logger.info(
+        "cli_eqapo_detected",
+        file=os.path.basename(file_path),
+        applied=len(result.applied),
+        bypassed=len(result.bypassed),
+        skipped=len(result.skipped),
+    )
+    for description in result.applied:
+        logger.debug(f"  EqualizerAPO: {description}")
+    if result.preamp_left != 0.0 or result.preamp_right != 0.0:
+        logger.info(
+            "cli_eqapo_preamp",
+            left=f"{result.preamp_left:g}",
+            right=f"{result.preamp_right:g}",
+        )
+    for report in result.bypassed[:_EQAPO_MAX_BYPASS_WARNINGS]:
+        logger.warning(
+            "cli_eqapo_bypassed_line",
+            line=report.line_number,
+            command=report.command,
+            reason=loc.get(f"cli_eqapo_reason_{report.reason}"),
+        )
+    if len(result.bypassed) > _EQAPO_MAX_BYPASS_WARNINGS:
+        logger.warning(
+            "cli_eqapo_bypassed_more",
+            count=len(result.bypassed) - _EQAPO_MAX_BYPASS_WARNINGS,
+        )
+
+    # 파이프라인은 eq FrequencyResponse의 error 필드를 보정 대상 오차로
+    # 사용하므로(잔차를 상쇄하도록 equalization을 계산), 설정 파일의 EQ 곡선이
+    # 그대로 적용되게 하려면 error = -gain 으로 넣는다. raw는 플롯용 곡선이다.
+    left_fr = FrequencyResponse(
+        name=name,
+        frequency=frequency.copy(),
+        raw=result.left_db,
+        error=-result.left_db,
+    )
+    right_fr = None
+    if result.channel_split:
+        logger.info("cli_eqapo_channel_split")
+        right_fr = FrequencyResponse(
+            name=f"{name} (right)",
+            frequency=frequency.copy(),
+            raw=result.right_db,
+            error=-result.right_db,
+        )
+    return left_fr, right_fr
+
+
 def equalization(estimator, dir_path):
-    """Reads equalization FIR filter or CSV settings
+    """Reads equalization FIR filter, CSV or EqualizerAPO settings
 
     Args:
         estimator: ImpulseResponseEstimator
@@ -308,26 +421,30 @@ def equalization(estimator, dir_path):
         logger = get_logger()
         logger.warning("cli_warning_eq_wav_deprecated")
     # Default for both sides
-    eq_path = os.path.join(dir_path, "eq.csv")
+    eq_path = _find_eq_settings_file(dir_path, "eq")
     eq_fr = None
-    if os.path.isfile(eq_path):
-        eq_fr = FrequencyResponse.read_from_csv(eq_path)
+    eq_fr_right = None
+    if eq_path is not None:
+        eq_fr, eq_fr_right = _read_eq_settings(eq_path, estimator)
 
     # Left
-    left_path = os.path.join(dir_path, "eq-left.csv")
+    left_path = _find_eq_settings_file(dir_path, "eq-left")
     left_fr = None
-    if os.path.isfile(left_path):
-        left_fr = FrequencyResponse.read_from_csv(left_path)
+    if left_path is not None:
+        left_fr, _ = _read_eq_settings(left_path, estimator)
     elif eq_fr is not None:
         left_fr = eq_fr
     if left_fr is not None:
         left_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2, pol_order=1)
 
     # Right
-    right_path = os.path.join(dir_path, "eq-right.csv")
+    right_path = _find_eq_settings_file(dir_path, "eq-right")
     right_fr = None
-    if os.path.isfile(right_path):
-        right_fr = FrequencyResponse.read_from_csv(right_path)
+    if right_path is not None:
+        candidate, candidate_right = _read_eq_settings(right_path, estimator)
+        right_fr = candidate_right if candidate_right is not None else candidate
+    elif eq_fr_right is not None:
+        right_fr = eq_fr_right
     elif eq_fr is not None:
         right_fr = eq_fr
     if right_fr is not None and right_fr != left_fr:

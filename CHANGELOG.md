@@ -4,6 +4,25 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.8.0 - 2026-07-10
+### EqualizerAPO(-XT) 설정 텍스트를 Custom EQ 입력으로 지원
+
+#### ⭐ 새로운 기능 / 개선
+- **EqualizerAPO 설정 파서 추가 (`core/eqapo.py`)**: Custom EQ 파일(`eq.csv`/`eq-left.csv`/`eq-right.csv`)에 AutoEQ 결과 CSV뿐 아니라 EqualizerAPO(-XT) 설정 텍스트를 넣을 수 있다. 형식은 확장자가 아니라 내용으로 판별하므로 GUI에서 `.txt`를 골라 `eq.csv`로 복사되는 기존 흐름도 그대로 동작하며, `eq.txt`/`eq-left.txt`/`eq-right.txt` 파일명도 새로 인식한다(.csv가 우선).
+- **적용 가능한 필터는 적용, 불가능한 명령은 바이패스**: `Filter`(PK/PEQ/Modal/LP/LPQ/HP/HPQ/BP/LS/LSC/LS 6dB/LS 12dB/HS/HSC/HS 6dB/HS 12dB/NO/AP 바이쿼드와 `ON IIR Order n Coefficients ...`), `Preamp`, `GraphicEQ`, `Convolution`은 크기 응답으로 합성해 적용한다. `MultiConvolution`/`Copy`/`Delay`/`Eval`/`VSTPlugin`과 평가 불가능한 `If` 블록 내부는 라인 번호·사유와 함께 경고 로그로 바이패스를 보고한다. `Device`/`Stage` 스코핑은 평가할 수 없어 무시(경고 후 계속 진행)하며, 비활성 필터(`OFF`, `ON None`)는 조용히 건너뛴다.
+- **바이쿼드 수식은 EqualizerAPO-XT 소스와 동치**: RBJ Audio EQ Cookbook 계수(filters/BiQuad.cpp), `gainAt()` 폐형식, 셸프 기본 S=0.9·LP/HP/BP 기본 Q=1/√2·NO 기본 Q=30, 슬로프/12 규칙과 코너→중심 주파수 변환(filters/BiQuadFilter.cpp), REW 천단위 구분자(`Fc 1.250 Hz`=1250 Hz)와 콤마 소수점, GraphicEQ의 로그 주파수 축 선형 보간(helpers/GainIterator.cpp)까지 동일하게 이식했고 scipy freqz 교차 검증 테스트로 고정했다(`tests/test_eqapo.py`, 79 tests).
+- **`Channel:` 스코핑 지원**: `Channel: L`/`R`/`1`/`2`/`ALL`로 스코프가 나뉜 설정은 좌/우 EQ 곡선을 분리 생성해 각각 적용한다. `Include:`는 설정 파일 기준 상대 경로(또는 절대 경로)가 존재하면 재귀 파싱하고(순환/깊이 가드), 없으면 바이패스로 보고한다.
+- **i18n**: 감지/프리앰프/채널 분리/바이패스 로그용 `cli_eqapo_*` 키를 11개 로케일 파일 전부에 추가했고(en/ko 번역, 나머지 영어 fallback), `checkbox_custom_eq` 문구에 `.txt`를 반영했다.
+- **`Convolution:` 명령 지원**: IR 파일(WAV/FLAC 등 soundfile 지원 형식)의 크기 응답을 EQ 곡선으로 합성한다. EqualizerAPO(filters/IrCache.cpp)와 동일하게 설정 파일 기준 경로 해석(따옴표 제거·환경변수 확장), 샘플레이트 1 Hz 초과 불일치 시 미적용(경고 바이패스), 채널 i → IR의 i % ch 채널 매핑(스테레오 IR이면 좌/우 곡선 분리)을 따른다. 위상(시간 구조)은 크기 응답 파이프라인 특성상 반영되지 않는다.
+- **`If: sampleRate == 48000` 단순 조건 평가**: If/ElseIf/Else/EndIf 분기 상태 머신을 도입해 sampleRate 비교 조건(`==`, `!=`, `<`, `<=`, `>`, `>=`)은 실제로 평가하고 선택된 분기만 적용한다. 평가 불가한 조건(deviceName, 변수 등)이 나오면 해당 블록을 기존처럼 보수적으로 바이패스한다(중첩 지원).
+- **EqualizerAPO-XT 엔진 골든 출력 교차 검증**: XT 저장소 `Tests/AudioRegressionTests`의 설정+골든 레퍼런스(실제 C++ FilterEngine이 임펄스/DC 입력을 처리한 float32 출력)를 `tests/fixtures/eqapo/`로 벤더링하고, `tests/test_eqapo_reference.py`가 바이패스되지 않는 전 케이스(biquad/IIR/GraphicEQ/Preamp/Channel/Convolution)에서 합성 크기 응답이 실측 엔진 응답과 일치함을 검증한다(biquad 선형 오차 ≤1e-6, IIR/Convolution ≤1e-9). GraphicEQ는 이상 곡선 비교에 더해 엔진의 최소위상(mps)+반코사인 윈도우 FIR 합성 체인을 NumPy로 재현해 레퍼런스와 샘플 단위(atol 1e-6)로 대조한다.
+
+#### 🐛 버그 수정
+- **error 열 없는 평문 EQ 파일 크래시 수정**: `주파수 게인` 2열 평문 파일을 eq.csv로 주면 빈 error 배열이 EQ 워커의 브로드캐스트 오류로 이어지던 것을, raw를 적용할 EQ 게인 곡선으로 해석(error = -raw)하도록 수정했다.
+
+#### 🔧 빌드 / 설정 변경
+- **BRIR 무결성 판정 SHA-256 전환**: `tests/test_brir_integrity.py`의 해시 비교를 md5에서 SHA-256으로 교체하고, `CLAUDE.md`의 Tier 3 절차를 sha256sum + 기준 ref(`origin/master`) worktree 자기 비교 방식으로 갱신했다(문서의 stale md5 절대값 baseline 제거).
+
 ## 2.7.9 - 2026-06-13
 ### GUI 디자인 적대적 리뷰 + 접근성 명암비 수리
 

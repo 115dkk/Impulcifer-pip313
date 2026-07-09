@@ -1,10 +1,10 @@
 """Cross-platform per-stage DSP numeric assertions (#115 finding 1).
 
-The end-to-end BRIR md5 guard (``tests/test_brir_integrity.py``) only runs on
+The end-to-end BRIR SHA-256 guard (``tests/test_brir_integrity.py``) only runs on
 Linux/CPython 3.13, so a one-sample alignment error or a gain bug is invisible
 on every other platform. These tests pin the *numeric contract* of individual,
 pure DSP stages so they run everywhere. They assert behavior of existing code
-only — no runtime code is modified, so the BRIR md5 is unaffected.
+only — no runtime code is modified, so the BRIR hash is unaffected.
 """
 
 from __future__ import annotations

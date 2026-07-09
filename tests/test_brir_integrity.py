@@ -48,8 +48,8 @@ SCENARIOS = [
 ]
 
 
-def _md5_file(path: Path) -> str:
-    digest = hashlib.md5()
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
     with path.open("rb") as file:
         for chunk in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(chunk)
@@ -125,7 +125,7 @@ def _run_impulcifer(project_root: Path, demo_dir: Path, scenario: BrirScenario) 
     assert hesuvi_path.is_file(), (
         f"{scenario.name} BRIR generation did not create {hesuvi_path}"
     )
-    return _md5_file(hesuvi_path)
+    return _sha256_file(hesuvi_path)
 
 
 def _add_reference_worktree(tmp_path: Path) -> Path:
@@ -157,10 +157,10 @@ def _add_reference_worktree(tmp_path: Path) -> Path:
 )
 @pytest.mark.skipif(
     sys.platform != CANONICAL_PLATFORM or sys.version_info[:2] != CANONICAL_PYTHON,
-    reason="BRIR md5 is canonicalized to Linux CPython 3.13",
+    reason="BRIR hash is canonicalized to Linux CPython 3.13",
 )
 @pytest.mark.parametrize("scenario", SCENARIOS, ids=[scenario.name for scenario in SCENARIOS])
-def test_demo_brir_matches_reference_ref_md5(
+def test_demo_brir_matches_reference_ref_sha256(
     tmp_path: Path,
     scenario: BrirScenario,
 ) -> None:
@@ -182,12 +182,12 @@ def test_demo_brir_matches_reference_ref_md5(
         _copy_demo_inputs(PROJECT_ROOT, current_demo_dir)
         _copy_demo_inputs(reference_root, reference_demo_dir)
 
-        reference_md5 = _run_impulcifer(reference_root, reference_demo_dir, scenario)
-        current_md5 = _run_impulcifer(PROJECT_ROOT, current_demo_dir, scenario)
+        reference_sha256 = _run_impulcifer(reference_root, reference_demo_dir, scenario)
+        current_sha256 = _run_impulcifer(PROJECT_ROOT, current_demo_dir, scenario)
 
-        assert current_md5 == reference_md5, (
-            f"{scenario.name} hesuvi.wav md5 changed from verified reference "
-            f"{reference_md5} to {current_md5}"
+        assert current_sha256 == reference_sha256, (
+            f"{scenario.name} hesuvi.wav SHA-256 changed from verified reference "
+            f"{reference_sha256} to {current_sha256}"
         )
     finally:
         subprocess.run(

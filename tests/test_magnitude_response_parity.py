@@ -3,7 +3,7 @@
 
 The BRIR integrity baseline was established with the one-sided NumPy ``rfft``
 path below. A full FFT can be numerically close, but it is not bit-identical on
-all supported platforms and changes the generated ``hesuvi.wav`` md5.
+all supported platforms and changes the generated ``hesuvi.wav`` hash.
 """
 
 from __future__ import annotations
