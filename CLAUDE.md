@@ -67,7 +67,7 @@ updater/
 
 `core/recorder.py`의 `play_and_record()`는 `sd.play(blocking=True)` + `Thread.join()`으로 완전한 블로킹 함수다. 이 동작을 변경하지 말 것.
 
-`core/utils.py`의 `magnitude_response()`는 현재 검증된 NumPy `rfft` 기반 출력과 bit-identical해야 한다. full FFT 경로는 수치적으로 가까워도 BRIR md5를 바꿀 수 있으므로, `test_magnitude_response_parity.py`가 이 verified 동작을 고정한다.
+`core/utils.py`의 `magnitude_response()`는 현재 검증된 NumPy `rfft` 기반 출력과 bit-identical해야 한다. full FFT 경로는 수치적으로 가까워도 BRIR 해시를 바꿀 수 있으므로, `test_magnitude_response_parity.py`가 이 verified 동작을 고정한다.
 
 데모 WAV 파일(`data/demo/*.wav`)은 raw 바이너리로 repo에 포함되어 있다(약 55MB). 일반 `git clone`으로 받아진다. `.gitignore`가 demo 폴더를 기본 무시하면서 화이트리스트로 필요한 파일들만 통과시키므로, 새 데모 파일을 추가할 때는 `.gitignore`의 `!data/demo/...` 라인을 갱신해야 한다.
 
@@ -262,25 +262,32 @@ python impulcifer.py \
 
 출력 파일: `data/demo/hesuvi.wav`
 
-#### Step 2: md5 해시 비교
+#### Step 2: SHA-256 해시 비교
+
+동일성 판정은 SHA-256 기반이다. 해시는 플랫폼(부동소수점/라이브러리)에 따라 달라지므로 절대값 baseline이 아니라 **같은 머신에서의 변경 전후 자기 비교**로 판정한다.
 
 ```bash
-md5sum data/demo/hesuvi.wav
+# 현재 브랜치 출력
+sha256sum data/demo/hesuvi.wav
+
+# 기준(master) 출력 — 작업 트리를 건드리지 않도록 임시 worktree 사용
+git worktree add /tmp/brir-baseline origin/master
+cd /tmp/brir-baseline && python impulcifer.py --dir_path=data/demo \
+    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl \
+    --vbass --vbass_freq=250
+sha256sum data/demo/hesuvi.wav
+cd - && git worktree remove --force /tmp/brir-baseline
 ```
 
-현재 검증된 baseline md5(가상 베이스 경로):
+주의: 로컬 `master` ref는 뒤처져 있을 수 있으므로 반드시 `origin/master`(또는 검증된 커밋 SHA)를 기준으로 하고, `git checkout master -- .` 같은 방식은 절대 쓰지 말 것(작업 트리를 오염시킨다).
 
-```
-d295982d021a6d16ab2c194c3517c162  data/demo/hesuvi.wav
-```
+CI의 `brir-integrity` job(`tests/test_brir_integrity.py`)도 같은 방식이다: 하나의 hardcoded 해시를 보지 않고, 같은 Ubuntu CPython 3.13 환경에서 기준 ref(`origin/master`)와 현재 브랜치의 `hesuvi.wav`를 모두 생성해 SHA-256으로 비교한다. 비교 대상은 기본값(헤드폰 보정 포함)과 `--vbass --vbass_freq=250` 두 경로다.
 
-CI의 `brir-integrity` job은 hardcoded md5 하나만 보지 않고, 같은 Ubuntu CPython 3.13 환경에서 무결성이 확인된 기준 ref(`origin/master`)와 현재 브랜치의 `hesuvi.wav`를 모두 생성해 비교한다. 비교 대상은 기본값(헤드폰 보정 포함)과 `--vbass --vbass_freq=250` 두 경로다.
+두 해시가 일치하면 무결성 확인 완료. 불일치하면 Step 3으로 진행한다.
 
-이 해시는 PR #63(AutoEQ 벤더링) 이후 확립된 것이다. 일치하면 무결성 확인 완료. 불일치하면 Step 3으로 진행한다.
+의도적으로 알고리즘을 변경하여 출력이 달라져야 하는 PR에서는, 변경 전후의 차이를 Step 3의 주파수 응답 분석으로 문서화한다(CI는 상대 비교이므로 의도된 변경은 PR 설명에 근거를 남긴다).
 
-의도적으로 알고리즘을 변경하여 출력이 달라져야 하는 PR에서는, 변경 전후의 차이를 Step 3의 주파수 응답 분석으로 문서화한 뒤, 이 문서의 baseline 해시를 새 값으로 갱신한다.
-
-#### Step 3: 주파수 응답 분석 (md5 불일치 시)
+#### Step 3: 주파수 응답 분석 (해시 불일치 시)
 
 불일치가 발생하면, 채널별 주파수 응답을 1Hz 단위로 추출하여 비교한다.
 
@@ -438,7 +445,7 @@ if __name__ == "__main__":
 
 #### Step 5: 수정 및 재검증
 
-원인을 특정했으면 해당 코드를 수정한 뒤, Step 1부터 다시 수행한다. md5 해시가 baseline과 일치할 때까지 반복한다. compare_fr.py의 출력을 PR 코멘트나 커밋 메시지에 첨부하면 추적에 도움이 된다.
+원인을 특정했으면 해당 코드를 수정한 뒤, Step 1부터 다시 수행한다. SHA-256 해시가 기준 출력과 일치할 때까지 반복한다. compare_fr.py의 출력을 PR 코멘트나 커밋 메시지에 첨부하면 추적에 도움이 된다.
 
 ### 변경 유형별 필수 검증 범위
 
@@ -486,7 +493,7 @@ CI 실패가 보고되면 다음 순서로 대응한다.
 
 1. **실패한 체크의 로그를 끝까지 읽는다.** `gh run view <run-id> --log-failed` 또는 체크 페이지의 stdout/stderr를 받아온다. 첫 번째 traceback / assertion 메시지뿐 아니라 그 위 컨텍스트까지 본다.
 2. **로컬에서 재현되는지 확인한다.** 같은 테스트를 동일한 환경 변수와 함께 돌려본다. Windows에서는 `tests/test_brir_integrity.py`처럼 Linux/Python 3.13만 동작하도록 skipif가 걸린 테스트가 있으므로, 재현이 안 되면 CI 환경 의존성을 의심한다.
-3. **회귀 원인을 코드 차원에서 특정한다.** "테스트가 깐깐해서"라고 결론 내리지 말 것. 거의 모든 경우 진짜 회귀(미처 인지하지 못한 사이드이펙트)다. 특히 `core/cli_builder.py`가 `core/pipeline.py`의 dataclass field default를 그대로 argparse default로 옮긴다는 점에 주의한다 — `ProcessingConfig` field의 default를 만지면 CLI default 동작이 바뀌고 BRIR md5가 깨진다.
+3. **회귀 원인을 코드 차원에서 특정한다.** "테스트가 깐깐해서"라고 결론 내리지 말 것. 거의 모든 경우 진짜 회귀(미처 인지하지 못한 사이드이펙트)다. 특히 `core/cli_builder.py`가 `core/pipeline.py`의 dataclass field default를 그대로 argparse default로 옮긴다는 점에 주의한다 — `ProcessingConfig` field의 default를 만지면 CLI default 동작이 바뀌고 BRIR 해시가 깨진다.
 4. **수정은 같은 PR에 후속 커밋으로 올린다.** 별도 PR을 만들지 말고, 같은 브랜치에 fixup commit을 올린 뒤 다시 CI를 따라간다. 커밋 메시지에 실패한 체크 이름과 원인을 한 줄로 적어둔다.
 5. **CHANGELOG도 같이 갱신한다.** 회귀 원인과 수정 방향이 처음 PR에 적힌 의도와 다르다면, CHANGELOG의 해당 항목을 새 의도에 맞게 다시 쓴다(잘못 적힌 채로 release되는 것을 막기 위해).
 

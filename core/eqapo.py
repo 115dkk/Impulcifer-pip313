@@ -3,9 +3,11 @@
 
 EqualizerAPO 및 EqualizerAPO-XT(115dkk/EqualizerAPO-XT)의 설정 텍스트를 파싱하여
 좌/우 채널별 EQ 크기 응답(dB) 곡선으로 변환한다. 크기 응답으로 표현 가능한
-명령(Filter 바이쿼드, Filter IIR, Preamp, GraphicEQ)은 적용하고, 표현할 수 없는
-명령(Convolution, Copy, Delay, VSTPlugin 등)은 사유와 함께 바이패스 목록으로
-보고한다. Channel 명령의 L/R 스코핑과 Include(상대 경로 해석 가능 시)도 지원한다.
+명령(Filter 바이쿼드, Filter IIR, Preamp, GraphicEQ, Convolution)은 적용하고,
+표현할 수 없는 명령(Copy, Delay, MultiConvolution, VSTPlugin 등)은 사유와 함께
+바이패스 목록으로 보고한다. Channel 명령의 L/R 스코핑, Include(상대 경로 해석
+가능 시), 그리고 ``If: sampleRate == 48000`` 형태의 단순 샘플레이트 조건 분기도
+지원한다(그 외 조건식은 블록 전체를 보수적으로 바이패스).
 
 수식은 EqualizerAPO-XT 소스와 동일하게 유지한다:
 - filters/BiQuad.cpp: RBJ Audio EQ Cookbook 계수 및 gainAt() 폐형식
@@ -17,6 +19,9 @@ EqualizerAPO 및 EqualizerAPO-XT(115dkk/EqualizerAPO-XT)의 설정 텍스트를 
   선형 보간(양끝 평탄 연장)
 - filters/IIRFilterFactory.cpp: "ON IIR Order n Coefficients ..." 파싱
 - filters/PreampFilterFactory.cpp: "Preamp: x dB" 파싱(콤마 소수점 허용)
+- filters/ConvolutionFilePath.cpp + filters/IrCache.cpp: 설정 파일 기준 경로
+  해석(환경변수 확장·따옴표 제거), 샘플레이트 불일치(>1 Hz) 시 미적용,
+  채널 i가 IR의 i % ch 채널을 사용하는 매핑
 - engine/FilterEngine.Configuration.cpp: 첫 ':' 기준 키/값 분리, 키 트리밍
 
 이 모듈은 numpy(+IIR 평가 시 scipy.signal)만 사용하며 autoeq에 의존하지 않는다.
@@ -41,6 +46,8 @@ REASON_INCLUDE_NOT_FOUND = "include_not_found"
 REASON_EXPRESSION = "expression"
 REASON_SCOPING_IGNORED = "scoping_ignored"
 REASON_DISABLED = "disabled"
+REASON_CONVOLUTION_NOT_FOUND = "convolution_not_found"
+REASON_CONVOLUTION_FS_MISMATCH = "convolution_fs_mismatch"
 
 # EqualizerAPO-XT FilterFactoryRegistry에 등록된 명령 키워드 중 크기 응답으로
 # 표현할 수 없어 바이패스되는 것들. 미지의 키워드(향후 XT 확장 포함)는
@@ -49,7 +56,6 @@ _UNSUPPORTED_COMMANDS = frozenset(
     {
         "Delay",
         "Copy",
-        "Convolution",
         "MultiConvolution",
         "Eval",
         "VSTPlugin",
@@ -79,6 +85,13 @@ _RE_NUMBER = re.compile(r"[-+0-9.eE]+")
 
 # wcstod와 유사하게 문자열 선두의 유효한 실수만 파싱한다.
 _LEADING_FLOAT_RE = re.compile(r"^\s*[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?")
+
+# 평가 가능한 단순 If 조건: "sampleRate <비교연산자> <숫자>". 그 외 표현식
+# (deviceName, 변수, 산술 등)은 muparserx 없이 평가할 수 없으므로 블록을
+# 보수적으로 바이패스한다. 괄호 한 겹은 허용한다.
+_IF_SAMPLERATE_RE = re.compile(
+    r"^\s*\(?\s*sampleRate\s*(==|!=|<=|>=|<|>)\s*([0-9]+(?:\.[0-9]+)?)\s*\)?\s*$"
+)
 
 # BiQuadCommand.cpp의 biquadTypeFromName과 동일(대소문자 구분 유지).
 PEAKING = "PEAKING"
@@ -159,7 +172,7 @@ def looks_like_eqapo_config(text: str) -> bool:
     "Preamp:", "GraphicEQ:" 등)가 한 줄이라도 있으면 True.
     """
     known = (
-        {"Preamp", "GraphicEQ", "Channel", "Include"}
+        {"Preamp", "GraphicEQ", "Channel", "Include", "Convolution"}
         | _UNSUPPORTED_COMMANDS
         | _SCOPING_COMMANDS
         | _CONDITIONAL_COMMANDS
@@ -425,6 +438,14 @@ def _evaluate_iir(b, a, frequency, srate):
     return 20.0 * np.log10(np.abs(h) + _LOG_EPS)
 
 
+def _evaluate_fir(ir, frequency, srate):
+    """FIR(임펄스 응답)의 크기 응답(dB)을 주어진 주파수에서 평가한다."""
+    from scipy.signal import freqz
+
+    _, h = freqz(np.asarray(ir, dtype=float), 1.0, worN=np.asarray(frequency, dtype=float), fs=srate)
+    return 20.0 * np.log10(np.abs(h) + _LOG_EPS)
+
+
 def _parse_graphic_eq_nodes(parameters: str):
     """GraphicEQCommand::parse 포팅. 주파수 오름차순 (freq, gain) 리스트를 반환한다."""
     value = parameters
@@ -446,7 +467,49 @@ def _evaluate_graphic_eq(nodes, frequency):
         return np.zeros(len(frequency))
     node_f = np.array([max(node[0], 1e-9) for node in nodes], dtype=float)
     node_g = np.array([node[1] for node in nodes], dtype=float)
-    return np.interp(np.log(np.asarray(frequency, dtype=float)), np.log(node_f), node_g)
+    # f=0은 log에서 -inf가 되므로 최솟값으로 클립한다. 평탄 연장 덕분에 결과는
+    # GainIterator::gainAt(0)(첫 노드의 게인)과 동일하다.
+    frequency = np.maximum(np.asarray(frequency, dtype=float), 1e-9)
+    return np.interp(np.log(frequency), np.log(node_f), node_g)
+
+
+def _try_evaluate_condition(expression: str, srate) -> bool | None:
+    """단순 sampleRate 비교 조건을 평가한다. 평가 불가면 None."""
+    m = _IF_SAMPLERATE_RE.match(expression)
+    if m is None:
+        return None
+    op = m.group(1)
+    rhs = float(m.group(2))
+    lhs = float(srate)
+    if op == "==":
+        return lhs == rhs
+    if op == "!=":
+        return lhs != rhs
+    if op == "<=":
+        return lhs <= rhs
+    if op == ">=":
+        return lhs >= rhs
+    if op == "<":
+        return lhs < rhs
+    return lhs > rhs  # ">"
+
+
+class _ConditionFrame:
+    """If/ElseIf/Else/EndIf 한 블록의 분기 상태.
+
+    - evaluable=False: 조건을 평가할 수 없어 블록 전체를 보수적으로 건너뛰며
+      내부의 명령 라인을 REASON_CONDITIONAL로 보고한다(기존 동작).
+    - silent=True: 상위 분기가 비활성이라 이 블록 자체가 실행 대상이 아님.
+      내용은 조용히 건너뛴다(추가 보고 없음).
+    """
+
+    __slots__ = ("active", "satisfied", "evaluable", "silent")
+
+    def __init__(self, active, satisfied, evaluable, silent=False):
+        self.active = active
+        self.satisfied = satisfied
+        self.evaluable = evaluable
+        self.silent = silent
 
 
 def _parse_channel_scope(parameters: str):
@@ -538,7 +601,20 @@ def _read_include_file(path):
 
 
 def _parse_lines(lines, state, base_dir, depth, visited):
-    if_depth = 0
+    # If/ElseIf/Else/EndIf 분기 스택. 파일(또는 Include된 파일) 단위로 관리한다.
+    condition_stack = []
+
+    def _branch_active():
+        return all(frame.active for frame in condition_stack)
+
+    def _report_skipped_lines():
+        # 평가 불가(evaluable=False) 블록 내부만 보고한다. 조건이 평가되어
+        # 선택되지 않은 분기(EqualizerAPO도 실행하지 않는 라인)는 조용히
+        # 건너뛴다.
+        return any(
+            not frame.evaluable and not frame.silent for frame in condition_stack
+        )
+
     for line_number, line in enumerate(lines, start=1):
         # FilterEngine.Configuration.cpp: 첫 ':'에서 키/값을 분리하고 키를 트리밍
         pos = line.find(":")
@@ -549,24 +625,89 @@ def _parse_lines(lines, state, base_dir, depth, visited):
         if not key or key.startswith("#"):
             continue
 
-        # If/EndIf 블록 내부는 조건을 평가할 수 없으므로 통째로 바이패스한다.
-        if if_depth > 0:
-            if key == "If":
-                if_depth += 1
-            elif key == "EndIf":
-                if_depth -= 1
+        if key == "If":
+            if not _branch_active():
+                # 상위 분기가 비활성: 블록 구조만 추적하고 조용히 건너뛴다.
+                if _report_skipped_lines():
+                    state.bypassed.append(
+                        EqApoCommandReport(line_number, key, line.strip(), REASON_CONDITIONAL)
+                    )
+                condition_stack.append(
+                    _ConditionFrame(active=False, satisfied=True, evaluable=True, silent=True)
+                )
                 continue
-            if _KNOWN_COMMAND_RE.match(key):
+            condition = _try_evaluate_condition(value, state.srate)
+            if condition is None:
+                # 평가 불가: 블록 전체를 보수적으로 바이패스(기존 동작).
                 state.bypassed.append(
                     EqApoCommandReport(line_number, key, line.strip(), REASON_CONDITIONAL)
                 )
+                condition_stack.append(
+                    _ConditionFrame(active=False, satisfied=True, evaluable=False)
+                )
+            else:
+                condition_stack.append(
+                    _ConditionFrame(active=condition, satisfied=condition, evaluable=True)
+                )
             continue
 
-        if key == "If":
-            if_depth = 1
-            state.bypassed.append(
-                EqApoCommandReport(line_number, key, line.strip(), REASON_CONDITIONAL)
-            )
+        if key == "ElseIf":
+            if not condition_stack:
+                state.bypassed.append(
+                    EqApoCommandReport(line_number, key, line.strip(), REASON_UNSUPPORTED)
+                )
+                continue
+            frame = condition_stack[-1]
+            if frame.silent or not frame.evaluable:
+                if _report_skipped_lines():
+                    state.bypassed.append(
+                        EqApoCommandReport(line_number, key, line.strip(), REASON_CONDITIONAL)
+                    )
+                continue
+            if frame.satisfied:
+                frame.active = False
+                continue
+            condition = _try_evaluate_condition(value, state.srate)
+            if condition is None:
+                # 앞선 분기는 모두 거짓이었고 이 조건은 평가할 수 없다.
+                # 블록의 나머지를 보수적으로 바이패스로 강등한다.
+                state.bypassed.append(
+                    EqApoCommandReport(line_number, key, line.strip(), REASON_CONDITIONAL)
+                )
+                frame.evaluable = False
+                frame.active = False
+                frame.satisfied = True
+            else:
+                frame.active = condition
+                frame.satisfied = condition
+            continue
+
+        if key == "Else":
+            if not condition_stack:
+                state.bypassed.append(
+                    EqApoCommandReport(line_number, key, line.strip(), REASON_UNSUPPORTED)
+                )
+                continue
+            frame = condition_stack[-1]
+            if not frame.silent and frame.evaluable:
+                frame.active = not frame.satisfied
+                frame.satisfied = True
+            continue
+
+        if key == "EndIf":
+            if condition_stack:
+                condition_stack.pop()
+            else:
+                state.bypassed.append(
+                    EqApoCommandReport(line_number, key, line.strip(), REASON_UNSUPPORTED)
+                )
+            continue
+
+        if not _branch_active():
+            if _report_skipped_lines() and _KNOWN_COMMAND_RE.match(key):
+                state.bypassed.append(
+                    EqApoCommandReport(line_number, key, line.strip(), REASON_CONDITIONAL)
+                )
             continue
 
         if key.startswith("Filter"):
@@ -579,11 +720,13 @@ def _parse_lines(lines, state, base_dir, depth, visited):
             state.scope = _parse_channel_scope(value)
         elif key == "Include":
             _handle_include(key, value, line, line_number, state, base_dir, depth, visited)
+        elif key == "Convolution":
+            _handle_convolution(key, value, line, line_number, state, base_dir)
         elif key in _SCOPING_COMMANDS:
             state.bypassed.append(
                 EqApoCommandReport(line_number, key, line.strip(), REASON_SCOPING_IGNORED)
             )
-        elif key in _UNSUPPORTED_COMMANDS or key in _CONDITIONAL_COMMANDS:
+        elif key in _UNSUPPORTED_COMMANDS:
             state.bypassed.append(
                 EqApoCommandReport(line_number, key, line.strip(), REASON_UNSUPPORTED)
             )
@@ -679,6 +822,86 @@ def _handle_graphic_eq(key, value, line, line_number, state):
         return
     gain_db = _evaluate_graphic_eq(nodes, state.frequency)
     state.add_response(gain_db, f"GraphicEQ ({len(nodes)} nodes)")
+
+
+def _handle_convolution(key, value, line, line_number, state, base_dir):
+    """Convolution 명령: IR 파일의 크기 응답을 EQ 곡선으로 합성한다.
+
+    EqualizerAPO(filters/IrCache.cpp)와 동일하게 샘플레이트가 1 Hz 넘게
+    다르면 적용하지 않고, 채널 i는 IR의 ``i % ch`` 채널을 사용한다(스테레오
+    IR이면 좌/우가 서로 다른 곡선을 받는다). 위상(시간 구조)은 크기 응답
+    파이프라인에서 표현할 수 없으므로 크기만 반영된다.
+    """
+    if "`" in value:
+        state.bypassed.append(
+            EqApoCommandReport(line_number, key, line.strip(), REASON_EXPRESSION)
+        )
+        return
+
+    # ConvolutionFilePath::normalizeParameter: 트리밍 → 따옴표 제거 → 환경변수 확장
+    ir_path = os.path.expandvars(value.strip().strip('"'))
+    resolved = None
+    if ir_path:
+        if os.path.isabs(ir_path):
+            candidate = ir_path
+        elif base_dir is not None:
+            candidate = os.path.join(base_dir, ir_path)
+        else:
+            candidate = None
+        if candidate is not None and os.path.isfile(candidate):
+            resolved = os.path.normpath(os.path.abspath(candidate))
+
+    if resolved is None:
+        state.bypassed.append(
+            EqApoCommandReport(line_number, key, line.strip(), REASON_CONVOLUTION_NOT_FOUND)
+        )
+        return
+
+    try:
+        import soundfile as sf
+
+        ir_data, ir_fs = sf.read(resolved, always_2d=True, dtype="float64")
+    except Exception:
+        state.bypassed.append(
+            EqApoCommandReport(line_number, key, line.strip(), REASON_CONVOLUTION_NOT_FOUND)
+        )
+        return
+
+    if ir_data.shape[0] <= 0 or ir_data.shape[1] <= 0:
+        state.bypassed.append(
+            EqApoCommandReport(line_number, key, line.strip(), REASON_CONVOLUTION_NOT_FOUND)
+        )
+        return
+    if abs(float(state.srate) - float(ir_fs)) > 1.0:
+        # IrCache.cpp: 장치 샘플레이트와 1 Hz 넘게 다르면 필터를 만들지 않는다.
+        state.bypassed.append(
+            EqApoCommandReport(line_number, key, line.strip(), REASON_CONVOLUTION_FS_MISMATCH)
+        )
+        return
+
+    if not _scope_or_report(key, line, line_number, state):
+        return
+
+    frames, ir_channels = ir_data.shape
+    description = f"Convolution {os.path.basename(resolved)} ({frames} taps, {ir_channels} ch)"
+    left_ir_index = 0 % ir_channels
+    right_ir_index = 1 % ir_channels
+    left_gain = _evaluate_fir(ir_data[:, left_ir_index], state.frequency, state.srate)
+    if right_ir_index == left_ir_index:
+        right_gain = left_gain
+    else:
+        right_gain = _evaluate_fir(ir_data[:, right_ir_index], state.frequency, state.srate)
+
+    applied_to = []
+    if "L" in state.scope:
+        state.left_db += left_gain
+        state.applied_left += 1
+        applied_to.append("L")
+    if "R" in state.scope:
+        state.right_db += right_gain
+        state.applied_right += 1
+        applied_to.append("R")
+    state.applied.append(f"{description} [{'+'.join(applied_to)}]")
 
 
 def _handle_include(key, value, line, line_number, state, base_dir, depth, visited):

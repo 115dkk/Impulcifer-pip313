@@ -16,5 +16,5 @@ making changes. This file is a pointer only — do not duplicate rules here.
   PyPI 발행이 성공해야만 Nuitka 빌드가 돈다. docs/CI/tests만 바꾼 변경은 릴리스를
   유발하지 않는다. 자세한 내용은 `CLAUDE.md`의 "2. 런타임 변경 시 버전 bump",
   "빌드 / 릴리스 파이프라인" 섹션 참조.
-- **i18n / CHANGELOG / PR 검증(Tier 1~3) / BRIR md5 무결성**: 각각 `CLAUDE.md`의
+- **i18n / CHANGELOG / PR 검증(Tier 1~3) / BRIR 해시(SHA-256) 무결성**: 각각 `CLAUDE.md`의
   해당 섹션을 따른다.

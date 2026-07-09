@@ -246,7 +246,7 @@ class TestConfigurationFiles:
         ``**kwargs`` straight into :class:`ProcessingConfig` (there are no
         per-parameter signature defaults left to drift). Pinning the canonical
         room-correction limits here guards against silently changing the CLI
-        default behavior and the BRIR md5.
+        default behavior and the BRIR hash.
         """
         from core.pipeline import ProcessingConfig
 

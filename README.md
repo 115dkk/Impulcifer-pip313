@@ -81,8 +81,8 @@ impulcifer --help
 
 Custom EQ 파일은 두 가지 형식을 지원합니다. 확장자가 아니라 내용으로 형식을 판별합니다.
 
-- **AutoEQ 결과 CSV**: 기존과 동일한 `frequency,raw,error,...` 형식입니다.
-- **EqualizerAPO(-XT) 설정 텍스트**: `Preamp:`, `Filter n: ON PK Fc ... Hz Gain ... dB Q ...`, `GraphicEQ:` 형식입니다. AutoEQ의 ParametricEQ.txt/GraphicEQ.txt 내보내기와 EqualizerAPO-XT에서 저장한 설정을 그대로 쓸 수 있습니다. 크기 응답으로 표현 가능한 명령(Filter 바이쿼드/IIR, Preamp, GraphicEQ)은 적용하고, 그럴 수 없는 명령(`Convolution`, `Copy`, `Delay`, `If` 블록, VSTPlugin 등)은 경고와 함께 바이패스합니다. `Channel: L`/`Channel: R` 스코핑은 좌/우 EQ 곡선으로 분리 적용되며, `Include:`는 같은 폴더 기준 상대 경로면 따라 들어갑니다.
+- **AutoEQ 결과 CSV**: 기존과 동일한 `frequency,raw,error,...` 형식입니다. error 열이 없는 평문 2열(`주파수 게인`) 파일은 값을 그대로 적용할 EQ 게인 곡선으로 해석합니다.
+- **EqualizerAPO(-XT) 설정 텍스트**: `Preamp:`, `Filter n: ON PK Fc ... Hz Gain ... dB Q ...`, `GraphicEQ:` 형식입니다. AutoEQ의 ParametricEQ.txt/GraphicEQ.txt 내보내기와 EqualizerAPO-XT에서 저장한 설정을 그대로 쓸 수 있습니다. 크기 응답으로 표현 가능한 명령(Filter 바이쿼드/IIR, Preamp, GraphicEQ, `Convolution`)은 적용하고, 그럴 수 없는 명령(`Copy`, `Delay`, `MultiConvolution`, VSTPlugin 등)은 경고와 함께 바이패스합니다. `Convolution:`은 IR 파일의 크기 응답만 반영하며(위상 제외) EqualizerAPO처럼 샘플레이트가 다르면 적용하지 않습니다. `Channel: L`/`Channel: R` 스코핑은 좌/우 EQ 곡선으로 분리 적용되고, `Include:`는 같은 폴더 기준 상대 경로면 따라 들어가며, `If: sampleRate == 48000` 같은 단순 샘플레이트 조건 분기는 평가됩니다(그 외 조건식 블록은 보수적으로 바이패스).
 
 Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전에 이 파일들이 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`로 복사됩니다.
 

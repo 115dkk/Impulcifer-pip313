@@ -190,7 +190,7 @@ def main(**kwargs):
     the old ``mic_deviation_phase_correction`` — are ignored by
     :meth:`~core.pipeline.ProcessingConfig.from_kwargs`, so this call site stays
     stable as the parameter set evolves and no longer hand-mirrors the dataclass.
-    The pipeline executes the legacy stage sequence so the BRIR md5 remains
+    The pipeline executes the legacy stage sequence so the BRIR output remains
     byte-identical to pre-refactor output.
     """
     # Local import to avoid a circular dependency: core.pipeline imports back
@@ -314,8 +314,9 @@ def _read_eq_settings(file_path, estimator):
     """EQ 설정 파일을 읽어 FrequencyResponse로 변환한다.
 
     내용이 EqualizerAPO(-XT) 설정 형식이면 지원되는 필터(Filter 바이쿼드/IIR,
-    Preamp, GraphicEQ)를 크기 응답으로 합성하고, 지원되지 않는 명령은
-    바이패스하며 경고를 남긴다. 그 외에는 기존 AutoEQ CSV 파서를 사용한다.
+    Preamp, GraphicEQ, Convolution)를 크기 응답으로 합성하고, 지원되지 않는
+    명령은 바이패스하며 경고를 남긴다. 그 외에는 기존 AutoEQ CSV 파서를
+    사용하며, error 열이 없는 평문 gain 곡선 파일은 error = -raw 로 채운다.
 
     Args:
         file_path: EQ 설정 파일 경로
@@ -332,10 +333,19 @@ def _read_eq_settings(file_path, estimator):
     except UnicodeDecodeError:
         text = raw.decode("cp1252", errors="replace")
 
-    if not looks_like_eqapo_config(text):
-        return FrequencyResponse.read_from_csv(file_path), None
-
     logger = get_logger()
+
+    if not looks_like_eqapo_config(text):
+        fr = FrequencyResponse.read_from_csv(file_path)
+        if len(fr.error) == 0 and len(fr.raw) > 0:
+            # error 열이 없는 평문(frequency, gain) 파일: raw를 적용할 EQ
+            # 곡선으로 해석한다. 파이프라인은 error 필드를 소비하므로
+            # error = -raw 로 채워 곡선이 그대로 적용되게 한다. (기존에는
+            # 빈 error 배열이 EQ 워커에서 브로드캐스트 오류를 일으켰다.)
+            logger.info("cli_eq_plain_gain_curve", file=os.path.basename(file_path))
+            fr.error = -fr.raw.copy()
+        return fr, None
+
     from i18n.localization import get_localization_manager
 
     loc = get_localization_manager()

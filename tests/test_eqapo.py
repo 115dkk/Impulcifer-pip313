@@ -22,6 +22,8 @@ from core.eqapo import (
     PEAKING,
     REASON_CHANNEL_SCOPE,
     REASON_CONDITIONAL,
+    REASON_CONVOLUTION_FS_MISMATCH,
+    REASON_CONVOLUTION_NOT_FOUND,
     REASON_DISABLED,
     REASON_EXPRESSION,
     REASON_INCLUDE_NOT_FOUND,
@@ -341,13 +343,13 @@ class TestChannelScoping:
 class TestBypassReporting:
     def test_unsupported_commands(self):
         text = (
-            "Convolution: ir.wav\n"
             "Copy: L=R\n"
             "Delay: 10 ms\n"
+            "MultiConvolution: L br.wav\n"
             "Preamp: -1 dB\n"
         )
         res = parse_eqapo_config(text, FS, np.array([100.0]))
-        assert [r.command for r in res.bypassed] == ["Convolution", "Copy", "Delay"]
+        assert [r.command for r in res.bypassed] == ["Copy", "Delay", "MultiConvolution"]
         assert all(r.reason == REASON_UNSUPPORTED for r in res.bypassed)
         np.testing.assert_allclose(res.left_db, -1.0)  # Preamp은 정상 적용
 
@@ -358,9 +360,9 @@ class TestBypassReporting:
         assert len(res.bypassed) == 2
         np.testing.assert_allclose(res.left_db, -2.0)
 
-    def test_if_block_is_skipped(self):
+    def test_unevaluable_if_block_is_skipped(self):
         text = (
-            "If: sampleRate == 44100\n"
+            'If: deviceName == "Speakers"\n'
             "Preamp: -10 dB\n"
             "Else:\n"
             "Preamp: -20 dB\n"
@@ -403,6 +405,191 @@ class TestBypassReporting:
         res = parse_eqapo_config(text, FS, np.array([100.0]))
         assert len(res.bypassed) == 0
         np.testing.assert_allclose(res.left_db, -1.0)
+
+
+class TestIfEvaluation:
+    """단순 sampleRate 조건의 If/ElseIf/Else 분기 평가."""
+
+    def test_true_branch_applies(self):
+        text = (
+            "If: sampleRate == 48000\n"
+            "Preamp: -10 dB\n"
+            "Else:\n"
+            "Preamp: -20 dB\n"
+            "EndIf:\n"
+        )
+        res = parse_eqapo_config(text, FS, np.array([100.0]))
+        np.testing.assert_allclose(res.left_db, -10.0)
+        assert len(res.bypassed) == 0
+
+    def test_false_condition_takes_else(self):
+        text = (
+            "If: sampleRate == 44100\n"
+            "Preamp: -10 dB\n"
+            "Else:\n"
+            "Preamp: -20 dB\n"
+            "EndIf:\n"
+        )
+        res = parse_eqapo_config(text, FS, np.array([100.0]))
+        np.testing.assert_allclose(res.left_db, -20.0)
+        # 평가된 분기의 미선택 라인은 EqualizerAPO처럼 조용히 건너뛴다.
+        assert len(res.bypassed) == 0
+
+    def test_elseif_chain(self):
+        text = (
+            "If: sampleRate == 44100\n"
+            "Preamp: -10 dB\n"
+            "ElseIf: sampleRate == 48000\n"
+            "Preamp: -20 dB\n"
+            "Else:\n"
+            "Preamp: -30 dB\n"
+            "EndIf:\n"
+        )
+        res = parse_eqapo_config(text, FS, np.array([100.0]))
+        np.testing.assert_allclose(res.left_db, -20.0)
+        assert len(res.bypassed) == 0
+
+    @pytest.mark.parametrize(
+        "condition,expected",
+        [
+            ("sampleRate == 48000", True),
+            ("sampleRate != 48000", False),
+            ("sampleRate <= 48000", True),
+            ("sampleRate >= 96000", False),
+            ("sampleRate < 96000", True),
+            ("sampleRate > 44100", True),
+            ("(sampleRate == 48000)", True),
+        ],
+    )
+    def test_comparison_operators(self, condition, expected):
+        text = f"If: {condition}\nPreamp: -3 dB\nEndIf:\n"
+        res = parse_eqapo_config(text, FS, np.array([100.0]))
+        np.testing.assert_allclose(res.left_db, -3.0 if expected else 0.0)
+
+    def test_unevaluable_elseif_degrades_to_bypass(self):
+        text = (
+            "If: sampleRate == 44100\n"
+            "Preamp: -10 dB\n"
+            'ElseIf: deviceName == "X"\n'
+            "Preamp: -20 dB\n"
+            "EndIf:\n"
+            "Preamp: -1 dB\n"
+        )
+        res = parse_eqapo_config(text, FS, np.array([100.0]))
+        np.testing.assert_allclose(res.left_db, -1.0)
+        assert any(r.reason == REASON_CONDITIONAL for r in res.bypassed)
+
+    def test_nested_evaluated_conditions(self):
+        text = (
+            "If: sampleRate >= 48000\n"
+            "If: sampleRate == 44100\n"
+            "Preamp: -10 dB\n"
+            "Else:\n"
+            "Preamp: -20 dB\n"
+            "EndIf:\n"
+            "EndIf:\n"
+        )
+        res = parse_eqapo_config(text, FS, np.array([100.0]))
+        np.testing.assert_allclose(res.left_db, -20.0)
+        assert len(res.bypassed) == 0
+
+    def test_inactive_branch_nested_if_is_silent(self):
+        text = (
+            "If: sampleRate == 44100\n"
+            "If: sampleRate == 48000\n"
+            "Preamp: -10 dB\n"
+            "EndIf:\n"
+            "EndIf:\n"
+            "Preamp: -1 dB\n"
+        )
+        res = parse_eqapo_config(text, FS, np.array([100.0]))
+        np.testing.assert_allclose(res.left_db, -1.0)
+        assert len(res.bypassed) == 0
+
+    def test_stray_endif_reported(self):
+        res = parse_eqapo_config("EndIf:\nPreamp: -1 dB\n", FS, np.array([100.0]))
+        np.testing.assert_allclose(res.left_db, -1.0)
+        assert res.bypassed[0].command == "EndIf"
+
+
+class TestConvolution:
+    """Convolution 명령의 크기 응답 합성."""
+
+    @staticmethod
+    def _write_wav(path, data, fs=FS):
+        import soundfile as sf
+
+        sf.write(str(path), data, fs, subtype="FLOAT")
+
+    def test_flat_gain_ir(self, tmp_path):
+        self._write_wav(tmp_path / "ir.wav", np.array([0.5, 0.0, 0.0, 0.0]))
+        res = parse_eqapo_config(
+            "Convolution: ir.wav", FS, np.array([100.0, 1000.0, 10000.0]),
+            base_dir=str(tmp_path),
+        )
+        assert len(res.applied) == 1
+        np.testing.assert_allclose(res.left_db, 20.0 * math.log10(0.5), atol=1e-6)
+        assert not res.channel_split
+
+    def test_ir_magnitude_matches_dft(self, tmp_path):
+        # ir_short.wav와 동일한 구성: h[0]=1.0, h[20]=0.5, h[40]=0.25
+        ir = np.zeros(64)
+        ir[0], ir[20], ir[40] = 1.0, 0.5, 0.25
+        self._write_wav(tmp_path / "ir.wav", ir)
+        freq = np.linspace(20.0, 20000.0, 50)
+        res = parse_eqapo_config(
+            "Convolution: ir.wav", FS, freq, base_dir=str(tmp_path)
+        )
+        omega = -2j * np.pi * np.outer(freq, np.arange(64)) / FS
+        expected = 20.0 * np.log10(np.abs(np.exp(omega) @ ir))
+        np.testing.assert_allclose(res.left_db, expected, atol=1e-6)
+
+    def test_stereo_ir_maps_per_channel(self, tmp_path):
+        # IrCache.cpp: 채널 i는 IR의 i % ch 채널을 사용한다.
+        stereo = np.zeros((4, 2))
+        stereo[0, 0] = 1.0
+        stereo[0, 1] = 0.5
+        self._write_wav(tmp_path / "ir.wav", stereo)
+        res = parse_eqapo_config(
+            "Convolution: ir.wav", FS, np.array([1000.0]), base_dir=str(tmp_path)
+        )
+        assert res.channel_split
+        np.testing.assert_allclose(res.left_db, 0.0, atol=1e-9)
+        np.testing.assert_allclose(res.right_db, 20.0 * math.log10(0.5), atol=1e-9)
+
+    def test_quoted_path(self, tmp_path):
+        self._write_wav(tmp_path / "my ir.wav", np.array([1.0]))
+        res = parse_eqapo_config(
+            'Convolution: "my ir.wav"', FS, np.array([1000.0]), base_dir=str(tmp_path)
+        )
+        assert len(res.applied) == 1
+
+    def test_fs_mismatch_bypassed(self, tmp_path):
+        # IrCache.cpp: 1 Hz 넘게 다르면 필터를 만들지 않는다.
+        self._write_wav(tmp_path / "ir.wav", np.array([1.0]), fs=44100)
+        res = parse_eqapo_config(
+            "Convolution: ir.wav", FS, np.array([1000.0]), base_dir=str(tmp_path)
+        )
+        assert len(res.applied) == 0
+        assert res.bypassed[0].reason == REASON_CONVOLUTION_FS_MISMATCH
+
+    def test_missing_file_bypassed(self, tmp_path):
+        res = parse_eqapo_config(
+            "Convolution: nope.wav", FS, np.array([1000.0]), base_dir=str(tmp_path)
+        )
+        assert res.bypassed[0].reason == REASON_CONVOLUTION_NOT_FOUND
+
+    def test_no_base_dir_bypassed(self):
+        res = parse_eqapo_config("Convolution: ir.wav", FS, np.array([1000.0]))
+        assert res.bypassed[0].reason == REASON_CONVOLUTION_NOT_FOUND
+
+    def test_channel_scoped_convolution(self, tmp_path):
+        self._write_wav(tmp_path / "ir.wav", np.array([0.5]))
+        text = "Channel: L\nConvolution: ir.wav"
+        res = parse_eqapo_config(text, FS, np.array([1000.0]), base_dir=str(tmp_path))
+        assert res.channel_split
+        np.testing.assert_allclose(res.left_db, 20.0 * math.log10(0.5), atol=1e-9)
+        np.testing.assert_allclose(res.right_db, 0.0, atol=1e-9)
 
 
 class TestInclude:
@@ -523,6 +710,22 @@ class TestEqualizationIntegration:
 
         left, right = equalization(self._estimator(), str(tmp_path))
         assert left is None and right is None
+
+    def test_two_column_plain_file(self, tmp_path):
+        """error 열이 없는 평문 gain 곡선 파일은 error = -raw로 적용된다."""
+        from impulcifer import equalization
+
+        rows = []
+        f = 20.0
+        while f <= 20000.0:
+            rows.append(f"{f:.2f} -3.00")
+            f *= 1.5
+        (tmp_path / "eq.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+        left, right = equalization(self._estimator(), str(tmp_path))
+        assert left is not None
+        assert len(left.error) == len(left.raw) > 0
+        np.testing.assert_allclose(left.error, -left.raw, atol=1e-9)
+        np.testing.assert_allclose(left.raw, -3.0, atol=1e-6)
 
 
 class TestRealWorldConfigs:

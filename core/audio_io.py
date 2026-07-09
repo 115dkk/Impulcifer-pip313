@@ -3,7 +3,7 @@
 
 Split out of ``core/utils.py`` (audit #115 finding 8). ``magnitude_response``
 is kept byte-identical — its rfft path is pinned by
-``tests/test_magnitude_response_parity.py`` and feeds the BRIR md5.
+``tests/test_magnitude_response_parity.py`` and feeds the BRIR hash.
 ``core.utils`` re-exports these names.
 """
 
