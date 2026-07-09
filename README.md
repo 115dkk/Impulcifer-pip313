@@ -77,7 +77,12 @@ impulcifer --help
 | `headphones.wav` | 기본 헤드폰 보정 측정 파일입니다. `--headphone_compensation_file`로 다른 파일을 지정할 수 있습니다. |
 | `room-target.csv` | 룸 보정 목표 응답입니다. 없으면 flat target을 씁니다. |
 | `room-mic-calibration.csv` 또는 `room-mic-calibration.txt` | 룸 측정 마이크 보정 파일입니다. 없으면 마이크 보정을 건너뜁니다. |
-| `eq.csv`, `eq-left.csv`, `eq-right.csv` | Custom EQ 파일입니다. `eq.csv`는 양쪽 공통, `eq-left.csv`와 `eq-right.csv`는 좌우 개별 EQ입니다. |
+| `eq.csv`, `eq-left.csv`, `eq-right.csv` | Custom EQ 파일입니다. `eq.csv`는 양쪽 공통, `eq-left.csv`와 `eq-right.csv`는 좌우 개별 EQ입니다. 같은 이름의 `.txt`(예: `eq.txt`)도 인식합니다. |
+
+Custom EQ 파일은 두 가지 형식을 지원합니다. 확장자가 아니라 내용으로 형식을 판별합니다.
+
+- **AutoEQ 결과 CSV**: 기존과 동일한 `frequency,raw,error,...` 형식입니다.
+- **EqualizerAPO(-XT) 설정 텍스트**: `Preamp:`, `Filter n: ON PK Fc ... Hz Gain ... dB Q ...`, `GraphicEQ:` 형식입니다. AutoEQ의 ParametricEQ.txt/GraphicEQ.txt 내보내기와 EqualizerAPO-XT에서 저장한 설정을 그대로 쓸 수 있습니다. 크기 응답으로 표현 가능한 명령(Filter 바이쿼드/IIR, Preamp, GraphicEQ)은 적용하고, 그럴 수 없는 명령(`Convolution`, `Copy`, `Delay`, `If` 블록, VSTPlugin 등)은 경고와 함께 바이패스합니다. `Channel: L`/`Channel: R` 스코핑은 좌/우 EQ 곡선으로 분리 적용되며, `Include:`는 같은 폴더 기준 상대 경로면 따라 들어갑니다.
 
 Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전에 이 파일들이 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`로 복사됩니다.
 
@@ -199,7 +204,7 @@ impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 ## 주의 사항
 
 - `.mlp`, `.thd`, `.truehd` 입력은 FFmpeg가 필요합니다. FFmpeg가 없으면 실행 중 설치 안내가 나올 수 있습니다.
-- Custom EQ는 처리 시점에 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`를 기준으로 읽습니다.
+- Custom EQ는 처리 시점에 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`(없으면 같은 이름의 `.txt`)를 기준으로 읽습니다. AutoEQ CSV와 EqualizerAPO 설정 텍스트를 모두 인식합니다.
 - 원본 Impulcifer와 같은 입력을 쓰더라도 Python, NumPy, SciPy, 보정 옵션 차이로 결과가 달라질 수 있습니다. 주요 경로는 회귀 테스트로 확인합니다.
 
 ## 업데이트

@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.8.0 - 2026-07-10
+### EqualizerAPO(-XT) 설정 텍스트를 Custom EQ 입력으로 지원
+
+#### ⭐ 새로운 기능 / 개선
+- **EqualizerAPO 설정 파서 추가 (`core/eqapo.py`)**: Custom EQ 파일(`eq.csv`/`eq-left.csv`/`eq-right.csv`)에 AutoEQ 결과 CSV뿐 아니라 EqualizerAPO(-XT) 설정 텍스트를 넣을 수 있다. 형식은 확장자가 아니라 내용으로 판별하므로 GUI에서 `.txt`를 골라 `eq.csv`로 복사되는 기존 흐름도 그대로 동작하며, `eq.txt`/`eq-left.txt`/`eq-right.txt` 파일명도 새로 인식한다(.csv가 우선).
+- **적용 가능한 필터는 적용, 불가능한 명령은 바이패스**: `Filter`(PK/PEQ/Modal/LP/LPQ/HP/HPQ/BP/LS/LSC/LS 6dB/LS 12dB/HS/HSC/HS 6dB/HS 12dB/NO/AP 바이쿼드와 `ON IIR Order n Coefficients ...`), `Preamp`, `GraphicEQ`는 크기 응답으로 합성해 적용한다. `Convolution`/`MultiConvolution`/`Copy`/`Delay`/`Eval`/`VSTPlugin`과 `If` 블록 내부는 라인 번호·사유와 함께 경고 로그로 바이패스를 보고한다. `Device`/`Stage` 스코핑은 평가할 수 없어 무시(경고 후 계속 진행)하며, 비활성 필터(`OFF`, `ON None`)는 조용히 건너뛴다.
+- **바이쿼드 수식은 EqualizerAPO-XT 소스와 동치**: RBJ Audio EQ Cookbook 계수(filters/BiQuad.cpp), `gainAt()` 폐형식, 셸프 기본 S=0.9·LP/HP/BP 기본 Q=1/√2·NO 기본 Q=30, 슬로프/12 규칙과 코너→중심 주파수 변환(filters/BiQuadFilter.cpp), REW 천단위 구분자(`Fc 1.250 Hz`=1250 Hz)와 콤마 소수점, GraphicEQ의 로그 주파수 축 선형 보간(helpers/GainIterator.cpp)까지 동일하게 이식했고 scipy freqz 교차 검증 테스트로 고정했다(`tests/test_eqapo.py`, 79 tests).
+- **`Channel:` 스코핑 지원**: `Channel: L`/`R`/`1`/`2`/`ALL`로 스코프가 나뉜 설정은 좌/우 EQ 곡선을 분리 생성해 각각 적용한다. `Include:`는 설정 파일 기준 상대 경로(또는 절대 경로)가 존재하면 재귀 파싱하고(순환/깊이 가드), 없으면 바이패스로 보고한다.
+- **i18n**: 감지/프리앰프/채널 분리/바이패스 로그용 `cli_eqapo_*` 키 12개를 9개 언어 파일에 추가했고(en/ko 번역, 나머지 영어 fallback), `checkbox_custom_eq` 문구에 `.txt`를 반영했다.
 ## 2.7.9 - 2026-06-13
 ### GUI 디자인 적대적 리뷰 + 접근성 명암비 수리
 
