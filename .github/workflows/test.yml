@@ -14,7 +14,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        # 3.14t는 free-threaded(no-GIL) 빌드다. core/parallel_utils.py의
+        # ThreadPoolExecutor 경로가 실제 no-GIL 런타임에서 검증된다.
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
 
     steps:
     - name: Checkout code
@@ -33,6 +35,24 @@ jobs:
     - name: Install dependencies
       run: |
         uv pip install --system -r requirements-dev.txt
+
+    - name: Verify GIL is disabled (free-threaded runtime)
+      if: matrix.python-version == '3.14t'
+      run: |
+        python - <<'PY'
+        import sys
+        # C 확장이 free-threaded 지원을 선언하지 않으면 임포트 시점에 GIL이
+        # 조용히 재활성화된다. 핵심 의존성을 임포트한 뒤에도 GIL이 꺼져
+        # 있어야 ThreadPoolExecutor 병렬 경로가 실제로 검증된 것이다.
+        import numpy, scipy, matplotlib, soundfile, PIL  # noqa: F401
+        assert not sys._is_gil_enabled(), (
+            "GIL re-enabled after importing core dependencies - "
+            "free-threaded path is not actually being tested"
+        )
+        from core.parallel_utils import is_gil_disabled
+        assert is_gil_disabled(), "is_gil_disabled() must be True on 3.14t"
+        print("OK: GIL disabled, free-threaded path active")
+        PY
 
     - name: Run unit tests
       run: |
@@ -82,6 +102,50 @@ jobs:
         MPLBACKEND: Agg
       run: |
         python -m pytest tests/test_brir_integrity.py -v --tb=short
+
+  # 멀티스레드 하이젠버그 트랩: free-threaded 런타임(ThreadPoolExecutor 경로)에서
+  # 데모 BRIR을 반복 생성해 모든 출력 .wav가 실행 간 byte-identical인지 검사한다.
+  # 데이터 레이스는 간헐적으로만 출력에 나타나므로, 매 CI 실행이 포획 시도가 된다.
+  brir-thread-determinism:
+    name: BRIR Thread Determinism (3.14t)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+
+    - name: Set up free-threaded Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14t"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv pip install --system -r requirements-dev.txt
+
+    - name: Verify GIL is disabled (free-threaded runtime)
+      run: |
+        python - <<'PY'
+        import sys
+        import numpy, scipy, matplotlib, soundfile, PIL  # noqa: F401
+        assert not sys._is_gil_enabled(), (
+            "GIL re-enabled after importing core dependencies - "
+            "determinism run would not exercise the threaded path"
+        )
+        print("OK: GIL disabled, free-threaded path active")
+        PY
+
+    - name: Check BRIR thread determinism (repeated-run hashes)
+      env:
+        IMPULCIFER_RUN_BRIR_THREAD_DETERMINISM: "1"
+        MPLBACKEND: Agg
+      run: |
+        python -m pytest tests/test_brir_thread_determinism.py -v --tb=short
 
   test-imports:
     name: Test Module Imports
@@ -183,18 +247,19 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [test, brir-integrity, test-imports, lint]
+    needs: [test, brir-integrity, brir-thread-determinism, test-imports, lint]
     if: always()
     steps:
     - name: Check test results
       run: |
-        if [ "${{ needs.test.result }}" = "success" ] && [ "${{ needs['brir-integrity'].result }}" = "success" ] && [ "${{ needs.test-imports.result }}" = "success" ] && [ "${{ needs.lint.result }}" = "success" ]; then
+        if [ "${{ needs.test.result }}" = "success" ] && [ "${{ needs['brir-integrity'].result }}" = "success" ] && [ "${{ needs['brir-thread-determinism'].result }}" = "success" ] && [ "${{ needs.test-imports.result }}" = "success" ] && [ "${{ needs.lint.result }}" = "success" ]; then
           echo "✅ All tests passed!"
           exit 0
         else
           echo "❌ Some tests failed"
           echo "  test: ${{ needs.test.result }}"
           echo "  brir-integrity: ${{ needs['brir-integrity'].result }}"
+          echo "  brir-thread-determinism: ${{ needs['brir-thread-determinism'].result }}"
           echo "  test-imports: ${{ needs.test-imports.result }}"
           echo "  lint: ${{ needs.lint.result }}"
           exit 1

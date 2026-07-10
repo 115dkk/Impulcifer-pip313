@@ -22,6 +22,8 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **BRIR 무결성 판정 SHA-256 전환**: `tests/test_brir_integrity.py`의 해시 비교를 md5에서 SHA-256으로 교체하고, `CLAUDE.md`의 Tier 3 절차를 sha256sum + 기준 ref(`origin/master`) worktree 자기 비교 방식으로 갱신했다(문서의 stale md5 절대값 baseline 제거).
+- **CI에 free-threaded 3.14t 테스트 추가** (2026-07-10, CI/문서만 변경 — 버전 bump 없음): 테스트 매트릭스에 CPython 3.14t(free-threaded)를 추가해 `core/parallel_utils.py`의 ThreadPoolExecutor 병렬 경로가 실제 no-GIL 런타임에서 검증되도록 했다. 핵심 C 확장(numpy/scipy/matplotlib/soundfile/Pillow) 임포트 후에도 GIL이 꺼져 있는지 확인하는 가드 스텝을 포함해, 의존성이 GIL을 조용히 재활성화하면 잡이 실패한다. README와 `docs/README_PYTHON314.md`에 free-threaded 권장 최소 패치(CPython 3.14.4+, 3.14.0의 GC 일시정지 폭주·GC 성능 회귀·mimalloc 페이지 누수가 3.14.1~3.14.4에서 수정됨)를 문서화하고, 문서의 stale한 `release-cross-platform.yml` 참조를 `publish.yml`로 바로잡았다.
+- **CI에 BRIR 스레드 결정성(하이젠버그 트랩) 잡 추가** (2026-07-10, CI/테스트만 변경 — 버전 bump 없음): `tests/test_brir_thread_determinism.py`가 free-threaded 런타임에서 데모 BRIR을 같은 환경에서 3회 반복 생성해 모든 출력 `.wav`의 SHA-256이 실행 간 byte-identical인지 검증한다(기본+vbass 두 시나리오). 스레드 병렬 경로의 데이터 레이스는 간헐적으로만 출력을 오염시키므로, 전용 `brir-thread-determinism` 잡이 매 CI 실행마다 반복해 포획 확률을 누적시킨다. 실패 시 어떤 파일이 어떤 해시로 갈라졌는지 run별로 보고한다.
 
 ## 2.7.9 - 2026-06-13
 ### GUI 디자인 적대적 리뷰 + 접근성 명암비 수리
