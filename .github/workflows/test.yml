@@ -14,7 +14,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        # 3.14t는 free-threaded(no-GIL) 빌드다. core/parallel_utils.py의
+        # ThreadPoolExecutor 경로가 실제 no-GIL 런타임에서 검증된다.
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
 
     steps:
     - name: Checkout code
@@ -33,6 +35,24 @@ jobs:
     - name: Install dependencies
       run: |
         uv pip install --system -r requirements-dev.txt
+
+    - name: Verify GIL is disabled (free-threaded runtime)
+      if: matrix.python-version == '3.14t'
+      run: |
+        python - <<'PY'
+        import sys
+        # C 확장이 free-threaded 지원을 선언하지 않으면 임포트 시점에 GIL이
+        # 조용히 재활성화된다. 핵심 의존성을 임포트한 뒤에도 GIL이 꺼져
+        # 있어야 ThreadPoolExecutor 병렬 경로가 실제로 검증된 것이다.
+        import numpy, scipy, matplotlib, soundfile, PIL  # noqa: F401
+        assert not sys._is_gil_enabled(), (
+            "GIL re-enabled after importing core dependencies - "
+            "free-threaded path is not actually being tested"
+        )
+        from core.parallel_utils import is_gil_disabled
+        assert is_gil_disabled(), "is_gil_disabled() must be True on 3.14t"
+        print("OK: GIL disabled, free-threaded path active")
+        PY
 
     - name: Run unit tests
       run: |

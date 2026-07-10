@@ -12,6 +12,7 @@ Impulcifer-py313은 [Jaakko Pasanen의 Impulcifer](https://github.com/jaakkopasa
 - PyPI 패키지, standalone 릴리스, Modern GUI를 제공합니다.
 - CLI와 GUI에서 BRIR 생성, 룸 보정, 헤드폰 보정, Custom EQ, Virtual Bass, TrueHD 레이아웃 출력, 마이크 착용 편차 보정을 다룹니다.
 - 일반 Python에서는 process 기반 병렬 처리를, free-threaded Python에서는 thread 기반 병렬 처리를 우선 사용합니다. standalone 빌드는 free-threaded Python을 대상으로 하지 않습니다.
+- free-threaded 런타임은 CPython 3.14.4 이상(가능하면 최신 패치)을 권합니다. 3.14.1~3.14.4 패치에 free-threaded GC 일시정지 증가, GC 성능 회귀, mimalloc 메모리 누수 수정이 순차 반영되었습니다. CI는 free-threaded 3.14t에서도 전체 테스트를 확인합니다.
 
 ## 설치
 

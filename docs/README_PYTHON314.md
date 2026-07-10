@@ -6,8 +6,8 @@
 
 | 항목 | 현재 상태 | 기준 코드 |
 | --- | --- | --- |
-| Python 테스트 범위 | CI에서 Python 3.9부터 3.14까지 확인합니다. | `.github/workflows/test.yml` |
-| Nuitka 릴리스 빌드 | 일반 CPython 3.14와 `nuitka>=4.1`을 씁니다. | `.github/workflows/build-linux.yml`, `.github/workflows/build-macos.yml`, `.github/workflows/release-cross-platform.yml` |
+| Python 테스트 범위 | CI에서 Python 3.9부터 3.14까지, 그리고 free-threaded 3.14t를 확인합니다. | `.github/workflows/test.yml` |
+| Nuitka 릴리스 빌드 | 일반 CPython 3.14와 `nuitka>=4.1`을 씁니다. | `.github/workflows/build-linux.yml`, `.github/workflows/build-macos.yml`, `.github/workflows/publish.yml` |
 | free-threaded standalone | 대상에서 제외합니다. `--disable-gil`, `3.14t`를 쓰지 않습니다. | `tests/test_build_config.py` |
 | Nuitka 플래그 | `build_scripts/nuitka_flags.py`가 단일 기준입니다. | `build_scripts/build_nuitka.py`, `build_scripts/nuitka_flags.py` |
 | 런타임 병렬 정책 | GIL 비활성화 여부를 보고 ThreadPool 또는 ProcessPool을 고릅니다. | `core/parallel_utils.py` |
@@ -114,6 +114,7 @@ python -m build_scripts.nuitka_flags --platform linux --version 0.0.0
 ## free-threaded Python 사용 시 주의
 
 - PyPI 패키지 실행에서는 free-threaded Python을 직접 쓸 수 있습니다.
+- free-threaded 빌드는 CPython 3.14.4 이상을 쓰세요. 3.14.0에는 힙이 커질수록 GC 일시정지가 2차 함수로 늘어나는 버그(3.14.1에서 수정), free-threaded GC 성능 회귀(3.14.3에서 수정), 스레드가 끝날 때까지 mimalloc 페이지가 회수되지 않는 누수(3.14.4에서 수정)가 있었습니다. 장시간 실행하는 GUI/DSP 작업에는 최신 패치를 권합니다.
 - standalone 릴리스는 일반 CPython 3.14 기준입니다.
 - no-GIL 런타임에서 ThreadPool 경로는 pickle 비용을 줄일 수 있지만, 모든 작업이 빨라진다고 보장할 수는 없습니다.
 - NumPy와 SciPy 내부 구현, BLAS 설정, 배열 크기에 따라 결과가 달라집니다.
