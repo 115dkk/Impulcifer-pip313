@@ -111,9 +111,8 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
     print(f"build_nuitka.py: build_impulcifer() called with version={project_version}", flush=True)
     """Nuitka로 Impulcifer GUI 빌드 (크로스 플랫폼 지원).
 
-    Flag definitions live in :mod:`build_scripts.nuitka_flags` (Phase 4 of
-    issue #87). This function only handles platform routing and the
-    ``subprocess.run`` invocation.
+    Flag definitions live in :mod:`build_scripts.nuitka_flags`. This function
+    only handles platform routing and the ``subprocess.run`` invocation.
     """
     from build_scripts.nuitka_flags import (
         PLATFORM_OUTPUT_DIRS,
@@ -187,10 +186,6 @@ def main():
 
     if not check_nuitka():
         sys.exit(1)
-
-    # clean_specific_build_folders()
-    # --remove-output 옵션이 output-dir을 정리하므로, 추가 정리 불필요할 수 있음
-    # 필요하다면 Nuitka가 생성하는 루트의 임시 파일/폴더만 정리
 
     current_version = get_project_version()
     print(f"빌드에 사용될 버전: {current_version}", flush=True)

@@ -220,7 +220,6 @@ class InfoTab:
             justify="left",
         ).grid(row=2, column=1, sticky="nw", padx=(0, 20), pady=(8, 12))
 
-        # Action row — License + Bug report
         action_frame = ctk.CTkFrame(hero, fg_color="transparent")
         action_frame.grid(row=3, column=1, sticky="w", padx=(0, 20), pady=(0, 20))
 

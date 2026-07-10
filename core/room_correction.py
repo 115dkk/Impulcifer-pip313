@@ -79,7 +79,6 @@ def room_correction(
         for speaker, pair in rir.irs.items():
             frs[speaker] = dict()
             for side, ir in pair.items():
-                # Create frequency response
                 fr = ir.frequency_response()
 
                 if mic_calibration is not None:
@@ -109,7 +108,6 @@ def room_correction(
                     ])
                     fr.error *= mask
 
-                # Add frequency response
                 frs[speaker][side] = fr
 
                 if plot:
@@ -165,13 +163,11 @@ def open_room_measurements(estimator, dir_path, debug=False):
         speakers = re.search(SPEAKER_LIST_PATTERN, file_name)
         if speakers is not None:
             speakers = speakers[0].split(',')
-        # Form absolute path
         file_path = os.path.join(dir_path, file_name)
         # Read side if present
         side = re.search(r'(left|right)', file_name)
         if side is not None:
             side = side[0]
-        # Read file
         rir.open_recording(file_path, speakers, side=side, debug=debug)
     return rir
 
@@ -202,7 +198,6 @@ def open_generic_room_measurement(estimator,
     if not os.path.isfile(file_path):
         return None
 
-    # Read the file
     fs, data = read_wav(file_path, expand=True)
 
     if fs != estimator.fs:
@@ -293,7 +288,6 @@ def open_generic_room_measurement(estimator,
         room_fr.error_smoothed *= mask
 
     if plot:
-        # Create dir
         room_plots_dir = os.path.join(dir_path, 'plots', 'room')
         os.makedirs(room_plots_dir, exist_ok=True)
 
@@ -318,7 +312,6 @@ def open_generic_room_measurement(estimator,
         ax.plot(fr.frequency, fr.error, color=COLORS['red'], label='Error smoothed')
         ax.legend()
 
-        # Set y limits
         sl = np.logical_and(fr.frequency >= 20, fr.frequency <= 20000)
         stack = np.vstack([
             fr.raw[sl],
@@ -327,7 +320,6 @@ def open_generic_room_measurement(estimator,
         ])
         ax.set_ylim(get_ylim(stack, padding=0.1))
 
-        # Save FR figure
         save_fig_as_png(os.path.join(room_plots_dir, 'room.png'), fig)
         plt.close(fig)
 

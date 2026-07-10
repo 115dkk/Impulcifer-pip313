@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Argparse builder driven by :class:`core.pipeline.ProcessingConfig` metadata.
 
-Phase 3 of issue #87. The dataclass declared in ``core/pipeline.py`` carries
+The dataclass declared in ``core/pipeline.py`` carries
 CLI metadata on every field — flag, help text, action, dest override,
 ``argparse.SUPPRESS`` opt-in, choices. This module reads that metadata and
 adds the corresponding ``add_argument`` calls to a parser, so the CLI no

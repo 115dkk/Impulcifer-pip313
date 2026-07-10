@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Pip-based updater for development / pip-install environments.
 
-Split out of ``updater/updater_core.py`` (issue #87 follow-up).
 ``updater_core`` re-exports :class:`PipUpdater` for backward compatibility.
 """
 

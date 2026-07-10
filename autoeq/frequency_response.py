@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*_
+# -*- coding: utf-8 -*-
 
 import os
 import csv
@@ -306,7 +306,7 @@ class FrequencyResponse:
                 # Prevent bass boost below lowest frequency
                 fr.raw[0] = 0.0
 
-        # Remove leading zeros
+        # Remove trailing zeros
         while np.abs(fr.raw[-1]) < 0.1 and np.abs(fr.raw[-2]) < 0.1:  # Last two are zeros
             fr.raw = fr.raw[:-1]
 
@@ -567,7 +567,6 @@ class FrequencyResponse:
                 fs=fs
             )
             n_produced.append(len(_fc))
-            # print('RMSE: {:.2f}dB'.format(rmse))
             self.parametric_eq += _eq
             max_gains.append(np.max(self.parametric_eq))
             fc = np.concatenate((fc, _fc))
@@ -1043,7 +1042,6 @@ class FrequencyResponse:
         # Calculate window size in indices
         # step_size^x = k  --> x = ...
         window_size = math.log(k) / math.log(step_size)
-        # Half window size
         window_size = window_size
         # Round to integer to be usable as index
         window_size = round(window_size)

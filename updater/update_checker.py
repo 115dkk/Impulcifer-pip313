@@ -13,7 +13,6 @@ from typing import Optional, Dict, Tuple
 from packaging import version
 import platform
 
-# GitHub repository information
 GITHUB_REPO_OWNER = "115dkk"
 GITHUB_REPO_NAME = "Impulcifer-pip313"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}/releases/latest"
@@ -43,7 +42,6 @@ class UpdateChecker:
             Tuple of (update_available, latest_version, download_url)
         """
         try:
-            # Fetch latest release info from GitHub
             req = urllib.request.Request(
                 GITHUB_API_URL,
                 headers={'User-Agent': 'Impulcifer-Update-Checker'}

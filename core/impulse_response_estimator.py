@@ -31,7 +31,6 @@ class ImpulseResponseEstimator(object):
         self.n_octaves = np.ceil(np.log2(self.high / self.low))  # P
         self.low = self.high / 2**self.n_octaves
 
-        # Total length in samples
         self.w1 = self.low / self.fs * 2 * np.pi
         self.w2 = self.high / self.fs * 2 * np.pi
 
@@ -193,14 +192,7 @@ class ImpulseResponseEstimator(object):
             standard_order = 'FL FR FC LFE BL BR'.split()
             n_tracks = 6
         elif tracks == 'stereo':
-            # Generic two-channel sequential sweep. Speakers map positionally
-            # to the two output channels (speakers[0] -> left channel,
-            # speakers[1] -> right channel) regardless of their surround
-            # position. This lets a stereo-only user physically reposition a
-            # single speaker pair to each group's location (SL,SR / BL,BR /
-            # FC) and capture a full surround set on ordinary 2-channel
-            # output hardware. ``[FL, FR]`` keeps its original FL->left,
-            # FR->right behaviour.
+            # Speakers map positionally to the two output channels — see the sweep_sequence docstring.
             if not 1 <= len(speakers) <= 2:
                 raise ValueError('"stereo" track configuration requires one or two speakers.')
             for speaker in speakers:
@@ -247,10 +239,8 @@ class ImpulseResponseEstimator(object):
 
         # Handle multi-channel data by using the first channel only
         if len(data.shape) > 1:
-            # Multi-channel data: use first channel for comparison
             data_for_comparison = data[0, :]
         else:
-            # Single channel data
             data_for_comparison = data
 
         # Calculate duration from actual data length
@@ -296,7 +286,7 @@ class ImpulseResponseEstimator(object):
                 # 호환성 문제 발생 시 다른 방식으로 시도
                 print(f"피클 파일 로드 중 오류 발생: {e}")
                 print("다른 형식으로 다시 시도합니다...")
-                f.seek(0)  # 파일 포인터를 처음으로 되돌림
+                f.seek(0)
                 try:
                     estimator = pickle.load(f, encoding='bytes')
                 except Exception as e2:
@@ -370,15 +360,12 @@ def main():
     ire = ImpulseResponseEstimator(min_duration=duration, fs=fs)
     wav_data = ire.sweep_sequence(speakers, tracks)
 
-    # Write test signal to WAV file
     file_name = f'sweep-{ire.file_name(bit_depth)}.wav'
     write_wav(os.path.join(dir_path, file_name), ire.fs, ire.test_signal, bit_depth=bit_depth)
 
-    # Write test signal to pickle file
     file_name = f'sweep-{ire.file_name(bit_depth)}.pkl'
     ire.to_pickle(os.path.join(dir_path, file_name))
 
-    # Write test signal sequence to WAV file
     file_name = f'sweep-seg-{",".join(speakers)}-{tracks}-{ire.file_name(bit_depth)}.wav'
     write_wav(os.path.join(dir_path, file_name), fs, wav_data, bit_depth=bit_depth)
 

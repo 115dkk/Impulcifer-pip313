@@ -64,9 +64,7 @@ class LocalizationManager:
         ``importlib.resources.files('i18n')`` anchors to wherever the running
         ``i18n`` package physically lives — the exact same install as this
         module — so it cannot be fooled by a stale ``impulcifer_py313`` folder
-        under ``sys.prefix``. (The previous code queried the package name
-        ``'impulcifer_py313'``, which does not exist and always raised
-        ``ModuleNotFoundError``, defeating the only robust lookup.)
+        under ``sys.prefix``.
         """
         candidates = []
 
@@ -122,13 +120,10 @@ class LocalizationManager:
         self.settings_dir = Path.home() / '.impulcifer'
         self.settings_file = self.settings_dir / 'settings.json'
 
-        # Find locales directory - try multiple possible locations
         self.locales_dir = self._find_locales_dir()
 
-        # Ensure settings directory exists
         self.settings_dir.mkdir(exist_ok=True)
 
-        # Load settings
         self.settings = self.load_settings()
 
         # Set language (from settings or detect system)
@@ -141,17 +136,14 @@ class LocalizationManager:
     def detect_system_language(self) -> str:
         """Detect system language"""
         try:
-            # Try to get system locale
             system_locale = locale.getdefaultlocale()[0]
             if system_locale:
-                # Map to our language code
                 for loc_code, lang_code in LOCALE_MAPPING.items():
                     if system_locale.startswith(loc_code):
                         return lang_code
         except Exception:
             pass
 
-        # Default to English if detection fails
         return 'en'
 
     def load_settings(self) -> dict:
@@ -214,7 +206,6 @@ class LocalizationManager:
         """Get translated text for a key"""
         text = self.translations.get(key, key)
 
-        # Format with kwargs if provided
         if kwargs:
             try:
                 text = text.format(**kwargs)

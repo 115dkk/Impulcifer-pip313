@@ -49,7 +49,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, List, Tuple
 
-# Phase 6 follow-up: updater_core is now a thin re-export shim.
 # Patch sites must point to the modules where the symbols are actually
 # resolved (Python's `from X import Y` rebinds Y in the importer's namespace,
 # so patching the shim wouldn't affect the call site).

@@ -4,8 +4,8 @@
 Provides matplotlib output (``plot``, ``plot_result``,
 ``plot_interaural_impulse_overlay``) and Bokeh layouts
 (``generate_*_bokeh_layout``, ``generate_result_bokeh_figure``). The mixin
-pattern keeps the original ``HRIR.plot()`` API usable while moving roughly 900
-lines of visualization out of ``core/hrir.py``.
+pattern keeps the original ``HRIR.plot()`` API usable while keeping
+visualization code separate from ``core/hrir.py``.
 """
 
 import os

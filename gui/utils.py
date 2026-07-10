@@ -3,8 +3,7 @@
 """Shared utilities for the modern GUI.
 
 Contains module-level helpers (font setup, environment detection, Tk var
-accessors, file dialog wrappers) that were previously colocated in
-``gui/modern_gui.py``.
+accessors, file dialog wrappers).
 """
 
 from __future__ import annotations
@@ -29,10 +28,8 @@ from gui.theme import get_ico_path, get_png_path
 def setup_app_icon(root: ctk.CTk) -> bool:
     """Apply the bundled pulse logo to the GUI window and Windows taskbar.
 
-    Why this exists. The previous build shipped without an explicit window
-    icon, so Tk fell back to the Tcl/Tk feather icon — what the user
-    described as "이상한 로고" pinned to the title bar and taskbar. The
-    redesign hands off ``logo/pulse.ico`` (multi-resolution 16/24/32/48/64/
+    Why this exists. The redesign hands off ``logo/pulse.ico``
+    (multi-resolution 16/24/32/48/64/
     128/256) and ``logo/pulse-*.png``; this helper wires both paths so the
     Windows title bar, the Windows taskbar (including pinned shortcuts),
     and the X11 / macOS dock icons all render the Pulse mark.
@@ -549,8 +546,7 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
     try:
         # Register every bundled font once — Pretendard is the primary, but
         # any companion font the user drops into ``font/`` becomes addressable
-        # too. This is the place that satisfies "잡도록 수정" for fonts
-        # placed alongside Pretendard.
+        # too.
         register_all_bundled_fonts_for_tk()
 
         # PRIMARY check: ask Tk's render layer directly.

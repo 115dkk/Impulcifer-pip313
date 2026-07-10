@@ -51,13 +51,13 @@ class TestDetectPolarity:
     def test_positive_peak(self):
         from core.virtual_bass import _detect_polarity
         ir = np.zeros(100)
-        ir[10] = 1.0  # Positive peak
+        ir[10] = 1.0
         assert _detect_polarity(ir) == 1.0
 
     def test_negative_peak(self):
         from core.virtual_bass import _detect_polarity
         ir = np.zeros(100)
-        ir[10] = -1.0  # Negative peak
+        ir[10] = -1.0
         assert _detect_polarity(ir) == -1.0
 
     def test_mixed_signal_positive_dominant(self):
@@ -139,7 +139,6 @@ class TestSynthesizeVirtualBass:
         """Apply virtual bass to a dummy HRIR and verify no exception."""
         from core.virtual_bass import apply_virtual_bass_to_hrir
         hrir = self._make_dummy_hrir()
-        # Should complete without error
         apply_virtual_bass_to_hrir(hrir, crossover_freq=250)
 
     def test_data_modified(self):
@@ -148,7 +147,6 @@ class TestSynthesizeVirtualBass:
         hrir = self._make_dummy_hrir(speakers=['FL'])
         original = hrir.irs['FL']['left'].data.copy()
         apply_virtual_bass_to_hrir(hrir, crossover_freq=250)
-        # Data should have changed
         assert not np.array_equal(hrir.irs['FL']['left'].data, original)
 
     def test_polarity_normal(self):

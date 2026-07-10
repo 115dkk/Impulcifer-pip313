@@ -27,13 +27,6 @@
 헤드폰 보상을 적용하면 마이크 전달함수가 귀별로 소거된다(Hammershøi &
 Møller 2005). 그 경우 이 보정은 잉여이므로 파이프라인에서 헤드폰 보상이
 켜져 있으면 건너뛴다(impulcifer.py 참조).
-
-v4.0 변경사항:
-- 방향 무관 양이 불일치 추정(확산음장/CTF 평균, 정면 FC 앵커)으로 교체.
-  v3.0의 기대 ILD 부호표 + "이상 편차 중앙값" 휴리스틱 제거.
-- 옥타브 6점/단일 빈 측정 → 풀 FFT + 분수옥타브 평활.
-- 보정 적용을 ``ImpulseResponse.equalize`` 검증 경로(또는 동등 컨볼루션)로
-  통일, 대역 제한 테이퍼 추가.
 """
 
 import os
@@ -110,9 +103,6 @@ class MicrophoneMatchingCorrector:
         self.mismatch_db = None
         self.anchor_used = None
 
-    # ------------------------------------------------------------------
-    # 측정
-    # ------------------------------------------------------------------
     def _windowed_power(self, ir, peak_index):
         """피크 주변 직접음을 창으로 잘라 공통 그리드의 파워 스펙트럼을 반환."""
         ir = np.asarray(ir, dtype=float)
@@ -176,9 +166,6 @@ class MicrophoneMatchingCorrector:
                 out[b] = float(np.interp(b, self.frequency, delta))
         return out
 
-    # ------------------------------------------------------------------
-    # 추정
-    # ------------------------------------------------------------------
     def _band_weight(self):
         """[f_min, f_max] 안은 1, 밖은 로그축 raised-cosine으로 0이 되는 가중치."""
         f = self.frequency
@@ -257,9 +244,6 @@ class MicrophoneMatchingCorrector:
         return {b: float(np.interp(b, self.frequency, delta))
                 for b in bands if b < self.fs / 2}
 
-    # ------------------------------------------------------------------
-    # 필터 설계
-    # ------------------------------------------------------------------
     def design_correction_filters(self):
         """좌/우 최소위상 보정 FIR을 생성. (좌 -Δ/2, 우 +Δ/2)"""
         if self.mismatch_db is None:
@@ -308,9 +292,6 @@ class MicrophoneMatchingCorrector:
         }
 
 
-# ----------------------------------------------------------------------
-# 하위 호환 래퍼 (v2.0/v3.0 API)
-# ----------------------------------------------------------------------
 class MicrophoneDeviationCorrector(MicrophoneMatchingCorrector):
     """기존 임포트/호출 호환용 래퍼.
 
@@ -472,9 +453,6 @@ def apply_microphone_deviation_correction_to_hrir(hrir,
     return summary
 
 
-# ----------------------------------------------------------------------
-# 플롯 (디버그)
-# ----------------------------------------------------------------------
 def _plot_mismatch(corrector, plot_dir):
     import matplotlib.pyplot as plt
     from core.utils import set_matplotlib_font

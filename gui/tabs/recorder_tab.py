@@ -3,7 +3,7 @@
 """Recorder tab for the modern GUI.
 
 Hosts the host-API/device pickers, file paths, recording options, and the
-record button. Moved from ``gui/modern_gui.py`` without behavioural changes.
+record button.
 """
 
 from __future__ import annotations
@@ -64,7 +64,6 @@ class RecorderTab:
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
 
-        # Create scrollable frame
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
         scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll.grid_columnconfigure(0, weight=1)
@@ -85,7 +84,6 @@ class RecorderTab:
             font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
-        # Host API
         ctk.CTkLabel(devices_frame, text=self.loc.get('label_host_api')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
         self.host_api_var = ctk.StringVar(value="Windows DirectSound" if platform.system() == "Windows" else "")
         self.host_api_menu = ctk.CTkOptionMenu(
@@ -96,7 +94,6 @@ class RecorderTab:
         )
         self.host_api_menu.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
 
-        # Playback device
         ctk.CTkLabel(devices_frame, text=self.loc.get('label_playback_device')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
         self.output_device_var = ctk.StringVar()
         self.output_device_menu = ctk.CTkOptionMenu(
@@ -106,7 +103,6 @@ class RecorderTab:
         )
         self.output_device_menu.grid(row=2, column=1, sticky="ew", padx=15, pady=5)
 
-        # Recording device
         ctk.CTkLabel(devices_frame, text=self.loc.get('label_recording_device')).grid(row=3, column=0, sticky="w", padx=15, pady=5)
         self.input_device_var = ctk.StringVar()
         self.input_device_menu = ctk.CTkOptionMenu(
@@ -128,7 +124,6 @@ class RecorderTab:
             font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
-        # File to play
         ctk.CTkLabel(files_frame, text=self.loc.get('label_file_to_play')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
         self.play_var = ctk.StringVar(value=os.path.join('data', 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
         self.play_var.trace_add('write', lambda *_: self._refresh_resolved_record_path())
@@ -171,11 +166,7 @@ class RecorderTab:
         ).grid(row=3, column=1, columnspan=2, sticky="ew", padx=15, pady=(0, 5))
         self._refresh_resolved_record_path()
 
-        # Surround sweep set generator. Produces a combined 7.1 file (for
-        # real multichannel rigs) plus per-group stereo files (for
-        # stereo-only users who reposition a speaker pair). Bundling these
-        # WAVs would add tens of MB to the repo, so the button materializes
-        # them on demand alongside the existing sweeps in ``data/``.
+        # sweep set은 수십 MB라 온디맨드 생성 — generate_sweep_set docstring 참조
         ctk.CTkButton(
             files_frame,
             text=self.loc.get('button_generate_14ch_sweep_set'),
@@ -194,7 +185,6 @@ class RecorderTab:
             font=self.fonts['heading']
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
-        # Channels checkbox and entry
         channels_subframe = ctk.CTkFrame(options_frame, fg_color="transparent")
         channels_subframe.grid(row=1, column=0, sticky="ew", padx=15, pady=5)
         channels_subframe.grid_columnconfigure(1, weight=1)
@@ -217,7 +207,6 @@ class RecorderTab:
         )
         self.channels_entry.grid(row=0, column=1, sticky="w", padx=10, pady=5)
 
-        # Channel guidance label
         self.channel_guidance = ctk.CTkLabel(
             options_frame,
             text=self.loc.get('message_using_default_recording'),
@@ -228,7 +217,6 @@ class RecorderTab:
         )
         self.channel_guidance.grid(row=2, column=0, sticky="w", padx=15, pady=5)
 
-        # Append checkbox
         self.append_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             options_frame,
@@ -319,7 +307,6 @@ class RecorderTab:
         )
         self.record_headphones_button.grid(row=1, column=0, sticky="ew", pady=(8, 0))
 
-        # Initialize devices
         self.refresh_devices()
         self.update_channel_guidance()
 
@@ -334,12 +321,10 @@ class RecorderTab:
 
     def refresh_devices(self, *args: object) -> None:
         """Refresh audio device lists."""
-        # Get host APIs
         host_apis = {}
         for i, host in enumerate(sounddevice.query_hostapis()):
             host_apis[i] = host['name']
 
-        # Update host API menu
         if host_apis:
             self.host_api_menu.configure(values=list(host_apis.values()))
             if not self.host_api_var.get() or self.host_api_var.get() not in host_apis.values():
@@ -348,7 +333,6 @@ class RecorderTab:
                 else:
                     self.host_api_var.set(list(host_apis.values())[0])
 
-        # Get devices for selected host API
         output_devices = []
         input_devices = []
 
@@ -359,7 +343,6 @@ class RecorderTab:
                 if device['max_input_channels'] > 0:
                     input_devices.append(device['name'])
 
-        # Update device menus
         if output_devices:
             self.output_device_menu.configure(values=output_devices)
             if not self.output_device_var.get() or self.output_device_var.get() not in output_devices:
@@ -492,7 +475,6 @@ class RecorderTab:
         record_file = resolve_record_path(record_dir, play_file)
         selected_channels = safe_get_int(self.channels_var, 14) if self.channels_check_var.get() else 2
 
-        # Validate play file exists
         if not os.path.exists(play_file):
             messagebox.showerror(self.loc.get('message_error'), self.loc.get('message_play_file_not_exist', file=play_file))
             return
@@ -514,7 +496,6 @@ class RecorderTab:
             if not messagebox.askyesno(self.loc.get('message_channel_mismatch_warning_title'), warning_msg):
                 return
 
-        # Confirmation dialog
         info_msg = self.loc.get(
             'message_recording_setup_info',
             play_file=os.path.basename(play_file),

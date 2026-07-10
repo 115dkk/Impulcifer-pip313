@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Legacy installer-based updater (DMG/AppImage download + open).
 
-Split out of ``updater/updater_core.py`` (issue #87 follow-up).
 ``updater_core`` re-exports :class:`LegacyInstallerUpdater`, the legacy-compat
 :class:`Updater` shim, and :data:`GITHUB_RELEASES_URL` for backward
 compatibility.
@@ -91,7 +90,6 @@ class LegacyInstallerUpdater:
         return False
 
 
-# Legacy compatibility: Keep Updater class for backward compatibility
 class Updater:
     """Legacy Updater class for backward compatibility. Use get_updater() instead."""
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Matplotlib font setup (Korean-capable, bundled-Pretendard-first).
 
-Split out of ``core/utils.py`` (audit #115 finding 8). ``core.utils``
+``core.utils``
 re-exports ``set_matplotlib_font`` / ``font_setup_result`` for compatibility.
 """
 
@@ -110,15 +110,11 @@ def set_matplotlib_font():
     번들 Pretendard 우선 → 시스템 Pretendard → OS별 한글 폴백 순으로
     시도하며, 한 번만 실행되고 이후 호출은 캐시된 결과를 반환한다.
 
-    이전 구현은 silent fallback이라 "Pretendard 적용에 실패해 Malgun으로
-    떨어졌다"를 추적할 방법이 없었다. 이번 리팩토링은:
-
-    1. 번들 경로 해석을 ``infra.resource_helper.get_font_path`` 로 일원화해
-       Nuitka standalone 환경에서도 같은 경로 규칙을 따른다.
-    2. 어떤 source가 채택됐는지(``bundled`` / ``system`` / ``fallback``)와
-       findfont가 실제로 어떤 파일을 골랐는지를 ``font_setup_result`` 모듈
-       전역에 기록한다 — smoke-test가 이를 보고 "Pretendard 보장" 검증을
-       수행할 수 있다.
+    번들 경로 해석은 ``infra.resource_helper.get_font_path`` 로 일원화되어
+    Nuitka standalone 환경에서도 같은 경로 규칙을 따른다. 채택된
+    source(``bundled`` / ``system`` / ``fallback``)와 findfont가 실제로 고른
+    파일을 ``font_setup_result`` 모듈 전역에 기록해 smoke-test가 "Pretendard
+    보장"을 검증할 수 있다.
 
     Returns:
         ``font_setup_result`` 의 사본. ``is_pretendard`` 가 ``True`` 일 때

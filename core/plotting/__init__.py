@@ -3,7 +3,7 @@
 
 The mixin classes here hold all matplotlib / Bokeh visualization logic so the
 data classes in :mod:`core.hrir` and :mod:`core.impulse_response` stay focused
-on numerical processing. This is Phase 1 of the issue #87 refactoring plan.
+on numerical processing.
 
 Usage:
     from core.plotting import HRIRPlotter, ImpulseResponsePlotter

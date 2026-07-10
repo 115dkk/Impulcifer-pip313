@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Backward-compatible re-export shim (audit #115 finding 9).
+"""Backward-compatible re-export shim; new code should import from
+core.ffmpeg_discovery / core.audio_truehd directly.
 
 FFmpeg discovery/install moved to :mod:`core.ffmpeg_discovery`; TrueHD/MLP
 decode and the TrueHD-aware ``read_audio`` moved to :mod:`core.audio_truehd`.
@@ -30,7 +31,7 @@ from core.audio_truehd import (  # noqa: F401  (intentional re-export)
 def __getattr__(name):
     """Delegate attribute reads (lazy FFmpeg state) to ``core.ffmpeg_discovery``.
 
-    Before audit #115 finding 9, ``core.ffmpeg_utils`` owned the lazy-init
+    ``core.ffmpeg_discovery`` owns the lazy-init
     module globals ``FFMPEG_PATH`` / ``FFPROBE_PATH`` / ``_FFMPEG_SETUP_DONE``
     (and the ``_FFMPEG_DETECTION_DONE`` / ``_FFMPEG_AUTO_INSTALL_ATTEMPTED``
     flags). ``ensure_ffmpeg_available()`` reassigns them, so a plain

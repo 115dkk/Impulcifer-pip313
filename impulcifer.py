@@ -78,15 +78,12 @@ from core.constants import (
 from core.eqapo import looks_like_eqapo_config, parse_eqapo_config
 from infra.logger import get_logger
 
-# PR3에서 추가된 import 문들
 import contextlib
 
-# Bokeh Tabs/Panel import 추가
-# from bokeh.models import Panel, Tabs # 이전 시도
 from bokeh.plotting import (
     output_file as bokeh_output_file,
     save as bokeh_save,
-)  # 중복 방지
+)
 
 _CANCEL_EVENT = ContextVar("impulcifer_cancel_event", default=None)
 
@@ -146,18 +143,11 @@ def get_pretendard_font_for_gui():
     return None
 
 
-set_matplotlib_font()  # 함수 호출하여 폰트 설정 실행
-
-
-# ============================================================================
-# Parallel Processing Worker Functions (Phase 2 Optimization)
-# 워커 함수는 core/parallel_workers.py에 정의 (경량 모듈).
-# ProcessPoolExecutor 워커가 impulcifer.py 전체를 import하지 않도록 분리.
-# ============================================================================
+set_matplotlib_font()
 
 
 def _save_bokeh_analysis_plots(hrir, dir_path, logger):
-    """PR4 분석 플롯(ILD/IPD/IACC/ETC)을 Bokeh HTML로 저장."""
+    """분석 플롯(ILD/IPD/IACC/ETC)을 Bokeh HTML로 저장."""
     plot_configs = {
         "ild": ("ILD Analysis", hrir.generate_ild_bokeh_layout),
         "ipd": ("IPD Analysis", hrir.generate_ipd_bokeh_layout),
@@ -179,7 +169,7 @@ def _save_bokeh_analysis_plots(hrir, dir_path, logger):
 
 
 def main(**kwargs):
-    """Thin wrapper around :class:`core.pipeline.BRIRPipeline` (issue #87 Phase 2).
+    """Thin wrapper around :class:`core.pipeline.BRIRPipeline`.
 
     Accepts the keyword-argument dict assembled by the GUI
     (``gui.brir_args.build_brir_args`` / ``generate_brir()``) and by the CLI
@@ -190,8 +180,8 @@ def main(**kwargs):
     the old ``mic_deviation_phase_correction`` — are ignored by
     :meth:`~core.pipeline.ProcessingConfig.from_kwargs`, so this call site stays
     stable as the parameter set evolves and no longer hand-mirrors the dataclass.
-    The pipeline executes the legacy stage sequence so the BRIR output remains
-    byte-identical to pre-refactor output.
+    BRIR output byte-exactness is pinned by tests/test_brir_integrity.py (see
+    core/pipeline.py module docstring).
     """
     # Local import to avoid a circular dependency: core.pipeline imports back
     # into impulcifer for the legacy stage runner.
@@ -211,17 +201,13 @@ def open_impulse_response_estimator(dir_path, file_path=None):
     Returns:
         ImpulseResponseEstimator instance
     """
-    # 테스트 신호가 숫자나 이름으로 지정된 경우
     if file_path in TEST_SIGNALS:
-        # 패키지 내 데이터 폴더에서 해당 파일 경로 찾기
         test_signal_name = TEST_SIGNALS[file_path]
         test_signal_path = os.path.join(get_data_path(), test_signal_name)
 
-        # 파일이 존재하는지 확인
         if os.path.isfile(test_signal_path):
             file_path = test_signal_path
         else:
-            # 패키지 내 파일을 찾지 못한 경우 로컬 data 폴더에서 시도
             local_path = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)), "data", test_signal_name
             )
@@ -232,20 +218,17 @@ def open_impulse_response_estimator(dir_path, file_path=None):
                 logger.warning("cli_warning_test_signal_not_found", signal=file_path, name=test_signal_name)
 
     if file_path is None:
-        # Test signal not explicitly given, try Pickle first then WAV
         if os.path.isfile(os.path.join(dir_path, "test.pkl")):
             file_path = os.path.join(dir_path, "test.pkl")
         elif os.path.isfile(os.path.join(dir_path, "test.wav")):
             file_path = os.path.join(dir_path, "test.wav")
         else:
-            # 기본 테스트 신호 사용 (패키지 내부 또는 로컬)
             default_signal_name = TEST_SIGNALS["default"]
             default_signal_path = os.path.join(get_data_path(), default_signal_name)
 
             if os.path.isfile(default_signal_path):
                 file_path = default_signal_path
             else:
-                # 패키지 내 파일을 찾지 못한 경우 로컬 data 폴더에서 시도
                 local_path = os.path.join(
                     os.path.dirname(os.path.abspath(__file__)),
                     "data",
@@ -259,13 +242,10 @@ def open_impulse_response_estimator(dir_path, file_path=None):
                     )
 
     if re.match(r"^.+\.wav$", file_path, flags=re.IGNORECASE):
-        # Test signal is WAV file
         estimator = ImpulseResponseEstimator.from_wav(file_path)
     elif re.match(r"^.+\.pkl$", file_path, flags=re.IGNORECASE):
-        # Test signal is Pickle file
         estimator = ImpulseResponseEstimator.from_pickle(file_path)
     elif re.match(r"^.+\.(mlp|thd|truehd)$", file_path, flags=re.IGNORECASE):
-        # Test signal is TrueHD/MLP file - convert to temporary WAV first.
         # auto_install=True로 호출해 사용자가 .mlp/.thd/.truehd 파일을 직접
         # 지정한 경우 FFmpeg가 없으면 기존처럼 자동 설치 UX를 시도한다.
         if not check_ffmpeg_available(auto_install=True):
@@ -283,7 +263,6 @@ def open_impulse_response_estimator(dir_path, file_path=None):
         try:
             estimator = ImpulseResponseEstimator.from_wav(temp_wav_path)
         finally:
-            # Clean up temporary file
             if os.path.exists(temp_wav_path):
                 os.remove(temp_wav_path)
     else:
@@ -340,8 +319,7 @@ def _read_eq_settings(file_path, estimator):
         if len(fr.error) == 0 and len(fr.raw) > 0:
             # error 열이 없는 평문(frequency, gain) 파일: raw를 적용할 EQ
             # 곡선으로 해석한다. 파이프라인은 error 필드를 소비하므로
-            # error = -raw 로 채워 곡선이 그대로 적용되게 한다. (기존에는
-            # 빈 error 배열이 EQ 워커에서 브로드캐스트 오류를 일으켰다.)
+            # error = -raw 로 채워 곡선이 그대로 적용되게 한다.
             logger.info("cli_eq_plain_gain_curve", file=os.path.basename(file_path))
             fr.error = -fr.raw.copy()
         return fr, None
@@ -427,7 +405,6 @@ def equalization(estimator, dir_path):
     if eq_path is not None:
         eq_fr, eq_fr_right = _read_eq_settings(eq_path, estimator)
 
-    # Left
     left_path = _find_eq_settings_file(dir_path, "eq-left")
     left_fr = None
     if left_path is not None:
@@ -437,7 +414,6 @@ def equalization(estimator, dir_path):
     if left_fr is not None:
         left_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2, pol_order=1)
 
-    # Right
     right_path = _find_eq_settings_file(dir_path, "eq-right")
     right_fr = None
     if right_path is not None:
@@ -450,15 +426,12 @@ def equalization(estimator, dir_path):
     if right_fr is not None and right_fr != left_fr:
         right_fr.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2, pol_order=1)
 
-    # Plot
     if left_fr is not None or right_fr is not None:
         if left_fr == right_fr:
-            # Both are the same, plot only one graph
             fig, ax = plt.subplots()
             fig.set_size_inches(12, 9)
             left_fr.plot(fig=fig, ax=ax, show_fig=False)
         else:
-            # Left and right are different, plot two graphs in the same figure
             fig, ax = plt.subplots(1, 2)
             fig.set_size_inches(22, 9)
             if left_fr is not None:
@@ -482,10 +455,8 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     Returns:
         None
     """
-    # Read WAV file
     hp_irs = HRIR(estimator)
 
-    # Determine the headphone file to use
     logger = get_logger()
 
     if headphone_file_path:
@@ -493,9 +464,7 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
         normalized_path = os.path.normpath(headphone_file_path)
         logger.info("cli_info_hp_param_provided", file=normalized_path)
 
-        # Check if it's a directory or a file
         if os.path.isdir(normalized_path):
-            # It's a directory - search for common headphone file names
             logger.info("cli_info_hp_searching_dir")
             possible_names = ["headphones.wav", "headphone.wav", "hp.wav", "compensation.wav"]
             actual_hp_file = None
@@ -509,7 +478,6 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
                     break
 
             if actual_hp_file is None:
-                # No standard file found, try to find any WAV file
                 logger.info("cli_info_hp_searching_wav")
                 try:
                     wav_files = [f for f in os.listdir(normalized_path) if f.lower().endswith('.wav')]
@@ -523,28 +491,21 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
                     logger.error("cli_error_hp_list_dir", dir=normalized_path, error=str(e))
                     actual_hp_file = None
         else:
-            # It's a file path (or should be)
             if not os.path.isabs(normalized_path):
-                # Relative path - make it relative to dir_path
                 actual_hp_file = os.path.join(dir_path, normalized_path)
                 logger.debug("cli_info_hp_relative_path", file=actual_hp_file)
             else:
-                # Absolute file path
                 actual_hp_file = normalized_path
                 logger.debug("cli_info_hp_absolute_path", file=actual_hp_file)
     else:
-        # Default to headphones.wav in the dir_path
         actual_hp_file = os.path.join(dir_path, "headphones.wav")
         logger.info("cli_info_hp_default", file=actual_hp_file)
 
-    # Validate file exists
     if actual_hp_file is None or not os.path.exists(actual_hp_file):
         if headphone_file_path:
-            # Custom file specified but not found, try default
             logger.warning("cli_warning_hp_file_not_found", file=actual_hp_file)
             actual_hp_file = os.path.join(dir_path, "headphones.wav")
 
-        # Final check
         if not os.path.exists(actual_hp_file):
             logger.error("cli_error_hp_file_missing", file=actual_hp_file)
             logger.error("cli_error_hp_ensure_exists", dir=dir_path)
@@ -554,11 +515,9 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     hp_irs.open_recording(actual_hp_file, speakers=["FL", "FR"])
     hp_irs.write_wav(os.path.join(dir_path, "headphone-responses.wav"))
 
-    # Frequency responses
     left = hp_irs.irs["FL"]["left"].frequency_response()
     right = hp_irs.irs["FR"]["right"].frequency_response()
 
-    # Center by left channel
     gain = left.center([100, 10000])
     right.raw += gain
 
@@ -572,25 +531,19 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     left.compensate(zero, min_mean_error=False)
     right.compensate(zero, min_mean_error=False)
 
-    # 기존 헤드폰 플롯
     fig = plt.figure()
     gs = fig.add_gridspec(2, 3)
     fig.set_size_inches(22, 10)
     fig.suptitle("Headphones")
 
-    # Left
     axl = fig.add_subplot(gs[0, 0])
     left.plot(fig=fig, ax=axl, show_fig=False)
     axl.set_title("Left")
-    # Right
     axr = fig.add_subplot(gs[1, 0])
     right.plot(fig=fig, ax=axr, show_fig=False)
     axr.set_title("Right")
-    # Sync axes
     sync_axes([axl, axr])
 
-    # Combined
-    # Optimized: Use _get_center_value instead of .copy().center()
     gain_l = _get_center_value(left, [100, 10000])
     gain_r = _get_center_value(right, [100, 10000])
     ax = fig.add_subplot(gs[:, 1:])
@@ -615,7 +568,6 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     ax.grid(True, which="minor")
     ax.xaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.0f}"))
 
-    # Save headphone plots
     file_path = os.path.join(dir_path, "plots", "headphones.png")
     os.makedirs(os.path.split(file_path)[0], exist_ok=True)
     save_fig_as_png(file_path, fig)
@@ -626,7 +578,6 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
 
 def create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt):
     """Creates target frequency response with bass boost, tilt and high pass at 20 Hz"""
-    # 타겟 주파수 응답 생성
     target = FrequencyResponse(
         name="bass_and_tilt",
         frequency=FrequencyResponse.generate_frequencies(
@@ -634,18 +585,12 @@ def create_target(estimator, bass_boost_gain, bass_boost_fc, bass_boost_q, tilt)
         ),
     )
 
-    # 베이스 부스트와 틸트 적용
-    # 기본 베이스 부스트만 적용 (추가 부스트 제거)
     target.raw = target.create_target(
-        bass_boost_gain=bass_boost_gain,  # +3dB 추가 부스트 제거
+        bass_boost_gain=bass_boost_gain,
         bass_boost_fc=bass_boost_fc,
         bass_boost_q=bass_boost_q,
         tilt=tilt,
     )
-
-    # 저주파 영역 베이스 부스트 값 출력 (디버깅용)
-    # bass_boost_values = target.raw[:200]  # 저주파 영역만 추출
-    # print("저주파 영역 Bass Boost 값:", bass_boost_values) # 주석 처리
 
     return target
 
@@ -663,11 +608,8 @@ def open_binaural_measurements(estimator, dir_path, debug=False):
     hrir = HRIR(estimator)
     pattern = r"^{pattern}\.wav$".format(pattern=SPEAKER_LIST_PATTERN)  # FL,FR.wav
     for file_name in [f for f in os.listdir(dir_path) if re.match(pattern, f)]:
-        # Read the speaker names from the file name into a list
         speakers = re.search(SPEAKER_LIST_PATTERN, file_name)[0].split(",")
-        # Form absolute path
         file_path = os.path.join(dir_path, file_name)
-        # Open the file and add tracks to HRIR
         hrir.open_recording(file_path, speakers=speakers, debug=debug)
     if len(hrir.irs) == 0:
         raise ValueError("No HRIR recordings found in the directory.")
@@ -687,20 +629,16 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
     Returns:
         str: Content of the README file.
     """
-    # Import localization for translated README content
     from i18n.localization import t
 
-    # 기본 헤더 생성
     content = f"# {t('cli_readme_title')}\n\n"
     content += t('cli_readme_processed', date=datetime.now().strftime('%Y-%m-%d %H:%M:%S'), fs=fs if fs is not None else hrir.fs) + "\n\n"
 
-    # 항목 8: 적용된 노멀라이제이션 게인 추가
     if applied_gain is not None:
         content += f"## {t('cli_readme_gain_title')}\n"
         content += t('cli_readme_gain_value', gain=f"{applied_gain:.2f}") + "\n\n"
 
-    # 기존 통계 테이블 생성 로직 (rt_name, table, speaker_names 등)
-    table_data = []  # 변수명 변경 (table -> table_data)
+    table_data = []
     # SPEAKER_NAMES 순서대로 정렬하되, 없는 스피커는 뒤로
     speaker_names_in_hrir = list(hrir.irs.keys())
     sorted_speaker_names = sorted(
@@ -739,8 +677,6 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
             if peak_idx_current_ir is not None:
                 # PNR 계산
                 peak_val_linear = np.abs(ir_obj.data[peak_idx_current_ir])
-                # 데이터가 0~1로 정규화되었다고 가정. 그렇지 않다면 최대값으로 나눠야 함.
-                # peak_val_db = 20 * np.log10(peak_val_linear / np.max(np.abs(ir_obj.data)) + 1e-9) # 좀 더 안전한 방식
                 peak_val_db = 20 * np.log10(
                     peak_val_linear + 1e-9
                 )  # 피크값의 dBFS (최대값이 1.0이라고 가정)
@@ -751,7 +687,6 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
                     if not np.isnan(noise_floor_db) and not np.isnan(peak_val_db):
                         pnr_val = peak_val_db - noise_floor_db
 
-                    # Length 계산
                     tail_ind_calc = decay_params_tuple[
                         1
                     ]  # decay_params의 두 번째 값이 tail index (peak_idx + knee_idx)
@@ -763,9 +698,6 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
                             (tail_ind_calc - peak_idx_current_ir) / ir_obj.fs * 1000
                         )
 
-                # RTxx 계산 (decay_times 사용)
-                # decay_times() 호출 시 peak_ind 등을 전달해야 할 수 있음 (API 확인)
-                # 현재 API는 decay_params() 내부 값들을 사용하므로, decay_params() 호출 후 사용 가능
                 edt, rt20, rt30, rt60 = ir_obj.decay_times(
                     peak_ind=decay_params_tuple[0] if decay_params_tuple else None,
                     knee_point_ind=decay_params_tuple[1]
@@ -775,7 +707,6 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
                     window_size=decay_params_tuple[3] if decay_params_tuple else None,
                 )
 
-                # 가장 긴 유효한 RTxx 값 선택
                 if rt60 is not None and not np.isnan(rt60):
                     rt_val_ms = rt60 * 1000
                     current_ir_rt_name = "RT60"
@@ -809,23 +740,20 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
                 ]
             )
 
-    # 모든 IR을 살펴본 후 최종 RTxx 이름 결정 (가장 많이 나온 유효한 이름 또는 우선순위)
     if rt_values_for_naming:
-        # 예: 가장 빈번하게 나타난 RTxx 이름 사용
         from collections import Counter
 
         final_rt_name = Counter(rt_values_for_naming).most_common(1)[0][0]
     else:
-        final_rt_name = "RTxx"  # 기본값
+        final_rt_name = "RTxx"
 
     if table_data:
         headers = [t('cli_readme_header_speaker'), t('cli_readme_header_side'), "PNR", "ITD", t('cli_readme_header_length'), final_rt_name]
         content += tabulate(table_data, headers=headers, tablefmt="pipe")
         content += "\n\n"
 
-    # 항목 9: 반사음 레벨 추가
     if estimator and hasattr(hrir, "calculate_reflection_levels"):
-        reflection_data = hrir.calculate_reflection_levels()  # 인자 없이 호출
+        reflection_data = hrir.calculate_reflection_levels()
         if reflection_data:
             content += f"## {t('cli_readme_reflection_title')}\n"
             # SPEAKER_NAMES 순서대로 정렬하되, 없는 스피커는 뒤로
@@ -838,7 +766,7 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
             for speaker in sorted_reflection_speakers:
                 if (
                     speaker not in reflection_data
-                ):  # Should not happen due to sorted keys
+                ):
                     continue
                 sides_data = reflection_data[speaker]
                 content += f"### {speaker}\n"
@@ -848,7 +776,6 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
                     content += f"- {t('cli_readme_right_ear')}: {t('cli_readme_early_label')}: {sides_data['right'].get('early_db', np.nan):.2f} dB, {t('cli_readme_late_label')}: {sides_data['right'].get('late_db', np.nan):.2f} dB\n"
             content += "\n"
 
-    # 파일에 쓰기
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
 
@@ -864,14 +791,12 @@ def _print_info():
     lines.append(f"OS: {pf.system()} {pf.release()} ({pf.machine()})")
     lines.append(f"CPU cores: {os.cpu_count() or 'unknown'}")
 
-    # GIL status
     if hasattr(sys, '_is_gil_enabled'):
         gil = "Disabled (Free-Threaded)" if not sys._is_gil_enabled() else "Enabled"
     else:
         gil = "Unavailable (GIL status API missing)"
     lines.append(f"GIL: {gil}")
 
-    # Optimal workers
     try:
         from core.parallel_processing import get_python_threading_info
         info = get_python_threading_info()
@@ -879,7 +804,6 @@ def _print_info():
     except Exception:
         pass
 
-    # Installation type
     try:
         from updater.updater_core import is_velopack_environment, is_pip_environment
         if is_velopack_environment():
@@ -891,7 +815,6 @@ def _print_info():
     except Exception:
         lines.append("Installation: Development")
 
-    # Key dependency versions
     dep_versions = []
     for pkg in ['numpy', 'scipy', 'matplotlib', 'soundfile', 'customtkinter', 'bokeh']:
         try:
@@ -929,7 +852,7 @@ def create_cli():
         help="Print diagnostic information (version, Python, OS, etc.) and exit.",
     )
 
-    # All BRIR-pipeline parameters (35 fields) come from the dataclass:
+    # All BRIR-pipeline parameters come from the dataclass:
     add_processing_config_arguments(arg_parser)
 
     # bass_boost is a CLI convenience that splits into 3 fields in
@@ -948,13 +871,11 @@ def create_cli():
 
     args = vars(arg_parser.parse_args())
 
-    # Handle --info early exit
     if args.get("info"):
         _print_info()
         raise SystemExit(0)
     del args["info"]
 
-    # Validate --dir_path is provided (was required=True, now manual check)
     if args.get("dir_path") is None:
         arg_parser.error("the following arguments are required: --dir_path")
 
@@ -976,10 +897,8 @@ def create_cli():
     if "decay" in args:
         decay = dict()
         try:
-            # Single float value
             decay = {ch: float(args["decay"]) / 1000 for ch in SPEAKER_NAMES}
         except ValueError:
-            # Channels separated
             for ch_t in args["decay"].split(","):
                 decay[ch_t.split(":")[0].upper()] = float(ch_t.split(":")[1]) / 1000
         args["decay"] = decay
@@ -988,5 +907,4 @@ def create_cli():
 
 if __name__ == "__main__":
     cli_args = create_cli()
-    # interactive_plots 인자를 main 함수에 전달
     main(**cli_args)

@@ -13,7 +13,6 @@ from core.utils import read_wav, write_wav, magnitude_response
 from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS
 from core.plotting.hrir_plotter import HRIRPlotter
 
-# Python 3.14 병렬 처리 지원
 try:
     from core.parallel_processing import parallel_process_dict, is_free_threaded_available
 
@@ -65,13 +64,10 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                        silence_length=2.0, debug=False):
     """Ingest a combined sweep recording into a {speaker: {side: IR}} map.
 
-    Extracted verbatim from :meth:`HRIR.open_recording` (audit #115 finding 4)
-    so ingestion (WAV load, silence crop, column/segment split, per-speaker IR
-    estimation) is a standalone, unit-testable unit. ``expected_fs`` is the
-    HRIR/estimator sampling rate; the recording's own rate (``fs`` below) must
-    match it. Byte-identical to the former inline body — once the guard passes
-    ``fs == expected_fs``, so the rest reads the same rate the original used.
-    The caller merges the returned mapping into ``self.irs``.
+    Performs the WAV load, silence crop, column/segment split and per-speaker
+    IR estimation. ``expected_fs`` is the HRIR/estimator sampling rate; the
+    recording's own rate (``fs`` below) must match it. The caller merges the
+    returned mapping into ``self.irs``.
     """
     irs: dict = {}
     print = builtins.print if debug else lambda *args, **kwargs: None
@@ -82,7 +78,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
             "Sampling rate of recording must match sampling rate of test signal."
         )
 
-    # Debug information
     print(">>>>>>>>> Recording Analysis Debug Info:")
     print(f"  File: {file_path}")
     print(f"  Recording shape: {recording.shape}")
@@ -105,7 +100,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
     else:
         print("    Test signal: Not available or None")
 
-    # Calculate expected recording length
     expected_length_with_silence = silence_length + len(estimator)
     print(
         f"  Expected minimum recording length: {expected_length_with_silence} samples ({expected_length_with_silence / fs:.2f} seconds)"
@@ -127,7 +121,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
         print("    2. Wrong test signal file used")
         print("    3. Estimator was created with different parameters")
 
-    # Analyze each channel for actual content
     print("  Channel content analysis:")
     for ch in range(recording.shape[0]):
         max_val = np.max(np.abs(recording[ch, :]))
@@ -152,7 +145,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
     print(f"  Expected total tracks needed: {len(speakers) * tracks_k}")
     print(f"  Available tracks in recording: {recording.shape[0]}")
 
-    # Warning if mismatch
     if len(speakers) * tracks_k > recording.shape[0]:
         print(
             f"  WARNING: Not enough tracks in recording! Need {len(speakers) * tracks_k}, have {recording.shape[0]}"
@@ -169,7 +161,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
     print(f"  Estimator length: {len(estimator)}")
     print(f"  Available recording length after silence crop: {recording.shape[1]}")
 
-    # Adjust column_size if it exceeds available recording length
     if column_size > recording.shape[1]:
         print(
             f"  WARNING: Calculated column_size ({column_size}) exceeds recording length ({recording.shape[1]})"
@@ -178,14 +169,11 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
             "  This suggests the recording was too short or estimator is longer than expected"
         )
 
-        # Try to use the entire available length as a single column
         if n_columns <= 1:
-            # Single column case - use all available data
             column_size = recording.shape[1]
             n_columns = 1
             print(f"  Adjusted to single column with size: {column_size}")
         else:
-            # Multiple columns case - divide available length equally
             column_size = recording.shape[1] // n_columns
             print(
                 f"  Adjusted column_size to: {column_size} (divided by {n_columns} columns)"
@@ -218,7 +206,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
             )
 
     if not columns:
-        # Try fallback options for short recordings
         print("  Attempting fallback solutions for short recording...")
 
         # Option 1: Reduce silence length
@@ -232,7 +219,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                     f"  Fallback 1: Reducing silence from {silence_length} to {adjusted_silence} samples"
                 )
 
-                # Recalculate with adjusted silence
                 adjusted_recording = recording[:, adjusted_silence:]
                 column_size = len(estimator)  # No additional silence in column
 
@@ -259,7 +245,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                     print(
                         f"  Fallback 1 successful: Created {len(columns)} columns with reduced silence"
                     )
-                    # Update the cropped recording for further processing
                     recording = adjusted_recording
 
         # Option 2: If still no columns, try using available length even if shorter than estimator
@@ -438,12 +423,10 @@ class HRIR(HRIRPlotter):
         Returns:
             None
         """
-        # Duplicate speaker names as left and right side impulse response names
         if track_order is None:
             track_order = HEXADECAGONAL_TRACK_ORDER
 
-        # Add only the requested impulse responses in output order. Previous
-        # code stacked every channel first, even for two-channel subset outputs.
+        # Add only the requested impulse responses in output order.
         irs_by_name = {}
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
@@ -459,7 +442,6 @@ class HRIR(HRIRPlotter):
             rows.append(irs_by_name.get(ch, np.zeros(reference_len)))
         irs = np.vstack(rows)
 
-        # Write to file
         write_wav(file_path, self.fs, irs, bit_depth=bit_depth)
 
     def normalize(self, peak_target=-0.1, avg_target=None):
@@ -488,7 +470,6 @@ class HRIR(HRIRPlotter):
                 "No valid impulse response data found for normalization. All channels appear to be empty."
             )
 
-        # Check if all arrays have the same length
         left_lengths = [len(arr) for arr in left]
         right_lengths = [len(arr) for arr in right]
 
@@ -507,7 +488,6 @@ class HRIR(HRIRPlotter):
         left = np.sum(np.vstack(left), axis=0)
         right = np.sum(np.vstack(right), axis=0)
 
-        # Calculate magnitude responses
         f_l, mr_l = magnitude_response(left, self.fs)
         f_r, mr_r = magnitude_response(right, self.fs)
 
@@ -532,23 +512,19 @@ class HRIR(HRIRPlotter):
                 'One and only one of the parameters "peak_target" and "avg_target" must be given!'
             )
 
-        # 전체 정규화 gain만 출력 (항목 8)
         print(
             f">>>>>>>>> Applied a normalization gain of {gain:.2f} dB to all channels"
         )
 
-        # Scale impulse responses (Python 3.14 병렬 처리 적용)
         gain_scalar = 10 ** (gain / 20)
 
         if PARALLEL_PROCESSING_AVAILABLE and len(self.irs) > 4:
-            # 병렬 처리: 각 스피커 채널에 gain 적용
             def apply_gain_to_pair(speaker, pair):
                 """각 스피커 채널에 gain을 적용"""
                 for ir in pair.values():
                     ir.data *= gain_scalar
                 return pair
 
-            # 병렬 실행
             self.irs = parallel_process_dict(
                 apply_gain_to_pair, self.irs, use_threads=True
             )
@@ -561,7 +537,7 @@ class HRIR(HRIRPlotter):
                 for ir in pair.values():
                     ir.data *= gain_scalar
 
-        return gain  # 적용된 게인 값 반환
+        return gain
 
     def crop_heads(self, head_ms=1):
         """Crops heads of impulse responses
@@ -579,7 +555,6 @@ class HRIR(HRIRPlotter):
             )
 
         for speaker, pair in self.irs.items():
-            # Peaks
             peak_left = pair["left"].peak_index()
             peak_right = pair["right"].peak_index()
 
@@ -588,13 +563,12 @@ class HRIR(HRIRPlotter):
                 print(
                     f"Warning: Could not find peaks for {speaker}. Skipping crop_heads processing for this speaker."
                 )
-                # Skip this speaker entirely if we can't find peaks
                 continue
 
             itd = np.abs(peak_left - peak_right) / self.fs
 
             # Speaker channel delay
-            head = int(head_ms * self.fs / 1000)  # PR의 head 계산 방식 (항목 4 연관)
+            head = int(head_ms * self.fs / 1000)
             delay = (
                 int(np.round(SPEAKER_DELAYS[speaker] * self.fs)) + head
             )  # Channel delay in samples
@@ -629,9 +603,6 @@ class HRIR(HRIRPlotter):
                         "speaker order given is not correct. Detected delay difference is "
                         f"{itd * 1000:.4f} milliseconds."
                     )
-                # Crop out silence from the beginning, only required channel delay remains
-                # Secondary ear has additional delay for inter aural time difference
-
                 crop_index = max(0, peak_right - delay)
                 pair["right"].data = pair["right"].data[crop_index:]
                 pair["left"].data = pair["left"].data[crop_index:]
@@ -639,7 +610,7 @@ class HRIR(HRIRPlotter):
             # Make sure impulse response starts from silence
             # Ensure we have enough data for the windowing
             if len(pair["left"].data) >= head and len(pair["right"].data) >= head:
-                window = hann(head * 2)[:head]  # scipy.signal.windows.hann 사용
+                window = hann(head * 2)[:head]
                 pair["left"].data[:head] *= window
                 pair["right"].data[:head] *= window
 
@@ -680,7 +651,6 @@ class HRIR(HRIRPlotter):
 
         for speaker, pair in self.irs.items():
             for ir in pair.values():
-                # Crop to tail_ind
                 ir.data = ir.data[:tail_ind]
                 # Apply fade-out window
                 ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
@@ -749,7 +719,6 @@ class HRIR(HRIRPlotter):
             subj.error = subj.raw - subj.target
             subj.smoothen_heavy_light()
             subj.equalize(max_gain=15, treble_f_lower=20000, treble_f_upper=self.fs / 2)
-            # Unit impulse for left side and equalization FIR filter for right side
             fir = subj.minimum_phase_impulse_response(fs=self.fs, normalize=False)
             if method == "left":
                 firs = [signal.unit_impulse((len(fir))), fir]
@@ -757,7 +726,6 @@ class HRIR(HRIRPlotter):
                 firs = [fir, signal.unit_impulse((len(fir)))]
 
         elif method == "avg" or method == "min":
-            # Center around 0 dB
             left_gain = _get_center_value(left_fr, [100, 10000])
             right_gain = _get_center_value(right_fr, [100, 10000])
             gain = (left_gain + right_gain) / 2
@@ -836,7 +804,6 @@ class HRIR(HRIRPlotter):
             if len([ch for ch in speakers if ch in self.irs]) < len(speakers):
                 # All the speakers in the current speaker group must exist, otherwise balancing makes no sense
                 continue
-            # Stack impulse responses
             left, right = [], []
             for speaker in speakers:
                 left.append(self.irs[speaker]["left"].data)
@@ -902,7 +869,6 @@ class HRIR(HRIRPlotter):
             plot_dir=mic_deviation_plot_dir,
         )
 
-        # 보정 결과 요약 출력 (v3.0 flat summary dict)
         if analysis_results and not analysis_results.get('error'):
             speakers_processed = analysis_results.get('speakers_processed', [])
             avg_error = analysis_results.get('avg_error_db', 0)

@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """WAV/audio I/O and core DSP primitives.
 
-Split out of ``core/utils.py`` (audit #115 finding 8). ``magnitude_response``
-is kept byte-identical — its rfft path is pinned by
-``tests/test_magnitude_response_parity.py`` and feeds the BRIR hash.
+``magnitude_response``'s rfft path is pinned by
+``tests/test_magnitude_response_parity.py`` — see its docstring.
 ``core.utils`` re-exports these names.
 """
 

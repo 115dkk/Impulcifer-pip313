@@ -33,10 +33,7 @@ class StudioSettingsTab:
         self.parent.grid_columnconfigure(0, weight=1)
         self.parent.grid_rowconfigure(0, weight=1)
 
-        # Opaque bg-1 backing — a transparent scrollable frame leaves the
-        # inner tk.Canvas without a solid background, causing Win32 scroll
-        # ghosting ("잔상") of the embedded widgets. Stable's tabs use the
-        # theme's opaque default; mirror that here.
+        # 불투명 배경 필수 — 투명 배경은 Win32 스크롤 잔상(ghosting)을 남긴다. 상세: gui/skins/studio_impulcifer_tab.py의 스크롤 프레임 주석.
         scroll = ctk.CTkScrollableFrame(self.parent, fg_color=COLORS["bg-1"])
         scroll.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
         scroll.grid_columnconfigure(0, weight=1)
@@ -65,7 +62,6 @@ class StudioSettingsTab:
         body = make_card_body(card)
         body.grid_columnconfigure(0, weight=1)
 
-        # Skin selector — segmented button
         self._build_setting_row(
             body,
             row=0,
@@ -74,7 +70,6 @@ class StudioSettingsTab:
             make_control=self._make_skin_segment,
         )
 
-        # Language selector
         self._build_setting_row(
             body,
             row=1,
@@ -83,7 +78,6 @@ class StudioSettingsTab:
             make_control=self._make_language_dropdown,
         )
 
-        # Theme selector
         self._build_setting_row(
             body,
             row=2,
@@ -137,7 +131,6 @@ class StudioSettingsTab:
         if control is not None:
             control.grid(row=0, column=0, sticky="e")
 
-        # Hairline below row
         rule = ctk.CTkFrame(parent, fg_color=COLORS["line-soft"], height=1, corner_radius=0)
         rule.grid(row=row * 2 + 1, column=0, sticky="sew", padx=4)
 

@@ -38,7 +38,6 @@ class ModernImpulciferGUI:
 
     def __init__(self) -> None:
         """Initialize localization, theme, root window, and tabs."""
-        # Initialize localization manager
         self.loc = get_localization_manager()
         self.current_theme = self.loc.get_theme()
         self.bus = EventBus()
@@ -52,7 +51,6 @@ class ModernImpulciferGUI:
         self.studio_shell = None
         self.font_family = None
 
-        # Apply saved theme
         if self.current_theme == 'system':
             ctk.set_appearance_mode("system")
         else:
@@ -77,11 +75,9 @@ class ModernImpulciferGUI:
         # cost at startup since most widgets requested size=16 bold).
         self.fonts = build_fonts(self.font_family)
 
-        # Show language selection dialog on first run
         if self.loc.is_first_run():
             self.root.after(500, self.show_language_selection_dialog)
 
-        # Check for updates in background (after 2 seconds)
         self.root.after(2000, self.check_for_updates_background)
 
         # Velopack 업데이트 후 재시작 감지 — 사용자에게 완료 알림
@@ -91,7 +87,6 @@ class ModernImpulciferGUI:
                 self.loc.get('update_restart_done', default="The new version has been installed successfully.")
             ))
 
-        # Set window size and position
         window_width, window_height = WINDOW_MAIN_SIZE
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
@@ -99,14 +94,11 @@ class ModernImpulciferGUI:
         y = (screen_height - window_height) // 2
         self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
 
-        # Configure grid weight
         self.root.grid_rowconfigure(1, weight=1)
         self.root.grid_columnconfigure(0, weight=1)
 
-        # Create header frame
         self.create_header()
 
-        # Build the body in the active skin's layout.
         self._build_body()
 
     def create_header(self) -> None:
@@ -114,9 +106,7 @@ class ModernImpulciferGUI:
 
         Layout follows the Pulse redesign's ``cv-brand`` pattern: 32px Pulse
         mark on the left, then a vertical stack with the app name (22px
-        bold) over the subtitle (12px secondary). The previous header put
-        title and subtitle side-by-side which read like two unrelated
-        labels.
+        bold) over the subtitle (12px secondary).
         """
         header = ctk.CTkFrame(self.root, corner_radius=0, height=72)
         header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
@@ -142,7 +132,6 @@ class ModernImpulciferGUI:
         except Exception as e:
             print(f"Header logo not loaded: {e}")
 
-        # App title (22px bold)
         self.title_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_title'),
@@ -151,7 +140,6 @@ class ModernImpulciferGUI:
         )
         self.title_label.grid(row=0, column=1, padx=(0, 12), pady=(14, 0), sticky="sw")
 
-        # Subtitle (12px secondary)
         self.subtitle_label = ctk.CTkLabel(
             header,
             text=self.loc.get('app_subtitle'),
@@ -162,7 +150,7 @@ class ModernImpulciferGUI:
         self.subtitle_label.grid(row=1, column=1, padx=(0, 12), pady=(0, 14), sticky="nw")
 
     def toggle_theme(self) -> None:
-        """Toggle between dark and light themes (legacy method - kept for compatibility)"""
+        """Toggle between dark and light themes (kept for compatibility)."""
         if self.current_theme == "dark":
             self.bus.emit('theme_changed', code="light")
         else:
@@ -204,7 +192,6 @@ class ModernImpulciferGUI:
         for tab_key in self.tab_keys.values():
             self.tabview.add(self.loc.get(tab_key))
 
-        # Set default tab
         self.tabview.set(self.loc.get('tab_recorder'))
 
     def get_current_version(self) -> str:
@@ -225,7 +212,6 @@ class ModernImpulciferGUI:
         except Exception:
             pass
 
-        # Fallback
         return "2.4.15"
 
     def check_for_updates_background(self) -> None:
@@ -246,7 +232,6 @@ class ModernImpulciferGUI:
                 # Silently fail - don't disturb user if update check fails
                 print(f"Update check failed: {e}")
 
-        # Run in background thread
         update_thread = threading.Thread(target=check_updates, daemon=True)
         update_thread.start()
 

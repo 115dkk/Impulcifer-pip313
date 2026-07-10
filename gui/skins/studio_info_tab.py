@@ -38,10 +38,7 @@ class StudioInfoTab:
         self.parent.grid_columnconfigure(0, weight=1)
         self.parent.grid_rowconfigure(0, weight=1)
 
-        # Opaque bg-1 backing — a transparent scrollable frame leaves the
-        # inner tk.Canvas without a solid background, causing Win32 scroll
-        # ghosting ("잔상") of the embedded widgets. Stable's tabs use the
-        # theme's opaque default; mirror that here.
+        # 불투명 배경 필수 — 투명 배경은 Win32 스크롤 잔상(ghosting)을 남긴다. 상세: gui/skins/studio_impulcifer_tab.py의 스크롤 프레임 주석.
         scroll = ctk.CTkScrollableFrame(self.parent, fg_color=COLORS["bg-1"])
         scroll.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
         scroll.grid_columnconfigure(0, weight=1)

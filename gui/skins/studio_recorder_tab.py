@@ -117,12 +117,7 @@ class StudioRecorderTab:
         self.parent.grid_columnconfigure(0, weight=1)
         self.parent.grid_rowconfigure(0, weight=1)
 
-        # Opaque background (matches the Studio content host's bg-1) — a
-        # ``transparent`` scrollable frame leaves the inner tk.Canvas with
-        # no solid backing, so on Win32 the embedded child windows smear
-        # ("잔상"/ghosting) during scroll because nothing repaints the
-        # vacated region. Stable avoids this by using the theme's opaque
-        # default fg_color; mirror that here.
+        # 불투명 배경 필수 — 투명 배경은 Win32 스크롤 잔상(ghosting)을 남긴다. 상세: gui/skins/studio_impulcifer_tab.py의 스크롤 프레임 주석.
         scroll = ctk.CTkScrollableFrame(self.parent, fg_color=COLORS["bg-1"])
         scroll.grid(row=0, column=0, sticky="nsew", padx=24, pady=24)
         scroll.grid_columnconfigure(0, weight=1)
@@ -181,7 +176,6 @@ class StudioRecorderTab:
         )
         self.input_device_menu.grid(row=0, column=1, sticky="ew", padx=0, pady=4)
 
-        # Channels selector — preset dropdown + optional custom entry.
         ch_row = self._labelled_row(body, row=3, label=self.loc.get("label_force_channels"))
         ch_values = [label for label, _ in CHANNEL_PRESETS] + [_CUSTOM_CHANNEL_KEY]
         ctk.CTkOptionMenu(
@@ -305,11 +299,7 @@ class StudioRecorderTab:
         ).grid(row=2, column=0, sticky="ew", pady=(2, 6))
         self._refresh_resolved_record_path()
 
-        # Surround sweep set generator. Drops per-group stereo
-        # ``sweep-seg-…-stereo-…wav`` files plus one combined
-        # ``sweep-seg-…-7.1-…wav`` file into a folder of the user's choice
-        # (defaults near the existing play file). Materialized on demand
-        # because the combined 8-channel file is tens of MB at PCM_32.
+        # sweep set은 수십 MB라 온디맨드 생성 — generate_sweep_set docstring 참조
         ctk.CTkButton(
             body,
             text=self.loc.get("button_generate_14ch_sweep_set"),

@@ -156,7 +156,6 @@ def main():
     ir = impulse_response(a0, a1, a2, b0, b1, b2, n=250)
 
     fig, ax = plt.subplots()
-    #plt.plot(f, np.sum(c, axis=1), linewidth=3)
     plt.plot(f, c)
     plt.xlabel('Frequency (Hz)')
     plt.semilogx()
