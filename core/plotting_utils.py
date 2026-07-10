@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """Matplotlib / PNG plotting helpers.
 
-Split out of ``core/utils.py`` (audit #115 finding 8). ``core.utils``
-re-exports these names.
+``core.utils`` re-exports these names.
 """
 
 import os

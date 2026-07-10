@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Update executor framework — non-GUI execution of an update.
 
-Split out of ``updater/updater_core.py`` (issue #87 follow-up).
 ``updater_core`` re-exports :class:`UpdateExecutionError`,
 :class:`UpdateExecutionResult`, :class:`UpdateExecutor`, the three concrete
 executors, and :func:`create_update_executor` / :func:`get_updater` factories

@@ -254,7 +254,7 @@ def add_disclosure(
         widget.bind("<Button-1>", _flip_from_click)
 
     state_var.trace_add("write", lambda *_: _toggle())
-    _toggle()  # Apply initial state
+    _toggle()
 
     return outer, body
 

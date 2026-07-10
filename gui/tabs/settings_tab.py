@@ -3,7 +3,7 @@
 """UI Settings tab for the modern GUI.
 
 Handles language selection, theme selection, and a quick "Open Data Folder"
-shortcut. Moved from ``gui/modern_gui.py`` without behavioural changes.
+shortcut.
 """
 
 from __future__ import annotations
@@ -44,7 +44,6 @@ class SettingsTab:
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
 
-        # Create scrollable frame
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
         scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll.grid_columnconfigure(0, weight=1)
@@ -169,7 +168,6 @@ class SettingsTab:
             font=self.fonts['heading']
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
-        # Description label
         ctk.CTkLabel(
             data_frame,
             text=self.loc.get('label_data_folder_description',
@@ -178,7 +176,6 @@ class SettingsTab:
             text_color="gray"
         ).grid(row=1, column=0, sticky="w", padx=15, pady=(0, 10))
 
-        # Open data folder button
         open_folder_btn = ctk.CTkButton(
             data_frame,
             text=self.loc.get('button_open_data_folder', default="Open Data Folder"),
@@ -189,7 +186,6 @@ class SettingsTab:
 
     def change_language(self, language_name: str) -> None:
         """Publish a language change event."""
-        # Find language code from name
         lang_code = None
         for code, name in SUPPORTED_LANGUAGES.items():
             if name == language_name:
@@ -224,7 +220,6 @@ class SettingsTab:
 
     def change_theme(self, theme_name: str) -> None:
         """Publish a theme change event."""
-        # Map display name to theme code
         theme_map = {
             self.loc.get('option_theme_dark'): 'dark',
             self.loc.get('option_theme_light'): 'light',

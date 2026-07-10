@@ -44,8 +44,7 @@ def _smoke_test():
     Two-part guarantee:
 
     1. **Import chain** — the full GUI tree must be importable. If any
-       ``--include-module`` was wrongly trimmed (or a Phase-N rename broke a
-       reference) this part exits non-zero.
+       ``--include-module`` was wrongly trimmed this part exits non-zero.
 
     2. **Pretendard application** — the bundled Pretendard font must be the
        one matplotlib actually applies. The smoke-test masks every system
@@ -116,7 +115,7 @@ def _smoke_test():
     import core.font_setup as core_font_setup  # noqa: E402
 
     # Reset the one-shot gate so set_matplotlib_font re-runs for this probe.
-    # The lazy font state lives in core.font_setup after the #115-8 split;
+    # The lazy font state lives in core.font_setup;
     # core.utils.set_matplotlib_font is a re-export of the same function.
     core_font_setup._font_configured = False
     result = core_utils.set_matplotlib_font()

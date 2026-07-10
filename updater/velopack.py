@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Velopack-based update download/apply for standalone (Nuitka) builds.
 
-Split out of ``updater/updater_core.py`` (issue #87 follow-up).
 ``updater_core`` now re-exports :class:`VelopackUpdater` and
 :class:`VelopackDownloadError` for backward compatibility.
 
@@ -80,10 +79,6 @@ class VelopackUpdater:
         # Last subprocess stderr for diagnostic surfacing in apply().
         self.last_apply_stderr: Optional[str] = None
 
-    # ------------------------------------------------------------------
-    # Velopack environment discovery
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _detect_channel() -> str:
         """Return the Velopack release-feed channel for this platform.
@@ -152,10 +147,6 @@ class VelopackUpdater:
             except (OSError, ValueError):
                 pass
         return self.update_exe.parent.name
-
-    # ------------------------------------------------------------------
-    # Manifest + download
-    # ------------------------------------------------------------------
 
     def _open_url(self, url: str, timeout: int):
         """Open a URL with the standard Impulcifer-Updater UA + 30s timeout."""

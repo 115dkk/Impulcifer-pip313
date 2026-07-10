@@ -5,11 +5,8 @@ Automatic updater for Impulcifer
 Supports both Velopack (standalone) and pip (development/pip install)
 environments.
 
-Issue #87 follow-up: the implementation was split into focused modules so the
-770-line monolith no longer mixes environment detection, three updater
-backends, and the executor framework. This file is now a thin re-export shim
-so existing callers (``gui/dialogs.py``, ``gui/tabs/info_tab.py``,
-``impulcifer.py``, ``tests/test_*``) keep working unchanged.
+The implementation is split into focused modules; this file is a thin
+re-export shim so existing callers keep working unchanged.
 
 New module layout:
 

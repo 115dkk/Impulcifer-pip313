@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Runtime environment detection for the updater (issue #87 follow-up).
+"""Runtime environment detection for the updater.
 
 Split out of ``updater/updater_core.py`` so the four updater backends
 (:mod:`updater.velopack`, :mod:`updater.pip_updater`, :mod:`updater.legacy`,

@@ -58,7 +58,6 @@ def test_microphone_deviation_integration():
     assert summary["speakers_processed"], "처리된 스피커가 없음"
     assert summary["max_error_db"] > 0.0
 
-    # 좌우 데이터가 실제로 바뀌었는지 확인
     for spk, pair in hrir.irs.items():
         assert not np.array_equal(original[spk]["left"], pair["left"].data)
         assert not np.array_equal(original[spk]["right"], pair["right"].data)

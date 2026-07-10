@@ -13,7 +13,6 @@ def test_executable():
     """실행 파일 테스트"""
     print("=== Impulcifer 빌드 테스트 ===\n")
 
-    # 가능한 실행 파일 위치들
     possible_paths = [
         "ImpulciferGUI.exe",
         "Impulcifer_Distribution/ImpulciferGUI.exe",
@@ -36,22 +35,18 @@ def test_executable():
     
     print(f"✓ 실행 파일 발견: {exe_path}")
     
-    # 파일 정보 출력
     file_size = os.path.getsize(exe_path) / (1024 * 1024)  # MB
     print(f"  파일 크기: {file_size:.1f} MB")
     
-    # 실행 파일 테스트
     print("\n실행 파일을 테스트합니다...")
     print("(GUI가 표시되면 정상 작동하는 것입니다)")
     
     try:
-        # 프로세스 시작
         process = subprocess.Popen([exe_path])
         
         print("\n테스트 중... (10초 대기)")
         print("GUI 창이 나타났는지 확인하세요.")
         
-        # 10초 대기
         for i in range(10, 0, -1):
             print(f"\r{i}초 남음...", end="")
             time.sleep(1)
@@ -74,7 +69,6 @@ def check_dependencies():
     """의존성 파일 확인"""
     print("\n의존성 파일 확인 중...")
     
-    # data 폴더 확인
     data_files = [
         "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
         "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl",
@@ -122,10 +116,8 @@ def check_dependencies():
 
 def main():
     """메인 테스트 함수"""
-    # 의존성 확인
     check_dependencies()
     
-    # 실행 파일 테스트
     print()
     try:
         test_executable()

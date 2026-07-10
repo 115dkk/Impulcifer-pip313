@@ -1,4 +1,4 @@
-"""Canonical Nuitka build flag definitions (issue #87 Phase 4).
+"""Canonical Nuitka build flag definitions.
 
 This module is the single source of truth for the arguments passed to
 ``python -m nuitka`` when packaging Impulcifer. Both

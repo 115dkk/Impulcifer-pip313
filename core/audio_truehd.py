@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """TrueHD/MLP detection, conversion and the TrueHD-aware audio reader.
 
-Split out of ``core/ffmpeg_utils.py`` (audit #115 finding 9). Depends on
-``core.ffmpeg_discovery`` for FFmpeg availability; the ``_discovery.FFMPEG_PATH``
-/ ``_discovery.FFPROBE_PATH`` references read the live paths that
-``ensure_ffmpeg_available`` populates.
+Depends on ``core.ffmpeg_discovery`` for FFmpeg availability; the
+``_discovery.FFMPEG_PATH`` / ``_discovery.FFPROBE_PATH`` references read the
+live paths that ``ensure_ffmpeg_available`` populates.
 """
 
 import json
@@ -58,7 +57,7 @@ def convert_truehd_to_wav(truehd_path, output_path=None):
     cmd = [
         _discovery.FFMPEG_PATH, '-i', truehd_path,
         '-acodec', 'pcm_f32le',  # 32-bit float PCM
-        '-ar', '48000',  # Sample rate
+        '-ar', '48000',
         output_path, '-y'
     ]
 
@@ -177,7 +176,6 @@ def read_audio(file_path, expand=False):
 
             return fs, data, channel_info
         finally:
-            # Clean up temp file
             if os.path.exists(temp_wav):
                 os.remove(temp_wav)
     else:

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Backward-compatible re-export shim (audit #115 finding 8).
+"""Backward-compatible re-export shim; new code should import from the
+focused modules below directly.
 
 core/utils.py was a three-domain grab-bag; it is now split into focused modules
 and re-exports their public surface so the 25+ existing importers keep working:

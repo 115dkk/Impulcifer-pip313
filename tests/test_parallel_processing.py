@@ -30,14 +30,12 @@ class TestParallelProcessing(unittest.TestCase):
         """Python 스레딩 정보 테스트"""
         info = get_python_threading_info()
 
-        # 필수 키 확인
         required_keys = ['python_version', 'is_python_314_plus', 'is_free_threaded',
                         'optimal_workers', 'cpu_count']
 
         for key in required_keys:
             self.assertIn(key, info, f"Missing key: {key}")
 
-        # 타입 확인
         self.assertIsInstance(info['python_version'], str)
         self.assertIsInstance(info['is_python_314_plus'], bool)
         self.assertIsInstance(info['is_free_threaded'], bool)
@@ -66,7 +64,6 @@ class TestParallelProcessing(unittest.TestCase):
         data = list(range(10))
         expected = [x * x for x in data]
 
-        # 병렬 처리
         result = parallel_map(square, data)
 
         self.assertEqual(result, expected)
@@ -143,17 +140,14 @@ class TestParallelProcessing(unittest.TestCase):
         # 작은 값으로 테스트 (너무 크면 오래 걸림)
         data = [10, 12, 14, 16, 18]
 
-        # 순차 처리
         start_time = time.time()
         sequential_result = [fibonacci(n) for n in data]
         sequential_time = time.time() - start_time
 
-        # 병렬 처리
         start_time = time.time()
         parallel_result = parallel_map(fibonacci, data, max_workers=4)
         parallel_time = time.time() - start_time
 
-        # 결과 동일성 확인
         self.assertEqual(sequential_result, parallel_result)
 
         print("\n[CPU 집약적 작업 테스트 - Fibonacci]")
@@ -177,7 +171,6 @@ class TestParallelProcessing(unittest.TestCase):
 
         data = [1, 2, 3, 4, 5, 6]
 
-        # 에러가 발생해야 함
         with self.assertRaises(ValueError):
             parallel_map(failing_func, data)
 
@@ -229,15 +222,12 @@ class TestParallelProcessing(unittest.TestCase):
 
 def run_tests():
     """테스트 실행"""
-    # 테스트 스위트 생성
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromTestCase(TestParallelProcessing)
 
-    # 테스트 실행
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
 
-    # 결과 요약
     print("\n" + "=" * 70)
     print("테스트 결과 요약")
     print("=" * 70)
@@ -251,7 +241,6 @@ def run_tests():
 
 
 if __name__ == '__main__':
-    # 정보 출력
     print("=" * 70)
     print("Impulcifer 병렬 처리 모듈 테스트")
     print("=" * 70)
@@ -259,8 +248,6 @@ if __name__ == '__main__':
     print(f"Free-Threaded: {is_free_threaded_available()}")
     print("=" * 70)
 
-    # 테스트 실행
     success = run_tests()
 
-    # 종료 코드
     sys.exit(0 if success else 1)

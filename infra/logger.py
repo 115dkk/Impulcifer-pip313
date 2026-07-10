@@ -131,10 +131,8 @@ class ImpulciferLogger:
         if not self.enabled:
             return
 
-        # Translate message if it's a key
         translated_msg = self._translate(message, **kwargs)
 
-        # Format message with level for console
         if level == LogLevel.PROGRESS:
             console_msg = f"[{progress_value}%] {translated_msg}"
         elif level == LogLevel.SUCCESS:
@@ -146,17 +144,14 @@ class ImpulciferLogger:
         else:
             console_msg = translated_msg
 
-        # Output to console
         print(console_msg)
 
-        # Output to GUI if callback is set
         if self.gui_callback:
             try:
                 self.gui_callback(level.value, translated_msg)
             except Exception as e:
                 print(f"Error in GUI callback: {e}")
 
-        # Update progress if callback is set
         if level == LogLevel.PROGRESS and self.progress_callback and progress_value is not None:
             try:
                 self.progress_callback(progress_value, translated_msg)

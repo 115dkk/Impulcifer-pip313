@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """FFmpeg binary discovery, version check and (lazy) auto-install.
 
-Split out of ``core/ffmpeg_utils.py`` (audit #115 finding 9): this module owns
-the FFmpeg/ffprobe lookup policy and the lazy-init module globals
+This module owns the FFmpeg/ffprobe lookup policy and the lazy-init module
+globals
 ``FFMPEG_PATH`` / ``FFPROBE_PATH``. ``ensure_ffmpeg_available`` is the only
 entry point that mutates them; the TrueHD decode layer (``core.audio_truehd``)
 reads them through this module so it always sees the current values.

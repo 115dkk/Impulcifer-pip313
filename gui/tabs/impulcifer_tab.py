@@ -3,9 +3,7 @@
 """Impulcifer (BRIR generation) tab for the modern GUI.
 
 Hosts inputs/outputs, processing options, advanced options, virtual bass
-controls, and the Generate BRIR button. Moved from ``gui/modern_gui.py``
-without behavioural changes — the ``generate_brir`` argument-assembly
-logic is preserved verbatim.
+controls, and the Generate BRIR button.
 """
 
 from __future__ import annotations
@@ -70,7 +68,6 @@ class ImpulciferTab:
         tab.grid_columnconfigure(0, weight=1)
         tab.grid_rowconfigure(0, weight=1)
 
-        # Create scrollable frame
         scroll = ctk.CTkScrollableFrame(tab, corner_radius=10)
         scroll.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
         scroll.grid_columnconfigure(0, weight=1)
@@ -91,7 +88,6 @@ class ImpulciferTab:
             font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
-        # Your recordings
         ctk.CTkLabel(input_frame, text=self.loc.get('label_your_recordings')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
         self.dir_path_var = ctk.StringVar(value=os.path.join('data', 'my_hrir'))
         self.dir_path_entry = ctk.CTkEntry(input_frame, textvariable=self.dir_path_var)
@@ -103,7 +99,6 @@ class ImpulciferTab:
             width=WIDGET_BUTTON_WIDTH_BROWSE,
         ).grid(row=1, column=2, padx=15, pady=5)
 
-        # Test signal
         ctk.CTkLabel(input_frame, text=self.loc.get('label_test_signal')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
         self.test_signal_var = ctk.StringVar(value=os.path.join('data', 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
         self.test_signal_entry = ctk.CTkEntry(input_frame, textvariable=self.test_signal_var)
@@ -129,7 +124,6 @@ class ImpulciferTab:
 
         proc_row = 1
 
-        # Room Correction
         self.do_room_correction_var = ctk.BooleanVar(value=False)
         self.room_correction_check = ctk.CTkCheckBox(
             processing_frame,
@@ -147,7 +141,6 @@ class ImpulciferTab:
         self.room_options_frame = ctk.CTkFrame(processing_frame, fg_color="transparent")
 
         room_opt_row = 0
-        # Specific Limit
         limits_frame = ctk.CTkFrame(self.room_options_frame, fg_color="transparent")
         limits_frame.grid(row=room_opt_row, column=0, sticky="ew", padx=30, pady=5)
         room_opt_row += 1
@@ -160,7 +153,6 @@ class ImpulciferTab:
         self.generic_limit_var = ctk.IntVar(value=int(processing_default("generic_limit")))
         ctk.CTkEntry(limits_frame, textvariable=self.generic_limit_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).pack(side="left", padx=5)
 
-        # FR combination method
         fr_method_frame = ctk.CTkFrame(self.room_options_frame, fg_color="transparent")
         fr_method_frame.grid(row=room_opt_row, column=0, sticky="ew", padx=30, pady=5)
         room_opt_row += 1
@@ -174,7 +166,6 @@ class ImpulciferTab:
             width=WIDGET_OPTION_WIDTH_DEFAULT,
         ).pack(side="left", padx=5)
 
-        # Mic calibration
         mic_frame = ctk.CTkFrame(self.room_options_frame, fg_color="transparent")
         mic_frame.grid(row=room_opt_row, column=0, sticky="ew", padx=30, pady=5)
         mic_frame.grid_columnconfigure(1, weight=1)
@@ -190,7 +181,6 @@ class ImpulciferTab:
             width=WIDGET_ENTRY_WIDTH_DEFAULT,
         ).grid(row=0, column=2, padx=5, pady=2)
 
-        # Room target
         ctk.CTkLabel(mic_frame, text=self.loc.get('label_target_curve')).grid(row=1, column=0, sticky="w", padx=5, pady=2)
         self.room_target_var = ctk.StringVar()
         ctk.CTkEntry(mic_frame, textvariable=self.room_target_var).grid(row=1, column=1, sticky="ew", padx=5, pady=2)
@@ -201,7 +191,6 @@ class ImpulciferTab:
             width=WIDGET_ENTRY_WIDTH_DEFAULT,
         ).grid(row=1, column=2, padx=5, pady=2)
 
-        # Headphone Compensation
         self.do_headphone_compensation_var = ctk.BooleanVar(value=False)
         self.headphone_check = ctk.CTkCheckBox(
             processing_frame,
@@ -232,7 +221,6 @@ class ImpulciferTab:
             width=WIDGET_ENTRY_WIDTH_DEFAULT,
         ).grid(row=0, column=2, padx=5, pady=2)
 
-        # Custom EQ
         self.do_equalization_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             processing_frame,
@@ -241,7 +229,6 @@ class ImpulciferTab:
         ).grid(row=proc_row, column=0, sticky="w", padx=15, pady=5)
         proc_row += 1
 
-        # Plot results
         self.plot_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             processing_frame,
@@ -271,7 +258,6 @@ class ImpulciferTab:
 
         adv_row = 0
 
-        # Resample
         resample_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         resample_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -286,7 +272,6 @@ class ImpulciferTab:
             width=WIDGET_OPTION_WIDTH_NARROW,
         ).pack(side="left", padx=5)
 
-        # Target level
         target_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         target_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -295,7 +280,6 @@ class ImpulciferTab:
         self.target_level_var = ctk.StringVar()
         ctk.CTkEntry(target_frame, textvariable=self.target_level_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).pack(side="left", padx=5)
 
-        # Bass boost
         bass_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         bass_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -313,7 +297,6 @@ class ImpulciferTab:
         self.bass_boost_q_var = ctk.DoubleVar(value=0.76)
         ctk.CTkEntry(bass_frame, textvariable=self.bass_boost_q_var, width=WIDGET_ENTRY_WIDTH_NARROW).pack(side="left", padx=2)
 
-        # Tilt
         tilt_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         tilt_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -322,7 +305,6 @@ class ImpulciferTab:
         self.tilt_var = ctk.DoubleVar()
         ctk.CTkEntry(tilt_frame, textvariable=self.tilt_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).pack(side="left", padx=5)
 
-        # Channel Balance
         balance_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         balance_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -343,7 +325,6 @@ class ImpulciferTab:
         self.channel_balance_db_entry = ctk.CTkEntry(balance_frame, textvariable=self.channel_balance_db_var, width=WIDGET_ENTRY_WIDTH_NARROW, state="disabled")
         self.channel_balance_db_entry.pack(side="left", padx=2)
 
-        # Decay
         decay_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         decay_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -379,7 +360,6 @@ class ImpulciferTab:
             self.decay_channel_vars[ch] = var
             ctk.CTkEntry(decay_ch_subframe, textvariable=var, width=WIDGET_ENTRY_WIDTH_TINY).pack(side="left", padx=2)
 
-        # Pre-response
         pre_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         pre_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -388,7 +368,6 @@ class ImpulciferTab:
         self.pre_response_var = ctk.DoubleVar(value=1.0)
         ctk.CTkEntry(pre_frame, textvariable=self.pre_response_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).pack(side="left", padx=5)
 
-        # Output options
         output_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         output_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -402,7 +381,6 @@ class ImpulciferTab:
         self.interactive_plots_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(output_frame, text=self.loc.get('checkbox_interactive_plots'), variable=self.interactive_plots_var).pack(side="left", padx=10)
 
-        # Mic deviation correction
         mic_dev_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         mic_dev_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -421,7 +399,6 @@ class ImpulciferTab:
         self.mic_deviation_strength_entry = ctk.CTkEntry(mic_dev_frame, textvariable=self.mic_deviation_strength_var, width=WIDGET_ENTRY_WIDTH_NARROW, state="disabled")
         self.mic_deviation_strength_entry.pack(side="left", padx=2)
 
-        # Mic deviation v4.0 options (debug plots only)
         self.mic_deviation_debug_plots_var = ctk.BooleanVar(value=False)
         self.mic_dev_debug_plots_check = ctk.CTkCheckBox(
             mic_dev_frame,
@@ -431,7 +408,6 @@ class ImpulciferTab:
         )
         self.mic_dev_debug_plots_check.pack(side="left", padx=10)
 
-        # TrueHD layouts
         truehd_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         truehd_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
@@ -457,7 +433,6 @@ class ImpulciferTab:
 
         vbass_row = 1
 
-        # Enable toggle
         vbass_enable_frame = ctk.CTkFrame(vbass_group, fg_color="transparent")
         vbass_enable_frame.grid(row=vbass_row, column=0, sticky="ew", padx=15, pady=5)
         vbass_row += 1
@@ -471,12 +446,10 @@ class ImpulciferTab:
         )
         self.vbass_enable_check.pack(side="left", padx=5)
 
-        # Virtual Bass options container
         self.vbass_options_frame = ctk.CTkFrame(vbass_group, fg_color="transparent")
 
         vbopt_row = 0
 
-        # Crossover frequency
         xo_frame = ctk.CTkFrame(self.vbass_options_frame, fg_color="transparent")
         xo_frame.grid(row=vbopt_row, column=0, sticky="ew", padx=30, pady=5)
         vbopt_row += 1
@@ -486,7 +459,6 @@ class ImpulciferTab:
         self.vbass_freq_spin = ctk.CTkEntry(xo_frame, textvariable=self.vbass_freq_var, width=WIDGET_ENTRY_WIDTH_DEFAULT)
         self.vbass_freq_spin.pack(side="left", padx=5)
 
-        # Sub-bass high-pass
         hp_frame = ctk.CTkFrame(self.vbass_options_frame, fg_color="transparent")
         hp_frame.grid(row=vbopt_row, column=0, sticky="ew", padx=30, pady=5)
         vbopt_row += 1
@@ -496,7 +468,6 @@ class ImpulciferTab:
         self.vbass_hp_entry = ctk.CTkEntry(hp_frame, textvariable=self.vbass_hp_var, width=WIDGET_ENTRY_WIDTH_DEFAULT)
         self.vbass_hp_entry.pack(side="left", padx=5)
 
-        # Polarity handling
         pol_frame = ctk.CTkFrame(self.vbass_options_frame, fg_color="transparent")
         pol_frame.grid(row=vbopt_row, column=0, sticky="ew", padx=30, pady=(5, 15))
         vbopt_row += 1
@@ -611,13 +582,10 @@ class ImpulciferTab:
             logger.error(f"Processing failed: {e}")
             return
 
-        # Disable button during processing
         self.generate_button.configure(state="disabled", text=self.loc.get('button_processing'))
 
-        # Create processing dialog
         dialog = ProcessingDialog(self.root, self.loc, fonts=self.fonts)
 
-        # Setup logger callbacks and localization
         logger = get_logger()
         logger.set_localization(self.loc)  # Enable translations
         set_gui_callbacks(
@@ -625,14 +593,11 @@ class ImpulciferTab:
             progress_callback=dialog.update_progress
         )
 
-        # Run processing in separate thread
         def run_processing():
             try:
                 with impulcifer.cancellation_scope(dialog.cancel_event):
                     impulcifer.main(**args)
-                # Mark as complete
                 dialog.mark_complete(success=True)
-                # Re-enable button
                 self.root.after(0, lambda: self.generate_button.configure(
                     state="normal",
                     text=self.loc.get('button_generate_brir')
@@ -645,10 +610,8 @@ class ImpulciferTab:
                     text=self.loc.get('button_generate_brir')
                 ))
             except Exception as e:
-                # Mark as failed
                 logger.error(f"Processing failed: {str(e)}")
                 dialog.mark_complete(success=False)
-                # Re-enable button
                 self.root.after(0, lambda: self.generate_button.configure(
                     state="normal",
                     text=self.loc.get('button_generate_brir')

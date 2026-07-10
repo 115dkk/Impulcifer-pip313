@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.8.1 - 2026-07-10
+### 주석 대청소 — 이력 내레이션·재진술·죽은 주석 제거
+
+#### 🔧 빌드 / 설정 변경
+- **저장소 전체 주석 정리(동작 무변경)**: 전 모듈의 주석 약 2,000건을 전수 분류해, 코드를 그대로 되읽는 재진술 주석·리팩토링 고고학("audit #115에서 분리", "Phase 2 Optimization", "이전에는 ~였다" 류)·주석 처리된 죽은 코드·현재 코드와 모순되는 낡은 주석 약 300건을 삭제/정정했다. DSP 수치 근거, 플랫폼 quirk, byte-exactness 불변식, 회귀 테스트의 버그 사유 주석은 전부 보존했고, byte-identical 불변식 서술은 `core/pipeline.py` 모듈 docstring을 정본으로 통합했다. 중복 사유 주석(Win32 스크롤 잔상 4중복, sweep set 용량 2중복 등)은 정본 한 곳만 남기고 포인터로 축약했다. AST 등가성 검사와 Tier 3 BRIR SHA-256 자기 비교로 실행 코드 무변경을 확인했다.
+- **CLI help 문자열의 티켓 마커 제거**: `--head_room`/`--jamesdsp`/`--hangloose` help 텍스트에 새어 있던 내부 티켓 번호 "(항목 4/6/7)"를 제거했다(사용자 노출 문자열 정리, BRIR 출력 무관).
+- **미참조 함수 제거**: `build_scripts/build_nuitka.py`의 `clean_specific_build_folders()`는 유일한 호출부가 주석 처리된 상태였고 이번 죽은 주석 정리로 완전 미참조가 되어 함수와 미사용 `shutil` import를 삭제했다(`--remove-output`이 output-dir 정리를 이미 담당).
+
 ## 2.8.0 - 2026-07-10
 ### EqualizerAPO(-XT) 설정 텍스트를 Custom EQ 입력으로 지원
 

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""BRIR processing pipeline (issue #87 Phase 2).
+"""BRIR processing pipeline.
 
 Two pieces:
 
 * :class:`ProcessingConfig` — a dataclass holding every parameter that
   :func:`impulcifer.main` accepts. Each field carries CLI metadata
-  (``cli_flag``, ``cli_help``, ``cli_arg_type`` …) so Phase 3 can auto-generate
-  the argparse definition from this single source of truth.
+  (``cli_flag``, ``cli_help``, ``cli_arg_type`` …) so the argparse definition
+  is auto-generated from this single source of truth.
 
 * :class:`BRIRPipeline` — wraps the BRIR-generation stages
   (estimate → room correction → HP compensation → EQ → align → normalize →
@@ -14,8 +14,7 @@ Two pieces:
   :func:`impulcifer.main` constructs ``ProcessingConfig`` from kwargs and calls
   :meth:`BRIRPipeline.run`.
 
-The pipeline preserves the byte-exact BRIR output of the previous monolithic
-``main()`` — see ``tests/test_brir_integrity.py`` for the regression guard.
+BRIR output byte-exactness is pinned by ``tests/test_brir_integrity.py``.
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ class ProcessingConfig:
     """Structured representation of all BRIR generation parameters.
 
     Field metadata (``cli_flag``, ``cli_help``, ``cli_arg_type`` …) is consumed
-    by Phase 3's GUI/argparse generators. ``cli_skip=True`` means the field
+    by the GUI/argparse generators. ``cli_skip=True`` means the field
     should not appear on the CLI (handled manually in ``create_cli``).
     """
 
@@ -268,7 +267,7 @@ class ProcessingConfig:
         default=1.0,
         metadata={
             "cli_flag": "--c",
-            "cli_help": "Head room in milliseconds for cropping impulse response heads. Default is 1.0 (ms). (항목 4)",
+            "cli_help": "Head room in milliseconds for cropping impulse response heads. Default is 1.0 (ms).",
             "cli_arg_type": "float",
             "cli_dest": "head_ms",
         },
@@ -277,7 +276,7 @@ class ProcessingConfig:
         default=False,
         metadata={
             "cli_flag": "--jamesdsp",
-            "cli_help": "Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels. (항목 6)",
+            "cli_help": "Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels.",
             "cli_arg_action": "store_true",
         },
     )
@@ -285,7 +284,7 @@ class ProcessingConfig:
         default=False,
         metadata={
             "cli_flag": "--hangloose",
-            "cli_help": "Generate separate stereo IR for each channel for Hangloose Convolver. (항목 7)",
+            "cli_help": "Generate separate stereo IR for each channel for Hangloose Convolver.",
             "cli_arg_action": "store_true",
         },
     )
@@ -382,24 +381,20 @@ class BRIRPipeline:
     """Orchestrates the BRIR generation stages.
 
     Constructs a logger, computes total step count from the config, and
-    delegates per-stage work to small private methods. The byte-exact output
-    of the previous monolithic ``main()`` is preserved — see
-    ``tests/test_brir_integrity.py``.
+    delegates per-stage work to small private methods. BRIR output
+    byte-exactness is pinned by ``tests/test_brir_integrity.py`` (see the
+    module docstring).
     """
 
     def __init__(self, config: ProcessingConfig):
         self.config = config
 
     def run(self) -> None:
-        """Execute the full BRIR generation pipeline.
-
-        BRIRPipeline now owns the stage sequence (estimator -> room/headphone/
+        """Run the full stage sequence (estimator -> room/headphone/
         EQ -> target -> HRIR open -> crop/align -> virtual bass ->
         mic-deviation -> equalize -> decay -> balance -> normalize -> plots ->
-        resample -> write) instead of delegating to a free function. The body
-        is a faithful relocation of the former impulcifer._run_pipeline_legacy
-        and produces byte-identical BRIR output (guarded by
-        tests/test_brir_integrity.py). DSP helpers still live in impulcifer and
+        resample -> write). Output byte-exactness is guarded by
+        tests/test_brir_integrity.py. DSP helpers still live in impulcifer and
         are imported lazily here to keep the import direction one-way."""
         import os
         import io
@@ -523,7 +518,6 @@ class BRIRPipeline:
         if dir_path is None or not os.path.isdir(dir_path):
             raise NotADirectoryError(f'Given dir path "{dir_path}"" is not a directory.')
 
-        # Dir path as absolute
         dir_path = os.path.abspath(dir_path)
         _check_cancelled()
 
@@ -587,8 +581,6 @@ class BRIRPipeline:
         logger.step("cli_cropping_responses")
         hrir.crop_heads(head_ms=head_ms)
 
-        # PR3에서 추가된 align_ipsilateral_all 호출 (항목 2)
-        # 페어 목록은 core.constants.IPSILATERAL_PAIRS로 통합되었다(단일 정의).
         hrir.align_ipsilateral_all(
             speaker_pairs=list(IPSILATERAL_PAIRS),
             segment_ms=30,
@@ -639,17 +631,14 @@ class BRIRPipeline:
         if do_headphone_compensation or do_room_correction or do_equalization:
             logger.step("cli_equalizing")
 
-            # Log parallelization info
             parallel_info = get_parallelization_info()
             logger.info("cli_info_parallel_executor", executor=parallel_info['executor_type'], version=parallel_info['python_version'], status='disabled' if parallel_info['gil_disabled'] else 'enabled')
 
-            # Optimization A1: Pre-generate common frequency array to reduce allocations
+            # Pre-generate common frequency array to reduce allocations
             common_freq = FrequencyResponse.generate_frequencies(
                 f_step=1.01, f_min=10, f_max=estimator.fs / 2
             )
 
-            # Phase 2 Optimization: Parallel processing of speaker-side pairs
-            # Prepare arguments for parallel processing.
             # Worker는 ir 객체를 사용하지 않으므로 task tuple에서 제외해 IPC pickle
             # 비용과 ImpulseResponse 객체 직렬화 부담을 제거한다.
             eq_tasks = []
@@ -657,7 +646,6 @@ class BRIRPipeline:
                 for side in pair.keys():
                     eq_tasks.append((speaker, side))
 
-            # Execute equalization in parallel
             logger.info("cli_info_parallel_eq", count=len(eq_tasks))
             eq_results = parallel_map(
                 process_equalization_worker,
@@ -675,7 +663,6 @@ class BRIRPipeline:
                 ),
             )
 
-            # Apply FIR filters to impulse responses
             for speaker, side, fir in eq_results:
                 hrir.irs[speaker][side].equalize(fir)
             _check_cancelled()
@@ -684,7 +671,6 @@ class BRIRPipeline:
         if decay:
             logger.step("cli_adjusting_decay")
 
-            # Phase 2 Optimization: Parallel decay adjustment
             decay_tasks = []
             for speaker, pair in hrir.irs.items():
                 if speaker in decay:
@@ -695,7 +681,6 @@ class BRIRPipeline:
                 logger.info("cli_info_parallel_decay", count=len(decay_tasks))
                 decay_results = parallel_map(process_decay_worker, decay_tasks)
 
-                # Apply results back to impulse responses
                 for speaker, side, adjusted_data in decay_results:
                     hrir.irs[speaker][side].data = adjusted_data
             _check_cancelled()
@@ -713,7 +698,7 @@ class BRIRPipeline:
         )
         _check_cancelled()
 
-        # Write info and stats in readme (gain 값 전달 추가)
+        # Write info and stats in readme
         readme_content = write_readme(
             os.path.join(dir_path, "README.md"), hrir, fs, estimator, applied_gain
         )
@@ -743,7 +728,6 @@ class BRIRPipeline:
         hrir.plot_result(os.path.join(dir_path, "plots"))
         _check_cancelled()
 
-        # PR4: 양이 응답 임펄스 오버레이 플롯 추가
         if plot:
             logger.step("cli_plotting_additional")
             hrir.plot_interaural_impulse_overlay(
@@ -753,7 +737,6 @@ class BRIRPipeline:
             _save_bokeh_analysis_plots(hrir, dir_path, logger)
             _check_cancelled()
 
-        # 인터랙티브 플롯 생성 (추가)
         if interactive_plots:
             logger.step("cli_generating_interactive")
             interactive_plot_dir = os.path.join(dir_path, "interactive_plots")
@@ -776,7 +759,7 @@ class BRIRPipeline:
                         # Bokeh 3.x 에서는 Panel이 TabPanel로 이름 변경됨
                         panel = TabPanel(
                             child=plot_obj, title=title
-                        )  # 수정: Panel -> TabPanel
+                        )
                         panels.append(panel)
                     else:
                         logger.debug("cli_warning_plot_skipped", title=title)
@@ -790,8 +773,8 @@ class BRIRPipeline:
                 )
                 bokeh_output_file(
                     output_html_path, title="Interactive Plot Summary"
-                )  # bokeh_output_file 사용
-                bokeh_save(tabs)  # bokeh_save 사용
+                )
+                bokeh_save(tabs)
                 logger.success("cli_success_interactive_saved", path=output_html_path)
             else:
                 logger.warning("cli_warning_no_interactive")
@@ -816,7 +799,7 @@ class BRIRPipeline:
         _check_cancelled()
         hrir.write_wav(os.path.join(dir_path, "hesuvi.wav"), track_order=HESUVI_TRACK_ORDER)
 
-        # TrueHD 레이아웃 출력 (새로 추가)
+        # TrueHD 레이아웃 출력
         if output_truehd_layouts:
             logger.step("cli_generating_truehd")
 
@@ -853,15 +836,12 @@ class BRIRPipeline:
                 logger.warning("cli_warning_truehd_13ch_fail", msg=msg_13ch)
             _check_cancelled()
 
-        # PR3 jamesdsp 로직 추가 (항목 6)
         if jamesdsp:
             logger.step("cli_generating_jamesdsp")
 
-            # 전체 HRIR 복사 후 FL/FR 외 모든 채널 제거
             dsp_hrir = hrir.subset(["FL", "FR"], copy_irs=True)
 
             # normalize 내부의 print문 출력을 숨기기 위해 stdout 리디렉션
-            # target_level 변수가 main 함수 스코프에 있어야 함
             with contextlib.redirect_stdout(io.StringIO()):
                 dsp_hrir.normalize(
                     peak_target=None if target_level is not None else -0.1,
@@ -876,15 +856,11 @@ class BRIRPipeline:
             logger.success("cli_success_jamesdsp", path=out_path)
             _check_cancelled()
 
-        # PR3 hangloose 로직 추가 (항목 7)
         if hangloose:
             logger.step("cli_generating_hangloose")
             output_dir = os.path.join(dir_path, "Hangloose")
             os.makedirs(output_dir, exist_ok=True)
 
-            # Hrir.wav 기준 최대 채널 순서 (constants.py의 SPEAKER_NAMES 순서와 일치시키는 것이 좋을 수 있음)
-            # PR3의 full_order는 LFE를 포함하나, 현재 SPEAKER_NAMES에는 LFE가 없음.
-            # 여기서는 hrir 객체에 있는 스피커만 사용하도록 단순화.
             processed_speakers = [sp for sp in SPEAKER_NAMES if sp in hrir.irs]
 
             for sp in processed_speakers:
@@ -895,10 +871,6 @@ class BRIRPipeline:
 
             logger.success("cli_success_hangloose", path=output_dir)
             _check_cancelled()
-
-            # PR3의 LFE 채널 생성 로직은 FL, FR을 기반으로 하므로, 필요시 여기에 추가 구현.
-            # 예시: if 'FL' in processed_speakers and 'FR' in processed_speakers:
-            # LFE 생성 로직 ...
 
         # 메모리 회수: 중간 변수 → 루트 객체 순서로 삭제 후 GC 수행.
         # eq_tasks/decay_tasks 등 중간 변수가 hrir/estimator 내부 데이터에 대한

@@ -21,7 +21,6 @@ import time
 
 from core.parallel_utils import is_gil_disabled, _run_parallel_map
 
-# 타입 변수 정의
 T = TypeVar('T')
 R = TypeVar('R')
 
@@ -189,7 +188,6 @@ def parallel_process_dict(
         key, value = item
         return key, func(key, value)
 
-    # 병렬 처리
     results = parallel_map(
         wrapper,
         zip(keys, values),
@@ -199,7 +197,6 @@ def parallel_process_dict(
         show_progress=show_progress
     )
 
-    # 딕셔너리로 변환
     return dict(results)
 
 
@@ -246,7 +243,6 @@ def enable_parallel_processing(func: Callable) -> Callable:
     return wrapper
 
 
-# 성능 벤치마크 함수
 def benchmark_parallel_performance(
     func: Callable[[int], Any],
     n_items: int = 100,
@@ -273,14 +269,12 @@ def benchmark_parallel_performance(
 
     items = list(range(n_items))
 
-    # 순차 처리
     start_time = time.time()
     [func(item) for item in items]
     sequential_time = time.time() - start_time
 
     results['sequential_time'] = sequential_time
 
-    # 병렬 처리
     for max_workers in max_workers_list:
         start_time = time.time()
         parallel_map(func, items, max_workers=max_workers)
@@ -298,7 +292,6 @@ def benchmark_parallel_performance(
 
 
 if __name__ == '__main__':
-    # 테스트 및 정보 출력
     print("=" * 60)
     print("Python 3.14 Free-Threaded 병렬 처리 유틸리티")
     print("=" * 60)
@@ -310,7 +303,6 @@ if __name__ == '__main__':
 
     print("\n[병렬 처리 테스트]")
 
-    # 간단한 테스트
     def test_func(x):
         return x * x
 
@@ -319,7 +311,6 @@ if __name__ == '__main__':
     print(f"  Input: {test_data}")
     print(f"  Output: {results}")
 
-    # 딕셔너리 병렬 처리 테스트
     print("\n[딕셔너리 병렬 처리 테스트]")
 
     def process_speaker(key, value):

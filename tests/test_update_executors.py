@@ -7,9 +7,8 @@ from typing import Optional
 
 import pytest
 
-# Phase 6 follow-up: PipExecutor lives in updater.executors after the
-# updater_core split. Patch the subprocess module where execute() actually
-# resolves it (i.e. inside updater.executors), not the re-export shim.
+# Patch the subprocess module where execute() actually resolves it
+# (i.e. inside updater.executors), not the re-export shim.
 from updater import executors as executors_module
 from updater.executors import LegacyExecutor, PipExecutor, UpdateExecutionError, VelopackExecutor
 

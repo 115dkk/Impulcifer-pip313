@@ -100,12 +100,10 @@ def get_img_path(filename):
     """img 폴더 내 파일의 경로를 반환"""
     return get_resource_path(os.path.join("img", filename))
 
-# 기본 경로들을 상수로 정의
 DATA_DIR = get_resource_path("data")
 FONT_DIR = get_resource_path("font")
 IMG_DIR = get_resource_path("img")
 
-# 자주 사용되는 파일들
 DEFAULT_SWEEP_FILE = get_data_path("sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
 DEFAULT_SWEEP_PICKLE = get_data_path("sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl")
 DEFAULT_FONT_FILE = find_pretendard_font_path() or get_font_path("PretendardVariable.ttf")

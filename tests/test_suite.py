@@ -11,7 +11,6 @@ import numpy as np
 import sys
 from pathlib import Path
 
-# 테스트 대상 모듈 임포트
 try:
     from core.microphone_deviation_correction import MicrophoneDeviationCorrector
     from core.impulse_response import ImpulseResponse
@@ -283,27 +282,22 @@ class TestIntegration:
 
     def test_end_to_end_microphone_correction(self):
         """마이크 보정 전체 플로우 테스트"""
-        # 이 테스트는 시간이 오래 걸리므로 @pytest.mark.slow로 표시
         corrector = MicrophoneDeviationCorrector(
             sample_rate=48000,
             correction_strength=0.5
         )
 
-        # 실제와 유사한 IR 생성
         length = 48000  # 1초
         left_ir = np.random.randn(length) * 0.01
         right_ir = np.random.randn(length) * 0.01
 
-        # 주요 임펄스 추가
         left_ir[10000] = 1.0
         right_ir[10000] = 0.9
 
-        # 보정 실행
         corrected_left, corrected_right, analysis = corrector.correct_microphone_deviation(
             left_ir, right_ir
         )
 
-        # 기본 검증
         assert corrected_left.shape == left_ir.shape
         assert corrected_right.shape == right_ir.shape
         assert analysis['correction_applied'] in [True, False]
@@ -330,7 +324,6 @@ def run_tests(verbose=True, markers=None):
 
 
 if __name__ == '__main__':
-    # 직접 실행 시
     print("=" * 70)
     print("Impulcifer 유닛 테스트 스위트")
     print("=" * 70)

@@ -3,7 +3,7 @@
 
 Hosts every matplotlib visualization that used to live directly on
 ``ImpulseResponse``. The mixin pattern keeps the public API identical while
-moving ~700 lines out of ``core/impulse_response.py``.
+keeping this visualization code separate from ``core/impulse_response.py``.
 """
 
 import os

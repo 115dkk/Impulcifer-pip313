@@ -8,7 +8,6 @@ print("build_nuitka.py: Module level - script parsing started.", flush=True)
 import os  # noqa: E402
 import sys  # noqa: E402
 import subprocess  # noqa: E402
-import shutil  # noqa: E402
 import platform  # noqa: E402
 from pathlib import Path  # noqa: E402
 
@@ -76,25 +75,6 @@ def check_nuitka():
         return False
 
 
-def clean_specific_build_folders():
-    """Nuitka 관련 이전 빌드 폴더 정리 (dist 제외)"""
-    # Nuitka가 생성하는 기본 패턴의 폴더들 및 파일
-    # --output-dir을 사용하면 대부분 해당 디렉토리 내에서 관리됨
-    # --remove-output 옵션을 사용하면 Nuitka가 빌드 시작 시 output-dir을 정리해줌
-    folders_to_clean = ['build', 'impulcifer_gui.build', 'impulcifer_gui.dist', 'ImpulciferGUI.onefile-build']
-    # .spec 파일 등도 생성될 수 있으나, 여기서는 주요 폴더만 대상으로 함
-    # 실행 파일 자체 (ImpulciferGUI.exe)는 --output-dir 내에 생성되므로 여기서 직접 삭제 안함
-
-    for folder in folders_to_clean:
-        if os.path.exists(folder):
-            print(f"이전 Nuitka 빌드 관련 폴더 삭제 중: {folder}", flush=True)
-            shutil.rmtree(folder)
-    # 추가적으로, 이전 빌드의 실행 파일이 루트에 남아있을 수 있다면 정리
-    if os.path.exists("ImpulciferGUI.exe") and not os.path.isdir("ImpulciferGUI.exe"):
-        print("루트의 이전 빌드 실행 파일 삭제 중: ImpulciferGUI.exe", flush=True)
-        os.remove("ImpulciferGUI.exe")
-
-
 def _generate_build_info(version: str):
     """Nuitka 빌드용 마커 파일 생성 — 런타임에서 버전/빌드 타입을 확실히 식별."""
     build_info_path = Path("infra/_build_info.py")
@@ -111,9 +91,8 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
     print(f"build_nuitka.py: build_impulcifer() called with version={project_version}", flush=True)
     """Nuitka로 Impulcifer GUI 빌드 (크로스 플랫폼 지원).
 
-    Flag definitions live in :mod:`build_scripts.nuitka_flags` (Phase 4 of
-    issue #87). This function only handles platform routing and the
-    ``subprocess.run`` invocation.
+    Flag definitions live in :mod:`build_scripts.nuitka_flags`. This function
+    only handles platform routing and the ``subprocess.run`` invocation.
     """
     from build_scripts.nuitka_flags import (
         PLATFORM_OUTPUT_DIRS,
@@ -187,10 +166,6 @@ def main():
 
     if not check_nuitka():
         sys.exit(1)
-
-    # clean_specific_build_folders()
-    # --remove-output 옵션이 output-dir을 정리하므로, 추가 정리 불필요할 수 있음
-    # 필요하다면 Nuitka가 생성하는 루트의 임시 파일/폴더만 정리
 
     current_version = get_project_version()
     print(f"빌드에 사용될 버전: {current_version}", flush=True)

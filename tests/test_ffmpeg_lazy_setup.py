@@ -9,12 +9,10 @@ import is side-effect-free, the setup is performed only when something
 actually needs FFmpeg, and the regular WAV reading path no longer triggers
 TrueHD detection.
 
-Issue #87 Phase 5 first split the FFmpeg helpers into ``core.ffmpeg_utils``.
-Audit #115 finding 9 split that further: discovery/install + the lazy
-module-level state now live in ``core.ffmpeg_discovery``, and TrueHD/MLP
-decode + ``read_audio`` in ``core.audio_truehd``. ``core.ffmpeg_utils`` and
-``core.utils`` re-export them for backward compatibility, so the spies below
-are anchored on the modules that actually own the behavior.
+The lazy FFmpeg state and discovery/install live in ``core.ffmpeg_discovery``;
+TrueHD/MLP decode + ``read_audio`` in ``core.audio_truehd``.
+``core.ffmpeg_utils`` and ``core.utils`` only re-export them, so the spies
+below are anchored on the modules that actually own the behavior.
 """
 
 from __future__ import annotations

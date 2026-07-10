@@ -112,11 +112,9 @@ class StudioShell:
             anchor="w",
         ).grid(row=1, column=1, sticky="nw")
 
-        # Hairline under brand
         rule = ctk.CTkFrame(sidebar, fg_color=COLORS["line-soft"], height=1, corner_radius=0)
         rule.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 8))
 
-        # Nav buttons
         for idx, (key, glyph, label_key) in enumerate(self.NAV_ITEMS):
             btn = self._make_nav_button(sidebar, key, glyph, self.loc.get(label_key))
             btn.grid(row=2 + idx, column=0, sticky="ew", padx=8, pady=2)
@@ -175,7 +173,6 @@ class StudioShell:
         """Activate the named tab. Builds the tab on first use."""
         if key not in self.content_frames:
             return
-        # Update nav button visual states
         for k, btn in self.nav_buttons.items():
             if k == key:
                 # Active item: keep the accent-soft pill as the selection cue but
@@ -187,13 +184,11 @@ class StudioShell:
             else:
                 btn.configure(fg_color="transparent", text_color=COLORS["fg-1"])
 
-        # Hide all, show selected
         for k, frame in self.content_frames.items():
             frame.grid_remove()
         target = self.content_frames[key]
         target.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
 
-        # Lazy-build the tab on first activation
         if key not in self.tabs:
             self._build_tab(key, target)
 

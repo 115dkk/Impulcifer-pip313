@@ -342,7 +342,6 @@ def play_and_record(
         print(f"Detected TrueHD/MLP file: {play}")
         print(f"Channel layout ({len(channel_info)} channels): {', '.join(channel_info)}")
 
-        # 채널 수가 많은 경우 경고
         if len(channel_info) > 8:
             print("WARNING: This file contains more than 8 channels.")
             print("Make sure your audio interface supports this many output channels.")

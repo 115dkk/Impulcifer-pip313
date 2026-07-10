@@ -4,16 +4,12 @@
 # TrueHD 지원을 위해 확장된 스피커 이름 목록
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'WL', 'WR', 'TFL', 'TFR', 'TSL', 'TSR', 'TBL', 'TBR']
 
-# 파이썬 3.13.2 스타일로 f-string 사용 - FC와 TSL/TSR 같은 3글자 채널 지원
 SPEAKER_PATTERN = f'({"|".join(SPEAKER_NAMES + ["X"])})'
-# format() 대신 f-string 사용 - 3글자 채널 지원
 SPEAKER_LIST_PATTERN = r'([A-Z]{2,3}(,[A-Z]{2,3})*)'
 
-# TrueHD 채널 레이아웃 정의
 TRUEHD_11CH_ORDER = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'TFL', 'TFR', 'TBL', 'TBR']  # 7.0.4
 TRUEHD_13CH_ORDER = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'TFL', 'TFR', 'TSL', 'TSR', 'TBL', 'TBR']  # 7.0.6
 
-# 채널 레이아웃 매핑
 CHANNEL_LAYOUT_MAP = {
     11: TRUEHD_11CH_ORDER,
     13: TRUEHD_13CH_ORDER
@@ -45,8 +41,7 @@ SPEAKER_DELAYS = {
 # Ipsilateral (left/right) speaker pairs used for onset alignment in
 # ``HRIR.align_ipsilateral_all``. ``FC`` is paired with itself so its own
 # left/right ears are aligned. Single source of truth shared by
-# ``impulcifer.main`` and the ``align_ipsilateral_all`` default — these two
-# lists were previously hand-duplicated and had already drifted in order.
+# ``impulcifer.main`` and the ``align_ipsilateral_all`` default.
 # (This is the alignment *pair* list; the *group* list in
 # ``align_onset_groups_peak_leftref`` uses a 1-tuple ``("FC",)`` and is a
 # deliberately different structure — do not merge it here.)
@@ -63,20 +58,11 @@ IPSILATERAL_PAIRS = (
 
 # Each channel, left and right
 IR_ORDER = []
-# SPL change relative to middle of the head - PR3에서는 이부분이 비활성화됨
+# SPL change relative to middle of the head (currently unused)
 IR_ROOM_SPL = {
     sp: {'left': 0.0, 'right': 0.0}
     for sp in SPEAKER_NAMES
 }
-# for _speaker in SPEAKER_NAMES:
-#     if _speaker not in IR_ROOM_SPL:
-#         IR_ROOM_SPL[_speaker] = dict()
-#     for _side in ['left', 'right']:
-#         IR_ORDER.append(f'{_speaker}-{_side}')
-#         IR_ROOM_SPL[_speaker][_side] = versus_distance(
-#             angle=abs(SPEAKER_ANGLES[_speaker]),
-#             ear='primary' if _side[0] == _speaker.lower()[1] else 'secondary'
-#         )[2]
 
 COLORS = {
     'lightblue': '#7db4db',
@@ -116,16 +102,11 @@ TEST_SIGNALS = {
 }
 
 
-# 패키지 내 데이터 폴더 경로
 def get_data_path():
     """패키지 내 데이터 폴더 경로를 반환합니다.
 
     런타임 데이터 위치는 ``infra.resource_helper``가 단일 진실 공급원이다.
-    이전 구현은 ``importlib.resources.files('impulcifer_py313')``로 wheel
-    shared-data 사본을 찾으려 했지만, ``impulcifer_py313``은 Python 패키지가
-    아니어서(어디에도 ``__init__.py``가 없음) 항상 ModuleNotFoundError로
-    떨어졌고, 결과적으로 fallback인 ``core/data``(존재하지 않음)를 반환하는
-    버그가 있었다. dev / pip-install / Nuitka standalone 모두를 처리하는
+    dev / pip-install / Nuitka standalone 모두를 처리하는
     ``infra.resource_helper.get_resource_path('data')``로 위임한다.
     """
     from infra.resource_helper import get_resource_path

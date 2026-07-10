@@ -45,7 +45,6 @@ def benchmark_normalize():
         from core.hrir import HRIR
         import numpy as np
 
-        # 테스트 데이터 생성
         print("테스트 데이터 생성 중...")
         estimator = ImpulseResponseEstimator(fs=48000)
         hrir = HRIR(estimator)
@@ -96,11 +95,8 @@ def benchmark_equalization():
         # 이퀄라이제이션 시뮬레이션 함수
         def simulate_eq_channel(speaker, data):
             """이퀄라이제이션 시뮬레이션 (FFT/IFFT)"""
-            # FFT
             spectrum = np.fft.rfft(data)
-            # 주파수 응답 처리 시뮬레이션
             processed = spectrum * (1 + 0.1 * np.random.randn(len(spectrum)))
-            # IFFT
             result = np.fft.irfft(processed, n=len(data))
             return result
 
@@ -115,7 +111,6 @@ def benchmark_equalization():
         print(f"  채널 수: {n_channels}")
         print(f"  데이터 길이: {data_length} 샘플")
 
-        # 순차 처리
         print("\n순차 처리 벤치마크...")
         start_time = time.time()
         {
@@ -125,7 +120,6 @@ def benchmark_equalization():
         sequential_time = time.time() - start_time
         print(f"  시간: {sequential_time:.4f}s")
 
-        # 병렬 처리
         print("\n병렬 처리 벤치마크...")
         start_time = time.time()
         parallel_process_dict(
@@ -136,7 +130,6 @@ def benchmark_equalization():
         parallel_time = time.time() - start_time
         print(f"  시간: {parallel_time:.4f}s")
 
-        # 결과
         speedup = sequential_time / parallel_time if parallel_time > 0 else 0
         print(f"\n속도 향상: {speedup:.2f}x")
 
@@ -183,7 +176,6 @@ def benchmark_resample():
         print("  원본 샘플링 레이트: 48000Hz")
         print("  타겟 샘플링 레이트: 44100Hz")
 
-        # 순차 처리
         print("\n순차 처리 벤치마크...")
         start_time = time.time()
         {
@@ -193,7 +185,6 @@ def benchmark_resample():
         sequential_time = time.time() - start_time
         print(f"  시간: {sequential_time:.4f}s")
 
-        # 병렬 처리
         print("\n병렬 처리 벤치마크...")
         start_time = time.time()
         parallel_process_dict(
@@ -204,7 +195,6 @@ def benchmark_resample():
         parallel_time = time.time() - start_time
         print(f"  시간: {parallel_time:.4f}s")
 
-        # 결과
         speedup = sequential_time / parallel_time if parallel_time > 0 else 0
         print(f"\n속도 향상: {speedup:.2f}x")
 

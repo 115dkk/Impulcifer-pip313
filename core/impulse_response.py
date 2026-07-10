@@ -57,22 +57,16 @@ class ImpulseResponse(ImpulseResponsePlotter):
         if max_abs_val < EPSILON:
             return start
 
-        # Normalize to 1.0
         data /= max_abs_val
 
-        # Find positive peaks
         peaks_pos, _ = signal.find_peaks(data, height=peak_height)
-        # Find negative peaks that are at least
         peaks_neg, _ = signal.find_peaks(data * -1.0, height=peak_height)
-        # Combine positive and negative peaks
         peaks = np.concatenate([peaks_pos, peaks_neg])
 
         if len(peaks) == 0:
             return np.argmax(np.abs(data)) + start
 
-        # Add start delta to peak indices
         peaks += start
-        # Return the first one
         return np.min(peaks)
 
     def decay_params(self):
@@ -327,7 +321,7 @@ class ImpulseResponse(ImpulseResponsePlotter):
         knee_point_ind -= peak_ind + 0
         data = self.data[peak_ind - 0 * self.fs // 1000 :].copy()
         data /= np.max(np.abs(data))
-        # analytical = np.abs(signal.hilbert(data))  # Hilbert doesn't work will with broadband signa
+        # Use the absolute-value envelope; Hilbert is unreliable for broadband signals.
         analytical = np.abs(data)
 
         schroeder = np.cumsum(
@@ -426,10 +420,8 @@ class ImpulseResponse(ImpulseResponsePlotter):
         ``samples > 0`` delays the response (prepends ``samples`` zeros and
         truncates the tail); ``samples < 0`` advances it (drops the leading
         ``-samples`` samples and zero-pads the tail); ``samples == 0`` is a
-        no-op. This is the single owner of the sample-shift idiom that was
-        previously copy-pasted across :class:`HRIR`'s ipsilateral/onset
-        alignment. The numpy ops are kept byte-identical to those call sites
-        so BRIR output is unchanged.
+        no-op. The numpy ops are kept byte-identical across call sites so
+        BRIR output is unchanged.
         """
         n = len(self.data)
         if samples > 0:
