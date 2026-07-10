@@ -132,3 +132,14 @@ pytest tests/test_build_config.py tests/test_nuitka_flags.py -q
 ```bash
 pytest tests/test_parallel_processing.py tests/test_hrir_outputs.py -q
 ```
+
+free-threaded 런타임에서 스레드 병렬 경로가 출력 파일을 오염시키지 않는지는
+반복 생성 해시 비교로 검사합니다. 데모 BRIR을 같은 환경에서 여러 번 생성해
+모든 출력 `.wav`의 SHA-256이 실행 간 동일해야 합니다. CI의
+`brir-thread-determinism` 잡이 3.14t에서 매 실행마다 이를 반복하므로,
+간헐적인 데이터 레이스(하이젠버그)도 실행이 누적되면 잡힙니다.
+
+```bash
+IMPULCIFER_RUN_BRIR_THREAD_DETERMINISM=1 \
+  pytest tests/test_brir_thread_determinism.py -v
+```
