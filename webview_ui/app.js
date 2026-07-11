@@ -23,6 +23,7 @@ const state = {
   lastOutputDir: null,
   systemThemeQuery: null,
   stageIndex: -1,
+  stageAbort: null,
   modalDismissed: false,
 };
 
@@ -188,19 +189,38 @@ function updateJobModal(job, busy) {
 
 function resetSteps(visible) {
   state.stageIndex = -1;
+  state.stageAbort = null;
   $("brir-steps").hidden = !visible;
   renderSteps();
 }
 
 function renderSteps() {
   const list = $("brir-steps");
+  list.classList.toggle("aborted", Boolean(state.stageAbort));
   list.replaceChildren();
   BRIR_STAGES.forEach((key, index) => {
     const item = document.createElement("li");
-    item.className = index < state.stageIndex ? "done" : index === state.stageIndex ? "current" : "";
+    let className = "";
+    let glyphText = "";
+    if (index < state.stageIndex) {
+      className = "done";
+      glyphText = "✓";
+    } else if (index === state.stageIndex) {
+      if (state.stageAbort === "failed") {
+        className = "error";
+        glyphText = "✕";
+      } else if (state.stageAbort === "cancelled") {
+        className = "cancelled";
+        glyphText = "–";
+      } else {
+        className = "current";
+        glyphText = "▸";
+      }
+    }
+    item.className = className;
     const glyph = document.createElement("span");
     glyph.className = "step-glyph";
-    glyph.textContent = index < state.stageIndex ? "✓" : index === state.stageIndex ? "▸" : "";
+    glyph.textContent = glyphText;
     const label = document.createElement("span");
     label.textContent = t(key);
     item.append(glyph, label);
@@ -223,6 +243,17 @@ function updateSteps(message) {
 
 function completeSteps() {
   state.stageIndex = BRIR_STAGES.length;
+  state.stageAbort = null;
+  renderSteps();
+}
+
+/* Failure/cancel semantics: the stage that was in flight gets ✕ (err) or
+   – (warn); finished stages keep their checkmarks; unreached stages stay
+   as dimmed circles so it reads "never got there", not "skipped okay". */
+function abortSteps(kind) {
+  if (state.stageIndex < 0) state.stageIndex = 0;
+  if (state.stageIndex >= BRIR_STAGES.length) state.stageIndex = BRIR_STAGES.length - 1;
+  state.stageAbort = kind;
   renderSteps();
 }
 
@@ -238,6 +269,9 @@ async function begin(start, payload) {
   if (!response) return;
   if (!response.ok) {
     appendLog(errorText(response));
+    // Stable hides the inline activity cards (jobs run in the modal), so a
+    // pre-start validation error would otherwise be invisible there.
+    if (state.skin === "stable") window.alert(errorText(response));
     return;
   }
   const job = response.data.job;
@@ -309,9 +343,13 @@ async function pollJob() {
   if (["succeeded", "failed", "cancelled"].includes(job.status)) {
     if (job.status === "succeeded") setProgress(1);
     if (job.error) appendLog(`${job.error.code}: ${job.error.message}`);
-    if (job.status === "succeeded" && job.kind === "brir") {
-      completeSteps();
-      if (state.lastOutputDir) $("btn-open-output").hidden = false;
+    if (job.kind === "brir") {
+      if (job.status === "succeeded") {
+        completeSteps();
+        if (state.lastOutputDir) $("btn-open-output").hidden = false;
+      } else {
+        abortSteps(job.status);
+      }
     }
     state.jobId = null;
     return;

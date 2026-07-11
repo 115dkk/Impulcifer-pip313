@@ -30,8 +30,9 @@ THEMES = ("dark", "light")
 VIEWS = ("recorder", "processing", "settings", "info")
 
 # 2 skins x 2 themes x 2 languages x 4 views + 3 busy-state shots
-# (studio checklist BRIR run, studio recording run, stable modal dialog).
-EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3
+# (studio checklist BRIR run, studio recording run, stable modal dialog)
+# + 2 failure shots (studio checklist abort, stable modal error).
+EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3 + 2
 
 VIEWPORT_WIDTH = 1280
 MIN_HEIGHT = 860
@@ -72,12 +73,21 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
   const SCENARIO = {json.dumps(scenario)};
   const VERSION = {json.dumps(version)};
   const respond = (data) => Promise.resolve({{ ok: true, data }});
-  const runningJob = (kind) => ({{
-    job_id: "gallery", kind, status: "running",
-    cancellable: kind === "brir", result: null, error: null,
+  const jobFor = (kind, status) => ({{
+    job_id: "gallery", kind, status,
+    cancellable: kind === "brir" && status === "running",
+    result: null,
+    error: status === "failed" ? {{
+      code: "INTERNAL_ERROR",
+      message: "Impulse response peak not found for FL-left — test signal does not match the recording.",
+      details: {{}},
+      retryable: false,
+    }} : null,
   }});
-  const activeKind = SCENARIO === "brir-running" ? "brir"
+  const runningJob = (kind) => jobFor(kind, "running");
+  const activeKind = SCENARIO === "brir-running" || SCENARIO === "brir-failed" ? "brir"
     : SCENARIO === "recording-running" ? "recording" : null;
+  const pollStatus = SCENARIO === "brir-failed" ? "failed" : "running";
   window.pywebview = {{ api: {{
     bootstrap: () => respond({{
       version: VERSION,
@@ -110,8 +120,20 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
       record_path: `${{recordDir}}/FL,FR.wav`,
     }}),
     poll_job: (jobId, afterSeq) => respond({{
-      job: runningJob(activeKind || "brir"),
-      events: afterSeq === 0 ? [
+      job: jobFor(activeKind || "brir", pollStatus),
+      events: afterSeq === 0 ? (SCENARIO === "brir-failed" ? [
+        {{ seq: 1, timestamp_ms: 0, type: "status", payload: {{ status: "running" }} }},
+        {{ seq: 2, timestamp_ms: 0, type: "log",
+           payload: {{ level: "INFO", message: STRINGS["cli_opening_measurements"] }} }},
+        {{ seq: 3, timestamp_ms: 0, type: "progress",
+           payload: {{ progress: 0.2, message: STRINGS["cli_cropping_responses"] }} }},
+        {{ seq: 4, timestamp_ms: 0, type: "progress",
+           payload: {{ progress: 0.34, message: STRINGS["cli_running_room_correction"] }} }},
+        {{ seq: 5, timestamp_ms: 0, type: "log",
+           payload: {{ level: "ERROR",
+             message: "Impulse response peak not found for FL-left" }} }},
+        {{ seq: 6, timestamp_ms: 0, type: "status", payload: {{ status: "failed" }} }},
+      ] : [
         {{ seq: 1, timestamp_ms: 0, type: "status", payload: {{ status: "running" }} }},
         {{ seq: 2, timestamp_ms: 0, type: "log",
            payload: {{ level: "INFO", message: STRINGS["cli_opening_measurements"] }} }},
@@ -123,7 +145,7 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
            payload: {{ level: "INFO", message: STRINGS["cli_equalizing"] + " FL,FR" }} }},
         {{ seq: 6, timestamp_ms: 0, type: "progress",
            payload: {{ progress: 0.62, message: STRINGS["cli_normalizing_gain"] }} }},
-      ] : [],
+      ]) : [],
       next_seq: 6,
     }}),
     cancel_job: () => respond({{ job: runningJob(activeKind || "brir") }}),
@@ -223,6 +245,23 @@ def render_gallery(out_dir: Path) -> list[Path]:
         page.click(".nav-item[data-view='processing']")
         page.wait_for_timeout(400)
         shots.append(_shoot(page, out_dir, "processing-stable-en-dark-busy"))
+        context.close()
+
+        # Failure semantics: the failed stage gets ✕, finished stages keep
+        # their checkmarks, unreached stages stay dimmed circles; Stable
+        # surfaces the same run in the modal with the error in the log.
+        context, page = _open_page(browser, index_uri, "en", "dark", "brir-failed", version)
+        page.click(".nav-item[data-view='processing']")
+        page.wait_for_timeout(400)
+        shots.append(_shoot(page, out_dir, "processing-studio-en-dark-failed"))
+        context.close()
+
+        context, page = _open_page(
+            browser, index_uri, "en", "dark", "brir-failed", version, "stable"
+        )
+        page.click(".nav-item[data-view='processing']")
+        page.wait_for_timeout(400)
+        shots.append(_shoot(page, out_dir, "processing-stable-en-dark-failed"))
         context.close()
 
         browser.close()

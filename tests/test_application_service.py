@@ -328,6 +328,28 @@ def test_brir_missing_eq_sidecar_fails_fast(tmp_path: Path) -> None:
     assert response["error"]["code"] == "FILE_NOT_FOUND"
 
 
+def test_brir_runtime_failure_reports_structured_error(monkeypatch, tmp_path: Path) -> None:
+    import impulcifer
+
+    def failing_main(**_kwargs):
+        raise ValueError("Impulse response peak not found for FL-left")
+
+    monkeypatch.setattr(impulcifer, "main", failing_main)
+    service = ImpulciferApplicationService()
+    started = service.start_brir({"dir_path": str(tmp_path)})
+    assert started["ok"], started
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+
+    job = data["job"]
+    assert job["status"] == "failed"
+    assert job["error"]["code"] == "INTERNAL_ERROR"
+    assert "peak not found" in job["error"]["message"]
+    statuses = [
+        event["payload"]["status"] for event in data["events"] if event["type"] == "status"
+    ]
+    assert statuses[-1] == "failed"
+
+
 class _FakeLocalization:
     def __init__(self, locales_dir: Path) -> None:
         self.current_language = "en"

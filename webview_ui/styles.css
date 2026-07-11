@@ -472,6 +472,23 @@ input[type="checkbox"] {
   color: #ffffff;
 }
 
+.steps li.error { color: var(--fg-0); font-weight: 700; }
+.steps li.error .step-glyph {
+  border-color: var(--err);
+  background: var(--err);
+  color: #ffffff;
+}
+
+.steps li.cancelled { color: var(--fg-1); font-weight: 700; }
+.steps li.cancelled .step-glyph {
+  border-color: var(--warn);
+  background: var(--warn);
+  color: #ffffff;
+}
+
+/* After an abort, unreached stages dim: they were never started. */
+.steps.aborted li:not(.done):not(.error):not(.cancelled) { opacity: 0.55; }
+
 /* -------------------------------------------------------------- modal */
 
 .modal-backdrop {
