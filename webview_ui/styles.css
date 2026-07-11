@@ -56,7 +56,10 @@
   --ok: #4ac776;
   --warn: #e6ac3d;
   --err: #fb594d;
-  --field-bg: #23272a;
+  /* Inputs read as a dark inset (like the log box): bg-2 would blend into
+     the card surface and bg-1 into disclosure bodies, so use bg-0 — it
+     contrasts against every container the fields sit on. */
+  --field-bg: #101214;
   color-scheme: dark;
 }
 
