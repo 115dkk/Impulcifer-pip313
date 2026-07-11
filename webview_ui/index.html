@@ -413,6 +413,7 @@
               <span class="card-meta mono" data-job-state data-i18n="webview_job_idle">Idle</span>
             </div>
             <div class="card-body">
+              <ol class="steps" id="brir-steps" hidden></ol>
               <div class="progress"><i data-progress></i></div>
               <pre class="log" data-log aria-live="polite"></pre>
               <div class="actions-row">
@@ -543,6 +544,24 @@
 
       </main>
     </div>
+
+    <!-- Stable skin runs jobs in a separate dialog, mirroring the CTk
+         RecordingProgressDialog / ProcessingDialog convention. -->
+    <div class="modal-backdrop" id="job-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="job-modal-title">
+        <div class="modal-head">
+          <h3 id="job-modal-title">Processing</h3>
+          <span class="card-meta mono" data-job-state data-i18n="webview_job_idle">Idle</span>
+        </div>
+        <div class="progress"><i data-progress></i></div>
+        <pre class="log" data-log></pre>
+        <div class="actions-row modal-actions">
+          <button class="btn btn-secondary" id="job-modal-cancel" data-i18n="button_cancel">Cancel</button>
+          <button class="btn btn-primary" id="job-modal-close" data-i18n="button_close" hidden>Close</button>
+        </div>
+      </div>
+    </div>
+
     <script src="app.js"></script>
   </body>
 </html>

@@ -22,9 +22,27 @@ const state = {
   resolvedRecordPath: "",
   lastOutputDir: null,
   systemThemeQuery: null,
+  stageIndex: -1,
+  modalDismissed: false,
 };
 
 const DECAY_CHANNELS = ["FL", "FC", "FR", "SL", "SR", "BL", "BR"];
+
+/* BRIR pipeline stages for the Studio activity checklist. The logger
+   emits these exact localized strings (optionally with a suffix), so
+   prefix-matching against the same locale table works in any language. */
+const BRIR_STAGES = [
+  "cli_opening_measurements",
+  "cli_cropping_responses",
+  "cli_running_room_correction",
+  "cli_running_headphone_compensation",
+  "cli_equalizing",
+  "cli_correcting_deviation",
+  "cli_adjusting_decay",
+  "cli_correcting_balance",
+  "cli_normalizing_gain",
+  "cli_writing_brirs",
+];
 
 const $ = (id) => document.getElementById(id);
 const api = () => window.pywebview.api;
@@ -48,6 +66,7 @@ function applyStrings() {
   });
   updateChannelGuidance();
   refreshResolvedPath();
+  renderSteps();
   renderJobState(state.lastJob);
   applySkin(state.skin);
 }
@@ -78,6 +97,9 @@ function applySkin(code) {
   document.documentElement.dataset.skin = state.skin;
   const desc = $("sf-skin-desc");
   if (desc) desc.textContent = t(state.skin === "stable" ? "tooltip_skin_stable" : "tooltip_skin_studio");
+  // Re-evaluate the job dialog: switching skins mid-job moves the running
+  // display between the inline activity card and the Stable modal.
+  renderJobState(state.lastJob);
 }
 
 /* ------------------------------------------------------------ primitives */
@@ -141,6 +163,67 @@ function renderJobState(job) {
   document.querySelectorAll("[data-job-state]").forEach((node) => {
     node.textContent = label;
   });
+  updateJobModal(job, busy);
+}
+
+/* Stable skin shows running jobs in a separate dialog, mirroring the CTk
+   RecordingProgressDialog / ProcessingDialog convention. */
+function updateJobModal(job, busy) {
+  const modal = $("job-modal");
+  if (state.skin !== "stable" || !job || state.modalDismissed) {
+    modal.hidden = true;
+    return;
+  }
+  $("job-modal-title").textContent = t(
+    job.kind === "recording" ? "dialog_recording_title" : "dialog_processing_title",
+  );
+  const cancel = $("job-modal-cancel");
+  cancel.hidden = !busy;
+  cancel.disabled = !job.cancellable;
+  $("job-modal-close").hidden = busy;
+  modal.hidden = false;
+}
+
+/* --------------------------------------------------- pipeline checklist */
+
+function resetSteps(visible) {
+  state.stageIndex = -1;
+  $("brir-steps").hidden = !visible;
+  renderSteps();
+}
+
+function renderSteps() {
+  const list = $("brir-steps");
+  list.replaceChildren();
+  BRIR_STAGES.forEach((key, index) => {
+    const item = document.createElement("li");
+    item.className = index < state.stageIndex ? "done" : index === state.stageIndex ? "current" : "";
+    const glyph = document.createElement("span");
+    glyph.className = "step-glyph";
+    glyph.textContent = index < state.stageIndex ? "✓" : index === state.stageIndex ? "▸" : "";
+    const label = document.createElement("span");
+    label.textContent = t(key);
+    item.append(glyph, label);
+    list.append(item);
+  });
+}
+
+function updateSteps(message) {
+  if (!message || state.jobKind !== "brir") return;
+  for (let index = BRIR_STAGES.length - 1; index >= 0; index -= 1) {
+    if (message.startsWith(t(BRIR_STAGES[index]))) {
+      if (index >= state.stageIndex) {
+        state.stageIndex = index;
+        renderSteps();
+      }
+      return;
+    }
+  }
+}
+
+function completeSteps() {
+  state.stageIndex = BRIR_STAGES.length;
+  renderSteps();
 }
 
 /* ------------------------------------------------------------------ jobs */
@@ -162,6 +245,8 @@ async function begin(start, payload) {
   state.jobKind = job.kind;
   state.nextSeq = 0;
   state.lastOutputDir = job.kind === "brir" ? val("bf-dir-path") : null;
+  state.modalDismissed = false;
+  resetSteps(job.kind === "brir");
   $("btn-open-output").hidden = true;
   setProgress(0);
   renderJobState(job);
@@ -178,6 +263,12 @@ function confirmationText(response) {
     });
   }
   return response.error.message;
+}
+
+async function cancelActiveJob() {
+  if (!state.jobId) return;
+  const response = await api().cancel_job(state.jobId);
+  if (!response.ok) appendLog(errorText(response));
 }
 
 function schedulePoll(delay = 250) {
@@ -200,21 +291,27 @@ async function pollJob() {
     const payload = event.payload || {};
     if (event.type === "progress") {
       if (typeof payload.progress === "number") setProgress(payload.progress);
-      if (payload.message) appendLog(payload.message);
-      else if (payload.phase) {
+      if (payload.message) {
+        appendLog(payload.message);
+        updateSteps(payload.message);
+      } else if (payload.phase) {
         const speakers = Array.isArray(payload.speakers) ? ` ${payload.speakers.join(",")}` : "";
         appendLog(`${payload.phase}${speakers}`);
       }
     }
-    if (event.type === "log") appendLog(`[${payload.level}] ${payload.message}`);
+    if (event.type === "log") {
+      appendLog(`[${payload.level}] ${payload.message}`);
+      updateSteps(payload.message);
+    }
     if (event.type === "status") appendLog(`· ${t(`webview_status_${payload.status}`)}`);
   }
   renderJobState(job);
   if (["succeeded", "failed", "cancelled"].includes(job.status)) {
     if (job.status === "succeeded") setProgress(1);
     if (job.error) appendLog(`${job.error.code}: ${job.error.message}`);
-    if (job.status === "succeeded" && job.kind === "brir" && state.lastOutputDir) {
-      $("btn-open-output").hidden = false;
+    if (job.status === "succeeded" && job.kind === "brir") {
+      completeSteps();
+      if (state.lastOutputDir) $("btn-open-output").hidden = false;
     }
     state.jobId = null;
     return;
@@ -597,10 +694,11 @@ function wireEvents() {
   $("btn-generate-brir").addEventListener("click", () =>
     begin((request) => api().start_brir(request), gatherBrirPayload()),
   );
-  $("btn-cancel-brir").addEventListener("click", async () => {
-    if (!state.jobId) return;
-    const response = await api().cancel_job(state.jobId);
-    if (!response.ok) appendLog(errorText(response));
+  $("btn-cancel-brir").addEventListener("click", cancelActiveJob);
+  $("job-modal-cancel").addEventListener("click", cancelActiveJob);
+  $("job-modal-close").addEventListener("click", () => {
+    state.modalDismissed = true;
+    $("job-modal").hidden = true;
   });
   $("btn-open-output").addEventListener("click", () => {
     if (state.lastOutputDir) api().open_path(state.lastOutputDir);
@@ -653,6 +751,7 @@ async function boot() {
     state.jobId = data.active_job.job_id;
     state.jobKind = data.active_job.kind;
     state.nextSeq = 0;
+    resetSteps(data.active_job.kind === "brir");
     schedulePoll(0);
   }
 

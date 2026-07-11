@@ -429,6 +429,82 @@ input[type="checkbox"] {
   overflow-wrap: anywhere;
 }
 
+/* Pipeline checklist (Studio activity card): done / current / upcoming. */
+.steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+.step-glyph {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.steps li.done { color: var(--fg-1); }
+.steps li.done .step-glyph {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: #ffffff;
+}
+
+.steps li.current { color: var(--fg-0); font-weight: 700; }
+.steps li.current .step-glyph {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* -------------------------------------------------------------- modal */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 12, 0.55);
+  z-index: 40;
+}
+
+.modal {
+  display: grid;
+  gap: 14px;
+  width: min(560px, calc(100vw - 48px));
+  padding: 20px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--bg-2);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modal-head h3 { margin: 0; font-size: 16px; }
+.modal .log { min-height: 100px; max-height: 180px; }
+.modal-actions { justify-content: flex-end; }
+
 /* ----------------------------------------------------------------- info */
 
 .about-hero { align-items: start; }
@@ -518,6 +594,62 @@ input[type="checkbox"] {
 
 [data-skin="stable"] .card-num { display: none; }
 [data-skin="stable"] .card-title { font-size: 16px; }
+
+/* Stable is not a disclosure shell: gated groups read as plain checkboxes
+   that reveal their sub-options (CTk toggle_* convention). Advanced
+   Options is the one sanctioned collapsible and keeps the Studio row. */
+[data-skin="stable"] .disclosure:not(#dis-advanced) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) > .disclosure-head {
+  gap: 8px;
+  padding: 2px 0;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) .disclosure-desc { display: none; }
+[data-skin="stable"] .disclosure:not(#dis-advanced) .caret { display: none; }
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) .switch {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--fg-3);
+  border-radius: 3px;
+  background: transparent;
+  transition: none;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) .switch::after {
+  top: 0;
+  left: 3px;
+  width: 4px;
+  height: 8px;
+  border: solid transparent;
+  border-width: 0 2px 2px 0;
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg);
+  transition: none;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced).open .switch {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced).open .switch::after {
+  border-color: #ffffff;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) .disclosure-body {
+  padding: 4px 0 10px 26px;
+}
+
+/* Stable runs jobs in the modal dialog (CTk ProcessingDialog parity), so
+   the inline activity cards and the Studio checklist stay hidden. */
+[data-skin="stable"] [data-activity-card] { display: none; }
 
 /* -------------------------------------------------------- small screens */
 

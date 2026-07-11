@@ -29,8 +29,9 @@ LANGUAGES = ("en", "ko")
 THEMES = ("dark", "light")
 VIEWS = ("recorder", "processing", "settings", "info")
 
-# 2 skins x 2 themes x 2 languages x 4 views + 2 busy-state shots.
-EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 2
+# 2 skins x 2 themes x 2 languages x 4 views + 3 busy-state shots
+# (studio checklist BRIR run, studio recording run, stable modal dialog).
+EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3
 
 VIEWPORT_WIDTH = 1280
 MIN_HEIGHT = 860
@@ -113,15 +114,17 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
       events: afterSeq === 0 ? [
         {{ seq: 1, timestamp_ms: 0, type: "status", payload: {{ status: "running" }} }},
         {{ seq: 2, timestamp_ms: 0, type: "log",
-           payload: {{ level: "INFO", message: "Opening measurement files..." }} }},
+           payload: {{ level: "INFO", message: STRINGS["cli_opening_measurements"] }} }},
         {{ seq: 3, timestamp_ms: 0, type: "progress",
-           payload: {{ progress: 0.34, message: "Room correction" }} }},
-        {{ seq: 4, timestamp_ms: 0, type: "log",
-           payload: {{ level: "INFO", message: "Equalizing FL,FR..." }} }},
-        {{ seq: 5, timestamp_ms: 0, type: "progress",
-           payload: {{ progress: 0.62, message: "Headphone compensation" }} }},
+           payload: {{ progress: 0.2, message: STRINGS["cli_cropping_responses"] }} }},
+        {{ seq: 4, timestamp_ms: 0, type: "progress",
+           payload: {{ progress: 0.34, message: STRINGS["cli_running_room_correction"] }} }},
+        {{ seq: 5, timestamp_ms: 0, type: "log",
+           payload: {{ level: "INFO", message: STRINGS["cli_equalizing"] + " FL,FR" }} }},
+        {{ seq: 6, timestamp_ms: 0, type: "progress",
+           payload: {{ progress: 0.62, message: STRINGS["cli_normalizing_gain"] }} }},
       ] : [],
-      next_seq: 5,
+      next_seq: 6,
     }}),
     cancel_job: () => respond({{ job: runningJob(activeKind || "brir") }}),
     set_language: (code) => respond({{ language: code, strings: STRINGS }}),
@@ -201,8 +204,8 @@ def render_gallery(out_dir: Path) -> list[Path]:
                         shots.append(_shoot(page, out_dir, f"{view}-{skin}-{language}-{theme}"))
                     context.close()
 
-        # Busy states: a BRIR run on the processing view and a capture run on
-        # the recorder view, with live progress and logs (studio skin).
+        # Busy states: a BRIR run with the Studio pipeline checklist, a
+        # capture run on the recorder view, and the Stable modal dialog.
         context, page = _open_page(browser, index_uri, "en", "dark", "brir-running", version)
         page.click(".nav-item[data-view='processing']")
         page.wait_for_timeout(400)
@@ -212,6 +215,14 @@ def render_gallery(out_dir: Path) -> list[Path]:
         context, page = _open_page(browser, index_uri, "ko", "dark", "recording-running", version)
         page.wait_for_timeout(400)
         shots.append(_shoot(page, out_dir, "recorder-studio-ko-dark-busy"))
+        context.close()
+
+        context, page = _open_page(
+            browser, index_uri, "en", "dark", "brir-running", version, "stable"
+        )
+        page.click(".nav-item[data-view='processing']")
+        page.wait_for_timeout(400)
+        shots.append(_shoot(page, out_dir, "processing-stable-en-dark-busy"))
         context.close()
 
         browser.close()
