@@ -911,8 +911,10 @@ async function boot() {
     applySkin(data.ui.skin);
   }
   applyStrings();
+  const backendLabels = { edgechromium: "WebView2", cocoa: "WKWebView", gtk: "WebKitGTK" };
+  const backendLabel = backendLabels[data.webview_backend] || "WebView";
   $("brand-version").textContent = `v${data.version}`;
-  $("runtime-status").textContent = `v${data.version} · ${data.platform} · WebView2`;
+  $("runtime-status").textContent = `v${data.version} · ${data.platform} · ${backendLabel}`;
   appendLog(t("webview_bridge_connected"));
 
   renderJobState(data.active_job);

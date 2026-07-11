@@ -129,7 +129,15 @@ def test_open_url_is_allowlist_only(monkeypatch) -> None:
     assert opened == ["https://github.com/115dkk/Impulcifer-pip313"]
 
 
-def test_main_forces_edgechromium_backend(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("system", "expected_backend"),
+    [
+        ("Windows", "edgechromium"),
+        ("Darwin", "cocoa"),
+        ("Linux", "gtk"),
+    ],
+)
+def test_main_forces_platform_backend(monkeypatch, system, expected_backend) -> None:
     import impulcifer_webview
 
     calls = []
@@ -137,22 +145,33 @@ def test_main_forces_edgechromium_backend(monkeypatch) -> None:
         create_window=lambda *args, **kwargs: calls.append(("create", args, kwargs)),
         start=lambda **kwargs: calls.append(("start", kwargs)),
     )
-    monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: system)
     monkeypatch.setattr(impulcifer_webview, "_index_uri", lambda: "file:///index.html")
     monkeypatch.setitem(sys.modules, "webview", fake_webview)
 
     impulcifer_webview.main()
 
     assert calls[0][0] == "create"
-    assert calls[1] == ("start", {"gui": "edgechromium", "debug": False})
+    assert calls[1] == ("start", {"gui": expected_backend, "debug": False})
 
 
-def test_main_rejects_non_windows_platform(monkeypatch) -> None:
+def test_main_rejects_unsupported_platform(monkeypatch) -> None:
     import impulcifer_webview
 
-    monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: "Linux")
-    with pytest.raises(SystemExit, match="Windows only"):
+    monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: "Java")
+    with pytest.raises(SystemExit, match="does not support"):
         impulcifer_webview.main()
+
+
+def test_bootstrap_reports_webview_backend(monkeypatch) -> None:
+    import impulcifer_webview
+    from impulcifer_webview import WebviewBridge
+
+    monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: "Darwin")
+    bridge = WebviewBridge(_FakeService())
+    response = bridge.bootstrap()
+    assert response["ok"]
+    assert response["data"]["webview_backend"] == "cocoa"
 
 
 def test_webview_entrypoint_contains_no_qt_backend() -> None:
@@ -163,4 +182,8 @@ def test_webview_entrypoint_contains_no_qt_backend() -> None:
     for forbidden in ("PySide", "PyQt", "QtWebEngine", 'gui="qt"'):
         assert forbidden not in source
         assert forbidden not in pyproject
-    assert 'webview.start(gui="edgechromium"' in source
+    # Only the three natively-validated engines may appear in the backend map.
+    assert '"Windows": "edgechromium"' in source
+    assert '"Darwin": "cocoa"' in source
+    assert '"Linux": "gtk"' in source
+    assert "webview.start(gui=backend" in source

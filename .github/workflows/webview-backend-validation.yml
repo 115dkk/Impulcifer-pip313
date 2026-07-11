@@ -1,0 +1,98 @@
+# WebView 백엔드 실기 검증.
+#
+# webview-gallery.yml은 headless Chromium + mock 브리지로 "화면"을 검증하고,
+# 이 워크플로는 각 플랫폼의 실제 렌더링 엔진(WebView2 / WKWebView /
+# WebKit2GTK)과 실제 WebviewBridge로 "런타임"을 검증한다. 세 잡이 모두
+# 그린이어야 해당 플랫폼의 Nuitka standalone에 WebView 프론트엔드를 기본으로
+# 실을 수 있다 (build_scripts/validate_webview_backend.py 참조).
+name: WebView Backend Validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'impulcifer_webview.py'
+      - 'application/**'
+      - 'webview_ui/**'
+      - 'build_scripts/validate_webview_backend.py'
+      - '.github/workflows/webview-backend-validation.yml'
+
+concurrency:
+  group: webview-backend-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-windows:
+    name: Validate edgechromium (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install project with webview extra
+        run: pip install -e ".[webview]"
+
+      - name: Validate Edge WebView2 backend
+        run: python build_scripts/validate_webview_backend.py
+
+  validate-macos:
+    name: Validate cocoa (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install project with webview extra
+        run: pip install -e ".[webview]"
+
+      - name: Validate Cocoa WKWebView backend
+        run: python build_scripts/validate_webview_backend.py
+
+  validate-linux:
+    name: Validate gtk (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      # WebKit2GTK + PyGObject 빌드 의존성. libgirepository는 PyGObject
+      # 3.50 미만(1.0)과 3.52 이상(2.0)이 서로 다른 dev 패키지를 요구하므로
+      # 둘 다 설치한다. libportaudio2는 sounddevice 임포트용(test.yml과 동일).
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            libportaudio2 \
+            gir1.2-gtk-3.0 \
+            gir1.2-webkit2-4.1 \
+            libgirepository1.0-dev \
+            libgirepository-2.0-dev \
+            libcairo2-dev \
+            pkg-config \
+            python3-dev \
+            gcc
+
+      - name: Install project with webview extra
+        run: pip install -e ".[webview]"
+
+      - name: Validate WebKit2GTK backend
+        run: xvfb-run -a python build_scripts/validate_webview_backend.py
