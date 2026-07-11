@@ -6,9 +6,11 @@ from dataclasses import asdict, dataclass, field, is_dataclass
 import os
 from pathlib import Path
 import platform
+import shutil
+import subprocess
 import threading
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 from uuid import uuid4
 
 
@@ -25,14 +27,74 @@ _RECORDING_FIELDS = {
     "debug_plots",
     "confirm_warnings",
 }
-_BRIR_FIELDS = {
-    "dir_path",
-    "test_signal",
-    "plot",
-    "do_room_correction",
-    "do_headphone_compensation",
-    "do_equalization",
+
+# Custom EQ files are not ``impulcifer.main`` kwargs: like the CTk GUI's
+# ``sync_custom_eq_files``, they are copied into the measurement directory
+# under fixed filenames before the pipeline runs.
+_BRIR_SIDECAR_EQ_FILES = {
+    "eq_file": "eq.csv",
+    "eq_left_file": "eq-left.csv",
+    "eq_right_file": "eq-right.csv",
 }
+_BRIR_PATH_FIELDS = {
+    "test_signal",
+    "room_target",
+    "room_mic_calibration",
+    "headphone_compensation_file",
+}
+_BRIR_CHOICE_FIELDS = {
+    "fr_combination_method": ("average", "conservative"),
+    "vbass_polarity": ("auto", "normal", "invert"),
+}
+_CHANNEL_BALANCE_TOKENS = ("trend", "left", "right", "avg", "min", "mids")
+_DECAY_CHANNELS = ("FL", "FC", "FR", "SL", "SR", "BL", "BR")
+_THEME_CODES = ("dark", "light", "system")
+
+_brir_field_kinds_cache: dict[str, str] | None = None
+
+
+def _brir_field_kinds() -> dict[str, str]:
+    """Map every ``ProcessingConfig`` field to a JSON validation kind.
+
+    Derived from the dataclass so that new pipeline parameters become
+    available to frontends without touching this module. ``dir_path`` is
+    validated separately because it is required.
+    """
+    global _brir_field_kinds_cache
+    if _brir_field_kinds_cache is None:
+        from dataclasses import fields as dataclass_fields
+
+        from core.pipeline import ProcessingConfig
+
+        kinds: dict[str, str] = {}
+        for config_field in dataclass_fields(ProcessingConfig):
+            name = config_field.name
+            if name == "dir_path":
+                continue
+            if name == "decay":
+                kinds[name] = "decay"
+            elif name == "channel_balance":
+                kinds[name] = "balance"
+            elif name == "fs":
+                kinds[name] = "optional_int"
+            elif name == "target_level":
+                kinds[name] = "optional_float"
+            elif name in _BRIR_PATH_FIELDS:
+                kinds[name] = "path"
+            elif name in _BRIR_CHOICE_FIELDS:
+                kinds[name] = "choice"
+            elif isinstance(config_field.default, bool):
+                kinds[name] = "bool"
+            elif isinstance(config_field.default, int):
+                kinds[name] = "int"
+            elif isinstance(config_field.default, float):
+                kinds[name] = "float"
+            elif isinstance(config_field.default, str):
+                kinds[name] = "str"
+            else:
+                kinds[name] = "any"
+        _brir_field_kinds_cache = kinds
+    return _brir_field_kinds_cache
 
 
 def _json_safe(value: Any) -> Any:
@@ -103,6 +165,7 @@ class ImpulciferApplicationService:
         self._active_job_id: str | None = None
 
     def bootstrap(self) -> dict[str, Any]:
+        from i18n.localization import get_localization_manager
         from impulcifer import __version__
 
         with self._lock:
@@ -119,6 +182,7 @@ class ImpulciferApplicationService:
                     "brir_cancel": True,
                 },
                 "active_job": active,
+                "ui": self._ui_settings_payload(get_localization_manager()),
             }
         )
 
@@ -206,11 +270,16 @@ class ImpulciferApplicationService:
         validation = self._validate_brir_request(request)
         if not validation["ok"]:
             return validation
-        params = validation["data"]
+        params = validation["data"]["params"]
+        eq_sidecars = validation["data"]["eq_sidecars"]
 
         def run(job_id: str, cancel_event: threading.Event) -> dict[str, Any]:
             import impulcifer
             from infra.logger import get_logger
+
+            if params.get("do_equalization", True):
+                for target_name, source in eq_sidecars.items():
+                    shutil.copy2(source, os.path.join(params["dir_path"], target_name))
 
             logger = get_logger()
             previous_gui_callback = logger.gui_callback
@@ -282,6 +351,144 @@ class ImpulciferApplicationService:
             job.cancel_event.set()
             self._append_event(job, "status", {"status": job.status})
             return _ok({"job": job.snapshot()})
+
+    # ------------------------------------------------------------------
+    # UI settings / environment (shared with the CTk GUI via
+    # LocalizationManager's ~/.impulcifer/settings.json persistence)
+    # ------------------------------------------------------------------
+
+    def get_ui_settings(self) -> dict[str, Any]:
+        from i18n.localization import get_localization_manager
+
+        return _ok(self._ui_settings_payload(get_localization_manager()))
+
+    def set_language(self, language_code: str) -> dict[str, Any]:
+        from i18n.localization import SUPPORTED_LANGUAGES, get_localization_manager
+
+        if language_code not in SUPPORTED_LANGUAGES:
+            return _error(
+                "INVALID_REQUEST",
+                "Unsupported language code.",
+                details={"language": language_code},
+            )
+        loc = get_localization_manager()
+        loc.set_language(language_code)
+        if hasattr(loc, "mark_language_selected"):
+            loc.mark_language_selected()
+        return _ok(self._ui_settings_payload(loc))
+
+    def set_theme(self, theme: str) -> dict[str, Any]:
+        from i18n.localization import get_localization_manager
+
+        if theme not in _THEME_CODES:
+            return _error(
+                "INVALID_REQUEST",
+                "Theme must be one of: " + ", ".join(_THEME_CODES) + ".",
+                details={"theme": theme},
+            )
+        get_localization_manager().set_theme(theme)
+        return _ok({"theme": theme})
+
+    @staticmethod
+    def _ui_settings_payload(loc: Any) -> dict[str, Any]:
+        from i18n.localization import SUPPORTED_LANGUAGES
+
+        return {
+            "language": loc.current_language,
+            "theme": loc.get_theme(),
+            "languages": [
+                {"code": code, "name": name} for code, name in SUPPORTED_LANGUAGES.items()
+            ],
+            "strings": _load_strings(loc.locales_dir, loc.current_language),
+        }
+
+    def get_system_info(self) -> dict[str, Any]:
+        from core.parallel_processing import get_python_threading_info
+        from impulcifer import __version__
+
+        install_kind = "dev"
+        try:
+            from updater.environment import is_pip_environment, is_velopack_environment
+
+            if is_velopack_environment():
+                install_kind = "velopack"
+            elif is_pip_environment():
+                install_kind = "pip"
+        except Exception:
+            pass
+
+        threading_info = get_python_threading_info()
+        return _ok(
+            {
+                "version": __version__,
+                "install_kind": install_kind,
+                "python_version": threading_info.get("python_version"),
+                "os": f"{platform.system()} {platform.release()}",
+                "cpu_count": threading_info.get("cpu_count"),
+                "gil_enabled": threading_info.get("gil_enabled"),
+                "optimal_workers": threading_info.get("optimal_workers"),
+            }
+        )
+
+    # ------------------------------------------------------------------
+    # Recorder helpers
+    # ------------------------------------------------------------------
+
+    def resolve_recording_paths(
+        self,
+        record_dir: Any,
+        play_path: Any = None,
+        mode: str = "speakers",
+    ) -> dict[str, Any]:
+        """Preview the canonical recording output path for the given inputs."""
+        from core.recording_naming import resolve_headphones_record_path, resolve_record_path
+
+        target_dir = _optional_string(record_dir)
+        if target_dir is None:
+            return _error("INVALID_REQUEST", "record_dir is required.")
+        if mode == "headphones":
+            return _ok({"record_path": resolve_headphones_record_path(target_dir)})
+        play = _optional_string(play_path)
+        if play is None:
+            return _error("INVALID_REQUEST", "play_path is required for speaker recordings.")
+        return _ok({"record_path": resolve_record_path(target_dir, play)})
+
+    def generate_sweep_set(self, dir_path: Any) -> dict[str, Any]:
+        target = _optional_string(dir_path)
+        if target is None or not os.path.isdir(target):
+            return _error(
+                "FILE_NOT_FOUND",
+                "Sweep set directory does not exist.",
+                details={"path": dir_path},
+            )
+        try:
+            from core.sweep_set_generator import generate_sweep_set
+
+            files = generate_sweep_set(target)
+        except Exception as exc:
+            return _error("INTERNAL_ERROR", str(exc) or exc.__class__.__name__)
+        return _ok({"files": files, "play_path": files[0] if files else None})
+
+    def open_path(self, path: Any = None) -> dict[str, Any]:
+        """Open a folder in the OS file explorer; defaults to the data folder."""
+        if path is None:
+            from infra.resource_helper import DATA_DIR
+
+            path = DATA_DIR
+        target = _optional_string(path)
+        if target is None or not os.path.isdir(target):
+            return _error("FILE_NOT_FOUND", "Folder does not exist.", details={"path": path})
+        try:
+            system = platform.system()
+            if system == "Windows":
+                os.startfile(target)  # noqa: S606
+            elif system == "Darwin":
+                subprocess.Popen(["open", target])
+            else:
+                subprocess.Popen(["xdg-open", target])
+        except Exception as exc:
+            return _error("INTERNAL_ERROR", str(exc) or exc.__class__.__name__)
+        return _ok({"path": target})
 
     def _start_job(
         self,
@@ -453,28 +660,108 @@ class ImpulciferApplicationService:
     def _validate_brir_request(request: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(request, dict):
             return _error("INVALID_REQUEST", "BRIR request must be an object.")
-        unknown = sorted(set(request) - _BRIR_FIELDS)
+        kinds = _brir_field_kinds()
+        allowed = set(kinds) | set(_BRIR_SIDECAR_EQ_FILES) | {"dir_path"}
+        unknown = sorted(set(request) - allowed)
         if unknown:
             return _error("INVALID_REQUEST", "Unknown BRIR fields.", details={"fields": unknown})
         dir_path = str(request.get("dir_path", "")).strip()
         if not dir_path or not os.path.isdir(dir_path):
             return _error("FILE_NOT_FOUND", "Measurement directory does not exist.", details={"path": dir_path})
 
-        params: dict[str, Any] = {
-            "dir_path": dir_path,
-            "test_signal": _optional_string(request.get("test_signal")),
-        }
-        for name, default in (
-            ("plot", False),
-            ("do_room_correction", True),
-            ("do_headphone_compensation", True),
-            ("do_equalization", True),
-        ):
-            value = request.get(name, default)
-            if not isinstance(value, bool):
-                return _error("INVALID_REQUEST", f"{name} must be a boolean.")
-            params[name] = value
-        return _ok(params)
+        params: dict[str, Any] = {"dir_path": dir_path}
+        for name, value in request.items():
+            if name == "dir_path" or name in _BRIR_SIDECAR_EQ_FILES:
+                continue
+            kind = kinds[name]
+            if kind == "bool":
+                if not isinstance(value, bool):
+                    return _error("INVALID_REQUEST", f"{name} must be a boolean.")
+                params[name] = value
+            elif kind in ("int", "optional_int"):
+                if value is None and kind == "optional_int":
+                    params[name] = None
+                    continue
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or (isinstance(value, float) and not value.is_integer())
+                ):
+                    return _error("INVALID_REQUEST", f"{name} must be an integer.")
+                params[name] = int(value)
+            elif kind in ("float", "optional_float"):
+                if value is None and kind == "optional_float":
+                    params[name] = None
+                    continue
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    return _error("INVALID_REQUEST", f"{name} must be a number.")
+                params[name] = float(value)
+            elif kind == "path":
+                if value is not None and not isinstance(value, str):
+                    return _error("INVALID_REQUEST", f"{name} must be a string path.")
+                params[name] = _optional_string(value)
+            elif kind == "choice":
+                choices = _BRIR_CHOICE_FIELDS[name]
+                if value not in choices:
+                    return _error(
+                        "INVALID_REQUEST",
+                        f"{name} must be one of: {', '.join(choices)}.",
+                    )
+                params[name] = value
+            elif kind == "balance":
+                if value is None:
+                    continue
+                if not isinstance(value, bool) and isinstance(value, (int, float)):
+                    params[name] = value
+                elif isinstance(value, str) and value in _CHANNEL_BALANCE_TOKENS:
+                    params[name] = value
+                else:
+                    return _error(
+                        "INVALID_REQUEST",
+                        "channel_balance must be a dB number or one of: "
+                        + ", ".join(_CHANNEL_BALANCE_TOKENS)
+                        + ".",
+                    )
+            elif kind == "decay":
+                if value is None:
+                    continue
+                decay = _validate_decay(value)
+                if decay is None:
+                    return _error(
+                        "INVALID_REQUEST",
+                        "decay must be a positive number of seconds or a"
+                        " {channel: seconds} object for FL/FC/FR/SL/SR/BL/BR.",
+                    )
+                params[name] = decay
+            elif kind == "str":
+                if not isinstance(value, str):
+                    return _error("INVALID_REQUEST", f"{name} must be a string.")
+                params[name] = value
+            else:
+                params[name] = value
+
+        if isinstance(params.get("vbass_freq"), int):
+            params["vbass_freq"] = max(30, min(500, params["vbass_freq"]))
+
+        sidecars: dict[str, str] = {}
+        for field_name, target_name in _BRIR_SIDECAR_EQ_FILES.items():
+            raw = request.get(field_name)
+            if raw is not None and not isinstance(raw, str):
+                return _error("INVALID_REQUEST", f"{field_name} must be a string path.")
+            text = _optional_string(raw)
+            if text is None or text == target_name:
+                continue
+            source = text if os.path.isabs(text) else os.path.join(dir_path, text)
+            if os.path.abspath(source) == os.path.abspath(os.path.join(dir_path, target_name)):
+                continue
+            if not os.path.isfile(source):
+                return _error(
+                    "FILE_NOT_FOUND",
+                    "Custom EQ file does not exist.",
+                    details={"field": field_name, "path": text},
+                )
+            sidecars[target_name] = source
+        return _ok({"params": params, "eq_sidecars": sidecars})
 
 
 def _optional_string(value: Any) -> str | None:
@@ -482,6 +769,41 @@ def _optional_string(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _validate_decay(value: Any) -> Optional[dict[str, float]]:
+    """Normalize a decay request (seconds) to a per-channel dict, or None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        if value <= 0:
+            return None
+        return {channel: float(value) for channel in _DECAY_CHANNELS}
+    if isinstance(value, dict):
+        result: dict[str, float] = {}
+        for channel, item in value.items():
+            if channel not in _DECAY_CHANNELS:
+                return None
+            if isinstance(item, bool) or not isinstance(item, (int, float)) or item <= 0:
+                return None
+            result[str(channel)] = float(item)
+        return result or None
+    return None
+
+
+def _load_strings(locales_dir: Path, language_code: str) -> dict[str, str]:
+    """Merge the English locale (fallback) with the requested language."""
+    import json
+
+    merged: dict[str, str] = {}
+    codes = ["en"] if language_code == "en" else ["en", language_code]
+    for code in codes:
+        try:
+            with open(locales_dir / f"{code}.json", encoding="utf-8") as handle:
+                merged.update(json.load(handle))
+        except (OSError, ValueError):
+            continue
+    return merged
 
 
 class _ServiceFailure(RuntimeError):

@@ -363,5 +363,18 @@
   "studio_disclosure_advanced_desc": "Adjust resampling, level, balance, decay, and output formats",
   "studio_disclosure_virtual_bass_desc": "Add an idealized low-frequency response where bass is lacking",
   "studio_toggle_plot_desc": "Generate graphs (longer processing)",
-  "label_force_channels_custom": "Custom value:"
+  "label_force_channels_custom": "Custom value:",
+  "webview_experimental_badge": "Experimental WebView frontend",
+  "webview_card_activity": "Activity",
+  "webview_job_idle": "Idle",
+  "webview_open_output_folder": "Open output folder",
+  "webview_bridge_connecting": "Connecting to Python…",
+  "webview_bridge_connected": "Python bridge connected.",
+  "webview_bridge_failed": "Python bridge unavailable.",
+  "button_refresh_devices": "Refresh devices",
+  "webview_status_running": "Running",
+  "webview_status_succeeded": "Completed",
+  "webview_status_failed": "Failed",
+  "webview_status_cancelled": "Cancelled",
+  "webview_status_cancel_requested": "Cancelling…"
 }

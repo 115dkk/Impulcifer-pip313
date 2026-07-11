@@ -62,7 +62,7 @@ GUI를 쓰려면 다음 명령을 실행합니다.
 impulcifer_gui
 ```
 
-Windows 전용 WebView PoC는 다음 명령으로 실행합니다. Recorder와 기본 BRIR 생성만 제공하며, 기존 CustomTkinter GUI와 standalone 릴리스의 기본 진입점은 바뀌지 않습니다.
+Windows 전용 실험적 WebView 프론트엔드는 다음 명령으로 실행합니다. Studio 스킨과 같은 Pulse 디자인의 사이드바 UI에서 Recorder / Processing / Settings / Info 탭, CustomTkinter GUI와 동등한 BRIR 옵션 전체(가상 저음, decay, channel balance, 마이크 편차 보정 등), 네이티브 파일·폴더 선택, 9개 언어와 dark/light/system 테마를 제공합니다. 기존 CustomTkinter GUI와 standalone 릴리스의 기본 진입점은 바뀌지 않습니다.
 
 ```bash
 impulcifer_webview

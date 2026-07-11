@@ -138,3 +138,6 @@ debug_plots/*.png
 test_microphone_deviation_output/*
 test_integration_output/*
 Impulcifer_Distribution/*
+
+# WebView gallery local render output (CI publishes to the webview-gallery branch)
+webview-gallery/

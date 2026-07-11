@@ -1,0 +1,233 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""Render the WebView frontend into a PNG review gallery.
+
+Follows the EqualizerAPO-XT skin-gallery pattern: a headless browser
+renders every view x theme x language combination against a mocked
+pywebview bridge, the script self-checks the exact shot count, and any
+mismatch exits non-zero so CI fails loudly instead of publishing a
+partial gallery.
+
+Usage:
+    python build_scripts/webview_gallery.py --out webview-gallery
+
+Requires playwright with the chromium browser installed:
+    pip install playwright && playwright install chromium
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+LANGUAGES = ("en", "ko")
+THEMES = ("dark", "light")
+VIEWS = ("recorder", "processing", "settings", "info")
+
+# 2 themes x 2 languages x 4 views + 2 busy-state shots.
+EXPECTED_SHOTS = len(LANGUAGES) * len(THEMES) * len(VIEWS) + 2
+
+VIEWPORT_WIDTH = 1280
+MIN_HEIGHT = 860
+MAX_HEIGHT = 3200
+
+FAKE_LANGUAGES = [
+    {"code": "en", "name": "English"},
+    {"code": "ko", "name": "한국어"},
+]
+
+
+def _project_version() -> str:
+    import tomllib
+
+    with open(PROJECT_ROOT / "pyproject.toml", "rb") as handle:
+        return tomllib.load(handle)["project"]["version"]
+
+
+def _load_strings(language: str) -> dict[str, str]:
+    locales = PROJECT_ROOT / "i18n" / "locales"
+    merged: dict[str, str] = {}
+    for code in ("en", language) if language != "en" else ("en",):
+        merged.update(json.loads((locales / f"{code}.json").read_text(encoding="utf-8")))
+    return merged
+
+
+def _mock_bridge_js(language: str, theme: str, scenario: str, version: str) -> str:
+    """Return an init script that fakes window.pywebview.api."""
+    strings = json.dumps(_load_strings(language), ensure_ascii=False)
+    languages = json.dumps(FAKE_LANGUAGES, ensure_ascii=False)
+    return f"""
+(() => {{
+  const STRINGS = {strings};
+  const LANGUAGES = {languages};
+  const LANGUAGE = {json.dumps(language)};
+  const THEME = {json.dumps(theme)};
+  const SCENARIO = {json.dumps(scenario)};
+  const VERSION = {json.dumps(version)};
+  const respond = (data) => Promise.resolve({{ ok: true, data }});
+  const runningJob = (kind) => ({{
+    job_id: "gallery", kind, status: "running",
+    cancellable: kind === "brir", result: null, error: null,
+  }});
+  const activeKind = SCENARIO === "brir-running" ? "brir"
+    : SCENARIO === "recording-running" ? "recording" : null;
+  window.pywebview = {{ api: {{
+    bootstrap: () => respond({{
+      version: VERSION,
+      platform: "windows",
+      capabilities: {{ recording: true, brir: true, recording_cancel: false, brir_cancel: true }},
+      active_job: activeKind ? runningJob(activeKind) : null,
+      ui: {{ language: LANGUAGE, theme: THEME, languages: LANGUAGES, strings: STRINGS }},
+    }}),
+    list_audio_devices: () => respond({{
+      host_apis: ["Windows DirectSound", "MME", "Windows WASAPI"],
+      devices: [
+        {{ index: 0, name: "Speakers (Realtek HD Audio)", host_api: "Windows DirectSound",
+           max_input_channels: 0, max_output_channels: 2 }},
+        {{ index: 1, name: "Microphone Array (Binaural)", host_api: "Windows DirectSound",
+           max_input_channels: 2, max_output_channels: 0 }},
+        {{ index: 2, name: "MiniDSP EARS", host_api: "Windows WASAPI",
+           max_input_channels: 2, max_output_channels: 0 }},
+      ],
+      default_input_index: 1,
+      default_output_index: 0,
+    }}),
+    get_system_info: () => respond({{
+      version: VERSION, install_kind: "pip", python_version: "3.13.9",
+      os: "Windows 11", cpu_count: 16, gil_enabled: false, optimal_workers: 16,
+    }}),
+    get_ui_settings: () => respond({{
+      language: LANGUAGE, theme: THEME, languages: LANGUAGES, strings: STRINGS,
+    }}),
+    resolve_recording_paths: (recordDir) => respond({{
+      record_path: `${{recordDir}}/FL,FR.wav`,
+    }}),
+    poll_job: (jobId, afterSeq) => respond({{
+      job: runningJob(activeKind || "brir"),
+      events: afterSeq === 0 ? [
+        {{ seq: 1, timestamp_ms: 0, type: "status", payload: {{ status: "running" }} }},
+        {{ seq: 2, timestamp_ms: 0, type: "log",
+           payload: {{ level: "INFO", message: "Opening measurement files..." }} }},
+        {{ seq: 3, timestamp_ms: 0, type: "progress",
+           payload: {{ progress: 0.34, message: "Room correction" }} }},
+        {{ seq: 4, timestamp_ms: 0, type: "log",
+           payload: {{ level: "INFO", message: "Equalizing FL,FR..." }} }},
+        {{ seq: 5, timestamp_ms: 0, type: "progress",
+           payload: {{ progress: 0.62, message: "Headphone compensation" }} }},
+      ] : [],
+      next_seq: 5,
+    }}),
+    cancel_job: () => respond({{ job: runningJob(activeKind || "brir") }}),
+    set_language: (code) => respond({{ language: code, strings: STRINGS }}),
+    set_theme: (theme) => respond({{ theme }}),
+    generate_sweep_set: () => respond({{ files: [], play_path: null }}),
+    open_path: () => respond({{ path: "" }}),
+    open_url: () => respond({{ url: "" }}),
+    select_file: () => respond({{ path: null }}),
+    select_directory: () => respond({{ path: null }}),
+    start_recording: () => respond({{ job: runningJob("recording") }}),
+    start_brir: () => respond({{ job: runningJob("brir") }}),
+  }} }};
+}})();
+"""
+
+
+def _shoot(page, out_dir: Path, name: str) -> Path:
+    height = page.evaluate("document.querySelector('.content').scrollHeight")
+    height = max(MIN_HEIGHT, min(MAX_HEIGHT, int(height) + 48))
+    page.set_viewport_size({"width": VIEWPORT_WIDTH, "height": height})
+    page.wait_for_timeout(120)
+    target = out_dir / f"{name}.png"
+    page.screenshot(path=str(target))
+    return target
+
+
+def _open_page(browser, index_uri: str, language: str, theme: str, scenario: str, version: str):
+    context = browser.new_context(
+        viewport={"width": VIEWPORT_WIDTH, "height": MIN_HEIGHT},
+        device_scale_factor=1,
+    )
+    page = context.new_page()
+    page.add_init_script(_mock_bridge_js(language, theme, scenario, version))
+    page.goto(index_uri)
+    page.wait_for_function("document.getElementById('brand-version').textContent !== 'v—'")
+    page.wait_for_timeout(250)
+    return context, page
+
+
+def render_gallery(out_dir: Path) -> list[Path]:
+    from playwright.sync_api import sync_playwright
+
+    version = _project_version()
+    index_uri = (PROJECT_ROOT / "webview_ui" / "index.html").resolve().as_uri()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    shots: list[Path] = []
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+
+        for language in LANGUAGES:
+            for theme in THEMES:
+                context, page = _open_page(browser, index_uri, language, theme, "idle", version)
+                for view in VIEWS:
+                    page.click(f".nav-item[data-view='{view}']")
+                    if view == "processing":
+                        # Open every disclosure so the full option surface is
+                        # part of the judging material.
+                        page.eval_on_selector_all(
+                            ".disclosure", "nodes => nodes.forEach(n => n.classList.add('open'))"
+                        )
+                        page.check("#bf-decay-per-channel")
+                        page.eval_on_selector(
+                            "#bf-decay-per-channel",
+                            "node => node.dispatchEvent(new Event('change'))",
+                        )
+                    shots.append(_shoot(page, out_dir, f"{view}-{language}-{theme}"))
+                context.close()
+
+        # Busy states: a BRIR run on the processing view and a capture run on
+        # the recorder view, with live progress and logs.
+        context, page = _open_page(browser, index_uri, "en", "dark", "brir-running", version)
+        page.click(".nav-item[data-view='processing']")
+        page.wait_for_timeout(400)
+        shots.append(_shoot(page, out_dir, "processing-en-dark-busy"))
+        context.close()
+
+        context, page = _open_page(browser, index_uri, "ko", "dark", "recording-running", version)
+        page.wait_for_timeout(400)
+        shots.append(_shoot(page, out_dir, "recorder-ko-dark-busy"))
+        context.close()
+
+        browser.close()
+    return shots
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", default="webview-gallery", help="Output directory for PNGs")
+    args = parser.parse_args()
+
+    out_dir = Path(args.out)
+    shots = render_gallery(out_dir)
+
+    missing = [shot for shot in shots if not shot.is_file() or shot.stat().st_size == 0]
+    print(f"Gallery wrote {len(shots)} PNGs to {out_dir}")
+    if missing:
+        print(f"ERROR: {len(missing)} shots missing or empty: {missing}", file=sys.stderr)
+        return 1
+    if len(shots) != EXPECTED_SHOTS:
+        print(
+            f"ERROR: expected {EXPECTED_SHOTS} shots, got {len(shots)}"
+            " — update EXPECTED_SHOTS if the matrix changed intentionally.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

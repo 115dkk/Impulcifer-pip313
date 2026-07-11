@@ -31,6 +31,13 @@ def test_module_import_does_not_require_pywebview(monkeypatch) -> None:
         ("start_brir", ({"dir_path": "C:/measurements"},)),
         ("poll_job", ("job", 4)),
         ("cancel_job", ("job",)),
+        ("get_ui_settings", ()),
+        ("set_language", ("ko",)),
+        ("set_theme", ("light",)),
+        ("get_system_info", ()),
+        ("resolve_recording_paths", ("dir", "play.wav", "speakers")),
+        ("generate_sweep_set", ("dir",)),
+        ("open_path", ("dir",)),
     ],
 )
 def test_bridge_delegates_only_public_service_methods(method, args) -> None:
@@ -40,6 +47,85 @@ def test_bridge_delegates_only_public_service_methods(method, args) -> None:
     response = getattr(bridge, method)(*args)
     assert response["data"]["method"] == method
     assert response["data"]["args"] == list(args)
+
+
+class _FakeWindow:
+    def __init__(self, selection) -> None:
+        self.selection = selection
+        self.calls: list[tuple] = []
+
+    def create_file_dialog(self, dialog_type, **kwargs):
+        self.calls.append((dialog_type, kwargs))
+        return self.selection
+
+
+def _install_fake_webview(monkeypatch) -> SimpleNamespace:
+    fake_webview = SimpleNamespace(
+        FileDialog=SimpleNamespace(OPEN="OPEN", FOLDER="FOLDER", SAVE="SAVE"),
+    )
+    monkeypatch.setitem(sys.modules, "webview", fake_webview)
+    return fake_webview
+
+
+def test_select_file_uses_native_open_dialog(monkeypatch) -> None:
+    from impulcifer_webview import WebviewBridge
+
+    _install_fake_webview(monkeypatch)
+    window = _FakeWindow(["C:/sounds/sweep.wav"])
+    bridge = WebviewBridge(_FakeService())
+    bridge.attach_window(window)
+
+    response = bridge.select_file("wav")
+
+    assert response["ok"]
+    assert response["data"]["path"] == "C:/sounds/sweep.wav"
+    dialog_type, kwargs = window.calls[0]
+    assert dialog_type == "OPEN"
+    assert kwargs["allow_multiple"] is False
+    assert any("*.wav" in file_type for file_type in kwargs["file_types"])
+
+
+def test_select_directory_uses_folder_dialog_and_handles_cancel(monkeypatch) -> None:
+    from impulcifer_webview import WebviewBridge
+
+    _install_fake_webview(monkeypatch)
+    window = _FakeWindow(None)
+    bridge = WebviewBridge(_FakeService())
+    bridge.attach_window(window)
+
+    response = bridge.select_directory()
+
+    assert response["ok"]
+    assert response["data"]["path"] is None
+    assert window.calls[0][0] == "FOLDER"
+
+
+def test_dialogs_require_attached_window() -> None:
+    from impulcifer_webview import WebviewBridge
+
+    bridge = WebviewBridge(_FakeService())
+    response = bridge.select_file("audio")
+    assert not response["ok"]
+    assert response["error"]["code"] == "NO_WINDOW"
+
+
+def test_open_url_is_allowlist_only(monkeypatch) -> None:
+    import webbrowser
+
+    from impulcifer_webview import WebviewBridge
+
+    opened: list[str] = []
+    monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
+    bridge = WebviewBridge(_FakeService())
+
+    response = bridge.open_url("fork_repo")
+    assert response["ok"]
+    assert opened == ["https://github.com/115dkk/Impulcifer-pip313"]
+
+    rejected = bridge.open_url("https://evil.example.com")
+    assert not rejected["ok"]
+    assert rejected["error"]["code"] == "INVALID_REQUEST"
+    assert opened == ["https://github.com/115dkk/Impulcifer-pip313"]
 
 
 def test_main_forces_edgechromium_backend(monkeypatch) -> None:

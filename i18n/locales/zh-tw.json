@@ -363,5 +363,18 @@
   "studio_disclosure_advanced_desc": "調整重新取樣、電平、平衡、衰減和輸出格式",
   "studio_disclosure_virtual_bass_desc": "在低音不足的位置加入理想化的低頻響應",
   "studio_toggle_plot_desc": "產生圖表（處理時間較長）",
-  "label_force_channels_custom": "自訂值:"
+  "label_force_channels_custom": "自訂值:",
+  "webview_experimental_badge": "Experimental WebView frontend",
+  "webview_card_activity": "Activity",
+  "webview_job_idle": "Idle",
+  "webview_open_output_folder": "Open output folder",
+  "webview_bridge_connecting": "Connecting to Python…",
+  "webview_bridge_connected": "Python bridge connected.",
+  "webview_bridge_failed": "Python bridge unavailable.",
+  "button_refresh_devices": "Refresh devices",
+  "webview_status_running": "Running",
+  "webview_status_succeeded": "Completed",
+  "webview_status_failed": "Failed",
+  "webview_status_cancelled": "Cancelled",
+  "webview_status_cancel_requested": "Cancelling…"
 }

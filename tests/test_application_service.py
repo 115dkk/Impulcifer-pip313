@@ -223,6 +223,203 @@ def test_successful_brir_restores_logger_callbacks(monkeypatch, tmp_path: Path) 
     assert logger.progress_callback is old_progress
 
 
+def test_brir_accepts_full_processing_config_surface(monkeypatch, tmp_path: Path) -> None:
+    import impulcifer
+
+    captured = {}
+
+    def fake_main(**kwargs):
+        captured.update(kwargs)
+        Path(kwargs["dir_path"], "hesuvi.wav").write_bytes(b"brir")
+
+    monkeypatch.setattr(impulcifer, "main", fake_main)
+    service = ImpulciferApplicationService()
+    started = service.start_brir(
+        {
+            "dir_path": str(tmp_path),
+            "fs": 44100,
+            "target_level": -12.5,
+            "channel_balance": "trend",
+            "decay": {"FL": 0.3, "FR": 0.25},
+            "head_ms": 2.0,
+            "jamesdsp": True,
+            "fr_combination_method": "conservative",
+            "vbass": True,
+            "vbass_freq": 800,
+            "vbass_hp": 12.5,
+            "vbass_polarity": "invert",
+        }
+    )
+    assert started["ok"], started
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+
+    assert data["job"]["status"] == "succeeded"
+    assert captured["fs"] == 44100
+    assert captured["target_level"] == -12.5
+    assert captured["channel_balance"] == "trend"
+    assert captured["decay"] == {"FL": 0.3, "FR": 0.25}
+    assert captured["head_ms"] == 2.0
+    assert captured["jamesdsp"] is True
+    assert captured["fr_combination_method"] == "conservative"
+    # The service clamps vbass_freq to [30, 500] like the CTk GUI.
+    assert captured["vbass_freq"] == 500
+    assert captured["vbass_polarity"] == "invert"
+
+
+def test_brir_numeric_decay_fans_out_to_all_channels(tmp_path: Path) -> None:
+    validation = ImpulciferApplicationService._validate_brir_request(
+        {"dir_path": str(tmp_path), "decay": 0.3}
+    )
+    assert validation["ok"]
+    assert validation["data"]["params"]["decay"] == {
+        channel: 0.3 for channel in ("FL", "FC", "FR", "SL", "SR", "BL", "BR")
+    }
+
+
+def test_brir_rejects_unknown_and_invalid_fields(tmp_path: Path) -> None:
+    validate = ImpulciferApplicationService._validate_brir_request
+    base = {"dir_path": str(tmp_path)}
+
+    for bad in (
+        {"definitely_not_a_field": 1},
+        {"vbass": "yes"},
+        {"vbass_polarity": "sideways"},
+        {"fr_combination_method": "median"},
+        {"channel_balance": "loud"},
+        {"decay": {"XX": 0.3}},
+        {"decay": -1},
+        {"fs": 44100.5},
+        {"specific_limit": "wide"},
+        {"test_signal": 42},
+    ):
+        response = validate({**base, **bad})
+        assert not response["ok"], bad
+        assert response["error"]["code"] == "INVALID_REQUEST", bad
+
+
+def test_brir_copies_custom_eq_sidecars(monkeypatch, tmp_path: Path) -> None:
+    import impulcifer
+
+    source = tmp_path / "my-eq.csv"
+    source.write_text("20 0.0\n", encoding="utf-8")
+
+    def fake_main(**kwargs):
+        Path(kwargs["dir_path"], "hesuvi.wav").write_bytes(b"brir")
+
+    monkeypatch.setattr(impulcifer, "main", fake_main)
+    service = ImpulciferApplicationService()
+    started = service.start_brir(
+        {
+            "dir_path": str(tmp_path),
+            "do_equalization": True,
+            "eq_file": str(source),
+        }
+    )
+    assert started["ok"], started
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+
+    assert data["job"]["status"] == "succeeded"
+    assert (tmp_path / "eq.csv").read_text(encoding="utf-8") == "20 0.0\n"
+
+
+def test_brir_missing_eq_sidecar_fails_fast(tmp_path: Path) -> None:
+    service = ImpulciferApplicationService()
+    response = service.start_brir({"dir_path": str(tmp_path), "eq_file": "missing.csv"})
+    assert response["error"]["code"] == "FILE_NOT_FOUND"
+
+
+class _FakeLocalization:
+    def __init__(self, locales_dir: Path) -> None:
+        self.current_language = "en"
+        self.locales_dir = locales_dir
+        self.theme = "dark"
+        self.marked = False
+
+    def get_theme(self) -> str:
+        return self.theme
+
+    def set_theme(self, theme: str) -> None:
+        self.theme = theme
+
+    def set_language(self, code: str) -> None:
+        self.current_language = code
+
+    def mark_language_selected(self) -> None:
+        self.marked = True
+
+
+def test_ui_settings_language_and_theme_roundtrip(monkeypatch) -> None:
+    import i18n.localization as localization
+
+    fake = _FakeLocalization(Path(__file__).resolve().parents[1] / "i18n" / "locales")
+    monkeypatch.setattr(localization, "get_localization_manager", lambda: fake)
+    service = ImpulciferApplicationService()
+
+    settings = service.get_ui_settings()
+    assert settings["ok"]
+    assert settings["data"]["language"] == "en"
+    assert settings["data"]["strings"]["tab_recorder"]
+    assert any(entry["code"] == "ko" for entry in settings["data"]["languages"])
+
+    switched = service.set_language("ko")
+    assert switched["ok"]
+    assert fake.current_language == "ko"
+    assert fake.marked is True
+    assert switched["data"]["strings"] != settings["data"]["strings"]
+
+    assert service.set_language("xx")["error"]["code"] == "INVALID_REQUEST"
+
+    assert service.set_theme("light")["ok"]
+    assert fake.theme == "light"
+    assert service.set_theme("neon")["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_system_info_reports_environment() -> None:
+    import impulcifer
+
+    response = ImpulciferApplicationService().get_system_info()
+    assert response["ok"]
+    data = response["data"]
+    assert data["version"] == impulcifer.__version__
+    assert data["install_kind"] in {"velopack", "pip", "dev"}
+    for key in ("python_version", "os", "cpu_count", "gil_enabled", "optimal_workers"):
+        assert key in data
+
+
+def test_resolve_recording_paths() -> None:
+    service = ImpulciferApplicationService()
+    speakers = service.resolve_recording_paths("out", "sweep-seg-FL,FR-stereo-test.wav")
+    assert speakers["ok"]
+    assert speakers["data"]["record_path"].endswith("FL,FR.wav")
+
+    headphones = service.resolve_recording_paths("out", None, "headphones")
+    assert headphones["data"]["record_path"].endswith("headphones.wav")
+
+    assert service.resolve_recording_paths("")["error"]["code"] == "INVALID_REQUEST"
+    assert service.resolve_recording_paths("out")["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_generate_sweep_set_delegates(monkeypatch, tmp_path: Path) -> None:
+    import core.sweep_set_generator as generator_module
+
+    files = [str(tmp_path / "sweep-seg-FL,FR-stereo.wav"), str(tmp_path / "sweep-7.1.wav")]
+    monkeypatch.setattr(generator_module, "generate_sweep_set", lambda target: files)
+    service = ImpulciferApplicationService()
+
+    response = service.generate_sweep_set(str(tmp_path))
+    assert response["ok"]
+    assert response["data"]["files"] == files
+    assert response["data"]["play_path"] == files[0]
+
+    missing = service.generate_sweep_set(str(tmp_path / "nope"))
+    assert missing["error"]["code"] == "FILE_NOT_FOUND"
+
+
+def test_open_path_rejects_missing_folder(tmp_path: Path) -> None:
+    response = ImpulciferApplicationService().open_path(str(tmp_path / "nope"))
+    assert response["error"]["code"] == "FILE_NOT_FOUND"
+
+
 def test_recording_jobs_reject_cancellation(monkeypatch, tmp_path: Path) -> None:
     from core import recorder
 

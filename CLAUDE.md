@@ -12,6 +12,13 @@ Impulcifer-py313은 HRIR(Head-Related Impulse Response)을 측정하고 헤드�
 
 ```
 gui_main.py              ← 엔트리포인트 (standalone 빌드 대상)
+impulcifer_webview.py     ← 실험적 WebView 프론트엔드 엔트리포인트 (Windows 전용,
+                            pywebview Edge WebView2 고정, 선택적 [webview] extra)
+application/
+  impulcifer_service.py   ← Tk 비종속 JSON-safe application service (job 모델,
+                            ProcessingConfig 전체 표면 검증, UI 설정/시스템 정보)
+webview_ui/               ← WebView HTML/CSS/JS (Pulse Studio 디자인, i18n 문자열은
+                            bootstrap 응답으로 주입; webview-gallery CI가 렌더 검증)
 impulcifer.py             ← 핵심 처리 파이프라인 (main 함수)
 core/
   hrir.py                 ← HRIR 클래스 (Phase 1: ~1150줄, plotting은 plotting/으로 이동)

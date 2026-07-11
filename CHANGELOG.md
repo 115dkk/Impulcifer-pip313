@@ -4,15 +4,18 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
-## 2.9.0 - 2026-07-11
-### Qt 없는 WebView 전환을 위한 application service와 Windows PoC
+## 2.9.0 - 2026-07-12
+### Qt 없는 WebView 전환 — application service, Pulse Studio 프론트엔드, 갤러리 리뷰 CI
 
 #### ⭐ 새로운 기능 / 개선
 - **Tk 비종속 application service 추가**: Recorder와 BRIR 생성 흐름을 JSON-safe 요청·응답 계약으로 감싸고, 단일 활성 job, 순번 기반 progress polling, BRIR 협력 취소, 구조화 오류를 제공한다. 기존 CustomTkinter 탭과 DSP·녹음 구현은 변경하지 않고 `application/` 계층에서 그대로 호출한다.
-- **실험적 pywebview 프론트엔드 추가**: 빌드 도구 없는 HTML/CSS/JavaScript 화면에서 녹음 장치 조회, 스피커·헤드폰 녹음, 기본 BRIR 생성을 실행할 수 있다. Windows Edge WebView2 backend를 명시적으로 고정해 Qt fallback을 허용하지 않으며, pywebview는 선택적 `webview` extra로만 설치된다.
+- **BRIR 옵션 전체 개방**: application service의 BRIR 요청이 `ProcessingConfig` dataclass 전체 표면(가상 저음, decay, channel balance, bass boost, tilt, 리샘플, 마이크 편차 보정, JamesDSP/Hangloose/TrueHD 출력 등)을 필드 종류별 타입 검증과 함께 수용한다. 새 파이프라인 파라미터는 dataclass 필드 추가만으로 프론트엔드에 자동 개방된다. Custom EQ 파일(`eq.csv`/`eq-left.csv`/`eq-right.csv`)은 CTk GUI와 동일하게 측정 폴더로 사이드카 복사한다.
+- **Pulse Studio 디자인의 WebView 프론트엔드**: 최소 PoC 화면을 Studio 스킨 철학(200px 사이드바 + 번호 카드 + disclosure 행)과 Pulse 팔레트(light/dark 정확한 hex, WCAG 수정 반영)로 전면 재구축했다. Recorder / Processing / Settings / Info 4개 탭, CTk GUI와 동등한 옵션 표면, 네이티브 파일·폴더 선택 다이얼로그(pywebview `create_file_dialog`), 스윕 세트 생성, 결과 폴더 열기, 번들 Pretendard/JetBrains Mono 폰트를 제공한다.
+- **WebView 설정·정보 탭**: 언어(9개)·테마(dark/light/system)를 CTk GUI와 같은 `~/.impulcifer/settings.json`에 저장·공유하고, i18n 문자열은 bootstrap에서 병합 제공(en fallback + 현재 언어)한다. 시스템 정보(GIL/워커/설치 형태)와 프로젝트 링크(allowlist 고정)도 노출한다.
 
 #### 🔧 빌드 / 설정 변경
-- **기존 Nuitka 릴리스 경로 보존**: canonical `gui_main.py`와 `tk-inter`/CustomTkinter 플래그는 그대로 유지한다. 이번 WebView PoC는 pip/source 전용 별도 entrypoint이며 standalone 전환은 후속 단계로 미룬다.
+- **WebView 갤러리 리뷰 CI 추가 (`.github/workflows/webview-gallery.yml`)**: EqualizerAPO-XT의 offscreen skin gallery 패턴을 이식했다. mock 브리지 위에서 4 view × 2 테마 × 2 언어 + busy 상태 2종 = 18샷을 headless Chromium으로 렌더링하고(`build_scripts/webview_gallery.py`, 샷 수 자가검증), PNG를 `webview-gallery` 브랜치에 push한 뒤 이미지를 임베드한 리뷰 이슈를 자동 생성/갱신한다.
+- **기존 Nuitka 릴리스 경로 보존**: canonical `gui_main.py`와 `tk-inter`/CustomTkinter 플래그는 그대로 유지한다. WebView는 pip/source 전용 별도 entrypoint(`impulcifer_webview`, 선택적 `webview` extra)이며 standalone 전환은 후속 단계로 미룬다.
 
 ## 2.8.1 - 2026-07-10
 ### 주석 대청소 — 이력 내레이션·재진술·죽은 주석 제거
