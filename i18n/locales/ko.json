@@ -285,7 +285,7 @@
   "vbass_enable_tooltip": "저주파 대역을 합성된 미니멈 페이즈 베이스로 교체하여 서브베이스 응답을 개선합니다",
   "vbass_crossover_freq": "크로스오버 주파수 (Hz)",
   "vbass_crossover_freq_tooltip": "이 주파수 이하의 원본 저음이 합성 베이스로 교체됩니다. 권장 범위: 100–300 Hz",
-  "vbass_hp_freq": "서브베이스 하이패스 (Hz)",
+  "vbass_hp_freq": "럼블 제거 주파수 (Hz)",
   "vbass_hp_freq_tooltip": "이 주파수 이하의 DC 럼블을 제거합니다. 대부분 기본값 15 Hz로 충분합니다",
   "vbass_polarity": "극성 처리",
   "vbass_polarity_auto": "자동 감지",

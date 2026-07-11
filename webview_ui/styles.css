@@ -441,6 +441,33 @@ input[type="checkbox"] {
   overflow-wrap: anywhere;
 }
 
+/* Recorder speaker chips (Studio segment-chip parity): the chip for the
+   speaker currently playing fills with accent; finished speakers keep a
+   green check so the sweep sequence reads at a glance. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chip.active { background: var(--accent); color: #ffffff; }
+.chip.done { color: var(--fg-1); }
+.chip.done::before { content: "✓ "; color: var(--ok); }
+
+.rec-status { font-size: 13px; font-weight: 700; }
+
 /* Pipeline checklist (Studio activity card): done / current / upcoming. */
 .steps {
   display: grid;

@@ -263,9 +263,21 @@ class ImpulciferApplicationService:
                     "Recording finished without producing the expected file.",
                     details={"record_path": params["record_path"]},
                 )
+            summary = None
+            try:
+                # Tk-free analysis helper (numpy/soundfile only) shared with
+                # the CTk RecordingStatusController's completion summary.
+                from gui.recording_status import analyze_recording
+
+                analyzed = analyze_recording(params["record_path"])
+                if analyzed is not None:
+                    summary = asdict(analyzed)
+            except Exception:
+                summary = None
             return {
                 "mode": params["mode"],
                 "record_path": params["record_path"],
+                "summary": summary,
             }
 
         return self._start_job("recording", False, run)

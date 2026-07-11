@@ -133,6 +133,18 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
            payload: {{ level: "ERROR",
              message: "Impulse response peak not found for FL-left" }} }},
         {{ seq: 6, timestamp_ms: 0, type: "status", payload: {{ status: "failed" }} }},
+      ] : activeKind === "recording" ? [
+        {{ seq: 1, timestamp_ms: 0, type: "status", payload: {{ status: "running" }} }},
+        {{ seq: 2, timestamp_ms: 0, type: "progress",
+           payload: {{ phase: "devices", progress: 0.02, message: "Windows DirectSound" }} }},
+        {{ seq: 3, timestamp_ms: 0, type: "progress",
+           payload: {{ phase: "recording", progress: 0.24, elapsed: 7.1, duration: 29.6,
+                       speaker: "FL", segment_index: 1, segment_total: 2,
+                       speakers: ["FL", "FR"] }} }},
+        {{ seq: 4, timestamp_ms: 0, type: "progress",
+           payload: {{ phase: "recording", progress: 0.58, elapsed: 17.2, duration: 29.6,
+                       speaker: "FR", segment_index: 2, segment_total: 2,
+                       speakers: ["FL", "FR"] }} }},
       ] : [
         {{ seq: 1, timestamp_ms: 0, type: "status", payload: {{ status: "running" }} }},
         {{ seq: 2, timestamp_ms: 0, type: "log",

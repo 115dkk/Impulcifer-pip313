@@ -25,6 +25,8 @@ const state = {
   stageIndex: -1,
   stageAbort: null,
   modalDismissed: false,
+  recPhase: null,
+  recDoneSpeakers: new Set(),
 };
 
 const DECAY_CHANNELS = ["FL", "FC", "FR", "SL", "SR", "BL", "BR"];
@@ -257,6 +259,133 @@ function abortSteps(kind) {
   renderSteps();
 }
 
+/* ---------------------------------------------------- recorder status
+   Port of the CTk RecordingStatusController presentation: speaker chips
+   (Studio segment-chip visual), a bold phase status line, and an
+   elapsed/duration detail line, driven by RecorderProgressEvent payloads. */
+
+function fmtDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "--:--";
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const mm = hours ? String(minutes).padStart(2, "0") : String(minutes);
+  return `${hours ? `${hours}:` : ""}${mm}:${String(secs).padStart(2, "0")}`;
+}
+
+function resetRecorderStatus() {
+  state.recPhase = null;
+  state.recDoneSpeakers = new Set();
+  document.querySelectorAll("[data-rec-chips]").forEach((node) => {
+    node.hidden = true;
+    node.replaceChildren();
+  });
+  setRecorderStatus("", "");
+}
+
+function setRecorderStatus(statusText, detailText) {
+  document.querySelectorAll("[data-rec-status]").forEach((node) => {
+    node.hidden = !statusText;
+    node.textContent = statusText;
+  });
+  document.querySelectorAll("[data-rec-detail]").forEach((node) => {
+    node.hidden = !detailText;
+    node.textContent = detailText || "";
+  });
+}
+
+function renderRecorderChips(speakers, activeSpeaker) {
+  if (!Array.isArray(speakers) || !speakers.length) return;
+  if (activeSpeaker) {
+    for (const speaker of speakers) {
+      if (speaker === activeSpeaker) break;
+      state.recDoneSpeakers.add(speaker);
+    }
+  }
+  document.querySelectorAll("[data-rec-chips]").forEach((node) => {
+    node.hidden = false;
+    node.replaceChildren(...speakers.map((speaker) => {
+      const chip = document.createElement("span");
+      chip.className = "chip mono"
+        + (speaker === activeSpeaker ? " active" : state.recDoneSpeakers.has(speaker) ? " done" : "");
+      chip.textContent = speaker;
+      return chip;
+    }));
+  });
+}
+
+function finishRecorderChips() {
+  document.querySelectorAll("[data-rec-chips] .chip").forEach((chip) => {
+    chip.classList.remove("active");
+    chip.classList.add("done");
+  });
+}
+
+function updateRecorderStatus(payload) {
+  renderRecorderChips(payload.speakers, payload.phase === "recording" ? payload.speaker : null);
+  const phase = payload.phase;
+  let status = "";
+  let detail = "";
+  if (phase === "recording" && payload.speaker) {
+    status = fmt(t("recording_status_recording_speaker"), {
+      speaker: payload.speaker,
+      index: payload.segment_index || 0,
+      total: payload.segment_total || 0,
+    });
+    detail = fmt(t("recording_status_recording"), {
+      elapsed: fmtDuration(payload.elapsed),
+      duration: fmtDuration(payload.duration),
+    });
+  } else if (phase === "recording") {
+    status = t("recording_status_recording_gap");
+    detail = fmt(t("recording_status_recording"), {
+      elapsed: fmtDuration(payload.elapsed),
+      duration: fmtDuration(payload.duration),
+    });
+  } else if (phase === "devices") {
+    status = t("recording_status_devices_ready");
+    detail = payload.message || "";
+  } else if (phase === "saving") {
+    status = t("recording_status_saving");
+  } else if (phase === "complete") {
+    status = t("recording_status_complete");
+  } else if (phase === "error") {
+    status = t("recording_status_error");
+    detail = payload.message || "";
+  } else {
+    status = t("recording_status_preparing");
+    detail = payload.message || "";
+  }
+  setRecorderStatus(status, detail);
+  if (phase !== state.recPhase) {
+    state.recPhase = phase;
+    appendLog(status);
+  }
+}
+
+function finishRecorderStatus(job) {
+  if (job.status === "succeeded" && job.result) {
+    finishRecorderChips();
+    const file = String(job.result.record_path || "").split(/[\\/]/).pop();
+    const summary = job.result.summary;
+    const detail = summary
+      ? fmt(t("recording_status_summary"), {
+          file,
+          channels: summary.channels,
+          duration: fmtDuration(summary.duration),
+          peak_db: Number(summary.peak_db).toFixed(1),
+          active: summary.active_channels,
+          total: summary.channels,
+        })
+      : fmt(t("recording_status_summary_unavailable"), { file });
+    setRecorderStatus(t("recording_status_complete"), detail);
+    appendLog(detail);
+  } else if (job.status === "failed") {
+    setRecorderStatus(t("recording_status_error"), job.error ? job.error.message : "");
+  }
+}
+
 /* ------------------------------------------------------------------ jobs */
 
 async function begin(start, payload) {
@@ -281,6 +410,7 @@ async function begin(start, payload) {
   state.lastOutputDir = job.kind === "brir" ? val("bf-dir-path") : null;
   state.modalDismissed = false;
   resetSteps(job.kind === "brir");
+  resetRecorderStatus();
   $("btn-open-output").hidden = true;
   setProgress(0);
   renderJobState(job);
@@ -325,12 +455,11 @@ async function pollJob() {
     const payload = event.payload || {};
     if (event.type === "progress") {
       if (typeof payload.progress === "number") setProgress(payload.progress);
-      if (payload.message) {
+      if (payload.phase) {
+        updateRecorderStatus(payload);
+      } else if (payload.message) {
         appendLog(payload.message);
         updateSteps(payload.message);
-      } else if (payload.phase) {
-        const speakers = Array.isArray(payload.speakers) ? ` ${payload.speakers.join(",")}` : "";
-        appendLog(`${payload.phase}${speakers}`);
       }
     }
     if (event.type === "log") {
@@ -351,6 +480,7 @@ async function pollJob() {
         abortSteps(job.status);
       }
     }
+    if (job.kind === "recording") finishRecorderStatus(job);
     state.jobId = null;
     return;
   }
@@ -791,6 +921,7 @@ async function boot() {
     state.jobKind = data.active_job.kind;
     state.nextSeq = 0;
     resetSteps(data.active_job.kind === "brir");
+    resetRecorderStatus();
     schedulePoll(0);
   }
 
