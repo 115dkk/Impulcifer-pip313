@@ -32,6 +32,14 @@ jobs:
       with:
         enable-cache: true
 
+    # sounddevice needs the PortAudio C library at import time; the
+    # application-service tests exercise the recorder job path, which
+    # imports core.recorder even though playback itself is monkeypatched.
+    - name: Install PortAudio
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libportaudio2
+
     - name: Install dependencies
       run: |
         uv pip install --system -r requirements-dev.txt
@@ -177,6 +185,8 @@ jobs:
         python -c "from i18n.localization import get_localization_manager; print('✓ i18n.localization')"
         python -c "from infra.logger import get_logger; print('✓ infra.logger')"
         python -c "from updater.update_checker import UpdateChecker; print('✓ updater.update_checker')"
+        python -c "from application import ImpulciferApplicationService; print('✓ application')"
+        python -c "import impulcifer_webview; print('✓ impulcifer_webview')"
 
     - name: Test audio/GUI imports (optional - requires PortAudio)
       continue-on-error: true

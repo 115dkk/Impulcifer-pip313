@@ -4,6 +4,23 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.9.0 - 2026-07-12
+### Qt 없는 WebView 전환 — application service, Pulse Studio 프론트엔드, 갤러리 리뷰 CI
+
+#### ⭐ 새로운 기능 / 개선
+- **Tk 비종속 application service 추가**: Recorder와 BRIR 생성 흐름을 JSON-safe 요청·응답 계약으로 감싸고, 단일 활성 job, 순번 기반 progress polling, BRIR 협력 취소, 구조화 오류를 제공한다. 기존 CustomTkinter 탭과 DSP·녹음 구현은 변경하지 않고 `application/` 계층에서 그대로 호출한다.
+- **BRIR 옵션 전체 개방**: application service의 BRIR 요청이 `ProcessingConfig` dataclass 전체 표면(가상 저음, decay, channel balance, bass boost, tilt, 리샘플, 마이크 편차 보정, JamesDSP/Hangloose/TrueHD 출력 등)을 필드 종류별 타입 검증과 함께 수용한다. 새 파이프라인 파라미터는 dataclass 필드 추가만으로 프론트엔드에 자동 개방된다. Custom EQ 파일(`eq.csv`/`eq-left.csv`/`eq-right.csv`)은 CTk GUI와 동일하게 측정 폴더로 사이드카 복사한다.
+- **Pulse Studio 디자인의 WebView 프론트엔드**: 최소 PoC 화면을 Studio 스킨 철학(200px 사이드바 + 번호 카드 + disclosure 행)과 Pulse 팔레트(light/dark 정확한 hex, WCAG 수정 반영)로 전면 재구축했다. Recorder / Processing / Settings / Info 4개 탭, CTk GUI와 동등한 옵션 표면, 네이티브 파일·폴더 선택 다이얼로그(pywebview `create_file_dialog`), 스윕 세트 생성, 결과 폴더 열기, 번들 Pretendard/JetBrains Mono 폰트를 제공한다.
+- **WebView 설정·정보 탭**: 언어(9개)·테마(dark/light/system)·스킨을 CTk GUI와 같은 `~/.impulcifer/settings.json`에 저장·공유하고, i18n 문자열은 bootstrap에서 병합 제공(en fallback + 현재 언어)한다. 시스템 정보(GIL/워커/설치 형태)와 프로젝트 링크(allowlist 고정)도 노출한다.
+- **WebView Stable 스킨 변형**: CTk Stable 레이아웃(72px 상단 헤더 + 중앙 탭 스트립 + 중앙 콘텐츠)을 충실 이식한 `data-skin=stable` 셸을 추가했다. 같은 DOM에 셸 크롬만 교체하며, CTk GUI에서 `skin: stable`을 저장한 사용자의 선택이 WebView에서도 존중된다. 선택된 탭은 WCAG AA를 위해 accent-strong 채움을 사용한다. Stable 관례에 맞춰 게이트 옵션 그룹은 disclosure 대신 **체크박스 공개**로 렌더링하고(고급 옵션만 접이식 유지), 작업 진행은 인라인 카드 대신 CTk `ProcessingDialog`/`RecordingProgressDialog`처럼 **별도 모달 다이얼로그**(진행률·로그·취소/닫기)로 표시한다.
+- **녹음 상태 연출 이식**: Recorder의 작업 표시가 원시 로그 나열에서 CTk `RecordingStatusController` 연출로 업그레이드됐다 — 스피커 칩(진행 중 accent, 완료 ✓), 단계별 상태 라인("현재 녹음 중: FL (1/2)" 등), 경과/총 시간 디테일, 완료 시 WAV 분석 요약(채널·길이·피크·활성 채널, 서비스가 결과에 동봉). Stable 모달에도 동일하게 표시되며, 로그에는 phase 전환만 기록해 틱 스팸을 없앴다.
+- **ko 문구 정리**: 가상 저음의 "서브베이스 하이패스 (Hz)"를 표준 공학 용어인 "초저역 차단 주파수 (Hz)"로 교체하고, 툴팁의 "DC 럼블"도 "DC·초저역 잡음"으로 정리.
+- **Studio 작업 체크리스트**: Studio의 Activity 카드가 CLI 로그 나열을 넘어 BRIR 파이프라인 10단계(측정 열기 → … → BRIR 쓰기)를 "✓ 완료 / ▸ 진행 중 / ○ 예정" 체크리스트로 표시한다. 로거 메시지를 같은 로케일 테이블의 스테이지 문자열과 prefix 매칭하므로 표시 언어와 무관하게 동작한다. **실패/취소 시맨틱**: 실패 지점 스테이지는 ✕(빨강), 취소는 –(주황)로 표시되고 완료 단계의 ✓는 유지되며, 도달하지 못한 단계는 ○인 채 흐려져 "미도달"로 읽힌다. Stable에서는 시작 전 검증 오류가 alert로 표면화된다(인라인 카드가 숨겨져 있으므로).
+
+#### 🔧 빌드 / 설정 변경
+- **WebView 갤러리 리뷰 CI 추가 (`.github/workflows/webview-gallery.yml`)**: EqualizerAPO-XT의 offscreen skin gallery 패턴을 이식했다. mock 브리지 위에서 4 view × 2 테마 × 2 언어 + busy 상태 2종 = 18샷을 headless Chromium으로 렌더링하고(`build_scripts/webview_gallery.py`, 샷 수 자가검증), PNG를 `webview-gallery` 브랜치에 push한 뒤 이미지를 임베드한 리뷰 이슈를 자동 생성/갱신한다.
+- **기존 Nuitka 릴리스 경로 보존**: canonical `gui_main.py`와 `tk-inter`/CustomTkinter 플래그는 그대로 유지한다. WebView는 pip/source 전용 별도 entrypoint(`impulcifer_webview`, 선택적 `webview` extra)이며 standalone 전환은 후속 단계로 미룬다.
+
 ## 2.8.1 - 2026-07-10
 ### 주석 대청소 — 이력 내레이션·재진술·죽은 주석 제거
 

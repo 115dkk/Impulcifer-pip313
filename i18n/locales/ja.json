@@ -363,5 +363,18 @@
   "studio_disclosure_advanced_desc": "リサンプリング、レベル、バランス、減衰、出力形式を調整します",
   "studio_disclosure_virtual_bass_desc": "低音が不足する部分に理想化した低域応答を追加します",
   "studio_toggle_plot_desc": "グラフを生成（処理時間が長くなります）",
-  "label_force_channels_custom": "カスタム値:"
+  "label_force_channels_custom": "カスタム値:",
+  "webview_experimental_badge": "Experimental WebView frontend",
+  "webview_card_activity": "Activity",
+  "webview_job_idle": "Idle",
+  "webview_open_output_folder": "Open output folder",
+  "webview_bridge_connecting": "Connecting to Python…",
+  "webview_bridge_connected": "Python bridge connected.",
+  "webview_bridge_failed": "Python bridge unavailable.",
+  "button_refresh_devices": "Refresh devices",
+  "webview_status_running": "Running",
+  "webview_status_succeeded": "Completed",
+  "webview_status_failed": "Failed",
+  "webview_status_cancelled": "Cancelled",
+  "webview_status_cancel_requested": "Cancelling…"
 }

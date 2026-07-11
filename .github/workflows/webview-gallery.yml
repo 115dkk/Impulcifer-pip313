@@ -1,0 +1,117 @@
+# WebView UI 갤러리 리뷰 파이프라인.
+#
+# EqualizerAPO-XT의 offscreen skin gallery 패턴을 이식한 것: 헤드리스
+# 브라우저가 mock 브리지 위에서 모든 view x theme x language 조합을
+# 렌더링하고(스크립트가 정확한 샷 수를 자가검증), PNG를 webview-gallery
+# 브랜치에 push한 뒤 리뷰 이슈를 열어 사용자가 화면을 직접 보고 판정할
+# 수 있게 한다. fork PR은 브랜치 push/이슈 생성 권한이 없으므로 제외.
+name: WebView Gallery
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'webview_ui/**'
+      - 'application/**'
+      - 'impulcifer_webview.py'
+      - 'build_scripts/webview_gallery.py'
+      - '.github/workflows/webview-gallery.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: webview-gallery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gallery:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Render gallery
+        run: python build_scripts/webview_gallery.py --out webview-gallery
+
+      - name: Upload gallery artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: webview-gallery
+          path: webview-gallery/*.png
+
+      - name: Publish gallery branch
+        id: publish
+        run: |
+          set -euo pipefail
+          BRANCH=webview-gallery
+          RUN_DIR="runs/${GITHUB_RUN_NUMBER}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$BRANCH" 2>/dev/null || true
+          if git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+            git worktree add /tmp/gallery-branch "origin/$BRANCH"
+            git -C /tmp/gallery-branch checkout -B "$BRANCH"
+          else
+            git worktree add --detach /tmp/gallery-branch
+            git -C /tmp/gallery-branch checkout --orphan "$BRANCH"
+            git -C /tmp/gallery-branch rm -rf --quiet . 2>/dev/null || true
+          fi
+          mkdir -p "/tmp/gallery-branch/$RUN_DIR"
+          cp webview-gallery/*.png "/tmp/gallery-branch/$RUN_DIR/"
+          git -C /tmp/gallery-branch add "$RUN_DIR"
+          git -C /tmp/gallery-branch commit -m "gallery: run ${GITHUB_RUN_NUMBER} (${GITHUB_SHA})"
+          git -C /tmp/gallery-branch push origin "$BRANCH"
+          echo "run_dir=$RUN_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update review issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RAW_BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/webview-gallery/${{ steps.publish.outputs.run_dir }}"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            CONTEXT="PR #${{ github.event.pull_request.number }}"
+            SOURCE_REF="${GITHUB_HEAD_REF}"
+          else
+            CONTEXT="manual (${GITHUB_REF_NAME})"
+            SOURCE_REF="${GITHUB_REF_NAME}"
+          fi
+          TITLE="WebView UI 갤러리 리뷰: ${CONTEXT}"
+          {
+            echo "WebView 프론트엔드 갤러리 — run ${GITHUB_RUN_NUMBER}, 커밋 \`${GITHUB_SHA}\` (\`${SOURCE_REF}\`)."
+            echo ""
+            echo "각 스크린샷을 보고 디자인/레이아웃/번역을 리뷰해 주세요."
+            echo "원본 PNG는 [webview-gallery 브랜치](https://github.com/${GITHUB_REPOSITORY}/tree/webview-gallery/${{ steps.publish.outputs.run_dir }})와 run artifact에 있습니다."
+            echo ""
+            for png in webview-gallery/*.png; do
+              name="$(basename "$png" .png)"
+              echo "<details><summary><b>${name}</b></summary>"
+              echo ""
+              echo "![${name}](${RAW_BASE}/${name}.png)"
+              echo ""
+              echo "</details>"
+            done
+          } > issue-body.md
+          EXISTING="$(gh issue list --state open --search "in:title \"${TITLE}\"" --json number,title \
+            --jq "[.[] | select(.title == \"${TITLE}\")][0].number // empty")"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file issue-body.md
+            echo "Updated review issue #$EXISTING"
+          else
+            gh issue create --title "$TITLE" --body-file issue-body.md \
+              --label webview-gallery 2>/dev/null \
+              || gh issue create --title "$TITLE" --body-file issue-body.md
+          fi

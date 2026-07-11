@@ -12,6 +12,13 @@ Impulcifer-py313은 HRIR(Head-Related Impulse Response)을 측정하고 헤드�
 
 ```
 gui_main.py              ← 엔트리포인트 (standalone 빌드 대상)
+impulcifer_webview.py     ← 실험적 WebView 프론트엔드 엔트리포인트 (Windows 전용,
+                            pywebview Edge WebView2 고정, 선택적 [webview] extra)
+application/
+  impulcifer_service.py   ← Tk 비종속 JSON-safe application service (job 모델,
+                            ProcessingConfig 전체 표면 검증, UI 설정/시스템 정보)
+webview_ui/               ← WebView HTML/CSS/JS (Pulse Studio 디자인, i18n 문자열은
+                            bootstrap 응답으로 주입; webview-gallery CI가 렌더 검증)
 impulcifer.py             ← 핵심 처리 파이프라인 (main 함수)
 core/
   hrir.py                 ← HRIR 클래스 (Phase 1: ~1150줄, plotting은 plotting/으로 이동)
@@ -460,6 +467,10 @@ if __name__ == "__main__":
 | `i18n/` | 필수 | 모듈 임포트 검증 | 불필요 |
 | 빌드 설정만 | 필수 | 불필요 | 권장 |
 | 의존성 변경 | 필수 | 전체 + 동기화 확인 | 권장 |
+
+## GitHub 작업 도구
+
+이 개발 환경에는 GitHub CLI(`gh`)가 설치되어 있고 `github.com` 계정 인증도 완료되어 있다. Issue 생성·조회·댓글, PR 생성·조회·댓글, Actions 상태·로그 확인 등 GitHub 작업은 브라우저나 Computer Use 자동화보다 `gh` CLI를 우선 사용한다(`gh issue ...`, `gh pr ...`, `gh run ...`). `gh`로 지원되지 않는 작업임을 확인한 경우에만 다른 수단을 사용한다.
 
 ## PR push 이후 CI 감시 및 회귀 대응
 

@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-skin="studio">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Impulcifer WebView Preview</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="../logo/pulse-32.png" alt="" onerror="this.style.display='none'">
+          <div>
+            <div class="brand-name">Impulcifer</div>
+            <div class="brand-version mono" id="brand-version">v—</div>
+          </div>
+        </div>
+        <div class="rule"></div>
+        <nav class="nav" id="nav">
+          <button class="nav-item active" data-view="recorder">
+            <span class="nav-glyph">●</span><span data-i18n="sidebar_recorder">Recorder</span>
+          </button>
+          <button class="nav-item" data-view="processing">
+            <span class="nav-glyph">≡</span><span data-i18n="sidebar_processing">Processing</span>
+          </button>
+          <button class="nav-item" data-view="settings">
+            <span class="nav-glyph">⚙</span><span data-i18n="sidebar_settings">Settings</span>
+          </button>
+          <button class="nav-item" data-view="info">
+            <span class="nav-glyph">ⓘ</span><span data-i18n="sidebar_info">Info</span>
+          </button>
+        </nav>
+        <div class="sidebar-footer">
+          <span class="badge" data-i18n="webview_experimental_badge">Experimental WebView frontend</span>
+          <span class="runtime mono" id="runtime-status" data-i18n="webview_bridge_connecting">Connecting to Python…</span>
+        </div>
+      </aside>
+
+      <main class="content" id="content">
+
+        <!-- ============================ RECORDER ============================ -->
+        <section class="view active" id="view-recorder">
+          <header class="page-header">
+            <div>
+              <h1 data-i18n="studio_recorder_title">Channel recording</h1>
+              <p class="subtitle" data-i18n="studio_recorder_subtitle">Play sweep through each speaker, capture with binaural mics.</p>
+            </div>
+            <button class="btn btn-danger" id="btn-start-recording" data-start data-i18n="button_start_recording">Start Recording</button>
+          </header>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">01</span>
+              <span class="card-title" data-i18n="section_audio_devices">Audio Devices</span>
+              <button class="btn-link" id="btn-refresh-devices" data-i18n="button_refresh_devices">Refresh devices</button>
+            </div>
+            <div class="card-body">
+              <div class="field-row">
+                <label for="rf-host-api" data-i18n="label_host_api">Host API:</label>
+                <select id="rf-host-api"><option value="">Auto</option></select>
+              </div>
+              <div class="field-row">
+                <label for="rf-output-device" data-i18n="label_playback_device">Playback Device:</label>
+                <select id="rf-output-device"><option value="">Default</option></select>
+              </div>
+              <div class="field-row">
+                <label for="rf-input-device" data-i18n="label_recording_device">Recording Device:</label>
+                <select id="rf-input-device"><option value="">Default</option></select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">02</span>
+              <span class="card-title" data-i18n="section_files">Files</span>
+            </div>
+            <div class="card-body">
+              <div class="field-row">
+                <label for="rf-play" data-i18n="label_file_to_play">File to Play:</label>
+                <input id="rf-play" class="mono" value="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" spellcheck="false">
+                <button class="btn-link" data-browse="audio" data-target="rf-play" data-i18n="button_browse">Browse</button>
+              </div>
+              <div class="field-row">
+                <label for="rf-record-dir" data-i18n="label_record_to_folder">Record to Folder:</label>
+                <input id="rf-record-dir" class="mono" value="data/my_hrir" spellcheck="false">
+                <button class="btn-link" data-browse="dir" data-target="rf-record-dir" data-i18n="button_browse">Browse</button>
+              </div>
+              <p class="hint mono" id="rf-resolved-path"></p>
+              <div class="actions-row">
+                <button class="btn btn-secondary" id="btn-sweep-set" data-i18n="button_generate_14ch_sweep_set">Generate sweep set</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">03</span>
+              <span class="card-title" data-i18n="section_recording_options">Recording Options</span>
+            </div>
+            <div class="card-body">
+              <div class="check-row">
+                <input type="checkbox" id="rf-force-channels">
+                <label for="rf-force-channels" data-i18n="label_force_channels">Force channel count:</label>
+                <input type="number" id="rf-channels" class="num mono" value="14" min="1" max="64" disabled>
+              </div>
+              <p class="hint" id="rf-channel-guidance"></p>
+              <div class="check-row">
+                <input type="checkbox" id="rf-append">
+                <label for="rf-append" data-i18n="checkbox_append_to_file">Append to existing file</label>
+              </div>
+              <div class="check-row">
+                <input type="checkbox" id="rf-debug-plots">
+                <label for="rf-debug-plots" data-i18n="checkbox_debug_plots">Debug plots</label>
+              </div>
+              <div class="actions-row">
+                <button class="btn btn-secondary" id="btn-record-headphones" data-start data-i18n="button_record_headphones">Record headphones</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" data-activity-card>
+            <div class="card-head">
+              <span class="card-num mono">04</span>
+              <span class="card-title" data-i18n="webview_card_activity">Activity</span>
+              <span class="card-meta mono" data-job-state data-i18n="webview_job_idle">Idle</span>
+            </div>
+            <div class="card-body">
+              <div class="chips" data-rec-chips hidden></div>
+              <p class="rec-status" data-rec-status hidden></p>
+              <p class="hint" data-rec-detail hidden></p>
+              <div class="progress"><i data-progress></i></div>
+              <pre class="log" data-log aria-live="polite"></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ PROCESSING ============================ -->
+        <section class="view" id="view-processing">
+          <header class="page-header">
+            <div>
+              <h1 data-i18n="studio_processing_title">HRIR Processing</h1>
+              <p class="subtitle" data-i18n="studio_processing_subtitle">Generate BRIR from measured impulse responses.</p>
+            </div>
+            <div class="header-actions">
+              <button class="btn btn-secondary" id="btn-cancel-brir" data-i18n="button_cancel" disabled>Cancel</button>
+              <button class="btn btn-primary" id="btn-generate-brir" data-start data-i18n="button_generate_brir">Generate BRIR</button>
+            </div>
+          </header>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">01</span>
+              <span class="card-title" data-i18n="section_input_files">Input Files</span>
+            </div>
+            <div class="card-body">
+              <div class="field-row">
+                <label for="bf-dir-path" data-i18n="label_your_recordings">Your Recordings:</label>
+                <input id="bf-dir-path" class="mono" value="data/my_hrir" spellcheck="false">
+                <button class="btn-link" data-browse="dir" data-target="bf-dir-path" data-i18n="button_browse">Browse</button>
+              </div>
+              <div class="field-row">
+                <label for="bf-test-signal" data-i18n="label_test_signal">Test Signal:</label>
+                <input id="bf-test-signal" class="mono" value="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" spellcheck="false">
+                <button class="btn-link" data-browse="audio_pkl" data-target="bf-test-signal" data-i18n="button_browse">Browse</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">02</span>
+              <span class="card-title" data-i18n="section_processing_options">Processing Options</span>
+            </div>
+            <div class="card-body">
+
+              <div class="disclosure" id="dis-room">
+                <div class="disclosure-head" data-disclosure>
+                  <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+                  <div class="disclosure-text">
+                    <span class="disclosure-title" data-i18n="section_room_correction">Room Correction</span>
+                    <span class="disclosure-desc" data-i18n="studio_disclosure_room_correction_desc">Compensate the room's frequency response.</span>
+                  </div>
+                  <span class="caret" aria-hidden="true"></span>
+                </div>
+                <div class="disclosure-body">
+                  <div class="field-row">
+                    <label for="bf-specific-limit" data-i18n="label_specific_limit">Specific Limit (Hz):</label>
+                    <input type="number" id="bf-specific-limit" class="num mono" value="400" min="0">
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-generic-limit" data-i18n="label_generic_limit">Generic Limit (Hz):</label>
+                    <input type="number" id="bf-generic-limit" class="num mono" value="300" min="0">
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-fr-combination" data-i18n="label_fr_combination">FR Combination Method:</label>
+                    <select id="bf-fr-combination">
+                      <option value="average" selected>average</option>
+                      <option value="conservative">conservative</option>
+                    </select>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-mic-calibration" data-i18n="label_mic_calibration">Mic Calibration:</label>
+                    <input id="bf-mic-calibration" class="mono" spellcheck="false">
+                    <button class="btn-link" data-browse="text" data-target="bf-mic-calibration" data-i18n="button_browse">Browse</button>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-room-target" data-i18n="label_target_curve">Target Curve:</label>
+                    <input id="bf-room-target" class="mono" spellcheck="false">
+                    <button class="btn-link" data-browse="text" data-target="bf-room-target" data-i18n="button_browse">Browse</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="disclosure" id="dis-headphone">
+                <div class="disclosure-head" data-disclosure>
+                  <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+                  <div class="disclosure-text">
+                    <span class="disclosure-title" data-i18n="section_headphone_compensation">Headphone Compensation</span>
+                    <span class="disclosure-desc" data-i18n="studio_disclosure_headphone_comp_desc">Flatten the headphone's own response.</span>
+                  </div>
+                  <span class="caret" aria-hidden="true"></span>
+                </div>
+                <div class="disclosure-body">
+                  <div class="field-row">
+                    <label for="bf-headphone-file" data-i18n="label_headphone_file">Headphone File:</label>
+                    <input id="bf-headphone-file" class="mono" spellcheck="false" placeholder="headphones.wav">
+                    <button class="btn-link" data-browse="wav" data-target="bf-headphone-file" data-i18n="button_browse">Browse</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="disclosure" id="dis-eq">
+                <div class="disclosure-head" data-disclosure>
+                  <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+                  <div class="disclosure-text">
+                    <span class="disclosure-title" data-i18n="checkbox_custom_eq">Custom EQ</span>
+                    <span class="disclosure-desc" data-i18n="studio_disclosure_custom_eq_desc">Apply eq.csv / eq-left.csv / eq-right.csv from the recording folder.</span>
+                  </div>
+                  <span class="caret" aria-hidden="true"></span>
+                </div>
+                <div class="disclosure-body">
+                  <div class="field-row">
+                    <label for="bf-eq-file" class="mono">eq.csv</label>
+                    <input id="bf-eq-file" class="mono" value="eq.csv" spellcheck="false">
+                    <button class="btn-link" data-browse="text" data-target="bf-eq-file" data-i18n="button_browse">Browse</button>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-eq-left" class="mono">eq-left.csv</label>
+                    <input id="bf-eq-left" class="mono" value="eq-left.csv" spellcheck="false">
+                    <button class="btn-link" data-browse="text" data-target="bf-eq-left" data-i18n="button_browse">Browse</button>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-eq-right" class="mono">eq-right.csv</label>
+                    <input id="bf-eq-right" class="mono" value="eq-right.csv" spellcheck="false">
+                    <button class="btn-link" data-browse="text" data-target="bf-eq-right" data-i18n="button_browse">Browse</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="check-row">
+                <input type="checkbox" id="bf-plot">
+                <label for="bf-plot" data-i18n="checkbox_plot_results">Plot results (slow)</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">03</span>
+              <span class="card-title" data-i18n="section_advanced_options">Advanced Options</span>
+            </div>
+            <div class="card-body">
+              <div class="disclosure" id="dis-advanced">
+                <div class="disclosure-head" data-disclosure>
+                  <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+                  <div class="disclosure-text">
+                    <span class="disclosure-title" data-i18n="section_advanced_options">Advanced Options</span>
+                    <span class="disclosure-desc" data-i18n="studio_disclosure_advanced_desc">Sampling rate, levels, decay and output formats.</span>
+                  </div>
+                  <span class="caret" aria-hidden="true"></span>
+                </div>
+                <div class="disclosure-body">
+                  <div class="check-row">
+                    <input type="checkbox" id="bf-resample">
+                    <label for="bf-resample" data-i18n="checkbox_resample_to">Resample to:</label>
+                    <select id="bf-fs" class="num" disabled>
+                      <option>44100</option><option selected>48000</option><option>88200</option>
+                      <option>96000</option><option>176400</option><option>192000</option>
+                      <option>352000</option><option>384000</option>
+                    </select>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-target-level" data-i18n="label_target_level">Target Level (dB):</label>
+                    <input type="number" id="bf-target-level" class="num mono" step="0.1" placeholder="—">
+                  </div>
+                  <div class="field-row">
+                    <label data-i18n="label_bass_boost">Bass Boost:</label>
+                    <div class="inline-group">
+                      <span class="mini-label" data-i18n="label_gain_db">Gain (dB):</span>
+                      <input type="number" id="bf-bass-gain" class="num mono" value="0" step="0.1">
+                      <span class="mini-label" data-i18n="label_fc">fc (Hz):</span>
+                      <input type="number" id="bf-bass-fc" class="num mono" value="105" min="1">
+                      <span class="mini-label" data-i18n="label_q">Q:</span>
+                      <input type="number" id="bf-bass-q" class="num mono" value="0.76" step="0.01" min="0.1">
+                    </div>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-tilt" data-i18n="label_tilt">Tilt (dB/octave):</label>
+                    <input type="number" id="bf-tilt" class="num mono" value="0" step="0.1">
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-balance" data-i18n="label_balance">Channel Balance:</label>
+                    <div class="inline-group">
+                      <select id="bf-balance">
+                        <option value="none" selected>none</option><option value="trend">trend</option>
+                        <option value="mids">mids</option><option value="avg">avg</option>
+                        <option value="min">min</option><option value="left">left</option>
+                        <option value="right">right</option><option value="number">number</option>
+                      </select>
+                      <span class="mini-label" data-i18n="label_balance_db">dB:</span>
+                      <input type="number" id="bf-balance-db" class="num mono" value="0" disabled>
+                    </div>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-decay" data-i18n="label_decay">Decay (ms):</label>
+                    <div class="inline-group">
+                      <input type="number" id="bf-decay" class="num mono" min="0" placeholder="—">
+                      <input type="checkbox" id="bf-decay-per-channel">
+                      <label for="bf-decay-per-channel" data-i18n="checkbox_per_channel">Per-channel</label>
+                    </div>
+                  </div>
+                  <div class="field-row" id="bf-decay-channels" hidden>
+                    <span></span>
+                    <div class="inline-group" id="bf-decay-grid"></div>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-head-ms" data-i18n="label_pre_response">Pre-response (ms):</label>
+                    <input type="number" id="bf-head-ms" class="num mono" value="1.0" step="0.1" min="0">
+                  </div>
+                  <div class="check-row">
+                    <input type="checkbox" id="bf-jamesdsp">
+                    <label for="bf-jamesdsp" data-i18n="checkbox_jamesdsp">JamesDSP true stereo IR</label>
+                  </div>
+                  <div class="check-row">
+                    <input type="checkbox" id="bf-hangloose">
+                    <label for="bf-hangloose" data-i18n="checkbox_hangloose">Hangloose Convolver IRs</label>
+                  </div>
+                  <div class="check-row">
+                    <input type="checkbox" id="bf-interactive-plots">
+                    <label for="bf-interactive-plots" data-i18n="checkbox_interactive_plots">Interactive plots</label>
+                  </div>
+                  <div class="check-row">
+                    <input type="checkbox" id="bf-truehd">
+                    <label for="bf-truehd" data-i18n="checkbox_truehd_layouts">TrueHD layouts</label>
+                  </div>
+                  <div class="check-row">
+                    <input type="checkbox" id="bf-mic-deviation">
+                    <label for="bf-mic-deviation" data-i18n="checkbox_enable_mic_deviation">Microphone deviation correction</label>
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-mic-strength" data-i18n="label_strength">Strength:</label>
+                    <input type="number" id="bf-mic-strength" class="num mono" value="0.7" step="0.05" min="0" max="1" disabled>
+                  </div>
+                  <div class="check-row">
+                    <input type="checkbox" id="bf-mic-debug" disabled>
+                    <label for="bf-mic-debug" data-i18n="checkbox_mic_deviation_debug_plots">Mic deviation debug plots</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">04</span>
+              <span class="card-title" data-i18n="vbass_group_title">Virtual Bass</span>
+            </div>
+            <div class="card-body">
+              <div class="disclosure" id="dis-vbass">
+                <div class="disclosure-head" data-disclosure>
+                  <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+                  <div class="disclosure-text">
+                    <span class="disclosure-title" data-i18n="vbass_enable">Enable virtual bass</span>
+                    <span class="disclosure-desc" data-i18n="studio_disclosure_virtual_bass_desc">Extend low-end response below the crossover.</span>
+                  </div>
+                  <span class="caret" aria-hidden="true"></span>
+                </div>
+                <div class="disclosure-body">
+                  <div class="field-row">
+                    <label for="bf-vbass-freq" data-i18n="vbass_crossover_freq">Crossover frequency (Hz):</label>
+                    <input type="number" id="bf-vbass-freq" class="num mono" value="250" min="30" max="500">
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-vbass-hp" data-i18n="vbass_hp_freq">Sub-bass high-pass (Hz):</label>
+                    <input type="number" id="bf-vbass-hp" class="num mono" value="15.0" step="0.5" min="0">
+                  </div>
+                  <div class="field-row">
+                    <label for="bf-vbass-polarity" data-i18n="vbass_polarity">Polarity:</label>
+                    <select id="bf-vbass-polarity">
+                      <option value="auto" selected data-i18n="vbass_polarity_auto">Auto</option>
+                      <option value="normal" data-i18n="vbass_polarity_normal">Normal</option>
+                      <option value="invert" data-i18n="vbass_polarity_invert">Invert</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" data-activity-card>
+            <div class="card-head">
+              <span class="card-num mono">05</span>
+              <span class="card-title" data-i18n="webview_card_activity">Activity</span>
+              <span class="card-meta mono" data-job-state data-i18n="webview_job_idle">Idle</span>
+            </div>
+            <div class="card-body">
+              <ol class="steps" id="brir-steps" hidden></ol>
+              <div class="progress"><i data-progress></i></div>
+              <pre class="log" data-log aria-live="polite"></pre>
+              <div class="actions-row">
+                <button class="btn btn-secondary" id="btn-open-output" data-i18n="webview_open_output_folder" hidden>Open output folder</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ SETTINGS ============================ -->
+        <section class="view" id="view-settings">
+          <header class="page-header">
+            <div>
+              <h1 data-i18n="studio_settings_title">UI Settings</h1>
+              <p class="subtitle" data-i18n="studio_settings_subtitle">Adjust the look and behaviour of the interface.</p>
+            </div>
+          </header>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">UI</span>
+              <span class="card-title" data-i18n="studio_card_appearance">Appearance</span>
+            </div>
+            <div class="card-body">
+              <div class="field-row">
+                <label for="sf-skin" data-i18n="label_select_skin">Select Skin:</label>
+                <select id="sf-skin">
+                  <option value="stable" data-i18n="option_skin_stable">Stable</option>
+                  <option value="studio" data-i18n="option_skin_studio">Studio</option>
+                </select>
+              </div>
+              <p class="hint" id="sf-skin-desc"></p>
+              <div class="field-row">
+                <label for="sf-theme" data-i18n="label_select_theme">Select Theme:</label>
+                <select id="sf-theme">
+                  <option value="dark" data-i18n="option_theme_dark">Dark</option>
+                  <option value="light" data-i18n="option_theme_light">Light</option>
+                  <option value="system" data-i18n="option_theme_system">System</option>
+                </select>
+              </div>
+              <div class="field-row">
+                <label for="sf-language" data-i18n="label_select_language">Select Language:</label>
+                <select id="sf-language"></select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">dir</span>
+              <span class="card-title" data-i18n="section_data_access">Data Access</span>
+            </div>
+            <div class="card-body">
+              <p class="hint" data-i18n="label_data_folder_description">Access reference files, test signals, and recordings</p>
+              <div class="actions-row">
+                <button class="btn btn-secondary" id="btn-open-data" data-i18n="button_open_data_folder">Open Data Folder</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ INFO ============================ -->
+        <section class="view" id="view-info">
+          <header class="page-header">
+            <div>
+              <h1 data-i18n="studio_info_title">Info</h1>
+              <p class="subtitle" data-i18n="studio_info_subtitle">Version, dependencies, license.</p>
+            </div>
+          </header>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">01</span>
+              <span class="card-title" data-i18n="section_about">About</span>
+            </div>
+            <div class="card-body about-hero">
+              <img class="about-logo" src="../logo/pulse-128.png" alt="" onerror="this.style.display='none'">
+              <div>
+                <h2 class="about-title">Impulcifer</h2>
+                <p class="version-pill mono" id="info-version-pill">VERSION — · PYTHON —</p>
+                <p class="hint" data-i18n="app_subtitle"></p>
+              </div>
+              <div class="actions-row">
+                <button class="btn btn-secondary" data-open-url="license" data-i18n="button_view_license">View License</button>
+                <button class="btn btn-secondary" data-open-url="report_bug" data-i18n="button_report_bug">Report Bug</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">env</span>
+              <span class="card-title" data-i18n="section_system_info">System Info</span>
+            </div>
+            <div class="card-body">
+              <div class="kv-grid" id="info-system"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">02</span>
+              <span class="card-title" data-i18n="section_contributors">Contributors</span>
+            </div>
+            <div class="card-body">
+              <div class="kv-grid">
+                <span class="kv-key">Jaakko Pasanen</span><span class="kv-val" data-i18n="contributor_role_original">Original author</span>
+                <span class="kv-key">115dkk</span><span class="kv-val" data-i18n="contributor_role_py313">Python 3.13+ fork</span>
+                <span class="kv-key">LionLion123</span><span class="kv-val" data-i18n="contributor_role_contributor">Contributor</span>
+                <span class="kv-key">SDC (DCinside)</span><span class="kv-val" data-i18n="contributor_role_contributor">Contributor</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">link</span>
+              <span class="card-title" data-i18n="section_project_links">Project Links</span>
+            </div>
+            <div class="card-body">
+              <div class="actions-row">
+                <button class="btn btn-secondary" data-open-url="original_repo" data-i18n="button_original_repo">Original Repository</button>
+                <button class="btn btn-secondary" data-open-url="fork_repo" data-i18n="button_fork_repo">Python 3.13+ Fork</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+
+    <!-- Stable skin runs jobs in a separate dialog, mirroring the CTk
+         RecordingProgressDialog / ProcessingDialog convention. -->
+    <div class="modal-backdrop" id="job-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="job-modal-title">
+        <div class="modal-head">
+          <h3 id="job-modal-title">Processing</h3>
+          <span class="card-meta mono" data-job-state data-i18n="webview_job_idle">Idle</span>
+        </div>
+        <div class="chips" data-rec-chips hidden></div>
+        <p class="rec-status" data-rec-status hidden></p>
+        <p class="hint" data-rec-detail hidden></p>
+        <div class="progress"><i data-progress></i></div>
+        <pre class="log" data-log></pre>
+        <div class="actions-row modal-actions">
+          <button class="btn btn-secondary" id="job-modal-cancel" data-i18n="button_cancel">Cancel</button>
+          <button class="btn btn-primary" id="job-modal-close" data-i18n="button_close" hidden>Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

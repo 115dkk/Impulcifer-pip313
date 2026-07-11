@@ -1,0 +1,729 @@
+/* Pulse design tokens — sRGB conversions of the oklch(L c 240) palette
+   shared with the CTk skins (gui/theme/__init__.py COLORS). The WCAG
+   fixes from the adversarial design review are baked in: filled controls
+   holding white text use accent-strong, and the active nav item keeps
+   fg-0 text over the accent-soft pill. */
+
+@font-face {
+  font-family: "Pretendard";
+  src: url("../font/PretendardVariable.ttf") format("truetype-variations");
+  font-weight: 45 920;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../font/JetBrainsMono[wght].ttf") format("truetype-variations");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  --bg-0: #f3f5f7;
+  --bg-1: #e6e8eb;
+  --bg-2: #dde0e3;
+  --bg-3: #cdd0d3;
+  --bg-4: #b5b8ba;
+  --fg-0: #15171b;
+  --fg-1: #3a3d42;
+  --fg-2: #5f6368;
+  --fg-3: #8b9198;
+  --line: #cdd0d3;
+  --line-soft: #dde0e3;
+  --accent: #3b82f6;
+  --accent-strong: #2563eb;
+  --accent-soft: #dbeafe;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --err: #dc2626;
+  --field-bg: #ffffff;
+  --field-border: #cdd0d3;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg-0: #101214;
+  --bg-1: #181b1d;
+  --bg-2: #23272a;
+  --bg-3: #2b2e31;
+  --bg-4: #2f3337;
+  --fg-0: #f3f5f7;
+  --fg-1: #b5b8ba;
+  --fg-2: #a3a8ae;
+  --fg-3: #7f858d;
+  --line: #2b2e31;
+  --line-soft: #1d2022;
+  --accent-soft: #1e3a5f;
+  --ok: #4ac776;
+  --warn: #e6ac3d;
+  --err: #fb594d;
+  /* Fields are contrast-aware per surface (user-picked in design review):
+     on cards (bg-2) they are a neutral-cool dark inset; inside disclosure
+     bodies (bg-1) the polarity flips to a lighter gray so the field always
+     sits one clear step away from its container. Pure bg-0 read as a
+     high-contrast hole; saturated blue read as synthetic. */
+  --field-bg: #17191d;
+  --field-border: #33373d;
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] .disclosure-body {
+  --field-bg: #2c3036;
+  --field-border: #454a52;
+}
+
+* { box-sizing: border-box; }
+
+/* Any explicit display on a class (grid/flex) outranks the UA's [hidden]
+   rule — this already bit the modal backdrop, the pipeline checklist and
+   the per-channel decay row. Make hidden mean hidden, always. */
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font: 13px/1.5 "Pretendard", "Segoe UI", system-ui, sans-serif;
+  background: var(--bg-1);
+  color: var(--fg-0);
+}
+
+.mono {
+  font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+}
+
+h1, h2, p { margin: 0; }
+
+/* ---------------------------------------------------------------- shell */
+
+.app {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-0);
+  min-width: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 14px 12px;
+}
+
+.brand-logo { width: 28px; height: 28px; }
+.brand-name { font-size: 15px; font-weight: 700; }
+.brand-version { font-size: 12px; color: var(--fg-2); }
+
+.rule { height: 1px; margin: 0 10px; background: var(--line-soft); }
+
+.nav {
+  display: grid;
+  gap: 4px;
+  padding: 10px 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav-item:hover { background: var(--bg-2); }
+.nav-item.active { background: var(--accent-soft); color: var(--fg-0); }
+.nav-glyph { width: 16px; text-align: center; }
+
+.sidebar-footer {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.badge {
+  justify-self: start;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+
+.runtime { font-size: 11px; color: var(--fg-2); overflow-wrap: anywhere; }
+
+.content {
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.view { display: none; max-width: 1080px; }
+.view.active { display: block; }
+
+/* ---------------------------------------------------------- page header */
+
+.page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.page-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.subtitle { margin-top: 4px; font-size: 13px; color: var(--fg-2); }
+.header-actions { display: flex; gap: 8px; }
+
+/* ----------------------------------------------------------------- card */
+
+.card {
+  overflow: hidden;
+  margin-bottom: 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--bg-2);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 10px 14px;
+  background: var(--bg-3);
+}
+
+.card-num {
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+:root[data-theme="dark"] .card-num { color: #9ec3ff; }
+
+.card-title { font-size: 14px; font-weight: 700; }
+.card-meta { margin-left: auto; font-size: 12px; color: var(--fg-2); }
+.card-head .btn-link { margin-left: auto; }
+
+.card-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px 18px;
+}
+
+/* --------------------------------------------------------------- fields */
+
+.field-row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.field-row > label, .field-row > span:first-child { color: var(--fg-1); }
+
+input[type="text"], input:not([type]), input[type="number"], select {
+  height: 36px;
+  width: 100%;
+  padding: 0 11px;
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--fg-0);
+  font: inherit;
+}
+
+input.mono { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+input.num { width: 110px; }
+select.num { width: 130px; }
+
+input:focus-visible, select:focus-visible, button:focus-visible, .switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input:disabled, select:disabled { color: var(--fg-3); opacity: 0.7; }
+input::placeholder { color: var(--fg-3); }
+
+.inline-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Selects inside inline groups must not take the full row, or trailing
+   inputs (e.g. the channel-balance dB box) wrap to their own line. */
+.inline-group select { width: auto; min-width: 170px; }
+
+#bf-decay-grid {
+  display: grid;
+  grid-template-columns: repeat(4, auto minmax(64px, 84px));
+  gap: 8px 10px;
+  align-items: center;
+}
+
+#bf-decay-grid input.num { width: 100%; }
+
+.mini-label { font-size: 12px; color: var(--fg-2); }
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check-row > label { color: var(--fg-1); }
+
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.hint { font-size: 12px; color: var(--fg-2); }
+.hint.mono { font-size: 11px; }
+
+.actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* -------------------------------------------------------------- buttons */
+
+.btn {
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-primary { background: var(--accent); color: #ffffff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-strong); }
+
+.btn-danger { background: #dc2626; color: #ffffff; }
+.btn-danger:hover:not(:disabled) { background: #b91c1c; }
+
+.btn-secondary {
+  border: 1px solid var(--line);
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--bg-4); }
+
+.btn:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.btn-link {
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+:root[data-theme="dark"] .btn-link { color: #9ec3ff; }
+.btn-link:hover:not(:disabled) { background: var(--accent-soft); }
+.btn-link:disabled { cursor: not-allowed; opacity: 0.45; }
+
+/* ----------------------------------------------------------- disclosure */
+
+.disclosure {
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: var(--bg-1);
+}
+
+.disclosure.open { border-color: var(--accent-soft); }
+
+.disclosure-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.disclosure-text { display: grid; gap: 2px; min-width: 0; }
+.disclosure-title { font-weight: 700; }
+.disclosure-desc { font-size: 12px; color: var(--fg-2); }
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--bg-4);
+  transition: background 0.15s ease;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: left 0.15s ease;
+}
+
+.open .switch { background: var(--accent); }
+.open .switch::after { left: 14px; }
+
+.caret { margin-left: auto; color: var(--fg-2); }
+.caret::after { content: "▸"; }
+.open .caret { color: var(--accent); }
+.open .caret::after { content: "▾"; }
+
+.disclosure-body {
+  display: none;
+  padding: 4px 12px 14px 54px;
+}
+
+.disclosure.open .disclosure-body { display: grid; gap: 10px; }
+
+.disclosure-body .field-row { grid-template-columns: 150px minmax(0, 1fr) auto; }
+
+/* ------------------------------------------------------------- activity */
+
+.progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-4);
+}
+
+.progress > i {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.log {
+  min-height: 120px;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--bg-0);
+  color: var(--fg-1);
+  font: 12px/1.55 "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Recorder speaker chips (Studio segment-chip parity): the chip for the
+   speaker currently playing fills with accent; finished speakers keep a
+   green check so the sweep sequence reads at a glance. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chip.active { background: var(--accent); color: #ffffff; }
+.chip.done { color: var(--fg-1); }
+.chip.done::before { content: "✓ "; color: var(--ok); }
+
+.rec-status { font-size: 13px; font-weight: 700; }
+
+/* Pipeline checklist (Studio activity card): done / current / upcoming. */
+.steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+
+.step-glyph {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.steps li.done { color: var(--fg-1); }
+.steps li.done .step-glyph {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: #ffffff;
+}
+
+.steps li.current { color: var(--fg-0); font-weight: 700; }
+.steps li.current .step-glyph {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.steps li.error { color: var(--fg-0); font-weight: 700; }
+.steps li.error .step-glyph {
+  border-color: var(--err);
+  background: var(--err);
+  color: #ffffff;
+}
+
+.steps li.cancelled { color: var(--fg-1); font-weight: 700; }
+.steps li.cancelled .step-glyph {
+  border-color: var(--warn);
+  background: var(--warn);
+  color: #ffffff;
+}
+
+/* After an abort, unreached stages dim: they were never started. */
+.steps.aborted li:not(.done):not(.error):not(.cancelled) { opacity: 0.55; }
+
+/* -------------------------------------------------------------- modal */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 10, 12, 0.55);
+  z-index: 40;
+}
+
+/* The explicit display above outweighs the UA [hidden] rule; without this
+   the invisible backdrop would cover the app and swallow every click. */
+.modal-backdrop[hidden] { display: none; }
+
+.modal {
+  display: grid;
+  gap: 14px;
+  width: min(560px, calc(100vw - 48px));
+  padding: 20px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--bg-2);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modal-head h3 { margin: 0; font-size: 16px; }
+.modal .log { min-height: 100px; max-height: 180px; }
+.modal-actions { justify-content: flex-end; }
+
+/* ----------------------------------------------------------------- info */
+
+.about-hero { align-items: start; }
+.about-logo { width: 72px; height: 72px; }
+.about-title { font-size: 20px; font-weight: 700; }
+
+.version-pill {
+  display: inline-block;
+  margin: 6px 0;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--bg-3);
+  color: var(--fg-1);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.kv-grid {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 6px 14px;
+}
+
+.kv-key { color: var(--fg-1); font-weight: 700; }
+.kv-val { color: var(--fg-2); }
+
+/* ---------------------------------------------------- Stable skin shell
+   Faithful port of the CTk Stable layout: 72px top app header + tabview
+   strip instead of the Studio sidebar. Same Pulse tokens; number pills
+   and header strips are Studio-only chrome. The selected tab fills with
+   accent-strong so its white 13px bold label clears WCAG AA. */
+
+[data-skin="stable"] .app {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+
+[data-skin="stable"] .sidebar {
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+  min-height: 72px;
+  padding: 0 20px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+[data-skin="stable"] .brand { padding: 0; }
+[data-skin="stable"] .brand-logo { width: 32px; height: 32px; }
+[data-skin="stable"] .rule { display: none; }
+
+[data-skin="stable"] .nav {
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--bg-3);
+  /* CTkTabview parity: the segmented tab strip sits centered between the
+     brand block and the runtime status. */
+  margin-inline: auto;
+}
+
+[data-skin="stable"] .nav-item { height: 30px; border-radius: 7px; }
+[data-skin="stable"] .nav-item:hover { background: var(--bg-2); }
+[data-skin="stable"] .nav-item.active { background: var(--accent-strong); color: #ffffff; }
+[data-skin="stable"] .nav-glyph { display: none; }
+
+[data-skin="stable"] .sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 0;
+  margin-left: auto;
+  padding: 0;
+}
+
+/* Without the sidebar the content spans the full window width, so the
+   left-anchored view column reads lopsided — center it under the header. */
+[data-skin="stable"] .view { margin-inline: auto; }
+
+[data-skin="stable"] .card-head {
+  background: transparent;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+[data-skin="stable"] .card-num { display: none; }
+[data-skin="stable"] .card-title { font-size: 16px; }
+
+/* Stable is not a disclosure shell: gated groups read as plain checkboxes
+   that reveal their sub-options (CTk toggle_* convention). Advanced
+   Options is the one sanctioned collapsible and keeps the Studio row. */
+[data-skin="stable"] .disclosure:not(#dis-advanced) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) > .disclosure-head {
+  gap: 8px;
+  padding: 2px 0;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) .disclosure-desc { display: none; }
+[data-skin="stable"] .disclosure:not(#dis-advanced) .caret { display: none; }
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) .switch {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--fg-3);
+  border-radius: 3px;
+  background: transparent;
+  transition: none;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) .switch::after {
+  top: 0;
+  left: 3px;
+  width: 4px;
+  height: 8px;
+  border: solid transparent;
+  border-width: 0 2px 2px 0;
+  border-radius: 0;
+  background: transparent;
+  transform: rotate(45deg);
+  transition: none;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced).open .switch {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced).open .switch::after {
+  border-color: #ffffff;
+}
+
+[data-skin="stable"] .disclosure:not(#dis-advanced) .disclosure-body {
+  padding: 4px 0 10px 26px;
+}
+
+/* Stable runs jobs in the modal dialog (CTk ProcessingDialog parity), so
+   the inline activity cards and the Studio checklist stay hidden. */
+[data-skin="stable"] [data-activity-card] { display: none; }
+
+/* -------------------------------------------------------- small screens */
+
+@media (max-width: 900px) {
+  [data-skin="studio"] .app { grid-template-columns: 64px 1fr; }
+  [data-skin="studio"] .brand > div,
+  [data-skin="studio"] .nav-item > span:last-child,
+  [data-skin="studio"] .sidebar-footer { display: none; }
+  [data-skin="stable"] .sidebar { flex-wrap: wrap; padding: 10px 16px; }
+  .field-row { grid-template-columns: 1fr; }
+  .field-row > label { margin-bottom: -6px; }
+}
