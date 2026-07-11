@@ -14,7 +14,7 @@ been fixed and old features improved.
 - **WebView 설정·정보 탭**: 언어(9개)·테마(dark/light/system)·스킨을 CTk GUI와 같은 `~/.impulcifer/settings.json`에 저장·공유하고, i18n 문자열은 bootstrap에서 병합 제공(en fallback + 현재 언어)한다. 시스템 정보(GIL/워커/설치 형태)와 프로젝트 링크(allowlist 고정)도 노출한다.
 - **WebView Stable 스킨 변형**: CTk Stable 레이아웃(72px 상단 헤더 + 중앙 탭 스트립 + 중앙 콘텐츠)을 충실 이식한 `data-skin=stable` 셸을 추가했다. 같은 DOM에 셸 크롬만 교체하며, CTk GUI에서 `skin: stable`을 저장한 사용자의 선택이 WebView에서도 존중된다. 선택된 탭은 WCAG AA를 위해 accent-strong 채움을 사용한다. Stable 관례에 맞춰 게이트 옵션 그룹은 disclosure 대신 **체크박스 공개**로 렌더링하고(고급 옵션만 접이식 유지), 작업 진행은 인라인 카드 대신 CTk `ProcessingDialog`/`RecordingProgressDialog`처럼 **별도 모달 다이얼로그**(진행률·로그·취소/닫기)로 표시한다.
 - **녹음 상태 연출 이식**: Recorder의 작업 표시가 원시 로그 나열에서 CTk `RecordingStatusController` 연출로 업그레이드됐다 — 스피커 칩(진행 중 accent, 완료 ✓), 단계별 상태 라인("현재 녹음 중: FL (1/2)" 등), 경과/총 시간 디테일, 완료 시 WAV 분석 요약(채널·길이·피크·활성 채널, 서비스가 결과에 동봉). Stable 모달에도 동일하게 표시되며, 로그에는 phase 전환만 기록해 틱 스팸을 없앴다.
-- **ko 문구 정리**: 가상 저음의 "서브베이스 하이패스 (Hz)"를 "럼블 제거 주파수 (Hz)"로 교체(기능을 그대로 서술하는 자연어).
+- **ko 문구 정리**: 가상 저음의 "서브베이스 하이패스 (Hz)"를 표준 공학 용어인 "초저역 차단 주파수 (Hz)"로 교체하고, 툴팁의 "DC 럼블"도 "DC·초저역 잡음"으로 정리.
 - **Studio 작업 체크리스트**: Studio의 Activity 카드가 CLI 로그 나열을 넘어 BRIR 파이프라인 10단계(측정 열기 → … → BRIR 쓰기)를 "✓ 완료 / ▸ 진행 중 / ○ 예정" 체크리스트로 표시한다. 로거 메시지를 같은 로케일 테이블의 스테이지 문자열과 prefix 매칭하므로 표시 언어와 무관하게 동작한다. **실패/취소 시맨틱**: 실패 지점 스테이지는 ✕(빨강), 취소는 –(주황)로 표시되고 완료 단계의 ✓는 유지되며, 도달하지 못한 단계는 ○인 채 흐려져 "미도달"로 읽힌다. Stable에서는 시작 전 검증 오류가 alert로 표면화된다(인라인 카드가 숨겨져 있으므로).
 
 #### 🔧 빌드 / 설정 변경
