@@ -35,6 +35,7 @@ def test_module_import_does_not_require_pywebview(monkeypatch) -> None:
         ("set_language", ("ko",)),
         ("set_theme", ("light",)),
         ("set_skin", ("stable",)),
+        ("set_frontend", ("ctk",)),
         ("get_system_info", ()),
         ("resolve_recording_paths", ("dir", "play.wav", "speakers")),
         ("generate_sweep_set", ("dir",)),

@@ -93,6 +93,54 @@ class SettingsTab:
             text_color="gray"
         ).grid(row=2, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 15))
 
+        # === Frontend Section (gui_main launcher default) ===
+        frontend_frame = ctk.CTkFrame(scroll, corner_radius=0)
+        frontend_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
+        frontend_frame.grid_columnconfigure(1, weight=1)
+        row += 1
+
+        ctk.CTkLabel(
+            frontend_frame,
+            text=self.loc.get('section_frontend'),
+            font=self.fonts['heading']
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        ctk.CTkLabel(
+            frontend_frame,
+            text=self.loc.get('label_frontend')
+        ).grid(row=1, column=0, sticky="w", padx=15, pady=5)
+
+        webview_label = self.loc.get('option_frontend_webview')
+        ctk_label = self.loc.get('option_frontend_ctk')
+        self._frontend_label_map = {webview_label: 'webview', ctk_label: 'ctk'}
+        self._frontend_code_map = {v: k for k, v in self._frontend_label_map.items()}
+        self.frontend_var = ctk.StringVar(
+            value=self._frontend_code_map.get(self.loc.get_frontend(), webview_label)
+        )
+        frontend_segment = ctk.CTkSegmentedButton(
+            frontend_frame,
+            values=[webview_label, ctk_label],
+            variable=self.frontend_var,
+            command=self.change_frontend,
+        )
+        frontend_segment.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
+
+        ctk.CTkLabel(
+            frontend_frame,
+            text=self.loc.get('tooltip_frontend'),
+            font=self.fonts['small'],
+            text_color="gray",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 5))
+
+        ctk.CTkLabel(
+            frontend_frame,
+            text=self.loc.get('label_ctk_deprecation'),
+            font=self.fonts['small'],
+            text_color="gray",
+            wraplength=560,
+            justify="left",
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 15))
+
         # === Language Section ===
         lang_frame = ctk.CTkFrame(scroll, corner_radius=0)
         lang_frame.grid(row=row, column=0, sticky="ew", padx=10, pady=10)
@@ -202,6 +250,11 @@ class SettingsTab:
                 self.loc.get('message_info'),
                 self.loc.get('message_language_changed', language=language_name)
             )
+
+    def change_frontend(self, frontend_label: str) -> None:
+        """Persist the gui_main launcher default; applies from the next launch."""
+        code = self._frontend_label_map.get(frontend_label, 'webview')
+        self.loc.set_frontend(code)
 
     def change_skin(self, skin_label: str) -> None:
         """Publish a skin change event.

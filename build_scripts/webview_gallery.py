@@ -95,7 +95,8 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
       platform: "windows",
       capabilities: {{ recording: true, brir: true, recording_cancel: false, brir_cancel: true }},
       active_job: activeKind ? runningJob(activeKind) : null,
-      ui: {{ language: LANGUAGE, theme: THEME, skin: SKIN, languages: LANGUAGES, strings: STRINGS }},
+      ui: {{ language: LANGUAGE, theme: THEME, skin: SKIN, frontend: "webview",
+             languages: LANGUAGES, strings: STRINGS }},
     }}),
     list_audio_devices: () => respond({{
       host_apis: ["Windows DirectSound", "MME", "Windows WASAPI"],
@@ -178,6 +179,7 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
     set_language: (code) => respond({{ language: code, strings: STRINGS }}),
     set_theme: (theme) => respond({{ theme }}),
     set_skin: (skin) => respond({{ skin }}),
+    set_frontend: (frontend) => respond({{ frontend }}),
     generate_sweep_set: () => respond({{ files: [], play_path: null }}),
     open_path: () => respond({{ path: "" }}),
     open_url: () => respond({{ url: "" }}),

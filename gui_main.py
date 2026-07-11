@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Impulcifer Modern GUI 엔트리 포인트"""
+"""Impulcifer GUI 엔트리 포인트 (launcher).
+
+기본값은 WebView 프론트엔드다(2.10+, 바로가기/Velopack 실행 포함).
+CustomTkinter는 ``--frontend=ctk`` 또는 설정(~/.impulcifer/settings.json의
+``frontend`` 키)으로 계속 사용할 수 있으며, 버전 2 동안 유지보수와 기능
+추가를 포함해 완전히 지원된다(버전 3에서 제거 예정). WebView 스택을 쓸 수
+없는 환경(pywebview 미설치, 시스템 WebKit 부재 등)에서는 자동으로
+CustomTkinter로 폴백한다.
+"""
 
 import sys
 
@@ -58,7 +66,7 @@ def _smoke_test():
     prefer_distribution_root()
     import importlib
 
-    for mod in (
+    smoke_modules = (
         "gui.modern_gui",
         "gui.tabs.impulcifer_tab",
         "gui.tabs.recorder_tab",
@@ -80,8 +88,25 @@ def _smoke_test():
         "updater.update_checker",
         "updater.updater_core",
         "infra.logger",
-    ):
+        # WebView frontend stack (default since 2.10). ``webview`` proves
+        # pywebview and its backend shims survived the Nuitka trim.
+        "webview",
+        "application.impulcifer_service",
+        "impulcifer_webview",
+    )
+    for mod in smoke_modules:
         importlib.import_module(mod)
+
+    # WebView UI assets — without index.html the default frontend would
+    # silently fall back to CustomTkinter on every launch.
+    import os as os_mod
+
+    from infra.resource_helper import get_resource_path
+
+    index_html = get_resource_path("webview_ui/index.html")
+    if not os_mod.path.isfile(index_html):
+        print(f"smoke-test FAIL: webview_ui/index.html missing from bundle ({index_html})")
+        sys.exit(2)
 
     # Pulse redesign assets — verify the bundle ships logo + CTk theme JSON.
     # If a packaging change drops these, the GUI silently falls back to a
@@ -172,9 +197,53 @@ def _smoke_test():
         tk_root.destroy()
 
     print(
-        f"smoke-test OK (imports=18, font.matplotlib={result['source']}, "
+        f"smoke-test OK (imports={len(smoke_modules)}, "
+        f"font.matplotlib={result['source']}, "
         f"font.gui={gui_family!r}, font.path={result['path']})"
     )
+
+
+def _resolve_frontend() -> str:
+    """Pick the frontend: CLI flag > persisted setting > webview default."""
+    for arg in sys.argv[1:]:
+        if arg.startswith("--frontend="):
+            value = arg.split("=", 1)[1].strip().lower()
+            if value in ("webview", "ctk"):
+                return value
+            print(f"Unknown --frontend value {value!r}; using 'webview'.")
+            return "webview"
+    try:
+        from i18n.localization import get_localization_manager
+
+        return get_localization_manager().get_frontend()
+    except Exception:
+        return "webview"
+
+
+def _launch_frontend() -> None:
+    frontend = _resolve_frontend()
+    if frontend == "webview":
+        try:
+            import webview  # noqa: F401
+            from impulcifer_webview import main as webview_main, select_gui_backend
+
+            select_gui_backend()
+        except (SystemExit, Exception) as exc:
+            # SystemExit comes from select_gui_backend on unsupported
+            # platforms; ImportError from a missing pywebview install.
+            print(f"WebView frontend unavailable ({exc}); falling back to CustomTkinter.")
+        else:
+            try:
+                webview_main()
+                return
+            except Exception as exc:
+                # Backend initialization can fail inside webview.start()
+                # (missing WebView2 runtime / system WebKit). Fall back so a
+                # broken WebView stack never leaves the user with nothing.
+                print(f"WebView frontend failed to start ({exc}); falling back to CustomTkinter.")
+    from gui.modern_gui import main_gui
+
+    main_gui()
 
 
 if __name__ == "__main__":
@@ -183,5 +252,4 @@ if __name__ == "__main__":
         _smoke_test()
         sys.exit(0)
     prefer_distribution_root()
-    from gui.modern_gui import main_gui
-    main_gui()
+    _launch_frontend()

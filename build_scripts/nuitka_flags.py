@@ -66,6 +66,27 @@ INCLUDED_PACKAGES: tuple[str, ...] = (
     # CustomTkinter ships JSON theme files and PNG assets that Nuitka's
     # static analysis won't pull in by import — keep as a package include.
     "customtkinter",
+    # NOTE: pywebview (the WebView frontend, launcher default since 2.10) is
+    # deliberately NOT listed here — and must not be added to
+    # INCLUDED_MODULES either. Any --include-module/--include-package entry
+    # feeds Nuitka's follow patterns for the whole subtree, which conflicts
+    # with the auto-enabled 'pywebview' plugin excluding other platforms'
+    # backend modules (observed FATAL: "Conflict between user and plugin
+    # decision for module 'webview.platforms.android'"). The static
+    # ``import webview`` chain (gui_main → impulcifer_webview) is traced
+    # automatically; the plugin selects the platform backend and Nuitka's
+    # package config bundles webview/js, webview/lib DLLs and the pythonnet /
+    # clr_loader runtime pieces on Windows.
+)
+
+# ``--include-package-data`` targets: packages that load non-Python files at
+# runtime. (Data-file flags do not feed follow patterns, so unlike module
+# includes this cannot conflict with the pywebview plugin.)
+INCLUDED_PACKAGE_DATA: tuple[str, ...] = (
+    # webview/js/*.js bootstrap + webview/lib DLLs — Nuitka's package config
+    # already covers these; kept as belt-and-suspenders against upstream
+    # config changes.
+    "webview",
 )
 
 # Nuitka in --standalone mode follows static (and lazy) imports automatically,
@@ -106,11 +127,19 @@ INCLUDED_DATA_DIRS: tuple[tuple[str, str], ...] = (
     ("logo", "logo"),
     ("i18n/locales", "i18n/locales"),
     ("gui/theme", "gui/theme"),
+    # WebView frontend HTML/CSS/JS — resolved via get_resource_path at the
+    # same relative path as in the source tree.
+    ("webview_ui", "webview_ui"),
 )
 
 INCLUDED_DATA_FILES: tuple[tuple[str, str], ...] = (
     ("LICENSE", "License.txt"),
     ("README.txt", "README.txt"),
+    # 서드파티 재배포 고지 — pywebview(BSD-3)·CustomTkinter(MIT) 코드와
+    # AutoEQ(MIT) 벤더링, OFL 폰트가 standalone에 번들되므로 고지 파일도
+    # 함께 실린다. (font/OFL-*.txt는 font 데이터 디렉토리에 이미 포함됨.)
+    ("THIRD_PARTY_LICENSES.md", "THIRD_PARTY_LICENSES.md"),
+    ("autoeq/LICENSE", "autoeq/LICENSE"),
 )
 
 
@@ -203,6 +232,8 @@ def build_nuitka_args(
 
     for pkg in INCLUDED_PACKAGES:
         args.append(f"--include-package={pkg}")
+    for pkg in INCLUDED_PACKAGE_DATA:
+        args.append(f"--include-package-data={pkg}")
     for mod in INCLUDED_MODULES:
         args.append(f"--include-module={mod}")
 

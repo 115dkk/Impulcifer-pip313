@@ -106,6 +106,9 @@ class WebviewBridge:
     def set_skin(self, skin: str) -> dict[str, Any]:
         return self._service.set_skin(skin)
 
+    def set_frontend(self, frontend: str) -> dict[str, Any]:
+        return self._service.set_frontend(frontend)
+
     def get_system_info(self) -> dict[str, Any]:
         return self._service.get_system_info()
 

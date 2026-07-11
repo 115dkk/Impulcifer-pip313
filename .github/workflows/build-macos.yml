@@ -54,6 +54,8 @@ jobs:
           fi
           echo "Installing project dependencies from requirements.txt..."
           uv pip install --system -r requirements.txt
+          echo "Installing WebView frontend stack (pywebview + pyobjc)..."
+          uv pip install --system "pywebview>=6.2,<7"
           echo "All dependencies installed successfully with uv!"
 
       - name: Read project version and set APP_VERSION

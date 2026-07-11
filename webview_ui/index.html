@@ -461,6 +461,14 @@
                 <label for="sf-language" data-i18n="label_select_language">Select Language:</label>
                 <select id="sf-language"></select>
               </div>
+              <div class="field-row">
+                <label for="sf-frontend" data-i18n="label_frontend">Default Interface:</label>
+                <select id="sf-frontend">
+                  <option value="webview" data-i18n="option_frontend_webview">WebView (recommended)</option>
+                  <option value="ctk" data-i18n="option_frontend_ctk">CustomTkinter (legacy)</option>
+                </select>
+              </div>
+              <p class="hint" data-i18n="tooltip_frontend">Which interface opens when the app starts. Takes effect on the next launch.</p>
             </div>
           </div>
 

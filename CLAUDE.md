@@ -11,9 +11,14 @@ Impulcifer-py313은 HRIR(Head-Related Impulse Response)을 측정하고 헤드�
 ## 아키텍처
 
 ```
-gui_main.py              ← 엔트리포인트 (standalone 빌드 대상)
-impulcifer_webview.py     ← 실험적 WebView 프론트엔드 엔트리포인트 (Windows 전용,
-                            pywebview Edge WebView2 고정, 선택적 [webview] extra)
+gui_main.py              ← 런처 엔트리포인트 (standalone 빌드 대상). 기본 프론트엔드는
+                            WebView(2.10+). --frontend=webview|ctk 인자 >
+                            settings.json의 frontend 키 > 기본 webview 순으로 결정,
+                            WebView 스택 불가 시 CTk 자동 폴백
+impulcifer_webview.py     ← WebView 프론트엔드 (Windows=edgechromium / macOS=cocoa /
+                            Linux=gtk 강제 맵; webview-backend-validation.yml이
+                            3-플랫폼 실기 검증; pip에서는 선택적 [webview] extra,
+                            Linux는 pywebview[gtk]+시스템 WebKit2GTK 필요)
 application/
   impulcifer_service.py   ← Tk 비종속 JSON-safe application service (job 모델,
                             ProcessingConfig 전체 표면 검증, UI 설정/시스템 정보)
@@ -44,7 +49,8 @@ core/
   parallel_utils.py       ← 병렬 처리 유틸리티
   channel_generation.py   ← 가상 채널 생성
 gui/
-  modern_gui.py           ← CustomTkinter GUI (~295줄, tabs/로 분리됨)
+  modern_gui.py           ← CustomTkinter GUI (~295줄, tabs/로 분리됨. 버전 2 동안
+                            유지보수+기능추가 지속, 버전 3에서 제거 예정 고지됨)
   tabs/                   ← Recorder / Impulcifer / Settings / Info 탭
   legacy_gui.py           ← 구버전 Tkinter GUI (deprecated, 신규 작업 금지)
 autoeq/                   ← 벤더링된 AutoEQ (PR #63에서 in-tree 전환)
@@ -77,6 +83,8 @@ updater/
 `core/utils.py`의 `magnitude_response()`는 현재 검증된 NumPy `rfft` 기반 출력과 bit-identical해야 한다. full FFT 경로는 수치적으로 가까워도 BRIR 해시를 바꿀 수 있으므로, `test_magnitude_response_parity.py`가 이 verified 동작을 고정한다.
 
 데모 WAV 파일(`data/demo/*.wav`)은 raw 바이너리로 repo에 포함되어 있다(약 55MB). 일반 `git clone`으로 받아진다. `.gitignore`가 demo 폴더를 기본 무시하면서 화이트리스트로 필요한 파일들만 통과시키므로, 새 데모 파일을 추가할 때는 `.gitignore`의 `!data/demo/...` 라인을 갱신해야 한다.
+
+pywebview는 Nuitka 플래그에 명시적 include로 넣지 말 것 — `--include-module=webview`든 `--include-package=webview`든 Nuitka의 follow 패턴에 들어가 내장 pywebview 플러그인(타 플랫폼 백엔드 제외 결정)과 충돌하고 빌드가 FATAL로 죽는다("Conflict between user and plugin decision for module 'webview.platforms.android'", 로컬 빌드로 확인). 정적 `import webview` 체인(gui_main → impulcifer_webview)의 자동 추적과 플러그인/패키지 설정이 백엔드 모듈 선택·webview js/lib·pythonnet/clr_loader DLL 번들을 전부 처리한다. 단, 그 플러그인의 Windows 화이트리스트에는 pywebview 6.x가 요구하는 `webview.platforms.win32`가 누락되어 있어(업스트림 버그) 빌드 스크립트가 `build_scripts/patch_nuitka_pywebview.py`로 빌드 직전에 화이트리스트를 패치한다 — 이 패치를 제거하면 패키징된 Windows 앱이 기동 시 조용히 CTk로 폴백한다. `tests/test_nuitka_flags.py`가 이 불변식들을 고정한다.
 
 Nuitka 빌드 플래그의 정본은 `build_scripts/nuitka_flags.py`다. 모든 빌드 진입점 — 릴리스 파이프라인(`.github/workflows/publish.yml`의 `build-windows`/`build-macos`/`build-linux` 잡)과 수동 빌드 워크플로(`build-linux.yml`, `build-macos.yml`) — 은 인라인 Nuitka 명령 없이 `python build_scripts/build_nuitka.py`를 호출하고, 이 스크립트가 `nuitka_flags.py`를 import하므로 플래그는 한 곳에서 동기화된다(이슈 #87 Phase 4에서 인라인 명령 제거 완료). 빌드 플래그를 추가/변경할 때는 `nuitka_flags.py`만 갱신하면 된다. `python build_scripts/nuitka_flags.py --platform linux --version X` 으로 정본 플래그 목록을 한 줄씩 출력해 비교에 활용할 수 있다.
 

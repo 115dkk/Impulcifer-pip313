@@ -1049,6 +1049,11 @@ function wireEvents() {
   $("sf-skin").addEventListener("change", (event) => changeSkin(event.target.value));
   $("sf-theme").addEventListener("change", (event) => changeTheme(event.target.value));
   $("sf-language").addEventListener("change", (event) => changeLanguage(event.target.value));
+  $("sf-frontend").addEventListener("change", async (event) => {
+    // Persisted for the next launch; the current session keeps running.
+    const response = await api().set_frontend(event.target.value);
+    if (!response.ok) appendLog(errorText(response));
+  });
 
   $("btn-check-updates").addEventListener("click", () => checkForUpdates(true));
   $("update-now").addEventListener("click", beginUpdate);
@@ -1088,6 +1093,7 @@ async function boot() {
     applyTheme(data.ui.theme || "dark");
     $("sf-skin").value = data.ui.skin === "stable" ? "stable" : "studio";
     applySkin(data.ui.skin);
+    $("sf-frontend").value = data.ui.frontend === "ctk" ? "ctk" : "webview";
   }
   applyStrings();
   const backendLabels = { edgechromium: "WebView2", cocoa: "WKWebView", gtk: "WebKitGTK" };

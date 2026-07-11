@@ -4,6 +4,22 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.10.0 - 2026-07-12
+### WebView 표준화 — 3-플랫폼 백엔드 검증, 자동 업데이트, standalone 기본 인터페이스 전환
+
+#### ⭐ 새로운 기능 / 개선
+- **WebView 프론트엔드의 macOS/Linux 지원**: Windows 전용 게이트를 제거하고 플랫폼별 렌더링 엔진을 강제 선택한다 — Windows는 Edge WebView2(edgechromium), macOS는 WKWebView(cocoa), Linux는 WebKit2GTK(gtk). KDE 세션에서 pywebview가 Qt를 우선하는 동작도 차단된다. 런타임 배지가 실제 백엔드명(WebView2/WKWebView/WebKitGTK)을 표시한다.
+- **WebView 자동 업데이트**: CTk `UpdateDialog`/`UpdateExecutor` 흐름을 application service job으로 이식했다. 부팅 2초 후 백그라운드 확인(CTk `after(2000)` 미러) → 릴리스 노트·버전 라인·"지금 업데이트/나중에/건너뛰기" 모달 → 다운로드 진행률 → 완료 메시지 → Velopack 경로는 OK 확인 시 `Update.exe` 인계 후 창 자동 종료·재시작. pip/legacy 경로는 각자의 완료 안내를 표시한다. Info 탭에 수동 "업데이트 확인" 버튼도 추가.
+- **Standalone 기본 인터페이스가 WebView로 전환**: `gui_main.py`가 런처가 되어 실행 인자(`--frontend=webview|ctk`) > 저장된 설정(`~/.impulcifer/settings.json`의 `frontend` 키) > 기본값 webview 순으로 결정한다. 바로가기/Velopack 실행 모두 WebView가 뜬다. pywebview 미탑재·시스템 WebKit 부재 등 WebView 스택을 쓸 수 없는 환경에서는 CustomTkinter로 자동 폴백한다. WebView 설정 탭과 CTk 설정 탭 양쪽에 "기본 인터페이스" 선택을 추가했다.
+- **CustomTkinter deprecation 고지**: CTk 인터페이스는 버전 3에서 제거될 예정이며, 버전 2 동안에는 유지보수와 기능 추가를 포함해 계속 완전히 지원된다. CTk 설정 탭·README·CHANGELOG에 고지를 추가했다.
+
+#### 🔧 빌드 / 설정 변경
+- **3-플랫폼 백엔드 실기 검증 CI (`.github/workflows/webview-backend-validation.yml`)**: mock 기반 갤러리와 상보적으로, 각 플랫폼의 실제 엔진 + 실제 `WebviewBridge`로 DOM 렌더 → boot() 완주(bootstrap 왕복) → promise 기반 브리지 왕복을 검증한다(`build_scripts/validate_webview_backend.py`, watchdog 포함). 첫 실행에서 cocoa/gtk/edgechromium 모두 통과.
+- **Nuitka standalone에 WebView 스택 번들**: `webview_ui/` 데이터 디렉토리를 포함하고, pywebview 자체는 명시적 include 없이 정적 `import webview` 체인의 자동 추적에 맡긴다 — `--include-module/package=webview`는 어느 형태든 Nuitka 내장 pywebview 플러그인의 "타 플랫폼 백엔드 제외" 결정과 충돌해 빌드가 즉사한다(로컬 빌드로 확인, `tests/test_nuitka_flags.py`가 이 불변식을 고정). 플러그인·패키지 설정이 백엔드 선택과 webview js/lib·pythonnet·clr_loader DLL 번들을 전부 처리한다. 빌드 잡 3종(publish.yml + 수동 build-linux/build-macos)에 pywebview 설치(리눅스는 `pywebview[gtk]` + WebKit2GTK/GObject 시스템 패키지)를 추가했다. `--smoke-test`가 webview 모듈·application service·`webview_ui/index.html` 번들 여부까지 검증한다.
+- **`[webview]` extra의 Linux GTK 지원**: `pywebview[gtk]`(PyGObject)을 Linux 마커로 요구한다. 소스 빌드에 필요한 시스템 패키지는 README에 문서화.
+- **서드파티 라이선스 고지 정비**: 재배포물에 포함되는 서드파티의 고지 파일을 추가했다 — `THIRD_PARTY_LICENSES.md`(루트: pywebview BSD-3, CustomTkinter MIT, AutoEQ MIT, Pretendard·JetBrains Mono OFL 1.1 전문), `autoeq/LICENSE`(원본 MIT 사본), `font/OFL-Pretendard.txt`·`font/OFL-JetBrainsMono.txt`(OFL 1.1은 폰트 재배포 시 라이선스 동봉 요구). wheel(`[tool.hatch.build] include`)과 Nuitka standalone(`INCLUDED_DATA_FILES`, font 디렉토리 동승) 양쪽에 포함된다.
+- **Nuitka pywebview 플러그인 화이트리스트 핫픽스 (`build_scripts/patch_nuitka_pywebview.py`)**: Nuitka 내장 pywebview 플러그인의 Windows 화이트리스트가 구버전 pywebview 기준이라 pywebview 6.x winforms가 import하는 헬퍼 모듈 `webview.platforms.win32`를 "actively excluded"로 빼버려, 패키징된 앱이 기동 시 조용히 CTk로 폴백하는 문제를 로컬 빌드 실검증으로 발견했다. 명시적 include는 플러그인 결정과 충돌하므로, 빌드 직전에 설치된 플러그인 화이트리스트에 누락 항목을 삽입하는 idempotent 패치를 두 빌드 스크립트(build_nuitka.py/build_local.py)에 연결했다(업스트림 수정 시 자동 no-op).
+
 ## 2.9.0 - 2026-07-12
 ### Qt 없는 WebView 전환 — application service, Pulse Studio 프론트엔드, 갤러리 리뷰 CI
 

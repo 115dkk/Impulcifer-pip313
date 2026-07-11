@@ -53,6 +53,9 @@ _THEME_CODES = ("dark", "light", "system")
 # Mirrors gui.skins.SKIN_CHOICES without importing the gui package (this
 # module must stay importable without tkinter).
 _SKIN_CODES = ("stable", "studio")
+# gui_main launcher targets; ``webview`` is the default since 2.10 and CTk
+# stays supported for the rest of version 2 (removal planned for version 3).
+_FRONTEND_CODES = ("webview", "ctk")
 
 _brir_field_kinds_cache: dict[str, str] | None = None
 
@@ -422,6 +425,18 @@ class ImpulciferApplicationService:
         get_localization_manager().set_skin(skin)
         return _ok({"skin": skin})
 
+    def set_frontend(self, frontend: str) -> dict[str, Any]:
+        from i18n.localization import get_localization_manager
+
+        if frontend not in _FRONTEND_CODES:
+            return _error(
+                "INVALID_REQUEST",
+                "Frontend must be one of: " + ", ".join(_FRONTEND_CODES) + ".",
+                details={"frontend": frontend},
+            )
+        get_localization_manager().set_frontend(frontend)
+        return _ok({"frontend": frontend})
+
     @staticmethod
     def _ui_settings_payload(loc: Any) -> dict[str, Any]:
         from i18n.localization import SUPPORTED_LANGUAGES
@@ -430,6 +445,9 @@ class ImpulciferApplicationService:
             "language": loc.current_language,
             "theme": loc.get_theme(),
             "skin": loc.get_skin(),
+            # Older LocalizationManager instances (or test fakes) may predate
+            # the frontend setting; default matches get_frontend().
+            "frontend": loc.get_frontend() if hasattr(loc, "get_frontend") else "webview",
             "languages": [
                 {"code": code, "name": name} for code, name in SUPPORTED_LANGUAGES.items()
             ],
