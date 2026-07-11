@@ -49,6 +49,9 @@ _BRIR_CHOICE_FIELDS = {
 _CHANNEL_BALANCE_TOKENS = ("trend", "left", "right", "avg", "min", "mids")
 _DECAY_CHANNELS = ("FL", "FC", "FR", "SL", "SR", "BL", "BR")
 _THEME_CODES = ("dark", "light", "system")
+# Mirrors gui.skins.SKIN_CHOICES without importing the gui package (this
+# module must stay importable without tkinter).
+_SKIN_CODES = ("stable", "studio")
 
 _brir_field_kinds_cache: dict[str, str] | None = None
 
@@ -389,6 +392,18 @@ class ImpulciferApplicationService:
         get_localization_manager().set_theme(theme)
         return _ok({"theme": theme})
 
+    def set_skin(self, skin: str) -> dict[str, Any]:
+        from i18n.localization import get_localization_manager
+
+        if skin not in _SKIN_CODES:
+            return _error(
+                "INVALID_REQUEST",
+                "Skin must be one of: " + ", ".join(_SKIN_CODES) + ".",
+                details={"skin": skin},
+            )
+        get_localization_manager().set_skin(skin)
+        return _ok({"skin": skin})
+
     @staticmethod
     def _ui_settings_payload(loc: Any) -> dict[str, Any]:
         from i18n.localization import SUPPORTED_LANGUAGES
@@ -396,6 +411,7 @@ class ImpulciferApplicationService:
         return {
             "language": loc.current_language,
             "theme": loc.get_theme(),
+            "skin": loc.get_skin(),
             "languages": [
                 {"code": code, "name": name} for code, name in SUPPORTED_LANGUAGES.items()
             ],

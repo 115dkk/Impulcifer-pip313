@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-skin="studio">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -437,6 +437,14 @@
               <span class="card-title" data-i18n="studio_card_appearance">Appearance</span>
             </div>
             <div class="card-body">
+              <div class="field-row">
+                <label for="sf-skin" data-i18n="label_select_skin">Select Skin:</label>
+                <select id="sf-skin">
+                  <option value="stable" data-i18n="option_skin_stable">Stable</option>
+                  <option value="studio" data-i18n="option_skin_studio">Studio</option>
+                </select>
+              </div>
+              <p class="hint" id="sf-skin-desc"></p>
               <div class="field-row">
                 <label for="sf-theme" data-i18n="label_select_theme">Select Theme:</label>
                 <select id="sf-theme">

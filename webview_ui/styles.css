@@ -255,6 +255,19 @@ input::placeholder { color: var(--fg-3); }
   gap: 8px;
 }
 
+/* Selects inside inline groups must not take the full row, or trailing
+   inputs (e.g. the channel-balance dB box) wrap to their own line. */
+.inline-group select { width: auto; min-width: 170px; }
+
+#bf-decay-grid {
+  display: grid;
+  grid-template-columns: repeat(4, auto minmax(64px, 84px));
+  gap: 8px 10px;
+  align-items: center;
+}
+
+#bf-decay-grid input.num { width: 100%; }
+
 .mini-label { font-size: 12px; color: var(--fg-2); }
 
 .check-row {
@@ -444,11 +457,69 @@ input[type="checkbox"] {
 .kv-key { color: var(--fg-1); font-weight: 700; }
 .kv-val { color: var(--fg-2); }
 
+/* ---------------------------------------------------- Stable skin shell
+   Faithful port of the CTk Stable layout: 72px top app header + tabview
+   strip instead of the Studio sidebar. Same Pulse tokens; number pills
+   and header strips are Studio-only chrome. The selected tab fills with
+   accent-strong so its white 13px bold label clears WCAG AA. */
+
+[data-skin="stable"] .app {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+}
+
+[data-skin="stable"] .sidebar {
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+  min-height: 72px;
+  padding: 0 20px;
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+[data-skin="stable"] .brand { padding: 0; }
+[data-skin="stable"] .brand-logo { width: 32px; height: 32px; }
+[data-skin="stable"] .rule { display: none; }
+
+[data-skin="stable"] .nav {
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--bg-3);
+}
+
+[data-skin="stable"] .nav-item { height: 30px; border-radius: 7px; }
+[data-skin="stable"] .nav-item:hover { background: var(--bg-2); }
+[data-skin="stable"] .nav-item.active { background: var(--accent-strong); color: #ffffff; }
+[data-skin="stable"] .nav-glyph { display: none; }
+
+[data-skin="stable"] .sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 0;
+  margin-left: auto;
+  padding: 0;
+}
+
+[data-skin="stable"] .card-head {
+  background: transparent;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+[data-skin="stable"] .card-num { display: none; }
+[data-skin="stable"] .card-title { font-size: 16px; }
+
 /* -------------------------------------------------------- small screens */
 
 @media (max-width: 900px) {
-  .app { grid-template-columns: 64px 1fr; }
-  .brand > div, .nav-item > span:last-child, .sidebar-footer { display: none; }
+  [data-skin="studio"] .app { grid-template-columns: 64px 1fr; }
+  [data-skin="studio"] .brand > div,
+  [data-skin="studio"] .nav-item > span:last-child,
+  [data-skin="studio"] .sidebar-footer { display: none; }
+  [data-skin="stable"] .sidebar { flex-wrap: wrap; padding: 10px 16px; }
   .field-row { grid-template-columns: 1fr; }
   .field-row > label { margin-bottom: -6px; }
 }

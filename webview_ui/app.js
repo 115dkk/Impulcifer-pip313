@@ -13,6 +13,7 @@ const state = {
   strings: {},
   language: "en",
   theme: "dark",
+  skin: "studio",
   jobId: null,
   jobKind: null,
   lastJob: null,
@@ -48,6 +49,7 @@ function applyStrings() {
   updateChannelGuidance();
   refreshResolvedPath();
   renderJobState(state.lastJob);
+  applySkin(state.skin);
 }
 
 /* ----------------------------------------------------------------- theme */
@@ -69,6 +71,13 @@ function applyTheme(code) {
 
 function onSystemThemeChange(event) {
   document.documentElement.dataset.theme = event.matches ? "dark" : "light";
+}
+
+function applySkin(code) {
+  state.skin = code === "stable" ? "stable" : "studio";
+  document.documentElement.dataset.skin = state.skin;
+  const desc = $("sf-skin-desc");
+  if (desc) desc.textContent = t(state.skin === "stable" ? "tooltip_skin_stable" : "tooltip_skin_studio");
 }
 
 /* ------------------------------------------------------------ primitives */
@@ -458,6 +467,15 @@ async function changeTheme(code) {
   applyTheme(code);
 }
 
+async function changeSkin(code) {
+  const response = await api().set_skin(code);
+  if (!response.ok) {
+    appendLog(errorText(response));
+    return;
+  }
+  applySkin(response.data.skin);
+}
+
 /* ------------------------------------------------------------------ info */
 
 async function loadSystemInfo() {
@@ -504,7 +522,6 @@ function buildDecayGrid() {
     input.min = "0";
     input.id = `bf-decay-${channel}`;
     input.className = "num mono";
-    input.style.width = "78px";
     grid.append(label, input);
   }
 }
@@ -590,6 +607,7 @@ function wireEvents() {
   });
 
   $("btn-open-data").addEventListener("click", () => api().open_path());
+  $("sf-skin").addEventListener("change", (event) => changeSkin(event.target.value));
   $("sf-theme").addEventListener("change", (event) => changeTheme(event.target.value));
   $("sf-language").addEventListener("change", (event) => changeLanguage(event.target.value));
 }
@@ -622,6 +640,8 @@ async function boot() {
     populateLanguages(data.ui.languages || []);
     $("sf-theme").value = data.ui.theme || "dark";
     applyTheme(data.ui.theme || "dark");
+    $("sf-skin").value = data.ui.skin === "stable" ? "stable" : "studio";
+    applySkin(data.ui.skin);
   }
   applyStrings();
   $("brand-version").textContent = `v${data.version}`;

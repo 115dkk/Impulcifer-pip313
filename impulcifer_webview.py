@@ -79,6 +79,9 @@ class WebviewBridge:
     def set_theme(self, theme: str) -> dict[str, Any]:
         return self._service.set_theme(theme)
 
+    def set_skin(self, skin: str) -> dict[str, Any]:
+        return self._service.set_skin(skin)
+
     def get_system_info(self) -> dict[str, Any]:
         return self._service.get_system_info()
 

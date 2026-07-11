@@ -11,7 +11,8 @@ been fixed and old features improved.
 - **Tk 비종속 application service 추가**: Recorder와 BRIR 생성 흐름을 JSON-safe 요청·응답 계약으로 감싸고, 단일 활성 job, 순번 기반 progress polling, BRIR 협력 취소, 구조화 오류를 제공한다. 기존 CustomTkinter 탭과 DSP·녹음 구현은 변경하지 않고 `application/` 계층에서 그대로 호출한다.
 - **BRIR 옵션 전체 개방**: application service의 BRIR 요청이 `ProcessingConfig` dataclass 전체 표면(가상 저음, decay, channel balance, bass boost, tilt, 리샘플, 마이크 편차 보정, JamesDSP/Hangloose/TrueHD 출력 등)을 필드 종류별 타입 검증과 함께 수용한다. 새 파이프라인 파라미터는 dataclass 필드 추가만으로 프론트엔드에 자동 개방된다. Custom EQ 파일(`eq.csv`/`eq-left.csv`/`eq-right.csv`)은 CTk GUI와 동일하게 측정 폴더로 사이드카 복사한다.
 - **Pulse Studio 디자인의 WebView 프론트엔드**: 최소 PoC 화면을 Studio 스킨 철학(200px 사이드바 + 번호 카드 + disclosure 행)과 Pulse 팔레트(light/dark 정확한 hex, WCAG 수정 반영)로 전면 재구축했다. Recorder / Processing / Settings / Info 4개 탭, CTk GUI와 동등한 옵션 표면, 네이티브 파일·폴더 선택 다이얼로그(pywebview `create_file_dialog`), 스윕 세트 생성, 결과 폴더 열기, 번들 Pretendard/JetBrains Mono 폰트를 제공한다.
-- **WebView 설정·정보 탭**: 언어(9개)·테마(dark/light/system)를 CTk GUI와 같은 `~/.impulcifer/settings.json`에 저장·공유하고, i18n 문자열은 bootstrap에서 병합 제공(en fallback + 현재 언어)한다. 시스템 정보(GIL/워커/설치 형태)와 프로젝트 링크(allowlist 고정)도 노출한다.
+- **WebView 설정·정보 탭**: 언어(9개)·테마(dark/light/system)·스킨을 CTk GUI와 같은 `~/.impulcifer/settings.json`에 저장·공유하고, i18n 문자열은 bootstrap에서 병합 제공(en fallback + 현재 언어)한다. 시스템 정보(GIL/워커/설치 형태)와 프로젝트 링크(allowlist 고정)도 노출한다.
+- **WebView Stable 스킨 변형**: CTk Stable 레이아웃(72px 상단 헤더 + 탭 스트립)을 충실 이식한 `data-skin=stable` 셸을 추가했다. 같은 DOM에 셸 크롬만 교체하며, CTk GUI에서 `skin: stable`을 저장한 사용자의 선택이 WebView에서도 존중된다. 선택된 탭은 WCAG AA를 위해 accent-strong 채움을 사용한다.
 
 #### 🔧 빌드 / 설정 변경
 - **WebView 갤러리 리뷰 CI 추가 (`.github/workflows/webview-gallery.yml`)**: EqualizerAPO-XT의 offscreen skin gallery 패턴을 이식했다. mock 브리지 위에서 4 view × 2 테마 × 2 언어 + busy 상태 2종 = 18샷을 headless Chromium으로 렌더링하고(`build_scripts/webview_gallery.py`, 샷 수 자가검증), PNG를 `webview-gallery` 브랜치에 push한 뒤 이미지를 임베드한 리뷰 이슈를 자동 생성/갱신한다.

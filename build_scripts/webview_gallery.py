@@ -24,12 +24,13 @@ import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+SKINS = ("studio", "stable")
 LANGUAGES = ("en", "ko")
 THEMES = ("dark", "light")
 VIEWS = ("recorder", "processing", "settings", "info")
 
-# 2 themes x 2 languages x 4 views + 2 busy-state shots.
-EXPECTED_SHOTS = len(LANGUAGES) * len(THEMES) * len(VIEWS) + 2
+# 2 skins x 2 themes x 2 languages x 4 views + 2 busy-state shots.
+EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 2
 
 VIEWPORT_WIDTH = 1280
 MIN_HEIGHT = 860
@@ -56,7 +57,7 @@ def _load_strings(language: str) -> dict[str, str]:
     return merged
 
 
-def _mock_bridge_js(language: str, theme: str, scenario: str, version: str) -> str:
+def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin: str = "studio") -> str:
     """Return an init script that fakes window.pywebview.api."""
     strings = json.dumps(_load_strings(language), ensure_ascii=False)
     languages = json.dumps(FAKE_LANGUAGES, ensure_ascii=False)
@@ -66,6 +67,7 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str) -> s
   const LANGUAGES = {languages};
   const LANGUAGE = {json.dumps(language)};
   const THEME = {json.dumps(theme)};
+  const SKIN = {json.dumps(skin)};
   const SCENARIO = {json.dumps(scenario)};
   const VERSION = {json.dumps(version)};
   const respond = (data) => Promise.resolve({{ ok: true, data }});
@@ -81,7 +83,7 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str) -> s
       platform: "windows",
       capabilities: {{ recording: true, brir: true, recording_cancel: false, brir_cancel: true }},
       active_job: activeKind ? runningJob(activeKind) : null,
-      ui: {{ language: LANGUAGE, theme: THEME, languages: LANGUAGES, strings: STRINGS }},
+      ui: {{ language: LANGUAGE, theme: THEME, skin: SKIN, languages: LANGUAGES, strings: STRINGS }},
     }}),
     list_audio_devices: () => respond({{
       host_apis: ["Windows DirectSound", "MME", "Windows WASAPI"],
@@ -101,7 +103,7 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str) -> s
       os: "Windows 11", cpu_count: 16, gil_enabled: false, optimal_workers: 16,
     }}),
     get_ui_settings: () => respond({{
-      language: LANGUAGE, theme: THEME, languages: LANGUAGES, strings: STRINGS,
+      language: LANGUAGE, theme: THEME, skin: SKIN, languages: LANGUAGES, strings: STRINGS,
     }}),
     resolve_recording_paths: (recordDir) => respond({{
       record_path: `${{recordDir}}/FL,FR.wav`,
@@ -124,6 +126,7 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str) -> s
     cancel_job: () => respond({{ job: runningJob(activeKind || "brir") }}),
     set_language: (code) => respond({{ language: code, strings: STRINGS }}),
     set_theme: (theme) => respond({{ theme }}),
+    set_skin: (skin) => respond({{ skin }}),
     generate_sweep_set: () => respond({{ files: [], play_path: null }}),
     open_path: () => respond({{ path: "" }}),
     open_url: () => respond({{ url: "" }}),
@@ -137,6 +140,11 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str) -> s
 
 
 def _shoot(page, out_dir: Path, name: str) -> Path:
+    # Reset to the base viewport first: scrollHeight can never shrink below
+    # clientHeight, so measuring at a previously enlarged viewport would
+    # carry the tallest view's height into every later shot.
+    page.set_viewport_size({"width": VIEWPORT_WIDTH, "height": MIN_HEIGHT})
+    page.wait_for_timeout(80)
     height = page.evaluate("document.querySelector('.content').scrollHeight")
     height = max(MIN_HEIGHT, min(MAX_HEIGHT, int(height) + 48))
     page.set_viewport_size({"width": VIEWPORT_WIDTH, "height": height})
@@ -146,13 +154,13 @@ def _shoot(page, out_dir: Path, name: str) -> Path:
     return target
 
 
-def _open_page(browser, index_uri: str, language: str, theme: str, scenario: str, version: str):
+def _open_page(browser, index_uri: str, language: str, theme: str, scenario: str, version: str, skin: str = "studio"):
     context = browser.new_context(
         viewport={"width": VIEWPORT_WIDTH, "height": MIN_HEIGHT},
         device_scale_factor=1,
     )
     page = context.new_page()
-    page.add_init_script(_mock_bridge_js(language, theme, scenario, version))
+    page.add_init_script(_mock_bridge_js(language, theme, scenario, version, skin))
     page.goto(index_uri)
     page.wait_for_function("document.getElementById('brand-version').textContent !== 'v—'")
     page.wait_for_timeout(250)
@@ -170,36 +178,40 @@ def render_gallery(out_dir: Path) -> list[Path]:
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
 
-        for language in LANGUAGES:
-            for theme in THEMES:
-                context, page = _open_page(browser, index_uri, language, theme, "idle", version)
-                for view in VIEWS:
-                    page.click(f".nav-item[data-view='{view}']")
-                    if view == "processing":
-                        # Open every disclosure so the full option surface is
-                        # part of the judging material.
-                        page.eval_on_selector_all(
-                            ".disclosure", "nodes => nodes.forEach(n => n.classList.add('open'))"
-                        )
-                        page.check("#bf-decay-per-channel")
-                        page.eval_on_selector(
-                            "#bf-decay-per-channel",
-                            "node => node.dispatchEvent(new Event('change'))",
-                        )
-                    shots.append(_shoot(page, out_dir, f"{view}-{language}-{theme}"))
-                context.close()
+        for skin in SKINS:
+            for language in LANGUAGES:
+                for theme in THEMES:
+                    context, page = _open_page(
+                        browser, index_uri, language, theme, "idle", version, skin
+                    )
+                    for view in VIEWS:
+                        page.click(f".nav-item[data-view='{view}']")
+                        if view == "processing":
+                            # Open every disclosure so the full option surface
+                            # is part of the judging material.
+                            page.eval_on_selector_all(
+                                ".disclosure",
+                                "nodes => nodes.forEach(n => n.classList.add('open'))",
+                            )
+                            page.check("#bf-decay-per-channel")
+                            page.eval_on_selector(
+                                "#bf-decay-per-channel",
+                                "node => node.dispatchEvent(new Event('change'))",
+                            )
+                        shots.append(_shoot(page, out_dir, f"{view}-{skin}-{language}-{theme}"))
+                    context.close()
 
         # Busy states: a BRIR run on the processing view and a capture run on
-        # the recorder view, with live progress and logs.
+        # the recorder view, with live progress and logs (studio skin).
         context, page = _open_page(browser, index_uri, "en", "dark", "brir-running", version)
         page.click(".nav-item[data-view='processing']")
         page.wait_for_timeout(400)
-        shots.append(_shoot(page, out_dir, "processing-en-dark-busy"))
+        shots.append(_shoot(page, out_dir, "processing-studio-en-dark-busy"))
         context.close()
 
         context, page = _open_page(browser, index_uri, "ko", "dark", "recording-running", version)
         page.wait_for_timeout(400)
-        shots.append(_shoot(page, out_dir, "recorder-ko-dark-busy"))
+        shots.append(_shoot(page, out_dir, "recorder-studio-ko-dark-busy"))
         context.close()
 
         browser.close()

@@ -333,6 +333,7 @@ class _FakeLocalization:
         self.current_language = "en"
         self.locales_dir = locales_dir
         self.theme = "dark"
+        self.skin = "stable"
         self.marked = False
 
     def get_theme(self) -> str:
@@ -340,6 +341,12 @@ class _FakeLocalization:
 
     def set_theme(self, theme: str) -> None:
         self.theme = theme
+
+    def get_skin(self) -> str:
+        return self.skin
+
+    def set_skin(self, skin: str) -> None:
+        self.skin = skin
 
     def set_language(self, code: str) -> None:
         self.current_language = code
@@ -372,6 +379,11 @@ def test_ui_settings_language_and_theme_roundtrip(monkeypatch) -> None:
     assert service.set_theme("light")["ok"]
     assert fake.theme == "light"
     assert service.set_theme("neon")["error"]["code"] == "INVALID_REQUEST"
+
+    assert settings["data"]["skin"] == "stable"
+    assert service.set_skin("studio")["ok"]
+    assert fake.skin == "studio"
+    assert service.set_skin("neon")["error"]["code"] == "INVALID_REQUEST"
 
 
 def test_system_info_reports_environment() -> None:
