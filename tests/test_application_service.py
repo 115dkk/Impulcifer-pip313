@@ -105,6 +105,7 @@ def test_recording_confirmation_and_headphone_forced_values(
             "play_path": str(segmented),
             "record_dir": str(tmp_path),
             "channels": 2,
+            "force_channels": True,
         }
     )
     assert warning["error"]["code"] == "CONFIRMATION_REQUIRED"
@@ -140,6 +141,40 @@ def test_recording_confirmation_and_headphone_forced_values(
     assert captured["append"] is False
     assert captured["mono_to_stereo"] is True
     assert captured["record"].endswith("headphones.wav")
+
+
+def test_unforced_default_recording_skips_channel_confirmation(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Codex review P2: the default 2ch path must not warn about the sweep's
+    speaker count — only an explicitly forced channel count is validated."""
+    from core import recorder
+
+    segmented = tmp_path / "sweep-seg-FL,FR-stereo-6.15s-test.wav"
+    segmented.write_bytes(b"sweep")
+    captured = {}
+
+    def fake_play_and_record(**kwargs):
+        captured.update(kwargs)
+        Path(kwargs["record"]).write_bytes(b"recorded")
+
+    monkeypatch.setattr(recorder, "play_and_record", fake_play_and_record)
+    service = ImpulciferApplicationService()
+    started = service.start_recording(
+        {
+            "mode": "speakers",
+            "play_path": str(segmented),
+            "record_dir": str(tmp_path),
+            "channels": 14,
+        }
+    )
+    assert started["ok"], started
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+
+    assert data["job"]["status"] == "succeeded"
+    # Without force_channels the requested count is ignored, like the CTk GUI.
+    assert captured["channels"] == 2
 
 
 def test_service_allows_only_one_active_job(monkeypatch, tmp_path: Path) -> None:

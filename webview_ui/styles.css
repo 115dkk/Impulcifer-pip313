@@ -500,6 +500,10 @@ input[type="checkbox"] {
   z-index: 40;
 }
 
+/* The explicit display above outweighs the UA [hidden] rule; without this
+   the invisible backdrop would cover the app and swallow every click. */
+.modal-backdrop[hidden] { display: none; }
+
 .modal {
   display: grid;
   gap: 14px;

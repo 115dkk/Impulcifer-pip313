@@ -23,6 +23,7 @@ _RECORDING_FIELDS = {
     "output_device",
     "host_api",
     "channels",
+    "force_channels",
     "append",
     "debug_plots",
     "confirm_warnings",
@@ -617,6 +618,9 @@ class ImpulciferApplicationService:
         channels = request.get("channels", 2)
         if isinstance(channels, bool) or not isinstance(channels, int) or not 1 <= channels <= 64:
             return _error("INVALID_REQUEST", "channels must be an integer from 1 to 64.")
+        force_channels = request.get("force_channels", False)
+        if not isinstance(force_channels, bool):
+            return _error("INVALID_REQUEST", "force_channels must be a boolean.")
         confirm = request.get("confirm_warnings", False)
         if not isinstance(confirm, bool):
             return _error("INVALID_REQUEST", "confirm_warnings must be a boolean.")
@@ -646,8 +650,14 @@ class ImpulciferApplicationService:
             append = request.get("append", False)
             if not isinstance(append, bool):
                 return _error("INVALID_REQUEST", "append must be a boolean.")
+            # CTk parity: the channel count is only honored — and the
+            # speaker-count mismatch warning only raised — when the user
+            # explicitly forces channels. The default path records 2ch
+            # without a confirmation prompt.
+            if not force_channels:
+                channels = 2
             record_path = resolve_record_path(record_dir, play_path)
-            channel_validation = validate_recording_setup(record_path, channels, True)
+            channel_validation = validate_recording_setup(record_path, channels, force_channels)
             if channel_validation and channel_validation.has_mismatch and not confirm:
                 return _error(
                     "CONFIRMATION_REQUIRED",

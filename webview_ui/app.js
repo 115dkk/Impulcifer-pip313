@@ -444,7 +444,8 @@ function gatherRecordingPayload(mode) {
     host_api: val("rf-host-api") || null,
   };
   if (mode === "speakers") {
-    payload.channels = checked("rf-force-channels") ? Math.trunc(numOr("rf-channels", 2)) : 2;
+    payload.force_channels = checked("rf-force-channels");
+    payload.channels = payload.force_channels ? Math.trunc(numOr("rf-channels", 2)) : 2;
     payload.append = checked("rf-append");
     payload.debug_plots = checked("rf-debug-plots");
   }
