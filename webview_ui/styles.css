@@ -37,6 +37,7 @@
   --warn: #d97706;
   --err: #dc2626;
   --field-bg: #ffffff;
+  --field-border: #cdd0d3;
   color-scheme: light;
 }
 
@@ -56,10 +57,12 @@
   --ok: #4ac776;
   --warn: #e6ac3d;
   --err: #fb594d;
-  /* Inputs read as a dark inset (like the log box): bg-2 would blend into
-     the card surface and bg-1 into disclosure bodies, so use bg-0 — it
-     contrasts against every container the fields sit on. */
-  --field-bg: #101214;
+  /* Inputs read as a cool blue-black inset: pure bg-0 looked like a
+     high-contrast hole, and bg-1/bg-2 blend into their containers. A drop
+     of blue (B channel lifted) keeps it dark but deliberate, and the
+     blue-gray border stays visible on both card and disclosure surfaces. */
+  --field-bg: #161b24;
+  --field-border: #343c48;
   color-scheme: dark;
 }
 
@@ -232,7 +235,7 @@ input[type="text"], input:not([type]), input[type="number"], select {
   height: 36px;
   width: 100%;
   padding: 0 11px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-border);
   border-radius: 4px;
   background: var(--field-bg);
   color: var(--fg-0);
