@@ -488,6 +488,9 @@ input[type="checkbox"] {
   padding: 5px;
   border-radius: 10px;
   background: var(--bg-3);
+  /* CTkTabview parity: the segmented tab strip sits centered between the
+     brand block and the runtime status. */
+  margin-inline: auto;
 }
 
 [data-skin="stable"] .nav-item { height: 30px; border-radius: 7px; }
@@ -503,6 +506,10 @@ input[type="checkbox"] {
   margin-left: auto;
   padding: 0;
 }
+
+/* Without the sidebar the content spans the full window width, so the
+   left-anchored view column reads lopsided — center it under the header. */
+[data-skin="stable"] .view { margin-inline: auto; }
 
 [data-skin="stable"] .card-head {
   background: transparent;
