@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.9.0 - 2026-07-11
+### Qt 없는 WebView 전환을 위한 application service와 Windows PoC
+
+#### ⭐ 새로운 기능 / 개선
+- **Tk 비종속 application service 추가**: Recorder와 BRIR 생성 흐름을 JSON-safe 요청·응답 계약으로 감싸고, 단일 활성 job, 순번 기반 progress polling, BRIR 협력 취소, 구조화 오류를 제공한다. 기존 CustomTkinter 탭과 DSP·녹음 구현은 변경하지 않고 `application/` 계층에서 그대로 호출한다.
+- **실험적 pywebview 프론트엔드 추가**: 빌드 도구 없는 HTML/CSS/JavaScript 화면에서 녹음 장치 조회, 스피커·헤드폰 녹음, 기본 BRIR 생성을 실행할 수 있다. Windows Edge WebView2 backend를 명시적으로 고정해 Qt fallback을 허용하지 않으며, pywebview는 선택적 `webview` extra로만 설치된다.
+
+#### 🔧 빌드 / 설정 변경
+- **기존 Nuitka 릴리스 경로 보존**: canonical `gui_main.py`와 `tk-inter`/CustomTkinter 플래그는 그대로 유지한다. 이번 WebView PoC는 pip/source 전용 별도 entrypoint이며 standalone 전환은 후속 단계로 미룬다.
+
 ## 2.8.1 - 2026-07-10
 ### 주석 대청소 — 이력 내레이션·재진술·죽은 주석 제거
 

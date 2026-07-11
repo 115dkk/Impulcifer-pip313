@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "2.8.1"
+version = "2.9.0"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13/3.14 호환 버전: 115dkk", email="" },
@@ -42,10 +42,16 @@ dependencies = [
     'packaging>=23.0',
 ]
 
+[project.optional-dependencies]
+webview = [
+    'pywebview>=6.2,<7',
+]
+
 [project.scripts]
 impulcifer = "impulcifer_cli:entry_point"
 impulcifer_gui = "impulcifer_gui:main_gui"
 impulcifer_gui_legacy = "impulcifer_gui_legacy:main_gui"
+impulcifer_webview = "impulcifer_webview:main"
 
 [project.urls]
 "Homepage" = "https://github.com/jaakkopasanen/impulcifer"
@@ -55,6 +61,7 @@ impulcifer_gui_legacy = "impulcifer_gui_legacy:main_gui"
 include = [
     "*.py",
     "autoeq/**/*.py",
+    "application/**/*.py",
     "core/**/*.py",
     "gui/**/*.py",
     # CTk custom theme JSON (Pulse audio-equipment palette). Without
@@ -62,6 +69,7 @@ include = [
     # `set_default_color_theme(pulse.json)` silently falls back to the
     # built-in "blue" theme on pip-installed environments.
     "gui/theme/pulse.json",
+    "webview_ui/**/*",
     "i18n/**/*.py",
     "i18n/locales/**/*.json",
     "infra/**/*.py",

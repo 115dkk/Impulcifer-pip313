@@ -44,6 +44,12 @@ pip install impulcifer-py313
 uv pip install impulcifer-py313
 ```
 
+Windows에서 실험적 WebView 프론트엔드를 시험하려면 선택적 extra를 설치합니다. 이 경로는 Microsoft Edge WebView2를 사용하며 Qt backend로 fallback하지 않습니다.
+
+```bash
+pip install "impulcifer-py313[webview]"
+```
+
 ### Standalone 릴리스
 
 Python을 따로 설치하지 않고 쓰려면 [GitHub Releases](https://github.com/115dkk/Impulcifer-pip313/releases)에서 운영체제에 맞는 파일을 받으세요. 릴리스 파일 이름과 구성은 버전마다 달라질 수 있으므로, 각 릴리스의 설명을 확인해 주세요.
@@ -54,6 +60,12 @@ GUI를 쓰려면 다음 명령을 실행합니다.
 
 ```bash
 impulcifer_gui
+```
+
+Windows 전용 WebView PoC는 다음 명령으로 실행합니다. Recorder와 기본 BRIR 생성만 제공하며, 기존 CustomTkinter GUI와 standalone 릴리스의 기본 진입점은 바뀌지 않습니다.
+
+```bash
+impulcifer_webview
 ```
 
 CLI를 쓰려면 측정 폴더를 지정합니다.

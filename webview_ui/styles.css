@@ -1,0 +1,160 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #0a0d12;
+  color: #f2f5f8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-width: 760px;
+  background:
+    radial-gradient(circle at 85% 0%, rgba(35, 99, 235, 0.17), transparent 32rem),
+    #0a0d12;
+}
+
+.app-header,
+main {
+  width: min(1120px, calc(100% - 48px));
+  margin-inline: auto;
+}
+
+.app-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  padding: 42px 0 24px;
+  border-bottom: 1px solid #252c36;
+}
+
+h1, h2, p { margin: 0; }
+h1 { font-size: 38px; letter-spacing: -0.04em; }
+h2 { font-size: 22px; letter-spacing: -0.02em; }
+
+.eyebrow, .step {
+  color: #7da7ff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  margin-bottom: 7px;
+}
+
+.runtime-status, #job-state, .badge {
+  color: #aab4c2;
+  font-size: 13px;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  padding: 24px 0 48px;
+}
+
+.panel, .activity {
+  border: 1px solid #252c36;
+  background: rgba(17, 22, 29, 0.92);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
+}
+
+.panel-heading, .activity-heading, .actions, .inline-fields, .checks {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-heading { margin-bottom: 22px; }
+
+.badge {
+  padding: 6px 9px;
+  border: 1px solid #303947;
+  border-radius: 999px;
+}
+
+form, label {
+  display: grid;
+  gap: 7px;
+}
+
+form { gap: 15px; }
+label { color: #bdc6d2; font-size: 12px; }
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+input, select, button {
+  min-height: 42px;
+  border-radius: 9px;
+  font: inherit;
+}
+
+input, select {
+  width: 100%;
+  border: 1px solid #303947;
+  background: #0d1117;
+  color: #f2f5f8;
+  padding: 9px 11px;
+}
+
+input:focus, select:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.inline-fields, .checks {
+  align-items: end;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.inline-fields > label:first-child { width: 130px; }
+.check { display: flex; align-items: center; gap: 7px; min-height: 42px; }
+.check input { width: 16px; min-height: 16px; accent-color: #3b82f6; }
+
+button {
+  border: 0;
+  background: #2563eb;
+  color: white;
+  padding: 0 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) { background: #3472eb; }
+button:disabled { cursor: not-allowed; opacity: 0.46; }
+button.secondary { background: #252c36; }
+
+.activity { grid-column: 1 / -1; }
+.activity-heading { margin-bottom: 14px; }
+
+progress {
+  width: 100%;
+  height: 8px;
+  accent-color: #3b82f6;
+}
+
+pre {
+  min-height: 140px;
+  max-height: 260px;
+  overflow: auto;
+  margin: 16px 0 0;
+  padding: 14px;
+  border-radius: 10px;
+  background: #090c10;
+  color: #b8c4d4;
+  font: 12px/1.55 "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; }
+  .activity { grid-column: 1; }
+}

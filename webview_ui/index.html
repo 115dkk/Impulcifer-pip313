@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Impulcifer WebView Preview</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">EXPERIMENTAL WEBVIEW FRONTEND</p>
+        <h1>Impulcifer</h1>
+      </div>
+      <p id="runtime-status" class="runtime-status">Connecting to Python…</p>
+    </header>
+
+    <main>
+      <section class="panel" aria-labelledby="recorder-title">
+        <div class="panel-heading">
+          <div>
+            <p class="step">01 · Capture</p>
+            <h2 id="recorder-title">Recorder</h2>
+          </div>
+          <span class="badge">Audio hardware</span>
+        </div>
+
+        <form id="recorder-form">
+          <div class="field-grid">
+            <label>Mode
+              <select name="mode">
+                <option value="speakers">Speakers</option>
+                <option value="headphones">Headphones</option>
+              </select>
+            </label>
+            <label>Host API
+              <select id="host-api" name="host_api"><option value="">Auto</option></select>
+            </label>
+            <label>Input device
+              <select id="input-device" name="input_device"><option value="">Default</option></select>
+            </label>
+            <label>Output device
+              <select id="output-device" name="output_device"><option value="">Default</option></select>
+            </label>
+          </div>
+          <label>Playback file
+            <input name="play_path" placeholder="C:\path\to\sweep.wav" required>
+          </label>
+          <label>Recording folder
+            <input name="record_dir" placeholder="C:\path\to\measurements" required>
+          </label>
+          <div class="inline-fields">
+            <label>Input channels
+              <input name="channels" type="number" min="1" max="64" value="2">
+            </label>
+            <label class="check"><input name="append" type="checkbox"> Append to existing file</label>
+            <label class="check"><input name="debug_plots" type="checkbox"> Debug plots</label>
+          </div>
+          <button type="submit" data-start>Start recording</button>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="brir-title">
+        <div class="panel-heading">
+          <div>
+            <p class="step">02 · Process</p>
+            <h2 id="brir-title">BRIR generation</h2>
+          </div>
+          <span class="badge">DSP pipeline</span>
+        </div>
+
+        <form id="brir-form">
+          <label>Measurement folder
+            <input name="dir_path" placeholder="C:\path\to\measurements" required>
+          </label>
+          <label>Test signal override
+            <input name="test_signal" placeholder="Leave empty for automatic detection">
+          </label>
+          <div class="checks">
+            <label class="check"><input name="do_room_correction" type="checkbox" checked> Room correction</label>
+            <label class="check"><input name="do_headphone_compensation" type="checkbox" checked> Headphone compensation</label>
+            <label class="check"><input name="do_equalization" type="checkbox" checked> Equalization</label>
+            <label class="check"><input name="plot" type="checkbox"> Diagnostic plots</label>
+          </div>
+          <div class="actions">
+            <button type="submit" data-start>Generate BRIR</button>
+            <button id="cancel-job" class="secondary" type="button" disabled>Cancel BRIR</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="activity" aria-labelledby="activity-title">
+        <div class="activity-heading">
+          <h2 id="activity-title">Activity</h2>
+          <span id="job-state">Idle</span>
+        </div>
+        <progress id="progress" max="1" value="0"></progress>
+        <pre id="event-log" aria-live="polite">Ready.</pre>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
