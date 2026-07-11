@@ -239,10 +239,12 @@ def render_gallery(out_dir: Path) -> list[Path]:
         shots.append(_shoot(page, out_dir, "recorder-studio-ko-dark-busy"))
         context.close()
 
+        # force=True: the Stable job modal is already covering the page, so
+        # a normal click would fail playwright's actionability check.
         context, page = _open_page(
             browser, index_uri, "en", "dark", "brir-running", version, "stable"
         )
-        page.click(".nav-item[data-view='processing']")
+        page.click(".nav-item[data-view='processing']", force=True)
         page.wait_for_timeout(400)
         shots.append(_shoot(page, out_dir, "processing-stable-en-dark-busy"))
         context.close()
@@ -259,7 +261,7 @@ def render_gallery(out_dir: Path) -> list[Path]:
         context, page = _open_page(
             browser, index_uri, "en", "dark", "brir-failed", version, "stable"
         )
-        page.click(".nav-item[data-view='processing']")
+        page.click(".nav-item[data-view='processing']", force=True)
         page.wait_for_timeout(400)
         shots.append(_shoot(page, out_dir, "processing-stable-en-dark-failed"))
         context.close()
