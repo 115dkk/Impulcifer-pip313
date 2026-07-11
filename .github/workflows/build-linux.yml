@@ -42,6 +42,7 @@ jobs:
             patchelf \
             desktop-file-utils \
             libfuse2 \
+            imagemagick \
             portaudio19-dev \
             python3-tk \
             python3-dev \
