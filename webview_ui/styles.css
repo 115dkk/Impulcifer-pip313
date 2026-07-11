@@ -74,6 +74,11 @@
 
 * { box-sizing: border-box; }
 
+/* Any explicit display on a class (grid/flex) outranks the UA's [hidden]
+   rule — this already bit the modal backdrop, the pipeline checklist and
+   the per-channel decay row. Make hidden mean hidden, always. */
+[hidden] { display: none !important; }
+
 html, body { height: 100%; }
 
 body {
