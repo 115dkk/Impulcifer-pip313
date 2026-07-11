@@ -376,5 +376,8 @@
   "webview_status_succeeded": "완료",
   "webview_status_failed": "실패",
   "webview_status_cancelled": "취소됨",
-  "webview_status_cancel_requested": "취소 요청됨…"
+  "webview_status_cancel_requested": "취소 요청됨…",
+  "button_check_updates": "업데이트 확인",
+  "update_checking": "업데이트 확인 중...",
+  "update_up_to_date": "이미 최신 버전입니다 (최신: {latest})."
 }

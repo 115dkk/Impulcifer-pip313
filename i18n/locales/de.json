@@ -376,5 +376,8 @@
   "webview_status_succeeded": "Completed",
   "webview_status_failed": "Failed",
   "webview_status_cancelled": "Cancelled",
-  "webview_status_cancel_requested": "Cancelling…"
+  "webview_status_cancel_requested": "Cancelling…",
+  "button_check_updates": "Check for Updates",
+  "update_checking": "Checking for updates...",
+  "update_up_to_date": "You are up to date (latest: {latest})."
 }

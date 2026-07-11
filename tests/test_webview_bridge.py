@@ -39,6 +39,9 @@ def test_module_import_does_not_require_pywebview(monkeypatch) -> None:
         ("resolve_recording_paths", ("dir", "play.wav", "speakers")),
         ("generate_sweep_set", ("dir",)),
         ("open_path", ("dir",)),
+        ("check_for_updates", ()),
+        ("start_update", ({"latest_version": "9.9.9"},)),
+        ("apply_pending_update", ()),
     ],
 )
 def test_bridge_delegates_only_public_service_methods(method, args) -> None:
@@ -172,6 +175,52 @@ def test_bootstrap_reports_webview_backend(monkeypatch) -> None:
     response = bridge.bootstrap()
     assert response["ok"]
     assert response["data"]["webview_backend"] == "cocoa"
+
+
+def test_apply_pending_update_closes_window_on_restart(monkeypatch) -> None:
+    import threading
+
+    from impulcifer_webview import WebviewBridge
+
+    class _RestartingService:
+        def apply_pending_update(self):
+            return {"ok": True, "data": {"restarting": True}}
+
+    timers: list[tuple[float, object]] = []
+
+    class _FakeTimer:
+        def __init__(self, interval, function):
+            timers.append((interval, function))
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(threading, "Timer", _FakeTimer)
+
+    destroyed: list[bool] = []
+    window = SimpleNamespace(destroy=lambda: destroyed.append(True))
+    bridge = WebviewBridge(_RestartingService())
+    bridge.attach_window(window)
+
+    response = bridge.apply_pending_update()
+    assert response["ok"]
+    assert len(timers) == 1
+
+    _interval, close_window = timers[0]
+    close_window()
+    assert destroyed == [True]
+
+
+def test_apply_pending_update_without_window_does_not_crash(monkeypatch) -> None:
+    from impulcifer_webview import WebviewBridge
+
+    class _RestartingService:
+        def apply_pending_update(self):
+            return {"ok": True, "data": {"restarting": True}}
+
+    bridge = WebviewBridge(_RestartingService())
+    response = bridge.apply_pending_update()
+    assert response["ok"]
 
 
 def test_webview_entrypoint_contains_no_qt_backend() -> None:

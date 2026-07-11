@@ -31,8 +31,9 @@ VIEWS = ("recorder", "processing", "settings", "info")
 
 # 2 skins x 2 themes x 2 languages x 4 views + 3 busy-state shots
 # (studio checklist BRIR run, studio recording run, stable modal dialog)
-# + 2 failure shots (studio checklist abort, stable modal error).
-EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3 + 2
+# + 2 failure shots (studio checklist abort, stable modal error)
+# + 2 auto-update prompt shots (studio en, stable ko).
+EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3 + 2 + 2
 
 VIEWPORT_WIDTH = 1280
 MIN_HEIGHT = 860
@@ -161,6 +162,19 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
       next_seq: 6,
     }}),
     cancel_job: () => respond({{ job: runningJob(activeKind || "brir") }}),
+    check_for_updates: () => respond(SCENARIO === "update-available" ? {{
+      update_available: true,
+      current_version: VERSION,
+      latest_version: "99.0.0",
+      download_url: "https://github.com/115dkk/Impulcifer-pip313/releases/download/v99.0.0/Impulcifer-win-Setup.exe",
+      release_notes: "## 99.0.0 - 2026-07-12\\n\\n### Gallery placeholder release\\n\\n- Auto-update prompt review shot\\n- Release notes render in this scrollable box\\n- Buttons mirror the CTk UpdateDialog",
+      release_url: "https://github.com/115dkk/Impulcifer-pip313/releases/latest",
+    }} : {{
+      update_available: false, current_version: VERSION, latest_version: VERSION,
+      download_url: null, release_notes: null, release_url: null,
+    }}),
+    start_update: () => respond({{ job: runningJob("update") }}),
+    apply_pending_update: () => respond({{ restarting: true }}),
     set_language: (code) => respond({{ language: code, strings: STRINGS }}),
     set_theme: (theme) => respond({{ theme }}),
     set_skin: (skin) => respond({{ skin }}),
@@ -279,6 +293,19 @@ def render_gallery(out_dir: Path) -> list[Path]:
         page.wait_for_timeout(400)
         shots.append(_shoot(page, out_dir, "processing-stable-en-dark-failed"))
         context.close()
+
+        # Auto-update prompt (CTk UpdateDialog port): version line, release
+        # notes, Update Now / Remind / Skip. Triggered directly instead of
+        # waiting out boot()'s 2-second background-check timer.
+        for skin, language in (("studio", "en"), ("stable", "ko")):
+            context, page = _open_page(
+                browser, index_uri, language, "dark", "update-available", version, skin
+            )
+            page.evaluate("checkForUpdates(false)")
+            page.wait_for_selector("#update-modal:not([hidden])")
+            page.wait_for_timeout(200)
+            shots.append(_shoot(page, out_dir, f"update-{skin}-{language}-dark"))
+            context.close()
 
         browser.close()
     return shots

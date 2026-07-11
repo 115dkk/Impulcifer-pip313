@@ -123,6 +123,24 @@ class WebviewBridge:
     def open_path(self, path: Any = None) -> dict[str, Any]:
         return self._service.open_path(path)
 
+    def check_for_updates(self) -> dict[str, Any]:
+        return self._service.check_for_updates()
+
+    def start_update(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._service.start_update(request)
+
+    def apply_pending_update(self) -> dict[str, Any]:
+        response = self._service.apply_pending_update()
+        restarting = bool(response.get("ok") and response["data"].get("restarting"))
+        if restarting and self._window is not None:
+            # Update.exe has taken over; give the JS caller a moment to
+            # receive this response, then close the window so main() returns
+            # and the old process exits for the restart.
+            import threading
+
+            threading.Timer(0.8, self._window.destroy).start()
+        return response
+
     def select_file(self, kind: str = "audio") -> dict[str, Any]:
         return self._create_file_dialog("open", kind)
 

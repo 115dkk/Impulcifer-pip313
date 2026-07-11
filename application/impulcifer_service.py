@@ -167,6 +167,11 @@ class ImpulciferApplicationService:
         self._lock = threading.RLock()
         self._jobs: dict[str, _Job] = {}
         self._active_job_id: str | None = None
+        # Deferred final action of a finished update job (e.g. Velopack's
+        # apply-and-restart); staged so the frontend can show the completion
+        # message first and apply on user confirmation, mirroring the CTk
+        # UpdateDialog messagebox → after_message sequence.
+        self._pending_update_apply: Callable[[], Any] | None = None
 
     def bootstrap(self) -> dict[str, Any]:
         from i18n.localization import get_localization_manager
@@ -360,7 +365,7 @@ class ImpulciferApplicationService:
             if not job.cancellable:
                 return _error(
                     "JOB_NOT_CANCELLABLE",
-                    "Recording jobs cannot be cancelled safely.",
+                    f"{job.kind} jobs cannot be cancelled safely.",
                     details={"job_id": job_id},
                 )
             job.status = "cancel_requested"
@@ -518,6 +523,110 @@ class ImpulciferApplicationService:
         except Exception as exc:
             return _error("INTERNAL_ERROR", str(exc) or exc.__class__.__name__)
         return _ok({"path": target})
+
+    # ------------------------------------------------------------------
+    # Auto-update (ports the CTk check_for_updates_background → UpdateDialog
+    # → UpdateExecutor flow onto the JSON job model)
+    # ------------------------------------------------------------------
+
+    def check_for_updates(self) -> dict[str, Any]:
+        """Query GitHub releases for a newer version (blocking, ~10s max)."""
+        from impulcifer import __version__
+        from updater.update_checker import UpdateChecker
+
+        try:
+            checker = UpdateChecker(__version__)
+            available, latest_version, download_url = checker.check_for_updates()
+        except Exception as exc:
+            return _error(
+                "UPDATE_CHECK_FAILED",
+                str(exc) or exc.__class__.__name__,
+                retryable=True,
+            )
+        # Same gate as the CTk background check: only prompt when there is
+        # both a newer version and something to download.
+        update_available = bool(available and download_url)
+        return _ok(
+            {
+                "update_available": update_available,
+                "current_version": __version__,
+                "latest_version": latest_version,
+                "download_url": download_url,
+                "release_notes": checker.get_release_notes() if update_available else None,
+                "release_url": checker.get_release_url(),
+            }
+        )
+
+    def start_update(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Run the environment-appropriate update executor as a job."""
+        if not isinstance(request, dict):
+            return _error("INVALID_REQUEST", "Request must be an object.")
+        download_url = _optional_string(request.get("download_url"))
+        latest_version = _optional_string(request.get("latest_version"))
+        if latest_version is None:
+            return _error("INVALID_REQUEST", "latest_version is required.")
+
+        def run(job_id: str, _cancel_event: threading.Event) -> dict[str, Any]:
+            from updater.updater_core import UpdateExecutionError, create_update_executor
+
+            executor = create_update_executor(download_url or "", latest_version)
+
+            def progress(value: float, message: str = "") -> None:
+                # ``message`` is either an i18n key ("update_downloading") or
+                # preformatted text ("Downloading: 42%"); the frontend
+                # resolves keys and falls back to the raw string.
+                self._emit(
+                    job_id,
+                    "progress",
+                    {
+                        "progress": max(0.0, min(1.0, float(value))),
+                        "message": message,
+                    },
+                )
+
+            try:
+                result = executor.execute(progress)
+            except UpdateExecutionError as exc:
+                raise _ServiceFailure("UPDATE_FAILED", str(exc), retryable=True) from exc
+            with self._lock:
+                self._pending_update_apply = result.after_message
+            return {
+                "status_key": result.status_key,
+                "status_default": result.status_default,
+                "title_key": result.title_key,
+                "title_default": result.title_default,
+                "message_key": result.message_key,
+                "message_default": result.message_default,
+                "progress": result.progress,
+                "requires_restart": result.after_message is not None,
+            }
+
+        return self._start_job("update", False, run)
+
+    def apply_pending_update(self) -> dict[str, Any]:
+        """Run the staged post-update action (Velopack apply-and-restart)."""
+        with self._lock:
+            apply_fn = self._pending_update_apply
+            self._pending_update_apply = None
+        if apply_fn is None:
+            return _error("INVALID_REQUEST", "No staged update to apply.")
+        try:
+            applied = apply_fn()
+        except SystemExit:
+            # VelopackUpdater.apply_and_restart hands over to Update.exe and
+            # calls sys.exit(); on a bridge worker thread that only unwinds
+            # this frame, so reaching here means the handover succeeded and
+            # the frontend should close the window.
+            return _ok({"restarting": True})
+        except Exception as exc:
+            return _error(
+                "UPDATE_FAILED",
+                str(exc) or exc.__class__.__name__,
+                retryable=True,
+            )
+        if applied is False:
+            return _error("UPDATE_FAILED", "Failed to apply update.", retryable=True)
+        return _ok({"restarting": True})
 
     def _start_job(
         self,

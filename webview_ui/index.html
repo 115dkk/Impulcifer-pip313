@@ -502,7 +502,9 @@
               <div class="actions-row">
                 <button class="btn btn-secondary" data-open-url="license" data-i18n="button_view_license">View License</button>
                 <button class="btn btn-secondary" data-open-url="report_bug" data-i18n="button_report_bug">Report Bug</button>
+                <button class="btn btn-secondary" id="btn-check-updates" data-i18n="button_check_updates">Check for Updates</button>
               </div>
+              <p class="hint" id="update-check-status" hidden></p>
             </div>
           </div>
 
@@ -564,6 +566,32 @@
         <div class="actions-row modal-actions">
           <button class="btn btn-secondary" id="job-modal-cancel" data-i18n="button_cancel">Cancel</button>
           <button class="btn btn-primary" id="job-modal-close" data-i18n="button_close" hidden>Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-update prompt, mirroring the CTk UpdateDialog: release notes,
+         Update Now / Remind Later / Skip, then in-place download progress. -->
+    <div class="modal-backdrop" id="update-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
+        <div class="modal-head">
+          <h3 id="update-modal-title" data-i18n="update_available_title">Update Available</h3>
+          <span class="card-meta mono" id="update-version-line"></span>
+        </div>
+        <p class="hint" data-i18n="update_available_message">A new version is available!</p>
+        <p class="hint" data-i18n="update_release_notes">Release Notes:</p>
+        <pre class="log update-notes" id="update-notes"></pre>
+        <div id="update-progress-row" hidden>
+          <div class="progress"><i id="update-progress"></i></div>
+          <p class="hint" id="update-status"></p>
+        </div>
+        <p class="hint" id="update-result" hidden></p>
+        <div class="actions-row modal-actions">
+          <button class="btn btn-secondary" id="update-skip" data-i18n="update_button_skip">Skip This Version</button>
+          <button class="btn btn-secondary" id="update-remind" data-i18n="update_button_remind">Remind Me Later</button>
+          <button class="btn btn-primary" id="update-now" data-i18n="update_button_update">Update Now</button>
+          <button class="btn btn-primary" id="update-restart" data-i18n="button_ok" hidden>OK</button>
+          <button class="btn btn-secondary" id="update-close" data-i18n="button_close" hidden>Close</button>
         </div>
       </div>
     </div>
