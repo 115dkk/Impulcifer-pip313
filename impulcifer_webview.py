@@ -1,9 +1,10 @@
-"""Experimental pywebview frontend for the Impulcifer application service."""
+"""Platform WebView frontend for the Impulcifer application service."""
 
 from __future__ import annotations
 
 from pathlib import Path
 import platform
+import time
 from typing import Any
 
 from application import ImpulciferApplicationService
@@ -39,6 +40,70 @@ def select_gui_backend() -> str:
             f"{platform.system() or 'unknown'}."
         )
     return backend
+
+
+# Pulse --bg-0 tokens (webview_ui/styles.css). Passed as the window's own
+# background so the pre-load flash matches the UI instead of blinding white.
+_WINDOW_BACKGROUNDS = {"dark": "#101214", "light": "#f3f5f7"}
+
+
+def resolve_effective_theme() -> str:
+    """Resolve the persisted theme to ``dark``/``light`` (``system`` → OS)."""
+    theme = "dark"
+    try:
+        from i18n.localization import get_localization_manager
+
+        theme = get_localization_manager().get_theme()
+    except Exception:
+        pass
+    if theme == "system":
+        if platform.system() == "Windows":
+            try:
+                import winreg
+
+                with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                ) as key:
+                    light, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+                return "light" if light else "dark"
+            except Exception:
+                return "dark"
+        return "dark"
+    return theme if theme in ("dark", "light") else "dark"
+
+
+def apply_windows_titlebar_theme(window: Any, dark: bool) -> bool:
+    """Match the OS title bar to the app theme via DWM, like CustomTkinter.
+
+    Without this the WebView window wears the default white Windows title
+    bar over the dark Pulse UI. Returns False only when the native handle
+    is not available yet (caller may retry); True otherwise (done or no-op).
+    """
+    if platform.system() != "Windows":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        handle = getattr(getattr(window, "native", None), "Handle", None)
+        if handle is None:
+            return False
+        hwnd = int(handle.ToInt64()) if hasattr(handle, "ToInt64") else int(str(handle))
+        set_attribute = ctypes.windll.dwmapi.DwmSetWindowAttribute
+        set_attribute.argtypes = [wintypes.HWND, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+        set_attribute.restype = ctypes.c_long
+        value = ctypes.c_int(1 if dark else 0)
+        # 20 = DWMWA_USE_IMMERSIVE_DARK_MODE (19 on pre-20H1 Windows 10).
+        for attribute in (20, 19):
+            if set_attribute(hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)) == 0:
+                break
+        # SWP_NOSIZE|NOMOVE|NOZORDER|FRAMECHANGED — repaint the frame so the
+        # new title bar color shows without waiting for a resize.
+        ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0020)
+    except Exception:
+        pass
+    return True
 
 
 # open_url() is allowlist-only so the JS side can never navigate the host
@@ -101,7 +166,26 @@ class WebviewBridge:
         return self._service.set_language(language_code)
 
     def set_theme(self, theme: str) -> dict[str, Any]:
-        return self._service.set_theme(theme)
+        response = self._service.set_theme(theme)
+        if response.get("ok"):
+            self.apply_titlebar_theme()
+        return response
+
+    def apply_titlebar_theme(self) -> None:
+        """Sync the native title bar with the current app theme (Windows).
+
+        The webview.start callback can fire before the native window handle
+        exists, so poll briefly instead of silently doing nothing (observed:
+        the packaged app kept the default white title bar).
+        """
+        window = self._window
+        if window is None:
+            return
+        dark = resolve_effective_theme() == "dark"
+        for _ in range(25):
+            if apply_windows_titlebar_theme(window, dark):
+                return
+            time.sleep(0.2)
 
     def set_skin(self, skin: str) -> dict[str, Any]:
         return self._service.set_skin(skin)
@@ -195,6 +279,7 @@ def create_app_window(webview_module: Any, bridge: "WebviewBridge") -> Any:
         width=1280,
         height=860,
         min_size=(980, 640),
+        background_color=_WINDOW_BACKGROUNDS[resolve_effective_theme()],
     )
     bridge.attach_window(window)
     return window
@@ -214,7 +299,8 @@ def main() -> None:
 
     bridge = WebviewBridge()
     create_app_window(webview, bridge)
-    webview.start(gui=backend, debug=False)
+    # Runs once the window is shown: the native handle exists only then.
+    webview.start(bridge.apply_titlebar_theme, gui=backend, debug=False)
 
 
 if __name__ == "__main__":

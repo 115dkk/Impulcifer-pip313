@@ -364,7 +364,6 @@
   "studio_disclosure_virtual_bass_desc": "Add an idealized low-frequency response where bass is lacking",
   "studio_toggle_plot_desc": "Generate graphs (longer processing)",
   "label_force_channels_custom": "Custom value:",
-  "webview_experimental_badge": "Experimental WebView frontend",
   "webview_card_activity": "Activity",
   "webview_job_idle": "Idle",
   "webview_open_output_folder": "Open output folder",

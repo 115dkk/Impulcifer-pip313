@@ -181,6 +181,16 @@ jobs:
         env:
           PYTHONIOENCODING: UTF-8
 
+      # 2.10.0 회귀 재발 방지: scipy 벤더링 모듈 누락처럼 "빌드는 성공하지만
+      # 기동이 죽는" 번들 결함은 이 스모크(전체 import 체인 + webview 스택 +
+      # 폰트/자산 검증)가 릴리스 전에 잡는다.
+      - name: Smoke test built binary
+        run: |
+          ./dist/Impulcifer_Distribution/ImpulciferGUI/gui_main.dist/ImpulciferGUI.exe --smoke-test
+        shell: bash
+        env:
+          PYTHONIOENCODING: UTF-8
+
       - name: Install Velopack CLI
         run: |
           dotnet tool install -g vpk
@@ -296,6 +306,13 @@ jobs:
         env:
           PYTHONIOENCODING: UTF-8
 
+      # 번들 기동 결함(누락 모듈 등)을 릴리스 전에 잡는 스모크 게이트.
+      - name: Smoke test built app bundle
+        run: |
+          ./dist/macos/Impulcifer.app/Contents/MacOS/Impulcifer --smoke-test
+        env:
+          PYTHONIOENCODING: UTF-8
+
       - name: Create DMG installer
         run: |
           echo "Creating DMG installer..."
@@ -367,6 +384,7 @@ jobs:
             desktop-file-utils \
             libfuse2 \
             imagemagick \
+            xvfb \
             portaudio19-dev \
             python3-tk \
             python3-dev \
@@ -420,6 +438,14 @@ jobs:
 
           echo "Checking Linux build output:"
           ls -la dist/linux/
+        env:
+          PYTHONIOENCODING: UTF-8
+
+      # 번들 기동 결함(누락 모듈 등)을 릴리스 전에 잡는 스모크 게이트.
+      # 스모크의 Tk 단계 때문에 가상 디스플레이(xvfb)가 필요하다.
+      - name: Smoke test built binary
+        run: |
+          xvfb-run -a ./dist/linux/gui_main.dist/Impulcifer --smoke-test
         env:
           PYTHONIOENCODING: UTF-8
 

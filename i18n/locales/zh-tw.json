@@ -364,7 +364,6 @@
   "studio_disclosure_virtual_bass_desc": "在低音不足的位置加入理想化的低頻響應",
   "studio_toggle_plot_desc": "產生圖表（處理時間較長）",
   "label_force_channels_custom": "自訂值:",
-  "webview_experimental_badge": "Experimental WebView frontend",
   "webview_card_activity": "Activity",
   "webview_job_idle": "Idle",
   "webview_open_output_folder": "Open output folder",

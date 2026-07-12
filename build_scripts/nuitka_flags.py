@@ -153,6 +153,38 @@ METADATA_TEMPLATE: tuple[str, ...] = (
 )
 
 
+def _package_exists(name: str) -> bool:
+    """Build-time probe: is ``name`` importable in the build environment?"""
+    try:
+        import importlib.util
+
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+# scipy가 벤더링한 array-api-compat은 백엔드 서브모듈(numpy.fft 등)을 lazy
+# import해 Nuitka의 정적 추적에서 누락된다. 2.10.0 릴리스의 standalone이
+# 모든 scipy import에서 "No module named 'scipy._external.array_api_compat.
+# numpy.fft'"로 즉사한 원인(설치본 실검증으로 발견) — CTk 기동과 WebView
+# bootstrap이 함께 죽어 UI 문자열/언어 목록까지 사라졌다. scipy 1.18+는
+# scipy._external 아래, 그 이전(1.12~1.17)은 scipy._lib 아래에 있으므로
+# 존재하는 쪽을 통째로 포함한다(없는 패키지를 include하면 Nuitka가 에러
+# 내므로 빌드 환경 기준으로 조건부).
+SCIPY_VENDORED_COMPAT_CANDIDATES: tuple[str, ...] = (
+    "scipy._external",
+    "scipy._lib.array_api_compat",
+)
+
+
+def scipy_vendored_compat_flags(package_exists=_package_exists) -> List[str]:
+    return [
+        f"--include-package={name}"
+        for name in SCIPY_VENDORED_COMPAT_CANDIDATES
+        if package_exists(name)
+    ]
+
+
 def platform_specific_flags(target_platform: str, project_root: str = ".") -> List[str]:
     """Return platform-conditional Nuitka flags.
 
@@ -236,6 +268,7 @@ def build_nuitka_args(
         args.append(f"--include-package-data={pkg}")
     for mod in INCLUDED_MODULES:
         args.append(f"--include-module={mod}")
+    args.extend(scipy_vendored_compat_flags())
 
     for src, dst in INCLUDED_DATA_DIRS:
         full_src = os.path.join(project_root, src)

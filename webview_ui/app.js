@@ -56,6 +56,27 @@ function t(key) {
   return state.strings[key] || key;
 }
 
+/* Strings needed BEFORE bootstrap delivers the locale table. If bootstrap
+   itself dies (e.g. a packaging regression on the Python side), t() would
+   render raw keys — 2.10.0 shipped exactly that. Language comes from the
+   OS/browser locale since the persisted choice is unreachable then. */
+const PREBOOT_STRINGS = {
+  en: {
+    webview_bridge_failed: "Python bridge unavailable.",
+    webview_bridge_connecting: "Connecting to Python…",
+  },
+  ko: {
+    webview_bridge_failed: "Python 브리지를 사용할 수 없습니다.",
+    webview_bridge_connecting: "Python 브리지에 연결하는 중…",
+  },
+};
+
+function tPreboot(key) {
+  if (state.strings[key]) return state.strings[key];
+  const lang = String(navigator.language || "en").toLowerCase().startsWith("ko") ? "ko" : "en";
+  return PREBOOT_STRINGS[lang][key] || PREBOOT_STRINGS.en[key] || key;
+}
+
 function fmt(text, vars) {
   return text.replace(/\{(\w+)\}/g, (match, name) =>
     Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match,
@@ -1073,12 +1094,12 @@ async function boot() {
   try {
     response = await api().bootstrap();
   } catch (error) {
-    $("runtime-status").textContent = t("webview_bridge_failed");
+    $("runtime-status").textContent = tPreboot("webview_bridge_failed");
     appendLog(String(error));
     return;
   }
   if (!response.ok) {
-    $("runtime-status").textContent = t("webview_bridge_failed");
+    $("runtime-status").textContent = tPreboot("webview_bridge_failed");
     appendLog(errorText(response));
     return;
   }
@@ -1125,9 +1146,33 @@ async function boot() {
   await Promise.all([loadDevices(), loadSystemInfo()]);
   refreshResolvedPath();
 
+  // First run: ask for the language before anything else (CTk parity).
+  if (data.ui && data.ui.first_run) {
+    showFirstRunLanguageModal(data.ui.languages || []);
+  }
+
   // Mirror the CTk root.after(2000) startup update check; failures stay
   // silent and never block the UI.
   window.setTimeout(() => checkForUpdates(false), 2000);
+}
+
+function showFirstRunLanguageModal(languages) {
+  const list = $("language-modal-list");
+  list.replaceChildren();
+  languages.forEach(({ code, name }) => {
+    const button = document.createElement("button");
+    button.className = "btn btn-secondary";
+    button.type = "button";
+    button.textContent = name;
+    button.addEventListener("click", async () => {
+      // set_language persists the choice and marks language_selected.
+      await changeLanguage(code);
+      $("sf-language").value = code;
+      $("language-modal").hidden = true;
+    });
+    list.appendChild(button);
+  });
+  if (list.childElementCount > 0) $("language-modal").hidden = false;
 }
 
 buildDecayGrid();

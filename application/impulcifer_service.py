@@ -179,14 +179,24 @@ class ImpulciferApplicationService:
 
     def bootstrap(self) -> dict[str, Any]:
         from i18n.localization import get_localization_manager
-        from impulcifer import __version__
+
+        # The DSP stack (impulcifer → core → scipy …) must never be able to
+        # kill the UI shell: a packaging regression there should surface as a
+        # readable job/system-info error, not as a dead bootstrap that leaves
+        # raw i18n keys and an empty language list on screen (observed with
+        # the 2.10.0 standalone, whose bundle was missing a lazy scipy
+        # vendored module).
+        try:
+            from impulcifer import __version__ as version
+        except Exception:
+            version = "unknown"
 
         with self._lock:
             active_job = self._jobs.get(self._active_job_id or "")
             active = active_job.snapshot() if active_job is not None else None
         return _ok(
             {
-                "version": __version__,
+                "version": version,
                 "platform": platform.system().lower(),
                 "capabilities": {
                     "recording": True,
@@ -449,6 +459,8 @@ class ImpulciferApplicationService:
             # Older LocalizationManager instances (or test fakes) may predate
             # the frontend setting; default matches get_frontend().
             "frontend": loc.get_frontend() if hasattr(loc, "get_frontend") else "webview",
+            # First run → the frontend shows a language picker (CTk parity).
+            "first_run": bool(loc.is_first_run()) if hasattr(loc, "is_first_run") else False,
             "languages": [
                 {"code": code, "name": name} for code, name in SUPPORTED_LANGUAGES.items()
             ],
@@ -456,8 +468,10 @@ class ImpulciferApplicationService:
         }
 
     def get_system_info(self) -> dict[str, Any]:
-        from core.parallel_processing import get_python_threading_info
-        from impulcifer import __version__
+        try:
+            from impulcifer import __version__ as version
+        except Exception:
+            version = "unknown"
 
         install_kind = "dev"
         try:
@@ -470,10 +484,15 @@ class ImpulciferApplicationService:
         except Exception:
             pass
 
-        threading_info = get_python_threading_info()
+        try:
+            from core.parallel_processing import get_python_threading_info
+
+            threading_info = get_python_threading_info()
+        except Exception:
+            threading_info = {}
         return _ok(
             {
-                "version": __version__,
+                "version": version,
                 "install_kind": install_kind,
                 "python_version": threading_info.get("python_version"),
                 "os": f"{platform.system()} {platform.release()}",
