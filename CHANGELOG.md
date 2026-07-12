@@ -11,7 +11,7 @@ been fixed and old features improved.
 - **WebView 프론트엔드의 macOS/Linux 지원**: Windows 전용 게이트를 제거하고 플랫폼별 렌더링 엔진을 강제 선택한다 — Windows는 Edge WebView2(edgechromium), macOS는 WKWebView(cocoa), Linux는 WebKit2GTK(gtk). KDE 세션에서 pywebview가 Qt를 우선하는 동작도 차단된다. 런타임 배지가 실제 백엔드명(WebView2/WKWebView/WebKitGTK)을 표시한다.
 - **WebView 자동 업데이트**: CTk `UpdateDialog`/`UpdateExecutor` 흐름을 application service job으로 이식했다. 부팅 2초 후 백그라운드 확인(CTk `after(2000)` 미러) → 릴리스 노트·버전 라인·"지금 업데이트/나중에/건너뛰기" 모달 → 다운로드 진행률 → 완료 메시지 → Velopack 경로는 OK 확인 시 `Update.exe` 인계 후 창 자동 종료·재시작. pip/legacy 경로는 각자의 완료 안내를 표시한다. Info 탭에 수동 "업데이트 확인" 버튼도 추가.
 - **Standalone 기본 인터페이스가 WebView로 전환**: `gui_main.py`가 런처가 되어 실행 인자(`--frontend=webview|ctk`) > 저장된 설정(`~/.impulcifer/settings.json`의 `frontend` 키) > 기본값 webview 순으로 결정한다. 바로가기/Velopack 실행 모두 WebView가 뜬다. pywebview 미탑재·시스템 WebKit 부재 등 WebView 스택을 쓸 수 없는 환경에서는 CustomTkinter로 자동 폴백한다. WebView 설정 탭과 CTk 설정 탭 양쪽에 "기본 인터페이스" 선택을 추가했다.
-- **CustomTkinter deprecation 고지**: CTk 인터페이스는 버전 3에서 제거될 예정이며, 버전 2 동안에는 유지보수와 기능 추가를 포함해 계속 완전히 지원된다. CTk 설정 탭·README·CHANGELOG에 고지를 추가했다.
+- **CustomTkinter 지원 일정 고지**: CTk 인터페이스는 버전 2 동안 유지보수와 기능 추가를 포함해 계속 완전히 지원되며, 버전 3부터는 제거되지 않고 지금의 레거시 GUI처럼 업데이트 없이 동결 상태로 유지된다(버전 3에서 제거되는 것은 구버전 레거시 GUI뿐). CTk 설정 탭·README·CHANGELOG에 고지를 추가했다.
 
 #### 🔧 빌드 / 설정 변경
 - **3-플랫폼 백엔드 실기 검증 CI (`.github/workflows/webview-backend-validation.yml`)**: mock 기반 갤러리와 상보적으로, 각 플랫폼의 실제 엔진 + 실제 `WebviewBridge`로 DOM 렌더 → boot() 완주(bootstrap 왕복) → promise 기반 브리지 왕복을 검증한다(`build_scripts/validate_webview_backend.py`, watchdog 포함). 첫 실행에서 cocoa/gtk/edgechromium 모두 통과.

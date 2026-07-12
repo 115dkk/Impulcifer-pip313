@@ -5,9 +5,9 @@
 기본값은 WebView 프론트엔드다(2.10+, 바로가기/Velopack 실행 포함).
 CustomTkinter는 ``--frontend=ctk`` 또는 설정(~/.impulcifer/settings.json의
 ``frontend`` 키)으로 계속 사용할 수 있으며, 버전 2 동안 유지보수와 기능
-추가를 포함해 완전히 지원된다(버전 3에서 제거 예정). WebView 스택을 쓸 수
-없는 환경(pywebview 미설치, 시스템 WebKit 부재 등)에서는 자동으로
-CustomTkinter로 폴백한다.
+추가를 포함해 완전히 지원된다(버전 3부터는 지금의 레거시 GUI처럼 업데이트
+없이 동결 유지 — 제거 아님). WebView 스택을 쓸 수 없는 환경(pywebview
+미설치, 시스템 WebKit 부재 등)에서는 자동으로 CustomTkinter로 폴백한다.
 """
 
 import sys

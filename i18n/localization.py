@@ -255,7 +255,8 @@ class LocalizationManager:
         ``webview`` is the platform WebView frontend (the default since
         2.10); ``ctk`` keeps the CustomTkinter interface, which stays fully
         supported (maintenance and new features) for the rest of version 2
-        and is planned for removal in version 3.
+        and is kept as a frozen legacy interface from version 3 on (only the
+        old legacy GUI is removed in version 3).
         """
         if frontend not in ('webview', 'ctk'):
             frontend = 'webview'

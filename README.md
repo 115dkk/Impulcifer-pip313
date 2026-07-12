@@ -77,7 +77,7 @@ impulcifer_webview
 
 Standalone 릴리스(2.10+)의 기본 인터페이스는 WebView입니다. CustomTkinter 인터페이스도 계속 함께 설치되며, 설정 탭의 "기본 인터페이스" 선택이나 실행 인자 `--frontend=ctk`로 전환할 수 있습니다 (`--frontend=webview`로 되돌리기). WebView 스택을 사용할 수 없는 환경에서는 자동으로 CustomTkinter로 폴백합니다.
 
-> **CustomTkinter 지원 안내**: CustomTkinter 인터페이스는 버전 3에서 제거될 예정입니다. 버전 2 동안에는 유지보수와 기능 추가를 포함해 계속 완전히 지원됩니다.
+> **CustomTkinter 지원 안내**: CustomTkinter 인터페이스는 버전 2 동안 유지보수와 기능 추가를 포함해 계속 완전히 지원됩니다. 버전 3부터는 제거되지 않고 지금의 레거시 GUI처럼 업데이트 없이 동결 상태로 유지됩니다 — 버전 3에서 제거되는 것은 구버전 레거시 GUI(`impulcifer_gui_legacy`)입니다.
 
 CLI를 쓰려면 측정 폴더를 지정합니다.
 

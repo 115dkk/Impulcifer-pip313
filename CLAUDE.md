@@ -50,9 +50,11 @@ core/
   channel_generation.py   ← 가상 채널 생성
 gui/
   modern_gui.py           ← CustomTkinter GUI (~295줄, tabs/로 분리됨. 버전 2 동안
-                            유지보수+기능추가 지속, 버전 3에서 제거 예정 고지됨)
+                            유지보수+기능추가 지속, 버전 3부터는 레거시 GUI처럼
+                            동결 유지[패치 없음] — 제거 아님)
   tabs/                   ← Recorder / Impulcifer / Settings / Info 탭
-  legacy_gui.py           ← 구버전 Tkinter GUI (deprecated, 신규 작업 금지)
+  legacy_gui.py           ← 구버전 Tkinter GUI (deprecated, 신규 작업 금지,
+                            버전 3에서 제거 예정)
 autoeq/                   ← 벤더링된 AutoEQ (PR #63에서 in-tree 전환)
   frequency_response.py   ← 주파수 응답 처리 핵심
 i18n/

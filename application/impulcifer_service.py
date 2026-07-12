@@ -54,7 +54,8 @@ _THEME_CODES = ("dark", "light", "system")
 # module must stay importable without tkinter).
 _SKIN_CODES = ("stable", "studio")
 # gui_main launcher targets; ``webview`` is the default since 2.10 and CTk
-# stays supported for the rest of version 2 (removal planned for version 3).
+# stays supported for the rest of version 2 (kept frozen like the legacy GUI
+# from version 3 on — not removed).
 _FRONTEND_CODES = ("webview", "ctk")
 
 _brir_field_kinds_cache: dict[str, str] | None = None
