@@ -20,6 +20,27 @@ _FILE_DIALOG_FILTERS: dict[str, tuple[str, ...]] = {
     "wav": ("WAV files (*.wav)", "All files (*.*)"),
 }
 
+# platform.system() → forced pywebview GUI backend. Forcing keeps startup
+# deterministic (pywebview would otherwise prefer Qt inside a KDE session) and
+# pins exactly the three engines that webview-backend-validation.yml verifies.
+_GUI_BACKENDS: dict[str, str] = {
+    "Windows": "edgechromium",  # Microsoft Edge WebView2
+    "Darwin": "cocoa",  # WKWebView
+    "Linux": "gtk",  # WebKit2GTK
+}
+
+
+def select_gui_backend() -> str:
+    """Return the pywebview ``gui=`` value for the current platform."""
+    backend = _GUI_BACKENDS.get(platform.system())
+    if backend is None:
+        raise SystemExit(
+            "The WebView frontend does not support this platform: "
+            f"{platform.system() or 'unknown'}."
+        )
+    return backend
+
+
 # open_url() is allowlist-only so the JS side can never navigate the host
 # browser to an arbitrary address.
 _PROJECT_URLS = {
@@ -53,7 +74,10 @@ class WebviewBridge:
         self._window = window
 
     def bootstrap(self) -> dict[str, Any]:
-        return self._service.bootstrap()
+        payload = self._service.bootstrap()
+        if payload.get("ok"):
+            payload["data"]["webview_backend"] = _GUI_BACKENDS.get(platform.system())
+        return payload
 
     def list_audio_devices(self, host_api: str | None = None) -> dict[str, Any]:
         return self._service.list_audio_devices(host_api)
@@ -82,6 +106,9 @@ class WebviewBridge:
     def set_skin(self, skin: str) -> dict[str, Any]:
         return self._service.set_skin(skin)
 
+    def set_frontend(self, frontend: str) -> dict[str, Any]:
+        return self._service.set_frontend(frontend)
+
     def get_system_info(self) -> dict[str, Any]:
         return self._service.get_system_info()
 
@@ -98,6 +125,24 @@ class WebviewBridge:
 
     def open_path(self, path: Any = None) -> dict[str, Any]:
         return self._service.open_path(path)
+
+    def check_for_updates(self) -> dict[str, Any]:
+        return self._service.check_for_updates()
+
+    def start_update(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._service.start_update(request)
+
+    def apply_pending_update(self) -> dict[str, Any]:
+        response = self._service.apply_pending_update()
+        restarting = bool(response.get("ok") and response["data"].get("restarting"))
+        if restarting and self._window is not None:
+            # Update.exe has taken over; give the JS caller a moment to
+            # receive this response, then close the window so main() returns
+            # and the old process exits for the restart.
+            import threading
+
+            threading.Timer(0.8, self._window.destroy).start()
+        return response
 
     def select_file(self, kind: str = "audio") -> dict[str, Any]:
         return self._create_file_dialog("open", kind)
@@ -141,10 +186,23 @@ def _index_uri() -> str:
     return Path(get_resource_path("webview_ui/index.html")).resolve().as_uri()
 
 
+def create_app_window(webview_module: Any, bridge: "WebviewBridge") -> Any:
+    """Create the main application window and wire the bridge to it."""
+    window = webview_module.create_window(
+        "Impulcifer",
+        _index_uri(),
+        js_api=bridge,
+        width=1280,
+        height=860,
+        min_size=(980, 640),
+    )
+    bridge.attach_window(window)
+    return window
+
+
 def main() -> None:
-    """Start the Windows Edge WebView2 frontend."""
-    if platform.system() != "Windows":
-        raise SystemExit("The experimental WebView frontend currently supports Windows only.")
+    """Start the platform WebView frontend (WebView2 / WKWebView / WebKit2GTK)."""
+    backend = select_gui_backend()
 
     try:
         import webview
@@ -155,16 +213,8 @@ def main() -> None:
         ) from exc
 
     bridge = WebviewBridge()
-    window = webview.create_window(
-        "Impulcifer WebView Preview",
-        _index_uri(),
-        js_api=bridge,
-        width=1280,
-        height=860,
-        min_size=(980, 640),
-    )
-    bridge.attach_window(window)
-    webview.start(gui="edgechromium", debug=False)
+    create_app_window(webview, bridge)
+    webview.start(gui=backend, debug=False)
 
 
 if __name__ == "__main__":

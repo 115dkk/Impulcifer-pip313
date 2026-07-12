@@ -123,6 +123,13 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
 
     print(f"최종 빌드 결과물은 다음 폴더에 생성됩니다: {final_output_dir.resolve()}", flush=True)
 
+    # Nuitka pywebview 플러그인의 stale 화이트리스트 핫픽스 — 없으면 Windows
+    # 번들에서 webview.platforms.win32가 빠져 앱이 CTk로 폴백한다
+    # (build_scripts/patch_nuitka_pywebview.py docstring 참조).
+    from build_scripts.patch_nuitka_pywebview import patch_pywebview_plugin
+
+    patch_pywebview_plugin()
+
     nuitka_args = build_nuitka_args(
         target_platform=target_platform,
         version=project_version,

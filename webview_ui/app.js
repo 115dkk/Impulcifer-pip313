@@ -487,6 +487,178 @@ async function pollJob() {
   schedulePoll();
 }
 
+/* ----------------------------------------------------------- auto-update */
+
+/* Port of the CTk flow: background check 2s after startup →
+   UpdateDialog (notes + Update Now / Remind / Skip) → UpdateExecutor with
+   progress → completion message → optional apply-and-restart (Velopack). */
+
+const updateState = {
+  info: null,
+  jobId: null,
+  nextSeq: 0,
+  pollTimer: null,
+};
+
+function tOr(key, fallback) {
+  return (key && state.strings[key]) || fallback || key || "";
+}
+
+function setUpdateProgress(value) {
+  $("update-progress").style.width = `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
+function showUpdateModal(info) {
+  updateState.info = info;
+  $("update-version-line").textContent = fmt(t("update_version_info"), {
+    current: info.current_version,
+    latest: info.latest_version,
+  });
+  $("update-notes").textContent = info.release_notes || t("update_no_notes");
+  $("update-progress-row").hidden = true;
+  setUpdateProgress(0);
+  $("update-status").textContent = "";
+  $("update-result").hidden = true;
+  $("update-now").hidden = false;
+  $("update-now").disabled = false;
+  $("update-remind").hidden = false;
+  $("update-skip").hidden = false;
+  $("update-restart").hidden = true;
+  $("update-close").hidden = true;
+  $("update-modal").hidden = false;
+}
+
+function showUpdateProgressOnly() {
+  // Resume path: an update job survived a frontend reload — no check info,
+  // just live progress until the terminal state arrives.
+  updateState.info = null;
+  $("update-version-line").textContent = "";
+  $("update-notes").textContent = "";
+  $("update-progress-row").hidden = false;
+  $("update-result").hidden = true;
+  $("update-now").hidden = true;
+  $("update-remind").hidden = true;
+  $("update-skip").hidden = true;
+  $("update-restart").hidden = true;
+  $("update-close").hidden = true;
+  $("update-modal").hidden = false;
+}
+
+function hideUpdateModal() {
+  window.clearTimeout(updateState.pollTimer);
+  $("update-modal").hidden = true;
+}
+
+async function checkForUpdates(manual) {
+  const statusLine = $("update-check-status");
+  if (manual) {
+    statusLine.hidden = false;
+    statusLine.textContent = t("update_checking");
+  }
+  let response;
+  try {
+    response = await api().check_for_updates();
+  } catch (error) {
+    response = null;
+  }
+  if (!response || !response.ok) {
+    // Startup checks fail silently, mirroring the CTk background check.
+    if (manual) statusLine.textContent = response ? errorText(response) : t("update_error_apply");
+    return;
+  }
+  const data = response.data;
+  if (data.update_available) {
+    if (manual) statusLine.hidden = true;
+    showUpdateModal(data);
+  } else if (manual) {
+    statusLine.textContent = fmt(t("update_up_to_date"), {
+      latest: data.latest_version || data.current_version,
+    });
+  }
+}
+
+async function beginUpdate() {
+  const info = updateState.info;
+  if (!info) return;
+  $("update-now").disabled = true;
+  $("update-remind").hidden = true;
+  $("update-skip").hidden = true;
+  $("update-progress-row").hidden = false;
+  $("update-status").textContent = t("update_downloading");
+  const response = await api().start_update({
+    download_url: info.download_url,
+    latest_version: info.latest_version,
+  });
+  if (!response.ok) {
+    finishUpdate(errorText(response), false);
+    return;
+  }
+  updateState.jobId = response.data.job.job_id;
+  updateState.nextSeq = 0;
+  pollUpdateJob();
+}
+
+async function pollUpdateJob() {
+  if (!updateState.jobId) return;
+  const response = await api().poll_job(updateState.jobId, updateState.nextSeq);
+  if (!response.ok) {
+    finishUpdate(errorText(response), false);
+    return;
+  }
+  const { job, events, next_seq: nextSeq } = response.data;
+  updateState.nextSeq = nextSeq;
+  for (const event of events) {
+    const payload = event.payload || {};
+    if (event.type === "progress") {
+      if (typeof payload.progress === "number") setUpdateProgress(payload.progress);
+      // The executor sends either an i18n key ("update_downloading") or
+      // preformatted text ("Downloading: 42%").
+      if (payload.message) $("update-status").textContent = tOr(payload.message, payload.message);
+    }
+  }
+  if (["succeeded", "failed", "cancelled"].includes(job.status)) {
+    updateState.jobId = null;
+    if (job.status === "succeeded") {
+      const result = job.result || {};
+      setUpdateProgress(typeof result.progress === "number" ? result.progress : 1);
+      $("update-status").textContent = tOr(result.status_key, result.status_default);
+      finishUpdate(
+        tOr(result.message_key, result.message_default),
+        true,
+        Boolean(result.requires_restart),
+      );
+    } else {
+      finishUpdate(job.error ? job.error.message : t("update_error_apply"), false);
+    }
+    return;
+  }
+  updateState.pollTimer = window.setTimeout(pollUpdateJob, 250);
+}
+
+function finishUpdate(message, success, requiresRestart = false) {
+  $("update-result").hidden = false;
+  $("update-result").textContent = message;
+  $("update-now").hidden = true;
+  $("update-remind").hidden = true;
+  $("update-skip").hidden = true;
+  // Velopack stages an apply-and-restart: confirming OK hands over to
+  // Update.exe and the window closes. pip/legacy end with a plain Close.
+  $("update-restart").hidden = !(success && requiresRestart);
+  $("update-close").hidden = success && requiresRestart;
+}
+
+async function applyStagedUpdate() {
+  $("update-restart").disabled = true;
+  const response = await api().apply_pending_update();
+  if (!response.ok) {
+    $("update-restart").disabled = false;
+    finishUpdate(errorText(response), false);
+    return;
+  }
+  $("update-result").hidden = false;
+  $("update-result").textContent = t("update_restart_message");
+}
+
 /* --------------------------------------------------------------- devices */
 
 async function loadDevices(hostApi = "") {
@@ -877,6 +1049,18 @@ function wireEvents() {
   $("sf-skin").addEventListener("change", (event) => changeSkin(event.target.value));
   $("sf-theme").addEventListener("change", (event) => changeTheme(event.target.value));
   $("sf-language").addEventListener("change", (event) => changeLanguage(event.target.value));
+  $("sf-frontend").addEventListener("change", async (event) => {
+    // Persisted for the next launch; the current session keeps running.
+    const response = await api().set_frontend(event.target.value);
+    if (!response.ok) appendLog(errorText(response));
+  });
+
+  $("btn-check-updates").addEventListener("click", () => checkForUpdates(true));
+  $("update-now").addEventListener("click", beginUpdate);
+  $("update-remind").addEventListener("click", hideUpdateModal);
+  $("update-skip").addEventListener("click", hideUpdateModal);
+  $("update-close").addEventListener("click", hideUpdateModal);
+  $("update-restart").addEventListener("click", applyStagedUpdate);
 }
 
 /* ------------------------------------------------------------------ boot */
@@ -909,24 +1093,41 @@ async function boot() {
     applyTheme(data.ui.theme || "dark");
     $("sf-skin").value = data.ui.skin === "stable" ? "stable" : "studio";
     applySkin(data.ui.skin);
+    $("sf-frontend").value = data.ui.frontend === "ctk" ? "ctk" : "webview";
   }
   applyStrings();
+  const backendLabels = { edgechromium: "WebView2", cocoa: "WKWebView", gtk: "WebKitGTK" };
+  const backendLabel = backendLabels[data.webview_backend] || "WebView";
   $("brand-version").textContent = `v${data.version}`;
-  $("runtime-status").textContent = `v${data.version} · ${data.platform} · WebView2`;
+  $("runtime-status").textContent = `v${data.version} · ${data.platform} · ${backendLabel}`;
   appendLog(t("webview_bridge_connected"));
 
-  renderJobState(data.active_job);
-  if (data.active_job && !["succeeded", "failed", "cancelled"].includes(data.active_job.status)) {
-    state.jobId = data.active_job.job_id;
-    state.jobKind = data.active_job.kind;
-    state.nextSeq = 0;
-    resetSteps(data.active_job.kind === "brir");
-    resetRecorderStatus();
-    schedulePoll(0);
+  const activeJob = data.active_job;
+  if (activeJob && activeJob.kind === "update") {
+    if (!["succeeded", "failed", "cancelled"].includes(activeJob.status)) {
+      updateState.jobId = activeJob.job_id;
+      updateState.nextSeq = 0;
+      showUpdateProgressOnly();
+      pollUpdateJob();
+    }
+  } else {
+    renderJobState(activeJob);
+    if (activeJob && !["succeeded", "failed", "cancelled"].includes(activeJob.status)) {
+      state.jobId = activeJob.job_id;
+      state.jobKind = activeJob.kind;
+      state.nextSeq = 0;
+      resetSteps(activeJob.kind === "brir");
+      resetRecorderStatus();
+      schedulePoll(0);
+    }
   }
 
   await Promise.all([loadDevices(), loadSystemInfo()]);
   refreshResolvedPath();
+
+  // Mirror the CTk root.after(2000) startup update check; failures stay
+  // silent and never block the UI.
+  window.setTimeout(() => checkForUpdates(false), 2000);
 }
 
 buildDecayGrid();

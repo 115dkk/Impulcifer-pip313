@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "impulcifer-py313"
-version = "2.9.0"
+version = "2.10.0"
 authors = [
   { name="원본 저자: Jaakko Pasanen", email="" },
   { name="Python 3.13/3.14 호환 버전: 115dkk", email="" },
@@ -43,8 +43,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Linux는 pywebview의 [gtk] extra(PyGObject)까지 필요하다 — WebKit2GTK 백엔드.
+# PyGObject는 소스 빌드이므로 시스템에 libgirepository*-dev / libcairo2-dev /
+# gir1.2-webkit2-4.1이 있어야 한다 (README 및 webview-backend-validation.yml 참조).
 webview = [
-    'pywebview>=6.2,<7',
+    'pywebview>=6.2,<7; sys_platform != "linux"',
+    'pywebview[gtk]>=6.2,<7; sys_platform == "linux"',
 ]
 
 [project.scripts]
@@ -107,6 +111,12 @@ include = [
     # config.
     "logo/**/*",
     "LICENSE",
+    # 재배포 서드파티 고지: pywebview(BSD-3)/CustomTkinter(MIT)/AutoEQ(MIT)/
+    # Pretendard·JetBrains Mono(OFL 1.1). OFL·MIT는 재배포 사본에 라이선스
+    # 동봉을 요구하므로 wheel과 standalone 모두에 포함된다.
+    "THIRD_PARTY_LICENSES.md",
+    "autoeq/LICENSE",
+    "font/OFL-*.txt",
     "README.md",
     "CHANGELOG.md",
     "pyproject.toml",

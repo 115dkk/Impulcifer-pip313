@@ -376,5 +376,14 @@
   "webview_status_succeeded": "Completed",
   "webview_status_failed": "Failed",
   "webview_status_cancelled": "Cancelled",
-  "webview_status_cancel_requested": "Cancelling…"
+  "webview_status_cancel_requested": "Cancelling…",
+  "button_check_updates": "Check for Updates",
+  "update_checking": "Checking for updates...",
+  "update_up_to_date": "You are up to date (latest: {latest}).",
+  "section_frontend": "Interface",
+  "label_frontend": "Default interface:",
+  "option_frontend_webview": "WebView (recommended)",
+  "option_frontend_ctk": "CustomTkinter (legacy)",
+  "tooltip_frontend": "Which interface opens when the app starts. Takes effect on the next launch.",
+  "label_ctk_deprecation": "Notice: the CustomTkinter interface remains fully supported — including new features — for the rest of version 2. From version 3 it will be kept as a frozen legacy interface without further updates (only the old legacy GUI is removed in version 3). WebView is the new default interface."
 }

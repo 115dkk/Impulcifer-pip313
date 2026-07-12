@@ -44,10 +44,17 @@ pip install impulcifer-py313
 uv pip install impulcifer-py313
 ```
 
-Windows에서 실험적 WebView 프론트엔드를 시험하려면 선택적 extra를 설치합니다. 이 경로는 Microsoft Edge WebView2를 사용하며 Qt backend로 fallback하지 않습니다.
+WebView 프론트엔드(2.10부터 기본 인터페이스)를 pip 환경에서 쓰려면 선택적 extra를 설치합니다. 플랫폼별로 Windows는 Microsoft Edge WebView2, macOS는 WKWebView(Cocoa), Linux는 WebKit2GTK를 사용하며 Qt backend로 fallback하지 않습니다.
 
 ```bash
 pip install "impulcifer-py313[webview]"
+```
+
+Linux에서는 PyGObject 소스 빌드를 위해 시스템 패키지가 먼저 필요합니다 (Debian/Ubuntu 기준):
+
+```bash
+sudo apt-get install -y gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
+  libgirepository1.0-dev libgirepository-2.0-dev libcairo2-dev pkg-config gcc python3-dev
 ```
 
 ### Standalone 릴리스
@@ -62,11 +69,15 @@ GUI를 쓰려면 다음 명령을 실행합니다.
 impulcifer_gui
 ```
 
-Windows 전용 실험적 WebView 프론트엔드는 다음 명령으로 실행합니다. Studio 스킨과 같은 Pulse 디자인의 사이드바 UI에서 Recorder / Processing / Settings / Info 탭, CustomTkinter GUI와 동등한 BRIR 옵션 전체(가상 저음, decay, channel balance, 마이크 편차 보정 등), 네이티브 파일·폴더 선택, 9개 언어와 dark/light/system 테마를 제공합니다. 기존 CustomTkinter GUI와 standalone 릴리스의 기본 진입점은 바뀌지 않습니다.
+WebView 프론트엔드는 다음 명령으로 실행합니다 (Windows/macOS/Linux). Pulse 디자인의 Studio/Stable 스킨, Recorder / Processing / Settings / Info 탭, CustomTkinter GUI와 동등한 BRIR 옵션 전체(가상 저음, decay, channel balance, 마이크 편차 보정 등), 네이티브 파일·폴더 선택, 자동 업데이트, 9개 언어와 dark/light/system 테마를 제공합니다.
 
 ```bash
 impulcifer_webview
 ```
+
+Standalone 릴리스(2.10+)의 기본 인터페이스는 WebView입니다. CustomTkinter 인터페이스도 계속 함께 설치되며, 설정 탭의 "기본 인터페이스" 선택이나 실행 인자 `--frontend=ctk`로 전환할 수 있습니다 (`--frontend=webview`로 되돌리기). WebView 스택을 사용할 수 없는 환경에서는 자동으로 CustomTkinter로 폴백합니다.
+
+> **CustomTkinter 지원 안내**: CustomTkinter 인터페이스는 버전 2 동안 유지보수와 기능 추가를 포함해 계속 완전히 지원됩니다. 버전 3부터는 제거되지 않고 지금의 레거시 GUI처럼 업데이트 없이 동결 상태로 유지됩니다 — 버전 3에서 제거되는 것은 구버전 레거시 GUI(`impulcifer_gui_legacy`)입니다.
 
 CLI를 쓰려면 측정 폴더를 지정합니다.
 

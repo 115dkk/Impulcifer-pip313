@@ -173,3 +173,75 @@ def test_cli_emits_one_flag_per_line(capsys):
     assert any(ln.startswith("--output-dir=") for ln in lines)
     assert any(ln == "--standalone" for ln in lines)
     assert any(ln.endswith(".py") for ln in lines), "Entry point line missing"
+
+
+def test_webview_frontend_is_bundled():
+    """The WebView frontend (launcher default since 2.10) must ship in the
+    standalone bundle — but WITHOUT explicit module includes.
+
+    Any ``--include-module=webview`` / ``--include-package=webview`` entry
+    feeds Nuitka's follow patterns for the whole subtree and conflicts with
+    the auto-enabled 'pywebview' plugin, which excludes the other platforms'
+    backend modules (observed FATAL: "Conflict between user and plugin
+    decision for module 'webview.platforms.android'"). The static
+    ``import webview`` chain in gui_main → impulcifer_webview is traced
+    automatically instead.
+    """
+    mod = _flags_module()
+    assert "webview" not in mod.INCLUDED_PACKAGES
+    assert "webview" not in mod.INCLUDED_MODULES
+    # Data-file flags do not feed follow patterns — safe belt-and-suspenders.
+    assert "webview" in mod.INCLUDED_PACKAGE_DATA
+    pairs = dict(mod.INCLUDED_DATA_DIRS)
+    assert pairs.get("webview_ui") == "webview_ui", (
+        "webview_ui must be bundled at the same relative path so "
+        "get_resource_path('webview_ui/index.html') resolves at runtime."
+    )
+
+
+def test_no_explicit_pythonnet_flags():
+    """pythonnet/clr_loader are followed from webview.platforms.winforms and
+    their DLLs come from Nuitka's package config ('clr', 'clr_loader.ffi',
+    'pythonnet' entries); explicit includes are unnecessary on Windows and
+    would fail macOS/Linux builds where those wheels don't exist."""
+    mod = _flags_module()
+    for plat in ("windows", "macos", "linux"):
+        flags = mod.platform_specific_flags(plat)
+        assert not any(
+            "pythonnet" in flag or "clr" in flag for flag in flags
+        ), f"{plat} flags must not reference the pythonnet stack: {flags}"
+
+
+def test_pywebview_plugin_patch_source():
+    """The build-time hotfix inserts webview.platforms.win32 into Nuitka's
+    pywebview plugin whitelist (idempotent, anchor-guarded)."""
+    from build_scripts.patch_nuitka_pywebview import patch_source
+
+    stale = (
+        "                result = module_name in (\n"
+        '                    "webview.platforms.winforms",\n'
+        '                    "webview.platforms.edgechromium",\n'
+        "                )\n"
+    )
+    patched, status = patch_source(stale)
+    assert status == "patched"
+    lines = patched.splitlines()
+    idx = next(i for i, line in enumerate(lines) if "winforms" in line)
+    assert lines[idx + 1].strip() == '"webview.platforms.win32",'
+    assert lines[idx + 1].startswith("                    ")
+
+    again, status2 = patch_source(patched)
+    assert status2 == "already-ok"
+    assert again == patched
+
+    assert patch_source("unrelated file contents")[1] == "anchor-missing"
+
+
+def test_third_party_license_notices_are_bundled():
+    """OFL/MIT/BSD-3 재배포 조건: 고지 파일이 standalone 번들에 실려야 한다."""
+    mod = _flags_module()
+    files = dict(mod.INCLUDED_DATA_FILES)
+    assert files.get("THIRD_PARTY_LICENSES.md") == "THIRD_PARTY_LICENSES.md"
+    assert files.get("autoeq/LICENSE") == "autoeq/LICENSE"
+    # font/OFL-*.txt는 font 데이터 디렉토리 전체 포함으로 함께 실린다.
+    assert dict(mod.INCLUDED_DATA_DIRS).get("font") == "font"

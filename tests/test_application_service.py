@@ -391,6 +391,7 @@ class _FakeLocalization:
         self.locales_dir = locales_dir
         self.theme = "dark"
         self.skin = "stable"
+        self.frontend = "webview"
         self.marked = False
 
     def get_theme(self) -> str:
@@ -404,6 +405,12 @@ class _FakeLocalization:
 
     def set_skin(self, skin: str) -> None:
         self.skin = skin
+
+    def get_frontend(self) -> str:
+        return self.frontend
+
+    def set_frontend(self, frontend: str) -> None:
+        self.frontend = frontend
 
     def set_language(self, code: str) -> None:
         self.current_language = code
@@ -441,6 +448,11 @@ def test_ui_settings_language_and_theme_roundtrip(monkeypatch) -> None:
     assert service.set_skin("studio")["ok"]
     assert fake.skin == "studio"
     assert service.set_skin("neon")["error"]["code"] == "INVALID_REQUEST"
+
+    assert settings["data"]["frontend"] == "webview"
+    assert service.set_frontend("ctk")["ok"]
+    assert fake.frontend == "ctk"
+    assert service.set_frontend("qt")["error"]["code"] == "INVALID_REQUEST"
 
 
 def test_system_info_reports_environment() -> None:
@@ -514,3 +526,139 @@ def test_recording_jobs_reject_cancellation(monkeypatch, tmp_path: Path) -> None
     assert response["error"]["code"] == "JOB_NOT_CANCELLABLE"
     release.set()
     _wait_for_terminal(service, job_id)
+
+
+def test_check_for_updates_reports_available(monkeypatch) -> None:
+    import updater.update_checker as checker_module
+
+    class _FakeChecker:
+        def __init__(self, current_version):
+            self.current_version = current_version
+
+        def check_for_updates(self):
+            return True, "99.0.0", "https://example.invalid/Impulcifer-win-Setup.exe"
+
+        def get_release_notes(self):
+            return "notes"
+
+        def get_release_url(self):
+            return "https://example.invalid/releases/latest"
+
+    monkeypatch.setattr(checker_module, "UpdateChecker", _FakeChecker)
+    response = ImpulciferApplicationService().check_for_updates()
+    assert response["ok"]
+    data = response["data"]
+    assert data["update_available"] is True
+    assert data["latest_version"] == "99.0.0"
+    assert data["download_url"].endswith("Setup.exe")
+    assert data["release_notes"] == "notes"
+    assert data["release_url"].endswith("latest")
+
+
+def test_check_for_updates_handles_constructor_failure(monkeypatch) -> None:
+    import updater.update_checker as checker_module
+
+    class _Boom:
+        def __init__(self, current_version):
+            raise OSError("offline")
+
+    monkeypatch.setattr(checker_module, "UpdateChecker", _Boom)
+    response = ImpulciferApplicationService().check_for_updates()
+    assert not response["ok"]
+    assert response["error"]["code"] == "UPDATE_CHECK_FAILED"
+    assert response["error"]["retryable"] is True
+
+
+def test_start_update_requires_latest_version() -> None:
+    response = ImpulciferApplicationService().start_update({})
+    assert not response["ok"]
+    assert response["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_start_update_job_stages_restart_action(monkeypatch) -> None:
+    import updater.updater_core as updater_core
+    from updater.updater_core import UpdateExecutionResult
+
+    applied = []
+
+    class _FakeExecutor:
+        def execute(self, progress_callback):
+            progress_callback(0.5, "update_downloading")
+            return UpdateExecutionResult(
+                status_key="update_installing",
+                status_default="Applying update...",
+                title_key="update_ready_title",
+                title_default="Update Ready",
+                message_key="update_restart_message",
+                message_default="The application will close to apply the update.",
+                progress=0.9,
+                close_delay_ms=0,
+                after_message=lambda: applied.append(True) or True,
+            )
+
+    monkeypatch.setattr(
+        updater_core, "create_update_executor", lambda url, version: _FakeExecutor()
+    )
+    service = ImpulciferApplicationService()
+    started = service.start_update(
+        {"latest_version": "99.0.0", "download_url": "https://example.invalid/pkg"}
+    )
+    assert started["ok"]
+    assert started["data"]["job"]["kind"] == "update"
+
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+    job = data["job"]
+    assert job["status"] == "succeeded"
+    assert job["result"]["requires_restart"] is True
+    assert job["result"]["message_key"] == "update_restart_message"
+    progress_events = [event for event in data["events"] if event["type"] == "progress"]
+    assert progress_events
+    assert progress_events[0]["payload"]["message"] == "update_downloading"
+
+    response = service.apply_pending_update()
+    assert response["ok"]
+    assert response["data"]["restarting"] is True
+    assert applied == [True]
+
+    # The staged action is single-use: a second apply has nothing to run.
+    again = service.apply_pending_update()
+    assert not again["ok"]
+    assert again["error"]["code"] == "INVALID_REQUEST"
+
+
+def test_start_update_failure_is_structured(monkeypatch) -> None:
+    import updater.updater_core as updater_core
+    from updater.updater_core import UpdateExecutionError
+
+    class _FailingExecutor:
+        def execute(self, progress_callback):
+            raise UpdateExecutionError("Failed to download update")
+
+    monkeypatch.setattr(
+        updater_core, "create_update_executor", lambda url, version: _FailingExecutor()
+    )
+    service = ImpulciferApplicationService()
+    started = service.start_update({"latest_version": "99.0.0"})
+    assert started["ok"]
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+    assert data["job"]["status"] == "failed"
+    assert data["job"]["error"]["code"] == "UPDATE_FAILED"
+    assert data["job"]["error"]["retryable"] is True
+
+
+def test_apply_pending_update_treats_sys_exit_as_success() -> None:
+    # VelopackUpdater.apply_and_restart exits the process after handing over
+    # to Update.exe; on a bridge worker thread that must read as success.
+    service = ImpulciferApplicationService()
+    service._pending_update_apply = lambda: (_ for _ in ()).throw(SystemExit(0))
+    response = service.apply_pending_update()
+    assert response["ok"]
+    assert response["data"]["restarting"] is True
+
+
+def test_apply_pending_update_reports_false_return() -> None:
+    service = ImpulciferApplicationService()
+    service._pending_update_apply = lambda: False
+    response = service.apply_pending_update()
+    assert not response["ok"]
+    assert response["error"]["code"] == "UPDATE_FAILED"

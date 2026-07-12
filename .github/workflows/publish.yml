@@ -157,6 +157,8 @@ jobs:
           fi
           echo "Installing project dependencies from requirements.txt..."
           uv pip install --system -r requirements.txt
+          echo "Installing WebView frontend stack (pywebview + pythonnet)..."
+          uv pip install --system "pywebview>=6.2,<7"
           echo "All dependencies installed successfully with uv!"
         shell: bash
 
@@ -262,6 +264,8 @@ jobs:
             uv pip install --system toml
           fi
           uv pip install --system -r requirements.txt
+          echo "Installing WebView frontend stack (pywebview + pyobjc)..."
+          uv pip install --system "pywebview>=6.2,<7"
           echo "All dependencies installed successfully!"
 
       - name: Read project version
@@ -372,7 +376,14 @@ jobs:
             libhdf5-dev \
             libatlas-base-dev \
             gfortran \
-            libopenblas-dev
+            libopenblas-dev \
+            gir1.2-gtk-3.0 \
+            gir1.2-webkit2-4.1 \
+            libgirepository1.0-dev \
+            libgirepository-2.0-dev \
+            libcairo2-dev \
+            pkg-config \
+            gcc
 
       - name: Cache Nuitka compilation
         uses: actions/cache@v5
@@ -392,6 +403,8 @@ jobs:
             uv pip install --system toml
           fi
           uv pip install --system -r requirements.txt
+          echo "Installing WebView frontend stack (pywebview + PyGObject)..."
+          uv pip install --system "pywebview[gtk]>=6.2,<7"
           echo "All dependencies installed successfully!"
 
       - name: Read project version

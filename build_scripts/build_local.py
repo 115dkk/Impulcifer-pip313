@@ -98,6 +98,11 @@ def main() -> int:
 
     _generate_build_marker(version)
 
+    # Nuitka pywebview 플러그인의 stale 화이트리스트 핫픽스 (모듈 docstring 참조).
+    from build_scripts.patch_nuitka_pywebview import patch_pywebview_plugin
+
+    patch_pywebview_plugin()
+
     args = build_nuitka_args(
         target_platform=target_platform,
         version=version,

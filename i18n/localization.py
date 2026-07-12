@@ -249,6 +249,24 @@ class LocalizationManager:
         """Return the persisted skin choice (default ``stable``)."""
         return self.settings.get('skin', 'stable')
 
+    def set_frontend(self, frontend: str):
+        """Persist which GUI frontend gui_main launches by default.
+
+        ``webview`` is the platform WebView frontend (the default since
+        2.10); ``ctk`` keeps the CustomTkinter interface, which stays fully
+        supported (maintenance and new features) for the rest of version 2
+        and is kept as a frozen legacy interface from version 3 on (only the
+        old legacy GUI is removed in version 3).
+        """
+        if frontend not in ('webview', 'ctk'):
+            frontend = 'webview'
+        self.settings['frontend'] = frontend
+        self.save_settings()
+
+    def get_frontend(self) -> str:
+        """Return the persisted frontend choice (default ``webview``)."""
+        return self.settings.get('frontend', 'webview')
+
     def is_first_run(self) -> bool:
         """Check if this is the first run (no language setting)"""
         return 'language' not in self.settings or not self.settings.get('language_selected', False)
