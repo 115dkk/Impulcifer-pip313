@@ -364,7 +364,6 @@
   "studio_disclosure_virtual_bass_desc": "Idealisierte Tieftonantwort hinzufügen, wo Bass fehlt",
   "studio_toggle_plot_desc": "Diagramme erzeugen (längere Verarbeitung)",
   "label_force_channels_custom": "Benutzerwert:",
-  "webview_experimental_badge": "Experimental WebView frontend",
   "webview_card_activity": "Activity",
   "webview_job_idle": "Idle",
   "webview_open_output_folder": "Open output folder",

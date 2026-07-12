@@ -4,6 +4,22 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.10.1 - 2026-07-12
+### 2.10.0 standalone 긴급 수정 — scipy 번들 누락으로 인한 기동 사망 + WebView 마감 손질
+
+#### 🐛 버그 수정
+- **standalone의 모든 scipy import 즉사 수정 (2.10.0 회귀)**: CI가 설치한 scipy 1.18이 벤더링 array-api-compat을 `scipy._external`로 옮겼는데 그 lazy import 서브모듈(`numpy.fft` 등)을 Nuitka가 추적하지 못해, 설치본에서 scipy를 import하는 모든 경로가 `ModuleNotFoundError`로 죽었다 — CTk 기동 즉사("웹뷰에서 CTk 전환 시 실행 불가"의 원인), WebView `bootstrap()` 사망(언어 목록 공백 + 원시 i18n 키 노출의 원인). `build_scripts/nuitka_flags.py`가 빌드 환경에 존재하는 쪽(`scipy._external` 또는 구버전의 `scipy._lib.array_api_compat`)을 통째로 `--include-package`한다. 설치본과 동일한 scipy 1.18 환경의 로컬 빌드로 재현·수정 검증.
+- **bootstrap 방어화**: DSP 스택(impulcifer→core→scipy) import 실패가 UI 셸 전체를 죽이지 못하게 bootstrap/get_system_info의 버전·스레딩 정보 조회를 개별 가드로 감쌌다. 패키징 결함이 나도 언어/테마/설정 UI는 살아서 원인이 읽히는 오류로 표면화된다.
+- **부트 전 오류 문자열 i18n 폴백**: bootstrap이 죽으면 로케일 테이블이 없어 `t()`가 원시 키(`webview_bridge_failed`)를 그대로 노출하던 것을, OS 로케일 기반 내장 en/ko 폴백(`PREBOOT_STRINGS`)으로 교체.
+- **Windows 제목 표시줄 다크 모드**: WebView 창이 기본 흰색 제목 표시줄을 쓰던 것을 CTk처럼 DWM `DWMWA_USE_IMMERSIVE_DARK_MODE`로 앱 테마(설정의 dark/light/system, system은 레지스트리 조회)와 동기화. 테마 변경 시 즉시 재적용되고, 창 배경색도 Pulse `--bg-0`으로 지정해 로드 전 흰 플래시를 제거.
+
+#### ⭐ 새로운 기능 / 개선
+- **첫 실행 언어 선택 (CTk 패리티)**: 첫 실행 시 WebView에도 언어 선택 모달이 뜬다(`ui.first_run`, CTk `LanguageSelectionDialog` 이식). 갤러리에 리뷰 샷 추가(총 40샷).
+- **'실험적 WebView 프론트엔드' 딱지 제거**: 사이드바 배지·`webview_experimental_badge` 키(11개 로케일)·창/문서 제목의 Preview 표기를 제거했다. WebView는 기본 인터페이스다.
+
+#### 🔧 빌드 / 설정 변경
+- **릴리스 파이프라인에 스모크 게이트 추가**: 3-플랫폼 빌드 잡(publish.yml)과 수동 빌드 워크플로가 패키징 전에 빌드된 바이너리로 `--smoke-test`(전체 import 체인 + webview 스택 + 자산)를 실행한다. 이번 scipy 회귀 같은 "빌드는 성공하지만 기동이 죽는" 결함은 이제 릴리스 전에 차단된다(Linux는 xvfb).
+
 ## 2.10.0 - 2026-07-12
 ### WebView 표준화 — 3-플랫폼 백엔드 검증, 자동 업데이트, standalone 기본 인터페이스 전환
 

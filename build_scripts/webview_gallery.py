@@ -32,8 +32,9 @@ VIEWS = ("recorder", "processing", "settings", "info")
 # 2 skins x 2 themes x 2 languages x 4 views + 3 busy-state shots
 # (studio checklist BRIR run, studio recording run, stable modal dialog)
 # + 2 failure shots (studio checklist abort, stable modal error)
-# + 2 auto-update prompt shots (studio en, stable ko).
-EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3 + 2 + 2
+# + 2 auto-update prompt shots (studio en, stable ko)
+# + 1 first-run language picker shot.
+EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3 + 2 + 2 + 1
 
 VIEWPORT_WIDTH = 1280
 MIN_HEIGHT = 860
@@ -96,6 +97,7 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
       capabilities: {{ recording: true, brir: true, recording_cancel: false, brir_cancel: true }},
       active_job: activeKind ? runningJob(activeKind) : null,
       ui: {{ language: LANGUAGE, theme: THEME, skin: SKIN, frontend: "webview",
+             first_run: SCENARIO === "first-run",
              languages: LANGUAGES, strings: STRINGS }},
     }}),
     list_audio_devices: () => respond({{
@@ -294,6 +296,13 @@ def render_gallery(out_dir: Path) -> list[Path]:
         page.eval_on_selector(".nav-item[data-view='processing']", "node => node.click()")
         page.wait_for_timeout(400)
         shots.append(_shoot(page, out_dir, "processing-stable-en-dark-failed"))
+        context.close()
+
+        # First-run language picker (CTk LanguageSelectionDialog port).
+        context, page = _open_page(browser, index_uri, "en", "dark", "first-run", version)
+        page.wait_for_selector("#language-modal:not([hidden])")
+        page.wait_for_timeout(200)
+        shots.append(_shoot(page, out_dir, "firstrun-studio-en-dark"))
         context.close()
 
         # Auto-update prompt (CTk UpdateDialog port): version line, release

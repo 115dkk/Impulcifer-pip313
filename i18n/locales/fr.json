@@ -364,7 +364,6 @@
   "studio_disclosure_virtual_bass_desc": "Ajouter une réponse grave idéalisée quand le grave manque",
   "studio_toggle_plot_desc": "Générer des graphiques (traitement plus long)",
   "label_force_channels_custom": "Valeur personnalisée :",
-  "webview_experimental_badge": "Experimental WebView frontend",
   "webview_card_activity": "Activity",
   "webview_job_idle": "Idle",
   "webview_open_output_folder": "Open output folder",

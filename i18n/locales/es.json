@@ -364,7 +364,6 @@
   "studio_disclosure_virtual_bass_desc": "Añade una respuesta idealizada de bajas frecuencias donde falte bajo",
   "studio_toggle_plot_desc": "Generar gráficas (procesamiento más largo)",
   "label_force_channels_custom": "Valor personalizado:",
-  "webview_experimental_badge": "Experimental WebView frontend",
   "webview_card_activity": "Activity",
   "webview_job_idle": "Idle",
   "webview_open_output_folder": "Open output folder",

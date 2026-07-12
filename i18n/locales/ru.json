@@ -364,7 +364,6 @@
   "studio_disclosure_virtual_bass_desc": "Добавить идеализированный низкочастотный отклик там, где не хватает баса",
   "studio_toggle_plot_desc": "Создавать графики (дольше обрабатывается)",
   "label_force_channels_custom": "Произвольное значение:",
-  "webview_experimental_badge": "Experimental WebView frontend",
   "webview_card_activity": "Activity",
   "webview_job_idle": "Idle",
   "webview_open_output_folder": "Open output folder",

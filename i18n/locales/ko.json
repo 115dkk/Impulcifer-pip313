@@ -364,7 +364,6 @@
   "studio_disclosure_virtual_bass_desc": "저음이 부족한 구간에 이상적인 저역 응답을 더합니다",
   "studio_toggle_plot_desc": "그래프 생성(처리 시간이 늘어납니다)",
   "label_force_channels_custom": "직접 입력:",
-  "webview_experimental_badge": "실험적 WebView 프론트엔드",
   "webview_card_activity": "작업 상태",
   "webview_job_idle": "대기 중",
   "webview_open_output_folder": "출력 폴더 열기",

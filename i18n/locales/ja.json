@@ -364,7 +364,6 @@
   "studio_disclosure_virtual_bass_desc": "低音が不足する部分に理想化した低域応答を追加します",
   "studio_toggle_plot_desc": "グラフを生成（処理時間が長くなります）",
   "label_force_channels_custom": "カスタム値:",
-  "webview_experimental_badge": "Experimental WebView frontend",
   "webview_card_activity": "Activity",
   "webview_job_idle": "Idle",
   "webview_open_output_folder": "Open output folder",

@@ -245,3 +245,34 @@ def test_third_party_license_notices_are_bundled():
     assert files.get("autoeq/LICENSE") == "autoeq/LICENSE"
     # font/OFL-*.txt는 font 데이터 디렉토리 전체 포함으로 함께 실린다.
     assert dict(mod.INCLUDED_DATA_DIRS).get("font") == "font"
+
+
+def test_scipy_vendored_compat_is_included_conditionally():
+    """scipy의 벤더링 array-api-compat(lazy import 서브모듈)은 존재하는
+    경로만 --include-package 되어야 한다 — 2.10.0 standalone에서 모든
+    scipy import를 죽인 회귀(scipy 1.18의 scipy._external 누락)의 방지책."""
+    from build_scripts.nuitka_flags import scipy_vendored_compat_flags
+
+    # scipy 1.18+ 환경
+    flags = scipy_vendored_compat_flags(package_exists=lambda n: n == "scipy._external")
+    assert flags == ["--include-package=scipy._external"]
+
+    # scipy 1.12~1.17 환경
+    flags = scipy_vendored_compat_flags(
+        package_exists=lambda n: n == "scipy._lib.array_api_compat"
+    )
+    assert flags == ["--include-package=scipy._lib.array_api_compat"]
+
+    # 어느 쪽도 없으면(미래 재배치) 존재하지 않는 include를 만들지 않는다.
+    assert scipy_vendored_compat_flags(package_exists=lambda n: False) == []
+
+
+def test_build_args_include_scipy_compat_in_this_environment():
+    """실제 빌드 환경 기준으로 최소 한 경로는 포함되어야 한다(requirements의
+    scipy>=1.12는 모두 array-api-compat을 벤더링한다)."""
+    mod = _flags_module()
+    args = mod.build_nuitka_args(target_platform="windows", version="9.9.9")
+    assert any(
+        a in ("--include-package=scipy._external", "--include-package=scipy._lib.array_api_compat")
+        for a in args
+    ), "scipy vendored array-api-compat include missing from build args"

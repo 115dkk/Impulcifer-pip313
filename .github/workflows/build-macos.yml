@@ -81,6 +81,15 @@ jobs:
         env:
           PYTHONIOENCODING: UTF-8
 
+      # 번들 기동 결함(누락 모듈 등)을 패키징 전에 잡는 스모크 게이트.
+      - name: Smoke test built app bundle
+        run: |
+          APP="dist/macos/Impulcifer.app"
+          [ -d "$APP" ] || APP="dist/macos/gui_main.app"
+          "./$APP/Contents/MacOS/Impulcifer" --smoke-test
+        env:
+          PYTHONIOENCODING: UTF-8
+
       - name: Create DMG installer (optional)
         run: |
           echo "[3/3] Creating DMG installer..."

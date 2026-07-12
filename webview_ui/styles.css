@@ -155,19 +155,14 @@ h1, h2, p { margin: 0; }
   padding: 14px;
 }
 
-.badge {
-  justify-self: start;
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-2);
-}
-
 .runtime { font-size: 11px; color: var(--fg-2); overflow-wrap: anywhere; }
+
+/* First-run language picker: two-column grid of language buttons. */
+.lang-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
 
 .content {
   overflow-y: auto;

@@ -43,6 +43,7 @@ jobs:
             desktop-file-utils \
             libfuse2 \
             imagemagick \
+            xvfb \
             portaudio19-dev \
             python3-tk \
             python3-dev \
@@ -105,6 +106,13 @@ jobs:
           python build_scripts/build_nuitka.py
 
           echo "Successfully built with Nuitka for Linux."
+        env:
+          PYTHONIOENCODING: UTF-8
+
+      # 번들 기동 결함(누락 모듈 등)을 패키징 전에 잡는 스모크 게이트.
+      - name: Smoke test built binary
+        run: |
+          xvfb-run -a ./dist/linux/gui_main.dist/Impulcifer --smoke-test
         env:
           PYTHONIOENCODING: UTF-8
 

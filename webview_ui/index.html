@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Impulcifer WebView Preview</title>
+    <title>Impulcifer</title>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -32,7 +32,6 @@
           </button>
         </nav>
         <div class="sidebar-footer">
-          <span class="badge" data-i18n="webview_experimental_badge">Experimental WebView frontend</span>
           <span class="runtime mono" id="runtime-status" data-i18n="webview_bridge_connecting">Connecting to Python…</span>
         </div>
       </aside>
@@ -575,6 +574,18 @@
           <button class="btn btn-secondary" id="job-modal-cancel" data-i18n="button_cancel">Cancel</button>
           <button class="btn btn-primary" id="job-modal-close" data-i18n="button_close" hidden>Close</button>
         </div>
+      </div>
+    </div>
+
+    <!-- First-run language selection, mirroring the CTk
+         LanguageSelectionDialog. Shown once when ui.first_run is true. -->
+    <div class="modal-backdrop" id="language-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="language-modal-title">
+        <div class="modal-head">
+          <h3 id="language-modal-title" data-i18n="dialog_select_language_title">Select Language</h3>
+        </div>
+        <p class="hint" data-i18n="dialog_select_language_message">Please select your language.</p>
+        <div class="lang-list" id="language-modal-list"></div>
       </div>
     </div>
 

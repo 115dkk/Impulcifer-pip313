@@ -147,7 +147,7 @@ def test_main_forces_platform_backend(monkeypatch, system, expected_backend) -> 
     calls = []
     fake_webview = SimpleNamespace(
         create_window=lambda *args, **kwargs: calls.append(("create", args, kwargs)),
-        start=lambda **kwargs: calls.append(("start", kwargs)),
+        start=lambda *args, **kwargs: calls.append(("start", args, kwargs)),
     )
     monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: system)
     monkeypatch.setattr(impulcifer_webview, "_index_uri", lambda: "file:///index.html")
@@ -156,7 +156,13 @@ def test_main_forces_platform_backend(monkeypatch, system, expected_backend) -> 
     impulcifer_webview.main()
 
     assert calls[0][0] == "create"
-    assert calls[1] == ("start", {"gui": expected_backend, "debug": False})
+    # The pre-load window background matches the resolved Pulse theme token.
+    assert calls[0][2]["background_color"] in ("#101214", "#f3f5f7")
+    start_name, start_args, start_kwargs = calls[1]
+    assert start_name == "start"
+    assert start_kwargs == {"gui": expected_backend, "debug": False}
+    # First positional arg is the on-shown callback that themes the title bar.
+    assert len(start_args) == 1 and callable(start_args[0])
 
 
 def test_main_rejects_unsupported_platform(monkeypatch) -> None:
@@ -236,4 +242,4 @@ def test_webview_entrypoint_contains_no_qt_backend() -> None:
     assert '"Windows": "edgechromium"' in source
     assert '"Darwin": "cocoa"' in source
     assert '"Linux": "gtk"' in source
-    assert "webview.start(gui=backend" in source
+    assert "webview.start(bridge.apply_titlebar_theme, gui=backend" in source
