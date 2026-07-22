@@ -1,353 +1,253 @@
-# Impulcifer
-Impulcifer is a tool for creating binaural room impulse responses (BRIR) for speaker virtualization on headphones.
+# Impulcifer-py313
 
-Normally headphones sound inside your head which is a clear disadvantage for games and movies but also for music
-because basically all material has been created for speakers. Virtual surround technologies for headphones have existed
-for a some time by now but almost all of them fail to fulfill expectations of out of head sound localization and the
-naturalness of speakers. This is because your brains have learned to localize sounds only with your ears and head and
-not with anyone else's. Surround sound on headphones can only be convincing when the surround virtualization technology
-has been tailored for your ears. BRIR is the tailored model for supreme virtual speaker surround on headphones. When
-done right virtualized speakers can be indistinguishable from real speakers.
+[![PyPI version](https://badge.fury.io/py/impulcifer-py313.svg)](https://badge.fury.io/py/impulcifer-py313)
 
-Watch these videos to get an idea what good BRIRs can do. The method used by Smyth Realizer and Creative Super X-Fi
-demos is the same what Impulcifer uses.
+Impulcifer-py313은 [Jaakko Pasanen의 Impulcifer](https://github.com/jaakkopasanen/impulcifer)를 바탕으로 한 포크입니다. 스피커와 헤드폰 측정 파일에서 개인 BRIR WAV를 만들고, HeSuVi, JamesDSP, Hangloose Convolver 같은 컨볼버에서 쓸 수 있는 출력을 만듭니다.
 
-- [Realiser A16 Smyth Research (Kickstarter project)](https://www.youtube.com/watch?v=3mZhN3OG-tc)
-- [a16 realiser](https://www.youtube.com/watch?v=RtY9QIkRJxA)
-- [Creative Super X-Fi 3D Immersive Headphone Technology at CES 2018](https://www.youtube.com/watch?v=mAidEm9_JYM)
+이 포크는 원본 Impulcifer의 측정과 보정 흐름을 유지하면서, Python 3.13/3.14, PyPI 배포, standalone 빌드, Modern GUI에서 쓰기 쉽게 정리하는 데 초점을 둡니다. 세부 변경 내역은 [CHANGELOG.md](CHANGELOG.md)를 보세요.
 
-These demos are trying to make headphones sound as much as possible like the speakers they have in the demo room for a
-good [wow](https://www.youtube.com/watch?v=KlLMlJ2tDkg) effect. Impulcifer actually takes this even further because
-Impulcifer can do measurements with only one speaker so you don't need access to surround speaker setup and can do room
-acoustic corrections which are normally not possible in real rooms with DSP.
+## 지원 범위
 
-## Installing
-Impulcifer is used from a command line and requires some prerequisites. These installation instructions will guide you
-through installing everything that is needed to run Impulcifer on you own PC.
+- Python 3.9 이상에서 실행합니다. Python 3.13/3.14 경로를 계속 확인합니다.
+- PyPI 패키지, standalone 릴리스, Modern GUI를 제공합니다.
+- CLI와 GUI에서 BRIR 생성, 룸 보정, 헤드폰 보정, Custom EQ, Virtual Bass, TrueHD 레이아웃 출력, 마이크 착용 편차 보정을 다룹니다.
+- 일반 Python에서는 process 기반 병렬 처리를, free-threaded Python에서는 thread 기반 병렬 처리를 우선 사용합니다. standalone 빌드는 free-threaded Python을 대상으로 하지 않습니다.
+- free-threaded 런타임은 CPython 3.14.4 이상(가능하면 최신 패치)을 권합니다. 3.14.1~3.14.4 패치에 free-threaded GC 일시정지 증가, GC 성능 회귀, mimalloc 메모리 누수 수정이 순차 반영되었습니다. CI는 free-threaded 3.14t에서도 전체 테스트를 확인합니다.
 
-- Download and install Git: https://git-scm.com/downloads. When installing Git on Windows, use Windows SSL verification
-instead of Open SSL or you might run into problems when installing project dependencies.
-- Download and install 64-bit [Python 3.8](https://www.python.org/getit/). Make sure to check *Add Python 3.8 to PATH*.
-- You may need to install libsndfile if you're having problems with `soundfile` when installing `requirements.txt`.
-- On Linux you may need to install Python dev packages  
-```bash
-sudo apt install python3-dev python3-pip python3-venv
-```
-- On Linux you may need to install [pip](https://pip.pypa.io/en/stable/installing/)
-- On Windows you may need to install
-[Microsoft Visual C++ Redistributable for Visual Studio 2015, 2017, or 2019](https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads)
+## 설치
 
-Rest will be done in terminal / command prompt. On Windows you'll find it by searching `cmd` in Start menu.
-You should be able to simply copy and paste in these commands. 
+### Python 패키지
 
-- Git clone Impulcifer. This will create a folder in your home folder called `Impulcifer`. See [Updating](#updating)
-for other versions than the latest.  
-```bash
-git clone https://github.com/jaakkopasanen/Impulcifer
-```
-- Go to Impulcifer folder.  
-```bash
-cd Impulcifer
-```
-- Create virtual environment for the project.  
+가상 환경 안에 설치하는 방식을 권합니다.
+
 ```bash
 python -m venv venv
 ```
-- Activate virtualenv.  
+
+Windows:
+
 ```bash
-# On Windows
 venv\Scripts\activate
-# On Mac and Linux
-. venv/bin/activate
+pip install impulcifer-py313
 ```
-- Update pip and setuptools
+
+macOS 또는 Linux:
+
 ```bash
-python -m pip install -U pip
+source venv/bin/activate
+pip install impulcifer-py313
 ```
-- Install required packages.  
+
+`uv`를 쓴다면 다음처럼 설치할 수 있습니다.
+
 ```bash
-pip install -U -r requirements.txt
+uv pip install impulcifer-py313
 ```
-- Verify installation. You should see help printed if everything went well.  
+
+WebView 프론트엔드(2.10부터 기본 인터페이스)를 pip 환경에서 쓰려면 선택적 extra를 설치합니다. 플랫폼별로 Windows는 Microsoft Edge WebView2, macOS는 WKWebView(Cocoa), Linux는 WebKit2GTK를 사용하며 Qt backend로 fallback하지 않습니다.
+
 ```bash
-python impulcifer.py --help
+pip install "impulcifer-py313[webview]"
 ```
 
-When coming back at a later time you'll only need to activate virtual environment again before using Impulcifer.
+Linux에서는 PyGObject 소스 빌드를 위해 시스템 패키지가 먼저 필요합니다 (Debian/Ubuntu 기준):
+
 ```bash
-cd Impulcifer
-# On Windows
-venv\Scripts\activate
-# On Mac and Linux
-. venv/bin/activate
+sudo apt-get install -y gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
+  libgirepository1.0-dev libgirepository-2.0-dev libcairo2-dev pkg-config gcc python3-dev
 ```
 
-### Updating
-Impulcifer is under active development and updates quite frequently. Take a look at the [Changelog](./CHANGELOG.md) to
-see what has changed.
+### Standalone 릴리스
 
-Versions in Changelog have Git tags with which you can switch to another version than the latest one:
+Python을 따로 설치하지 않고 쓰려면 [GitHub Releases](https://github.com/115dkk/Impulcifer-pip313/releases)에서 운영체제에 맞는 파일을 받으세요. 릴리스 파일 이름과 구성은 버전마다 달라질 수 있으므로, 각 릴리스의 설명을 확인해 주세요.
+
+## 실행
+
+GUI를 쓰려면 다음 명령을 실행합니다.
+
 ```bash
-# Check available versions
-git tag
-# Update to a specific version
-git checkout 1.0.0
+impulcifer_gui
 ```
 
-You can update your own copy to the latest versions by running:
+WebView 프론트엔드는 다음 명령으로 실행합니다 (Windows/macOS/Linux). Pulse 디자인의 Studio/Stable 스킨, Recorder / Processing / Settings / Info 탭, CustomTkinter GUI와 동등한 BRIR 옵션 전체(가상 저음, decay, channel balance, 마이크 편차 보정 등), 네이티브 파일·폴더 선택, 자동 업데이트, 9개 언어와 dark/light/system 테마를 제공합니다.
+
 ```bash
-git checkout master
-git pull
+impulcifer_webview
 ```
 
-required packages change quite rarely but sometimes they do and then it's necessary to upgrade them
+Standalone 릴리스(2.10+)의 기본 인터페이스는 WebView입니다. CustomTkinter 인터페이스도 계속 함께 설치되며, 설정 탭의 "기본 인터페이스" 선택이나 실행 인자 `--frontend=ctk`로 전환할 수 있습니다 (`--frontend=webview`로 되돌리기). WebView 스택을 사용할 수 없는 환경에서는 자동으로 CustomTkinter로 폴백합니다.
+
+> **CustomTkinter 지원 안내**: CustomTkinter 인터페이스는 버전 2 동안 유지보수와 기능 추가를 포함해 계속 완전히 지원됩니다. 버전 3부터는 제거되지 않고 지금의 레거시 GUI처럼 업데이트 없이 동결 상태로 유지됩니다 — 버전 3에서 제거되는 것은 구버전 레거시 GUI(`impulcifer_gui_legacy`)입니다.
+
+CLI를 쓰려면 측정 폴더를 지정합니다.
+
 ```bash
-python -m pip install -U -r requirements.txt
+impulcifer --dir_path "data/demo" --test_signal default --plot
 ```
-You can always invoke the update for required packages, it does no harm when nothing has changed.
 
-## Demo
-The actual BRIR measurements require a little investment in measurement gear and the chances are that you're here before
-you have acquired them. There is a demo available for testing out Impulcifer without having to do the actual
-measurements. `data/demo` folder contains five measurement files which are needed for running Impulcifer.
-`headphones.wav` has the sine sweep recordings done with headphones and all the rest files are recordings done with
-stereo speakers in multiple stages.
+사용 가능한 CLI 옵션은 다음 명령으로 확인할 수 있습니다.
 
-You can try out what Impulcifer does by running:
 ```bash
-python impulcifer.py --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl --dir_path=data/demo 
+impulcifer --help
 ```
-Impulcifer will now process the measurements and produce `hrir.wav` and `hesuvi.wav` which can be used with headphone
-speaker virtualization software such as [HeSuVi](https://sourceforge.net/projects/hesuvi/) to make headphones sound like
-speakers in a room. When testing with HeSuVi copy `hesuvi.wav` into `C:\Program Files\Equalizer APO\config\Hesuvi\hrir`,
-(re)start HeSuVi and select `hesuvi.wav` from the Common HRIRs list on Virtualization tab.
 
-## Measurement
-BRIR measurements are done with binaural microphones which are also called ear canal blocking microphones or in-ear
-microphones. Exponential sine sweep test signal is played on speakers and the sound is recorded with the microphones at
-ear canal openings. This setup ensures that the sound measured by the microphones is affected by the room, your body,
-head and ears just like it is when listening to music playing on speakers. Impulcifer will then transform these
-recordings into impulse responses, one per each speaker-ear pair.
+## 입력 파일
 
-Guide for doing the measurements yourself and comments about the gear needed to do it can be found in
-[measurements](https://github.com/jaakkopasanen/Impulcifer/wiki/Measurements) page of Impulcifer wiki. The whole process
-is really quite simple and doesn't take more than couple of minutes. Reading through the measurement guide is most
-strongly recommended when doing measurements the first time or using a different speaker configuration the first time.
+`--dir_path`로 지정한 폴더에 측정 파일과 보정 파일을 둡니다.
 
-Following is a quick reference for running the measurements once you're familiar with the process. If you always use
-`my_hrir` as the temporary folder and rename it after the processing has been done, you don't have to change the
-following commands at all and you can simply copy-paste them for super quick process.
+| 파일 | 설명 |
+| --- | --- |
+| `FL,FR.wav`, `FC.wav`, `SL,SR.wav` 등 | 스피커 측정 파일입니다. 파일 이름의 스피커 이름을 보고 채널을 판단합니다. |
+| `headphones.wav` | 기본 헤드폰 보정 측정 파일입니다. `--headphone_compensation_file`로 다른 파일을 지정할 수 있습니다. |
+| `room-target.csv` | 룸 보정 목표 응답입니다. 없으면 flat target을 씁니다. |
+| `room-mic-calibration.csv` 또는 `room-mic-calibration.txt` | 룸 측정 마이크 보정 파일입니다. 없으면 마이크 보정을 건너뜁니다. |
+| `eq.csv`, `eq-left.csv`, `eq-right.csv` | Custom EQ 파일입니다. `eq.csv`는 양쪽 공통, `eq-left.csv`와 `eq-right.csv`는 좌우 개별 EQ입니다. 같은 이름의 `.txt`(예: `eq.txt`)도 인식합니다. |
 
-### 7.1 Speaker Setup
-Steps and commands for doing measurements with 7.1 surround system:
+Custom EQ 파일은 두 가지 형식을 지원합니다. 확장자가 아니라 내용으로 형식을 판별합니다.
 
-| Setup | Command |
-|-------|---------|
-| Put microphones in ears, put headphones on | `python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/headphones.wav"` |
-| Take heaphones off, look forward | `python recorder.py --play="data/sweep-seg-FL,FC,FR,SR,BR,BL,SL-7.1-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FL,FC,FR,SR,BR,BL,SL.wav"` |
+- **AutoEQ 결과 CSV**: 기존과 동일한 `frequency,raw,error,...` 형식입니다. error 열이 없는 평문 2열(`주파수 게인`) 파일은 값을 그대로 적용할 EQ 게인 곡선으로 해석합니다.
+- **EqualizerAPO(-XT) 설정 텍스트**: `Preamp:`, `Filter n: ON PK Fc ... Hz Gain ... dB Q ...`, `GraphicEQ:` 형식입니다. AutoEQ의 ParametricEQ.txt/GraphicEQ.txt 내보내기와 EqualizerAPO-XT에서 저장한 설정을 그대로 쓸 수 있습니다. 크기 응답으로 표현 가능한 명령(Filter 바이쿼드/IIR, Preamp, GraphicEQ, `Convolution`)은 적용하고, 그럴 수 없는 명령(`Copy`, `Delay`, `MultiConvolution`, VSTPlugin 등)은 경고와 함께 바이패스합니다. `Convolution:`은 IR 파일의 크기 응답만 반영하며(위상 제외) EqualizerAPO처럼 샘플레이트가 다르면 적용하지 않습니다. `Channel: L`/`Channel: R` 스코핑은 좌/우 EQ 곡선으로 분리 적용되고, `Include:`는 같은 폴더 기준 상대 경로면 따라 들어가며, `If: sampleRate == 48000` 같은 단순 샘플레이트 조건 분기는 평가됩니다(그 외 조건식 블록은 보수적으로 바이패스).
 
-### Stereo Speaker Setup
-Steps and commands for doing measurements with two speakers in four stages:
+Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전에 이 파일들이 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`로 복사됩니다.
 
-| Setup | Command |
-|-------|---------|
-| Put microphones in ears, put on headphones | `python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/headphones.wav"` |
-| Take heaphones off, look forward | `python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FL,FR.wav"` |
-| Look 120 degrees left (left speaker should be on your right) | `python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/SR,BR.wav"` |
-| Look 120 degrees right (right speaker should be on your left) | `python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/BL,SL.wav"` |
-| Look directly at the left speaker OR... | `python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FC.wav"` |
-| ...Look directly at the right speaker | `python recorder.py --play="data/sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FC.wav"` |
+## CLI 옵션
 
-### Single Speaker
-Steps and command for doing measurements with just a single speaker in 7 steps. All speaker measurements use either
-`sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav` or
-`sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav` depending if the speaker is connected to left or right
-cable terminals in the amplifier. These commands assume the speaker is connected to left speaker terminals.
+### 입력과 파일
 
-| Setup | Command |
-|-------|---------|
-| Put microphones in ears, put on headphones | `python recorder.py --play="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/headphones.wav"` |
-| Look 30 degrees right of the speaker (speaker on your front left) | `python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FL.wav"` |
-| Look directly at the speaker | `python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FC.wav"` |
-| Look 30 degrees left of the speaker (speaker on you front right) | `python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/FR.wav"` |
-| Look 90 degrees left of the speaker (speaker on your right) | `python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/SR.wav"` |
-| Look 150 degrees left of the speaker (speaker on your back right) | `python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/BR.wav"` |
-| Look 150 degrees right of the speaker (speaker on you back left) | `python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/BL.wav"` |
-| Look 90 degrees right of the speaker (speaker on your left) | `python recorder.py --play="data/sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" --record="data/my_hrir/SL.wav"` |
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--dir_path PATH` | 필수 | 측정 파일을 읽고 결과를 저장할 폴더입니다. |
+| `--test_signal VALUE` | `test.pkl`, `test.wav`, 없으면 내장 `default` | 측정에 쓴 sweep WAV, estimator pickle, TrueHD/MLP 파일 또는 미리 정한 이름입니다. |
+| `--room_target PATH` | `dir_path/room-target.csv` | 룸 보정 목표 응답 CSV입니다. 파일이 없으면 flat target을 씁니다. |
+| `--room_mic_calibration PATH` | `dir_path/room-mic-calibration.csv`, 없으면 `.txt` | 룸 측정 마이크 보정 파일입니다. |
+| `--headphone_compensation_file PATH` | `dir_path/headphones.wav` | 헤드폰 보정 측정 WAV입니다. 폴더를 주면 흔히 쓰는 파일명을 찾아봅니다. |
+| `--fs HZ` | 측정 신호의 샘플레이트 | 출력 샘플레이트입니다. 지정하면 결과를 해당 샘플레이트로 맞춥니다. |
 
-## Processing
-Once you have obtained the sine sweep recordings, you can turn them into a BRIR file with Impulcifer. All the processing
-is done by running a single command on command line. The command below assumes you have made a speaker recordings and
-a headphones recording and saved the recording files into `data/my_hrir` folder. Start command prompt, jump to
-Impulcifer folder and activate the virtual environment as described in the installation instructions if you don't have
-command prompt open yet. Sine sweep recordings are processed by running `impulcifer.py` with Python as shown below.
+`--test_signal`에는 다음 약칭을 쓸 수 있습니다.
+
+| 값 | 의미 |
+| --- | --- |
+| `default`, `1` | 내장 pickle sweep estimator입니다. |
+| `sweep`, `2` | 내장 기본 sweep WAV입니다. |
+| `stereo`, `3` | `FL,FR` 스테레오 분절 sweep입니다. |
+| `mono-left`, `4` | `FL` 모노 분절 sweep입니다. |
+| `left`, `5` | `FL` 스테레오 분절 sweep입니다. |
+| `right`, `6` | `FR` 스테레오 분절 sweep입니다. |
+
+### 보정과 목표 응답
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--channel_balance VALUE` | 사용 안 함 | 좌우 레벨이나 응답 차이를 보정합니다. `trend`, `left`, `right`, `avg`, `min`, `mids` 또는 dB 값을 받습니다. |
+| `--decay VALUE` | 사용 안 함 | 잔향 꼬리를 줄입니다. `300`처럼 전체 ms 값을 주거나 `FL:500,FC:100`처럼 채널별 ms 값을 줄 수 있습니다. |
+| `--target_level DB` | 사용 안 함 | 좌우 평균 레벨을 지정한 dB로 맞춥니다. 클리핑을 피하려면 보통 음수 값을 씁니다. |
+| `--fr_combination_method average|conservative` | `average` | 여러 룸 측정 응답을 합치는 방식입니다. |
+| `--specific_limit HZ` | `400` | speaker-ear specific 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. |
+| `--generic_limit HZ` | `300` | generic 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. |
+| `--bass_boost DB` | 사용 안 함 | 저역 shelf boost입니다. `6` 또는 `6,150,0.69`처럼 gain, Fc, Q를 줄 수 있습니다. |
+| `--tilt DB_PER_OCT` | `0.0` | 목표 응답 기울기입니다. 양수는 밝게, 음수는 어둡게 맞춥니다. |
+| `--no_room_correction` | 룸 보정 켜짐 | 룸 보정을 건너뜁니다. |
+| `--no_headphone_compensation` | 헤드폰 보정 켜짐 | 헤드폰 보정을 건너뜁니다. |
+| `--no_equalization` | EQ 켜짐 | Custom EQ를 건너뜁니다. |
+
+### 출력과 진단
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--plot` | 꺼짐 | 처리 그래프를 PNG로 저장합니다. |
+| `--interactive_plots` | 꺼짐 | Bokeh 기반 HTML 플롯을 저장합니다. |
+| `--c MS` | `1.0` | IR 앞부분을 자를 때 남길 headroom입니다. 단위는 ms입니다. |
+| `--jamesdsp` | 꺼짐 | `FL/FR` 기반의 `jamesdsp.wav`를 추가로 만듭니다. |
+| `--hangloose` | 꺼짐 | Hangloose Convolver용 스피커별 stereo IR 파일을 만듭니다. |
+| `--output_truehd_layouts` | 꺼짐 | TrueHD용 레이아웃 출력을 추가로 만듭니다. |
+| `--info` | 꺼짐 | 버전, Python, 운영체제, 주요 의존성 정보를 출력하고 종료합니다. |
+| `-V`, `--version` | 꺼짐 | Impulcifer 버전을 출력하고 종료합니다. |
+
+### Virtual Bass
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--vbass` | 꺼짐 | Virtual Bass 합성을 켭니다. |
+| `--vbass_freq HZ` | `250` | Virtual Bass crossover 주파수입니다. |
+| `--vbass_hp HZ` | `15.0` | 합성 저역에 적용할 high-pass 주파수입니다. |
+| `--vbass_polarity auto|normal|invert` | `auto` | 합성 저역 polarity 처리 방식입니다. |
+
+### 마이크 착용 편차 보정
+
+방향과 무관한 좌우 마이크 불일치(착용·감도)를 보정합니다(v4.0). 헤드폰 보상을 같은 마이크로 측정하면 마이크 응답이 보상 단계에서 이미 소거되므로, **헤드폰 보상이 켜져 있으면 이 보정은 자동으로 생략**됩니다. 자세한 내용은 [마이크 착용 편차 보정](docs/README_microphone_deviation_correction.md) 문서를 참고하세요.
+
+| 옵션 | 기본값 | 설명 |
+| --- | --- | --- |
+| `--microphone_deviation_correction` | 꺼짐 | 좌우 마이크 불일치를 보정합니다. 헤드폰 보상이 켜져 있으면 생략됩니다. |
+| `--mic_deviation_strength VALUE` | `0.7` | 보정 강도입니다. `0.0`은 보정 없음, `1.0`은 전체 보정입니다. |
+| `--mic_deviation_debug_plots` | 꺼짐 | 마이크 착용 편차 보정 진단 그래프를 저장합니다. |
+
+## CLI 예시
+
+데모 폴더를 처리하고 그래프를 저장합니다.
+
 ```bash
-python impulcifer.py --test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl" --dir_path="data/my_hrir" --plot
+impulcifer --dir_path "data/demo" --test_signal default --plot
 ```
 
-You should have several WAV files and graphs in the folder. `hesuvi.wav` can now be used with HeSuVi to make your
-headphones sound like speakers.
+룸 보정과 헤드폰 보정을 끄고 측정 IR만 정리합니다.
 
-`--dir_path=data/my_hrir` tells Impulcifer that the recordings can be found in a folder called `my_hrir` under `data`.
-Impulcifer will also write all the output files into this folder.
-
-Impulcifer always needs to know which sine sweep signal was used during recording process. Test signal can be either a
-WAV (`.wav`) file or a Pickle (`.pkl`) file. Test signal is read from a file called `test.pkl` or `test.wav`. 
-`impulse_response_estimator.py` produces both but using a Pickle file is a bit faster. Pickle file however cannot be
-used with `recorder.py`. An alternative way of passing the test signal is with a command line argument `--test_signal`
-which takes is a path to the file eg. `--test_signal="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl"`.
-
-Sine sweep recordings are read from WAV files which have speaker names separated with commas and `.wav` extension eg.
-`FL,FR.wav`. The individual speakers in the given file must be recorded in the order of the speaker names in the file
-name. There can be multiple files if the recording was done with multiple steps as is the case when recording 7.1 setup
-with two speakers. In that case there should be `FL,FR.wav`, `SR,BR.wav`, `BL,SL.wav` and `FC.wav` files in the folder.
-
-#### Room Correction
-Similar pattern is used for room acoustics measurements. The idea is to measure room response with a calibrated
-measurement microphone in the exact same spot where the binaural microphones were. Room measurement files have file name
-format of `room-<SPEAKERS>-<left|right>.wav`, where `<SPEAKERS>` is the comma separated list of speaker names and
-`<left|right>` is either "left" or "right". This tells if the measurement microphone is measuring at the left or right
-ear position. File name could be for example `room-FL,FR-left.wav`. Impulcifer does not support stereo measurement
-microphones because vast majority of measurement microphones are mono. Room recording files need to be single track
-only. Some measurement microphones like MiniDSP UMIK-1 are seen as stereo microphones by Windows and will for that
-reason record a stereo file. `recorder.py` can force the capture to be one channel by setting `--channels=1`.
-
-Generic room measurements can be done for speakers with which it's hard to position the measurement microphone
-correctly. Impulcifer reads these measurements from `room.wav` file which can contain any number of tracks and any
-number of sweeps per track. All the sweeps are being read and their frequency responses are combined. The combined
-frequency response is used for room correction with the speakers that don't have specific measurements
-(`room-FL,FR-left.wav` etc...).
-
-There are two methods for combining the frequency responses: `"average"` and `"conservative"`. Average method takes the
-average frequency response of all the measurements and builds the room correction equalization with that. Conservative
-method takes the absolute minimum error for each frequency and only if all the measurements are on the same side of 0
-level at the given frequency. This ensures that there will never be room correction adjustments that would make the
-frequency response of any of the measurements worse. These methods are available with `--fr_combination_method=average`
-and `--fr_combination_method=conservative`.
-
-Upper frequency limit for room measurements can be adjusted with parameters `--specific_limit` and `--generic_limit`.
-These will limit the room correction equalization to 0 dB above that frequency. This can be useful for avoiding pitfalls
-of room correction in high frequencies. `--specific_limit` applies to room measurements which specify the ear and
-`--generic_limit` to room measurements which don't. Typically room dominates the frequency response below 300 or 400 Hz
-and speakers dominate above 700 Hz. Speaker's problems cannot be fixed based on in-room measurements and therefore the
-limits should usually be placed at 700 Hz. The octave leading up to the limit (eg. 350 to 700 Hz) will be sloped down
-from full EQ effect (at 350 Hz) to 0 dB at the limit (700 Hz). Other, higher, values can be tried out and they can
-improve the sound but there are not guarantees about that.
-
-Generic room measurements are not expected to be in the same location as the binaural microphones were so limiting the
-equalization to less than 1 kHz is probably a good idea. Conservative combination method with several measurements is
-safer method and with that it should be safer to try to increase the limit up from 1 kHz. For example
-`--specific_limit=5000 --generic_limit=2000` would ensure that room correction won't adjust frequency response of BRIR
-above 5 kHz for any speaker-ear pairs and above 2 kHz for speaker-ear pairs that don't have specific room measurements.
-
-Room measurements can be calibrated with the measurement microphone calibration file called `room-mic-calibration.txt`
-or `room-mic-calibration.csv`. This must be a CSV file where the first column contains frequencies and the second one
-amplitude data. Data is expected to be calibration data and not equalization data. This means that the calibration data
-is subtracted from the room frequency responses. An alternative way of passing in the measurement microphone calibration
-file is with a command line argument `--room_mic_calibration` and it takes a path to the file eg.
-`--room_mic_calibration="data/umik-1_90deg.txt"`
-
-Room frequency response target is read from a file called `room-target.txt` or `room-target.csv`. Head related impulse
-responses will be equalized with the difference between room response measurements and room response target. An
-alternative way to pass in the target file is with a command line argument `--room_target` eg.
-`--room_target="data/harman-in-room-loudspeaker-target.csv"`.
-
-Room correction can be skipped by adding a command line argument `--no_room_correction` without any value.
-
-#### Headphone Compensation
-Impulcifer will compensate for the headphone frequency response using headphone sine sweep recording if the folder
-contains file called `headphones.wav`. If you have the file but would like not to have headphone compensation, you can
-simply rename the file for example as `headphones.wav.bak` and run the command again. 
-
-Headphone equalization can be baked into the produced BRIR file by having a file called `eq.csv` in the folder. The eq 
-file must be an AutoEQ produced result CSV file. Separate equalizations for left and right channels are supported with
-files `eq-left.csv` and `eq-right.csv`. Headphone equalization is useful for in-ear monitors because it's not possible
-to do headphone compensation with IEMs. When using IEMS you still need an around ear headphone for the headphone
-compensation. **eq.wav is no longer supported!**
-
-Impulcifer will bake the frequency response transformation from the CSV file into the BRIR and you can enjoy speaker
-sound with your IEMs. You can generate this filter with [AutoEQ](https://github.com/jaakkopasanen/AutoEq); see usage
-instructions for [using sound signatures](https://github.com/jaakkopasanen/AutoEq#using-sound-signatures) to learn how 
-to transfer one headphone into another. In this case the input directory needs to point to the IEM, compensation curve
-is the curve of the measurement system used to measure the IEM and the sound signature needs point to the existing
-result of the headphone which was used to make the headphone compensation recording.
-
-For example if the headphone compensation recording was made with Sennheiser HD 650 and you want to enjoy Impulcifer
-produced BRIR with Campfire Andromeda, you should run:
 ```bash
-python -m autoeq --input-file="measurements/oratory1990/data/in-ear/Campfire Audio Andromeda.csv" --output-dir="my-results/Andromeda (HD 650)" --target="targets/AutoEq in-ear.csv" --sound-signature="results/oratory1990/over-ear/Sennheiser HD 650/Sennheiser HD 650.csv" --equalize --bass-boost=8 --max-gain=12
+impulcifer --dir_path "measurements" --no_room_correction --no_headphone_compensation
 ```
-and then copy `AutoEq/my_results/Andromeda (HD 650)/Campfire Audio Andromeda.csv` to `Impulcifer/data/my_hrir/eq.csv`.
 
-See how the Harman over-ear target is used for IEM in this case. This is because the goal is to make Andromeda sound as
-similar as possible to HD 650, which is an over-ear headphone. Normally with AutoEQ you would use Harman in-ear target
-for IEMs but not in this case.
+Virtual Bass와 JamesDSP 출력을 함께 만듭니다.
 
-Headphone compensation can be skipped by adding a command line argument `--no_headphone_compensation` without any value.
+```bash
+impulcifer --dir_path "measurements" --vbass --vbass_freq 250 --jamesdsp
+```
 
-#### Sampling Rate
-Outputs with different sampling rates than the recording sampling rate can be produced with `--fs` parameter. This
-parameter takes a sampling rate in Hertz as value and will then resample the output BRIR to the desired sampling rate if
-the recording and output sampling rates differ. For example `--fs=44100`.
+채널별 decay를 지정합니다.
 
-#### Plotting Graphs
-Various graphs can be produced by providing `--plot` parameter to Impulcifer. These can be helpful in figuring out what
-went wrong if the produced BRIR doesn't sound right. Producing the plots will take some time.
+```bash
+impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
+```
 
-- **pre** plots are the unprocessed BRIR measurement
-- **room** plots are room measurements done with measurement microphone
-- **post** plots are the final results after all processing
+## GUI에서 할 수 있는 일
 
-#### Channel Balance Correction
-Channel balance can be corrected with `--channel_balance` parameter. In ideal case this would not be needed and the
-natural channel balance after headphone equalization and room correction would be perfect but this is not always the
-case since there are multiple factors which affect that like placement of the binaural microphones. There are six
-different strategies available for channel balance correction.
+- Recorder에서 sweep 재생과 녹음을 진행합니다. 스피커 측정은 `FL,FR.wav` 같은 이름으로 저장하고, 헤드폰 보정은 별도 버튼으로 `headphones.wav`를 만듭니다.
+- Impulcifer 탭에서 BRIR 생성 옵션을 지정하고 처리 중 취소할 수 있습니다.
+- Studio skin에서는 같은 작업을 더 넓은 화면 구성으로 다룹니다.
+- UI Settings에서 언어와 테마를 바꿀 수 있습니다.
 
-Setting `--channel_balance=trend` will equalize right side by the difference trend of left and right sides. This is a
-very smooth difference curve over the entire spectrum. Trend will not affect small deviations and therefore doesn't
-warp the frequency response which could lead to uncanny sensations. Bass, mids and treble are all centered when using
-trend. Trend is probably the best choice in most situations.
+각 옵션 위에 마우스를 올리면 짧은 설명을 확인할 수 있습니다.
 
-Setting `--channel_balance=mids` will find a gain level for right side which makes the mid frequencies (100, 3000)
-average level match that of the left side. This is essentially an automatic guess for the numeric strategy value.
+## 추가 문서
 
-Setting `--channel_balance=1.4` or any numerical value will amplify right side IRs by that number of decibels.
-Positive values will boost right side and negative values will attenuate right side. You can find the correct value by
-trial and error either with Impulcifer or your virtualization software and running Impulcifer again with the best value.
-Typically vocals or speech is good reference for finding the right side gain value because these are most often mixed
-in the center and therefore are the most important aspect of channel balance.
+- [TrueHD/MLP 지원 및 레이아웃 출력](docs/README_TrueHD.md)
+- [마이크 착용 편차 보정](docs/README_microphone_deviation_correction.md)
+- [Python 3.14 및 Nuitka 빌드 메모](docs/README_PYTHON314.md)
+- [빌드 가이드 (Nuitka standalone)](docs/BUILD_README.md)
+- [성능 최적화 요약](docs/OPTIMIZATION_SUMMARY.md)
 
-Setting `--channel_balance=avg` will equalize both left and right sides to the their average frequency response and
-`--channel_balance=min` will equalize them to the minimum of the left and right side frequency response curves. Using
-minimum instead of average will be better for avoiding narrow spikes in the equalization curve but which is better in
-the end varies case by case. These strategies might cause uncanny sensation because of frequency response warping.
+## 주의 사항
 
-`--channel_balance=left` will equalize right side IRs to have the same frequency response as left side IRs and
-`--channel_balance=right` will do the same in reverse. These strategies might cause uncanny sensation because of
-frequency response warping.
+- `.mlp`, `.thd`, `.truehd` 입력은 FFmpeg가 필요합니다. FFmpeg가 없으면 실행 중 설치 안내가 나올 수 있습니다.
+- Custom EQ는 처리 시점에 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`(없으면 같은 이름의 `.txt`)를 기준으로 읽습니다. AutoEQ CSV와 EqualizerAPO 설정 텍스트를 모두 인식합니다.
+- 원본 Impulcifer와 같은 입력을 쓰더라도 Python, NumPy, SciPy, 보정 옵션 차이로 결과가 달라질 수 있습니다. 주요 경로는 회귀 테스트로 확인합니다.
 
-#### Level Adjustment
-Output BRIR level can be adjusted with `--target_level` parameter which will normalize the BRIR gain to the given
-numeric value. The level is calculated from all frequencies excluding lowest bass frequencies and highest treble
-frequencies and then the level is adjusted to the target level. Setting `--target_level=0` will ensure that BRIR
-average gain is about 0 dB. Keep in mind that there often is large variance in the gain of different frequencies so
-target level of 0 dB will not mean that the BRIR would not produce clipping. Typically the desired level is several dB
-negative such as `--target_level=-12.5`. Target level is a tool for having same level for different BRIRs for easier
-comparison.
+## 업데이트
 
-#### Decay Time Management
-The room decay time (reverb time) captured in the binaural room impulse responses can be shortened with `--decay`
-parameter. The value is a time it should take for the sound to decay by 60 dB in milliseconds. When the natural decay
-time is longer than the given target, the impulse response tails will be shortened with a slope to achieve the desired
-decay velocity. Decay times are not increased if the target is longer than the natural one. The decay time management
-can be a powerful tool for controlling ringing in the room without having to do any physical room treatments.
+```bash
+pip install --upgrade impulcifer-py313
+```
 
-## Contact
-[Issues](https://github.com/jaakkopasanen/AutoEq/issues) are the way to go if you are experiencing problems, have
-ideas or if there is something unclear about how things are done or documented.
+## 라이선스
 
-You can find me in [Reddit](https://www.reddit.com/user/jaakkopasanen) and
-[Head-fi](https://www.head-fi.org/members/jaakkopasanen.491235/) if you just want to say hello.
+이 프로젝트는 MIT License를 따릅니다. 전체 문구는 [LICENSE](LICENSE)를 보세요.
 
-There is also a [Head-fi thread about Impulcifer](https://www.head-fi.org/threads/recording-impulse-responses-for-speaker-virtualization.890719/).
+저작권 표기는 `LICENSE`와 맞췄습니다.
+
+- Copyright (c) 2018- Jaakko Pasanen
+- Copyright (c) 2024- 115dkk
+- Copyright (c) 2025- LionLion123
+- Copyright (c) 2025- SDC (DCinside)
+
+## 기여와 문의
+
+버그를 찾았거나 개선할 점이 있으면 [이슈 트래커](https://github.com/115dkk/Impulcifer-pip313/issues)에 남겨 주세요.

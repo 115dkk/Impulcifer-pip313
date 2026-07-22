@@ -5,11 +5,11 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from autoeq.frequency_response import FrequencyResponse
-sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
-from impulse_response_estimator import ImpulseResponseEstimator
-from hrir import HRIR
-from utils import sync_axes, save_fig_as_png, config_fr_axis
-from constants import COLORS
+sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
+from core.impulse_response_estimator import ImpulseResponseEstimator
+from core.hrir import HRIR
+from core.utils import sync_axes, save_fig_as_png, config_fr_axis
+from core.constants import COLORS
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl')
@@ -86,7 +86,7 @@ def main():
             frequency=fllfr.frequency.copy(),
             error=feedback_errors[side] / 2
         )
-        feedback_errors[side].plot_graph(fig=fig, ax=ax[2, i], show=False)
+        feedback_errors[side].plot(fig=fig, ax=ax[2, i], show=False)
 
     sync_axes([ax[i, j] for i in range(ax.shape[0]) for j in range(ax.shape[1])])
     save_fig_as_png(os.path.join(DIR_PATH, 'feedback.png'), fig)
@@ -95,8 +95,8 @@ def main():
     fig, ax = plt.subplots(1, 2)
     fig.set_size_inches(18, 9)
     fig.suptitle('Feedforward Compensation')
-    ffl.plot_graph(fig=fig, ax=ax[0], show=False)
-    ffr.plot_graph(fig=fig, ax=ax[1], show=False)
+    ffl.plot(fig=fig, ax=ax[0], show=False)
+    ffr.plot(fig=fig, ax=ax[1], show=False)
     save_fig_as_png(os.path.join(DIR_PATH, 'feedforward.png'), fig)
 
     # Feedback compensation vs Feedforward compensation

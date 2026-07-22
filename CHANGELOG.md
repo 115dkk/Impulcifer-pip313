@@ -4,5 +4,1902 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.10.1 - 2026-07-12
+### 2.10.0 standalone 긴급 수정 — scipy 번들 누락으로 인한 기동 사망 + WebView 마감 손질
+
+#### 🐛 버그 수정
+- **standalone의 모든 scipy import 즉사 수정 (2.10.0 회귀)**: CI가 설치한 scipy 1.18이 벤더링 array-api-compat을 `scipy._external`로 옮겼는데 그 lazy import 서브모듈(`numpy.fft` 등)을 Nuitka가 추적하지 못해, 설치본에서 scipy를 import하는 모든 경로가 `ModuleNotFoundError`로 죽었다 — CTk 기동 즉사("웹뷰에서 CTk 전환 시 실행 불가"의 원인), WebView `bootstrap()` 사망(언어 목록 공백 + 원시 i18n 키 노출의 원인). `build_scripts/nuitka_flags.py`가 빌드 환경에 존재하는 쪽(`scipy._external` 또는 구버전의 `scipy._lib.array_api_compat`)을 통째로 `--include-package`한다. 설치본과 동일한 scipy 1.18 환경의 로컬 빌드로 재현·수정 검증.
+- **bootstrap 방어화**: DSP 스택(impulcifer→core→scipy) import 실패가 UI 셸 전체를 죽이지 못하게 bootstrap/get_system_info의 버전·스레딩 정보 조회를 개별 가드로 감쌌다. 패키징 결함이 나도 언어/테마/설정 UI는 살아서 원인이 읽히는 오류로 표면화된다.
+- **부트 전 오류 문자열 i18n 폴백**: bootstrap이 죽으면 로케일 테이블이 없어 `t()`가 원시 키(`webview_bridge_failed`)를 그대로 노출하던 것을, OS 로케일 기반 내장 en/ko 폴백(`PREBOOT_STRINGS`)으로 교체.
+- **Windows 제목 표시줄 다크 모드**: WebView 창이 기본 흰색 제목 표시줄을 쓰던 것을 CTk처럼 DWM `DWMWA_USE_IMMERSIVE_DARK_MODE`로 앱 테마(설정의 dark/light/system, system은 레지스트리 조회)와 동기화. 테마 변경 시 즉시 재적용되고, 창 배경색도 Pulse `--bg-0`으로 지정해 로드 전 흰 플래시를 제거.
+
+#### ⭐ 새로운 기능 / 개선
+- **첫 실행 언어 선택 (CTk 패리티)**: 첫 실행 시 WebView에도 언어 선택 모달이 뜬다(`ui.first_run`, CTk `LanguageSelectionDialog` 이식). 갤러리에 리뷰 샷 추가(총 40샷).
+- **'실험적 WebView 프론트엔드' 딱지 제거**: 사이드바 배지·`webview_experimental_badge` 키(11개 로케일)·창/문서 제목의 Preview 표기를 제거했다. WebView는 기본 인터페이스다.
+
+#### 🔧 빌드 / 설정 변경
+- **릴리스 파이프라인에 스모크 게이트 추가**: 3-플랫폼 빌드 잡(publish.yml)과 수동 빌드 워크플로가 패키징 전에 빌드된 바이너리로 `--smoke-test`(전체 import 체인 + webview 스택 + 자산)를 실행한다. 이번 scipy 회귀 같은 "빌드는 성공하지만 기동이 죽는" 결함은 이제 릴리스 전에 차단된다(Linux는 xvfb).
+
+## 2.10.0 - 2026-07-12
+### WebView 표준화 — 3-플랫폼 백엔드 검증, 자동 업데이트, standalone 기본 인터페이스 전환
+
+#### ⭐ 새로운 기능 / 개선
+- **WebView 프론트엔드의 macOS/Linux 지원**: Windows 전용 게이트를 제거하고 플랫폼별 렌더링 엔진을 강제 선택한다 — Windows는 Edge WebView2(edgechromium), macOS는 WKWebView(cocoa), Linux는 WebKit2GTK(gtk). KDE 세션에서 pywebview가 Qt를 우선하는 동작도 차단된다. 런타임 배지가 실제 백엔드명(WebView2/WKWebView/WebKitGTK)을 표시한다.
+- **WebView 자동 업데이트**: CTk `UpdateDialog`/`UpdateExecutor` 흐름을 application service job으로 이식했다. 부팅 2초 후 백그라운드 확인(CTk `after(2000)` 미러) → 릴리스 노트·버전 라인·"지금 업데이트/나중에/건너뛰기" 모달 → 다운로드 진행률 → 완료 메시지 → Velopack 경로는 OK 확인 시 `Update.exe` 인계 후 창 자동 종료·재시작. pip/legacy 경로는 각자의 완료 안내를 표시한다. Info 탭에 수동 "업데이트 확인" 버튼도 추가.
+- **Standalone 기본 인터페이스가 WebView로 전환**: `gui_main.py`가 런처가 되어 실행 인자(`--frontend=webview|ctk`) > 저장된 설정(`~/.impulcifer/settings.json`의 `frontend` 키) > 기본값 webview 순으로 결정한다. 바로가기/Velopack 실행 모두 WebView가 뜬다. pywebview 미탑재·시스템 WebKit 부재 등 WebView 스택을 쓸 수 없는 환경에서는 CustomTkinter로 자동 폴백한다. WebView 설정 탭과 CTk 설정 탭 양쪽에 "기본 인터페이스" 선택을 추가했다.
+- **CustomTkinter 지원 일정 고지**: CTk 인터페이스는 버전 2 동안 유지보수와 기능 추가를 포함해 계속 완전히 지원되며, 버전 3부터는 제거되지 않고 지금의 레거시 GUI처럼 업데이트 없이 동결 상태로 유지된다(버전 3에서 제거되는 것은 구버전 레거시 GUI뿐). CTk 설정 탭·README·CHANGELOG에 고지를 추가했다.
+
+#### 🔧 빌드 / 설정 변경
+- **3-플랫폼 백엔드 실기 검증 CI (`.github/workflows/webview-backend-validation.yml`)**: mock 기반 갤러리와 상보적으로, 각 플랫폼의 실제 엔진 + 실제 `WebviewBridge`로 DOM 렌더 → boot() 완주(bootstrap 왕복) → promise 기반 브리지 왕복을 검증한다(`build_scripts/validate_webview_backend.py`, watchdog 포함). 첫 실행에서 cocoa/gtk/edgechromium 모두 통과.
+- **Nuitka standalone에 WebView 스택 번들**: `webview_ui/` 데이터 디렉토리를 포함하고, pywebview 자체는 명시적 include 없이 정적 `import webview` 체인의 자동 추적에 맡긴다 — `--include-module/package=webview`는 어느 형태든 Nuitka 내장 pywebview 플러그인의 "타 플랫폼 백엔드 제외" 결정과 충돌해 빌드가 즉사한다(로컬 빌드로 확인, `tests/test_nuitka_flags.py`가 이 불변식을 고정). 플러그인·패키지 설정이 백엔드 선택과 webview js/lib·pythonnet·clr_loader DLL 번들을 전부 처리한다. 빌드 잡 3종(publish.yml + 수동 build-linux/build-macos)에 pywebview 설치(리눅스는 `pywebview[gtk]` + WebKit2GTK/GObject 시스템 패키지)를 추가했다. `--smoke-test`가 webview 모듈·application service·`webview_ui/index.html` 번들 여부까지 검증한다.
+- **`[webview]` extra의 Linux GTK 지원**: `pywebview[gtk]`(PyGObject)을 Linux 마커로 요구한다. 소스 빌드에 필요한 시스템 패키지는 README에 문서화.
+- **서드파티 라이선스 고지 정비**: 재배포물에 포함되는 서드파티의 고지 파일을 추가했다 — `THIRD_PARTY_LICENSES.md`(루트: pywebview BSD-3, CustomTkinter MIT, AutoEQ MIT, Pretendard·JetBrains Mono OFL 1.1 전문), `autoeq/LICENSE`(원본 MIT 사본), `font/OFL-Pretendard.txt`·`font/OFL-JetBrainsMono.txt`(OFL 1.1은 폰트 재배포 시 라이선스 동봉 요구). wheel(`[tool.hatch.build] include`)과 Nuitka standalone(`INCLUDED_DATA_FILES`, font 디렉토리 동승) 양쪽에 포함된다.
+- **Nuitka pywebview 플러그인 화이트리스트 핫픽스 (`build_scripts/patch_nuitka_pywebview.py`)**: Nuitka 내장 pywebview 플러그인의 Windows 화이트리스트가 구버전 pywebview 기준이라 pywebview 6.x winforms가 import하는 헬퍼 모듈 `webview.platforms.win32`를 "actively excluded"로 빼버려, 패키징된 앱이 기동 시 조용히 CTk로 폴백하는 문제를 로컬 빌드 실검증으로 발견했다. 명시적 include는 플러그인 결정과 충돌하므로, 빌드 직전에 설치된 플러그인 화이트리스트에 누락 항목을 삽입하는 idempotent 패치를 두 빌드 스크립트(build_nuitka.py/build_local.py)에 연결했다(업스트림 수정 시 자동 no-op).
+
+## 2.9.0 - 2026-07-12
+### Qt 없는 WebView 전환 — application service, Pulse Studio 프론트엔드, 갤러리 리뷰 CI
+
+#### ⭐ 새로운 기능 / 개선
+- **Tk 비종속 application service 추가**: Recorder와 BRIR 생성 흐름을 JSON-safe 요청·응답 계약으로 감싸고, 단일 활성 job, 순번 기반 progress polling, BRIR 협력 취소, 구조화 오류를 제공한다. 기존 CustomTkinter 탭과 DSP·녹음 구현은 변경하지 않고 `application/` 계층에서 그대로 호출한다.
+- **BRIR 옵션 전체 개방**: application service의 BRIR 요청이 `ProcessingConfig` dataclass 전체 표면(가상 저음, decay, channel balance, bass boost, tilt, 리샘플, 마이크 편차 보정, JamesDSP/Hangloose/TrueHD 출력 등)을 필드 종류별 타입 검증과 함께 수용한다. 새 파이프라인 파라미터는 dataclass 필드 추가만으로 프론트엔드에 자동 개방된다. Custom EQ 파일(`eq.csv`/`eq-left.csv`/`eq-right.csv`)은 CTk GUI와 동일하게 측정 폴더로 사이드카 복사한다.
+- **Pulse Studio 디자인의 WebView 프론트엔드**: 최소 PoC 화면을 Studio 스킨 철학(200px 사이드바 + 번호 카드 + disclosure 행)과 Pulse 팔레트(light/dark 정확한 hex, WCAG 수정 반영)로 전면 재구축했다. Recorder / Processing / Settings / Info 4개 탭, CTk GUI와 동등한 옵션 표면, 네이티브 파일·폴더 선택 다이얼로그(pywebview `create_file_dialog`), 스윕 세트 생성, 결과 폴더 열기, 번들 Pretendard/JetBrains Mono 폰트를 제공한다.
+- **WebView 설정·정보 탭**: 언어(9개)·테마(dark/light/system)·스킨을 CTk GUI와 같은 `~/.impulcifer/settings.json`에 저장·공유하고, i18n 문자열은 bootstrap에서 병합 제공(en fallback + 현재 언어)한다. 시스템 정보(GIL/워커/설치 형태)와 프로젝트 링크(allowlist 고정)도 노출한다.
+- **WebView Stable 스킨 변형**: CTk Stable 레이아웃(72px 상단 헤더 + 중앙 탭 스트립 + 중앙 콘텐츠)을 충실 이식한 `data-skin=stable` 셸을 추가했다. 같은 DOM에 셸 크롬만 교체하며, CTk GUI에서 `skin: stable`을 저장한 사용자의 선택이 WebView에서도 존중된다. 선택된 탭은 WCAG AA를 위해 accent-strong 채움을 사용한다. Stable 관례에 맞춰 게이트 옵션 그룹은 disclosure 대신 **체크박스 공개**로 렌더링하고(고급 옵션만 접이식 유지), 작업 진행은 인라인 카드 대신 CTk `ProcessingDialog`/`RecordingProgressDialog`처럼 **별도 모달 다이얼로그**(진행률·로그·취소/닫기)로 표시한다.
+- **녹음 상태 연출 이식**: Recorder의 작업 표시가 원시 로그 나열에서 CTk `RecordingStatusController` 연출로 업그레이드됐다 — 스피커 칩(진행 중 accent, 완료 ✓), 단계별 상태 라인("현재 녹음 중: FL (1/2)" 등), 경과/총 시간 디테일, 완료 시 WAV 분석 요약(채널·길이·피크·활성 채널, 서비스가 결과에 동봉). Stable 모달에도 동일하게 표시되며, 로그에는 phase 전환만 기록해 틱 스팸을 없앴다.
+- **ko 문구 정리**: 가상 저음의 "서브베이스 하이패스 (Hz)"를 표준 공학 용어인 "초저역 차단 주파수 (Hz)"로 교체하고, 툴팁의 "DC 럼블"도 "DC·초저역 잡음"으로 정리.
+- **Studio 작업 체크리스트**: Studio의 Activity 카드가 CLI 로그 나열을 넘어 BRIR 파이프라인 10단계(측정 열기 → … → BRIR 쓰기)를 "✓ 완료 / ▸ 진행 중 / ○ 예정" 체크리스트로 표시한다. 로거 메시지를 같은 로케일 테이블의 스테이지 문자열과 prefix 매칭하므로 표시 언어와 무관하게 동작한다. **실패/취소 시맨틱**: 실패 지점 스테이지는 ✕(빨강), 취소는 –(주황)로 표시되고 완료 단계의 ✓는 유지되며, 도달하지 못한 단계는 ○인 채 흐려져 "미도달"로 읽힌다. Stable에서는 시작 전 검증 오류가 alert로 표면화된다(인라인 카드가 숨겨져 있으므로).
+
+#### 🔧 빌드 / 설정 변경
+- **WebView 갤러리 리뷰 CI 추가 (`.github/workflows/webview-gallery.yml`)**: EqualizerAPO-XT의 offscreen skin gallery 패턴을 이식했다. mock 브리지 위에서 4 view × 2 테마 × 2 언어 + busy 상태 2종 = 18샷을 headless Chromium으로 렌더링하고(`build_scripts/webview_gallery.py`, 샷 수 자가검증), PNG를 `webview-gallery` 브랜치에 push한 뒤 이미지를 임베드한 리뷰 이슈를 자동 생성/갱신한다.
+- **기존 Nuitka 릴리스 경로 보존**: canonical `gui_main.py`와 `tk-inter`/CustomTkinter 플래그는 그대로 유지한다. WebView는 pip/source 전용 별도 entrypoint(`impulcifer_webview`, 선택적 `webview` extra)이며 standalone 전환은 후속 단계로 미룬다.
+
+## 2.8.1 - 2026-07-10
+### 주석 대청소 — 이력 내레이션·재진술·죽은 주석 제거
+
+#### 🔧 빌드 / 설정 변경
+- **저장소 전체 주석 정리(동작 무변경)**: 전 모듈의 주석 약 2,000건을 전수 분류해, 코드를 그대로 되읽는 재진술 주석·리팩토링 고고학("audit #115에서 분리", "Phase 2 Optimization", "이전에는 ~였다" 류)·주석 처리된 죽은 코드·현재 코드와 모순되는 낡은 주석 약 300건을 삭제/정정했다. DSP 수치 근거, 플랫폼 quirk, byte-exactness 불변식, 회귀 테스트의 버그 사유 주석은 전부 보존했고, byte-identical 불변식 서술은 `core/pipeline.py` 모듈 docstring을 정본으로 통합했다. 중복 사유 주석(Win32 스크롤 잔상 4중복, sweep set 용량 2중복 등)은 정본 한 곳만 남기고 포인터로 축약했다. AST 등가성 검사와 Tier 3 BRIR SHA-256 자기 비교로 실행 코드 무변경을 확인했다.
+- **CLI help 문자열의 티켓 마커 제거**: `--head_room`/`--jamesdsp`/`--hangloose` help 텍스트에 새어 있던 내부 티켓 번호 "(항목 4/6/7)"를 제거했다(사용자 노출 문자열 정리, BRIR 출력 무관).
+- **미참조 함수 제거**: `build_scripts/build_nuitka.py`의 `clean_specific_build_folders()`는 유일한 호출부가 주석 처리된 상태였고 이번 죽은 주석 정리로 완전 미참조가 되어 함수와 미사용 `shutil` import를 삭제했다(`--remove-output`이 output-dir 정리를 이미 담당).
+
+## 2.8.0 - 2026-07-10
+### EqualizerAPO(-XT) 설정 텍스트를 Custom EQ 입력으로 지원
+
+#### ⭐ 새로운 기능 / 개선
+- **EqualizerAPO 설정 파서 추가 (`core/eqapo.py`)**: Custom EQ 파일(`eq.csv`/`eq-left.csv`/`eq-right.csv`)에 AutoEQ 결과 CSV뿐 아니라 EqualizerAPO(-XT) 설정 텍스트를 넣을 수 있다. 형식은 확장자가 아니라 내용으로 판별하므로 GUI에서 `.txt`를 골라 `eq.csv`로 복사되는 기존 흐름도 그대로 동작하며, `eq.txt`/`eq-left.txt`/`eq-right.txt` 파일명도 새로 인식한다(.csv가 우선).
+- **적용 가능한 필터는 적용, 불가능한 명령은 바이패스**: `Filter`(PK/PEQ/Modal/LP/LPQ/HP/HPQ/BP/LS/LSC/LS 6dB/LS 12dB/HS/HSC/HS 6dB/HS 12dB/NO/AP 바이쿼드와 `ON IIR Order n Coefficients ...`), `Preamp`, `GraphicEQ`, `Convolution`은 크기 응답으로 합성해 적용한다. `MultiConvolution`/`Copy`/`Delay`/`Eval`/`VSTPlugin`과 평가 불가능한 `If` 블록 내부는 라인 번호·사유와 함께 경고 로그로 바이패스를 보고한다. `Device`/`Stage` 스코핑은 평가할 수 없어 무시(경고 후 계속 진행)하며, 비활성 필터(`OFF`, `ON None`)는 조용히 건너뛴다.
+- **바이쿼드 수식은 EqualizerAPO-XT 소스와 동치**: RBJ Audio EQ Cookbook 계수(filters/BiQuad.cpp), `gainAt()` 폐형식, 셸프 기본 S=0.9·LP/HP/BP 기본 Q=1/√2·NO 기본 Q=30, 슬로프/12 규칙과 코너→중심 주파수 변환(filters/BiQuadFilter.cpp), REW 천단위 구분자(`Fc 1.250 Hz`=1250 Hz)와 콤마 소수점, GraphicEQ의 로그 주파수 축 선형 보간(helpers/GainIterator.cpp)까지 동일하게 이식했고 scipy freqz 교차 검증 테스트로 고정했다(`tests/test_eqapo.py`, 79 tests).
+- **`Channel:` 스코핑 지원**: `Channel: L`/`R`/`1`/`2`/`ALL`로 스코프가 나뉜 설정은 좌/우 EQ 곡선을 분리 생성해 각각 적용한다. `Include:`는 설정 파일 기준 상대 경로(또는 절대 경로)가 존재하면 재귀 파싱하고(순환/깊이 가드), 없으면 바이패스로 보고한다.
+- **i18n**: 감지/프리앰프/채널 분리/바이패스 로그용 `cli_eqapo_*` 키를 11개 로케일 파일 전부에 추가했고(en/ko 번역, 나머지 영어 fallback), `checkbox_custom_eq` 문구에 `.txt`를 반영했다.
+- **`Convolution:` 명령 지원**: IR 파일(WAV/FLAC 등 soundfile 지원 형식)의 크기 응답을 EQ 곡선으로 합성한다. EqualizerAPO(filters/IrCache.cpp)와 동일하게 설정 파일 기준 경로 해석(따옴표 제거·환경변수 확장), 샘플레이트 1 Hz 초과 불일치 시 미적용(경고 바이패스), 채널 i → IR의 i % ch 채널 매핑(스테레오 IR이면 좌/우 곡선 분리)을 따른다. 위상(시간 구조)은 크기 응답 파이프라인 특성상 반영되지 않는다.
+- **`If: sampleRate == 48000` 단순 조건 평가**: If/ElseIf/Else/EndIf 분기 상태 머신을 도입해 sampleRate 비교 조건(`==`, `!=`, `<`, `<=`, `>`, `>=`)은 실제로 평가하고 선택된 분기만 적용한다. 평가 불가한 조건(deviceName, 변수 등)이 나오면 해당 블록을 기존처럼 보수적으로 바이패스한다(중첩 지원).
+- **EqualizerAPO-XT 엔진 골든 출력 교차 검증**: XT 저장소 `Tests/AudioRegressionTests`의 설정+골든 레퍼런스(실제 C++ FilterEngine이 임펄스/DC 입력을 처리한 float32 출력)를 `tests/fixtures/eqapo/`로 벤더링하고, `tests/test_eqapo_reference.py`가 바이패스되지 않는 전 케이스(biquad/IIR/GraphicEQ/Preamp/Channel/Convolution)에서 합성 크기 응답이 실측 엔진 응답과 일치함을 검증한다(biquad 선형 오차 ≤1e-6, IIR/Convolution ≤1e-9). GraphicEQ는 이상 곡선 비교에 더해 엔진의 최소위상(mps)+반코사인 윈도우 FIR 합성 체인을 NumPy로 재현해 레퍼런스와 샘플 단위(atol 1e-6)로 대조한다.
+
+#### 🐛 버그 수정
+- **error 열 없는 평문 EQ 파일 크래시 수정**: `주파수 게인` 2열 평문 파일을 eq.csv로 주면 빈 error 배열이 EQ 워커의 브로드캐스트 오류로 이어지던 것을, raw를 적용할 EQ 게인 곡선으로 해석(error = -raw)하도록 수정했다.
+
+#### 🔧 빌드 / 설정 변경
+- **BRIR 무결성 판정 SHA-256 전환**: `tests/test_brir_integrity.py`의 해시 비교를 md5에서 SHA-256으로 교체하고, `CLAUDE.md`의 Tier 3 절차를 sha256sum + 기준 ref(`origin/master`) worktree 자기 비교 방식으로 갱신했다(문서의 stale md5 절대값 baseline 제거).
+- **CI에 free-threaded 3.14t 테스트 추가** (2026-07-10, CI/문서만 변경 — 버전 bump 없음): 테스트 매트릭스에 CPython 3.14t(free-threaded)를 추가해 `core/parallel_utils.py`의 ThreadPoolExecutor 병렬 경로가 실제 no-GIL 런타임에서 검증되도록 했다. 핵심 C 확장(numpy/scipy/matplotlib/soundfile/Pillow) 임포트 후에도 GIL이 꺼져 있는지 확인하는 가드 스텝을 포함해, 의존성이 GIL을 조용히 재활성화하면 잡이 실패한다. README와 `docs/README_PYTHON314.md`에 free-threaded 권장 최소 패치(CPython 3.14.4+, 3.14.0의 GC 일시정지 폭주·GC 성능 회귀·mimalloc 페이지 누수가 3.14.1~3.14.4에서 수정됨)를 문서화하고, 문서의 stale한 `release-cross-platform.yml` 참조를 `publish.yml`로 바로잡았다.
+- **CI에 BRIR 스레드 결정성(하이젠버그 트랩) 잡 추가** (2026-07-10, CI/테스트만 변경 — 버전 bump 없음): `tests/test_brir_thread_determinism.py`가 free-threaded 런타임에서 데모 BRIR을 같은 환경에서 3회 반복 생성해 모든 출력 `.wav`의 SHA-256이 실행 간 byte-identical인지 검증한다(기본+vbass 두 시나리오). 스레드 병렬 경로의 데이터 레이스는 간헐적으로만 출력을 오염시키므로, 전용 `brir-thread-determinism` 잡이 매 CI 실행마다 반복해 포획 확률을 누적시킨다. 실패 시 어떤 파일이 어떤 해시로 갈라졌는지 run별로 보고한다.
+
+## 2.7.9 - 2026-06-13
+### GUI 디자인 적대적 리뷰 + 접근성 명암비 수리
+
+Stable/Studio 두 스킨의 디자인을 실제 렌더링 스크린샷 30장으로 캡처해 6개 렌즈(WCAG 2.2 명암비/타깃 크기, Nielsen 휴리스틱, 시각 위계, dark/light 패리티, 스킨 비교)로 적대적 리뷰하고, 각 결함을 인용 스크린샷의 픽셀로 재검증했다(후보 34건 → 생존 23건/기각 11건). 명암비는 디자인 토큰의 sRGB 상대휘도로 실제 계산했다. 결과는 `docs/design_review/`에 문서화하고, 객관적이고 저위험인 HIGH/MEDIUM 접근성 결함 3건을 코드에 반영했다(테마 토큰·라벨 색만 변경, BRIR 파이프라인 무관).
+
+#### 🐛 버그 수정
+- **드롭다운 흰 텍스트 명암비 AA 미달 수리 (HIGH)**: 모든 `CTkOptionMenu`(Host API·재생/녹음 장치·채널 강제 지정·언어·테마)의 흰 텍스트가 accent `#3B82F6` 채움 위에서 3.37:1로 WCAG 2.2 SC 1.4.3(4.5:1)에 미달했다(양 스킨·양 테마 공통). 채움을 accent-strong `#2563EB`로 darken해 **4.69:1**로 통과시키고, chevron 영역은 `#1d4ed8`/`#1e40af`로 한 단계 더 어둡게 해 분리 어포던스를 유지했다(`gui/theme/pulse.json`).
+- **정보 탭 버전 문자열 명암비 수리 (HIGH)**: `VERSION … PYTHON …` 모노 문자열이 accent 색이라 라이트 카드에서 2.78:1, 다크에서 4.15:1로 둘 다 미달했다. `accent` → `fg-1`로 바꿔 라이트 ~9:1, 다크 ~7.5:1로 통과(`gui/tabs/info_tab.py`, `gui/skins/studio_info_tab.py`).
+- **Studio 활성 사이드바 라벨 명암비 수리 (MEDIUM)**: 활성 nav 항목이 accent-on-accent-soft 약 3.0:1(양 테마 미달)이라 역설적으로 비활성 항목보다 읽기 어려웠다. 활성 텍스트를 `fg-0`(고대비 잉크)로 바꾸고 accent-soft 알약 + bold로 선택 표시를 유지했다(`gui/skins/studio_shell.py`).
+
+#### ⭐ 새로운 기능 / 개선
+- **디자인 리뷰 문서화**: `docs/design_review/`에 방법론·심각도 요약(README), 접근성(WCAG) 상세, 일관성·UX 권고 + 기각 항목("나빠 보이지만 괜찮음") + 거짓 양성 정정을 정리했다. 미반영 MEDIUM/LOW(스킨 간 CTA 색 표준화, 처리옵션 가이드 패리티 등)는 후속 권고로 남겼다.
+
+## 2.7.8 - 2026-06-10
+### GUI 스크롤 잔상(고스팅) 수리
+
+스크롤 성능 최적화(`install_smooth_scrolling`) 이후에도 빠른 휠 스크롤 시 행이 복제되고 글자가 반토막 나는 blit 잔상이 화면에 남는 버그를 수리했다. 원인: Tk 캔버스의 다시 그리기는 idle 콜백이라, 연속 휠 이벤트가 이벤트 큐를 점유하면 "픽셀 밀기(blit)"만 누적되고 "다시 그리기"가 따라붙지 못한다 — 기존 프레임 병합은 밀기 횟수만 줄였을 뿐 밀기-그리기 짝을 보장하지 않았다.
+
+#### 🐛 버그 수정
+- **휠 flush 직후 강제 리페인트**: 프레임당 1회 병합된 스크롤 적용 직후 `update_idletasks()`로 캔버스 리드로우를 즉시 실행해, 모든 픽셀 이동이 자신의 다시 그리기와 짝을 이루도록 했다(`update_idletasks`는 idle 콜백만 처리하므로 이벤트 재진입 없음).
+- **settle 리페인트 보험**: 스크롤 움직임이 멈추고 150ms 후 scrollregion을 재적용해 전체 캔버스 리드로우를 1회 유도(Tk `ConfigureCanvas`는 값이 같아도 항상 전체 redisplay를 스케줄), 그래도 스쳐 지나간 잔상을 마지막에 청소한다. O(N) `bbox` walk는 제스처당 1회뿐이라 hot path 비용 불변.
+- **스크롤바 경로 병합 누락 수리**: `CTkScrollableFrame.__init__`이 스크롤바 `command=`에 **원본** `yview`를 캡처해 두므로, 스크롤바 드래그와 스크롤바 위 휠은 프레임 병합·settle을 모두 우회하고 있었다. `install_smooth_scrolling`이 스크롤바 command를 래퍼로 재배선해 두 입력 경로도 같은 처리를 받는다.
+- 회귀 테스트: flush-리페인트 짝/settle 스케줄(`FakeCanvas` 단위), 스크롤바 command 재배선(실디스플레이 기능 테스트)을 `tests/test_scroll_perf.py`에 고정. 기존 8개 계약(병합 cadence, 스크롤 중 bbox/configure 0회 등) 전부 유지.
+
+## 2.7.7 - 2026-06-09
+### f-9 후속 — ffmpeg_utils 셸 하위호환 복원
+
+PR #123(2.7.6)에 달린 Codex 자동 리뷰(P2)를 검증한 결과, `core/ffmpeg_utils.py`를 `ffmpeg_discovery`/`audio_truehd`로 분할(#115-9)하면서 함수만 재노출하고 lazy 모듈 글로벌(`FFMPEG_PATH`/`FFPROBE_PATH`/`_FFMPEG_SETUP_DONE` 등)을 빠뜨려, 분리 전 `core.ffmpeg_utils.FFMPEG_PATH`를 직접 읽던 코드가 `AttributeError`를 보게 되는 회귀가 사실로 확인됐다. 셸은 스스로 "Backward-compatible re-export shim"을 표방하므로 이는 계약 위반이다.
+
+#### 🐛 버그 수정
+- **`ffmpeg_utils` 셸의 lazy 상태 재노출 복원**: PEP 562 모듈 `__getattr__`로 누락된 속성 읽기를 `core.ffmpeg_discovery`에 위임했다. 단순 `from ... import FFMPEG_PATH` 재노출은 import 시점의 `None`에 고정돼 `ensure_ffmpeg_available()`의 재할당을 추적하지 못하므로(stale `None`), 매 접근 시 discovery 모듈에서 live 값을 해석하는 `__getattr__`가 정답이다. 회귀 테스트(`tests/test_ffmpeg_lazy_setup.py`)로 셸이 discovery의 mutation을 추적함과 미존재 속성의 `AttributeError`를 고정. BRIR 출력 무관(md5 byte-identical 확인).
+
+#### 🔧 빌드 / 설정 변경
+- **자동 버전 bump + PyPI-성공 게이팅 릴리스 파이프라인**: 흩어져 있던 릴리스 워크플로(`publish.yml` + `python-publish.yml` + `release-cross-platform.yml`, master push마다 무조건 3-플랫폼 Nuitka 빌드)를 단일 게이트 파이프라인 `publish.yml` 하나로 통합했다. master push 시 `gate`(→ `.github/scripts/release_gate.py`)가 변경 경로를 검사해, 출하물 변경인데 수동 bump가 누락됐으면 PATCH를 자동 증가(`[skip ci]` 커밋)하고, 수동 bump(특히 MINOR/MAJOR)는 존중한다. 빌드(`build-windows`/`macos`/`linux`)는 `needs: publish-pypi`로 **PyPI 발행 성공 후에만** 시작하므로, docs/CI/tests만 바꾼 push는 PyPI·빌드를 모두 건너뛴다(러너 절약). PyPI Trusted Publisher OIDC 보존을 위해 파일명 `publish.yml` + `environment: PyPI`를 유지. 게이트 결정 로직은 `tests/test_release_gate.py`로 고정. 이중 PyPI publish 위험 제거. (런타임/출하물 무변경 → 버전 bump 없음.)
+- **격주 감사 모델 변경**: CI 자동감사(`biweekly-audit.yml`)가 사용하는 모델을 `claude-fable-5`로 변경. (CI 설정 변경 → 버전 bump 없음.)
+
+## 2.7.6 - 2026-06-09
+### 격주 감사(#113·#115) 잔여 deferred finding 해결
+
+2.7.5에서 미뤄둔 deferred finding 8개를 마저 해결했다. 모든 변경은 동작 보존(byte-exact) 리팩터 또는 테스트/문서 추가다. md5 민감 변경은 동일 머신에서 변경 전후 `hesuvi.wav`를 비교해 byte-identical임을 확인했다(`--vbass` `07eef9ef…`, 기본값 `cf37a9aa…`). 감사 액션 아티팩트를 전수 확인한 결과 이슈 본문에 누락된 추가 finding은 없었고(#110 런은 인증 실패로 산출물이 없었음), 본 릴리스는 #113/#115가 제기했으나 PR #119에서 미룬 항목들을 다룬다.
+
+#### ⭐ 리팩터링 / 개선
+- **`core/utils.py` 3-도메인 분할 (#115-8/A5)**: `core/audio_io.py`(WAV I/O + DSP, `magnitude_response`는 verbatim 이동), `core/font_setup.py`(matplotlib 한글 폰트), `core/plotting_utils.py`(플롯/PNG)로 분리하고 `core/utils.py`는 25+ 임포터를 위한 re-export 셸로 유지.
+- **`core/ffmpeg_utils.py` 분할 (#115-9)**: `core/ffmpeg_discovery.py`(검색/설치 + lazy globals)와 `core/audio_truehd.py`(TrueHD 디코드 + `read_audio`)로 분리, `ffmpeg_utils.py`는 re-export 셸. lazy-setup 회귀 테스트는 새 소유 모듈로 재지정(모든 단언 보존).
+- **`ImpulseResponse.shift()` 도입 (#113 A4)**: `hrir.py`에 5번 복붙돼 있던 샘플 시프트 관용구를 단일 signed `shift()` 메서드로 통합(numpy 연산 byte-identical).
+- **`HRIR.open_recording` 적재 로직 추출 (#115-4)**: 309줄 메서드의 적재 본문을 모듈 함수 `_ingest_recording`(→ `{speaker:{side:IR}}` 반환)으로 분리해 단위 테스트 가능하게 만들고, `open_recording`은 전제조건 검사 + 병합만 수행.
+- **번들 폰트 탐색 중복 제거 (#113 A5)**: `core/utils`·`gui/utils`의 폰트 디렉터리 탐색/스캔을 `infra.resource_helper`의 공유 헬퍼로 통합(탐색 순서 byte-identical).
+- **루트 문서 정리 (#113 DEBT-11)**: 장문 문서 5종(README_PYTHON314/TrueHD/microphone_deviation/BUILD_README/OPTIMIZATION_SUMMARY)을 `docs/`로 이동, 링크·테스트·빌드 참조 갱신. 번들되는 `README.txt`는 루트 유지.
+
+#### 검증 / 테스트
+- **DSP 단계별 수치 테스트 추가 (#115-1)**: `tests/test_dsp_stages.py`로 `normalize()` 게인·`align_ipsilateral_all` ITD·`ImpulseResponse.shift()`를 플랫폼 무관하게 고정(런타임 코드 무변경).
+- **AutoEQ 단위 테스트 추가 (#115-5)**: `tests/test_frequency_response_core.py`로 파이프라인이 실제 사용하는 `generate_frequencies`/smoothing/biquad/`equalize`/min-phase 경로를 검증(벤더 모듈 무변경).
+
+## 2.7.5 - 2026-06-09
+### 격주 감사(#113·#115) 해결 — 통합 리팩터링
+
+이슈 #113·#115(같은 날짜의 격주 감사) finding을 통합 검토해 해결했다. `tests/test_audit_contracts.py`의 계약은 그대로 green을 유지하며, BRIR 출력은 동일 머신에서 변경 전후 `hesuvi.wav`를 생성·md5 비교하여 byte-identical임을 확인했다(`07eef9ef…`). 이미 HEAD에서 해결돼 있던 finding(GUI/CLI 기본값 drift, 잔존 임시 파일)은 제외했다.
+
+#### ⭐ 리팩터링 / 개선
+- **`main()` 파라미터 4중 중복 제거 (DEBT-2)**: `impulcifer.main()`을 `**kwargs` → `ProcessingConfig.from_kwargs()` 단일 경로로 통합했다. 명시적 32-인자 시그니처와 수기 forwarding을 제거해 파라미터 정본을 `ProcessingConfig` 한 곳으로 모았다(모든 호출자가 이미 `main(**dict)` 형태였고, 35개 기본값이 dataclass와 일치함을 사전 검증).
+- **`BRIRPipeline` 심화 (DEBT-3/#115-4)**: pass-through에 불과하던 `BRIRPipeline.run()`이 ~450줄 단계 시퀀스를 직접 보유하도록 본문을 이관했다(DSP 헬퍼는 `impulcifer.py`에 두고 지연 import로 단방향 의존 유지). `_run_pipeline_legacy` 자유 함수는 제거.
+- **`parallel_map` 이중 구현 통합 (#115-3)**: `parallel_utils`/`parallel_processing`의 중복 executor 루프를 공유 `_run_parallel_map`으로 합쳤다. 각 진입점의 반환값·결과 순서·executor 선택(process-first vs thread-first)·worker 수 기본값·단일 항목 단축은 그대로 보존. (thread-first 경로에서 worker 실패 시 항목별 진단 `print`와 `show_progress=True`일 때의 최종 요약 `print`는 제거됐다 — BRIR 출력과 무관하고 production 호출자/테스트가 사용하지 않는 경로다.)
+- **ipsilateral 페어 상수화 (#113 DEBT-6)**: `align_ipsilateral_all`용 (좌,우) 페어 목록을 `core.constants.IPSILATERAL_PAIRS` 단일 정의로 통합(기존 dead default와 production 호출의 순서 drift 제거). 구조가 다른 onset-group 목록은 의도적으로 분리 유지.
+- **죽은 코드 제거**: 도달 불가능한 `channel_generation.generate_missing_channels`와 빈 `AUTO_GENERATABLE_CHANNELS`(#115-7), `impulcifer_cli.py`와 byte-동일한 고아 파일 `impulcifer-cli.py`(#113 DEBT-8), 사용되지 않던 `mic_deviation_phase/adaptive/anatomical` config 필드(#113 DEBT-7/#115-6)를 삭제.
+- **문서 정정**: `CLAUDE.md`의 `updater_core.py` 설명을 실제 모듈 구성(58줄 re-export shim + 분리된 모듈들)으로 갱신(DEBT-9/#115-10)하고, 폐기된 `main()` 시그니처 규칙을 새 `**kwargs`/`ProcessingConfig` 계약으로 대체했다.
+
+#### 🐛 버그 수정
+- **GUI 워커 스레드 예외 로깅 (#113 DEBT-4)**: `gui/dialogs.py`의 9개 `except Exception: pass`(진행률·로그·완료/취소 UI 갱신)가 예외를 조용히 삼키던 것을 `_run_ui_safe`/`_schedule_ui`로 교체했다. 종료 중 발생하는 위젯 파괴 `TclError`는 debug, 그 외 예외는 warning으로 남겨 콜백 버그가 보이지 않게 사라지지 않도록 했다(동작은 그대로 non-fatal).
+
+#### 검증
+- 전체 테스트 스위트 통과(181 pass / 0 fail / 3 skip, 유일한 환경 의존 실패는 Tk 미설치로 인한 `test_scroll_perf` flake). A-1은 TDD(red→green)로 진행했다.
+- BRIR md5 byte-exact를 로컬에서 변경 전후 비교로 확인했고, CI `brir-integrity`(Linux/CPython 3.13)로 교차 검증한다.
+
+## 2.7.4 - 2026-06-08
+### 감사 RED 테스트 후속 수정
+
+#### 🐛 버그 수정
+- **GUI room-correction 기본값 단일화**: Stable/Studio GUI의 `specific_limit`·`generic_limit` widget 초기값과 invalid/empty fallback을 `ProcessingConfig` 기본값에서 읽도록 바꿔 CLI와 GUI가 서로 다른 room-EQ limit을 쓰는 drift를 제거했다.
+- **`ProcessingConfig` seam 누락 보정**: `impulcifer.main()`이 GUI 호환을 위해 계속 받는 v4.0 legacy mic-deviation 인자 3개를 `ProcessingConfig`에 `cli_skip` field로 포함하고 legacy runner도 받을 수 있게 하여 공개 kwargs가 config seam에서 조용히 사라지지 않게 했다.
+- **`parallel_processing.parallel_map` 초기화 계약 보강**: `core.parallel_processing.parallel_map`도 `initializer`/`initargs`를 받아 worker 초기화가 필요한 호출을 지원하도록 맞췄다.
+
+#### 검증
+- **감사 회귀 테스트 추가**: 이슈 #113/#115에서 확인된 세 drift를 `tests/test_audit_contracts.py`로 고정했다.
+- **대상 테스트 통과**: `tests/test_audit_contracts.py`, `tests/test_parallel_processing.py`, GUI 인접 테스트, `ProcessingConfig` 기본값 동기화 테스트를 통과했다.
+
+## 2.7.3 - 2026-06-03
+### download-artifact를 실제 Node.js 24 메이저(v7)로 정정
+
+#### 🔧 빌드 / 설정 변경
+- **`actions/download-artifact` v6→v7**: GitHub 러너의 체크런 어노테이션을 전수 조회한 결과 download-artifact v6 역시 `node20`임이 확인됐다(upload-artifact v5와 동일한 함정). download-artifact가 `node24`로 전환된 첫 메이저는 v7이므로, 활성 사용처 3곳(`publish.yml`, `python-publish.yml`, `release-cross-platform.yml`)을 v7로 정정했다. 이름·경로·전체 다운로드 의미는 v6과 동일하다. 이로써 9개 액션 전부 각 태그의 `action.yml` `runs.using`이 `node24`임을 직접 검증했으며(checkout v5·setup-python v6·cache v5·upload-artifact v6·download-artifact v7·setup-dotnet v5·setup-uv v7·action-gh-release v3, codecov v6은 composite), 커밋의 모든 체크런 어노테이션에 Node.js 20 경고가 0건임을 확인했다.
+
+## 2.7.2 - 2026-06-03
+### upload-artifact를 실제 Node.js 24 메이저(v6)로 정정
+
+#### 🔧 빌드 / 설정 변경
+- **`actions/upload-artifact` v5→v6**: 2.7.1에서 upload-artifact를 v5로 올렸으나, GitHub 러너의 런타임 어노테이션 결과 v5는 여전히 `node20`임이 확인됐다(`runs.using: node20`). upload-artifact가 `node24`로 전환된 첫 메이저는 v6이므로, 8개 사용처(`build-linux.yml`, `build-macos.yml`, `release-cross-platform.yml`×4, `publish.yml`, `python-publish.yml`)를 모두 v6으로 정정했다. v6은 v4/v5와 업로드 의미(이름·경로·`if-no-files-found`·`retention-days`)가 동일하며 GitHub-hosted 러너의 최소 러너 버전(2.327.1)을 충족한다. 나머지 8개 액션(checkout v5, setup-python v6, cache v5, download-artifact v6, setup-dotnet v5, setup-uv v7, action-gh-release v3, codecov v6)은 각 태그의 `action.yml`에서 `node24`임을 재검증했다.
+
+## 2.7.1 - 2026-06-03
+### GitHub Actions Node.js 24 마이그레이션
+
+#### 🔧 빌드 / 설정 변경
+- **Node.js 20 기반 액션 일괄 업그레이드**: GitHub이 2026년 9월 16일 러너에서 Node.js 20을 제거하고 6월부터 Node.js 24를 기본값으로 강제함에 따라, 모든 워크플로(`test.yml`, `release-cross-platform.yml`, `build-linux.yml`, `build-macos.yml`, `publish.yml`, `python-publish.yml`)의 액션을 Node.js 24를 지원하는 첫 메이저 버전으로 올렸다. `actions/checkout` v4→v5, `actions/setup-python` v5→v6, `actions/cache` v4→v5, `actions/upload-artifact` v4→v5, `actions/download-artifact` v4→v6, `actions/setup-dotnet` v4→v5, `astral-sh/setup-uv` v5→v7, `softprops/action-gh-release` v2→v3. 기존 동작을 보존하기 위해 최신 메이저가 아니라 "Node 24를 처음 지원하는" 메이저를 선택했다(예: setup-uv는 v6이 아직 node20이라 v7 채택, download-artifact는 v5가 node20이라 v6 채택).
+- **codecov-action v4→v6 + 입력명 갱신**: `codecov/codecov-action`을 node20인 v4/v5에서 node24 composite 액션인 v6으로 올리고, v5에서 제거된 단수형 입력 `file:`을 복수형 `files:`로 교체했다(`fail_ci_if_error: false`라 업로드 실패가 CI를 막지 않는 best-effort 동작은 유지).
+- Docker 액션인 `pypa/gh-action-pypi-publish@release/v1`은 Node 런타임 대상이 아니라 경고가 발생하지 않으므로 그대로 두었다.
+
+## 2.7.0 - 2026-05-30
+### 마이크 착용 편차 보정 음향학 기반 재설계 (v4.0)
+
+#### ⭐ 새로운 기능 / 개선
+- **방향 무관 양이(interaural) 불일치 추정으로 교체**: 기존 v3.0은 스피커별 기대 ILD 부호표(FL=+1, FR=−1, FC=0 …)와 "기대와 반대 방향 편차의 중앙값" 휴리스틱으로 마이크 오차를 추정했다. 그러나 오프센터 스피커의 좌우 차이는 대부분 실제 ILD(양이 레벨차)이며 방향·주파수에 따라 비단조적으로 변하므로(Cai/Rakerd/Hartmann 2015), 이 방식은 진짜 ILD를 마이크 오차로 오인하는 편향이 있었다. v4.0은 정면(FC, 기대 ILD≈0) 또는 확산음장(CTF) 파워 평균을 기준으로 **방향 무관 성분만** 추정한다(`anchor='auto'`).
+- **풀 FFT + 분수옥타브 평활**: 250 Hz~8 kHz의 6개 옥타브 점만 쓰던 것을, 직접음의 풀 FFT 크기응답을 1/6 옥타브로 평활하는 방식으로 바꿨다. 3.7 kHz 이상 협대역 개인차(Denk 2021; Middlebrooks 1999)를 담을 수 있다. 보정 대역(기본 200 Hz~16 kHz) 밖은 raised-cosine으로 테이퍼링하고 최대 보정량으로 클램프해 노치 역전을 방지한다(Bücklein 1981).
+- **ITD 보존 + 검증된 적용 경로**: 좌우를 ±Δ/2 최소위상 FIR로 크기만 보정해 ITD(양이 지연)를 보존한다(Kistler & Wightman 1992; Kulkarni/Isabelle/Colburn 1999). 적용은 `signal.convolve(mode='same')` 대신 검증된 `ImpulseResponse.equalize`를 사용한다.
+
+#### 🐛 버그 수정
+- **헤드폰 보상과의 이중 보정 차단**: 같은 인이어 마이크를 같은 위치에 두고 측정하면 마이크 전달함수는 헤드폰 보상(`out = HRTF/HpTF`)에서 귀별로 소거된다(Hammershøi & Møller 2005). 기존에는 보상 *이전*에 마이크 보정이 돌아 좌우 밸런스를 이중으로 건드렸다. 이제 `do_headphone_compensation`이 켜져 있으면 마이크 보정을 건너뛰고 안내 로그(`cli_mic_deviation_skipped_hpcomp`)를 출력한다.
+
+#### 🔧 빌드 / 설정 변경
+- **무력화(no-op) CLI 옵션 제거**: 동작에 영향이 없던 v2.0 호환 플래그 `--no_mic_deviation_phase_correction`, `--no_mic_deviation_adaptive_correction`, `--no_mic_deviation_anatomical_validation`을 `core/pipeline.py`·`gui/brir_args.py`에서 제거했다. `impulcifer.main()` 시그니처는 GUI 호환을 위해 인자를 받기만 하고 무시한다.
+- **i18n**: `cli_correcting_deviation`을 v4.0으로 갱신하고 `cli_mic_deviation_skipped_hpcomp` 키를 11개 로케일에 추가, `tooltip_mic_deviation` 문구를 갱신했다.
+
+#### 검증
+- **기본 BRIR 출력 무결성 유지**: 이 기능은 기본값이 꺼짐이며 헤드폰 보상이 켜진 기본 경로에서는 실행되지 않으므로, 데모 `hesuvi.wav`의 md5는 기본값 경로·`--vbass --vbass_freq=250` 경로 모두 master와 동일하다(vbass: `d295982d021a6d16ab2c194c3517c162`).
+
+## 2.6.10 - 2026-05-29
+### 내장 AutoEQ 임포트/연산 경량화
+
+#### ⚡ 성능 개선
+- **AutoEQ 임포트에서 matplotlib/Pillow/tabulate 지연 로딩**: `autoeq/frequency_response.py`와 `autoeq/biquad.py`가 모듈 최상위에서 `matplotlib.pyplot`·`PIL.Image`·`tabulate`를 끌어오던 것을, 실제로 사용하는 메서드(`plot_graph`·`write_readme`·`main`) 안으로 옮겨 지연 import로 전환했다. 특히 `biquad.py`가 데모용 `main()`만을 위해 matplotlib을 최상위에서 import하던 탓에, 플롯과 무관한 EQ 워커가 `FrequencyResponse`만 import해도 matplotlib까지 강제로 로드되던 문제를 해소했다. 그 결과 EQ 전용 ProcessPool 워커(`core/parallel_workers.py`)의 신규 프로세스 import 비용이 약 1.07s → 0.82s로 감소하며, spawn 시작 방식(Python 3.14 기본, macOS/Windows)에서 워커 수에 비례한 시작 지연이 줄어든다.
+- **`_init_data` 벡터화**: 모든 `FrequencyResponse` 생성 시 데이터 배열을 원소 단위 파이썬 루프(`[None if ... for x in data]`)로 재구성하던 것을, NaN이 없는 숫자형 배열은 `np.asarray` 빠른 경로로 처리하도록 바꿨다. None/NaN을 포함한 배열은 기존 경로를 그대로 유지해 dtype·값이 비트 단위로 동일하다.
+- **`_sort` 중복 주파수 검사 벡터화**: 정렬 후 인접 주파수 중복을 파이썬 루프로 검사하던 것을 `np.diff` 기반 벡터 비교로 교체했다. 중복이 있을 때 보고하는 주파수 값과 예외 동작은 동일하다.
+
+#### 검증
+- **BRIR 출력 무결성 유지**: 데모 데이터로 생성한 `hesuvi.wav`의 md5가 기본값 경로·`--vbass --vbass_freq=250` 경로 모두에서 master와 비트 단위로 동일함을 확인했다(vbass: `d295982d021a6d16ab2c194c3517c162`). `_init_data`는 None/NaN/정수/object 배열 등 엣지 케이스에서도 원본 구현과 dtype·값이 일치함을 별도 검증했다.
+
+## 2.6.9 - 2026-05-29
+### 일본어 GUI 폰트 적용 + 미사용 세리프 폰트 정리
+
+#### 버그 수정
+- **일본어에서 Pretendard 적용**: 일본어(`ja`)로 전환하면 GUI가 번들된 `PretendardJPVariable.ttf`(Pretendard JP) 대신 OS 기본 폰트로 떨어지던 문제를 고쳤다. 일본어는 이제 한국어/영어와 동일하게 Pretendard 계열(JP 컷)로 렌더된다. 표준 Pretendard 빌드에는 한자(日 語 国 気 …)가 전혀 들어 있지 않아 일본어 본문이 전부 두부(豆腐) 글리프로 깨졌기 때문에, 한자까지 포함한 유일한 번들 폰트인 Pretendard JP를 일본어 전용으로 선택하도록 했다.
+
+#### 정리
+- **미사용 세리프 폰트 제거**: 어떤 런타임 코드도 참조하지 않던 `font/Serif/`(Source Han Serif VF 5종 + Subset 5종, 약 348MB)를 저장소에서 삭제했다. 폰트 스캐너는 `font/` 최상위만 비재귀로 훑으므로 이 폴더는 등록되지도 사용되지도 않은 채 git과 Nuitka standalone 빌드만 부풀리고 있었다.
+- **JP 컷 선택 로직 정리**: `_find_pretendard_font_file(prefer_jp=...)`로 일본어/그 외 언어가 각각 JP 컷·표준 컷을 명시적으로 고르게 하여, 한국어/영어가 실수로 JP 패밀리에 매칭되거나 일본어가 한자 없는 표준 Pretendard로 폴백하는 경로를 차단했다.
+
+#### 검증
+- **폰트 선택 테스트 추가**: `tests/test_gui.py`에 일본어가 `Pretendard JP Variable`로 해석되는지, JP 컷을 못 쓸 때 표준 Pretendard가 아니라 OS 폰트(None)로 폴백하는지, `_find_pretendard_font_file`이 `prefer_jp`에 따라 올바른 컷을 고르는지 검증하는 케이스를 추가했다.
+
+## 2.6.8 - 2026-05-29
+### Sweep 세트를 통합 7.1 + 그룹별 스테레오 파일로 재정비
+
+#### 버그 수정
+- **Sweep 세트 결과물 수정**: 기존 sweep 세트 생성 기능이 그룹별로 14채널(7.1.6) 파일을 내놓아 대부분의 출력 장치에서 재생조차 되지 않던 문제를 고쳤다. 이제 한 번의 생성으로 두 가지 형태를 함께 내놓는다.
+  1. **통합 7.1 파일 1개** (`sweep-seg-FL,FR,FC,SL,SR,BL,BR-7.1-…wav`, 8채널): 진짜 멀티채널 출력 장치 보유자가 한 번에 녹음하면 Impulcifer가 단일 `FL,FR,FC,SL,SR,BL,BR.wav` 녹음을 스피커별로 분할한다.
+  2. **그룹별 2채널 스테레오 파일들** (`sweep-seg-FL,FR-stereo-…wav` / `FC` / `SL,SR` / `BL,BR`): 스테레오만 있는 사용자가 스피커 한 쌍을 각 그룹 위치로 옮겨가며 일반 2채널 장치로 멀티채널 측정을 흉내 낼 수 있다.
+- **파일명에서 하이트 채널 암시 제거**: 생성되는 모든 sweep 파일명에서 `7.1.6` 태그를 없애고 `7.1` / `stereo`만 남겨, 측정 대상이 7개 지상 스피커뿐임을 분명히 했다. `sweep_sequence()`의 `7.1.6`(14채널) 분기도 함께 제거했다.
+
+#### 개선
+- **`sweep_sequence()`의 `stereo` 일반화**: `core/impulse_response_estimator.py`의 `stereo` 트랙 구성이 이제 임의의 한/두 스피커를 좌/우 채널에 위치 순서대로 매핑한다(`speakers[0]`→좌, `speakers[1]`→우). 기존 `[FL, FR]` 동작은 그대로 유지되며, `[SL, SR]` / `[BL, BR]` / `[FC]` 같은 그룹도 스테레오 파일로 생성할 수 있다.
+
+#### 검증
+- **회귀 테스트 갱신**: `tests/test_sweep_set_generator.py`를 새 결과물(스테레오 그룹 + 통합 7.1)에 맞게 다시 작성하고, 파일명에 `7.1.6`이 남지 않는지, 녹음 파일명 도출이 올바른지(`FL,FR,FC,SL,SR,BL,BR.wav` 포함), 스테레오 sweep이 재배치 그룹을 지원하는지 검증한다.
+
+## 2.6.7 - 2026-05-20
+### i18n 문구와 업데이트 완료 상태 정리
+
+#### 버그 수정
+- **자동 업데이트 완료 표시 수정**: pip 업데이트가 끝난 뒤에도 완료 대화상자와 상태 표시줄에 “업데이트 시작됨”으로 나오던 문구를 “업데이트 완료”로 고쳤습니다.
+- **업데이트 상태 키 분리**: pip 설치 완료, Velopack 재시작 준비, 레거시 설치 프로그램 열림을 서로 다른 i18n 키로 분리했습니다. 이제 진행 단계마다 맞는 제목과 안내문을 표시합니다.
+- **GIL 상태 안내 수정**: GIL 상태 API를 확인할 수 없는 경우를 “3.14 이전”으로 단정하지 않고, API를 사용할 수 없다고 안내합니다.
+
+#### 정리
+- **locale 번역 보강**: 영어 원문으로 남아 있던 녹음 상태, Studio 화면, 처리 옵션, 업데이트 완료 문구를 독일어, 스페인어, 프랑스어, 일본어, 한국어, 러시아어, 중국어 간체/번체에 맞춰 정리했습니다.
+- **마이크 편차 보정 문구 갱신**: 사용자에게 보이는 v2.0 표기를 v3.0 교차 검증 기반 구현에 맞게 고쳤습니다.
+
+#### 검증
+- **i18n 무결성 테스트 강화**: 모든 locale 파일의 키 일치 여부뿐 아니라 placeholder 보존, 업데이트 완료 문구 회귀, 영어 fallback 잔여 여부를 확인하도록 테스트를 넓혔습니다.
+
+## 2.6.6 - 2026-05-17
+### 패키징 정리, CLI/Studio 회귀 수정, subset 출력 최적화
+
+#### 성능 개선
+- **subset WAV 출력 메모리 사용량 절감**: `HRIR.write_wav()`가 `track_order`로 요청된 채널만 순서대로 쌓도록 변경해 JamesDSP, TrueHD, Hangloose 같은 부분 출력에서 전체 30채널 HRIR을 먼저 materialize하지 않도록 했다.
+- **Hangloose 출력 deep copy 제거**: 스피커별 출력은 HRIR 전체를 복제하지 않고 `write_wav(track_order=...)`만 사용하도록 변경했다.
+- **JamesDSP 출력 복제 범위 축소**: `HRIR.subset(..., copy_irs=True)` 헬퍼를 추가해 FL/FR 네 IR만 복사한 뒤 정규화하도록 변경했다.
+- **ProcessPool equalization pickle 비용 감소**: equalization worker 공통 입력을 initializer context로 한 번만 전달하고, 각 task에는 speaker/side만 전달하도록 정리했다.
+- **병렬 정책 정렬**: `parallel_processing.py`도 `sys._is_gil_enabled()` 기반 감지를 공유해 Python 3.13 free-threaded 빌드를 올바르게 인식한다.
+
+#### 버그 수정
+- **CLI i18n 키 노출 방지**: CLI logger가 localization manager를 명시적으로 받지 않아도 `cli_*` 진행 메시지를 자동 번역하도록 수정했다.
+- **녹음 분석 debug 출력 기본 비활성화**: `HRIR.open_recording()`의 대량 분석 출력은 debug/plot 경로에서만 보이도록 숨겼다.
+- **Studio Custom EQ 파일 선택 반영**: Studio에서 선택한 `eq.csv`, `eq-left.csv`, `eq-right.csv`를 처리 전에 녹음 폴더의 backend canonical 파일명으로 복사해 UI 선택과 실제 처리가 어긋나지 않게 했다.
+- **Studio 입력 상태 보존**: Stable/Studio 전환과 언어 변경 rebuild에서 Recorder/Impulcifer 입력값을 가능한 범위 안에서 이전한다.
+- **Studio hardcoded label 제거**: room limit, FR combination, virtual bass crossover/sub HP/polarity 라벨을 기존 i18n 키로 전환했다.
+- **레거시 Pretendard 경로 정리**: 레거시 GUI와 리소스 헬퍼가 `PretendardVariable.ttf`를 우선 스캔하도록 변경했다.
+
+#### 빌드 / 설정 변경
+- **대용량 검증 산출물 제외**: `_verification/`, `.worktrees/`, `.claude/worktrees/`를 git/build 제외 목록에 추가해 source archive와 review diff에 로컬 산출물이 섞이지 않도록 했다.
+
+#### 정리
+- **Stable/Studio BRIR 인자 조립 통합**: 두 skin의 `impulcifer.main()` kwargs 조립을 `gui/brir_args.py`로 모아 option drift를 줄였다.
+- **CHANGELOG release heading 정리**: 중복된 2.5.0/2.4.18 heading과 날짜 순서를 정리하고 이를 static test로 고정했다.
+- **README 정리**: 성능 홍보식 문구와 오래된 안내를 걷어내고, 실제 CLI 옵션과 `LICENSE` 저작권 표기에 맞춰 문서를 다시 정리했다.
+- **README 연결 문서 정리**: TrueHD/MLP, 마이크 착용 편차 보정, Python 3.14/Nuitka 문서를 현재 코드 기준으로 다시 작성하고 오래된 성능 배속 주장과 v2 보정 설명을 제거했다.
+
+## 2.6.5 - 2026-05-16
+### 🐛 PyPI 로케일 해석 버그 수정 — GUI가 i18n 키 원문으로 표시되던 문제
+
+#### 🐛 버그 수정
+- **PyPI 업그레이드 환경에서 모든 GUI 문자열이 번역되지 않던 치명적 버그**: `_find_locales_dir()`가
+  존재하지 않는 패키지명 `impulcifer_py313`으로 `importlib.resources.files()`를 호출해 항상
+  `ModuleNotFoundError`로 실패했고, 그 뒤 후보 경로를 단순히 `.exists()`로만 검사했다. 이 때문에
+  2.4.27 이전 shared-data 설치에서 업그레이드 시 남는 **빈** `<sys.prefix>/impulcifer_py313/locales`
+  디렉터리가 선택되어, `app_title`·`sidebar_recorder` 등 모든 라벨이 i18n 키 원문 그대로 노출됐다.
+  실제 패키지명 `i18n`으로 `importlib.resources.files('i18n')/'locales'`를 1순위로 사용하도록
+  고치고, 모든 후보 디렉터리를 `en.json` 존재 여부로 내용 검증하도록 변경했다. 빈 디렉터리를
+  생성해 성공으로 위장하던 폴백도 제거했다. 미업그레이드 구버전 호환을 위해 legacy shared-data
+  경로는 실제 JSON이 남아 있을 때만 인정한다.
+
+## 2.6.4 - 2026-05-16
+### PyPI GUI entry point shadowing fix
+
+#### Fixed
+- **`impulcifer_gui` import failure on PyPI installs**: console scripts now enter through unique
+  `impulcifer_gui` / `impulcifer_gui_legacy` bootstrap modules instead of importing
+  `gui.modern_gui` directly. The bootstrap prefers the installed distribution root before
+  loading project packages, so stale or third-party top-level modules such as
+  `Python313/gui.py` no longer shadow the bundled `gui` package.
+
+## 2.6.3 - 2026-05-16
+### ⚡ DSP hot path optimization + Nuitka 4.1 build refresh
+
+#### ⚡ 성능 개선
+- **AutoEQ smoothing allocation reduction**: `smoothen_heavy_light()`의 copy-heavy 중간 `FrequencyResponse` 객체 생성을 배열 기반 계산으로 대체하고, 반복 smoothing 중 동일한 Savitzky-Golay 윈도우 크기를 재계산하지 않도록 최적화했다.
+- **Biquad response memory reduction**: biquad 응답 합산에서 주파수 행렬을 필터 수만큼 반복 생성하던 경로를 NumPy broadcasting으로 대체해 동일 출력에서 임시 배열 할당을 줄였다.
+- **ImpulseResponse slice-copy 최적화**: peak/decay 분석에서 전체 IR 배열을 먼저 복사하지 않고 분석 구간만 복사하도록 바꿔 긴 녹음 처리 시 메모리 사용량을 낮췄다.
+
+#### 🔧 빌드 / 설정 변경
+- **Nuitka 4.1 + Python 3.14 빌드 경로**: 활성 standalone 빌드 워크플로를 일반 CPython 3.14와 `nuitka>=4.1`로 갱신했다. Nuitka의 free-threaded 지원은 아직 제외하고, release Linux 빌드도 정본 `build_scripts/build_nuitka.py`/`nuitka_flags.py` 경로를 사용하도록 통합했다.
+
+## 2.6.2 - 2026-05-11
+### Recorder 폴더 모드 + 14채널 sweep 세트 + 헤드폰 보정 분리 + 모노 sweep 지원 + Atmos MLP 차단
+
+#### 🐛 버그 수정
+- **모노 sweep WAV에서 `tuple index out of range` 해소**: `data/sweep-6.15s-...wav` 같은 1채널 sweep을 `core/recorder.py::play_and_record()`가 `read_audio()`를 `expand=False` 기본값으로 호출해 1D `(samples,)` 배열을 받고 `data.shape[1]`에서 `IndexError`를 일으키던 회귀를 수정. `expand=True`로 호출해 항상 2D `(channels, samples)` 형태로 정규화한다. 회귀 테스트 추가.
+- **(Codex 리뷰 반영) 스피커 측 모노 sweep을 양쪽 출력에 broadcast하지 않음**: 초기 수정안에서는 1채널 입력을 항상 스테레오로 broadcast했지만, 이는 `sweep-seg-FL-mono-...wav`처럼 출력 ch0(=FL 스피커)에만 가야 할 모노 sweep을 ch1(=FR 스피커)에도 흘려보내 FL 임펄스 응답에 FR 응답이 섞이는 회귀였다. `play_and_record()`에 `mono_to_stereo: bool = False` 플래그를 추가해 broadcast를 옵트인으로 전환했다. 스피커 측 경로(`start_recording`)는 기본값 그대로 두어 모노 sweep은 ch0에만 흐른다. 헤드폰 보정 경로(`start_recording_headphones`)만 `mono_to_stereo=True`를 명시적으로 넘겨, 모노 재생일 때 양쪽 드라이버가 같이 울리도록 한다(이때는 L=R 일반 EQ만 얻을 수 있다는 다이얼로그 경고가 이미 표시된다). 양쪽 경로 모두 회귀 테스트로 고정.
+- **TrueHD+Atmos MLP 무성 녹음 방지 (Codex 리뷰 반영해 범위 정밀화)**: 번들된 `data/11cmaster.mlp` / `data/13cmaster.mlp`는 `profile = "Dolby TrueHD + Dolby Atmos"`인 Atmos 오브젝트 마스터라 ffmpeg가 7.1 베드 8채널만 디코드하고 height/wide 오브젝트는 복원 불가(파일명과 달리 디스크리트 출력 불가). **초기 구현은 `channel_info is None`인 모든 `.mlp/.thd/.truehd`를 거부**했는데, `get_truehd_channel_info()`는 `CHANNEL_LAYOUT_MAP`(커스텀 11/13ch만)에 없으면 정상 5.1/7.1 TrueHD에도 `None`을 반환하므로 **재생 가능한 일반 7.1 TrueHD까지 잘못 거부**하는 회귀였다. `core/ffmpeg_utils.py`에 `get_truehd_profile()` + `is_truehd_atmos_object_master()`를 추가해, ffprobe `profile`에 "atmos"가 포함된 오브젝트 마스터만 거부하고 일반 "Dolby TrueHD" 5.1/7.1은 디코드된 PCM으로 정상 재생되도록 분기를 좁혔다. 에러 메시지도 "is a Dolby Atmos object master; FFmpeg decodes only its N-channel bed …"로 구체화. Atmos 거부 + 일반 7.1 통과 양쪽 회귀 테스트 추가(`tests/test_recorder_progress.py`, `tests/test_ffmpeg_lazy_setup.py`).
+
+#### ⭐ 새로운 기능 / 개선
+- **14채널 (7.1.6 Atmos) sweep 세트 생성기 추가**: 7개 ground-plane 스피커(FL/FR/FC/SL/SR/BL/BR) HRIR 측정을 4개 그룹으로 나눠 녹음할 수 있도록, 14채널 Atmos 레이아웃에 라우팅된 sweep WAV 4개를 만들어주는 `core/sweep_set_generator.py`를 추가. 그룹 분할은 임펄사이퍼 정석 그대로 — `FL,FR` / `FC` / `SL,SR` / `BL,BR`. CLI(`python -m core.sweep_set_generator --dir_path=...`)와 GUI 버튼("14채널 sweep 세트 생성...") 양쪽에서 호출 가능하며, 생성 후 재생 파일 picker가 자동으로 첫 그룹(`FL,FR`)으로 이동해 곧바로 녹음에 들어갈 수 있다. 파일은 한 번만 생성하면 되므로 repo에 번들하지 않고 사용자 환경에서 만드는 방식 — PCM_32에서 4개 합 ~167MB라 무게 비용을 피하기 위함.
+- **`sweep_sequence()`가 `7.1.6` 레이아웃 지원**: `core/impulse_response_estimator.py`의 sweep 시퀀스 빌더에 14채널 7.1.6 Atmos 트랙 구성(`FL FR FC LFE BL BR SL SR TFL TFR TBL TBR TSL TSR`)을 추가했다. 기존 `mono` / `stereo` / `5.1` / `7.1` 옵션은 그대로 유지된다. CLI `--tracks=7.1.6`도 함께 가능.
+- **헤드폰 보정 녹음 경로 분리 (Stable + Studio)**: 스피커 측 녹음과 헤드폰 보정 녹음이 의미상 다른 작업이라 GUI 버튼을 분리했다 — 기본 "🔴 START RECORDING" 옆에 "🎧 Record headphones..." 버튼이 새로 붙는다. 헤드폰 버튼은:
+  1. 출력 파일명을 항상 `headphones.wav`로 고정 (재생 sweep 파일명과 무관).
+  2. 재생 파일을 **모노 또는 스테레오로만** 허용 (`core/headphones_recording.py::inspect_headphones_playback()`이 검사). 7.1 / 7.1.6 같은 다채널 sweep을 헤드폰 보정에 쓰지 못하게 차단.
+  3. 모노 재생일 경우 "L=R 동시 재생은 L/R 드라이버 개별 측정이 불가하므로 일반적 EQ만 얻을 수 있다"는 경고 다이얼로그를 띄우고, 사용자가 명시적으로 동의해야만 진행. 정확한 per-driver 보정에는 `sweep-seg-FL,FR-stereo-...wav` 같은 스테레오 분절 sweep을 쓰라고 가이드.
+  4. 녹음 입력 채널을 2로 고정 (양쪽 인이어 마이크). 스피커 측 force-channels 토글은 헤드폰 경로에 영향 없음.
+
+#### 🐛 추가 버그 수정
+- **모노 sweep이 자동으로 `headphones.wav`가 되는 잘못된 매핑 제거**: 기존에는 plain mono sweep을 재생 파일로 고르면 `derive_record_filename()`이 자동으로 `headphones.wav`로 매핑했다. 하지만 양쪽 헤드폰 드라이버에 같은 신호를 동시에 재생해서는 L/R 드라이버 응답을 구분할 수 없어 결과가 부정확하다. 이제 plain mono sweep은 파일명 stem을 그대로 사용(`sweep-6.15s-...wav` → `sweep-6.15s-...wav`)하고, `headphones.wav` 출력은 **반드시 명시적 헤드폰 녹음 버튼을 거쳐야만** 생성된다.
+
+#### ⭐ 사용성 개선
+- **녹음 대상이 "파일" → "폴더"로 전환 (Stable + Studio)**: Recorder 탭이 더 이상 사용자가 직접 출력 파일명을 적도록 하지 않고, 녹음 폴더만 받는다. 폴더 안에 들어갈 파일명은 재생 sweep 파일에서 자동 도출 — `sweep-seg-FL,FR-...wav` → `FL,FR.wav`, `sweep-seg-FC-...wav` → `FC.wav`, 일반 `sweep-6.15s-...wav` → `headphones.wav`. 파일명 정책의 정본은 새 `core/recording_naming.py` 모듈(`derive_record_filename` / `resolve_record_path`)로, Stable / Studio / 향후 CLI 모두 같은 규칙을 따른다. 결과적으로 임펄사이퍼 본편이 dir_path를 스캔할 때 그대로 인식되는 형태(`<speakers>.wav` / `headphones.wav`)가 보장된다.
+- **저장 경로 미리보기 라벨 추가 (Stable + Studio)**: 폴더와 sweep 입력에 대한 Tk variable trace로 "저장 위치: data/my_hrir/FL,FR.wav" 같은 read-only 미리보기를 즉시 갱신해, 녹음 시작 전에 실제 출력 경로를 확인할 수 있다.
+- **14ch sweep 세트 생성 버튼 (Stable + Studio)**: Recorder 탭의 파일 영역에 한 번 클릭으로 4개 sweep WAV를 만들어내는 버튼 추가. 폴더를 묻는 dialog가 뜨고, 완료 시 재생 파일 picker가 첫 그룹으로 자동 이동.
+- **Studio에 "기존 파일에 추가" 옵션 추가 (Stable 대비 누락분 보완)**: Stable Recorder에만 있던 append-to-file 체크박스를 Studio Recorder 디바이스 카드에도 추가했다. 체크 시 `recorder.play_and_record(append=True)`로 전달돼, 기존 녹음 WAV를 덮어쓰지 않고 새 sweep을 뒤에 이어 붙인다(트랙 길이는 묵음 패딩으로 맞춤). 헤드폰 보정 경로는 Stable과 동일하게 항상 fresh `headphones.wav`를 쓰므로 append를 노출하지 않는다. i18n는 기존 `checkbox_append_to_file` 키 재사용(신규 키 없음). `append_var`는 `*_var` 규칙을 따르므로 언어/스킨 전환 시 상태 보존(`snapshot_tk_vars`)에 자동 포함된다.
+- **i18n 동기화**: 폴더 모드용 3개 + 14ch sweep 세트용 5개 + 헤드폰 녹음용 8개 등 신규 16개 키를 ko/en 직접 번역과 나머지 7개 locale 번역으로 추가했다(`zh-cn.json` / `zh-tw.json` legacy alias 포함 11개 파일 모두 동기화).
+- **회귀 테스트 강화**: 녹음 파일명 도출 규칙(`tests/test_recording_naming.py` — plain mono sweep이 더 이상 `headphones.wav`로 가지 않는 것까지 포함), 모노 sweep 인덱스 에러 회귀, Atmos MLP 차단, 14채널 sweep 세트 생성과 그룹별 라우팅 검증(`tests/test_sweep_set_generator.py`), 헤드폰 재생 파일 검증(`tests/test_headphones_recording.py`)을 단위 테스트로 고정.
+- **스크롤 성능 정적 가드를 Studio 스킨까지 확대**: `tests/test_scroll_perf.py`의 `install_smooth_scrolling` 정적 검사가 그동안 Stable 탭 4개(`gui/tabs/`)만 커버하고 Studio 탭 4개(`gui/skins/`)는 빠져 있었다. Studio 탭들은 런타임에 이미 `install_smooth_scrolling`(size-change-only `<Configure>` 핸들러 + 모니터 주사율 기반 휠 스크롤 coalescing)을 호출하고 있어 개선 자체는 적용돼 있었지만, 향후 Studio 탭 리팩터에서 호출이 누락돼도 잡아낼 테스트가 없었다. `GUI_TABS`에 `studio_{recorder,impulcifer,settings,info}_tab.py`를 추가해 두 스킨 모두 동일하게 보호된다(현재 4개 Studio 탭 모두 통과 확인).
+
+#### 🐛 Studio 스크롤 잔상(ghosting) 수정
+- **Studio 4개 탭의 `CTkScrollableFrame`를 불투명 배경으로 전환**: Stable 탭은 `ctk.CTkScrollableFrame(tab, corner_radius=10)`처럼 테마 기본 **불투명** fg_color를 쓰는 반면, Studio 탭 4개는 모두 `fg_color="transparent"`로 만들고 있었다. 투명 scrollable frame은 내부 `tk.Canvas`에 solid 배경이 없어, Win32에서 스크롤 시 embedded child window들이 비워진 영역을 다시 칠하지 못해 **잔상(ghosting)**이 남는다(`install_smooth_scrolling`이 잡는 GPU 스파이크와는 별개의 렌더링 결함). Stable이 깨끗한 이유가 바로 불투명 배경이었다. 4개 Studio 탭(`studio_{recorder,impulcifer,settings,info}_tab.py`)의 scroll frame `fg_color`를 Studio content host와 동일한 `COLORS["bg-1"]`로 바꿔 — 시각적으로는 동일하지만 canvas 배경이 solid가 되어 매 스크롤 스텝마다 정상 repaint, 잔상 제거.
+
+## 2.6.1 - 2026-05-10
+### Recorder FFmpeg lazy path + safety polish
+
+#### 버그 수정
+- **WAV 녹음의 FFmpeg 선탐색 제거**: `core.recorder.play_and_record()`가 더 이상 `is_truehd_file()`을 먼저 호출하지 않고 `read_audio()`만 사용한다. 일반 WAV는 `read_audio()` 내부의 soundfile fast-path를 타며, `.mlp`/`.thd`/`.truehd`에서만 FFmpeg/ffprobe 탐색과 자동 설치 경로로 들어간다.
+- **FFmpeg lazy setup cache poison 수정**: 정보 조회용 `auto_install=False` 탐색 실패와 실제 TrueHD 사용 시 `auto_install=True` 설치 시도를 별도 캐시로 분리했다. 지원 포맷 표시가 먼저 실패해도 이후 TrueHD 파일을 열 때 자동 설치 기회를 잃지 않는다.
+- **ProcessingConfig ↔ main 시그니처 동기화 (방향 정정)**: `ProcessingConfig.specific_limit`/`generic_limit`은 `core.cli_builder`가 argparse 기본값을 그대로 읽어 쓰는 정본이므로 master의 400/300을 그대로 둔다. 대신 비활성 코드처럼 어긋나 있던 `impulcifer.main()` 시그니처 기본값(20000/1000)을 dataclass에 맞춰 400/300으로 내린다. CLI/GUI 모두 항상 명시값을 넘기므로 실행 결과는 변하지 않으며, BRIR md5도 master와 일치한다.
+
+#### 사용성 개선
+- **Studio Recorder 채널 검증 추가**: Studio Recorder도 Stable과 동일한 `validate_recording_setup()` 경고를 사용해, 파일명으로 예상되는 스피커/채널 수와 사용자가 선택한 입력 채널 수가 다를 때 확인을 받는다. 사용자가 직접 켠 force-channels 토글이 있을 때만 mismatch 확인 다이얼로그를 띄우며, 기본 캡처 경로(예: `FL,FR.wav` + 2채널)에서는 더 이상 매번 확인을 묻지 않는다.
+- **Recorder 디버그 플롯 옵션 추가**: Stable/Studio Recorder와 CLI에 `Debug plots` 옵션을 추가했다. 녹음 대상 파일, 채널 RMS, headroom 등 verbose 진단 출력은 이 옵션을 켰을 때만 표시된다.
+- **GUI 스크롤 프레임 페이싱 추가**: `CTkScrollableFrame`의 wheel-driven canvas 이동을 사용자 모니터 주사율 기반 interval로 coalesce해 고해상도 휠/터치패드 이벤트 폭주가 Tk/DWM repaint를 디스플레이보다 빠르게 밀어붙이지 않도록 했다. 기존 scrollregion 재계산 제거에 더해 실제 view 이동 빈도도 50Hz 목표 이상으로 유지한다.
+- **회귀 테스트 강화**: WAV 녹음이 TrueHD 정밀 판별을 호출하지 않는지, detection-only FFmpeg 실패 후에도 auto-install 경로가 재시도되는지 테스트를 추가했다.
+
+## 2.6.0 - 2026-05-09
+### ⭐ Recorder 내부 진행 이벤트 + 현재 스피커 표시
+
+#### ⭐ 새로운 기능 / 개선
+- **`play_and_record()` 진행 이벤트 추가**: 기존 블로킹 재생/녹음 구조는 유지하되 선택적 `progress_callback`을 추가해 loading, devices, recording, saving, complete/error 단계와 현재 sweep speaker(`FL`, `FR` 등)를 외부로 전달한다.
+- **Stable 녹음 다이얼로그**: Stable Recorder에서 녹음 시작 시 별도 진행 다이얼로그를 띄워 현재 스피커, sweep 진행률, 장치 준비/저장 상태를 표시한다. 기존 inline 상태 영역은 완료 요약을 계속 남긴다.
+- **Studio Capture session 강화**: Studio Recorder 카드에 speaker segment chip을 추가해 현재 녹음 중인 스피커를 강조 표시한다.
+- **CLI 진행 표시**: `core/recorder.py` CLI 실행 시 같은 progress event를 사용해 현재 단계와 현재 스피커를 콘솔에 출력한다.
+- **무결성 검증 대상 분리**: 새 `core.recording_progress` 모듈로 segmented sweep timeline 추정 로직을 분리하고 단위 테스트를 추가했다.
+- **CI 녹음 테스트 안정화**: PortAudio가 없는 CI 환경에서도 recorder progress 테스트가 수집 단계에서 실패하지 않도록 테스트 내부에서 `sounddevice`를 대체한다.
+
+## 2.5.1 - 2026-05-09
+### 🐛 Recorder 녹음 진행 상태 표시 보강
+
+#### ⭐ 새로운 기능 / 개선
+- **Recorder 상태 표시 추가 (Stable / Studio)**: 녹음 중 앱이 멈춘 것처럼 보이지 않도록 재생 sweep 길이를 기준으로 예상 진행률과 상태 문구(장치 준비 → sweep 녹음 → 저장 대기)를 표시. 완료 후에는 저장된 WAV를 읽어 채널 수, 길이, peak dBFS, 활성 채널 수를 인라인 요약으로 남긴다.
+- **공통 녹음 상태 헬퍼 추가**: Stable 탭의 compact 상태 영역과 Studio 탭의 Capture session 카드가 `gui.recording_status`의 동일한 길이 추정/녹음 요약 로직을 공유한다. `core.recorder.play_and_record()`의 블로킹 동작은 변경하지 않았다.
+- **i18n / 문서 갱신**: 녹음 상태 문구 키를 9개 locale 및 legacy zh alias 파일에 동기화하고, README의 Recorder 설명에 진행 상태/완료 요약 안내를 추가.
+
+## 2.5.0 - 2026-05-07
+### ⭐ Pulse 리디자인 — Stable / Studio 스킨 시스템 + 앱 아이콘 + about-hero 정보 탭
+
+#### ⭐ 새로운 기능 / 개선
+- **레이아웃 프리셋 (스킨) 시스템 — Stable + Studio**: 디자인 핸드오프의 두 변형(원래 "Heritage / Studio")을 실제 위젯 트리로 구현. 기본은 **Stable**(기존 콤팩트 탭뷰가 Pulse 팔레트로 입은 옷); **Studio**는 디자인의 사이드바 + 카드 위계 — 좌측 200px 사이드바(로고 + 버전 + 4개 nav)와 우측 카드 기반 컨텐츠 패널로 분리. UI 설정 탭의 "스킨" 세그먼트(Stable / Studio)로 즉시 전환되며 `i18n.localization`의 settings.json에 `skin` 키로 영속화. 스킨 전환 시 root 윈도우는 유지하면서 body만 tear-down + rebuild되어 빠르게 응답.
+- **gui/skins/ 패키지 신설**: Studio 스킨 전용 위젯 컴포지션 헬퍼(`make_card`, `add_card_header`, `add_disclosure`, `add_inline_metric`, `make_page_header` — 디자인의 `.card`/`.dt`/`.fld-std`/`.nf` CSS 토큰을 CTk frame 트리로 표현)와 4개 Studio 탭 클래스(`StudioRecorderTab` / `StudioImpulciferTab` / `StudioSettingsTab` / `StudioInfoTab`). Stable 탭들은 기존 `gui/tabs/`에 그대로 두고 Studio는 병렬 구현체로 분리.
+- **Studio 처리 탭 — disclosure 패턴**: 룸 보정 / 헤드폰 보상 / 이퀄라이제이션 각각이 토글 ON일 때만 옵션 패널을 펼치는 disclosure 토글로. 디자인의 의도(focused experience)대로 advanced 옵션(target_level, bass_boost, tilt, channel balance, decay 등)은 Stable에만 노출 — Studio는 디자인의 카드 컨텐츠와 1:1 매칭.
+- **i18n 키 37개 추가 (9 locale)**: `section_skin`, `label_select_skin`, `option_skin_stable/studio`, `tooltip_skin_studio`, `sidebar_*`, `studio_card_*`, `studio_*_title/subtitle`, `studio_change_button`, `studio_disclosure_*_desc`, `studio_brir_generate`, `studio_record_start` 등. ko/en은 직접 번역, 나머지 7개 locale은 영어 fallback. `zh-cn.json`/`zh-tw.json` legacy alias 파일도 `zh_CN`/`zh_TW`와 동기화 보장.
+- **앱 아이콘 (Pulse mark) — 타이틀바 + 윈도우 작업 표시줄 양쪽 적용 (issue: 사용자 보고)**: 기존에는 `iconbitmap()`/`iconphoto()` 호출 자체가 없어 Tk가 기본 Tcl/Tk 깃털 아이콘으로 폴백, 사용자가 "이상한 로고"라 지적한 그것이 그대로 노출되었다. `gui/utils.py::setup_app_icon(root)` 신규 함수가 `logo/pulse.ico`(16/24/32/48/64/128/256 멀티 해상도)로 `iconbitmap`을, `logo/pulse-{32,48,64,128,256}.png`로 `iconphoto`를 각각 호출해 Win32 / X11 / Aqua 모든 경로에서 Pulse mark가 그려진다. Windows에서는 `SetCurrentProcessExplicitAppUserModelID("Impulcifer.115dkk.HRIR.1")`까지 호출해 작업 표시줄 그룹화 키를 `python.exe`에서 우리 앱으로 분리.
+- **CTk 커스텀 테마 — Pulse audio-equipment dark palette**: 디자인 토큰(`oklch(0.14..0.97 / hue 240)`)을 sRGB hex로 변환해 `gui/theme/pulse.json`으로 정본화. `bg-0/1/2/3/4` 5단계 레이어 + 정밀 청색 액센트(`#3B82F6` / `#2563EB`). `ctk.set_default_color_theme(pulse.json)`로 모든 CTk 위젯(`CTkButton`, `CTkOptionMenu`, `CTkSegmentedButton`, `CTkSwitch` 등 19개 클래스)이 일관된 검은 베이스 + 청색 액센트를 받는다. 기존 builtin "blue" 테마가 던져주던 회청색 톤보다 아웃보드 EQ/컨버터 페시아 느낌이 분명히 살아남.
+- **헤더 — Pulse mark 32px + 타이틀/서브타이틀 수직 스택**: 기존에는 타이틀("🎧 Impulcifer")과 서브타이틀이 column 0/1로 가로 배치되어 두 개 별개 라벨처럼 읽혔다. 디자인의 `cv-brand` 패턴(좌측 32px 마크 + 우측 22px 타이틀 / 12px 보조 텍스트 수직 스택)으로 재배치. `gui/modern_gui.py::create_header()`에서 `logo/pulse-64.png`를 `CTkImage`로 32×32로 리사이즈해 좌측에 배치.
+- **Info 탭 — about-hero 카드 + KV 그리드**: `gui/tabs/info_tab.py`를 디자인의 `.about-hero` 패턴으로 재구성. 88px Pulse 로고 + "Impulcifer" 24pt bold + `VERSION 2.5.0 · PYTHON 3.X.Y · {설치 방식}` 모노스페이스 청색 pill + 서브타이틀 + (License 보기 / 버그 제보) 액션 행. 시스템 정보는 1열 라벨/값 나열에서 2열 KV 그리드(`fg_color=COLORS['bg-2']` 카드)로 위계 정리. 정보 탭만 봐도 디자인의 의도가 가장 잘 드러남.
+- **Pulse 디자인 토큰 모듈 (`gui/theme/__init__.py`)**: 색 토큰 19개를 `(light, dark)` 튜플로 단일 정본화 (`COLORS['accent']`, `COLORS['bg-2']` 등) — 차후 다른 화면이 디자인 색을 직접 참조할 때 hardcode hex 흩어짐을 방지. 로고 / 테마 JSON 경로 헬퍼(`get_ico_path()`, `get_png_path(size)`, `get_ctk_theme_json_path()`)도 dev / pip-install / Nuitka standalone 세 런타임 모드에서 동일하게 동작하도록 `infra.resource_helper.get_resource_path` 위임.
+
+#### 🔧 빌드 / 설정 변경
+- **Velopack 인스톨러 아이콘 적용**: `release-cross-platform.yml`의 `vpk pack` 명령에 `--icon "${{ github.workspace }}/logo/pulse.ico"` 추가. 이전에는 `# 아이콘이 준비되면 활성화` 주석으로 비활성화되어 인스톨러 / Add-Remove Programs / 시작 메뉴 단축키가 모두 기본 generic 아이콘이었다. 이제 Pulse mark가 모든 OS-level 노출 지점에 일관되게 박힌다.
+- **macOS .icns 생성 (`logo/pulse.icns`)**: 기존 PNG 시리즈(16/32/64/128/256)를 Apple ICNS 컨테이너 포맷(magic `icns` + `icp4`/`icp5`/`icp6`/`ic07`/`ic08`/`ic11`/`ic12`/`ic13` 8개 type entry)으로 묶어 22.5KB 단일 파일로. `nuitka_flags.py::platform_specific_flags("macos")`가 이 파일을 잡아 `--macos-app-icon=logo/pulse.icns`를 부여 — 이전에는 `img/icon.icns`가 없어 macOS 빌드의 .app 번들이 generic icon으로 떨어졌다.
+- **Nuitka 번들에 `logo/` + `gui/theme/` 추가**: `build_scripts/nuitka_flags.py::INCLUDED_DATA_DIRS`에 `("logo", "logo")`, `("gui/theme", "gui/theme")` 두 entry 추가. `release-cross-platform.yml`의 Linux 인라인 명령에도 동일 entry 반영(`build-linux.yml`/`build-macos.yml`/Windows + macOS 릴리스 잡은 `build_nuitka.py` → `nuitka_flags.py`로 단일화되어 자동 동기화됨).
+- **Windows .exe 아이콘**: `--windows-icon-from-ico=logo/pulse.ico` 플래그 추가(`platform_specific_flags("windows")`). Linux/macOS는 `logo/pulse-256.png` / `logo/pulse.icns` 우선 + `img/icon.*` 폴백.
+- **smoke-test에 Pulse 자산 검증 추가**: `gui_main.py::_smoke_test()`가 `get_ico_path()`, `get_png_path(256)`, `get_ctk_theme_json_path()` 세 경로를 모두 확인. 패키징에서 자산이 누락되면 빌드 단계에서 즉시 실패.
+- **테스트 갱신**: `tests/test_nuitka_flags.py`에 `test_data_dirs_bundle_pulse_logo_and_theme`(logo/ + gui/theme 매핑 검증) + `test_platform_specific_flags_windows_includes_pulse_icon`(`--windows-icon-from-ico=logo/pulse.ico` 검증) 두 케이스 추가. `tests/test_build.py::check_dependencies()`도 `logo/{pulse.ico, pulse-256.png, pulse-32.png, pulse-16.png}` + `gui/theme/pulse.json` 존재 검사 추가.
+- **검증 (Windows / Python 3.14.4 / CTk 5.2.2)**:
+  - `pytest tests/ -v -m "not slow"` → 107 passed, 1 skipped, 3 deselected.
+  - `python gui_main.py --smoke-test` → import 18개 + Pretendard render-layer + Pulse 3종 자산 모두 OK.
+  - End-to-end GUI 인스턴스화 + 2개 스킨 동적 전환 + 8개 화면(2 skins × 4 tabs) 순회 → 예외 0건. ImageGrab으로 모두 스크린샷 캡처해 디자인 mockup과 시각 비교.
+
+#### 🐛 버그 수정 (Pulse 리디자인 후속)
+- **명시 `font=` 없이 만들어진 위젯이 굴림체로 폴백되던 문제 (`gui/modern_gui.py::_sync_ctk_font_default`)**: `pulse.json::CTkFont.family = "Pretendard"`로 박았으나 번들된 가변 폰트의 family-name(name table id 1)이 `"Pretendard Variable"`이라, theme JSON default를 잡는 위젯들(`CTkOptionMenu`, `CTkComboBox`, dropdown 메뉴 등)이 family를 못 찾고 한국 Windows의 시스템 default = 굴림으로 폴백. probe로 확인:
+  ```
+  Before: CTkFont() family='Pretendard'         actual='굴림'
+  After:  CTkFont() family='Pretendard Variable' actual='Pretendard Variable'
+  ```
+  `setup_pretendard_font()`가 반환한 실제 family로 `ctk.ThemeManager.theme["CTkFont"]`를 동적 갱신하는 헬퍼 추가. `__init__` + `refresh_localized_ui` 양쪽에서 호출.
+- **버전 bump 2.4.29 → 2.5.0 (MINOR)**: 새 기능 추가(앱 아이콘 + Pulse 테마)이며 기존 동작은 유지되므로 SemVer minor 증가.
+
+## 2.4.29 - 2026-05-07
+### 🐛 PyPI "버전: standard" 회귀 수정 + Pretendard Variable 전환으로 한글 fake-bold 제거
+
+#### 🐛 버그 수정
+- **PyPI 빌드 정보탭 "버전: standard" 표기 + UpdateChecker `Invalid version: 'standard'` 에러 (root cause fix)**: `hatch_build.py::CustomBuildHook.initialize(version, build_data)`에서 `version` 파라미터를 패키지 버전으로 오인해 `infra/_build_info.py`에 `VERSION = "{version}"` 형태로 박았다. 그러나 hatchling의 `version` 파라미터는 **빌드 타깃 종류**("standard"/"editable")이지 패키지 버전이 아니다. 결과적으로 PyPI wheel의 마커가 `VERSION = "standard"`가 되어 정보 탭에 그대로 노출되고, `updater/update_checker.py::_normalize_version("standard")` → `version.parse("standard")`가 `Invalid version: 'standard'`로 실패하면서 백그라운드 업데이트 체크도 동시에 깨졌다. `self.metadata.version`으로 교체.
+- **Modern GUI 한글 글리프 fake-bold 글리치 (root cause fix)**: `font/`에 `Pretendard-Regular.otf` 단일 cut만 번들되어 있는데 `gui/utils.py::build_fonts()`가 11개 폰트 슬롯 중 7개에 `weight="bold"`를 지정해, 같은 family의 진짜 Bold cut을 못 찾은 GDI가 **synthetic bold**(글리프 stroke를 굵게 그리는 알고리즘) 경로로 폴백했다. 한글 글리프는 이 합성 두께 처리에서 자획이 뭉개지고, MacType이 활성화된 환경에서는 합성 경로가 후킹되어 시스템 한글 serif(Noto Serif KR / 명조계)로 substitute되는 회귀까지 유발했다. `font/PretendardVariable.ttf`(fvar wght 45–930, 9개 named instance)로 교체하면 Win32 GDI / Pango / CoreText가 같은 family 내에서 `weight="bold"` → fvar wght=700 instance를 자동 매핑해 진짜 Bold cut으로 렌더링한다.
+
+#### ⭐ 새로운 기능 / 개선
+- **`gui/utils.py::_find_pretendard_font_file()` 우선순위 확장**: PretendardVariable*.ttf → Pretendard*Regular* → Pretendard* 순. 가변 폰트 단일 파일이 모든 weight를 커버하는 것을 우선으로 둔다.
+- **`gui/utils.py::setup_pretendard_font()` 1차 후보 다중화**: 기존 `_tk_renders_family("Pretendard")` 단일 시도를 `("Pretendard Variable", "Pretendard")` 순회로 확장. 가변 폰트의 family-name(name table id 1)이 `Pretendard Variable`이라 직접 잡히게 되어 한 번의 render-probe miss를 줄이고 weight 매핑 경로도 곧바로 가변 폰트로 진입.
+- **`core/utils.py::_resolve_bundled_pretendard_path()` 동일 우선순위 적용**: matplotlib 경로도 가변 폰트를 먼저 잡도록 확장.
+
+#### 🔧 빌드 / 설정 변경
+- **`tests/test_build.py` font 존재 체크 갱신**: hardcoded `Pretendard-Regular.otf` → `[PretendardVariable.ttf, Pretendard-Regular.otf]` 후보 리스트.
+- **검증 (Windows / Tk 8.6.16 / Python 3.14.4)**:
+  ```
+  Tk render layer resolves Pretendard Variable: Pretendard Variable
+  setup_pretendard_font('ko') = 'Pretendard Variable'
+  weight='bold': actual family='Pretendard Variable', weight='bold'
+  ```
+- **PyPI wheel 재빌드 검증**: `pip wheel . -w /tmp/wheel_test` → 생성된 `infra/_build_info.py`에 `VERSION = "2.4.29"` 정확히 기록 확인.
+- **테스트**: 전체 스위트 106 passed, 3 skipped 통과.
+- **부산물 — ruff lint 청소**: 기존 unused import 5건(`core/utils.py` subprocess/tempfile/json/shutil, `core/constants.py` os, `core/pipeline.py` MISSING, `build_scripts/nuitka_flags.py` Iterable), f-string-without-placeholders 3건(`build_scripts/build_local.py:85`, `gui_main.py:135-136`) 모두 제거. `ruff check . --output-format=concise` → `All checks passed!`.
+
+## 2.4.28 - 2026-05-06
+### 🐛 Pretendard render-layer 보장 + 일반 폰트 스캐너 + 빠른 로컬 빌드
+
+#### 🐛 버그 수정
+- **GUI Pretendard 적용 누락 회귀 차단 (root cause fix)**: 일반 Windows에서 Modern GUI가 Pretendard 대신 시스템 한글 폰트(맑은 고딕 / 명조계 substitute)로 렌더링되던 회귀를 추적해 수정. MacType을 별도로 사용하는 dev 환경에서는 표면적으로 가려져 있었으나, 일반 Windows에서는 명백히 노출되던 문제다.
+  - **원인**: `gui/utils.py::setup_pretendard_font`가 `tkfont.families()` 캐시에 의존해 Pretendard 등록을 검증했는데, `AddFontResourceExW(FR_PRIVATE)` + `WM_FONTCHANGE`는 Windows GDI에는 즉시 반영되지만 Tk의 families 캐시는 첫 호출 시점 스냅샷이라 항상 갱신되지는 않는다. 결과적으로 setup_pretendard_font가 `None`을 반환 → `CTkFont(family=None)` → Korean Windows의 Tk default(맑은 고딕)로, 글리프 링크에 따라 명조계 substitute가 끼어들었다.
+  - **수정**: families 캐시 대신 Tk 렌더 레이어를 직접 프로빙하는 `_tk_renders_family()` 도입. `tkfont.Font(family=name).actual('family')`가 요청한 family를 verbatim 반환하는지로 판정한다. Tk render는 GDI를 통해 process-private 폰트를 즉시 보므로 등록 직후에도 신뢰 가능하다.
+- **`core/utils.py::set_matplotlib_font()` 결과 노출**: silent fallback이던 함수를 `font_setup_result` 모듈 전역(`source`/`family`/`path`/`is_pretendard`)으로 결과를 보고하도록 리팩토링. 호출 측이 "Pretendard 적용 보장"을 검증할 수 있다.
+- **`gui_main.py --smoke-test` 보장 강화**: 시스템 Pretendard를 마스킹한 상태에서 (1) matplotlib이 번들 파일을 채택하는지, (2) Tk root에서 `setup_pretendard_font('ko')` → `actual('family')`가 'Pretendard'로 해상되는지를 검증한다. 어느 한 경로라도 실패하면 exit 2로 떨어져 정적 빌드 회귀를 잡는다.
+
+#### ⭐ 새로운 기능 / 개선
+- **번들 폰트 일반 스캐너**: `core/utils.py::_scan_bundled_fonts()` / `gui/utils.py::_scan_bundled_fonts()` 가 `font/` 디렉토리의 `.otf`/`.ttf`/`.ttc`를 모두 자동 스캔·등록한다. 사용자가 `font/`에 본명조(SourceHanSerif) 같은 보조 폰트를 떨어뜨리면 wheel/standalone 양쪽에 자동으로 번들·등록되어 코드 변경 없이 family 이름으로 바로 참조 가능. `pyproject.toml`의 force-include는 `font/Pretendard-Regular.otf` → `font/**` glob으로 확장.
+- **`build_scripts/build_local.py` 신설**: 16-core 머신 기준 `--jobs=14`(`max(2, min(cpu_count - 2, 14))`)로 자동 산출. dist/local/ 으로 출력해 CI release 산출물과 충돌하지 않는다. `nuitka_flags.build_nuitka_args(jobs=…)` 파라미터로 CI는 `--jobs=4` 기본값을 유지하면서 로컬은 빠르게 반복 가능.
+
+#### 🔧 빌드 / 설정 변경
+- **검증 (Windows / Nuitka 4.0.8 / Python 3.13.3 / standalone)**:
+  ```
+  python build_scripts/build_local.py
+  ./dist/local/gui_main.dist/ImpulciferGUI.exe --smoke-test
+  → Tk render layer resolves Pretendard: Pretendard
+  → smoke-test OK (imports=18, font.matplotlib=bundled, font.gui='Pretendard',
+                   font.path=...\dist\local\gui_main.dist\font\Pretendard-Regular.otf)
+  ```
+- **BRIR md5 회귀 없음**:
+  - 기본값:                  `cf37a9aaf95e717c04e309fba05fa61d`
+  - --vbass --vbass_freq=250: `07eef9ef89cc0d55313c9c0c18edbc76`
+- **테스트**: 기존 `_match_tk_family` stub 기반 GUI 테스트 3건을 `_tk_renders_family`-기반 3건(render check + cache 안정성)으로 대체. 79건 모두 통과.
+
+## 2.4.27 - 2026-05-06
+### 🐛 PyPI 100MB 업로드 한도 복구 + 데이터 경로 단일화
+
+#### 🐛 버그 수정
+- **PyPI 업로드 실패 해결 (2.4.19~2.4.26 8개 버전 누적 실패)**: 빌드된 wheel이 ~117 MB로 PyPI의 프로젝트별 100 MB 파일 한도(`400 File too large. Limit for project 'impulcifer-py313' is 100 MB.`)를 넘기면서 8개 버전이 모두 업로드 실패한 것이 원인이었다. wheel 내부에 `data/` 폴더가 두 벌(약 200 MB uncompressed) 들어가 있던 것이 직접 원인:
+  - **사본 1 (실제 사용)**: `[tool.hatch.build] include`로 wheel root의 `data/...`에 들어가, 설치 시 `<site-packages>/data/...`로 풀린다. `infra.resource_helper.get_resource_path()`가 `__file__` 기준 상대 경로로 이 사본을 찾는다.
+  - **사본 2 (dead copy)**: `[tool.hatch.build.targets.wheel.shared-data]`가 `data/` → `impulcifer_py313/data/`로 매핑해 wheel data scheme으로 한 벌 더 묶었다. 설치 시 `<sys.prefix>/impulcifer_py313/data/...`로 풀리지만 그곳에는 `__init__.py`가 없어 Python 패키지가 아니다. 이를 찾던 `core/constants.py:get_data_path()`의 `importlib.resources.files('impulcifer_py313')` 호출은 항상 `ModuleNotFoundError`로 떨어지고 fallback `core/data`(존재하지 않음)를 반환하던 상태였다.
+  - **수정**: `[tool.hatch.build.targets.wheel.shared-data]` 섹션을 제거. 데이터 파일 자체(데모 wav 포함)는 그대로 유지된다. 빌드된 wheel은 117 MB → 약 56 MB로 축소되어 PyPI 한도 여유 충족.
+- **`core/constants.get_data_path()` 단일화**: 위 문제로 인해 사실상 기능하지 않던 `importlib.resources` 기반 lookup을 제거하고, dev/pip-install/Nuitka standalone 세 환경을 모두 정확히 처리하는 `infra.resource_helper.get_resource_path('data')`에 위임하도록 정리. 호출처(`impulcifer.py:851,876`)의 동작은 동일.
+
+
+### 🔧 Nuitka 빌드 클린업 + 워크플로 통합 + updater_core 분리 (이슈 #87 후속)
+
+#### 🔧 빌드 / 설정 변경
+- **Nuitka `--include-module` 50+ → 8개 트림**: Nuitka 4.x의 정적/lazy import 자동 추적을 활용해 `core.*`/`gui.*`/`i18n.*`/`infra.*`/`updater.*`/`impulcifer` 및 `nnresample`/`tabulate`/`autoeq`/`soundfile`/`sounddevice`/`seaborn`/top-level `scipy`를 명시 리스트에서 제거. 유지: `scipy.signal`/`scipy.optimize`/`scipy.interpolate`/`scipy.io`/`scipy.fft`/`bokeh`(heavy submodules) + `core.parallel_workers`(ProcessPoolExecutor 자식 import) + `infra._build_info`(빌드 단계 just-in-time 생성). 플러그인은 `tk-inter` 외 `matplotlib`을 추가하고, `multiprocessing`/`pkg-resources`/`anti-bloat`은 Nuitka가 자동 활성화하므로 명시하지 않음.
+- **검증 완료**: Windows / Nuitka 4.0.8 / Python 3.13.3 환경에서 `python build_scripts/build_nuitka.py` exit 0, `ImpulciferGUI.exe`(204MB) 생성, `ImpulciferGUI.exe --smoke-test`로 18개 핵심 모듈 import 체인 검증 통과. 검증을 위해 `gui_main.py`에 비대화형 `--smoke-test` 모드를 추가.
+- **`build_scripts/build_nuitka.py` sys.path 회귀 수정**: `python build_scripts/build_nuitka.py` 직접 실행 시 `from build_scripts.nuitka_flags import …`가 ModuleNotFoundError로 실패하던 문제를 project root를 `sys.path`에 prepend하여 해결.
+- **CI 워크플로 통합**: `build-linux.yml` / `build-macos.yml` / `release-cross-platform.yml`(macOS 잡) 세 곳의 60줄짜리 인라인 `python -m nuitka …` 블록을 모두 `python build_scripts/build_nuitka.py` 한 줄로 줄였다. 플랫폼은 `platform.system()`으로 자동 감지되며, AppImage/DMG 후속 패키징은 영향 없이 그대로 동작한다.
+
+#### ⭐ 새로운 기능 / 개선
+- **`updater/updater_core.py`(770줄) 분리**: 이슈 #87 Phase 5에서 후속으로 미뤄둔 작업을 완료. 5개 모듈로 책임별 분리.
+  - `updater/environment.py`: 런타임 환경 감지(`_is_standalone_build`, `is_velopack_environment`, `get_velopack_update_exe`, `is_pip_environment`)
+  - `updater/velopack.py`: Velopack 다운로드/적용 (`VelopackUpdater`, `VelopackDownloadError`)
+  - `updater/pip_updater.py`: pip-install 환경 업그레이드 (`PipUpdater`)
+  - `updater/legacy.py`: 직접 다운로드/실행 경로 (`LegacyInstallerUpdater`, `Updater` 레거시 호환, `GITHUB_RELEASES_URL`)
+  - `updater/executors.py`: 비-GUI 실행 프레임워크 (`UpdateExecutor` ABC + `PipExecutor`/`VelopackExecutor`/`LegacyExecutor` + `create_update_executor`/`get_updater` 팩토리)
+  - `updater/updater_core.py`: 18개 공개 심볼을 모두 re-export하는 thin shim. 기존 `from updater.updater_core import …` 호출자(`gui/dialogs.py`, `gui/tabs/info_tab.py`, `impulcifer.py`)는 코드 변경 없이 동작.
+- **테스트 patch 대상 정정**: `tests/test_velopack_updater.py` / `tests/test_update_executors.py`가 `mock.patch.object(updater_core, …)` 형태로 shim 네임스페이스를 패치했지만, `from X import Y`로 인해 실제 호출부의 `Y` 바인딩은 새 모듈에 있었기에 patch가 무효였다. 16건 테스트가 모두 통과하도록 patch 대상을 `velopack_module` / `executors_module`로 정정 (`subprocess`, `sys`, `get_velopack_update_exe`, `GITHUB_RELEASES_URL`).
+
+#### 🐛 버그 수정
+- **`tests/test_ffmpeg_lazy_setup.py` patch 대상 정정**: Phase 5에서 FFmpeg 헬퍼가 `core/ffmpeg_utils.py`로 이동했으나, lazy state(`FFMPEG_PATH`/`FFPROBE_PATH`/`_FFMPEG_SETUP_DONE`)와 실제 호출부(`setup_ffmpeg`/`install_ffmpeg`/`find_ffmpeg_in_common_paths`)는 새 모듈에 있는데 테스트가 여전히 `core.utils`를 패치하고 있어 spy가 호출 경로에 닿지 못했다. 결과적으로 Python 3.9~3.14 전 버전에서 3개 테스트(`test_check_ffmpeg_available_with_auto_install_triggers_install`, `test_import_does_not_call_setup_ffmpeg`, `test_truehd_helpers_trigger_lazy_setup`)가 실패하며 CI pytest 전체가 탈락했다. patch/state 접근을 `core.ffmpeg_utils`로 이동하고 setUp의 모듈 캐시 클리어에 `core.ffmpeg_utils`도 추가해 6건 모두 통과하도록 수정. 런타임 동작·BRIR 출력은 변경 없음 (테스트 파일 단독 수정).
+
+## 2.4.25 - 2026-05-05
+### 🔧 책임별 모듈 분리 (이슈 #87 Phase 5)
+
+#### 🔧 빌드 / 설정 변경
+- **`core/utils.py` 분리**: FFmpeg 검색/설치 + TrueHD/MLP 변환 로직(440줄)을 `core/ffmpeg_utils.py`로 분리. 모듈 globals(`FFMPEG_PATH`, `FFPROBE_PATH`, `_FFMPEG_SETUP_DONE`)와 lazy 초기화 패턴은 새 모듈에 그대로 유지된다. `core.utils`는 동일한 12개 공개 심볼(`MIN_FFMPEG_VERSION`, `is_truehd_file`, `convert_truehd_to_wav`, `read_audio` 등)을 re-export하므로 기존 `from core.utils import …` 호출은 코드 변경 없이 그대로 동작한다. `utils.py`: 785→347라인.
+- **`gui/legacy_gui.py` deprecation 정책 명시**: 모듈 docstring에 (1) Modern GUI가 primary, (2) bug-fix-only 모드, (3) 신규 작업은 `gui/modern_gui.py`로, (4) Modern GUI가 한 번의 minor release를 무사히 거친 뒤 major bump(≥3.0.0)에서 제거 가능 — 4개 항목으로 정리. `tests/test_suite.py::test_gui_modules_importable`이 import 안전망 역할.
+- **`updater/updater_core.py` 후속 분리 방향 기록**: `CLAUDE.md`에 `VelopackUpdater` / `PipUpdater` / `LegacyInstallerUpdater` + `UpdateExecutor` 계열을 별도 모듈로 분리할 것을 안내. 현재는 ~770줄을 1파일에 둔 채로 유지(분리는 다음 PR로 미룸).
+- **BRIR md5 회귀 없음**: 기본값 `cf37a9aa…` / `--vbass` `07eef9ef…` 양쪽 무결성이 master와 일치함을 Windows에서 검증. 53건의 빠른 테스트도 모두 통과.
+
+## 2.4.24 - 2026-05-05
+### 🔧 Nuitka 빌드 플래그 단일 소스화 (이슈 #87 Phase 4)
+
+#### 🔧 빌드 / 설정 변경
+- **`build_scripts/nuitka_flags.py` 신설**: `COMMON_FLAGS`, `INCLUDED_PACKAGES`, `INCLUDED_MODULES`, `INCLUDED_DATA_DIRS`, `INCLUDED_DATA_FILES`, `METADATA_TEMPLATE`, `PLATFORM_OUTPUT_DIRS` 등을 모듈 상수로 정의하고, `build_nuitka_args(target_platform, version)`이 platform-conditional 플래그(Windows console-disable, macOS app-bundle, Linux/macOS 아이콘)를 합쳐 완성된 인자 리스트를 반환한다. 또한 `python build_scripts/nuitka_flags.py --platform linux --version X` 형태의 CLI 모드를 제공해 워크플로 한 줄씩 비교에 활용할 수 있다.
+- **`build_scripts/build_nuitka.py` 단순화**: 인라인 100여 줄의 인자 조립 코드를 제거하고 `nuitka_flags.build_nuitka_args(...)`를 호출하도록 변경. Windows 릴리스 워크플로(`release-cross-platform.yml`)는 이 스크립트를 통해 빌드하므로 자동 동기화됨. 인라인 Nuitka 명령이 남은 `build-linux.yml` / `build-macos.yml` / `release-cross-platform.yml`(macOS 잡)은 후속 PR에서 동일하게 정본을 호출하도록 통합 예정.
+- **무결성 가드 `tests/test_nuitka_flags.py` 추가**: 모듈 공개 심볼/플랫폼별 스위치/Phase 1·2의 신규 패키지(`core.plotting`, `core.pipeline`, `core.cli_builder`) 포함 여부/locales 데이터 경로/CLI 출력 형식을 9개 케이스로 검증한다.
+
+## 2.4.23 - 2026-05-05
+### ⭐ argparse 자동 생성 (이슈 #87 Phase 3)
+
+#### ⭐ 새로운 기능 / 개선
+- **`core/cli_builder.py` 신설**: `ProcessingConfig`의 필드 메타데이터(`cli_flag`, `cli_help`, `cli_arg_type`/`cli_arg_action`, `cli_dest`, `cli_suppress_default`, `cli_choices`, `cli_skip`)를 읽어 argparse 인자를 자동 등록한다. `impulcifer.py`의 `create_cli()`는 234라인 → 약 35라인의 thin wrapper로 축소. CLI 정의가 `ProcessingConfig`라는 단일 소스에서 나오므로 향후 GUI 생성기가 같은 메타데이터를 재사용할 수 있다.
+- **수동 처리 잔존**: `--bass_boost`(3개 필드로 split), `--info`(즉시 종료), `-V/--version`은 dataclass 필드와 1:1 대응되지 않으므로 `create_cli()`에 그대로 남는다. `--decay`/`--bass_boost` 후처리(`SPEAKER_NAMES` 분배 / 셸프 파라미터 split)도 보존.
+- **BRIR md5 회귀 없음**: 기본값/`--vbass`/`--bass_boost=4,150,0.69 --decay=300` 세 경로 모두 무결성이 유지됨을 Windows에서 검증.
+
+## 2.4.22 - 2026-05-05
+### ⭐ ProcessingConfig + BRIRPipeline 구조화 (이슈 #87 Phase 2)
+
+#### ⭐ 새로운 기능 / 개선
+- **`core/pipeline.py` 신설**: BRIR 생성 파이프라인을 객체화. `ProcessingConfig` 데이터클래스가 `main()`이 받는 35개 파라미터를 단일 소스로 들고 있고(각 필드에 CLI 메타데이터 — flag, help, action, dest, suppress_default, choices — 부여), `BRIRPipeline`이 실행을 책임진다. `impulcifer.main(**kwargs)`는 `ProcessingConfig.from_kwargs()` → `BRIRPipeline(config).run()` 두 줄짜리 thin wrapper가 됨. Phase 3에서 GUI/argparse 자동 생성을 위한 토대를 놓았다.
+- **레거시 파이프라인 본문 보존**: 알고리즘 본체는 `_run_pipeline_legacy()`로 그대로 옮겨 BRIR md5가 byte-identical하게 유지됨을 확인(기본값 `cf37a9aa…`, `--vbass` `07eef9ef…`).
+
+## 2.4.21 - 2026-05-05
+### 🔧 시각화 코드 분리 (이슈 #87 Phase 1)
+
+#### 🔧 빌드 / 설정 변경
+- **`core/plotting/` 서브패키지 신설**: `core/plotting/hrir_plotter.py`와 `core/plotting/impulse_response_plotter.py`에 `HRIRPlotter`, `ImpulseResponsePlotter` mixin을 도입해 matplotlib/Bokeh 시각화 로직을 데이터 클래스에서 분리. `HRIR(HRIRPlotter)`, `ImpulseResponse(ImpulseResponsePlotter)` 상속 구조로 기존 `hrir.plot(...)` / `ir.plot_fr(...)` 호출 API는 그대로 유지. `core/hrir.py`는 2086→1149라인, `core/impulse_response.py`는 1231→534라인으로 축소(목표 1500라인 미만 달성). BRIR md5는 기본값/`--vbass` 경로 모두 master와 동일(`cf37a9aa…`, `07eef9ef…`)함을 Windows에서 확인.
+
+## 2.4.20 - 2026-05-05
+### 🔧 Python 3.14 테스트 확대 + 빌드/GUI 폰트 안정화
+
+#### 🔧 빌드 / 설정 변경
+- **Python 3.14 pytest 매트릭스 추가**: GitHub Actions `test.yml`의 테스트 대상에 Python 3.14를 추가하고, `CLAUDE.md`와 `README.md`의 CI 검증 범위 안내를 Python 3.9~3.14로 갱신
+- **데모 BRIR md5 회귀 검증 자동화**: `tests/test_brir_integrity.py`를 추가해 CI에서 무결성이 확인된 기준 ref(`origin/master`)와 현재 브랜치의 `hesuvi.wav`를 같은 Linux CPython 3.13 환경에서 생성한 뒤 md5를 비교하도록 함
+- **전용 GitHub Actions job 추가**: 무거운 BRIR 생성 검증이 Python 버전 매트릭스에서 반복되지 않도록 `brir-integrity` job에서 단일 실행으로 분리하고, 기본값(헤드폰 보정 포함)과 `--vbass --vbass_freq=250` 두 경로를 모두 검증하며, 실패 시 `test-summary`가 PR을 실패 처리하도록 연결
+- **Nuitka `--onefile` 잔존 옵션 제거**: AppImage/DMG 패키징이 standalone 폴더를 전제로 하므로 `build_scripts/build_nuitka.py`와 `build-macos.yml`에 남아 있던 `--onefile` 옵션을 제거
+
+#### 🐛 버그 수정
+- **GUI Pretendard 폰트 검증 강화**: 번들 폰트 파일을 발견했다는 이유만으로 `"Pretendard"`를 반환하지 않고, 플랫폼별 프로세스 폰트 등록 후 Tk에서 실제로 보이는 family 이름만 CustomTkinter 폰트에 전달하도록 수정
+- **`magnitude_response()` verified parity 고정**: full FFT 경로가 BRIR md5를 바꾸지 않도록 verified NumPy `rfft` 경로를 유지하고, `tests/test_magnitude_response_parity.py`와 `CLAUDE.md`를 해당 무결성 기준에 맞게 갱신
+
+## 2.4.19 - 2026-05-04
+### 🐛 한국어 로케일 mojibake 복구 + 업데이트 재시작 알림 누락 키 추가
+
+#### 🐛 버그 수정
+- **`update_restart_done` 키 누락(전 언어)**: Velopack 자동 업데이트로 앱이 재시작된 직후 띄우는 정보 다이얼로그(`gui/modern_gui.py:67-69`)가 코드에서 `loc.get('update_restart_done', default=...)`를 호출하지만 9개 로케일 어디에도 키가 없어 본문이 키 이름 그대로 `update_restart_done`으로 표시되던 회귀
+  - **수정**: 9개 캐노니컬 로케일(`en, ko, de, es, fr, ja, ru, zh_CN, zh_TW`) 전부에 키 추가. ko는 자연스러운 한국어 번역(`새 버전이 정상적으로 설치되었습니다.`), 나머지 7개 비-en 언어는 영어 fallback(`The new version has been installed successfully.`)으로 동기화. 키 총수 273→274
+- **ko.json 3개 키 mojibake 복구**: 한글이 `?`로 망가져 있어 사용자에게 `??? 한국어(?)? ???????.` 같은 텍스트가 노출되던 문제. CP949↔UTF-8 인코딩 사고로 추정
+  - `message_language_changed` (ko.json:97): `??? {language}(?)? ???????.` → `언어가 {language}(으)로 변경되었습니다.` (조사 자동 처리 형태로 복구)
+  - `message_processing_cancelling` (ko.json:273): `?? ??? ??? ?? ?????...` → `이 작업을 마치고 취소하겠습니다...`
+  - `message_processing_cancelled` (ko.json:274): `??? ???????.` → `처리가 취소되었습니다.`
+
+## 2.4.18 - 2026-05-04
+### 🔧 데모 데이터 raw binary 전환 (LFS 포기)
+
+#### 🔧 빌드 / 설정 변경
+- **`data/demo/*.wav` 13개 raw 바이너리로 재커밋(약 55MB)**: 기존 Git LFS 포인터 방식이 GitHub의 public fork LFS 업로드 차단 정책(`@user can not upload new objects to public fork`)에 막혀 master에 데모 파일이 계속 누락된 상태였음. fork-detach 없이 즉시 해결 가능한 raw binary 방식으로 전환
+  - **`.gitattributes` 삭제**: `data/demo/*.{wav,WAV,png,PNG,html,HTML}` LFS 필터 라인 제거. repo 내 LFS 추적 대상이 사라져 파일 자체를 삭제
+  - **`.gitignore` 화이트리스트 갱신**: 옛 `room-responses.wav`(단일 파일) 흔적 제거하고 현재 데모 구조에 맞게 `!data/demo/room-*.wav` 패턴 추가. `SR,BR.WAV` → `SR,BR.wav` 케이스 정정
+  - **CLAUDE.md 갱신**: "LFS로 관리됨, `git lfs pull` 필요" 안내 제거. Tier 3 알고리즘 무결성 검증 절차에서 `git lfs pull` 단계 제거(일반 `git clone`만으로 데모 이용 가능)
+  - **결과**: PR #63 이후 사라졌던 데모 파일이 master에 다시 포함됨. Tier 3 검증의 baseline md5(`d295982d021a6d16ab2c194c3517c162`) 비교가 신규 클론 환경에서도 즉시 가능
+
+### Historical note: GUI scroll GPU spike fix (originally 2.4.18 - 2026-05-03)
+### ⚡ GUI 스크롤 GPU 스파이크(20-30%) 추가 해소
+
+#### ⚡ 성능 개선
+- **CTkScrollableFrame `<Configure>` 핸들러 size-change-only로 교체** (`gui/utils.py::install_smooth_scrolling`):
+  - **근본 원인**: CustomTkinter의 `CTkScrollableFrame.__init__`은 내부 Frame의 `<Configure>` 이벤트에 `lambda e: canvas.configure(scrollregion=canvas.bbox('all'))`를 무조건 바인딩한다. Win32 Tk는 *위치 변경*에 대해서도 `<Configure>`를 발생시키므로(SetWindowPos → WM_WINDOWPOSCHANGED → `<Configure>`), 매 스크롤 스텝(`yview_moveto` 호출)마다 캔버스 아이템 트리를 walk(`bbox('all')`)하고 scrollregion을 재설정한다. 약 100개의 CTk 위젯이 있는 BRIR 탭에서 이 O(N) 작업이 초당 수십~수백 회 발생하면서 DWM 컴포지터까지 연쇄적으로 깨워 GPU 점유율이 20-30%로 치솟는다
+  - **수정**: `install_smooth_scrolling()` 헬퍼 추가. 기존 lambda 바인딩을 제거하고, 마지막 본 `(width, height)`를 기억하여 *크기 변경*(자식 위젯 추가/제거/리사이즈, 언어 변경, 고급옵션 토글 등)일 때만 `bbox + configure(scrollregion=...)`를 수행하는 size-change-only 핸들러로 교체. 위치 변경만 발생한 경우(스크롤) 핸들러는 즉시 return하여 O(1) 비용
+  - **적용 위치**: 4개 탭의 모든 `CTkScrollableFrame`에 적용 (`gui/tabs/{impulcifer,recorder,settings,info}_tab.py`)
+- **측정 결과** (`tools/bench_scroll.py`, 임펄사이퍼 탭과 동일한 위젯 분포로 ~175개 위젯 + 3 passes × 60 steps 스크롤):
+
+  | 지표 | 수정 전 | 수정 후 |
+  |------|---------|---------|
+  | `bbox_calls` (캔버스 아이템 트리 walk) | 150 | **0** |
+  | `canvas.configure(scrollregion=...)` 호출 | 150 | **0** |
+  | `yview_moveto` 호출 | 186 | 186 (변화 없음 — 스크롤 동작 자체는 동일) |
+  | `<Configure>` 이벤트 | 150 | 150 (Win32에서 차단 불가, 그러나 핸들러는 fast-return) |
+
+  스크롤 1회당 캔버스 트리 walk + scrollregion 재설정이 완전히 제거됨. 실제 GUI에서 빠른 스크롤 시 발생하던 wakeup 캐스케이드(canvas configure → paint event → DWM 컴포지트)가 차단되어 GPU 스파이크 해소
+
+#### 🧪 회귀 방지 테스트 (`tests/test_scroll_perf.py`, 3 테스트)
+- **정적 테스트** (디스플레이 불요, CI 안전): 4개 탭 소스를 AST로 파싱하여 `CTkScrollableFrame` 호출 직후 `install_smooth_scrolling`이 호출되는지 검증. 향후 새 탭 추가 시 패치를 빠뜨리면 즉시 실패
+- **기능 테스트** (디스플레이 필요, headless에서 자동 skip):
+  - 베이스라인 sanity: 패치 미적용 상태에서 스크롤 시 `bbox` 호출 ≥ 10 (CTkScrollableFrame 업스트림 동작이 바뀌면 알림)
+  - 수정 검증: 패치 적용 시 스크롤 중 `bbox`/`configure` 호출이 정확히 0임을 검증
+
+#### 🛠 기타
+- **벤치마크 스크립트 추가** (`tools/bench_scroll.py`): A/B 비교를 통해 스크롤 시 캔버스 호출 횟수와 elapsed 시간을 측정. `--fix` 플래그로 패치 적용/미적용 비교 가능
+
+## 2.4.17 - 2026-05-03
+### 🐛 스탠드얼론 자동 업데이트 다운로드 실패 해결
+
+#### 🐛 버그 수정
+- **Velopack 자동 업데이트 다운로드 실패 (#82)**: 스탠드얼론 빌드의 GUI에서 "지금 업데이트" 클릭 시 "업데이트 다운로드 실패. 나중에 다시 시도해주세요." 오류로 항상 실패하던 회귀 수정
+  - **근본 원인**: 코드는 `Update.exe download <feed_url>` 서브커맨드로 다운로드를 위임했지만, Velopack v0.0.x에서 `download` 서브커맨드가 완전히 제거되었고 다운로드 책임이 SDK 측(lib-csharp/lib-rust/...)으로 이동. 현 Velopack의 `Update.exe`는 `apply`/`start`/`patch`/`uninstall`/`update-self`만 인식하므로 호출이 "Unknown subcommand 'download'"로 즉시 실패하고 GUI가 일반 오류 다이얼로그를 띄움
+  - **수정**: `VelopackUpdater.check_and_download()`을 Python urllib 기반으로 재구현. `releases.<channel>.json` 매니페스트(`win`/`osx`/`linux`)를 파싱하여 최신 full nupkg를 찾고, 청크 단위 스트리밍으로 Velopack의 packages 디렉터리(`<root>/packages` 또는 LOCALAPPDATA fallback)에 `.partial` 임시 파일로 저장. SHA256(우선) 또는 SHA1로 무결성 검증 후 최종 경로로 rename. 캐시된 동일 크기/체크섬 패키지가 이미 있으면 재다운로드 생략
+  - **`apply_and_restart()` 강화**: `Update.exe apply --package <downloaded_path>`로 명시 인자를 전달해 Velopack의 `find_latest_full_package` 휴리스틱에 의존하지 않도록 함. `--restart`는 Velopack v0.0.x apply의 기본 동작이라 별도 플래그 불필요
+  - **에러 메시지 개선**: 다운로드 실패 시 GUI에 “release feed 도달 불가 / 패키지 누락 / 체크섬 검증 실패” 가능 원인과 GitHub에서 수동 다운로드하라는 fallback 안내를 함께 표시
+- **회귀 방지 테스트 추가** (`tests/test_velopack_updater.py`, 13개): 실제 localhost HTTP 서버 + 가짜 `Update.exe` 스크립트 + 가짜 Velopack 설치 레이아웃(`<root>/Update.exe`, `<root>/current/app.exe`, `<root>/sq.version`, `<root>/packages/`)을 tempdir에 구성하여 스탠드얼론 빌드를 띄우지 않고도 업데이트 경로를 end-to-end로 검증. Linux/macOS/Windows 어디서든 실행 가능
+  - 행복 경로(매니페스트 → nupkg → 체크섬 검증 → packages 디렉터리에 저장)
+  - `Update.exe download` 서브커맨드가 절대 호출되지 않음을 가짜 스크립트의 invocation log로 검증
+  - 캐시된 패키지 재다운로드 생략 / 크기 불일치 시 재다운로드
+  - 체크섬 불일치 / 매니페스트 누락 / 서버 도달 불가 시 깨끗하게 False 반환 (예외로 누설되지 않음)
+  - 진행률 콜백이 `(downloaded, total)` 바이트 쌍을 받음
+  - `apply_and_restart()`가 `Update.exe apply --package <path>`를 호출하고 `download`를 절대 포함하지 않음
+  - 읽기 전용 root → LOCALAPPDATA fallback / `sq.version`에서 packId 읽기 / Update.exe 부재 시 안전한 False 반환
+
+## 2.4.16 - 2026-05-03
+### ⚡ 플롯 메모리 잔류 해소와 FFmpeg lazy setup
+
+#### ⚡ 성능 개선
+- **플롯 후 ~3GB 메모리 잔류 해소**: `plot=True`로 BRIR을 생성하면 작업 종료 후에도 ~3GB가 프로세스에 남아 있던 문제를 두 단계로 해결
+  - **`impulcifer.py` (Phase 1)**: 플롯용 convolve를 ProcessPoolExecutor로 14개 워커(워커당 ~150MB)에 분산하던 동작을 직렬 `scipy.signal.convolve`로 환원. 워커 결과를 `plot_tasks`/`plot_results` 튜플에 보관하느라 `del hrir`/`del estimator` 후에도 recording·test_signal 참조가 살아남던 잔류 경로를 제거. 메모리 회수 블록은 중간 변수(`eq_tasks`/`eq_results`/`decay_tasks`/`decay_results`) → 루트 객체(`hrir`/`estimator`/`room_frs` 등) 순서로 삭제하도록 정정하고, safety net으로 `plt.close('all')`을 `gc.collect()` 직전에 호출
+  - **`core/hrir.py` (Phase 2)**: `HRIR.plot()`을 2-pass 렌더링으로 리팩토링. Pass 1에서 figure를 1개씩 생성·축 범위 수집 후 즉시 `plt.close()`, Pass 2에서 동기화된 limit으로 다시 생성하여 저장. 동시 존재 figure를 14개 → 1개로 줄여 matplotlib 객체 단편화에 의한 메모리 부풀림 차단. `gc.collect()`를 패스 사이에 1회 호출
+- **FFmpeg setup lazy화**: `core/utils.py` import 시점에 항상 실행되던 `setup_ffmpeg()` (시스템 PATH 탐색 + 일반 경로 검색 + 미발견 시 자동 설치 시도)를 `ensure_ffmpeg_available()`로 분리하여 실제 사용 시점까지 지연. 일반 WAV 처리, ProcessPool 워커 import, unit test에서는 ffmpeg/ffprobe subprocess 호출이 발생하지 않음. TrueHD/MLP 처리 경로(`is_truehd_file` / `convert_truehd_to_wav` / `get_truehd_channel_info`, 그리고 `open_impulse_response_estimator`의 .mlp/.thd/.truehd 분기)는 `auto_install=True`로 호출해 사용자가 직접 .mlp 파일을 열었을 때 자동 설치 UX는 그대로 보존. `read_audio()`는 확장자가 `.mlp`/`.thd`/`.truehd`가 아니면 `is_truehd_file()` 호출을 건너뛰어 일반 WAV 경로의 lazy setup도 우회
+- **EQ task tuple에서 미사용 `ir` 제거**: `process_equalization_worker`가 unpack만 하고 사용하지 않던 `ir` (ImpulseResponse) 객체를 task 튜플에서 제외. ProcessPoolExecutor 환경에서 14개 IR 객체 pickle/IPC 비용 제거 (출력은 bit-identical, 데모 hesuvi.wav md5 유지)
+
+#### 🐛 버그 수정
+- **`core/hrir.py` 미사용 `sync_axes` import 제거**: 2-pass 리팩토링으로 sync_axes 직접 호출이 사라져 ruff F401 경고 해소
+
+## 2.4.15 - 2026-05-03
+### ⭐ Modern GUI 후속 개선과 취소 지원
+
+#### ⭐ 개선
+- **다이얼로그 공통 베이스 도입**: `ProcessingDialog`, `UpdateDialog`, `LanguageSelectionDialog`가 공통 모달 초기화와 중앙 정렬 로직을 공유하도록 정리
+- **언어 변경 즉시 적용**: UI 설정 탭에서 언어를 바꾸면 입력값을 보존한 채 Modern GUI 탭을 재생성해 재시작 없이 새 번역을 반영
+- **BRIR 생성 취소 지원**: 처리 다이얼로그에 Cancel 버튼을 추가하고 단계 경계에서 협력적으로 중단하도록 cancellation scope를 도입
+
+#### 🔧 빌드 / 설정 변경
+- **GUI 이벤트 버스 추가**: 언어/테마 변경 이벤트를 `EventBus`로 발행해 탭과 앱 오케스트레이터의 직접 결합을 낮춤
+- **업데이트 실행 로직 분리**: pip, Velopack, legacy installer 업데이트 실행을 UI 없는 executor 클래스로 분리해 테스트 가능하게 변경
+- **i18n 키 정합성 CI 검증**: 모든 로케일 JSON이 `en.json`과 동일한 키를 갖는지 lint 잡에서 확인
+- **GUI 매직 사이즈 상수화**: Modern GUI 창/다이얼로그/주요 위젯 폭 값을 `gui.constants`로 모음
+- **standalone 빌드 include 동기화**: 신규 `gui.event_bus`와 `core.recording_validation` 모듈을 Nuitka 빌드 설정에 반영
+
+#### 🐛 버그 수정
+- **녹음 채널 검증 분리**: 파일명 기반 스피커 목록과 강제 채널 수 불일치 검사를 순수 함수로 분리하고 단위 테스트를 추가
+
+## 2.4.14 - 2026-05-03
+### 🔧 Modern GUI 구조적 분리 (Phase 4 — Move-only refactor)
+
+#### 🔧 빌드 / 설정 변경
+- **`gui/modern_gui.py` 6개 모듈로 분할**: 단일 2,405줄 God Object를 메인 오케스트레이터(~250줄) + 4개 탭(`gui/tabs/{recorder,impulcifer,settings,info}_tab.py`) + 다이얼로그(`gui/dialogs.py`) + 헬퍼(`gui/utils.py`) + 상수(`gui/constants.py`)로 분리. 동작·UI 레이아웃·`generate_brir()` 인자 조립 로직은 변경 없음 (move-only refactor)
+- **외부 인터페이스 보존**: `gui_main.py`, `pyproject.toml`의 콘솔 스크립트, `tests/test_suite.py`, Nuitka 빌드 스크립트가 사용하는 `from gui.modern_gui import main_gui` 경로는 그대로 유지
+- **Nuitka 빌드 동기화**: `build_scripts/build_nuitka.py`에 신규 8개 모듈(`gui.constants`, `gui.utils`, `gui.dialogs`, `gui.tabs`, `gui.tabs.recorder_tab`, `gui.tabs.impulcifer_tab`, `gui.tabs.settings_tab`, `gui.tabs.info_tab`)을 명시. CI 워크플로우는 이미 `--include-package=gui`로 하위 패키지를 재귀 포함하므로 미수정
+- **테스트 회귀 없음**: 전체 pytest 스위트(57 passed, 3 skipped — GUI 임포트는 headless 환경에서 skip), `magnitude_response` parity, virtual bass, parallel processing, 마이크 편차 보정 통합 테스트 모두 통과. en/ko 271개 i18n 키 동기 유지
+
+## 2.4.13 - 2026-05-02
+### 🐛 Modern GUI 스레드 안전성·블로킹·자잘한 회귀 정리
+
+#### 🐛 버그 수정
+- **녹음 중 GUI 응답 불능 해소**: `start_recording()`이 메인 스레드에서 `recorder.play_and_record()`(완전 블로킹 함수)를 직접 호출하던 동작을 별도 스레드 실행으로 전환. 완료/실패 처리는 `root.after(0, ...)`로 메인 스레드에 위임
+- **로거 콜백 스레드 안전성 확보**: 워커 스레드에서 `ProcessingDialog.add_log/update_progress/mark_complete`가 Tkinter 위젯의 `insert/configure/set`을 직접 호출하던 위반을 수정. 모든 위젯 조작을 `self.after(0, _fn)`로 메인 스레드에 마샬링하고 의미 없던 `update_idletasks()` 제거
+- **`pip_upgrade()` 무성공 표시 차단**: `subprocess.Popen` 후 `time.sleep(1)`로 끝내고 항상 성공 메시지를 띄우던 동작을 `process.communicate(timeout=300)`으로 완료 대기·`returncode` 분기·실패 시 stderr 노출로 교체. Windows `CREATE_NEW_CONSOLE`를 제거해 양 플랫폼 모두 출력을 캡처
+- **`UpdateDialog.on_update()` 위젯 트리 순회 의존 제거**: `winfo_children()` 검색으로 버튼을 찾던 취약한 비활성화 로직을 `update_button` / `remind_button` / `skip_button` 인스턴스 직접 참조로 교체
+
+#### ⚡ 성능 개선
+- **`setup_pretendard_font()` 결과 캐싱**: `ModernImpulciferGUI.__init__`·`ProcessingDialog.__init__`·`UpdateDialog.__init__`마다 GDI `AddFontResourceExW`와 `tkfont.families()` 순회를 반복하던 비용을 모듈 수준 `_font_cache`(언어 코드 기준)로 1회로 고정
+- **CTkFont 인스턴스 공용화**: 동일한 `family/size/weight` 조합의 `ctk.CTkFont(...)`를 탭·다이얼로그마다 재생성하던 23곳을 `ModernImpulciferGUI._build_fonts()`가 만드는 `self.fonts` 딕셔너리(11종) 한 번 생성·재사용으로 정리. `ProcessingDialog`·`UpdateDialog`도 `fonts` 파라미터로 같은 폰트 셋을 공유
+
+#### ⭐ 개선
+- **GUI 하드코딩 문자열 i18n화**: `update_channel_guidance()`(채널 안내 5종)와 `start_recording()`(녹음 설정 확인·채널 불일치 본문)에서 영어 하드코딩되어 있던 문자열을 i18n 키로 추출. `message_channel_guidance_*`, `message_channel_mismatch_body`, `message_recording_setup_info` 등 7개 키를 `en.json`/`ko.json`(한국어 번역)에 추가하고 나머지 7개 언어 파일에는 영어 fallback으로 동기화
+- **매직넘버 row 제거**: `toggle_room_correction`/`toggle_headphone_compensation`/`toggle_decay_per_channel`이 `row=99/100/999`로 임의 행에 프레임을 그리던 동작을 부모 grid 흐름과 일치하는 예약 행(`_room_options_row`/`_headphone_options_row`/`_decay_channels_row`)으로 교체
+- **파일 다이얼로그 필터 상수화**: `browse_file` 호출 시 중복되던 `filetypes` 리터럴 5개소를 `FILETYPES_AUDIO`/`FILETYPES_AUDIO_WITH_PKL`/`FILETYPES_TEXT`/`FILETYPES_WAV`/`FILETYPES_WAV_SAVE` 모듈 상수로 통합
+
+## 2.4.12 - 2026-05-02
+### 🐛 Lion 가상 베이스 AutoEQ 패리티 회복 + 빌드 설정 정리
+
+#### 🐛 버그 수정 (PR #62)
+- **가상 베이스 출력 변조 회귀 수정**: 외부 `autoeq-py313` 의존성이 단순 Python 3.13 포팅이 아닌 알고리즘 변경판이라 LionLion123/Impulcifer 대비 EQ FIR magnitude를 흐트러뜨려 저역 채널 불일치와 고역 변조를 발생시키던 문제 해결
+  - `autoeq-py313` 외부 의존을 제거하고 AutoEQ 1.2.5 계열을 `autoeq/` 패키지로 벤더링
+  - `smoothen_heavy_light()` / 구형 `equalize()` / `minimum_phase_impulse_response()` 경로를 EQ 워커가 직접 사용
+  - `core/utils.py:magnitude_response()`, `core/impulse_response.py:frequency_response()`, headphone compensation을 Lion 동작으로 정렬
+  - 정규화는 모든 처리 후 한 번 수행하도록 파이프라인 순서 복원
+- **가상 베이스 합성 경로 정렬**: 채널별 임의 boost/cut을 막기 위해 shared band-limited bass impulse + global crossover gain 매칭 + ITD 보존 + ILD shelf 적용 방식으로 통일
+- **TensorFlow v1 의존성 제거**: parametric/fixed-band EQ 최적화의 활성 경로를 `scipy.optimize.least_squares`로 대체 (BRIR 출력에는 영향 없음 — 데모 hesuvi.wav 비트 동등)
+- **Pillow 12 호환**: `Image.ADAPTIVE` 직접 사용을 `Image.Palette.ADAPTIVE` 우선 fallback으로 교체
+- **병렬 처리 정책 명확화**: 표준 GIL Python에서 BrokenProcessPool 시 thread fallback을 차단(직렬화로 회귀 방지). free-threaded 빌드에서만 thread fallback 허용
+
+#### ⚡ 현대화 — 출력 동등 보장 (PR #63)
+- **`magnitude_response`를 `np.fft.rfft`로 전환**: 기존 `scipy.fftpack.fft` + half-slice와 첫 `ceil(N/2)` 빈에서 비트 동일. 실수 입력에서 `fft(x)[k] == rfft(x)[k]`가 성립하는 범위만 노출. 약 2배 빠름. 회귀 방지를 위한 `tests/test_magnitude_response_parity.py` 추가
+- **콘솔 유니코드 글리프 복원**: `✓ / ✗ / ⚠`를 다시 사용. Windows cp949 인코딩 에러는 글리프 제거가 아니라 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` 일회성 호출로 해결
+- **벤더링한 AutoEQ 정리** (출력 영향 없음):
+  - `autoeq/__init__.py`에 `__version__ = "1.2.5+impulcifer"` 추가
+  - `raise NotImplementedError` 뒤 도달 불가능 코드 제거
+  - `_fc = np.abs(np.round(_fc / fs) * fs - _fc)` 항등 연산 제거
+  - `read_from_csv`를 `with open(...)` 블록으로 전환 (파일 핸들 누수 차단)
+  - `None in ndarray` / float ndarray의 `is None` 체크를 `np.any(np.isnan(...))`로 교체 (NumPy 2.x deprecation 트랩 회피)
+  - `interpolate()`의 죽은 None-제거 루프를 `~np.isnan` boolean mask로 벡터화
+- **`core/parallel_workers.py` docstring 정정**: "scipy + numpy만 사용" 표현은 EQ 워커가 lazy-import로 matplotlib/PIL/tabulate까지 끌어오는 실제 동작과 어긋나므로 수정
+
+#### 🛠 빌드 설정 정리 (PR #65)
+- **불필요한 Nuitka 플러그인 활성화 제거**: 현행 Nuitka(V4.1rc9) 소스 검증 결과 다음 두 플래그가 빌드 로그에 경고를 출력하는 무의미한 호출이라 제거. `--enable-plugin=tk-inter`만 유지
+  - `--enable-plugin=numpy`: `NumpyPlugin.isDeprecated() == True`. 본문이 비어 있고 deprecation 경고 출력
+  - `--enable-plugin=matplotlib`: `MatplotlibPlugin.isAlwaysEnabled() == True`. 표준 빌드에서 자동 활성화. "이미 항상 활성화" 경고 출력
+  - 적용 위치: `build_scripts/build_nuitka.py`, `.github/workflows/build-linux.yml`, `.github/workflows/build-macos.yml`, `.github/workflows/release-cross-platform.yml`(2개 잡)
+- **`requirements.txt` ↔ `pyproject.toml` 동기화**: AutoEQ 벤더링 후 드리프트되어 있던 항목들 정정
+  - 제거: `autoeq-py313>=1.2.0` (벤더링됨, 코드에서 import 없음)
+  - 추가: `Pillow>=10.0.0` (PNG 팔레트 최적화에 사용)
+  - 추가: `packaging>=23.0` (`updater/update_checker.py` 버전 비교)
+
+#### ✅ 검증
+- 데모 입력(`data/demo` + `--vbass --vbass_freq 250`)으로 생성한 `hesuvi.wav`가 Lion Python 3.13 대조군과 비트 단위 일치 (PR #62), Lion Python 3.8 대조군과는 cross-Python BLAS 부동소수 바닥값(`max_abs_sample_diff ~7e-9`)에서 일치
+- PR #63 현대화 이후에도 동일 데모의 `hesuvi.wav` MD5(`d295982d021a6d16ab2c194c3517c162`) 변동 없음
+- PR #65 빌드 설정 변경 후에도 동일 MD5 유지 — 빌드 설정은 런타임 경로를 건드리지 않음
+
+## 2.4.11 - 2026-03-23
+### ⚡ GUI 스크롤 성능 개선
+
+#### ⚡ 성능 개선
+- **스크롤 시 GPU 스파이크(~30%) 해소**: CTkScrollableFrame 내부 중첩 프레임 14개의 `corner_radius=10` → `0`으로 변경
+  - CustomTkinter의 corner_radius는 Canvas 위에 안티앨리어싱 라운드 코너를 매 프레임 렌더링하여 스크롤 시 GPU 부하 유발
+  - 최상위 컨테이너(탭뷰, 스크롤 프레임)의 라운드 코너는 유지하여 디자인 톤 보존
+- **ProcessingDialog `.update()` → `.update_idletasks()`**: 로그 출력 시 전체 이벤트 루프 처리 대신 화면 갱신만 수행하여 처리 중 UI 응답성 개선
+
+## 2.4.10 - 2026-03-23
+### 🐛 BRIR 처리 후 메모리 미해제 수정
+
+#### 🐛 버그 수정
+- **BRIR 처리 후 ~3.6GB 메모리 미해제**: `gc.collect()`만으로는 아직 스코프 내 로컬 변수를 수거하지 못함
+  - `impulcifer.py:main()` 끝에서 `del hrir, estimator` 등 대형 객체 명시적 삭제 후 GC 수행
+  - jamesdsp `dsp_hrir` deepcopy 사용 후 즉시 `del`
+  - hangloose `single_hrir` deepcopy 사용 후 즉시 `del`
+  - 글로벌 로거의 GUI 콜백 참조 해제 (ProcessingDialog → GUI 위젯 참조 체인 끊기)
+  - `infra/logger.py:set_gui_callbacks()`에서 None 전달 시에도 콜백 설정 가능하도록 수정
+
+## 2.4.9 - 2026-03-19
+### 🐛 Velopack 훅 인자명 수정 + 업데이트 UX 개선
+
+#### 🐛 버그 수정
+- **Velopack 라이프사이클 훅 인자명 수정**: Velopack은 `--veloapp-*` prefix를 사용하지만 코드가 `--velopack-*`을 검색하고 있어 모든 훅(설치/업데이트/제거)이 감지 실패
+  - `gui_main.py`: `--velopack-` → `--veloapp-` (공식 문서: https://docs.velopack.io/integrating/hooks)
+  - `build_nuitka.py`: 폴백 엔트리포인트에도 올바른 Velopack 훅 핸들러 추가
+
+#### ⭐ 개선
+- **업데이트 후 재시작 알림**: `VELOPACK_RESTART` 환경 변수 감지하여 업데이트 완료 메시지 표시
+- **업데이트 전 메시지 개선**: "앱이 종료됩니다. 잠시 후 자동으로 다시 시작됩니다." 안내 추가
+
+## 2.4.8 - 2026-03-08
+### 🐛 Velopack 설치 훅 + 메모리 회수
+
+#### 🐛 버그 수정
+- **Velopack 설치 훅 실패 수정**: `--velopack-install=<version>` 형식의 인자를 exact match로 검사하여 감지 실패 → 설치 중 GUI가 실행되고 "install hook failed" 경고 발생
+  - `startswith('--velopack-')` prefix 매칭으로 변경하여 모든 인자 형식 처리
+
+#### ⭐ 개선
+- **BRIR 생성 후 메모리 회수**: 처리 완료 후 ~3 GB 메모리가 해제되지 않던 문제
+  - `impulcifer.py:main()` 끝에 `gc.collect()` 추가
+  - GUI `run_processing()` finally 블록에서 `gc.collect()` + Windows working set 트리밍
+  - BRIR 반복 생성 시 메모리 누적 방지
+
+## 2.4.7 - 2026-03-05
+### 🐛 가상 베이스 + 플롯 병렬 처리 크래시 수정
+
+#### 🐛 버그 수정
+- **가상 베이스 + 플롯 동시 사용 시 크래시 수정**: ProcessPoolExecutor 워커 프로세스가 `impulcifer.py` 전체를 import하여 matplotlib, bokeh, autoeq 등 무거운 모듈을 불필요하게 로드 → 가상 베이스의 메모리 사용과 결합하여 워커 OOM 크래시
+  - 워커 함수를 `core/parallel_workers.py` 경량 모듈로 분리
+  - `process_plot_worker`: `scipy.signal.convolve`만 사용 (matplotlib/bokeh 불필요)
+  - 워커당 메모리: ~200-400 MB → ~50-80 MB
+- **ProcessPoolExecutor 안전망 추가**: `BrokenProcessPool` 발생 시 `ThreadPoolExecutor`로 자동 폴백
+- **max_workers 최적화**: 작업 수보다 많은 워커 생성 방지 (`min(cpu_count, len(items))`)
+
+## 2.4.6 - 2026-03-05
+### 🔧 빌드 타임 마커 기반 버전/설치방식/라이선스 수정
+
+#### 🐛 버그 수정
+- **버전 인식 오류 수정**: Nuitka 스탠드얼론 빌드에서 `importlib.metadata`와 `pyproject.toml` 모두 실패하여 하드코딩된 구 버전이 표시되던 문제 해결
+  - `infra/_build_info.py` 빌드 마커 시스템 도입으로 모든 빌드 경로에서 정확한 버전 보장
+- **설치 방식 오인식 수정**: Nuitka가 `__compiled__`를 `sys` 속성이 아닌 모듈 전역 변수로 설정하여 `hasattr(sys, '__compiled__')` 감지 실패 → 스탠드얼론인데 "pip 패키지"로 표시되던 문제 해결
+  - `updater_core.py`에 빌드 마커 기반 `_is_standalone_build()` 도입
+  - `is_pip_environment()`가 스탠드얼론에 번들된 pip을 무시하도록 수정
+- **라이선스 파일 열리지 않는 문제 수정**: Nuitka 빌드에서 `LICENSE`가 `License.txt`로 리네임되어 번들되는데 GUI가 `LICENSE`만 탐색하던 문제 해결
+  - 복수 후보 경로(`License.txt`, `LICENSE`) 탐색 + GitHub 폴백
+
+#### ⭐ 새로운 기능
+- **빌드 타임 마커 시스템**: `infra/_build_info.py`를 통한 빌드 타입/버전 관리
+  - Nuitka 빌드: `build_scripts/build_nuitka.py`가 `BUILD_TYPE="standalone"` 마커 생성
+  - PyPI 빌드: `hatch_build.py` 커스텀 훅이 `BUILD_TYPE="pip"` 마커 생성
+  - 개발 환경: 기본값 `BUILD_TYPE="dev"` 사용, pyproject.toml에서 동적 읽기
+
+## 2.4.5 - 2026-03-04
+### 🐛 버그 수정 및 안정성 개선
+
+#### 🐛 버그 수정
+- **plot_ild/plot_ipd/plot_iacc/plot_etc AttributeError 수정**: PR4에서 Bokeh 레이아웃 메서드만 구현하고 matplotlib 래퍼(`plot_ild`, `plot_ipd`, `plot_iacc`, `plot_etc`)를 누락한 문제 해결
+  - `impulcifer.py`의 호출부를 Bokeh HTML 저장 방식(`_save_bokeh_analysis_plots` 헬퍼)으로 전환
+  - 각 분석 플롯이 `plots/<name>/<name>_analysis.html`로 저장됨
+- **가상 베이스 극성 감지 왜곡 수정**: `virtual_bass.py`의 `_detect_polarity()`가 채널별로 독립 실행되어 같은 스피커의 좌/우 ear IR에 서로 다른 극성이 적용되던 문제 해결
+  - 스피커 단위로 ipsilateral ear의 극성을 기준으로 통일하여 좌우 일관된 저역 응답 보장
+
+#### ⭐ 새로운 기능
+- **Velopack 라이프사이클 훅 처리**: `gui_main.py`에 `--velopack-install`, `--velopack-updated`, `--velopack-obsolete`, `--velopack-uninstall` 인자 처리 추가
+  - 설치/업데이트 시 불필요한 GUI 실행 방지 (이슈 3: install hook failed 해결)
+  - 제거 시 즉시 종료하여 GUI가 실행되는 문제 해결 (이슈 4)
+  - 제거 시 `%LOCALAPPDATA%/Impulcifer/config` 설정 파일 자동 정리 (이슈 5)
+
+### Historical note: Console/GUI localization and Info tab (originally 2.5.0 - 2026-03-02)
+### 🌐 콘솔/GUI 메시지 전면 국제화 및 Info 탭 추가
+
+#### ⭐ 새로운 기능
+- **Info 탭 추가**: 버전 정보, 라이선스 보기, 버그 리포트 링크를 제공하는 Info 탭 신설
+  - `tab_info`, `section_about`, `label_version`, `button_view_license`, `button_report_bug` 키 추가
+
+#### 🌐 콘솔 메시지 국제화
+- **BRIR 생성 전 과정의 콘솔 메시지 국제화**: `impulcifer.py`의 40개 이상 logger 호출을 번역 키로 전환
+  - `logger.step()`에 `**kwargs` 지원 추가 (매개변수화된 번역 키 지원)
+  - `write_readme()` 함수의 BRIR Info 섹션 전면 국제화
+  - 헤드폰 보상 파일 탐색 과정의 진단 메시지 국제화
+  - 병렬 처리 정보 메시지 국제화
+- **33개 신규 번역 키** 추가 (11개 로케일 파일 모두 반영):
+  - 헤드폰 파일 탐색: `cli_info_hp_*` (10개)
+  - 병렬 처리: `cli_info_parallel_*` (4개)
+  - BRIR Info: `cli_readme_*` (14개)
+  - 경고/오류: `cli_warning_hp_no_wav`, `cli_error_hp_*` (3개)
+
+#### 🐛 번역 품질 수정
+- **9개 로케일 파일의 번역 오류 수정**:
+  - FR: `cli_readme_side_right` 약어 역전 수정, `cli_adjusting_decay` 잘못된 용어 수정
+  - RU: `cli_adjusting_decay` 존재하지 않는 단어 수정
+  - 7개 언어: `message_channel_mismatch_warning`의 누락된 `\n\n` 복원
+  - 다수 언어: `{play_channels}` 등 팬텀 포맷 플레이스홀더 제거
+  - 이모지 불일치 수정
+- **zh_CN/zh_TW 로케일 동기화**: zh-cn/zh-tw의 완전 번역을 zh_CN/zh_TW에 복사하여 미번역 문자열 해결
+
+#### 📦 변경된 파일
+- `impulcifer.py`: 40+ logger 호출 국제화, `write_readme()` 국제화
+- `infra/logger.py`: `step()` 메서드 `**kwargs` 지원
+- 모든 locale 파일 (11개): 33개 신규 키 + 오류 수정
+
+---
+
+## 2.4.4 - 2026-02-28
+### Virtual Bass ITD 반영
+- Virtual Bass: ITD(Interaural Time Difference) 반영 로직 추가. 합성된 bass IR에 원본 HRIR의 좌우 귀 도달 시간차를 보존하도록 개선.
+
+### Import 정리
+- `impulcifer.py`: 누락된 `importlib.resources`, `matplotlib.font_manager` import 추가
+- `core/channel_generation.py`: ImpulseResponse를 올바른 소스 모듈에서 import하도록 수정
+- `research/` 전체(10개 파일 + 1 notebook): `sys.path` 경로 수정 및 패키지 접두사 적용
+
+## 2.4.3 - 2026-02-28
+### Import 정리 및 경로 수정 (중간 릴리스)
+
+## 2.4.2 - 2026-02-27
+### 📁 프로젝트 구조 재편
+루트에 평면적으로 나열되어 있던 모듈들을 논리적 패키지 구조로 재편했습니다.
+
+#### 새로운 폴더 구조
+- **`core/`** — 핵심 오디오 처리 모듈 (constants, utils, impulse_response, hrir, room_correction, virtual_bass, channel_generation, recorder, parallel_processing 등)
+- **`gui/`** — GUI 모듈 (modern_gui, legacy_gui)
+- **`i18n/`** — 국제화/로컬라이제이션 (localization.py + locales/*.json)
+- **`infra/`** — 인프라 유틸리티 (logger, resource_helper, get_version)
+- **`updater/`** — 업데이트 관리 (update_checker, updater_core)
+- **`tests/`** — 테스트 파일
+- **`build_scripts/`** — 빌드 스크립트 (build_nuitka, benchmark_parallel)
+
+#### 루트에 유지된 파일
+- `impulcifer.py` — 메인 파이프라인
+- `impulcifer_cli.py`, `impulcifer-cli.py` — CLI 진입점
+- `gui_main.py` — Nuitka 빌드 진입점
+- `pyproject.toml` — 프로젝트 설정
+
+#### 변경 사항
+- 모든 내부 임포트를 새 패키지 경로로 업데이트
+- pyproject.toml 엔트리 포인트, 빌드 설정, 공유 데이터 경로 업데이트
+- build_nuitka.py 모듈 포함 목록 업데이트
+- pytest 설정의 testpaths 업데이트
+
+---
+
+## 2.4.1 - 2026-02-27
+### 🔧 Virtual Bass 로거 번역 수정
+- `vbass_` 접두사가 로거 자동 번역 시스템에서 누락되어 번역 키가 그대로 출력되던 문제 수정
+- `logger.py`의 `_translate()` 접두사 목록에 `vbass_` 추가
+
+---
+
+## 2.4.0 - 2026-02-27
+### 🎵 가상 베이스 (Virtual Bass) 합성 기능 추가
+저주파 대역을 합성된 미니멈 페이즈 베이스로 교체하여 서브베이스 응답을 개선하는 기능을 추가했습니다.
+
+#### ⭐ 새로운 기능
+- **Virtual Bass 합성 엔진** (`virtual_bass.py`):
+  - 크로스오버 주파수 이하의 원본 저음을 합성 베이스로 교체
+  - 미니멈 페이즈 변환을 통한 자연스러운 베이스 재생
+  - 자동 극성 감지 (Samson LM10x 등 대부분의 마이크 지원)
+  - ILD (Interaural Level Difference) 셸프 보정
+  - 크로스오버 주파수에서 자동 게인 매칭
+  - 서브베이스 하이패스 필터로 DC 럼블 제거
+
+- **CLI 인자 추가**:
+  - `--vbass`: 가상 베이스 합성 활성화
+  - `--vbass_freq`: 크로스오버 주파수 (Hz, 기본값 250)
+  - `--vbass_hp`: 서브베이스 하이패스 주파수 (Hz, 기본값 15)
+  - `--vbass_polarity`: 극성 처리 (auto/normal/invert)
+
+- **GUI 통합** (Modern GUI):
+  - Virtual Bass 전용 설정 그룹 추가
+  - 활성화 토글, 크로스오버 주파수, 하이패스, 극성 설정
+  - 비활성화 시 자동으로 옵션 잠금
+
+#### 🌐 다국어 지원
+- 9개 언어 모두 Virtual Bass 관련 문자열 번역 완료
+  - 한국어, 영어, 일본어, 중국어(간체/번체), 프랑스어, 독일어, 스페인어, 러시아어
+
+#### 🧪 테스트
+- `test_virtual_bass.py`: 스피커 분류, 극성 감지, ILD 셸프, 전체 파이프라인 스모크 테스트
+
+#### 📦 변경된 파일
+- **신규**: `virtual_bass.py`, `test_virtual_bass.py`
+- **수정**: `impulcifer.py`, `modern_gui.py`, `pyproject.toml`, `CHANGELOG.md`
+- **번역**: 모든 locale 파일 (11개)
+
+---
+
+## 2.3.3 - 2026-01-04
+### 🔄 Windows CI/CD Velopack 마이그레이션
+Windows 배포 시스템을 Inno Setup에서 Velopack으로 전환하여 델타 업데이트를 지원합니다.
+
+#### 🚀 주요 변경
+- **Inno Setup → Velopack**: Windows 설치 파일(.iss) 제거, Velopack 패키징으로 전환
+  - .NET SDK 설정 단계 추가 (Velopack CLI 도구용)
+  - 델타 업데이트 메커니즘으로 업데이트 크기 대폭 감소
+- **업데이터 재작성** (`updater.py`): Velopack + pip 이중 지원 구조
+  - `velopack_update()`: Velopack 기반 자동 업데이트
+  - `legacy_update()`: pip 기반 폴백 업데이트
+- **데이터 폴더 접근**: UI Settings 탭에 "Data Access" 섹션 추가
+  - 참조 파일, 테스트 신호, 녹음 파일에 바로 접근 가능
+- **현지화 키 추가**: `section_data_access`, `label_data_folder_description`, `button_open_data_folder` 등 (11개 로케일)
+
+#### 📦 변경된 파일
+- **제거**: `.github/workflows/Impulcifer install maker.iss`
+- **수정**: `release-cross-platform.yml`, `updater.py`, `modern_gui.py`
+- **번역**: 모든 locale 파일 (11개)
+
+---
+
+## 2.3.2 - 2025-11-29
+### 🔧 업데이트 체커 및 CI/CD 수정
+GitHub 자동 릴리즈 태그로 인한 업데이트 오탐지 문제를 해결하고, Linux CI/CD 빌드 이슈를 수정했습니다.
+
+#### 🐛 버그 수정
+- **업데이트 체커 타임스탬프 접미사 무시**: 자동 릴리즈 태그 (`v2.3.1-20241129123456`)가 동일한 버전임에도 "업데이트 가능"으로 잘못 표시되던 문제 해결
+  - `_normalize_version()` 메서드 추가: 기본 시맨틱 버전만 추출
+  - 예: `2.3.1-20241129123456` → `2.3.1`, `v2.3.1-beta` → `2.3.1`
+  - 양쪽 버전 모두 정규화 후 비교
+
+- **Linux CI/CD `--onefile` 문제 해결**: AppImage 생성을 위해 standalone 폴더를 사용해야 하는데 `--onefile`이 함께 지정되어 있던 문제 수정
+  - `build-linux.yml`, `release-cross-platform.yml`에서 `--onefile` 플래그 제거
+  - AppImage 생성 스크립트가 `gui_main.dist` 폴더를 올바르게 처리하도록 업데이트
+  - 래퍼 스크립트로 `LD_LIBRARY_PATH` 설정 추가
+
+#### 🌐 현지화 추가
+다음 누락된 키들을 11개 언어 파일에 추가:
+- `error_title`: 오류 다이얼로그 제목
+- `update_preparing`: pip 업데이트 준비 메시지
+- `update_error_no_method`: pip/설치 프로그램 모두 불가 시 오류
+- `update_success`: 업데이트 시작 확인
+- `update_complete_title`, `update_complete_message`: 백그라운드 업데이트 시작 알림
+- `update_error_no_installer`: 설치 프로그램 없음 오류
+
+#### 📦 변경된 파일
+- `update_checker.py`: 버전 정규화 로직 및 테스트 추가
+- `.github/workflows/build-linux.yml`: standalone 폴더 기반 AppImage 생성
+- `.github/workflows/release-cross-platform.yml`: 동일 수정
+- 모든 locale 파일 (11개): 누락 키 추가
+
+---
+
+## 2.3.1 - 2025-11-28
+### 🎯 마이크 편차 보정 v3.0 및 버전 관리 개선
+마이크 편차 보정 알고리즘을 완전히 재작성하고, 버전 관리를 pyproject.toml에서 동적으로 읽어오도록 개선했습니다.
+
+#### ⭐ 마이크 편차 보정 v3.0 (완전 재작성)
+- **교차 검증 기반 보정**: 스피커 위치별 일관성 분석
+  - 같은 방향 스피커들의 좌우 편차 패턴 비교
+  - 일관된 편차만 마이크 문제로 판단, 불일관한 편차는 음향 특성으로 보존
+
+- **마이크 고유 오류 분리**:
+  - 스피커별 편차에서 공통 패턴(마이크 오류) 추출
+  - 룸 음향 및 HRTF 특성은 보존
+
+- **품질 가중 평균**:
+  - 저주파(<200Hz): 0.3 가중치 (룸 모드 영향 큼)
+  - 중주파(200-2000Hz): 1.0 가중치 (가장 신뢰)
+  - 고주파(>2000Hz): 0.5 가중치 (HRTF 특성 보존)
+
+- **v2.0 대비 개선점**:
+  - 단순 좌우 차이 → 다중 스피커 교차 검증
+  - 적응형 보정 → 품질 기반 신뢰도 가중치
+  - 위상 보정/해부학적 검증 → 간소화된 크기 전용 보정
+
+#### 🔧 기타 수정
+- **동적 버전 읽기**: `__version__`이 pyproject.toml에서 자동으로 읽어옴
+  - pip 설치 시: `importlib.metadata.version()` 사용
+  - 개발 모드: `tomllib`로 직접 파일 읽기
+  - Nuitka 빌드: 폴백 버전 사용
+
+- **GUI v3.0 반영**: v2.0 전용 옵션(phase_correction, adaptive_correction, anatomical_validation) 제거
+- **테스트 스위트 업데이트**: v3.0 API에 맞게 테스트 케이스 수정
+- **린터 오류 수정**: F401(미사용 import), F841(미사용 변수), F541(f-string 플레이스홀더 없음)
+
+#### ⚙️ 새 설정
+- `mic_deviation_debug_plots`: 디버그 플롯 저장 옵션 (기본: 비활성화)
+  - Program Files 등 쓰기 권한 문제 방지
+
+---
+
+## 2.2.5 - 2025-11-28
+### 🐛 역필터 및 GUI 안정성 수정
+
+#### 🐛 버그 수정
+- **from_wav 역필터 계산 치명적 버그 수정**: 외부 WAV 파일의 역필터 생성 시 잘못된 계산이 수행되던 문제 해결
+- **역필터 생성 개선**: 외부 WAV 파일에 대한 역필터 생성 로직 전반 개선
+- **GUI 크래시 수정**: DoubleVar/IntVar Entry 필드가 비어있을 때 발생하던 GUI 크래시 해결
+- **병렬 워커 ImpulseResponse 오류 수정**: 병렬 처리 시 ImpulseResponse 인스턴스 생성 오류 해결
+- **crop_tails() 노이즈 플로어 크롭 수정**: IR 꼬리가 노이즈 플로어에서 올바르게 잘리지 않던 문제 수정
+- **`button_close` 번역 누락 추가**: en.json, ko.json에 누락된 키 추가
+
+---
+
+## 2.3.0 - 2025-11-27
+### 🔴 치명적 버그 수정 - 고주파 보간 문제
+AutoEQ/Impulcifer의 고주파 응답이 훼손되던 치명적인 버그를 수정했습니다.
+
+#### 🐛 핵심 수정
+- **고주파 보간 아티팩트 해결**: `interpolate()` 호출 시 `pol_order=1` (선형) 명시
+  - **문제**: 기본값 `pol_order=3` (큐빅)이 고주파에서 심각한 오버슈트/링잉 유발
+  - **증상**: 10kHz 이상에서 비정상적인 피크와 딥, "벽" 같은 노이즈
+  - **원인**: 큐빅 스플라인이 sparse한 고주파 데이터에서 불안정
+  - **해결**: 선형 보간(`pol_order=1`)으로 통일
+
+- **`_apply_cubic_interp` 함수 제거**: 직접 `interpolate(pol_order=1)` 호출로 대체
+  - 코드 단순화 및 명확성 향상
+  - 모든 보간 지점에서 일관된 선형 보간 적용
+
+#### 📍 영향받은 파일
+- `impulcifer.py`: 모든 `interpolate()` 호출에 `pol_order=1` 추가
+- `hrir.py`: 헤드폰 보상 관련 보간 수정
+- `frequency_response.py`: FR 조합 시 보간 수정
+
+#### ⚠️ 사용자 영향
+- 이전 버전(v1.5.2~v2.2.x)에서 생성한 BRIR은 고주파가 훼손되었을 수 있음
+- v2.3.0으로 재생성 권장
+
+---
+
+## 2.2.4 - 2025-11-24
+### PyPI 패키지 현지화 수정
+pip로 설치한 패키지에서 번역이 작동하지 않던 문제를 해결했습니다.
+
+#### 🐛 버그 수정
+- **PyPI 패키지 locale 경로 문제**: 설치된 패키지에서 `locales/` 디렉토리를 찾지 못하던 문제
+  - `importlib.resources`를 사용한 패키지 리소스 접근으로 변경
+  - `pyproject.toml`에 `[tool.hatch.build.targets.wheel]` 설정 추가
+- **한국어 Windows 인코딩 오류**: subprocess 호출 시 `UnicodeDecodeError` 수정
+  - `encoding='utf-8', errors='replace'` 옵션 추가
+- **헤드폰 보상 파일 경로 처리 개선**: 상대/절대 경로 혼합 처리
+
+---
+
+## 2.2.3 - 2025-11-23
+### 헤드폰 보상 및 WAV 검증 수정
+
+#### 🐛 버그 수정
+- **헤드폰 보상 변수 스코프 문제**: `hp_fr` 변수가 조건문 밖에서 참조되던 오류 수정
+- **WAV 파일 검증 과도**: 정상 파일이 "노이즈 월"로 오진되던 문제 완화
+  - 검증 임계값 조정
+  - 경고만 표시하고 처리는 계속 진행
+
+---
+
+## 2.2.2 - 2025-11-22
+### 폰트 렌더링 및 업데이트 메커니즘 개선
+
+#### 🔧 개선사항
+- **폰트 렌더링 최적화**: matplotlib 폰트 캐시 관리 개선
+- **업데이트 감지 개선**: Nuitka standalone 환경 감지 로직 수정
+  - `sys.frozen` 속성 확인 추가
+  - pip 가용성 체크 개선
+- **ctypes.wintypes 미사용 import 제거**: Ruff F401 수정
+
+---
+
+## 2.2.1 - 2025-11-21
+### 최종 사용자 설치 가이드 추가
+
+#### 📚 문서
+- **INSTALL_GUIDE.md** 추가: Windows/macOS/Linux 설치 방법 상세 안내
+  - Nuitka 빌드 실행 파일 설치
+  - pip 설치 방법
+  - 문제 해결 가이드
+
+---
+
+## 2.2.0 - 2025-11-20
+### 코드 품질 개선 및 선형 보간 수정
+
+#### 🐛 중요 수정
+- **두꺼운 꼬리/오버슈트 아티팩트 수정**: 큐빅 → 선형 보간으로 전환
+  - IR tail에서 발생하던 비정상적인 진동 제거
+  - 고주파 응답 안정성 향상
+
+#### 🔧 코드 품질
+- **Flake8 린팅**: 전체 코드베이스 린팅 완료
+- **gui.py 포맷팅**: 탭을 스페이스로 변환 (ruff formatter)
+- 모든 주요 린터 경고 해결
+
+---
+
+## 2.1.5 - 2025-11-19
+### macOS 앱 이름 문제 수정
+
+#### 🐛 버그 수정
+- **macOS DMG 앱 이름**: 빌드 시 잘못된 앱 이름이 생성되던 문제 수정
+- Nuitka `--macos-app-name` 옵션 올바르게 적용
+
+---
+
+## 2.1.4 - 2025-11-19
+### 최종 사용자 설치 가이드
+
+#### 📚 문서
+- 설치 가이드 초안 추가
+- 버전 범프
+
+---
+
+## 2.1.3 - 2025-11-18
+### Linux AppImage 및 macOS DMG 빌드 수정
+
+#### 🐛 빌드 수정
+- **Linux AppImage**: 아이콘 및 검증 문제 해결
+  - `.desktop` 파일 포맷 수정 (들여쓰기 제거)
+  - 아이콘 경로 올바르게 설정
+- **macOS DMG**: `--onefile` 옵션으로 11KB 빈 DMG가 생성되던 문제 수정
+  - `--standalone`만 사용하도록 변경
+- **YAML 구문 오류**: heredoc을 echo 명령으로 교체
+
+---
+
+## 2.1.2 - 2025-11-17
+### CI/CD 중복 빌드 제거
+
+#### 🔧 CI/CD
+- **중복 빌드 방지**: push와 release 이벤트가 동시에 트리거되던 문제 해결
+- **아이콘 파일 참조 오류 제거**: 존재하지 않는 아이콘 파일 참조 제거
+
+---
+
+## 2.1.1 - 2025-11-17
+### uv 패키지 매니저 도입
+
+#### 🚀 성능 개선
+- **uv 패키지 매니저**: pip 대신 uv 사용으로 의존성 설치 50-80% 단축
+- **CI/CD 워크플로우 최적화**: 모든 워크플로우에서 uv 사용
+
+---
+
+## 2.1.0 - 2025-11-16
+### 성능 최적화 Phase 1-4
+
+#### 🚀 Phase 1: 메모리 복사 최적화 (5-10% 향상)
+- 불필요한 `.copy()` 호출 제거
+- 참조로 충분한 경우 복사 방지
+
+#### 🚀 Phase 2: 적응형 병렬 처리 (3-7배 속도 향상)
+- CPU 코어 수에 따른 동적 워커 할당
+- I/O 바운드 vs CPU 바운드 작업 구분
+
+#### 🚀 Phase 3: 주파수 배열 벡터화 (5-10% 향상)
+- 루프 기반 주파수 배열 생성을 NumPy 벡터 연산으로 변환
+
+#### 🚀 Phase 4: 문서화 및 버전 업데이트
+- 최적화 문서 추가
+- Python 3.14 지원 명기
+
+---
+
+## 2.0.0 - 2025-11-15
+### 🎉 Python 3.14 Free-Threaded 지원 및 크로스 플랫폼 CI/CD
+
+#### ⭐ 주요 기능
+- **Python 3.14 Free-Threaded (no-GIL) 지원**
+  - GIL 없는 진정한 병렬 처리 가능
+  - `concurrent.futures.ThreadPoolExecutor` 활용
+  - 멀티코어 CPU에서 선형적 성능 향상
+
+- **크로스 플랫폼 CI/CD**
+  - **Windows**: Nuitka → Inno Setup 설치 파일
+  - **macOS**: Nuitka → DMG 이미지
+  - **Linux**: Nuitka → AppImage + tarball
+  - GitHub Actions로 자동 빌드 및 릴리즈
+
+#### 🔧 코드 품질
+- **Ruff 린터**: 145개 오류 모두 수정
+  - F401: 미사용 import 제거
+  - F541: 불필요한 f-string 수정
+  - E722: bare except → Exception
+  - E701/E702: 한 줄에 여러 문장 분리
+
+#### 📦 의존성
+- Python 3.9-3.14 지원
+- `requires-python = ">=3.9,<3.15"`
+
+#### ⚠️ 호환성
+- Python 3.14t (Free-Threaded)는 선택적
+- 기존 Python 3.9-3.13에서도 정상 작동
+
+---
+
+## 1.9.1 - 2025-11-14
+### 🌐 업데이트 시스템 번역 완료
+v1.9.0에서 추가된 자동 업데이트 시스템의 모든 문자열을 나머지 언어로 번역 완료했습니다.
+
+#### 📝 번역 완료 언어
+- ✅ **프랑스어 (Français)**: 14개 업데이트 문자열 번역 완료
+- ✅ **독일어 (Deutsch)**: 14개 업데이트 문자열 번역 완료
+- ✅ **스페인어 (Español)**: 14개 업데이트 문자열 번역 완료
+- ✅ **일본어 (日本語)**: 14개 업데이트 문자열 번역 완료
+- ✅ **중국어 간체 (简体中文)**: 14개 업데이트 문자열 번역 완료
+- ✅ **중국어 번체 (繁體中文)**: 14개 업데이트 문자열 번역 완료
+- ✅ **러시아어 (Русский)**: 14개 업데이트 문자열 번역 완료
+
+#### 🎯 번역된 문자열
+- 업데이트 알림 다이얼로그 제목 및 메시지
+- 버전 정보 표시 (현재 → 새 버전)
+- 릴리스 노트 섹션
+- 3개 버튼: "지금 업데이트", "나중에 알림", "이 버전 건너뛰기"
+- 다운로드 진행 상황 메시지
+- 설치 진행 메시지
+- 오류 메시지 (다운로드 실패, 설치 실패, 일반 오류)
+
+#### 🌍 완전한 다국어 지원
+이제 **모든 9개 지원 언어**에서 자동 업데이트 시스템을 완전히 사용할 수 있습니다. 사용자는 자신의 언어로 업데이트 알림을 받고 원활하게 업데이트를 진행할 수 있습니다.
+
+#### 📦 변경된 파일
+- `locales/fr.json`: 프랑스어 업데이트 문자열 추가
+- `locales/de.json`: 독일어 업데이트 문자열 추가
+- `locales/es.json`: 스페인어 업데이트 문자열 추가
+- `locales/ja.json`: 일본어 업데이트 문자열 추가
+- `locales/zh-cn.json`: 중국어 간체 업데이트 문자열 추가
+- `locales/zh-tw.json`: 중국어 번체 업데이트 문자열 추가
+- `locales/ru.json`: 러시아어 업데이트 문자열 추가
+
+#### ✨ 사용자 경험
+- 모든 언어 사용자가 동일한 품질의 업데이트 경험을 제공받음
+- 업데이트 다이얼로그가 사용자의 선택 언어로 자동 표시
+- 일관된 번역 품질로 혼란 없이 업데이트 프로세스 진행
+
+## 1.9.0 - 2025-11-14
+### 🎉 자동 업데이트 시스템 추가
+프로그램이 자동으로 새 버전을 확인하고 설치할 수 있는 기능을 추가했습니다.
+
+#### ✨ 새로운 기능
+- **자동 업데이트 체크**: 프로그램 시작 시 GitHub 릴리즈에서 새 버전 자동 확인
+- **업데이트 알림 다이얼로그**: 새 버전 발견 시 릴리스 노트와 함께 알림 표시
+- **원클릭 업데이트**: "지금 업데이트" 버튼 클릭으로 자동 다운로드 및 설치
+- **진행 상황 표시**: 다운로드 진행률을 실시간으로 표시
+- **자동 재시작**: 설치 완료 후 새 버전 자동 실행
+
+#### 🔧 구현 세부사항
+- **`update_checker.py`**: GitHub API를 사용한 버전 체크
+  - Semantic versioning 비교
+  - 플랫폼별 다운로드 URL 자동 선택 (Windows/macOS/Linux)
+  - 릴리스 노트 자동 가져오기
+  - GitHub API rate limiting 처리
+
+- **`updater.py`**: 다운로드 및 설치 관리
+  - 백그라운드 다운로드 with 진행 상황 콜백
+  - Windows: Inno Setup 설치 파일 자동 실행
+  - macOS: DMG/PKG 파일 열기
+  - Linux: DEB/RPM/AppImage 지원
+
+- **`modern_gui.py`**: GUI 통합
+  - 시작 2초 후 백그라운드에서 업데이트 체크
+  - `UpdateDialog`: 업데이트 알림 및 관리 다이얼로그
+  - 사용자 선택: "지금 업데이트", "나중에 알림", "이 버전 건너뛰기"
+  - 현재 버전 자동 감지 (pyproject.toml에서 읽기)
+
+#### 🌍 다국어 지원
+- 영어 (`en.json`): 모든 업데이트 관련 문자열 추가
+- 한국어 (`ko.json`): 모든 업데이트 관련 문자열 번역
+- 업데이트 다이얼로그, 버튼, 메시지 모두 번역됨
+
+#### 📦 의존성 추가
+- **`packaging>=23.0`**: Semantic versioning 비교를 위해 추가
+
+#### ⚙️ 빌드 설정 업데이트
+- **Nuitka 빌드**: `update_checker`, `updater` 모듈 포함 추가
+- 업데이트 시스템이 빌드된 실행 파일에서도 정상 작동
+
+#### 💡 사용법
+1. 프로그램 시작 시 자동으로 업데이트 확인
+2. 새 버전이 있으면 다이얼로그가 자동으로 표시됨
+3. "지금 업데이트" 클릭 → 다운로드 및 설치 자동 진행
+4. "나중에 알림" 클릭 → 다음 실행 시 다시 확인
+5. "이 버전 건너뛰기" 클릭 → 해당 버전 무시
+
+#### 🔒 보안 및 안정성
+- GitHub API를 HTTPS로만 통신
+- 다운로드 실패 시 사용자에게 수동 다운로드 안내
+- 네트워크 오류 시 조용히 실패 (사용자 방해 안함)
+
+## 1.8.5 - 2025-11-14
+### Nuitka 빌드 설정 수정 - 번역 시스템 복구
+Nuitka 빌드에서 누락된 필수 모듈과 데이터를 추가하여 빌드된 프로그램의 번역 기능을 복구했습니다.
+
+#### 🔴 긴급 수정 (번역 시스템 복구)
+- **`localization` 모듈 추가**: 번역 시스템 모듈이 빌드에 포함되지 않던 문제 해결
+- **`locales/` 디렉토리 추가**: 모든 번역 파일 (9개 언어) 이 빌드에 포함되도록 수정
+  - en.json, ko.json, fr.json, de.json, es.json, ja.json, zh-cn.json, zh-tw.json, ru.json
+
+#### 🔧 필수 모듈 추가
+- **`logger` 모듈 추가**: 로깅 시스템이 빌드에 포함되도록 수정
+- **`channel_generation` 모듈 추가**: 채널 생성 기능이 빌드에 포함되도록 수정
+
+#### 🗑️ 불필요한 모듈 제거
+- **`scipy.io.wavfile` 제거**: v1.8.4에서 코드에서 제거된 모듈을 빌드 설정에서도 제거
+
+#### ⚙️ 엔트리 포인트 수정
+- **자동 생성 엔트리 포인트 수정**: `gui` → `modern_gui` 로 변경
+  - 기존에는 legacy GUI를 호출하도록 자동 생성되었으나, modern GUI를 사용하도록 수정
+
+#### 📝 변경된 빌드 설정
+```python
+# build_nuitka.py에 추가된 항목:
+"--include-module=localization",   # 번역 시스템
+"--include-module=logger",         # 로깅 시스템
+"--include-module=channel_generation",  # 채널 생성
+"--include-data-dir=locales=locales",  # 번역 파일
+
+# 제거된 항목:
+# "--include-module=scipy.io.wavfile"  # 사용하지 않음
+```
+
+#### 🎯 영향
+- **이전 빌드 (v1.8.4 이하)**: 번역이 작동하지 않았음
+- **현재 빌드 (v1.8.5)**: 모든 번역 기능이 정상 작동
+
+#### ⚠️ 참고
+- Legacy GUI (`gui` 모듈) 는 호환성을 위해 계속 포함됨
+- numpy, matplotlib 플러그인은 안정성을 위해 유지
+
+## 1.8.4 - 2025-11-14
+### 코드 품질 개선 - 린터 에러 수정
+모든 주요 린터 에러를 수정하여 코드 품질을 개선했습니다.
+
+#### 🔧 수정 사항
+- **F401 (Unused imports)**: 사용하지 않는 import 제거
+  - `logger.py`: `sys` import 제거
+  - `test_suite.py`: `FrequencyResponse` import 제거
+  - `impulcifer.py`: `scipy.io.wavfile` import 제거
+  - `utils.py`: 사용하지 않는 `Path` import 제거 후 실제 사용 확인하여 복원
+
+- **F541 (f-strings without placeholders)**: 불필요한 f-string을 일반 문자열로 변경
+  - `hrir.py`: 20개 이상의 f-string 수정
+  - 플레이스홀더가 없는 f-string을 일반 문자열로 변환
+
+- **E722 (Bare except)**: 모든 bare except를 `except Exception`으로 변경
+  - `impulcifer.py`: 2개 수정
+  - `localization.py`: 3개 수정
+  - `modern_gui.py`: 5개 수정
+  - `utils.py`: 1개 수정
+  - SystemExit, KeyboardInterrupt 등을 잘못 잡지 않도록 개선
+
+- **E701/E702 (Multiple statements on one line)**: 한 줄에 여러 문장 분리
+  - `hrir.py`: 9개의 복합 문장을 여러 줄로 분리
+  - 가독성 및 디버깅 용이성 향상
+
+- **E721 (Type comparison)**: `type() ==` 를 `isinstance()`로 변경
+  - `hrir.py`: 4개 수정
+  - `impulcifer.py`: 1개 수정
+  - 상속을 고려한 올바른 타입 체크
+
+#### ⚙️ 린터 설정 개선
+- **Jupyter notebook 제외**: `pyproject.toml`에 Ruff/Flake8 설정 추가
+  - `research/**/*` 디렉토리 제외
+  - `*.ipynb` 파일 제외
+  - 연구용 노트북은 린팅 대상에서 제외
+
+#### ✅ 테스트
+- 모든 단위 테스트 통과 (14 passed, 2 skipped)
+- 코드 동작에 영향 없이 품질만 개선
+
+## 1.8.3 - 2025-11-14
+### 번역 시스템 버그 수정 및 UI 개선
+v1.8.2에서 발생한 번역 관련 버그들을 수정하고 UI를 개선했습니다.
+
+#### 🐛 버그 수정
+- **번역 라벨 직접 출력 문제 해결**:
+  - logger가 번역 키를 그대로 출력하던 문제 수정
+  - LocalizationManager를 logger에 주입하여 자동 번역 활성화
+  - `cli_*`, `message_*`, `error_*`, `warning_*`, `success_*`, `info_*` 접두사를 가진 메시지 자동 번역
+  - 일반 텍스트는 그대로 출력 (하위 호환성 유지)
+
+- **언어 선택 화면 짤림 현상 해결**:
+  - 대화상자 크기를 400x300에서 400x550으로 확대
+  - 9개 언어 옵션이 모두 정상적으로 표시됨
+  - 스크롤 없이 모든 옵션 확인 가능
+
+#### ⚙️ 기술적 개선
+- **`logger.py` 현지화 지원 추가**:
+  - `set_localization(loc_manager)`: LocalizationManager 주입
+  - `_translate()`: 자동 번역 키 감지 및 변환
+  - 모든 로깅 메서드에 `**kwargs` 추가로 포맷 파라미터 전달 지원
+
+- **`modern_gui.py` 현지화 통합**:
+  - BRIR 생성 시작 전 logger에 localization 설정
+  - ProcessingDialog가 번역된 메시지를 실시간으로 표시
+
+#### 📝 사용법
+```python
+# Logger with translation
+from logger import get_logger
+from localization import LocalizationManager
+
+logger = get_logger()
+loc = LocalizationManager()
+logger.set_localization(loc)
+
+# Translation keys are automatically translated
+logger.info("cli_creating_estimator")  # → "Creating impulse response estimator" (en)
+                                        # → "임펄스 응답 추정기 생성 중" (ko)
+
+# Plain text works as before
+logger.info("This is a plain message")  # → "This is a plain message"
+```
+
+#### ✅ 테스트
+- 모든 pytest 테스트 통과 (15 passed, 2 skipped)
+- 번역 키 자동 감지 및 변환 검증
+- 다국어 전환 테스트 완료
+
+## 1.8.2 - 2025-11-14
+### GUI 처리 진행 상황 표시 및 CLI 메시지 통합
+BRIR 생성 프로세스의 진행 상황을 GUI에서 실시간으로 확인할 수 있도록 개선했습니다.
+
+#### 🎯 새로운 기능
+- **처리 진행 다이얼로그** (`ProcessingDialog`):
+  - 실시간 진행률 표시 (0-100%)
+  - 현재 작업 단계 표시
+  - 모든 처리 로그 실시간 표시
+  - 완료 시 자동으로 닫기 버튼 활성화
+  - 처리 중 다른 작업 방지 (모달 다이얼로그)
+
+- **통합 로깅 시스템** (`logger.py`):
+  - CLI와 GUI 양쪽에서 동작하는 통합 로거
+  - 로그 레벨: DEBUG, INFO, SUCCESS, WARNING, ERROR, PROGRESS
+  - GUI 콜백 지원으로 실시간 메시지 전달
+  - 진행률 자동 계산 (step 기반 추적)
+
+- **CLI 메시지 현지화**:
+  - 모든 처리 단계 메시지에 대한 번역 키 추가
+  - 영어/한국어 번역 완료
+  - GUI에서 처리 메시지가 선택한 언어로 표시됨
+
+#### ⚙️ 기술적 개선
+- **`impulcifer.py` 리팩토링**:
+  - 모든 `print()` 문을 `logger` 호출로 교체
+  - 67개 이상의 print 문 → logger.step/info/success/warning/error
+  - 처리 단계별 진행률 자동 추적
+  - 총 단계 수 자동 계산 (활성화된 옵션 기반)
+
+- **스레드 기반 처리**:
+  - GUI가 멈추지 않도록 별도 스레드에서 BRIR 생성
+  - 실시간 로그 및 진행률 업데이트
+  - 안전한 에러 처리 및 사용자 알림
+
+- **진행률 추적 시스템**:
+  - `logger.set_total_steps()`: 총 단계 설정
+  - `logger.step()`: 단계 실행 및 진행률 자동 증가
+  - `logger.progress()`: 수동 진행률 설정 (0-100%)
+  - 옵션별 동적 단계 계산
+
+#### 📊 처리 단계 가시화
+처리 중 다음과 같은 단계가 실시간으로 표시됩니다:
+1. 임펄스 응답 추정기 생성
+2. 룸 보정 (활성화 시)
+3. 헤드폰 보상 (활성화 시)
+4. 헤드폰 이퀄라이제이션 (활성화 시)
+5. 주파수 응답 목표 생성
+6. 바이노럴 측정값 로드
+7. 게인 정규화
+8. 임펄스 응답 잘라내기
+9. 마이크 편차 보정 (활성화 시)
+10. 이퀄라이제이션 적용
+11. 감쇠 시간 조정 (활성화 시)
+12. 채널 밸런스 보정 (활성화 시)
+13. 그래프 생성 (활성화 시)
+14. BRIR 파일 쓰기
+15. 기타 출력 형식 생성 (TrueHD/JamesDSP/Hangloose)
+
+#### 🌐 번역 추가
+모든 CLI 처리 메시지에 대한 번역 키 추가:
+- `cli_starting_brir_generation`: BRIR 생성 시작
+- `cli_creating_estimator`: 임펄스 응답 추정기 생성 중
+- `cli_running_room_correction`: 룸 보정 실행 중
+- `cli_equalizing`: 이퀄라이제이션 적용 중
+- `cli_writing_brirs`: BRIR 파일 쓰기 중
+- ... 및 기타 25개 이상의 메시지 키
+
+#### 🎨 사용자 경험
+- **투명성**: 무엇이 처리되고 있는지 명확히 표시
+- **신뢰성**: 프로그램이 멈춘 것처럼 보이지 않음
+- **진행 추적**: 얼마나 남았는지 시각적으로 확인 가능
+- **에러 가시성**: 오류 발생 시 즉시 확인 가능
+- **언어 지원**: 선택한 언어로 진행 상황 표시
+
+#### 🔧 파일 변경사항
+- **신규 파일**:
+  - `logger.py`: 통합 로깅 시스템
+
+- **수정 파일**:
+  - `impulcifer.py`: 67개 print 문을 logger 호출로 교체
+  - `modern_gui.py`: ProcessingDialog 클래스 추가, 스레드 기반 처리
+  - `locales/en.json`: 30개 CLI 메시지 번역 키 추가
+  - `locales/ko.json`: 30개 CLI 메시지 한국어 번역 추가
+
+#### 📝 코드 개선
+- 폰트 로딩 메시지 정리 (debug 레벨로 변경, 필요시만 출력)
+- 보간 경고 메시지 정리 (불필요한 출력 제거)
+- 헤드폰 보상 파일 경고 개선 (logger 사용)
+- TrueHD 변환 메시지 개선
+
+#### 🚀 성능
+- 멀티스레딩으로 GUI 응답성 유지
+- 로그 메시지 실시간 전달 (버퍼링 없음)
+- 진행률 계산 최적화
+
+## 1.8.1 - 2025-11-14
+### 완전한 GUI 현지화 - 모든 텍스트 번역 완료
+GUI의 **모든 하드코딩된 텍스트**를 번역 키로 교체하여 완전한 다국어 지원을 구현했습니다.
+
+#### 개선사항
+- **100% GUI 번역**: 모든 레이블, 버튼, 메시지가 번역 가능
+  - Recorder 탭: 오디오 장치, 파일, 녹음 옵션 등 모든 UI 요소
+  - Impulcifer 탭: 처리 옵션, 룸 보정, 헤드폰 보상, 고급 옵션 등
+  - 메시지 다이얼로그: 오류, 경고, 확인 메시지 모두 번역
+
+- **번역 품질 개선**:
+  - "Room Correction" → "룸 보정" (명확한 의미 전달)
+  - "Headphone Compensation" → "헤드폰 보상" (음향 보정)
+  - "Tilt" → "기울기" (스펙트럼 경사)
+  - "per channel" → "채널별 설정" (명확한 표현)
+  - 모든 기술 용어의 의미를 재검토하여 적절한 번역어 선택
+
+- **메시지 현지화**:
+  - 오류 메시지 (파일 없음, 녹음 실패 등)
+  - 경고 메시지 (채널 불일치 등)
+  - 확인 다이얼로그 (녹음 시작 등)
+  - 완료 메시지 (녹음 완료, 처리 완료 등)
+
+#### 기술적 개선
+- 모든 하드코딩된 문자열을 `self.loc.get('key')` 형태로 교체
+- 47개 UI 텍스트 일괄 교체 스크립트 사용
+- 메시지 다이얼로그 번역 자동화
+- 포맷 문자열 지원 (파일명, 오류 메시지 등 동적 텍스트)
+
+#### 사용자 경험
+- 선택한 언어로 모든 UI가 표시됨
+- 오류 메시지도 모국어로 이해하기 쉬움
+- 일관된 용어 사용으로 혼란 감소
+- 전문 용어도 적절한 번역으로 명확하게 이해 가능
+
+#### 번역 완료 현황
+- ✅ 영어 (English): 완전 업데이트
+- ✅ 한국어: 완전 업데이트, 번역 품질 재검토 완료
+- ⏳ 기타 언어: 1.8.0 키 사용 (기본 번역), 추후 업데이트 예정
+
+## 1.8.0 - 2025-11-14
+### 다국어 지원 - 전 세계 사용자를 위한 현지화
+Impulcifer GUI가 이제 9개 언어를 지원합니다! 영어를 모르는 사용자도 쉽게 사용할 수 있습니다.
+
+#### 🌍 지원 언어
+- 🇬🇧 English (영어)
+- 🇰🇷 한국어 (Korean)
+- 🇫🇷 Français (프랑스어)
+- 🇩🇪 Deutsch (독일어)
+- 🇪🇸 Español (스페인어)
+- 🇯🇵 日本語 (일본어)
+- 🇨🇳 简体中文 (중국어 간체)
+- 🇹🇼 繁體中文 (중국어 번체)
+- 🇷🇺 Русский (러시아어)
+
+#### 새로운 기능
+- **자동 언어 감지**:
+  - 첫 실행 시 시스템 언어를 자동으로 감지
+  - 지원하지 않는 언어는 영어로 기본 설정
+  - 사용자 친화적인 언어 선택 다이얼로그
+
+- **UI Settings 탭** (`⚙️ UI 설정`):
+  - **언어 설정**: 9개 언어 중 선택 가능
+  - **테마 설정**: Dark/Light/System 테마 선택
+  - 모든 설정은 자동 저장 (~/.impulcifer/settings.json)
+
+- **현지화 시스템** (`localization.py`):
+  - 완전한 번역 관리 시스템
+  - JSON 기반 언어 파일 (locales/*.json)
+  - 실시간 언어 변경 (재시작 권장)
+  - 사용자 설정 영구 저장
+
+#### 기술적 개선
+- **설정 관리**:
+  - 사용자별 설정 디렉토리: `~/.impulcifer/`
+  - 언어 설정 자동 저장
+  - 테마 설정 자동 저장
+  - 첫 실행 감지 시스템
+
+- **확장성**:
+  - 새로운 언어 추가가 간편함 (JSON 파일만 추가)
+  - 모든 UI 텍스트가 번역 가능하도록 설계
+  - 번역 키 기반 시스템으로 유지보수 용이
+
+#### 사용자 경험 개선
+- 깔끔해진 헤더 UI (테마 버튼 제거, UI Settings 탭으로 이동)
+- 언어 변경 시 재시작 안내 메시지
+- 테마 변경 시 즉시 적용
+- 직관적인 언어 선택 인터페이스
+
+#### 파일 구조
+```
+locales/
+├── en.json      # English
+├── ko.json      # 한국어
+├── fr.json      # Français
+├── de.json      # Deutsch
+├── es.json      # Español
+├── ja.json      # 日本語
+├── zh_CN.json   # 简体中文
+├── zh_TW.json   # 繁體中文
+└── ru.json      # Русский
+```
+
+## 1.7.2 - 2025-11-13
+### CI/CD 개선 - 자동화된 테스트 및 품질 보증
+배포 전 자동 테스트로 코드 품질을 보장합니다. TestPyPI와 PyPI 발행 전에 유닛 테스트가 자동으로 실행됩니다.
+
+#### 새로운 기능
+- **포괄적인 유닛 테스트 스위트** (`test_suite.py`):
+  - 마이크 편차 보정 v2.0 테스트
+  - ImpulseResponse 클래스 테스트
+  - 모듈 임포트 테스트
+  - 데이터 파일 존재 확인
+  - 설정 파일 검증
+  - 버전 일관성 테스트
+  - 통합 테스트 (느린 테스트 별도 분류)
+
+- **GitHub Actions 테스트 워크플로우** (`.github/workflows/test.yml`):
+  - Python 3.9-3.13 다중 버전 테스트
+  - pytest 기반 자동 테스트
+  - 코드 커버리지 측정 (Codecov 통합)
+  - 모듈 임포트 검증
+  - 코드 품질 체크 (ruff)
+
+- **PyPI 배포 워크플로우 개선** (`.github/workflows/python-publish.yml`):
+  - **테스트 우선 배포**: 유닛 테스트 통과 후에만 빌드 및 배포
+  - TestPyPI 발행 전 자동 검증
+  - PyPI 발행 전 자동 검증
+  - 테스트 실패 시 배포 자동 중단
+
+#### 개발 환경 개선
+- **requirements-dev.txt** 추가:
+  - pytest >= 7.4.0
+  - pytest-cov >= 4.1.0 (커버리지)
+  - pytest-xdist >= 3.3.1 (병렬 테스트)
+  - pytest-timeout >= 2.1.0 (타임아웃)
+
+#### 워크플로우 구조
+```
+1. 코드 푸시/PR 생성
+   ↓
+2. 테스트 워크플로우 자동 실행
+   - 유닛 테스트 (Python 3.9-3.13)
+   - 임포트 테스트
+   - 코드 품질 체크
+   ↓
+3. 테스트 통과 시에만 빌드
+   ↓
+4. TestPyPI / PyPI 발행
+```
+
+#### 사용법
+```bash
+# 로컬에서 테스트 실행
+python test_suite.py
+
+# pytest로 실행 (더 상세한 출력)
+pytest test_suite.py -v
+
+# 커버리지 포함
+pytest test_suite.py --cov=. --cov-report=term-missing
+
+# 느린 테스트 제외
+pytest test_suite.py -m "not slow"
+
+# 개발 환경 설치
+pip install -r requirements-dev.txt
+```
+
+#### 기술적 개선사항
+- 자동화된 회귀 테스트로 버그 조기 발견
+- 배포 전 자동 검증으로 안정성 향상
+- CI/CD 파이프라인 신뢰도 대폭 개선
+- 다중 Python 버전 호환성 보장
+
+### 사용자 임팩트
+- ✅ **안정성**: 배포 전 자동 테스트로 품질 보증
+- 🚀 **신뢰성**: TestPyPI 발행 전 검증으로 실수 방지
+- 🔍 **투명성**: GitHub Actions에서 테스트 결과 실시간 확인
+- 🛡️ **보호**: 테스트 실패 시 자동으로 배포 중단
+
+## 1.7.1 - 2025-11-13
+### GUI 개선 - 마이크 편차 보정 v2.0 완전 지원
+Modern GUI에서 마이크 편차 보정 v2.0의 모든 고급 기능을 사용할 수 있습니다.
+
+#### GUI 변경사항
+- **v2.0 Options 섹션 추가**: Mic Deviation Correction 활성화 시 3개의 고급 옵션 사용 가능
+  - ☑ **Phase Correction**: 위상 보정 (ITD 반영)
+  - ☑ **Adaptive**: 적응형 비대칭 보정 (품질 기반 참조 선택)
+  - ☑ **Anatomical Validation**: ITD/ILD 해부학적 검증
+- 모든 v2.0 옵션은 기본값으로 활성화
+- Mic Deviation Correction 체크박스로 일괄 활성화/비활성화
+
+#### 문서 업데이트
+- **README_microphone_deviation_correction.md**: 완전 재작성 (~567줄)
+  - v2.0 4가지 핵심 개선사항 상세 설명
+  - 음향학적 이론 배경 (Duplex Theory, ITD/ILD, 해부학적 검증)
+  - 수학적 공식 및 알고리즘 흐름도
+  - CLI/API/GUI 사용법 전체 문서화
+  - 주의사항 및 권장 설정 가이드
+  - 참고 문헌 (AES, ITU, psychoacoustics)
+
+#### 기술 파일 변경
+- `modern_gui.py` (lines 643-675, 803-814, 1010-1012):
+  - v2.0 체크박스 3개 추가
+  - `toggle_mic_deviation()` 함수 업데이트 (v2.0 옵션 동기화)
+  - `run_impulcifer()` args에 v2.0 파라미터 3개 전달
+
+### 사용법 (GUI)
+1. Impulcifer 탭 → Advanced Options 섹션
+2. **Mic Deviation Correction** 체크박스 활성화
+3. **Strength** 값 조정 (0.0-1.0, 기본: 0.7)
+4. **v2.0 Options** 세부 조정 (선택사항, 모두 기본 활성화)
+5. Run Impulcifer 버튼 클릭
+
+## 1.7.0 - 2025-11-13
+### 🎯 주요 기능 개선 - 마이크 편차 보정 v2.0
+완전히 재설계된 음향학적 마이크 편차 보정 시스템으로, 측정 품질을 획기적으로 개선합니다.
+
+#### 새로운 기능 (v2.0)
+1. **적응형 비대칭 보정** ⭐⭐⭐
+   - 좌우 응답의 품질을 자동으로 평가 (SNR, smoothness, consistency 기반)
+   - 더 높은 품질의 응답을 참조 기준으로 사용
+   - 기존: 무조건 좌우 대칭 보정 → 개선: 품질 기반 비대칭 보정 (80:20 또는 20:80)
+
+2. **위상 보정 추가** ⭐⭐⭐
+   - ITD (Interaural Time Difference) 정보를 FIR 필터에 반영
+   - 음상 정위(sound localization) 정확도 향상
+   - 기존: 크기(magnitude)만 보정 → 개선: 크기 + 위상 동시 보정
+
+3. **ITD/ILD 해부학적 검증** ⭐⭐
+   - 인간 머리 크기(평균 반지름 8.75cm)에 기반한 ITD 범위 검증 (±0.7ms)
+   - 비정상적인 측정값에 대한 경고 메시지 출력
+   - 마이크 배치 오류 조기 감지 가능
+
+4. **주파수 대역별 보정 전략** ⭐⭐
+   - **저주파 (< 700Hz)**: ITD 중심, 크기 보정 30% 가중치
+   - **중간주파 (700Hz - 4kHz)**: ITD/ILD 혼합, 크기 70%, 위상 60% 가중치
+   - **고주파 (> 4kHz)**: ILD 중심, 크기 100%, 위상 20% 가중치
+   - 음향심리학적 원리에 기반한 과학적 접근
+
+#### CLI 파라미터 추가
+- `--microphone_deviation_correction`: v2.0 활성화 (기본: 비활성화)
+- `--mic_deviation_strength`: 보정 강도 (0.0-1.0, 기본: 0.7)
+- `--no_mic_deviation_phase_correction`: 위상 보정 비활성화 (기본: 활성화)
+- `--no_mic_deviation_adaptive_correction`: 적응형 보정 비활성화 (기본: 활성화)
+- `--no_mic_deviation_anatomical_validation`: 해부학적 검증 비활성화 (기본: 활성화)
+
+#### 개선된 시각화
+- **ILD (Interaural Level Difference)** 플롯: 주파수별 크기 차이
+- **ITD (Interaural Time Difference)** 플롯: 저주파 대역 시간 차이 + 해부학적 범위 표시
+- **보정 효과** 플롯: 보정 전후 좌우 차이 비교
+- 참조 기준(left/right) 및 품질 점수 표시
+
+#### 성능 및 호환성
+- 기존 v1.0 API와 100% 하위 호환
+- 모든 v2.0 기능은 기본값으로 활성화됨
+- 개별 기능을 선택적으로 비활성화 가능
+
+#### 기술적 세부사항
+- `microphone_deviation_correction.py`: 전면 재작성 (~829줄)
+- `hrir.py`: v2.0 파라미터 지원 추가
+- `impulcifer.py`: CLI 파라미터 4개 추가
+- 음향심리학 논문 및 REW MTW 개념 기반 설계
+
+## 1.6.2 - 2025-11-13
+### 버그 수정
+- **GUI 레이아웃 문제 해결**: Modern GUI에서 컨텐츠가 창 전체를 사용하지 않고 일부만 사용하던 문제 수정
+  - Recorder와 Impulcifer 탭에 `grid_rowconfigure(0, weight=1)` 추가
+  - 이제 GUI가 창 크기에 맞춰 동적으로 확장됨
+- **Light 모드 가시성 문제 해결**: Light 모드 전환 시 테마 토글 버튼이 배경과 거의 같은 색으로 표시되어 식별 불가능하던 문제 수정
+  - 버튼 색상을 명시적으로 지정 (Light/Dark 모드별)
+  - Light 모드: 회색 배경에 검은색 텍스트
+  - Dark 모드: 어두운 회색 배경에 밝은 텍스트
+
+## 1.6.1 - 2025-11-12
+### 주요 기능 추가
+- **완전히 새로운 Modern GUI**: CustomTkinter 기반의 전문적인 GUI 구현
+  - Windows 11/macOS Big Sur 스타일의 현대적인 디자인
+  - 다크/라이트 모드 지원 (테마 토글 버튼)
+  - 탭 UI로 Recorder와 Impulcifer 통합
+  - 모든 CLI 기능 100% 구현 (30+ 기능)
+  - 직관적인 레이아웃과 사용자 친화적 인터페이스
+  - 실시간 validation 및 에러 핸들링
+
+### GUI 세부 기능
+- **Recorder 탭**: 오디오 장치 선택, 멀티채널 녹음 (14/22/26 채널), 동적 채널 가이던스
+- **Impulcifer 탭**: 룸 보정, 헤드폰 보정, 커스텀 EQ, 15개 고급 옵션
+- 레거시 GUI는 `impulcifer_gui_legacy` 명령으로 계속 사용 가능
+
+### 성능 최적화
+- **CI/CD 워크플로우**: pip → uv 전환으로 의존성 설치 50-80% 단축
+- **Nuitka 빌드**: 멀티코어 컴파일 + LTO 비활성화로 빌드 시간 75-85% 단축 (2-4시간 → 15-30분)
+- Nuitka 캐싱 추가로 재빌드 시 90%+ 시간 단축
+
+### 버그 수정
+- CustomTkinter 패키지를 Nuitka 빌드에 올바르게 포함하도록 개선 (`--include-package` 사용)
+- tkinter 플러그인 명시적 활성화로 GUI 안정성 향상
+
+### 개발자 경험 개선
+- PyPI 엔트리 포인트: `impulcifer_gui` → 현대적인 GUI, `impulcifer_gui_legacy` → 레거시 GUI
+- Nuitka 빌드 스크립트에 CustomTkinter 전체 패키지 포함
+- 더 나은 주석과 코드 구조
+
+## 1.5.2 - 2025-11-12
+### 버그 수정
+- **AutoEQ 훼손 문제 해결**: `headphone_compensation` 함수의 큐빅 스플라인 보간 fallback 로직에서 발생하던 치명적인 버그를 수정했습니다.
+  - 문제: 큐빅 보간이 실패할 때 fallback이 복사본(`left_orig`)을 수정하고 실제 객체(`left`)는 그대로 두어, 잘못된 주파수 그리드로 보상이 이루어졌습니다.
+  - 결과: 헤드폰과 룸의 이도 응답을 합성할 때 FR(Frequency Response) 및 임펄스 응답이 훼손되었습니다.
+  - 해결: Fallback 람다 함수가 실제 객체를 수정하도록 변경하여 주파수 그리드 정렬이 올바르게 이루어지도록 했습니다.
+- 이 수정으로 구버전에서 제대로 작동하던 결과가 복원되었습니다.
+
+## 1.5.0 - 2025-06-03
+### TrueHD 지원 및 다채널 확장
+
+#### ⭐ 새로운 기능
+- **TrueHD/MLP 파일 인식 및 측정 지원**: TrueHD 파일을 자동 인식하고 WAV로 변환하여 측정
+- **확장된 다채널 HRIR 처리**: Atmos 등 최대 16채널까지의 HRIR 생성 지원
+  - `WL,WR`, `TFL,TFR`, `TSL,TSR`, `TBL,TBR` 등 높이/와이드 채널 추가
+  - `HEXADECAGONAL_TRACK_ORDER`에 따른 표준화된 채널 순서 저장
+  - HeSuVi 소프트웨어 전용 채널 순서 지원
+
+#### 🔧 개선사항
+- **동측 귀 임펄스 응답 정렬 개선** (`align_ipsilateral_all`):
+  - 동일 쪽 귀의 임펄스 응답을 상호 상관(cross-correlation)으로 정렬
+  - 시간축 불일치 보정으로 정확한 음상 정위 실현
+- **저음 부스팅/하이패스 필터 수정**:
+  - `create_target`에서 의도치 않은 +3dB 추가 부스트 제거
+  - 사용자 설정값만 정확히 반영되도록 수정
+- **주파수 응답 보간법 개선**: 3차 스플라인(cubic spline) 보간 도입
+  - 실패 시 선형 보간으로 안전하게 폴백
+  - (v2.3.0에서 선형 보간으로 재전환 — 고주파 아티팩트 발견)
+- **Seaborn 스타일 플롯**: `whitegrid` 스타일 적용으로 플롯 가독성 향상
+- **커스텀 한글 폰트(Pretendard)**: 시스템 폰트 없이도 한글 표시 가능
+  - `importlib.resources`로 동적 로드, 폴백 폰트 지원
+  - Matplotlib 마이너스 부호 유니코드 문제 해결
+- **방어적 프로그래밍**: 각종 예외 상황에서도 실행을 계속할 수 있도록 개선
+- **스피커 크기 대비 귀 크기 반영**: 귀가 스피커의 2배 크기인 점을 반영
+
+---
+
+## 1.4.0 - 2024-12-20
+### GUI에 추가된 기능들
+- **임펄스 응답 사전 응답(Pre-response) 길이 조절 옵션**: 임펄스 응답의 시작 부분을 자르는 길이를 ms 단위로 조절할 수 있습니다. (기본값: 1.0ms)
+- **JamesDSP용 트루 스테레오 IR(.wav) 생성 기능**: FL/FR 채널만 포함하는 jamesdsp.wav 파일을 생성합니다.
+- **Hangloose Convolver용 개별 채널 스테레오 IR(.wav) 생성 기능**: 각 스피커 채널별로 별도의 스테레오 IR 파일을 생성합니다.
+- **인터랙티브 플롯 HTML 파일 생성 기능**: Bokeh 기반의 대화형 플롯을 HTML 파일로 생성합니다.
+- **마이크 착용 편차 보정(Microphone Deviation Correction) 기능**: 좌우 마이크 위치 차이로 인한 편차를 보정합니다. (강도: 0.0-1.0)
+
+### 개선사항
+- GUI의 고급 옵션(Advanced options) 섹션에 모든 새로운 기능들이 추가되었습니다.
+- 각 기능에 대한 툴팁이 추가되어 사용자가 쉽게 이해할 수 있도록 했습니다.
+
 ## 1.0.0 - 2020-07-20
 Performance improvements. Main features are supported and Impulcifer is relatively stable.
+

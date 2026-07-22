@@ -5,11 +5,11 @@ import sys
 from glob import glob
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
+sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
 from impulcifer import headphone_compensation
-from impulse_response_estimator import ImpulseResponseEstimator
-from impulse_response import ImpulseResponse
-from utils import read_wav, optimize_png_size
+from core.impulse_response_estimator import ImpulseResponseEstimator
+from core.impulse_response import ImpulseResponse
+from core.utils import read_wav, optimize_png_size
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl')
@@ -46,7 +46,7 @@ def main():
             ax.set_title(f'{location} {side}')
             ax.grid(True, which='major')
             ax.grid(True, which='minor')
-            ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0f}'))
+            ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f'{x:.0f}'))
 
             ax.plot(cl.frequency, cl.smoothed, color='#1f77b4')
             ax.plot(op.frequency, op.smoothed, '--', color='#1f77b4')

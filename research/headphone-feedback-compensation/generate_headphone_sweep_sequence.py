@@ -4,10 +4,10 @@ import os
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
-sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir)))
-from utils import write_wav
-from impulse_response_estimator import ImpulseResponseEstimator
-from hrir import HRIR
+sys.path.insert(1, os.path.realpath(os.path.join(sys.path[0], os.pardir, os.pardir)))
+from core.utils import write_wav
+from core.impulse_response_estimator import ImpulseResponseEstimator
+from core.hrir import HRIR
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl')
