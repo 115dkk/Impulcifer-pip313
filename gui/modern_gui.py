@@ -36,8 +36,13 @@ else:
 class ModernImpulciferGUI:
     """Top-level orchestrator for the modern GUI."""
 
-    def __init__(self) -> None:
-        """Initialize localization, theme, root window, and tabs."""
+    def __init__(self, startup_notice: str | None = None) -> None:
+        """Initialize localization, theme, root window, and tabs.
+
+        ``startup_notice`` is a pre-localized message shown once shortly
+        after launch — used by the launcher to surface a WebView→CTk
+        fallback that would otherwise be invisible in packaged apps.
+        """
         self.loc = get_localization_manager()
         self.current_theme = self.loc.get_theme()
         self.bus = EventBus()
@@ -85,6 +90,12 @@ class ModernImpulciferGUI:
             self.root.after(1000, lambda: messagebox.showinfo(
                 self.loc.get('update_complete_title', default="Update Complete"),
                 self.loc.get('update_restart_done', default="The new version has been installed successfully.")
+            ))
+
+        if startup_notice:
+            self.root.after(1500, lambda: messagebox.showwarning(
+                self.loc.get('message_webview_fallback_title', default="WebView Unavailable"),
+                startup_notice,
             ))
 
         window_width, window_height = WINDOW_MAIN_SIZE
@@ -421,9 +432,9 @@ class ModernImpulciferGUI:
         self.root.mainloop()
 
 
-def main_gui() -> None:
+def main_gui(startup_notice: str | None = None) -> None:
     """Start the modern GUI application."""
-    app = ModernImpulciferGUI()
+    app = ModernImpulciferGUI(startup_notice=startup_notice)
     app.run()
 
 
