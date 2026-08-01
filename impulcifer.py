@@ -74,6 +74,7 @@ from core.constants import (
     SPEAKER_LIST_PATTERN,
     TEST_SIGNALS,
     get_data_path,
+    speaker_side,
 )
 from core.eqapo import looks_like_eqapo_config, parse_eqapo_config
 from infra.logger import get_logger
@@ -663,9 +664,9 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
         for side, ir_obj in pair.items():
             current_itd = 0.0
             if not np.isnan(itd):
-                if speaker.endswith("L") and side == "right":
+                if speaker_side(speaker) == "left" and side == "right":
                     current_itd = itd
-                elif speaker.endswith("R") and side == "left":
+                elif speaker_side(speaker) == "right" and side == "left":
                     current_itd = itd
 
             pnr_val = np.nan

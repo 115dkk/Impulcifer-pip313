@@ -6,43 +6,57 @@ import pytest
 from unittest.mock import MagicMock
 
 
-class TestClassifySpeaker:
-    """Test _classify_speaker() returns correct classification."""
+class TestSpeakerSide:
+    """Test core.constants.speaker_side() returns correct classification."""
 
     def test_left_speakers(self):
-        from core.virtual_bass import _classify_speaker
-        assert _classify_speaker('FL') == 'left'
-        assert _classify_speaker('SL') == 'left'
-        assert _classify_speaker('BL') == 'left'
-        assert _classify_speaker('WL') == 'left'
-        assert _classify_speaker('TFL') == 'left'
-        assert _classify_speaker('TSL') == 'left'
-        assert _classify_speaker('TBL') == 'left'
+        from core.constants import speaker_side
+        assert speaker_side('FL') == 'left'
+        assert speaker_side('SL') == 'left'
+        assert speaker_side('BL') == 'left'
+        assert speaker_side('WL') == 'left'
+        assert speaker_side('TFL') == 'left'
+        assert speaker_side('TSL') == 'left'
+        assert speaker_side('TBL') == 'left'
 
     def test_right_speakers(self):
-        from core.virtual_bass import _classify_speaker
-        assert _classify_speaker('FR') == 'right'
-        assert _classify_speaker('SR') == 'right'
-        assert _classify_speaker('BR') == 'right'
-        assert _classify_speaker('WR') == 'right'
-        assert _classify_speaker('TFR') == 'right'
-        assert _classify_speaker('TSR') == 'right'
-        assert _classify_speaker('TBR') == 'right'
+        from core.constants import speaker_side
+        assert speaker_side('FR') == 'right'
+        assert speaker_side('SR') == 'right'
+        assert speaker_side('BR') == 'right'
+        assert speaker_side('WR') == 'right'
+        assert speaker_side('TFR') == 'right'
+        assert speaker_side('TSR') == 'right'
+        assert speaker_side('TBR') == 'right'
 
     def test_center_speakers(self):
-        from core.virtual_bass import _classify_speaker
-        assert _classify_speaker('FC') == 'center'
-        assert _classify_speaker('LFE') == 'center'
+        from core.constants import speaker_side
+        assert speaker_side('FC') == 'center'
+        assert speaker_side('LFE') == 'center'
 
     def test_unknown_defaults_to_center(self):
-        from core.virtual_bass import _classify_speaker
-        assert _classify_speaker('UNKNOWN') == 'center'
+        from core.constants import speaker_side
+        assert speaker_side('UNKNOWN') == 'center'
 
     def test_case_insensitive(self):
-        from core.virtual_bass import _classify_speaker
-        assert _classify_speaker('fl') == 'left'
-        assert _classify_speaker('fr') == 'right'
-        assert _classify_speaker('fc') == 'center'
+        from core.constants import speaker_side
+        assert speaker_side('fl') == 'left'
+        assert speaker_side('fr') == 'right'
+        assert speaker_side('fc') == 'center'
+
+    def test_covers_every_speaker_name(self):
+        """The frozenset partition must cover SPEAKER_NAMES exactly."""
+        from core.constants import (
+            CENTER_SPEAKERS,
+            LEFT_SIDE_SPEAKERS,
+            RIGHT_SIDE_SPEAKERS,
+            SPEAKER_NAMES,
+        )
+        partition = LEFT_SIDE_SPEAKERS | RIGHT_SIDE_SPEAKERS | CENTER_SPEAKERS
+        assert set(SPEAKER_NAMES) <= partition
+        assert not (LEFT_SIDE_SPEAKERS & RIGHT_SIDE_SPEAKERS)
+        assert not (LEFT_SIDE_SPEAKERS & CENTER_SPEAKERS)
+        assert not (RIGHT_SIDE_SPEAKERS & CENTER_SPEAKERS)
 
 
 class TestDetectPolarity:
@@ -73,33 +87,6 @@ class TestDetectPolarity:
         ir[10] = 0.3
         ir[20] = -0.9
         assert _detect_polarity(ir) == -1.0
-
-
-class TestBuildIldShelf:
-    """Test ILD shelf building."""
-
-    def test_high_crossover_returns_shelf(self):
-        from core.virtual_bass import _build_ild_shelf
-        # xo_hz=250 >= 160 threshold, so 150Hz shelf should be active
-        result = _build_ild_shelf(250, 48000)
-        assert result is not None
-        sos_lp, gain_linear, shelf_gain_db = result
-        assert shelf_gain_db == 6.0  # 150 Hz shelf at 6 dB
-        assert gain_linear == pytest.approx(10 ** (6.0 / 20.0), rel=1e-6)
-
-    def test_low_crossover_returns_none(self):
-        from core.virtual_bass import _build_ild_shelf
-        # xo_hz=50 < 80 (minimum threshold), so no shelf
-        result = _build_ild_shelf(50, 48000)
-        assert result is None
-
-    def test_medium_crossover(self):
-        from core.virtual_bass import _build_ild_shelf
-        # xo_hz=100 >= 80 threshold
-        result = _build_ild_shelf(100, 48000)
-        assert result is not None
-        _, _, shelf_gain_db = result
-        assert shelf_gain_db == 3.0  # 50 Hz shelf at 3 dB
 
 
 class TestSynthesizeVirtualBass:

@@ -7,6 +7,24 @@ SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'WL', 'WR', 'TFL', 'T
 SPEAKER_PATTERN = f'({"|".join(SPEAKER_NAMES + ["X"])})'
 SPEAKER_LIST_PATTERN = r'([A-Z]{2,3}(,[A-Z]{2,3})*)'
 
+# Left/right/center partition of the speaker layout. Includes LFE (present in
+# HEXADECAGONAL_TRACK_ORDER but not SPEAKER_NAMES). Single source of truth for
+# "which side of the head is this speaker on" — positional checks like
+# speaker[1] == 'R' break on 3-letter top-layer names ('TFL'[1] == 'F').
+LEFT_SIDE_SPEAKERS = frozenset({'FL', 'SL', 'BL', 'WL', 'TFL', 'TSL', 'TBL'})
+RIGHT_SIDE_SPEAKERS = frozenset({'FR', 'SR', 'BR', 'WR', 'TFR', 'TSR', 'TBR'})
+CENTER_SPEAKERS = frozenset({'FC', 'LFE'})
+
+
+def speaker_side(name: str) -> str:
+    """Classify a speaker name as 'left', 'right' or 'center'."""
+    name_upper = name.upper()
+    if name_upper in LEFT_SIDE_SPEAKERS:
+        return 'left'
+    if name_upper in RIGHT_SIDE_SPEAKERS:
+        return 'right'
+    return 'center'
+
 TRUEHD_11CH_ORDER = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'TFL', 'TFR', 'TBL', 'TBR']  # 7.0.4
 TRUEHD_13CH_ORDER = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'TFL', 'TFR', 'TSL', 'TSR', 'TBL', 'TBR']  # 7.0.6
 
