@@ -11,6 +11,7 @@ const state = {
   version: "",
   platform: "",
   strings: {},
+  brirDefaults: {},
   language: "en",
   theme: "dark",
   skin: "studio",
@@ -146,6 +147,13 @@ function numOrNull(id) {
 function numOr(id, fallback) {
   const parsed = numOrNull(id);
   return parsed === null ? fallback : parsed;
+}
+
+/* Canonical pipeline default shipped by bootstrap(); the literal fallback
+   only applies when bootstrap itself failed to load ProcessingConfig. */
+function brirDefault(name, fallback) {
+  const value = state.brirDefaults[name];
+  return typeof value === "number" ? value : fallback;
 }
 
 function isOpen(id) {
@@ -835,8 +843,8 @@ function gatherBrirPayload() {
   if (isOpen("dis-room")) {
     args.room_target = val("bf-room-target") || null;
     args.room_mic_calibration = val("bf-mic-calibration") || null;
-    args.specific_limit = numOr("bf-specific-limit", 400);
-    args.generic_limit = numOr("bf-generic-limit", 300);
+    args.specific_limit = numOr("bf-specific-limit", brirDefault("specific_limit", 400));
+    args.generic_limit = numOr("bf-generic-limit", brirDefault("generic_limit", 300));
     args.fr_combination_method = val("bf-fr-combination");
   }
   if (isOpen("dis-headphone")) {
@@ -861,8 +869,8 @@ function gatherBrirPayload() {
     const bassGain = numOr("bf-bass-gain", 0);
     if (bassGain) {
       args.bass_boost_gain = bassGain;
-      args.bass_boost_fc = numOr("bf-bass-fc", 105);
-      args.bass_boost_q = numOr("bf-bass-q", 0.76);
+      args.bass_boost_fc = numOr("bf-bass-fc", brirDefault("bass_boost_fc", 105));
+      args.bass_boost_q = numOr("bf-bass-q", brirDefault("bass_boost_q", 0.76));
     }
     const tilt = numOr("bf-tilt", 0);
     if (tilt) args.tilt = tilt;
@@ -879,19 +887,19 @@ function gatherBrirPayload() {
       if (decayMs !== null && decayMs > 0) args.decay = decayMs / 1000;
     }
 
-    args.head_ms = numOr("bf-head-ms", 1.0);
+    args.head_ms = numOr("bf-head-ms", brirDefault("head_ms", 1.0));
     args.jamesdsp = checked("bf-jamesdsp");
     args.hangloose = checked("bf-hangloose");
     args.interactive_plots = checked("bf-interactive-plots");
     args.microphone_deviation_correction = checked("bf-mic-deviation");
-    args.mic_deviation_strength = numOr("bf-mic-strength", 0.7);
+    args.mic_deviation_strength = numOr("bf-mic-strength", brirDefault("mic_deviation_strength", 0.7));
     args.mic_deviation_debug_plots = checked("bf-mic-debug");
     args.output_truehd_layouts = checked("bf-truehd");
   }
   if (isOpen("dis-vbass")) {
     args.vbass = true;
-    args.vbass_freq = Math.max(30, Math.min(500, Math.trunc(numOr("bf-vbass-freq", 250))));
-    args.vbass_hp = numOr("bf-vbass-hp", 15.0);
+    args.vbass_freq = Math.max(30, Math.min(500, Math.trunc(numOr("bf-vbass-freq", brirDefault("vbass_freq", 250)))));
+    args.vbass_hp = numOr("bf-vbass-hp", brirDefault("vbass_hp", 15.0));
     args.vbass_polarity = val("bf-vbass-polarity");
   }
   return args;
@@ -1106,6 +1114,7 @@ async function boot() {
   const data = response.data;
   state.version = data.version;
   state.platform = data.platform;
+  state.brirDefaults = data.brir_defaults || {};
   if (data.ui) {
     state.strings = data.ui.strings || {};
     state.language = data.ui.language || "en";
