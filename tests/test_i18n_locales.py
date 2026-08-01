@@ -108,3 +108,21 @@ def test_visible_locale_strings_are_not_english_fallbacks() -> None:
             continue
         for key in visible_keys:
             assert locale[key] != english[key], f"{locale_file.name}:{key} is English fallback"
+
+
+def test_webview_html_i18n_keys_exist_in_english() -> None:
+    """Every data-i18n key in the WebView HTML must exist in en.json.
+
+    A typo'd key silently renders as the raw key name in the WebView UI,
+    so pin the HTML → locale linkage here (audit #138 F042).
+    """
+    _locale_dir, english, _locales = _load_locales()
+    index_html = (
+        Path(__file__).parent.parent / "webview_ui" / "index.html"
+    ).read_text(encoding="utf-8")
+
+    html_keys = set(re.findall(r'data-i18n="([^"]+)"', index_html))
+    assert html_keys, "no data-i18n keys found — extraction regex is broken"
+
+    missing = sorted(html_keys - set(english))
+    assert not missing, f"index.html data-i18n keys missing from en.json: {missing}"
