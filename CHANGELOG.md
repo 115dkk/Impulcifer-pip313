@@ -4,6 +4,24 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.10.2 - 2026-08-01
+### 격주 감사(#138) 1라운드 — Quick-win 버그 수정 및 기본값 단일화
+
+#### 🐛 버그 수정
+- **`LocalizationManager.get()`이 `default=`를 무시하던 문제 수정 (F031/F055)**: 19개 이상의 호출부(gui/dialogs.py에만 27곳)가 넘기던 `default=` 폴백이 `**kwargs`로 빨려 들어가 죽은 코드였고, 누락 키는 원시 키 이름으로 렌더링됐다. 이제 번역이 없으면 `default`를 반환하고, 누락 키는 키당 1회 stdlib logging WARNING으로 기록한다.
+- **톱레이어 스피커 측정 경고 침묵 수정 (F024/F009)**: `speaker[1] == "R"` 방식의 위치 기반 분류가 3글자 이름(`TFL`)에서 틀려 상단 6개 스피커의 측정 정합성 경고가 조용히 비활성화돼 있었다. `core.constants.speaker_side()` 단일 분류기로 5곳의 좌/우/중앙 판정을 통일하고, 죽은 `_classify_speaker`/ILD 셸프 헬퍼를 삭제했다. DSP 경로는 비트 동일(해시 중립).
+- **FFmpeg lazy 초기화 경쟁 조건 수정 (F049)**: `ensure_ffmpeg_available()`의 check-then-act가 free-threaded 빌드에서 동시 자동 설치(무인 `sudo apt install` 포함)를 두 번 띄울 수 있었다. `threading.Lock`으로 직렬화.
+- **WebView→CTk 조용한 폴백 가시화 (F053)**: 패키징된 앱은 콘솔이 없어 폴백 사유가 완전히 사라졌다(pywebview 화이트리스트 회귀가 그렇게 출하됐다). 이제 사유+traceback을 `~/.impulcifer/webview-fallback.log`에 남기고 CTk 기동 직후 1회 경고 다이얼로그로 알린다.
+- **Studio 설정탭에 프론트엔드 선택기 추가 (F022)**: Studio 스킨 사용자는 UI에서 WebView로 되돌아갈 방법이 없었다(CLI 플래그만 가능). stable 탭과 동일한 WebView/CTk 선택기를 이식.
+
+#### ⭐ 개선
+- **파이프라인 기본값 단일화 (F019/F020)**: bass-boost Fc/Q(105/0.76)의 CLI·GUI 하드코딩을 `ProcessingConfig` 참조로 교체하고, WebView `bootstrap()`이 `brir_defaults` 맵을 제공해 app.js의 하드코딩 기본값(specific/generic limit 400/300 등)을 제거했다. 새 파이프라인 파라미터 기본값은 이제 dataclass 한 곳에만 존재한다.
+- **빌드 안전화 (F016)**: `gui_main.py` 부재 시 13줄짜리 stale CTk 전용 stub을 조용히 생성하던 폴백을 제거하고 빌드를 즉시 실패시킨다.
+
+#### 🔧 빌드 / 설정 변경
+- **감사 아티팩트 작업 트리 격리 (F046)**: biweekly-audit 워크플로 산출물을 `$RUNNER_TEMP/audit`으로 옮기고 5개 파일명을 `.gitignore`에 추가했다. `.txt`는 release gate EXCLUDE에 없어 `change-summary.txt`를 실수로 커밋하면 자동 릴리스가 트리거될 수 있었다.
+- **테스트 추가 (F041/F042)**: `updater/environment.py` probe ladder 첫 유닛 테스트(마커 우선순위, 번들 pip 배제), WebView `index.html`의 `data-i18n` 키 ⊆ `en.json` 계약 테스트.
+
 ## 2.10.1 - 2026-07-12
 ### 2.10.0 standalone 긴급 수정 — scipy 번들 누락으로 인한 기동 사망 + WebView 마감 손질
 
