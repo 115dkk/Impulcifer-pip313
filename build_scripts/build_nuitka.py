@@ -181,21 +181,12 @@ def main():
     _generate_build_info(current_version)
 
     if not os.path.exists("gui_main.py"):
-        print("\n엔트리 포인트 파일 생성 중...", flush=True)
-        with open("gui_main.py", "w", encoding="utf-8") as f:
-            f.write("""#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-\"\"\"Impulcifer Modern GUI 엔트리 포인트\"\"\"
-import sys
-
-if __name__ == "__main__":
-    # Velopack lifecycle hooks (https://docs.velopack.io/integrating/hooks)
-    for arg in sys.argv[1:]:
-        if arg.startswith('--veloapp-'):
-            sys.exit(0)
-    from gui.modern_gui import main_gui
-    main_gui()
-""")
+        # 과거에는 여기서 13줄짜리 stub 엔트리 포인트를 생성했지만, 실제
+        # gui_main.py(스모크 테스트·프론트엔드 해석·WebView 포함)와 다른
+        # 앱이 조용히 패키징되는 위험만 남기므로 즉시 실패한다.
+        print("\n✗ 엔트리 포인트 gui_main.py를 찾을 수 없습니다. "
+              "저장소 루트에서 빌드를 실행했는지 확인하세요.", flush=True)
+        sys.exit(1)
 
     if build_impulcifer(project_version=current_version, output_base_dir="dist"):
         print("\n빌드가 완료되었습니다!", flush=True)
