@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.10.5 - 2026-08-02
+### 감사(#138) 4라운드(최종) — 프론트엔드 드리프트 수정 + 테스트 확충
+
+#### 🐛 버그 수정
+- **decay 채널 드리프트 수정 (F018, 유지보수자 판정 Q2)**: CTk의 단일값 decay가 하드코딩된 7채널에만 적용되던 것을 CLI와 동일하게 전체 15채널 `SPEAKER_NAMES`로 fan-out하도록 수정했다. 채널별 decay UI도 세 프론트엔드(CTk Stable/Studio 8채널씩 줄바꿈 그리드, WebView 그리드) 모두 톱레이어 포함 15채널을 노출한다. app.js의 채널 목록은 `SPEAKER_NAMES`와의 패리티 테스트로 고정.
+- **녹음 채널 의미 통일 (F021, 유지보수자 판정 Q5)**: Stable 탭의 계약(강제 체크 시에만 다채널, 아니면 스테레오)을 `core.recording_validation.resolve_recording_channels()` 공유 헬퍼로 추출하고, Studio의 `max(2, entry)` 독자 해석을 제거해 Stable 의미에 정렬했다(프리셋≠2 = 명시적 다채널 요청).
+
+#### ⭐ 개선
+- **zh 로케일 실질 정리 (F030, 유지보수자 판정 Q3 — 삭제 금지)**: 하이픈 파일(`zh-cn.json`/`zh-tw.json`)을 정본(`zh_CN`/`zh_TW`)의 **테스트 강제 byte-mirror**(BCP-47 스타일 파일명 별칭)로 공식화하고, 로더가 BCP-47 스타일 언어 코드(`zh-CN` 등)를 `normalize_language_code()`로 수용하게 했다. zh_TW가 진짜 번체 번역임을 고정하는 가드 테스트 추가(zh_CN 대비 79% 상이, 번체 고유 문자 존재).
+- **테스트 확충 (F038/F039)**: BRIR integrity에 미커버 플래그 시나리오 3종 추가(`--decay`+`--channel_balance`+`--bass_boost`, `--fs`+TrueHD+JamesDSP+Hangloose, `--no_headphone_compensation`). `channel_balance_firs` 7개 분기 전부·`crop_heads`(ITD 계약 + F024 톱레이어 경고 수정 고정)·`crop_tails`·`resample`에 플랫폼 무관 characterization 테스트 14종 신설.
+
 ## 2.10.4 - 2026-08-02
 ### 감사(#138) 3라운드 — C3: 환경 감지 단일화
 
