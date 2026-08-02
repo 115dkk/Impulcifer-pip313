@@ -24,7 +24,7 @@ from typing import Callable, Dict, Optional
 
 from packaging import version as _version
 
-from updater.environment import get_velopack_update_exe
+from infra.environment import get_velopack_update_exe
 
 
 class VelopackDownloadError(RuntimeError):

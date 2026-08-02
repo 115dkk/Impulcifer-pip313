@@ -134,3 +134,20 @@ def test_pip_executor_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
         PipExecutor(timeout=1).execute(lambda value, message: None)
 
     assert process.killed is True
+
+
+@pytest.mark.parametrize(
+    "kind, expected_type",
+    [
+        ("velopack", VelopackExecutor),
+        ("pip", PipExecutor),
+        ("dev", LegacyExecutor),
+    ],
+)
+def test_create_update_executor_maps_install_kind(
+    monkeypatch: pytest.MonkeyPatch, kind: str, expected_type: type
+) -> None:
+    """The factory ladder follows infra.environment.get_install_kind (#138 C3)."""
+    monkeypatch.setattr(executors_module, "get_install_kind", lambda: kind)
+    executor = executors_module.create_update_executor("https://example.com/x", "9.9.9")
+    assert type(executor) is expected_type

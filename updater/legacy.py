@@ -91,7 +91,7 @@ class LegacyInstallerUpdater:
 
 
 class Updater:
-    """Legacy Updater class for backward compatibility. Use get_updater() instead."""
+    """Legacy Updater class for backward compatibility. Use create_update_executor() instead."""
 
     def __init__(self, download_url: str, version: str):
         self.download_url = download_url

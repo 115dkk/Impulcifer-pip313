@@ -72,6 +72,9 @@ docs/adr/                 ← 아키텍처 결정 기록(ADR). 구조 변경/감
                             기각됨("네이티브는 네이티브답게"); 재제안 금지
 infra/
   logger.py               ← 통합 로거 (GUI 콜백 지원)
+  environment.py          ← 런타임 환경 감지 정본 (standalone 프로브,
+                            get_install_kind, normalized_platform — 이슈 #138
+                            C3에서 4개 프로브·6개 래더를 단일화)
   resource_helper.py      ← 리소스 경로 헬퍼
   _build_info.py          ← 빌드 시 생성되는 버전/타입 마커
 updater/
@@ -79,7 +82,7 @@ updater/
   updater_core.py         ← 하위 호환 re-export 셸(이슈 #87 Phase 5에서 분리 완료,
                             ~58줄). 기존 import 경로를 유지하기 위해 아래 모듈들을
                             다시 export한다. 신규 코드는 아래 실제 모듈을 직접 import.
-  environment.py          ← 설치 환경/플랫폼 감지
+  environment.py          ← infra/environment.py 재export 셸 (이슈 #138 C3)
   velopack.py             ← Velopack 업데이터
   pip_updater.py          ← pip 기반 업데이터
   legacy.py               ← 레거시 인스톨러 업데이터

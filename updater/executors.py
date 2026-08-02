@@ -3,8 +3,8 @@
 
 ``updater_core`` re-exports :class:`UpdateExecutionError`,
 :class:`UpdateExecutionResult`, :class:`UpdateExecutor`, the three concrete
-executors, and :func:`create_update_executor` / :func:`get_updater` factories
-for backward compatibility.
+executors, and the :func:`create_update_executor` factory for backward
+compatibility.
 
 Each :class:`UpdateExecutor` subclass wraps one of the three update backends
 (:mod:`updater.velopack`, :mod:`updater.pip_updater`, :mod:`updater.legacy`)
@@ -19,9 +19,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from updater.environment import is_pip_environment, is_velopack_environment
+from infra.environment import get_install_kind
 from updater.legacy import GITHUB_RELEASES_URL, LegacyInstallerUpdater
-from updater.pip_updater import PipUpdater
 from updater.velopack import VelopackUpdater
 
 
@@ -216,27 +215,9 @@ class LegacyExecutor(UpdateExecutor):
 
 def create_update_executor(download_url: str, version: str) -> UpdateExecutor:
     """Create an update executor for the current runtime environment."""
-    if is_velopack_environment():
+    kind = get_install_kind()
+    if kind == "velopack":
         return VelopackExecutor(version)
-    if is_pip_environment():
+    if kind == "pip":
         return PipExecutor()
     return LegacyExecutor(download_url, version)
-
-
-def get_updater(download_url: str, version: str):
-    """
-    Factory function to get the appropriate updater for the current environment.
-
-    Args:
-        download_url: URL to download update from
-        version: Target version
-
-    Returns:
-        Tuple of (updater_instance, updater_type_string)
-    """
-    if is_velopack_environment():
-        return VelopackUpdater(GITHUB_RELEASES_URL, version), "velopack"
-    elif is_pip_environment():
-        return PipUpdater(), "pip"
-    else:
-        return LegacyInstallerUpdater(download_url, version), "legacy"

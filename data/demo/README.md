@@ -1,47 +1,47 @@
-# BRIR Info
+# BRIR 정보
 
-Processed on 2025-05-27 21:25:48. Output sampling rate is 48000 Hz.
+2026-08-02 11:35:22에 처리됨. 출력 샘플레이트: 48000 Hz.
 
-## Applied Normalization Gain
-0.67 dB was applied to all channels.
+## 적용된 정규화 게인
+모든 채널에 -3.70 dB가 적용되었습니다.
 
-| Speaker   | Side   | PNR     | ITD      | Length   | RT30     |
-|:----------|:-------|:--------|:---------|:---------|:---------|
-| FL        | left   | 62.1 dB | 0.0 us   | 454.2 ms | 169.9 ms |
-| FL        | right  | 40.2 dB | 208.3 us | 476.3 ms | 172.8 ms |
-| FR        | left   | 45.7 dB | 187.5 us | 450.2 ms | 171.5 ms |
-| FR        | right  | 59.1 dB | 0.0 us   | 452.1 ms | 168.8 ms |
-| FC        | left   | 55.9 dB | 0.0 us   | 461.5 ms | 170.0 ms |
-| FC        | right  | 53.7 dB | 0.0 us   | 435.1 ms | 168.3 ms |
-| BL        | left   | 45.4 dB | 0.0 us   | 447.7 ms | 172.0 ms |
-| BL        | right  | 39.4 dB | 229.2 us | 468.0 ms | 164.6 ms |
-| BR        | left   | 38.3 dB | 270.8 us | 496.8 ms | 172.1 ms |
-| BR        | right  | 52.2 dB | 0.0 us   | 422.1 ms | 171.6 ms |
-| SL        | left   | 60.7 dB | 0.0 us   | 436.6 ms | 173.4 ms |
-| SL        | right  | 26.3 dB | 625.0 us | 448.9 ms | 169.3 ms |
-| SR        | left   | 27.0 dB | 625.0 us | 515.1 ms | 175.0 ms |
-| SR        | right  | 61.5 dB | 0.0 us   | 424.5 ms | 167.0 ms |
+| 스피커   | 사이드   | PNR      | ITD      | 길이       | RT60     |
+|:------|:------|:---------|:---------|:---------|:---------|
+| FL    | 왼쪽    | 88.4 dB  | 0.0 us   | 683.5 ms | 683.8 ms |
+| FL    | 오른쪽   | 64.1 dB  | 208.3 us | 666.2 ms | 754.5 ms |
+| FR    | 왼쪽    | 85.4 dB  | 187.5 us | 669.4 ms | 605.7 ms |
+| FR    | 오른쪽   | 95.5 dB  | 0.0 us   | 669.5 ms | 676.7 ms |
+| FC    | 왼쪽    | 75.5 dB  | 0.0 us   | 668.6 ms | 807.8 ms |
+| FC    | 오른쪽   | 83.6 dB  | 0.0 us   | 683.3 ms | 679.3 ms |
+| BL    | 왼쪽    | 75.2 dB  | 0.0 us   | 654.8 ms | 753.1 ms |
+| BL    | 오른쪽   | 64.9 dB  | 208.3 us | 662.4 ms | 761.1 ms |
+| BR    | 왼쪽    | 71.5 dB  | 270.8 us | 678.6 ms | 739.9 ms |
+| BR    | 오른쪽   | 90.8 dB  | 0.0 us   | 674.2 ms | 715.8 ms |
+| SL    | 왼쪽    | 101.8 dB | 0.0 us   | 659.6 ms | 721.0 ms |
+| SL    | 오른쪽   | 67.3 dB  | 687.5 us | 664.6 ms | 735.3 ms |
+| SR    | 왼쪽    | 49.1 dB  | 625.0 us | 650.7 ms | 808.7 ms |
+| SR    | 오른쪽   | 90.0 dB  | 0.0 us   | 669.7 ms | 675.6 ms |
 
-## Reflection Levels (Direct vs. Early/Late)
+## 반사음 레벨 (직접음 대비 초기/후기 반사음)
 ### FL
-- Left Ear: Early (20-50ms): -20.64 dB, Late (50-150ms): -30.46 dB
-- Right Ear: Early (20-50ms): -10.86 dB, Late (50-150ms): -21.08 dB
+- 왼쪽 귀: 초기 (20-50ms): -22.57 dB, 후기 (50-150ms): -32.60 dB
+- 오른쪽 귀: 초기 (20-50ms): -12.83 dB, 후기 (50-150ms): -23.16 dB
 ### FR
-- Left Ear: Early (20-50ms): -12.65 dB, Late (50-150ms): -21.68 dB
-- Right Ear: Early (20-50ms): -22.40 dB, Late (50-150ms): -31.32 dB
+- 왼쪽 귀: 초기 (20-50ms): -15.82 dB, 후기 (50-150ms): -25.42 dB
+- 오른쪽 귀: 초기 (20-50ms): -25.39 dB, 후기 (50-150ms): -35.58 dB
 ### FC
-- Left Ear: Early (20-50ms): -18.28 dB, Late (50-150ms): -27.82 dB
-- Right Ear: Early (20-50ms): -16.57 dB, Late (50-150ms): -27.00 dB
+- 왼쪽 귀: 초기 (20-50ms): -22.66 dB, 후기 (50-150ms): -32.26 dB
+- 오른쪽 귀: 초기 (20-50ms): -18.55 dB, 후기 (50-150ms): -29.14 dB
 ### BL
-- Left Ear: Early (20-50ms): -12.41 dB, Late (50-150ms): -22.77 dB
-- Right Ear: Early (20-50ms): -14.19 dB, Late (50-150ms): -24.28 dB
+- 왼쪽 귀: 초기 (20-50ms): -16.65 dB, 후기 (50-150ms): -26.97 dB
+- 오른쪽 귀: 초기 (20-50ms): -15.64 dB, 후기 (50-150ms): -25.86 dB
 ### BR
-- Left Ear: Early (20-50ms): -13.79 dB, Late (50-150ms): -23.60 dB
-- Right Ear: Early (20-50ms): -18.21 dB, Late (50-150ms): -27.99 dB
+- 왼쪽 귀: 초기 (20-50ms): -15.19 dB, 후기 (50-150ms): -26.45 dB
+- 오른쪽 귀: 초기 (20-50ms): -20.37 dB, 후기 (50-150ms): -30.51 dB
 ### SL
-- Left Ear: Early (20-50ms): -20.70 dB, Late (50-150ms): -29.80 dB
-- Right Ear: Early (20-50ms): -14.17 dB, Late (50-150ms): -23.64 dB
+- 왼쪽 귀: 초기 (20-50ms): -23.52 dB, 후기 (50-150ms): -33.60 dB
+- 오른쪽 귀: 초기 (20-50ms): -16.90 dB, 후기 (50-150ms): -27.35 dB
 ### SR
-- Left Ear: Early (20-50ms): -12.51 dB, Late (50-150ms): -22.35 dB
-- Right Ear: Early (20-50ms): -22.00 dB, Late (50-150ms): -31.37 dB
+- 왼쪽 귀: 초기 (20-50ms): -16.81 dB, 후기 (50-150ms): -27.50 dB
+- 오른쪽 귀: 초기 (20-50ms): -24.25 dB, 후기 (50-150ms): -33.67 dB
 
