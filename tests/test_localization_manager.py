@@ -44,3 +44,14 @@ def test_missing_key_warns_once(caplog):
         mgr.get('warn_once_key')
         mgr.get('warn_once_key')
     assert sum('warn_once_key' in record.getMessage() for record in caplog.records) == 1
+
+
+def test_normalize_language_code_accepts_bcp47_variants():
+    from i18n.localization import normalize_language_code
+
+    assert normalize_language_code('zh-CN') == 'zh_CN'
+    assert normalize_language_code('zh-tw') == 'zh_TW'
+    assert normalize_language_code('ko-KR') == 'ko_KR'
+    assert normalize_language_code('zh_CN') == 'zh_CN'
+    assert normalize_language_code('en') == 'en'
+    assert normalize_language_code('') == ''
