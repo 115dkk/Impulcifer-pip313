@@ -62,6 +62,14 @@ from core.cancellation import (  # noqa: F401
     check_cancelled as _check_cancelled,
 )
 
+# Load-bearing re-export: the bundled demo test-signal pickle
+# (data/sweep-*.pkl) stores its class reference as
+# __main__.ImpulseResponseEstimator because it was created by running
+# impulcifer.py directly. Unpickling therefore resolves the class as an
+# attribute of this module whenever the CLI is the entry point — removing
+# this import breaks every --test_signal=*.pkl run (tests pin it).
+from core.impulse_response_estimator import ImpulseResponseEstimator  # noqa: F401
+
 # Stage helpers now live in core.pipeline_stages (audit #138 C1); re-exported
 # for legacy callers (tests import equalization from here, etc.).
 from core.pipeline_stages import (  # noqa: F401
