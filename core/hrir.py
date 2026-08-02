@@ -25,7 +25,7 @@ except ImportError:
         return False
 
 
-def _get_center_value(fr, frequency_range):
+def get_center_value(fr, frequency_range):
     """Calculate center value without modifying the FrequencyResponse object.
 
     This is an optimized version that avoids copying the entire FrequencyResponse
@@ -675,7 +675,7 @@ class HRIR(HRIRPlotter):
         if method == "mids":
             # Find gain for right side
             # R diff - L diff = L mean - R mean
-            gain = _get_center_value(right_fr, [100, 3000]) - _get_center_value(left_fr, [100, 3000])
+            gain = get_center_value(right_fr, [100, 3000]) - get_center_value(left_fr, [100, 3000])
             gain = 10 ** (gain / 20)
             n = int(round(self.fs * 0.1))  # 100 ms
             firs = [signal.unit_impulse(n), signal.unit_impulse(n) * gain]
@@ -726,8 +726,8 @@ class HRIR(HRIRPlotter):
                 firs = [fir, signal.unit_impulse((len(fir)))]
 
         elif method == "avg" or method == "min":
-            left_gain = _get_center_value(left_fr, [100, 10000])
-            right_gain = _get_center_value(right_fr, [100, 10000])
+            left_gain = get_center_value(left_fr, [100, 10000])
+            right_gain = get_center_value(right_fr, [100, 10000])
             gain = (left_gain + right_gain) / 2
             left_fr.raw += gain
             right_fr.raw += gain

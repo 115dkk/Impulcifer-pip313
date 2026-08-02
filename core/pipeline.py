@@ -394,8 +394,9 @@ class BRIRPipeline:
         EQ -> target -> HRIR open -> crop/align -> virtual bass ->
         mic-deviation -> equalize -> decay -> balance -> normalize -> plots ->
         resample -> write). Output byte-exactness is guarded by
-        tests/test_brir_integrity.py. DSP helpers still live in impulcifer and
-        are imported lazily here to keep the import direction one-way."""
+        tests/test_brir_integrity.py. DSP stage helpers live in
+        core.pipeline_stages and are imported lazily so constructing a
+        pipeline stays cheap until run() is called."""
         import os
         import io
         import contextlib
@@ -424,7 +425,7 @@ class BRIRPipeline:
             create_truehd_layout_track_order,
         )
         from core.cancellation import check_cancelled as _check_cancelled
-        from impulcifer import (
+        from core.pipeline_stages import (
             open_impulse_response_estimator,
             headphone_compensation,
             equalization,
