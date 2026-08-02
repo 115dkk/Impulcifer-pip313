@@ -29,3 +29,23 @@ def test_cancellation_scope_is_reset_after_exit() -> None:
             impulcifer._check_cancelled()
 
     impulcifer._check_cancelled()
+
+
+def test_core_cancellation_is_the_canonical_module() -> None:
+    """impulcifer re-exports the same objects core.cancellation owns.
+
+    The pipeline and the application service import from core.cancellation
+    directly; identity (not equality) matters because the ContextVar state
+    must be shared with legacy impulcifer.* callers.
+    """
+    from core import cancellation
+
+    assert impulcifer.CancelledError is cancellation.CancelledError
+    assert impulcifer.cancellation_scope is cancellation.cancellation_scope
+    assert impulcifer._check_cancelled is cancellation.check_cancelled
+
+    cancel_event = threading.Event()
+    cancel_event.set()
+    with cancellation.cancellation_scope(cancel_event):
+        with pytest.raises(cancellation.CancelledError):
+            cancellation.check_cancelled()

@@ -4,6 +4,20 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.10.3 - 2026-08-02
+### 감사(#138) 2라운드 — C1: BRIR 파이프라인 seam 심화 (해시 중립 리팩토링)
+
+#### ⭐ 개선
+- **`impulcifer.py` ↔ `core/pipeline.py` 순환 제거 (C1-1/C1-2, F001/F036)**: 협조적 취소를 `core/cancellation.py`로(공개 `check_cancelled()` 포함), DSP 스테이지 헬퍼 7종을 `core/pipeline_stages.py`로 이동했다. `impulcifer.py`는 912→260여 줄로 줄어 버전/CLI/`main()` 래퍼만 남고, 기존 import 표면은 재export로 유지된다. 파이프라인이 스크립트 모듈을 역-import하던 구조가 사라져 스테이지 단위 테스트가 가능해졌다.
+- **510줄 `BRIRPipeline.run()`을 stage 메서드로 분할 (C1-3, F002)**: 단계별 게이트·진행률 스텝 수·메서드를 단일 stage table로 통합해, 진행률 총계가 실제 실행되는 단계 목록에서 도출된다(기존에는 수작업 산술이 게이트 로직을 중복 기술하며 과대 계상 — 표시 전용 변화). 33개 지역변수 destructure와 `del`/`except NameError` 수동 메모리 관리 꼬리도 제거.
+- **`core/channel_generation.py` 인라인 삭제 (C1-4, F005)**: 리스트를 만들고 버린 뒤 다시 계산하던 3-함수 시퀀스를 TrueHD 레이아웃 스테이지 안의 단일 루프로 흡수. 메시지·파일명·트랙 순서는 동일.
+- **ADR 도입 (C1-5)**: `docs/adr/0001` — CTk 네이티브 GUI를 서비스 계층으로 단일화하는 감사 제안(C2류)의 기각과 프론트엔드별 의도된 계약(헤드폰 보상 파일 처리)을 기록. 향후 감사가 재제안하지 않도록 CLAUDE.md에도 명시.
+
+#### 🐛 버그 수정
+- **데모 pkl 언피클 계약 고정**: 데모 테스트 신호 pkl은 `__main__.ImpulseResponseEstimator`를 참조하므로 impulcifer 모듈 네임스페이스에 이 이름이 반드시 필요하다 — 리팩토링 중 제거됐다가 Tier 3 해시 검증에서 즉시 발각되어 복원했고, `tests/test_pickle_compat.py`로 고정했다.
+
+모든 커밋은 같은 머신에서 기본 경로·`--vbass --vbass_freq=250` 경로의 SHA-256 자기비교로 해시 중립을 확인했다.
+
 ## 2.10.2 - 2026-08-01
 ### 격주 감사(#138) 1라운드 — Quick-win 버그 수정 및 기본값 단일화
 
