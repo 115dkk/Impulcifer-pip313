@@ -15,7 +15,7 @@ import sounddevice
 from core import recorder
 from core.headphones_recording import inspect_headphones_playback
 from core.recording_naming import resolve_headphones_record_path, resolve_record_path
-from core.recording_validation import validate_recording_setup
+from core.recording_validation import resolve_recording_channels, validate_recording_setup
 from core.sweep_set_generator import generate_sweep_set
 from gui.constants import FILETYPES_AUDIO
 from gui.recording_status import RecordingStatusController, analyze_recording
@@ -468,7 +468,15 @@ class StudioRecorderTab:
             )
             return
         record_file = resolve_record_path(record_dir, play_file)
-        channels = max(2, safe_get_int(self.channels_var, 2))
+        # Stable's force-channels checkbox is expressed here by the channel
+        # preset itself: picking anything other than stereo IS the explicit
+        # multi-channel request. The resolution contract is shared with the
+        # stable tab (audit #138 F021/Q5 — the old max(2, entry) reading was
+        # drift, not intent).
+        requested_channels = safe_get_int(self.channels_var, 2)
+        channels, force_channels = resolve_recording_channels(
+            requested_channels != 2, requested_channels
+        )
 
         if not os.path.exists(play_file):
             messagebox.showerror(
@@ -477,11 +485,7 @@ class StudioRecorderTab:
             )
             return
 
-        # Stable's force-channels checkbox is replaced here by the channel
-        # preset itself: keep the auto-stereo (channels == 2) path silent,
-        # and only warn when the user explicitly picks a different channel
-        # count that disagrees with the speaker-list filename.
-        validation = validate_recording_setup(record_file, channels, channels != 2)
+        validation = validate_recording_setup(record_file, channels, force_channels)
         if validation and validation.has_mismatch:
             warning_msg = self.loc.get(
                 "message_channel_mismatch_body",

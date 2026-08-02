@@ -329,3 +329,14 @@ def test_processing_dialog_cancel_sets_event(ctk_root) -> None:
         assert dialog.cancel_event.is_set() is True
     finally:
         dialog.destroy()
+
+
+def test_resolve_recording_channels_stable_contract() -> None:
+    """Shared channel contract (audit #138 F021/Q5): stereo unless forced."""
+    from core.recording_validation import resolve_recording_channels
+
+    assert resolve_recording_channels(False, 14) == (2, False)
+    assert resolve_recording_channels(True, 14) == (14, True)
+    assert resolve_recording_channels(True, 6) == (6, True)
+    # Studio maps "preset != 2" to the force flag; stereo preset stays silent.
+    assert resolve_recording_channels(2 != 2, 2) == (2, False)

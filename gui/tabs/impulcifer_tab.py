@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 import customtkinter as ctk
 
 import impulcifer
+from core.constants import SPEAKER_NAMES
 from gui.constants import (
     FILETYPES_AUDIO_WITH_PKL,
     FILETYPES_TEXT,
@@ -353,12 +354,18 @@ class ImpulciferTab:
         decay_ch_subframe = ctk.CTkFrame(self.decay_channels_frame, fg_color="transparent")
         decay_ch_subframe.grid(row=0, column=0, sticky="ew", padx=30, pady=5)
 
+        # 전체 SPEAKER_NAMES 노출 (톱레이어 포함 15채널; 8채널씩 줄바꿈 그리드)
         self.decay_channel_vars = {}
-        for i, ch in enumerate(['FL', 'FC', 'FR', 'SL', 'SR', 'BL', 'BR']):
-            ctk.CTkLabel(decay_ch_subframe, text=f"{ch}:").pack(side="left", padx=2)
+        for i, ch in enumerate(SPEAKER_NAMES):
+            row_i, col_i = divmod(i, 8)
+            ctk.CTkLabel(decay_ch_subframe, text=f"{ch}:").grid(
+                row=row_i, column=col_i * 2, sticky="w", padx=2, pady=2
+            )
             var = ctk.StringVar()
             self.decay_channel_vars[ch] = var
-            ctk.CTkEntry(decay_ch_subframe, textvariable=var, width=WIDGET_ENTRY_WIDTH_TINY).pack(side="left", padx=2)
+            ctk.CTkEntry(
+                decay_ch_subframe, textvariable=var, width=WIDGET_ENTRY_WIDTH_TINY
+            ).grid(row=row_i, column=col_i * 2 + 1, sticky="w", padx=2, pady=2)
 
         pre_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
         pre_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)

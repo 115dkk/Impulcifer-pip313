@@ -30,7 +30,10 @@ const state = {
   recDoneSpeakers: new Set(),
 };
 
-const DECAY_CHANNELS = ["FL", "FC", "FR", "SL", "SR", "BL", "BR"];
+/* Full speaker layout — must mirror core/constants.py SPEAKER_NAMES
+   (pinned by tests/test_audit_contracts.py; audit #138 F018). */
+const DECAY_CHANNELS = ["FL", "FR", "FC", "BL", "BR", "SL", "SR", "WL", "WR",
+  "TFL", "TFR", "TSL", "TSR", "TBL", "TBR"];
 
 /* BRIR pipeline stages for the Studio activity checklist. The logger
    emits these exact localized strings (optionally with a suffix), so
