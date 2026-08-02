@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import customtkinter as ctk
 
 import impulcifer
+from core.constants import SPEAKER_NAMES
 from gui.brir_args import (
     build_brir_args,
     processing_default,
@@ -87,9 +88,7 @@ class StudioImpulciferTab:
         self.channel_balance_db_var = ctk.IntVar(value=0)
         self.decay_var = ctk.StringVar()
         self.decay_per_channel_var = ctk.BooleanVar(value=False)
-        self.decay_channel_vars = {
-            ch: ctk.StringVar() for ch in ("FL", "FC", "FR", "SL", "SR", "BL", "BR")
-        }
+        self.decay_channel_vars = {ch: ctk.StringVar() for ch in SPEAKER_NAMES}
         self.pre_response_var = ctk.DoubleVar(value=1.0)
         self.jamesdsp_var = ctk.BooleanVar(value=False)
         self.hangloose_var = ctk.BooleanVar(value=False)
@@ -447,17 +446,18 @@ class StudioImpulciferTab:
         self.decay_channels_frame = ctk.CTkFrame(adv_body, fg_color="transparent")
         self.decay_channels_frame.grid(row=5, column=0, sticky="ew", padx=(18, 0), pady=(0, 8))
         for idx, (ch, var) in enumerate(self.decay_channel_vars.items()):
+            row_i, col_i = divmod(idx, 8)
             ctk.CTkLabel(
                 self.decay_channels_frame,
                 text=f"{ch}:",
                 font=ctk.CTkFont(size=12, weight="bold"),
                 text_color=COLORS["fg-1"],
-            ).grid(row=0, column=idx * 2, sticky="w", padx=(0, 4), pady=4)
+            ).grid(row=row_i, column=col_i * 2, sticky="w", padx=(0, 4), pady=4)
             ctk.CTkEntry(
                 self.decay_channels_frame,
                 textvariable=var,
                 width=54,
-            ).grid(row=0, column=idx * 2 + 1, sticky="w", padx=(0, 8), pady=4)
+            ).grid(row=row_i, column=col_i * 2 + 1, sticky="w", padx=(0, 8), pady=4)
         self.decay_channels_frame.grid_remove()
 
         output_row = ctk.CTkFrame(adv_body, fg_color="transparent")

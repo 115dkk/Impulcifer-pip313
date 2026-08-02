@@ -7,6 +7,7 @@ import os
 import shutil
 from typing import Any
 
+from core.constants import SPEAKER_NAMES
 from core.pipeline import ProcessingConfig
 from gui.utils import safe_get_double, safe_get_int, safe_get_string
 
@@ -127,9 +128,9 @@ def build_brir_args(tab: Any, loc: Any) -> dict:
             if decay_str.strip():
                 try:
                     decay_val = float(decay_str) / 1000
-                    args["decay"] = {
-                        ch: decay_val for ch in ("FL", "FC", "FR", "SL", "SR", "BL", "BR")
-                    }
+                    # 단일값 decay는 CLI와 동일하게 전체 SPEAKER_NAMES로 fan-out
+                    # (기존 7채널 하드코딩은 드리프트 — 감사 #138 F018/Q2 판정)
+                    args["decay"] = {ch: decay_val for ch in SPEAKER_NAMES}
                 except ValueError:
                     pass
 

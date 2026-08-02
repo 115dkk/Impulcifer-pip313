@@ -106,3 +106,59 @@ def test_parallel_processing_map_supports_initializer_contract() -> None:
     )
 
     assert result == [("task", "ready")]
+
+
+class AdvancedDecayBrirTab(MinimalBrirTab):
+    """Tab stand-in with the advanced panel open and a single decay value."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.show_advanced_var = DummyVar(True)
+        self.fs_check_var = DummyVar(False)
+        self.fs_var = DummyVar(raises=ValueError)
+        self.target_level_var = DummyVar("")
+        self.channel_balance_var = DummyVar("none")
+        self.channel_balance_db_var = DummyVar(0)
+        self.bass_boost_gain_var = DummyVar(0.0)
+        self.bass_boost_fc_var = DummyVar(raises=ValueError)
+        self.bass_boost_q_var = DummyVar(raises=ValueError)
+        self.tilt_var = DummyVar(0.0)
+        self.decay_per_channel_var = DummyVar(False)
+        self.decay_channel_vars = {}
+        self.decay_var = DummyVar("300")
+        self.pre_response_var = DummyVar(1.0)
+        self.jamesdsp_var = DummyVar(False)
+        self.hangloose_var = DummyVar(False)
+        self.interactive_plots_var = DummyVar(False)
+        self.microphone_deviation_correction_var = DummyVar(False)
+        self.mic_deviation_strength_var = DummyVar(0.7)
+        self.mic_deviation_debug_plots_var = DummyVar(False)
+        self.output_truehd_layouts_var = DummyVar(False)
+
+
+def test_gui_single_decay_fans_out_to_all_speaker_names() -> None:
+    """Single-value decay must cover the full 15-speaker layout like the CLI.
+
+    Audit #138 F018/Q2: the old hardcoded 7-channel tuple was drift, not an
+    intentional "GUI only exposes 7.1" decision.
+    """
+    from core.constants import SPEAKER_NAMES
+
+    args = build_brir_args(AdvancedDecayBrirTab(), DummyLoc())
+
+    assert set(args["decay"]) == set(SPEAKER_NAMES)
+    assert all(value == 0.3 for value in args["decay"].values())
+
+
+def test_webview_decay_channels_mirror_speaker_names() -> None:
+    """app.js DECAY_CHANNELS must stay in sync with core SPEAKER_NAMES."""
+    import re
+    from pathlib import Path
+
+    from core.constants import SPEAKER_NAMES
+
+    app_js = (Path(__file__).parent.parent / "webview_ui" / "app.js").read_text(encoding="utf-8")
+    match = re.search(r"const DECAY_CHANNELS = \[(.*?)\];", app_js, flags=re.DOTALL)
+    assert match, "DECAY_CHANNELS not found in app.js"
+    channels = re.findall(r'"([A-Z]+)"', match.group(1))
+    assert channels == list(SPEAKER_NAMES)

@@ -51,3 +51,19 @@ def validate_recording_setup(
         expected_channels=expected_channels,
         selected_channels=selected_channels,
     )
+
+
+def resolve_recording_channels(force_multi_channel, requested_channels):
+    """Resolve the recording channel count under the Stable-tab contract.
+
+    Stereo unless the user explicitly forces a multi-channel recording;
+    forced recordings use the requested count as-is. This is the single
+    contract for both CTk skins (audit #138 F021/Q5 — Studio's former
+    ``max(2, entry)`` reading was drift, not intent).
+
+    Returns:
+        ``(channels, force_channels)`` tuple.
+    """
+    if not force_multi_channel:
+        return 2, False
+    return int(requested_channels), True

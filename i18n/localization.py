@@ -43,6 +43,24 @@ LOCALE_MAPPING = {
 }
 
 
+def normalize_language_code(code: str) -> str:
+    """Canonicalize a language code to the ``SUPPORTED_LANGUAGES`` form.
+
+    Accepts BCP-47-style variants (``zh-CN``, ``zh-tw``, ``ko-KR``) from web
+    or OS contexts and maps them to the underscore form (``zh_CN``). The
+    hyphenated ``i18n/locales/zh-cn.json``/``zh-tw.json`` files are kept as
+    byte-mirrors of the canonical files for external BCP-47-style consumers
+    (audit #138 F030/Q3); the loader itself always reads the canonical file.
+    """
+    if not code:
+        return code
+    normalized = code.replace('-', '_')
+    parts = normalized.split('_')
+    if len(parts) == 2:
+        normalized = parts[0].lower() + '_' + parts[1].upper()
+    return normalized
+
+
 class LocalizationManager:
     """Manages translations and user preferences"""
 
@@ -172,6 +190,7 @@ class LocalizationManager:
 
     def set_language(self, language_code: str):
         """Set current language and load translations"""
+        language_code = normalize_language_code(language_code)
         if language_code not in SUPPORTED_LANGUAGES:
             language_code = 'en'
 

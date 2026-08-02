@@ -126,3 +126,33 @@ def test_webview_html_i18n_keys_exist_in_english() -> None:
 
     missing = sorted(html_keys - set(english))
     assert not missing, f"index.html data-i18n keys missing from en.json: {missing}"
+
+
+def test_bcp47_alias_files_mirror_canonical() -> None:
+    """zh-cn/zh-tw are byte-mirrors of zh_CN/zh_TW.
+
+    They are kept as BCP-47-style filename aliases for external consumers
+    (audit #138 F030/Q3 — maintainer: do not delete). This test turns the
+    accidental duplication into an enforced mirror contract so the pairs can
+    never drift apart silently.
+    """
+    locale_dir = Path(__file__).parent.parent / "i18n" / "locales"
+    for alias, canonical in (("zh-cn.json", "zh_CN.json"), ("zh-tw.json", "zh_TW.json")):
+        assert (locale_dir / alias).read_bytes() == (locale_dir / canonical).read_bytes(), (
+            f"{alias} must stay a byte-mirror of {canonical}"
+        )
+
+
+def test_traditional_chinese_is_a_real_translation() -> None:
+    """zh_TW must remain genuinely Traditional, not a zh_CN copy."""
+    locale_dir = Path(__file__).parent.parent / "i18n" / "locales"
+    cn = json.loads((locale_dir / "zh_CN.json").read_text(encoding="utf-8"))
+    tw = json.loads((locale_dir / "zh_TW.json").read_text(encoding="utf-8"))
+
+    differing = sum(1 for key in cn if cn[key] != tw.get(key))
+    assert differing > len(cn) * 0.5, "zh_TW looks like a zh_CN copy"
+
+    tw_text = "".join(value for value in tw.values() if isinstance(value, str))
+    traditional_only = "設應體錯誤"
+    hits = sum(1 for ch in traditional_only if ch in tw_text)
+    assert hits >= 3, "Traditional-specific characters missing from zh_TW"

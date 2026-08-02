@@ -20,7 +20,7 @@ import sounddevice
 import core.recorder as recorder
 from core.headphones_recording import inspect_headphones_playback
 from core.recording_naming import resolve_headphones_record_path, resolve_record_path
-from core.recording_validation import validate_recording_setup
+from core.recording_validation import resolve_recording_channels, validate_recording_setup
 from core.sweep_set_generator import generate_sweep_set
 from gui.constants import (
     FILETYPES_AUDIO,
@@ -473,7 +473,9 @@ class RecorderTab:
             )
             return
         record_file = resolve_record_path(record_dir, play_file)
-        selected_channels = safe_get_int(self.channels_var, 14) if self.channels_check_var.get() else 2
+        selected_channels, force_channels = resolve_recording_channels(
+            self.channels_check_var.get(), safe_get_int(self.channels_var, 14)
+        )
 
         if not os.path.exists(play_file):
             messagebox.showerror(self.loc.get('message_error'), self.loc.get('message_play_file_not_exist', file=play_file))
@@ -482,7 +484,7 @@ class RecorderTab:
         validation = validate_recording_setup(
             record_file,
             selected_channels,
-            self.channels_check_var.get(),
+            force_channels,
         )
         if validation and validation.has_mismatch:
             warning_msg = self.loc.get(

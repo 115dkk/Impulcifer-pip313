@@ -45,6 +45,19 @@ SCENARIOS = [
         name="virtual_bass",
         extra_args=("--vbass", "--vbass_freq=250"),
     ),
+    # Audit #138 F038: the flags below had no end-to-end coverage at all.
+    BrirScenario(
+        name="dsp_shaping",
+        extra_args=("--decay=100", "--channel_balance=trend", "--bass_boost=4"),
+    ),
+    BrirScenario(
+        name="resample_and_extra_outputs",
+        extra_args=("--fs=44100", "--output_truehd_layouts", "--jamesdsp", "--hangloose"),
+    ),
+    BrirScenario(
+        name="no_headphone_compensation",
+        extra_args=("--no_headphone_compensation",),
+    ),
 ]
 
 
