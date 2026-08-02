@@ -872,45 +872,33 @@ class BRIRPipeline:
 
         from core.cancellation import check_cancelled
         from core.constants import TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER
-        from core.channel_generation import (
-            validate_channel_requirements,
-            get_available_channels_for_layout,
-            create_truehd_layout_track_order,
-        )
 
         self.logger.step("cli_generating_truehd")
 
-        # 11채널 (7.0.4) 레이아웃 생성
-        valid_11ch, count_11ch, msg_11ch = validate_channel_requirements(
-            self.hrir, TRUEHD_11CH_ORDER, min_channels=8
-        )
-        if valid_11ch:
-            available_11ch = get_available_channels_for_layout(self.hrir, TRUEHD_11CH_ORDER)
-            track_order_11ch = create_truehd_layout_track_order(available_11ch)
-
-            output_path_11ch = os.path.join(
-                self.dir_path, f"truehd_11ch_{len(available_11ch)}ch.wav"
-            )
-            self.hrir.write_wav(output_path_11ch, track_order=track_order_11ch)
-            self.logger.success("cli_success_truehd_11ch", path=output_path_11ch)
-        else:
-            self.logger.warning("cli_warning_truehd_11ch_fail", msg=msg_11ch)
-
-        # 13채널 (7.0.6) 레이아웃 생성
-        valid_13ch, count_13ch, msg_13ch = validate_channel_requirements(
-            self.hrir, TRUEHD_13CH_ORDER, min_channels=10
-        )
-        if valid_13ch:
-            available_13ch = get_available_channels_for_layout(self.hrir, TRUEHD_13CH_ORDER)
-            track_order_13ch = create_truehd_layout_track_order(available_13ch)
-
-            output_path_13ch = os.path.join(
-                self.dir_path, f"truehd_13ch_{len(available_13ch)}ch.wav"
-            )
-            self.hrir.write_wav(output_path_13ch, track_order=track_order_13ch)
-            self.logger.success("cli_success_truehd_13ch", path=output_path_13ch)
-        else:
-            self.logger.warning("cli_warning_truehd_13ch_fail", msg=msg_13ch)
+        # 레이아웃별로 보유 채널을 세고, 최소 채널 수를 만족하면 좌/우 트랙
+        # 순서를 만들어 기록한다. (구 core/channel_generation.py 인라인 —
+        # validate가 만든 리스트를 버리고 같은 것을 다시 계산하던 3-함수
+        # 시퀀스였다.)
+        for layout_name, layout_order, min_channels, ok_key, fail_key in (
+            ("11ch", TRUEHD_11CH_ORDER, 8, "cli_success_truehd_11ch", "cli_warning_truehd_11ch_fail"),  # 7.0.4
+            ("13ch", TRUEHD_13CH_ORDER, 10, "cli_success_truehd_13ch", "cli_warning_truehd_13ch_fail"),  # 7.0.6
+        ):
+            available = [ch for ch in layout_order if ch in self.hrir.irs]
+            if len(available) >= min_channels:
+                track_order = [
+                    f"{ch}-{side}" for ch in available for side in ("left", "right")
+                ]
+                output_path = os.path.join(
+                    self.dir_path, f"truehd_{layout_name}_{len(available)}ch.wav"
+                )
+                self.hrir.write_wav(output_path, track_order=track_order)
+                self.logger.success(ok_key, path=output_path)
+            else:
+                missing = [ch for ch in layout_order if ch not in self.hrir.irs]
+                self.logger.warning(fail_key, msg=(
+                    f"Insufficient channels: need {min_channels}, "
+                    f"have {len(available)}. Missing: {missing}"
+                ))
         check_cancelled()
 
     def _stage_jamesdsp(self):
