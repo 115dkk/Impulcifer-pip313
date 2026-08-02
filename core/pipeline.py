@@ -423,8 +423,8 @@ class BRIRPipeline:
             get_available_channels_for_layout,
             create_truehd_layout_track_order,
         )
+        from core.cancellation import check_cancelled as _check_cancelled
         from impulcifer import (
-            _check_cancelled,
             open_impulse_response_estimator,
             headphone_compensation,
             equalization,

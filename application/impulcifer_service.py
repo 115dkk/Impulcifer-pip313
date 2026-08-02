@@ -347,6 +347,7 @@ class ImpulciferApplicationService:
 
         def run(job_id: str, cancel_event: threading.Event) -> dict[str, Any]:
             import impulcifer
+            from core.cancellation import CancelledError, cancellation_scope
             from infra.logger import get_logger
 
             if params.get("do_equalization", True):
@@ -369,9 +370,9 @@ class ImpulciferApplicationService:
                 )
             )
             try:
-                with impulcifer.cancellation_scope(cancel_event):
+                with cancellation_scope(cancel_event):
                     impulcifer.main(**params)
-            except impulcifer.CancelledError:
+            except CancelledError:
                 raise _JobCancelled() from None
             finally:
                 logger.set_gui_callback(previous_gui_callback)

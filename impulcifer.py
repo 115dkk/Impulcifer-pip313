@@ -53,7 +53,6 @@ import re
 import argparse
 from tabulate import tabulate
 from datetime import datetime
-from contextvars import ContextVar
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
@@ -79,35 +78,18 @@ from core.constants import (
 from core.eqapo import looks_like_eqapo_config, parse_eqapo_config
 from infra.logger import get_logger
 
-import contextlib
-
 from bokeh.plotting import (
     output_file as bokeh_output_file,
     save as bokeh_save,
 )
 
-_CANCEL_EVENT = ContextVar("impulcifer_cancel_event", default=None)
-
-
-class CancelledError(RuntimeError):
-    """Raised when BRIR generation is cancelled cooperatively."""
-
-
-@contextlib.contextmanager
-def cancellation_scope(cancel_event):
-    """Install a cancellation event for the current processing context."""
-    token = _CANCEL_EVENT.set(cancel_event)
-    try:
-        yield
-    finally:
-        _CANCEL_EVENT.reset(token)
-
-
-def _check_cancelled():
-    """Raise ``CancelledError`` if the active cancellation event is set."""
-    cancel_event = _CANCEL_EVENT.get()
-    if cancel_event is not None and cancel_event.is_set():
-        raise CancelledError("User cancelled BRIR generation.")
+# Cancellation now lives in core.cancellation; these re-exports keep the
+# historical import surface (GUI tabs, application service, tests) working.
+from core.cancellation import (  # noqa: F401
+    CancelledError,
+    cancellation_scope,
+    check_cancelled as _check_cancelled,
+)
 
 # Python 3.14 병렬 처리 지원
 try:
