@@ -155,13 +155,12 @@ def _print_info():
         pass
 
     try:
-        from updater.updater_core import is_velopack_environment, is_pip_environment
-        if is_velopack_environment():
-            lines.append("Installation: Standalone (Velopack)")
-        elif is_pip_environment():
-            lines.append("Installation: pip package")
-        else:
-            lines.append("Installation: Development")
+        from infra.environment import get_install_kind
+        lines.append({
+            "velopack": "Installation: Standalone (Velopack)",
+            "pip": "Installation: pip package",
+            "dev": "Installation: Development",
+        }[get_install_kind()])
     except Exception:
         lines.append("Installation: Development")
 

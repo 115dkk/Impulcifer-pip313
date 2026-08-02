@@ -33,17 +33,14 @@ from build_scripts.nuitka_flags import (  # noqa: E402
 
 
 def _detect_platform() -> str:
-    """Return canonical platform string used in nuitka_flags."""
-    import platform
+    """Return canonical platform string used in nuitka_flags.
 
-    system = platform.system().lower()
-    if system == "windows":
-        return "windows"
-    if system == "darwin":
-        return "macos"
-    if system == "linux":
-        return "linux"
-    return "unknown"
+    Delegates to :func:`build_scripts.build_nuitka.get_platform` — the two
+    files used to carry verbatim copies of the same mapping (audit #138 C3).
+    """
+    from build_scripts.build_nuitka import get_platform
+
+    return get_platform()
 
 
 def _read_project_version() -> str:

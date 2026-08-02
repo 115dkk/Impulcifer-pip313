@@ -93,7 +93,9 @@ def open_data_folder() -> None:
 
     if not data_dir.exists():
         # Fallback: executable 디렉토리 기준
-        if is_frozen_or_standalone():
+        from infra.environment import is_standalone_build
+
+        if is_standalone_build():
             data_dir = Path(sys.executable).parent / "data"
         else:
             data_dir = Path(__file__).parent.parent / "data"
@@ -112,79 +114,6 @@ def open_data_folder() -> None:
             subprocess.Popen(['xdg-open', str(data_dir)])
     except Exception as e:
         print(f"Failed to open data folder: {e}")
-
-
-def is_frozen_or_standalone() -> bool:
-    """
-    Check if the application is running as a Nuitka-compiled standalone executable.
-
-    Returns:
-        True if running as Nuitka standalone
-        False if running as a normal Python script or pip-installed package
-    """
-    # 빌드 마커 우선 (가장 확실)
-    try:
-        from infra._build_info import BUILD_TYPE
-        return BUILD_TYPE == "standalone"
-    except ImportError:
-        pass
-
-    # 폴백: 기존 런타임 감지
-    if getattr(sys, 'frozen', False):
-        return True
-
-    if '__nuitka__' in sys.modules:
-        return True
-
-    return False
-
-
-def is_pip_available() -> bool:
-    """
-    Check if pip is available in the current environment.
-
-    Returns:
-        True if pip can be used for package management
-    """
-    # Method 1: Try importing pip directly (most reliable)
-    try:
-        import pip  # noqa: F401
-        return True
-    except ImportError:
-        pass
-
-    # Method 2: Try importing pip._internal
-    try:
-        import pip._internal  # noqa: F401
-        return True
-    except ImportError:
-        pass
-
-    # Method 3: Try subprocess check (fallback)
-    try:
-        import subprocess
-        result = subprocess.run(
-            [sys.executable, '-m', 'pip', '--version'],
-            capture_output=True,
-            timeout=10,
-            encoding='utf-8',
-            errors='replace'
-        )
-        if result.returncode == 0:
-            return True
-    except Exception as e:
-        print(f"Subprocess pip check failed: {e}")
-
-    # Method 4: Check if pip module exists in sys.modules or can be found
-    try:
-        import importlib.util
-        spec = importlib.util.find_spec('pip')
-        if spec is not None:
-            return True
-    except Exception:
-        pass
-
-    return False
 
 
 def safe_get_double(var: Any, default: float = 0.0) -> float:

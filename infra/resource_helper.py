@@ -10,19 +10,13 @@ from pathlib import Path
 def get_resource_path(relative_path):
     """리소스 파일의 절대 경로를 반환
 
-    개발 환경과 Nuitka 빌드 환경 모두에서 작동
+    개발 환경과 Nuitka 빌드 환경 모두에서 작동. standalone 판정은
+    :func:`infra.environment.is_standalone_build`가 정본이다 (audit #138 C3;
+    이 함수의 자체 인라인 프로브 — 마커 + ``__compiled__`` — 를 대체).
     """
-    # 빌드 마커 우선
-    try:
-        from infra._build_info import BUILD_TYPE
-        if BUILD_TYPE == "standalone":
-            base_path = os.path.dirname(sys.executable)
-            return os.path.join(base_path, relative_path)
-    except ImportError:
-        pass
+    from infra.environment import is_standalone_build
 
-    # Nuitka 컴파일 폴백 (__compiled__는 모듈 전역 변수)
-    if "__compiled__" in globals():
+    if is_standalone_build():
         base_path = os.path.dirname(sys.executable)
         return os.path.join(base_path, relative_path)
 

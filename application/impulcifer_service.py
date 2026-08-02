@@ -233,6 +233,8 @@ class ImpulciferApplicationService:
         return _ok(
             {
                 "version": version,
+                # infra.environment.normalized_platform()과 동일 어휘
+                # (windows/darwin/linux) — JSON API 계약 표면이므로 유지.
                 "platform": platform.system().lower(),
                 "brir_defaults": brir_defaults,
                 "capabilities": {
@@ -513,12 +515,9 @@ class ImpulciferApplicationService:
 
         install_kind = "dev"
         try:
-            from updater.environment import is_pip_environment, is_velopack_environment
+            from infra.environment import get_install_kind
 
-            if is_velopack_environment():
-                install_kind = "velopack"
-            elif is_pip_environment():
-                install_kind = "pip"
+            install_kind = get_install_kind()
         except Exception:
             pass
 

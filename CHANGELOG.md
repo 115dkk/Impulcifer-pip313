@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.10.4 - 2026-08-02
+### 감사(#138) 3라운드 — C3: 환경 감지 단일화
+
+#### ⭐ 개선
+- **`infra/environment.py` 신설 (F012)**: "standalone 빌드인가?"(3개 프로브 — `updater/environment.py`, `gui/utils.is_frozen_or_standalone` 완전 복제본, `infra/resource_helper`의 `__compiled__` 인라인 프로브), "설치 종류는?"(6개 동일 if/elif 래더)을 단일 모듈로 통합했다. `is_standalone_build()`는 빌드 마커 우선 + 마커 없는 구 빌드용 폴백 합집합(`sys.frozen` ∨ `__nuitka__` ∨ `__compiled__`), `get_install_kind()`는 `velopack/pip/dev` 분류 한 곳, `normalized_platform()`은 플랫폼 정본 어휘(windows/darwin/linux). GUI/서비스/업데이터/CLI의 래더 6곳이 전부 `get_install_kind()` 한 줄 + 라벨 맵으로 바뀌어 UI 표기와 업데이터 실제 동작이 구조적으로 일치한다.
+- **죽은 코드 삭제 (F008 일부)**: `gui/utils.is_pip_available`(46줄, 참조 0 — standalone 게이트가 없어 살릴 경우 `is_pip_environment`와 상반된 답을 내는 함수), `updater/executors.get_updater`(참조 0인 두 번째 팩토리), `updater/legacy.py`의 죽은 함수를 권하던 독스트링. `build_scripts/build_local.py`의 플랫폼 감지 함수는 `build_nuitka.get_platform` 위임으로 복제 해소.
+- **테스트 (F041 확장)**: probe ladder 테스트를 `infra.environment`로 재조준하고 `__compiled__` 폴백·`get_install_kind` 분기·`updater.environment` 셸 identity·`create_update_executor` 팩토리(기존 미테스트)를 추가로 고정 — 25개 통과.
+
+`updater/environment.py`는 하위 호환 재export 셸로 유지된다(기존 `updater_core` 경유 임포트 체인 무변).
+
 ## 2.10.3 - 2026-08-02
 ### 감사(#138) 2라운드 — C1: BRIR 파이프라인 seam 심화 (해시 중립 리팩토링)
 

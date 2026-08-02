@@ -34,7 +34,6 @@ from updater.executors import (  # noqa: F401  (re-export)
     UpdateExecutor,
     VelopackExecutor,
     create_update_executor,
-    get_updater,
 )
 from updater.legacy import (  # noqa: F401  (re-export)
     GITHUB_RELEASES_URL,

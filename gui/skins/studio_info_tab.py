@@ -18,7 +18,7 @@ from core.parallel_processing import get_python_threading_info
 from gui.skins.studio_widgets import add_card_header, make_card, make_card_body, make_page_header
 from gui.theme import COLORS, get_mono_font_family, get_png_path
 from gui.utils import install_smooth_scrolling
-from updater.updater_core import is_pip_environment, is_velopack_environment
+from infra.environment import get_install_kind
 
 if TYPE_CHECKING:
     from gui.modern_gui import ModernImpulciferGUI
@@ -95,12 +95,12 @@ class StudioInfoTab:
             anchor="w",
         ).grid(row=0, column=1, sticky="sw", padx=(0, 20), pady=(20, 0))
 
-        if is_velopack_environment():
-            install_text = self.loc.get("info_install_velopack")
-        elif is_pip_environment():
-            install_text = self.loc.get("info_install_pip")
-        else:
-            install_text = self.loc.get("info_install_dev")
+        install_keys = {
+            "velopack": "info_install_velopack",
+            "pip": "info_install_pip",
+            "dev": "info_install_dev",
+        }
+        install_text = self.loc.get(install_keys[get_install_kind()])
 
         version_pill = (
             f"VERSION {impulcifer.__version__}  ·  PYTHON "
