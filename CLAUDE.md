@@ -24,7 +24,9 @@ application/
                             ProcessingConfig 전체 표면 검증, UI 설정/시스템 정보)
 webview_ui/               ← WebView HTML/CSS/JS (Pulse Studio 디자인, i18n 문자열은
                             bootstrap 응답으로 주입; webview-gallery CI가 렌더 검증)
-impulcifer.py             ← 핵심 처리 파이프라인 (main 함수)
+impulcifer.py             ← CLI 엔트리 + main() 래퍼 (버전 계산, create_cli;
+                            DSP 스테이지 헬퍼·cancellation은 core로 이동했고
+                            하위 호환 재export만 유지 — 이슈 #138 C1)
 core/
   hrir.py                 ← HRIR 클래스 (Phase 1: ~1150줄, plotting은 plotting/으로 이동)
   impulse_response.py     ← 임펄스 응답 단위 처리 (Phase 1: ~534줄)
@@ -40,14 +42,18 @@ core/
   ffmpeg_discovery.py     ← FFmpeg 검색/설치 + lazy 초기화 globals (audit #115-9 분리)
   audio_truehd.py         ← TrueHD/MLP 디코드 + read_audio (audit #115-9 분리)
   ffmpeg_utils.py         ← 위 둘의 하위 호환 re-export 셸
-  constants.py            ← 스피커 이름/딜레이 등 상수
-  pipeline.py             ← ProcessingConfig + BRIRPipeline (Phase 2)
+  constants.py            ← 스피커 이름/딜레이/speaker_side() 등 상수
+  pipeline.py             ← ProcessingConfig + BRIRPipeline (stage table 기반
+                            오케스트레이터, 이슈 #138 C1에서 run() 분할)
+  pipeline_stages.py      ← DSP 스테이지 헬퍼 7종 (이슈 #138 C1에서
+                            impulcifer.py로부터 이동)
+  cancellation.py         ← 협조적 취소 (ContextVar + cancellation_scope +
+                            check_cancelled, 이슈 #138 C1에서 분리)
   cli_builder.py          ← argparse 자동 생성기 (Phase 3)
   plotting/               ← HRIRPlotter / ImpulseResponsePlotter mixin (Phase 1)
   parallel_workers.py     ← ProcessPoolExecutor 워커 (경량 모듈)
   parallel_processing.py  ← free-threaded 병렬 처리
   parallel_utils.py       ← 병렬 처리 유틸리티
-  channel_generation.py   ← 가상 채널 생성
 gui/
   modern_gui.py           ← CustomTkinter GUI (~295줄, tabs/로 분리됨. 버전 2 동안
                             유지보수+기능추가 지속, 버전 3부터는 레거시 GUI처럼
@@ -60,6 +66,10 @@ autoeq/                   ← 벤더링된 AutoEQ (PR #63에서 in-tree 전환)
 i18n/
   localization.py         ← 다국어 관리
   locales/*.json          ← 번역 파일 (en, ko, ja, de, es, fr, ru, zh_CN, zh_TW)
+docs/adr/                 ← 아키텍처 결정 기록(ADR). 구조 변경/감사 제안 전
+                            반드시 확인할 것 — 0001: CTk 네이티브 GUI를
+                            서비스 계층으로 단일화하는 제안(감사 C2류)은
+                            기각됨("네이티브는 네이티브답게"); 재제안 금지
 infra/
   logger.py               ← 통합 로거 (GUI 콜백 지원)
   resource_helper.py      ← 리소스 경로 헬퍼
@@ -78,7 +88,9 @@ updater/
 
 ## 수정 시 주의사항
 
-`impulcifer.py`의 `main()`은 `**kwargs`를 받아 `core.pipeline.ProcessingConfig.from_kwargs()`로 전달하는 얇은 래퍼다(이슈 #113/#115 audit에서 기존의 32개 명시적 인자 시그니처를 통합). GUI의 `generate_brir()`/`gui.brir_args.build_brir_args`와 CLI(`create_cli`)가 인자 딕셔너리를 조립해 넘기며, `ProcessingConfig`에 없는 키(예: 폐기된 호환 플래그)는 `from_kwargs`가 무시한다. 따라서 파라미터의 정본 기본값은 `ProcessingConfig` 필드에만 존재하므로, 새 파라미터는 `ProcessingConfig`에 필드를 추가하면 CLI·GUI·파이프라인에 자동 반영된다. 실제 BRIR 파이프라인 단계 시퀀스는 `core.pipeline.BRIRPipeline.run()`이 보유한다(DSP 단계 헬퍼는 여전히 `impulcifer.py`에 있고 `run()` 내부에서 지연 import한다).
+`impulcifer.py`의 `main()`은 `**kwargs`를 받아 `core.pipeline.ProcessingConfig.from_kwargs()`로 전달하는 얇은 래퍼다(이슈 #113/#115 audit에서 기존의 32개 명시적 인자 시그니처를 통합). GUI의 `generate_brir()`/`gui.brir_args.build_brir_args`와 CLI(`create_cli`)가 인자 딕셔너리를 조립해 넘기며, `ProcessingConfig`에 없는 키(예: 폐기된 호환 플래그)는 `from_kwargs`가 무시한다. 따라서 파라미터의 정본 기본값은 `ProcessingConfig` 필드에만 존재하므로, 새 파라미터는 `ProcessingConfig`에 필드를 추가하면 CLI·GUI·파이프라인에 자동 반영된다. 실제 BRIR 파이프라인 단계 시퀀스는 `core.pipeline.BRIRPipeline._stage_table()`이 보유한다 — 단계별 게이트·진행률 스텝 수·메서드가 한 테이블에 있고, 진행률 총계도 같은 테이블에서 도출된다(이슈 #138 C1에서 510줄 `run()`을 분할). DSP 단계 헬퍼는 `core/pipeline_stages.py`에 있으며 `impulcifer.py`는 하위 호환 재export만 유지한다.
+
+데모 테스트 신호 pkl(`data/sweep-*.pkl`)은 `__main__.ImpulseResponseEstimator`로 피클되어 있다. CLI 실행 시(`python impulcifer.py`) `__main__`이 곧 impulcifer 모듈이므로, impulcifer 모듈 네임스페이스에 `ImpulseResponseEstimator` 이름이 반드시 남아 있어야 한다(제거하면 모든 `--test_signal=*.pkl` 실행이 죽는다). `tests/test_pickle_compat.py`가 이 계약을 고정한다.
 
 `core/recorder.py`의 `play_and_record()`는 `sd.play(blocking=True)` + `Thread.join()`으로 완전한 블로킹 함수다. 이 동작을 변경하지 말 것.
 
