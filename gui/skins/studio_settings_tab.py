@@ -73,6 +73,14 @@ class StudioSettingsTab:
         self._build_setting_row(
             body,
             row=1,
+            label=self.loc.get("section_frontend"),
+            description=self.loc.get("tooltip_frontend"),
+            make_control=self._make_frontend_segment,
+        )
+
+        self._build_setting_row(
+            body,
+            row=2,
             label=self.loc.get("section_language"),
             description=self.loc.get("label_select_language"),
             make_control=self._make_language_dropdown,
@@ -80,7 +88,7 @@ class StudioSettingsTab:
 
         self._build_setting_row(
             body,
-            row=2,
+            row=3,
             label=self.loc.get("section_theme"),
             description=self.loc.get("label_select_theme"),
             make_control=self._make_theme_dropdown,
@@ -161,6 +169,32 @@ class StudioSettingsTab:
             width=200,
         )
         seg.set(skin_value_map.get(current, self.loc.get("option_skin_stable")))
+        return seg
+
+    def _make_frontend_segment(self, parent: ctk.CTkBaseClass) -> ctk.CTkSegmentedButton:
+        """gui_main launcher default (WebView/CTk) — applies on next launch.
+
+        Mirrors the stable Settings tab's frontend selector; without it a
+        Studio-skin user had no way back to the WebView frontend from the UI.
+        """
+        current = self.loc.get_frontend()
+        frontend_label_map = {
+            self.loc.get("option_frontend_webview"): "webview",
+            self.loc.get("option_frontend_ctk"): "ctk",
+        }
+        frontend_value_map = {v: k for k, v in frontend_label_map.items()}
+
+        def _on_change(value: str) -> None:
+            self.loc.set_frontend(frontend_label_map.get(value, "webview"))
+
+        seg = ctk.CTkSegmentedButton(
+            parent,
+            values=list(frontend_label_map.keys()),
+            command=_on_change,
+            font=ctk.CTkFont(family=self.app.font_family, size=12, weight="bold"),
+            width=200,
+        )
+        seg.set(frontend_value_map.get(current, self.loc.get("option_frontend_webview")))
         return seg
 
     def _make_language_dropdown(self, parent: ctk.CTkBaseClass) -> ctk.CTkOptionMenu:

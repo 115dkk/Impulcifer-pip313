@@ -159,23 +159,31 @@ jobs:
             echo "::warning::Ignoring ANTHROPIC_* credentials so Claude Code uses CLAUDE_CODE_OAUTH_TOKEN."
           fi
 
+      # 워크플로 자체 산출물은 $RUNNER_TEMP/audit에 쓴다 — 체크아웃 작업
+      # 트리에 남으면 감사 세션이 untracked 파일로 오인해 finding으로 잡거나
+      # 실수로 커밋될 수 있다(특히 .txt는 release gate의 EXCLUDE에 없음).
+      # ARCHITECTURE_AUDIT.md/TECH_DEBT_AUDIT.md는 스킬이 repo 루트에 쓰는
+      # 규약이므로 그대로 두고 .gitignore로 커밋만 차단한다.
       - name: Generate change summary
         id: changes
         run: |
+          mkdir -p "$RUNNER_TEMP/audit"
+          SUMMARY="$RUNNER_TEMP/audit/change-summary.txt"
           LAST_REF="${{ needs.check-changes.outputs.last_audit_ref }}"
           if [ -n "$LAST_REF" ]; then
-            echo "## 변경된 파일 목록" > change-summary.txt
-            echo "" >> change-summary.txt
+            echo "## 변경된 파일 목록" > "$SUMMARY"
+            echo "" >> "$SUMMARY"
             git diff --stat "$LAST_REF"..HEAD \
               -- '.' ':!*.md' ':!*.txt' ':!*.rst' ':!*.ipynb' ':!docs/**' \
-              >> change-summary.txt 2>/dev/null || true
+              >> "$SUMMARY" 2>/dev/null || true
           else
-            echo "첫 감사 실행입니다." > change-summary.txt
+            echo "첫 감사 실행입니다." > "$SUMMARY"
           fi
 
       - name: Run combined audit
         run: |
           unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+          REPORT="$RUNNER_TEMP/audit/combined-audit-report.md"
 
           set +e
           claude \
@@ -208,19 +216,19 @@ jobs:
           Produce the full TECH_DEBT_AUDIT.md content with severity,
           effort estimates, and the required 'looks bad but is
           actually fine' section.
-          " > combined-audit-report.md 2>&1
+          " > "$REPORT" 2>&1
           CLAUDE_EXIT=$?
           set -e
 
           if [ "$CLAUDE_EXIT" -eq 0 ] && [ ! -s ARCHITECTURE_AUDIT.md ]; then
             echo "::error::Claude audit completed without ARCHITECTURE_AUDIT.md."
-            cat combined-audit-report.md
+            cat "$REPORT"
             exit 1
           fi
 
           if [ "$CLAUDE_EXIT" -eq 0 ] && [ ! -s TECH_DEBT_AUDIT.md ]; then
             echo "::error::Claude audit completed without TECH_DEBT_AUDIT.md."
-            cat combined-audit-report.md
+            cat "$REPORT"
             exit 1
           fi
 
@@ -232,7 +240,7 @@ jobs:
               echo "# ARCHITECTURE_AUDIT.md"
               echo ""
               cat ARCHITECTURE_AUDIT.md
-            } >> combined-audit-report.md
+            } >> "$REPORT"
           fi
 
           if [ -f TECH_DEBT_AUDIT.md ]; then
@@ -243,18 +251,18 @@ jobs:
               echo "# TECH_DEBT_AUDIT.md"
               echo ""
               cat TECH_DEBT_AUDIT.md
-            } >> combined-audit-report.md
+            } >> "$REPORT"
           fi
 
-          if [ ! -s combined-audit-report.md ]; then
-            echo "Audit produced no output." > combined-audit-report.md
-            cat combined-audit-report.md
+          if [ ! -s "$REPORT" ]; then
+            echo "Audit produced no output." > "$REPORT"
+            cat "$REPORT"
             exit 1
           fi
 
           if [ "$CLAUDE_EXIT" -ne 0 ]; then
             echo "Claude audit failed with exit code $CLAUDE_EXIT."
-            cat combined-audit-report.md
+            cat "$REPORT"
             exit "$CLAUDE_EXIT"
           fi
 
@@ -280,7 +288,7 @@ jobs:
             echo "- \`ARCHITECTURE_AUDIT.md\` - 댓글"
             echo "- \`combined-audit-report.md\` - 댓글"
             echo "- \`TECH_DEBT_AUDIT.md\` - 댓글"
-          } > issue-body.md
+          } > "$RUNNER_TEMP/audit/issue-body.md"
 
           post_file_comments() {
             local issue_number="$1"
@@ -318,11 +326,14 @@ jobs:
             total=$(find "$comment_dir" -type f -name 'part-*' | wc -l | tr -d ' ')
             local index=1
 
+            local display_name
+            display_name=$(basename "$file_path")
+
             for part in "$comment_dir"/part-*; do
               {
                 echo "## ${title} (${index}/${total})"
                 echo ""
-                echo "Source file: \`${file_path}\`"
+                echo "Source file: \`${display_name}\`"
                 echo ""
                 echo '````markdown'
                 cat "$part"
@@ -353,28 +364,27 @@ jobs:
           ISSUE_URL=$(gh issue create \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Biweekly Audit: ${DATE}" \
-            --body-file issue-body.md \
+            --body-file "$RUNNER_TEMP/audit/issue-body.md" \
             --label audit \
             --label maintenance)
 
           echo "Created issue: ${ISSUE_URL}"
           ISSUE_NUMBER="${ISSUE_URL##*/}"
 
-          post_file_comments "$ISSUE_NUMBER" change-summary.txt "Change summary"
+          post_file_comments "$ISSUE_NUMBER" "$RUNNER_TEMP/audit/change-summary.txt" "Change summary"
           post_file_comments "$ISSUE_NUMBER" ARCHITECTURE_AUDIT.md "Architecture audit"
-          post_file_comments "$ISSUE_NUMBER" combined-audit-report.md "Combined audit report"
+          post_file_comments "$ISSUE_NUMBER" "$RUNNER_TEMP/audit/combined-audit-report.md" "Combined audit report"
           post_file_comments "$ISSUE_NUMBER" TECH_DEBT_AUDIT.md "Tech debt audit"
+
+      - name: Collect report artifacts
+        run: |
+          cp ARCHITECTURE_AUDIT.md TECH_DEBT_AUDIT.md "$RUNNER_TEMP/audit/" 2>/dev/null || true
 
       - name: Upload report artifact
         uses: actions/upload-artifact@v4
         with:
           name: "audit-report-${{ github.run_id }}"
-          path: |
-            combined-audit-report.md
-            change-summary.txt
-            ARCHITECTURE_AUDIT.md
-            TECH_DEBT_AUDIT.md
-            issue-body.md
+          path: ${{ runner.temp }}/audit/
           retention-days: 90
 
       - name: Tag audit checkpoint

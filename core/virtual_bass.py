@@ -12,36 +12,9 @@ from typing import Optional
 
 import numpy as np
 from scipy import signal
-from scipy.signal import butter, sosfilt
 
+from core.constants import speaker_side
 from infra.logger import get_logger
-
-
-_LEFT_SIDE_SPEAKERS = frozenset({
-    "FL", "SL", "BL", "WL", "TFL", "TSL", "TBL",
-})
-_RIGHT_SIDE_SPEAKERS = frozenset({
-    "FR", "SR", "BR", "WR", "TFR", "TSR", "TBR",
-})
-_CENTER_SPEAKERS = frozenset({
-    "FC", "LFE",
-})
-
-_ILD_SHELF_TABLE = [
-    (80, 50.0, 3.0),
-    (160, 100.0, 4.5),
-    (250, 150.0, 6.0),
-]
-
-
-def _classify_speaker(name: str) -> str:
-    """Classify a speaker name into 'left', 'right', or 'center'."""
-    name_upper = name.upper()
-    if name_upper in _LEFT_SIDE_SPEAKERS:
-        return "left"
-    if name_upper in _RIGHT_SIDE_SPEAKERS:
-        return "right"
-    return "center"
 
 
 def _detect_polarity(ir: np.ndarray) -> float:
@@ -104,35 +77,6 @@ def _rbj_high_shelf(fc: float, fs: int, gain_db: float, q: float) -> np.ndarray:
     a2 = (a + 1) - (a - 1) * cos_w0 - 2 * np.sqrt(a) * alpha
 
     return signal.tf2sos([b0, b1, b2], [a0, a1, a2])
-
-
-def _build_ild_shelf(xo_hz: float, fs: int):
-    """Build the legacy low-shelf descriptor kept for API/tests."""
-    best = None
-    for threshold, shelf_freq, shelf_gain_db in _ILD_SHELF_TABLE:
-        if xo_hz >= threshold:
-            best = (shelf_freq, shelf_gain_db)
-    if best is None:
-        return None
-    shelf_freq, shelf_gain_db = best
-    gain_linear = 10 ** (shelf_gain_db / 20.0)
-    sos_lp = butter(2, shelf_freq, btype="low", fs=fs, output="sos")
-    return sos_lp, gain_linear, shelf_gain_db
-
-
-def _apply_ild_shelf(ir: np.ndarray, shelf_info, side: str, speaker_class: str) -> np.ndarray:
-    """Legacy low-shelf helper kept for compatibility with older callers."""
-    if shelf_info is None or speaker_class == "center":
-        return ir
-
-    sos_lp, gain_linear, _ = shelf_info
-    lf_component = sosfilt(sos_lp, ir)
-    if speaker_class == side:
-        boost = (gain_linear - 1.0) * 0.5
-        return ir + boost * lf_component
-
-    cut = (1.0 - 1.0 / gain_linear) * 0.5
-    return ir - cut * lf_component
 
 
 def synthesize_virtual_bass(
@@ -201,7 +145,7 @@ def synthesize_virtual_bass(
         if "left" not in pair or "right" not in pair:
             continue
 
-        speaker_on_left = speaker.upper().endswith("L")
+        speaker_on_left = speaker_side(speaker) == "left"
         left_peak = pair["left"].peak_index()
         right_peak = pair["right"].peak_index()
         if not isinstance(left_peak, (int, np.integer, float, np.floating)):

@@ -100,8 +100,12 @@ def build_brir_args(tab: Any, loc: Any) -> dict:
         bass_gain = safe_get_double(tab.bass_boost_gain_var, 0.0)
         if bass_gain:
             args["bass_boost_gain"] = bass_gain
-            args["bass_boost_fc"] = safe_get_int(tab.bass_boost_fc_var, 105)
-            args["bass_boost_q"] = safe_get_double(tab.bass_boost_q_var, 0.76)
+            args["bass_boost_fc"] = safe_get_int(
+                tab.bass_boost_fc_var, int(processing_default("bass_boost_fc"))
+            )
+            args["bass_boost_q"] = safe_get_double(
+                tab.bass_boost_q_var, float(processing_default("bass_boost_q"))
+            )
 
         tilt_val = safe_get_double(tab.tilt_var, 0.0)
         if tilt_val:

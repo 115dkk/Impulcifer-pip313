@@ -220,8 +220,50 @@ def _resolve_frontend() -> str:
         return "webview"
 
 
+def _record_webview_fallback(stage: str, exc: BaseException) -> str:
+    """Persist the WebView→CTk fallback reason and return the user notice.
+
+    Packaged apps have no console, so a bare ``print`` makes the fallback
+    invisible — the exact failure mode that already shipped once with the
+    Nuitka pywebview-whitelist bug. The reason goes to a file under
+    ``~/.impulcifer`` and a localized summary is handed to the CTk GUI for a
+    one-time warning dialog.
+    """
+    import datetime
+    import traceback
+    from pathlib import Path
+
+    reason = f"{type(exc).__name__}: {exc}"
+    log_path = Path.home() / ".impulcifer" / "webview-fallback.log"
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] {stage}: {reason}\n")
+            fh.write(traceback.format_exc())
+            fh.write("\n")
+    except Exception:
+        pass
+
+    try:
+        from i18n.localization import t
+
+        return t(
+            "message_webview_fallback_body",
+            default=(
+                "The WebView interface could not be started, so the CustomTkinter "
+                "interface is shown instead.\n\nReason: {reason}\n\n"
+                "A detailed log was written to:\n{log_path}"
+            ),
+            reason=reason,
+            log_path=str(log_path),
+        )
+    except Exception:
+        return f"WebView unavailable: {reason}\nLog: {log_path}"
+
+
 def _launch_frontend() -> None:
     frontend = _resolve_frontend()
+    fallback_notice = None
     if frontend == "webview":
         try:
             import webview  # noqa: F401
@@ -232,6 +274,7 @@ def _launch_frontend() -> None:
             # SystemExit comes from select_gui_backend on unsupported
             # platforms; ImportError from a missing pywebview install.
             print(f"WebView frontend unavailable ({exc}); falling back to CustomTkinter.")
+            fallback_notice = _record_webview_fallback("unavailable", exc)
         else:
             try:
                 webview_main()
@@ -241,9 +284,10 @@ def _launch_frontend() -> None:
                 # (missing WebView2 runtime / system WebKit). Fall back so a
                 # broken WebView stack never leaves the user with nothing.
                 print(f"WebView frontend failed to start ({exc}); falling back to CustomTkinter.")
+                fallback_notice = _record_webview_fallback("failed to start", exc)
     from gui.modern_gui import main_gui
 
-    main_gui()
+    main_gui(startup_notice=fallback_notice)
 
 
 if __name__ == "__main__":

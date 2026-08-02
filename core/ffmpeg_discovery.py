@@ -12,6 +12,7 @@ import os
 import platform
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 
@@ -275,6 +276,10 @@ _FFMPEG_AUTO_INSTALL_ATTEMPTED = False
 # Backward-compatible state name for older tests/importers. It mirrors whether
 # any detection/install path has already been attempted.
 _FFMPEG_SETUP_DONE = False
+# The lazy init is reachable from the audio read path on multiple threads
+# (free-threaded builds especially); without the lock two threads could both
+# pass the detection check and launch concurrent auto-installs.
+_FFMPEG_LOCK = threading.Lock()
 
 
 def ensure_ffmpeg_available(auto_install=True):
@@ -291,25 +296,26 @@ def ensure_ffmpeg_available(auto_install=True):
     global FFMPEG_PATH, FFPROBE_PATH
     global _FFMPEG_DETECTION_DONE, _FFMPEG_AUTO_INSTALL_ATTEMPTED, _FFMPEG_SETUP_DONE
 
-    if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
-        return True
-
-    if not _FFMPEG_DETECTION_DONE:
-        _FFMPEG_DETECTION_DONE = True
-        _FFMPEG_SETUP_DONE = True
-        FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=False)
+    with _FFMPEG_LOCK:
         if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
             return True
 
-    if auto_install and not _FFMPEG_AUTO_INSTALL_ATTEMPTED:
-        _FFMPEG_AUTO_INSTALL_ATTEMPTED = True
-        _FFMPEG_SETUP_DONE = True
-        FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=True)
-        if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
-            return True
-        print("FFmpeg를 찾거나 설치할 수 없습니다. TrueHD/MLP 지원이 비활성화됩니다.")
+        if not _FFMPEG_DETECTION_DONE:
+            _FFMPEG_DETECTION_DONE = True
+            _FFMPEG_SETUP_DONE = True
+            FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=False)
+            if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
+                return True
 
-    return False
+        if auto_install and not _FFMPEG_AUTO_INSTALL_ATTEMPTED:
+            _FFMPEG_AUTO_INSTALL_ATTEMPTED = True
+            _FFMPEG_SETUP_DONE = True
+            FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=True)
+            if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
+                return True
+            print("FFmpeg를 찾거나 설치할 수 없습니다. TrueHD/MLP 지원이 비활성화됩니다.")
+
+        return False
 
 
 def check_ffmpeg_available(auto_install=False):

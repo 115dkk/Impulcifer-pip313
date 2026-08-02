@@ -384,5 +384,7 @@
   "option_frontend_webview": "WebView (recommended)",
   "option_frontend_ctk": "CustomTkinter (legacy)",
   "tooltip_frontend": "Which interface opens when the app starts. Takes effect on the next launch.",
-  "label_ctk_deprecation": "Notice: the CustomTkinter interface remains fully supported — including new features — for the rest of version 2. From version 3 it will be kept as a frozen legacy interface without further updates (only the old legacy GUI is removed in version 3). WebView is the new default interface."
+  "label_ctk_deprecation": "Notice: the CustomTkinter interface remains fully supported — including new features — for the rest of version 2. From version 3 it will be kept as a frozen legacy interface without further updates (only the old legacy GUI is removed in version 3). WebView is the new default interface.",
+  "message_webview_fallback_title": "WebView Unavailable",
+  "message_webview_fallback_body": "The WebView interface could not be started, so the CustomTkinter interface is shown instead.\n\nReason: {reason}\n\nA detailed log was written to:\n{log_path}"
 }

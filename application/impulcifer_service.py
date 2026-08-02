@@ -105,6 +105,33 @@ def _brir_field_kinds() -> dict[str, str]:
     return _brir_field_kinds_cache
 
 
+_brir_field_defaults_cache: dict[str, Any] | None = None
+
+
+def _brir_field_defaults() -> dict[str, Any]:
+    """Map every defaulted ``ProcessingConfig`` field to its canonical default.
+
+    Shipped to frontends via ``bootstrap()`` so they never hardcode copies of
+    pipeline defaults (audit #138 F020).
+    """
+    global _brir_field_defaults_cache
+    if _brir_field_defaults_cache is None:
+        from dataclasses import MISSING, fields as dataclass_fields
+
+        from core.pipeline import ProcessingConfig
+
+        defaults: dict[str, Any] = {}
+        for config_field in dataclass_fields(ProcessingConfig):
+            if config_field.name == "dir_path":
+                continue
+            if config_field.default is not MISSING:
+                defaults[config_field.name] = config_field.default
+            elif config_field.default_factory is not MISSING:
+                defaults[config_field.name] = config_field.default_factory()
+        _brir_field_defaults_cache = defaults
+    return _brir_field_defaults_cache
+
+
 def _json_safe(value: Any) -> Any:
     if is_dataclass(value):
         value = asdict(value)
@@ -191,6 +218,15 @@ class ImpulciferApplicationService:
         except Exception:
             version = "unknown"
 
+        # Same isolation rule as the version probe above: pipeline defaults
+        # come from core.pipeline, and a broken DSP bundle must degrade to
+        # missing defaults (frontends keep their literal fallbacks), not to a
+        # dead bootstrap.
+        try:
+            brir_defaults = _brir_field_defaults()
+        except Exception:
+            brir_defaults = {}
+
         with self._lock:
             active_job = self._jobs.get(self._active_job_id or "")
             active = active_job.snapshot() if active_job is not None else None
@@ -198,6 +234,7 @@ class ImpulciferApplicationService:
             {
                 "version": version,
                 "platform": platform.system().lower(),
+                "brir_defaults": brir_defaults,
                 "capabilities": {
                     "recording": True,
                     "brir": True,

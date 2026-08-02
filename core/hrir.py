@@ -10,7 +10,7 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from autoeq.frequency_response import FrequencyResponse
 from core.impulse_response import ImpulseResponse
 from core.utils import read_wav, write_wav, magnitude_response
-from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS
+from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS, speaker_side
 from core.plotting.hrir_plotter import HRIRPlotter
 
 try:
@@ -574,8 +574,8 @@ class HRIR(HRIRPlotter):
             )  # Channel delay in samples
 
             if peak_left < peak_right:
-                # Delay to left ear is smaller, this is must left side speaker
-                if speaker[1] == "R":
+                # Delay to left ear is smaller, this must be a left side speaker
+                if speaker_side(speaker) == "right":
                     # Speaker name indicates this is right side speaker but delay to left ear is smaller than to right.
                     # There is something wrong with the measurement
                     warnings.warn(
@@ -592,8 +592,8 @@ class HRIR(HRIRPlotter):
                 pair["left"].data = pair["left"].data[crop_index:]
                 pair["right"].data = pair["right"].data[crop_index:]
             else:
-                # Delay to right ear is smaller, this is must right side speaker
-                if speaker[1] == "L":
+                # Delay to right ear is smaller, this must be a right side speaker
+                if speaker_side(speaker) == "left":
                     # Speaker name indicates this is left side speaker but delay to right ear is smaller than to left.
                     # There si something wrong with the measurement
                     warnings.warn(

@@ -7,6 +7,7 @@ Supports multiple languages with automatic system language detection
 
 import json
 import locale
+import logging
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -22,6 +23,11 @@ SUPPORTED_LANGUAGES = {
     'zh_TW': '繁體中文',
     'ru': 'Русский'
 }
+
+# Missing-key warnings are deduplicated process-wide so a key that renders on
+# every GUI refresh does not flood the log.
+_missing_key_log = logging.getLogger(__name__)
+_MISSING_KEYS_WARNED: set = set()
 
 # Mapping from system locale to our language codes
 LOCALE_MAPPING = {
@@ -202,9 +208,22 @@ class LocalizationManager:
         else:
             self.translations = {}
 
-    def get(self, key: str, **kwargs) -> str:
-        """Get translated text for a key"""
-        text = self.translations.get(key, key)
+    def get(self, key: str, default: Optional[str] = None, **kwargs) -> str:
+        """Get translated text for a key.
+
+        Returns ``default`` when the key has no translation; without a
+        default the key itself is returned (legacy behavior for call sites
+        that pass none).
+        """
+        text = self.translations.get(key)
+        if text is None:
+            if key not in _MISSING_KEYS_WARNED:
+                _MISSING_KEYS_WARNED.add(key)
+                _missing_key_log.warning(
+                    "Missing translation key '%s' (language '%s')",
+                    key, self.current_language,
+                )
+            text = key if default is None else default
 
         if kwargs:
             try:
@@ -289,6 +308,6 @@ def get_localization_manager() -> LocalizationManager:
     return _localization_manager
 
 
-def t(key: str, **kwargs) -> str:
+def t(key: str, default: Optional[str] = None, **kwargs) -> str:
     """Shorthand for getting translated text"""
-    return get_localization_manager().get(key, **kwargs)
+    return get_localization_manager().get(key, default=default, **kwargs)

@@ -455,6 +455,26 @@ def test_ui_settings_language_and_theme_roundtrip(monkeypatch) -> None:
     assert service.set_frontend("qt")["error"]["code"] == "INVALID_REQUEST"
 
 
+def test_bootstrap_ships_processing_config_defaults() -> None:
+    """bootstrap() must publish ProcessingConfig defaults so frontends never
+    hardcode drifting copies (audit #138 F020)."""
+    from dataclasses import MISSING, fields
+
+    from core.pipeline import ProcessingConfig
+
+    response = ImpulciferApplicationService().bootstrap()
+    assert response["ok"]
+    shipped = response["data"]["brir_defaults"]
+
+    for config_field in fields(ProcessingConfig):
+        if config_field.name == "dir_path" or config_field.default is MISSING:
+            continue
+        assert shipped[config_field.name] == config_field.default, config_field.name
+
+    assert shipped["specific_limit"] == 400
+    assert shipped["generic_limit"] == 300
+
+
 def test_system_info_reports_environment() -> None:
     import impulcifer
 

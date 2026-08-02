@@ -74,6 +74,7 @@ from core.constants import (
     SPEAKER_LIST_PATTERN,
     TEST_SIGNALS,
     get_data_path,
+    speaker_side,
 )
 from core.eqapo import looks_like_eqapo_config, parse_eqapo_config
 from infra.logger import get_logger
@@ -663,9 +664,9 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
         for side, ir_obj in pair.items():
             current_itd = 0.0
             if not np.isnan(itd):
-                if speaker.endswith("L") and side == "right":
+                if speaker_side(speaker) == "left" and side == "right":
                     current_itd = itd
-                elif speaker.endswith("R") and side == "left":
+                elif speaker_side(speaker) == "right" and side == "left":
                     current_itd = itd
 
             pnr_val = np.nan
@@ -837,7 +838,14 @@ def create_cli():
     arguments (``--info``, ``--version``, the ``--bass_boost`` shelf splitter)
     and post-processing remain here.
     """
+    from dataclasses import fields as _dataclass_fields
+
     from core.cli_builder import add_processing_config_arguments
+    from core.pipeline import ProcessingConfig
+
+    _config_defaults = {f.name: f.default for f in _dataclass_fields(ProcessingConfig)}
+    _bass_fc_default = _config_defaults["bass_boost_fc"]
+    _bass_q_default = _config_defaults["bass_boost_q"]
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
@@ -865,7 +873,8 @@ def create_cli():
         "either a single value for a gain in dB or a comma separated list of three values for "
         "parameters of a low shelf filter, where the first is gain in dB, second is center "
         "frequency (Fc) in Hz and the last is quality (Q). When only a single value (gain) is "
-        "given, default values for Fc and Q are used which are 105 Hz and 0.76, respectively. "
+        f"given, default values for Fc and Q are used which are {_bass_fc_default:g} Hz and "
+        f"{_bass_q_default:g}, respectively. "
         'For example "--bass_boost=6" or "--bass_boost=6,150,0.69".',
     )
 
@@ -883,8 +892,8 @@ def create_cli():
         bass_boost = args["bass_boost"].split(",")
         if len(bass_boost) == 1:
             args["bass_boost_gain"] = float(bass_boost[0])
-            args["bass_boost_fc"] = 105
-            args["bass_boost_q"] = 0.76
+            args["bass_boost_fc"] = _bass_fc_default
+            args["bass_boost_q"] = _bass_q_default
         elif len(bass_boost) == 3:
             args["bass_boost_gain"] = float(bass_boost[0])
             args["bass_boost_fc"] = float(bass_boost[1])
