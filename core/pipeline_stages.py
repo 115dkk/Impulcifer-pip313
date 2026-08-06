@@ -50,7 +50,7 @@ def _save_bokeh_analysis_plots(hrir, dir_path, logger):
         "ild": ("ILD Analysis", hrir.generate_ild_bokeh_layout),
         "ipd": ("IPD Analysis", hrir.generate_ipd_bokeh_layout),
         "iacc": ("IACC Analysis", hrir.generate_iacc_bokeh_layout),
-        "etc": ("ETC Analysis", hrir.generate_etc_bokeh_layout),
+        "etc": ("EDC Analysis", hrir.generate_etc_bokeh_layout),
     }
     for name, (title, func) in plot_configs.items():
         try:

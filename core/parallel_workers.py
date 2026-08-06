@@ -128,3 +128,69 @@ def process_equalization_worker(args):
     fir = fr.minimum_phase_impulse_response(fs=estimator_fs, normalize=False, f_res=5)
 
     return (speaker, side, fir)
+
+
+def render_hrir_figure_worker(args):
+    """스피커-사이드 한 장의 6패널 figure를 렌더링하는 워커.
+
+    matplotlib figure(특히 3D waterfall/pcolormesh)는 수십만 개의 소형
+    객체로 힙을 조각내 close 후에도 RSS가 잔류하므로, 렌더링을 워커
+    프로세스에 격리해 종료 시 OS에 메모리를 반환한다.
+
+    Args:
+        args: (speaker, side, ir_data, recording, fs, plot_flags,
+               sync_limits, out_path, suptitle) 튜플.
+              plot_flags는 ImpulseResponse.plot()의 plot_* 키워드 dict.
+              sync_limits가 None이면 축 한계 수집 패스(저장 없음),
+              아니면 {axis_idx: {'xlim': [..], 'ylim': [..]}}를 적용해
+              out_path에 PNG로 저장하는 렌더 패스.
+
+    Returns:
+        (speaker, side, limits). limits는 축 idx 0..5 순서의
+        (x_min, x_max, y_min, y_max) 리스트 (축이 없으면 None).
+    """
+    (speaker, side, ir_data, recording, fs,
+     plot_flags, sync_limits, out_path, suptitle) = args
+
+    import gc
+
+    import matplotlib
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+    try:
+        # 파이프라인은 플롯 활성화 시 seaborn whitegrid 테마를 적용하므로
+        # 워커에서도 동일하게 맞춰 기존 출력과 시각적으로 동일하게 유지한다.
+        import seaborn as sns
+        sns.set_theme(style="whitegrid")
+    except ImportError:
+        pass
+
+    from core.impulse_response import ImpulseResponse
+
+    ir = ImpulseResponse(ir_data, fs, recording=recording)
+    fig = ir.plot(**plot_flags)
+    axes_list = fig.get_axes()
+
+    limits = []
+    for idx in range(6):
+        if idx < len(axes_list):
+            xlim = axes_list[idx].get_xlim()
+            ylim = axes_list[idx].get_ylim()
+            limits.append((xlim[0], xlim[1], ylim[0], ylim[1]))
+        else:
+            limits.append(None)
+
+    if sync_limits is not None:
+        if suptitle:
+            fig.suptitle(suptitle)
+        for idx, sl in sync_limits.items():
+            if idx < len(axes_list):
+                axes_list[idx].set_xlim(sl["xlim"])
+                axes_list[idx].set_ylim(sl["ylim"])
+        if out_path is not None:
+            from core.plotting_utils import save_fig_as_png
+            save_fig_as_png(out_path, fig, n_colors=60)
+
+    plt.close(fig)
+    gc.collect()
+    return (speaker, side, limits)
