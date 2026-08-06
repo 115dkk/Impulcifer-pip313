@@ -620,8 +620,15 @@ class HRIRPlotter:
         else:
             return None
 
-    def generate_ipd_bokeh_layout(self, freq_bands=None, unwrap_phase=True):
-        """Generates Bokeh layout for Interaural Phase Difference (IPD)."""
+    def generate_ipd_bokeh_layout(self, freq_bands=None):
+        """Generates Bokeh layout for Interaural Phase Difference (IPD).
+
+        IPD는 대역 크로스 스펙트럼 합의 위상각이므로 항상 주각(principal
+        angle) [-180°, 180°]로 보고된다. 이전의 ``unwrap_phase`` 인자는
+        제거되었다 — ``False``가 반환하던 주각 차(합산 스펙트럼 위상의 raw
+        차, 최대 ±360°)는 크로스 스펙트럼 방식에서는 정의되지 않고, 플롯
+        y축도 ±180°로 고정되어 있어 범위 밖 값은 표시되지 않았다.
+        """
         plots = []
         if freq_bands is None:
             freq_bands = octave_bands(self.fs)
