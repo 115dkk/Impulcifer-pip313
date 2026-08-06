@@ -806,7 +806,7 @@ class BRIRPipeline:
             "ILD": self.hrir.generate_ild_bokeh_layout,
             "IPD": self.hrir.generate_ipd_bokeh_layout,
             "IACC": self.hrir.generate_iacc_bokeh_layout,
-            "ETC": self.hrir.generate_etc_bokeh_layout,
+            "EDC": self.hrir.generate_etc_bokeh_layout,
             "Result Overview": self.hrir.generate_result_bokeh_figure,
         }
 

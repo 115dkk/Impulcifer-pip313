@@ -13,8 +13,6 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy import signal
-from scipy.fft import fft, next_fast_len
 from PIL import Image
 
 from bokeh.plotting import figure
@@ -23,6 +21,13 @@ from bokeh.palettes import Category10
 from bokeh.layouts import gridplot
 
 from core.utils import ADAPTIVE_PALETTE
+from core.plotting.analysis import (
+    band_interaural_level_difference,
+    energy_decay_curve_db,
+    band_interaural_phase_difference,
+    interaural_cross_correlation,
+    octave_bands,
+)
 
 
 class HRIRPlotter:
@@ -43,16 +48,155 @@ class HRIRPlotter:
         plot_waterfall=True,
         close_plots=True,
     ):
-        """Plots all impulse responses with memory-efficient 2-pass rendering.
+        """Plots all impulse responses with 2-pass axis synchronization.
 
-        Pass 1: Generate each figure to collect axis limits, then close immediately.
-        Pass 2: Regenerate each figure with synchronized limits, save, then close.
+        Pass 1: Generate each figure to collect axis limits.
+        Pass 2: Regenerate each figure with synchronized limits and save.
 
-        Holding all 14 figures in memory simultaneously (the previous behavior)
-        fragments the matplotlib heap and pins ~3GB of small objects through
-        ``gc.collect()``. This 2-pass form caps live figures at 1 at the cost
-        of generating each figure twice — plotting time roughly doubles, but
-        plotting is a small fraction of total BRIR generation time.
+        PNG로 저장만 하는 경로(``dir_path`` 지정 + ``close_plots=True``)는
+        워커 프로세스에서 렌더링한다. matplotlib figure(3D waterfall,
+        pcolormesh)는 소형 객체 수십만 개로 힙을 조각내 ``plt.close()`` +
+        ``gc.collect()`` 후에도 수백 MB의 RSS가 프로세스 종료까지
+        잔류하는데(BRIR 생성 후에도 점유 유지), 워커 프로세스는 종료 시
+        메모리를 OS에 반환하므로 잔류가 없다.
+        ``tests/test_plot_memory.py``가 이 계약을 고정한다.
+
+        figure 객체 자체가 필요한 경로(``close_plots=False``, 예:
+        room_correction)는 기존처럼 호출 프로세스 안에서 렌더링한다.
+        """
+        if dir_path is not None and close_plots:
+            try:
+                return self._plot_with_workers(
+                    dir_path,
+                    plot_recording=plot_recording,
+                    plot_spectrogram=plot_spectrogram,
+                    plot_ir=plot_ir,
+                    plot_fr=plot_fr,
+                    plot_decay=plot_decay,
+                    plot_waterfall=plot_waterfall,
+                )
+            except Exception as e:
+                # 워커 프로세스를 띄울 수 없는 환경(스폰 제한 등)에서는
+                # 메모리 이점을 포기하고 기존 인프로세스 경로로 폴백한다.
+                print(f"Worker-process plotting failed ({e!r}), "
+                      "falling back to in-process rendering.")
+        return self._plot_in_process(
+            dir_path=dir_path,
+            plot_recording=plot_recording,
+            plot_spectrogram=plot_spectrogram,
+            plot_ir=plot_ir,
+            plot_fr=plot_fr,
+            plot_decay=plot_decay,
+            plot_waterfall=plot_waterfall,
+            close_plots=close_plots,
+        )
+
+    # ImpulseResponse.plot()이 만드는 6개 축의 생성 순서와 동일한 인덱스.
+    _PLOT_AXIS_FLAGS = (
+        "plot_recording",
+        "plot_ir",
+        "plot_decay",
+        "plot_spectrogram",
+        "plot_fr",
+        "plot_waterfall",
+    )
+
+    def _plot_with_workers(self, dir_path, max_workers=None, **plot_flags):
+        """워커 프로세스에서 2-pass 렌더링을 수행하고 PNG를 저장한다.
+
+        figure들은 서로 독립이라 병렬 렌더링이 가능하다(4코어에서 직렬
+        워커 대비 ~2.5배). matplotlib은 스레드-불안전하므로 free-threaded
+        런타임에서도 항상 프로세스 풀을 사용하며, 워커당 수백 MB의 일시
+        점유를 감안해 워커 수를 4로 캡한다.
+        """
+        import multiprocessing
+        from concurrent.futures import ProcessPoolExecutor
+
+        from core.parallel_workers import render_hrir_figure_worker
+
+        os.makedirs(dir_path, exist_ok=True)
+
+        tasks = [
+            (speaker, side, ir.data, ir.recording)
+            for speaker, pair in self.irs.items()
+            for side, ir in pair.items()
+        ]
+        if not tasks:
+            return {}
+
+        if max_workers is None:
+            max_workers = min(len(tasks), os.cpu_count() or 1, 4)
+
+        ctx = multiprocessing.get_context("spawn")
+        with ProcessPoolExecutor(max_workers=max_workers, mp_context=ctx) as pool:
+            # --- Pass 1: 축 한계 수집 ---
+            futures = [
+                pool.submit(
+                    render_hrir_figure_worker,
+                    (speaker, side, data, recording, self.fs,
+                     plot_flags, None, None, None),
+                )
+                for speaker, side, data, recording in tasks
+            ]
+            enabled = [
+                idx
+                for idx, flag_name in enumerate(self._PLOT_AXIS_FLAGS)
+                if plot_flags[flag_name]
+            ]
+            limits = {
+                idx: {'x_mins': [], 'x_maxs': [], 'y_mins': [], 'y_maxs': []}
+                for idx in enabled
+            }
+            for future in futures:
+                _speaker, _side, axis_limits = future.result()
+                for idx in enabled:
+                    if axis_limits[idx] is None:
+                        continue
+                    x_min, x_max, y_min, y_max = axis_limits[idx]
+                    limits[idx]['x_mins'].append(x_min)
+                    limits[idx]['x_maxs'].append(x_max)
+                    limits[idx]['y_mins'].append(y_min)
+                    limits[idx]['y_maxs'].append(y_max)
+
+            sync_limits = {}
+            for idx, lim in limits.items():
+                if lim['x_mins']:
+                    sync_limits[idx] = {
+                        'xlim': [float(np.min(lim['x_mins'])), float(np.max(lim['x_maxs']))],
+                        'ylim': [float(np.min(lim['y_mins'])), float(np.max(lim['y_maxs']))],
+                    }
+
+            # --- Pass 2: 동기화된 한계로 렌더링 + 저장 ---
+            futures = [
+                pool.submit(
+                    render_hrir_figure_worker,
+                    (speaker, side, data, recording, self.fs,
+                     plot_flags, sync_limits,
+                     os.path.join(dir_path, f"{speaker}-{side}.png"),
+                     f"{speaker}-{side}"),
+                )
+                for speaker, side, data, recording in tasks
+            ]
+            for future in futures:
+                future.result()
+
+        return {}
+
+    def _plot_in_process(
+        self,
+        dir_path=None,
+        plot_recording=True,
+        plot_spectrogram=True,
+        plot_ir=True,
+        plot_fr=True,
+        plot_decay=True,
+        plot_waterfall=True,
+        close_plots=True,
+    ):
+        """호출 프로세스 안에서 렌더링하는 기존 2-pass 구현.
+
+        figure 객체를 반환해야 하는 호출자(``close_plots=False``)와 워커
+        스폰이 불가능한 환경의 폴백 경로.
         """
         import gc
 
@@ -403,17 +547,7 @@ class HRIRPlotter:
         """Generates Bokeh layout for Interaural Level Difference (ILD)."""
         plots = []
         if freq_bands is None:
-            octave_centers = [125, 250, 500, 1000, 2000, 4000, 8000, 16000]
-            freq_bands = []
-            for center in octave_centers:
-                lower = center / (2 ** (1 / 2))
-                upper = center * (2 ** (1 / 2))
-                if upper > self.fs / 2:
-                    upper = self.fs / 2
-                if lower < upper:
-                    freq_bands.append((lower, upper))
-                if upper >= self.fs / 2:
-                    break
+            freq_bands = octave_bands(self.fs)
 
         unique_freq_bands_str = [f"{int(fb[0])}-{int(fb[1])}Hz" for fb in freq_bands]
         num_unique_speakers = len(self.irs.keys())
@@ -428,33 +562,14 @@ class HRIRPlotter:
             if not ir_left or not ir_right:
                 continue
 
-            ild_values = []
-            for f_low, f_high in freq_bands:
-                if f_high > self.fs / 2:
-                    f_high = self.fs / 2
-                if f_low >= f_high:
-                    ild_values.append(np.nan)
-                    continue
+            data_l_sq = ir_left.data.squeeze()
+            data_r_sq = ir_right.data.squeeze()
+            if data_l_sq.ndim > 1 or data_r_sq.ndim > 1:
+                continue
 
-                fft_len = next_fast_len(max(len(ir_left.data), len(ir_right.data)))
-                data_l_sq = ir_left.data.squeeze()
-                data_r_sq = ir_right.data.squeeze()
-                if data_l_sq.ndim > 1 or data_r_sq.ndim > 1:
-                    ild_values.append(np.nan)
-                    continue
-
-                fft_l_full = fft(data_l_sq, n=fft_len)
-                fft_r_full = fft(data_r_sq, n=fft_len)
-                freqs = np.fft.fftfreq(fft_len, d=1 / self.fs)
-                band_idx = np.where((freqs >= f_low) & (freqs < f_high))[0]
-                if not len(band_idx):
-                    ild_values.append(np.nan)
-                    continue
-
-                power_l = np.sum(np.abs(fft_l_full[band_idx]) ** 2)
-                power_r = np.sum(np.abs(fft_r_full[band_idx]) ** 2)
-                ild = 10 * np.log10((power_l + 1e-12) / (power_r + 1e-12))
-                ild_values.append(ild)
+            ild_values = band_interaural_level_difference(
+                data_l_sq, data_r_sq, self.fs, freq_bands
+            )
 
             if not ild_values or all(np.isnan(v) for v in ild_values):
                 continue
@@ -509,17 +624,7 @@ class HRIRPlotter:
         """Generates Bokeh layout for Interaural Phase Difference (IPD)."""
         plots = []
         if freq_bands is None:
-            octave_centers = [125, 250, 500, 1000, 2000, 4000, 8000, 16000]
-            freq_bands = []
-            for center in octave_centers:
-                lower = center / (2 ** (1 / 2))
-                upper = center * (2 ** (1 / 2))
-                if upper > self.fs / 2:
-                    upper = self.fs / 2
-                if lower < upper:
-                    freq_bands.append((lower, upper))
-                if upper >= self.fs / 2:
-                    break
+            freq_bands = octave_bands(self.fs)
 
         unique_freq_bands_str = [f"{int(fb[0])}-{int(fb[1])}Hz" for fb in freq_bands]
         num_unique_speakers = len(self.irs.keys())
@@ -534,37 +639,14 @@ class HRIRPlotter:
             if not ir_left or not ir_right:
                 continue
 
-            ipd_values = []
-            for f_low, f_high in freq_bands:
-                if f_high > self.fs / 2:
-                    f_high = self.fs / 2
-                if f_low >= f_high:
-                    ipd_values.append(np.nan)
-                    continue
+            data_l_sq = ir_left.data.squeeze()
+            data_r_sq = ir_right.data.squeeze()
+            if data_l_sq.ndim > 1 or data_r_sq.ndim > 1:
+                continue
 
-                fft_len = next_fast_len(max(len(ir_left.data), len(ir_right.data)))
-                data_l_sq = ir_left.data.squeeze()
-                data_r_sq = ir_right.data.squeeze()
-                if data_l_sq.ndim > 1 or data_r_sq.ndim > 1:
-                    ipd_values.append(np.nan)
-                    continue
-
-                fft_l_full = fft(data_l_sq, n=fft_len)
-                fft_r_full = fft(data_r_sq, n=fft_len)
-                freqs = np.fft.fftfreq(fft_len, d=1 / self.fs)
-                band_idx = np.where((freqs >= f_low) & (freqs < f_high))[0]
-                if not len(band_idx):
-                    ipd_values.append(np.nan)
-                    continue
-
-                complex_sum_l = np.sum(fft_l_full[band_idx])
-                complex_sum_r = np.sum(fft_r_full[band_idx])
-                phase_l = np.angle(complex_sum_l)
-                phase_r = np.angle(complex_sum_r)
-                ipd = phase_l - phase_r
-                if unwrap_phase:
-                    ipd = (ipd + np.pi) % (2 * np.pi) - np.pi
-                ipd_values.append(np.degrees(ipd))
+            ipd_values = band_interaural_phase_difference(
+                data_l_sq, data_r_sq, self.fs, freq_bands
+            )
 
             if not ipd_values or all(np.isnan(v) for v in ipd_values):
                 continue
@@ -620,7 +702,6 @@ class HRIRPlotter:
     def generate_iacc_bokeh_layout(self, max_delay_ms=1):
         """Generates Bokeh layout for Interaural Cross-Correlation (IACC)."""
         plots = []
-        max_delay_samples = int(max_delay_ms * self.fs / 1000)
         num_unique_speakers = len(self.irs.keys())
         palette_size = max(
             3, min(10, num_unique_speakers if num_unique_speakers > 0 else 3)
@@ -643,40 +724,17 @@ class HRIRPlotter:
             ):
                 continue
 
-            norm_l = data_l_sq / (np.sqrt(np.mean(data_l_sq**2)) + 1e-12)
-            norm_r = data_r_sq / (np.sqrt(np.mean(data_r_sq**2)) + 1e-12)
-
-            len_diff = len(norm_l) - len(norm_r)
-            if len_diff > 0:
-                norm_r_pad = np.pad(norm_r, (0, len_diff), "constant")
-                norm_l_pad = norm_l
-            elif len_diff < 0:
-                norm_l_pad = np.pad(norm_l, (0, -len_diff), "constant")
-                norm_r_pad = norm_r
-            else:
-                norm_l_pad = norm_l
-                norm_r_pad = norm_r
-
-            correlation = signal.correlate(norm_l_pad, norm_r_pad, mode="full")
-            lags = signal.correlation_lags(
-                len(norm_l_pad), len(norm_r_pad), mode="full"
+            lags_ms, iacf, max_iacc_val, tau_iacc_ms_val = (
+                interaural_cross_correlation(
+                    data_l_sq, data_r_sq, self.fs, max_delay_ms=max_delay_ms
+                )
             )
 
-            mask = np.abs(lags) <= max_delay_samples
-            relevant_lags_s = lags[mask]
-            relevant_corr = correlation[mask]
-
-            if not len(relevant_corr):
+            if not len(iacf) or np.isnan(max_iacc_val):
                 continue
 
-            max_iacc_val = np.max(relevant_corr)
-            tau_iacc_s = relevant_lags_s[np.argmax(relevant_corr)]
-            tau_iacc_ms_val = tau_iacc_s * 1000 / self.fs
-
             source = ColumnDataSource(
-                data=dict(
-                    lags_ms=relevant_lags_s * 1000 / self.fs, correlation=relevant_corr
-                )
+                data=dict(lags_ms=lags_ms, correlation=iacf)
             )
 
             p = figure(
@@ -712,7 +770,12 @@ class HRIRPlotter:
             return None
 
     def generate_etc_bokeh_layout(self, time_range_ms=(0, 200), y_range_db=(-80, 0)):
-        """Generates Bokeh layout for Energy Time Curve (ETC)."""
+        """Generates Bokeh layout for the Schroeder Energy Decay Curve (EDC).
+
+        역사적 이유로 메서드/파일 이름은 ``etc``지만, 계산되는 값은 순간
+        에너지(ETC)가 아니라 Schroeder 역적분 감쇠 곡선(EDC)이므로 플롯
+        라벨은 EDC로 표기한다.
+        """
         plots = []
         num_speakers = len(self.irs.items())
         palette_size = max(3, min(10, num_speakers * 2 if num_speakers > 0 else 3))
@@ -721,12 +784,12 @@ class HRIRPlotter:
 
         for speaker, pair in self.irs.items():
             p = figure(
-                title=f"ETC - {speaker}",
+                title=f"Energy Decay Curve (EDC) - {speaker}",
                 tools="hover,save,pan,wheel_zoom,box_zoom,reset",
                 height=200,
                 sizing_mode="scale_both",
                 x_axis_label="Time (ms)",
-                y_axis_label="Energy (dBFS)",
+                y_axis_label="Decay (dB re total energy)",
             )
             has_data_for_speaker = False
             current_plot_lines = []
@@ -739,14 +802,7 @@ class HRIRPlotter:
                 if data_sq.ndim > 1:
                     continue
 
-                squared_response = data_sq**2
-                energy = np.cumsum(squared_response[::-1])[::-1]
-                if np.max(energy) > 1e-12:
-                    etc_db_vals = 10 * np.log10(
-                        energy / (np.max(energy) + 1e-12) + 1e-12
-                    )
-                else:
-                    etc_db_vals = np.full_like(energy, y_range_db[0])
+                etc_db_vals = energy_decay_curve_db(data_sq, floor_db=y_range_db[0])
 
                 time_axis = np.arange(len(etc_db_vals)) * 1000 / self.fs
 

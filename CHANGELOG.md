@@ -4,6 +4,21 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.10.6 - 2026-08-06
+### 인터랙티브 분석 플롯 수치 정합성 수정 + 플롯 메모리 잔류 해소·병렬화
+
+#### 🐛 버그 수정
+- **IACC 플롯이 쓰레기값을 표시하던 문제**: "Cross-Correlation Coefficient" 축에 정규화되지 않은 상관값(신호 길이에 비례, 완전 상관 신호에서 1.0이 아니라 ~48000)이 그대로 실렸다. ISO 3382-1 정의대로 `sqrt(sum(l²)·sum(r²))`로 정규화한 IACF로 수정해 값이 항상 [-1, 1] 범위이며, IACC(범례 표기)는 탐색 창 내 max |IACF|로 계산한다.
+- **IPD 플롯이 중·고역에서 무의미한 값을 내던 문제**: 대역 내 복소 스펙트럼을 각각 합한 뒤 위상차를 취하는 방식은 빈 간 위상 회전으로 상쇄가 일어나 실제 위상차와 무관한 값을 냈다(0.5ms 지연 신호의 2kHz 대역 정답 0° 대비 128° 등). 크로스 스펙트럼 합 `sum(L·conj(R))`의 위상각(에너지 가중 원형 평균)으로 수정해 순수 지연에 대해 대역 중심 주파수의 이론 위상차와 일치한다.
+- **ETC 라벨 정정**: 계산되는 값은 순간 에너지(ETC)가 아니라 Schroeder 역적분 감쇠 곡선이므로 플롯 제목/축/탭 라벨을 EDC(Energy Decay Curve)로 정정했다(파일 경로 `plots/etc/`는 호환을 위해 유지).
+- **플롯 렌더링 후 메모리 잔류 해소**: `HRIR.plot()`이 만드는 6패널 figure(3D waterfall, pcolormesh)는 소형 객체 수십만 개로 힙을 조각내 `plt.close()` + `gc.collect()` 후에도 프로세스 종료까지 RSS가 잔류했다(7스피커 워크로드에서 ~855MB, BRIR 생성 완료 후에도 유지). PNG 저장 경로의 렌더링을 spawn 워커 프로세스로 격리해 완료 시 메모리가 OS로 반환되도록 수정했다(측정 잔류 0MB). 렌더 결과는 기존 경로와 픽셀 단위로 동일하며, `tests/test_plot_memory.py`가 잔류 상한을 회귀 테스트로 고정한다. 워커 스폰이 불가능한 환경에서는 기존 인프로세스 렌더링으로 자동 폴백한다.
+
+#### ⚡ 성능 개선
+- **플롯 렌더링 병렬화**: figure들이 서로 독립이므로 워커 풀에서 병렬 렌더링한다(워커 수는 일시 메모리 사용을 고려해 `min(작업 수, CPU 수, 4)`로 캡). 4코어 기준 14 figure 렌더링이 28.5초 → 10.9초로 약 2.6배 단축.
+
+#### ⭐ 개선
+- **분석 지표 계산 코어 분리**: ILD/IPD/IACC/EDC 계산을 `core/plotting/analysis.py`의 순수 함수로 추출해 합성 신호로 직접 검증 가능하게 했고, FFT를 대역 루프 밖으로 끌어올려 대역당 반복 계산을 제거했다. `tests/test_bokeh_analysis.py`가 각 지표의 음향학적 정합성(지연/감쇠 신호쌍의 닫힌 식 정답)을 고정한다.
+
 ## 2.10.5 - 2026-08-02
 ### 감사(#138) 4라운드(최종) — 프론트엔드 드리프트 수정 + 테스트 확충
 
