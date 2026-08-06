@@ -51,6 +51,7 @@ ZERO_SHA = "0" * 40
 EXCLUDE = (
     "*.md", "*.rst", "*.adoc", "*.ipynb",
     "docs/*", ".github/*", "tests/*", "research/*", ".claude/*",
+    "packaging/*",
     "LICENSE*", "CHANGELOG*", "CONTEXT.md", ".gitignore", ".gitattributes",
 )
 

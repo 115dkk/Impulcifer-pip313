@@ -55,6 +55,14 @@ def test_nested_excluded_dirs_match_at_any_depth():
     ]) == []
 
 
+def test_packaging_metadata_is_not_shippable():
+    # AUR PKGBUILD 등 배포 채널 메타데이터는 출하물(wheel/standalone)에
+    # 포함되지 않으므로 릴리스를 트리거하면 안 된다.
+    assert release_gate.classify_shippable([
+        "packaging/aur/PKGBUILD.in", "packaging/aur/README.md",
+    ]) == []
+
+
 # ── parse_version / next_free_patch ──────────────────────────────────────────
 
 def test_parse_version():

@@ -747,3 +747,70 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ---------------------------------------------------------------------------
+  # 5. Publish/update the AUR binary package (impulcifer-py313-bin).
+  #    AUR_SSH_PRIVATE_KEY 시크릿이 없으면 조용히 스킵된다 — 설정 방법은
+  #    packaging/aur/README.md 참조.
+  # ---------------------------------------------------------------------------
+  publish-aur:
+    name: Publish AUR package
+    needs: [gate, create-release]
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check AUR deploy key
+        id: key
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -n "$AUR_KEY" ]; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "AUR_SSH_PRIVATE_KEY secret is not set; skipping AUR publish."
+          fi
+
+      - name: Checkout code
+        if: steps.key.outputs.have == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+
+      - name: Download Linux tarball artifact
+        if: steps.key.outputs.have == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: linux-tarball
+          path: tarball
+
+      - name: Generate PKGBUILD from template
+        if: steps.key.outputs.have == 'true'
+        run: |
+          APP_VERSION="${{ needs.gate.outputs.version }}"
+          TARBALL="tarball/Impulcifer-${APP_VERSION}-linux-x86_64.tar.gz"
+          if [ ! -f "$TARBALL" ]; then
+            echo "Error: expected tarball not found: $TARBALL"
+            ls -R tarball/
+            exit 1
+          fi
+          SHA256=$(sha256sum "$TARBALL" | cut -d' ' -f1)
+          echo "Version: $APP_VERSION  SHA256: $SHA256"
+          sed -e "s/@PKGVER@/${APP_VERSION}/" \
+              -e "s/@SHA256@/${SHA256}/" \
+              packaging/aur/PKGBUILD.in > PKGBUILD
+          echo "---- PKGBUILD ----"
+          cat PKGBUILD
+
+      - name: Publish to AUR
+        if: steps.key.outputs.have == 'true'
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        with:
+          pkgname: impulcifer-py313-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: 115dkk
+          commit_email: 33408534+115dkk@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ needs.gate.outputs.version }}"
+          ssh_keyscan_types: ed25519

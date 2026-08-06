@@ -61,6 +61,16 @@ sudo apt-get install -y gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
 
 Python을 따로 설치하지 않고 쓰려면 [GitHub Releases](https://github.com/115dkk/Impulcifer-pip313/releases)에서 운영체제에 맞는 파일을 받으세요. 릴리스 파일 이름과 구성은 버전마다 달라질 수 있으므로, 각 릴리스의 설명을 확인해 주세요.
 
+### Arch Linux (AUR)
+
+Arch 계열 배포판에서는 AUR의 [`impulcifer-py313-bin`](https://aur.archlinux.org/packages/impulcifer-py313-bin) 패키지로 설치할 수 있습니다. 릴리스 tarball 기반 바이너리 패키지이며 새 릴리스마다 자동으로 갱신됩니다.
+
+```bash
+yay -S impulcifer-py313-bin
+```
+
+WebView UI를 쓰려면 `webkit2gtk-4.1`을 함께 설치하세요 (없으면 CustomTkinter UI로 폴백).
+
 ## 실행
 
 GUI를 쓰려면 다음 명령을 실행합니다.

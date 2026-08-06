@@ -1,0 +1,60 @@
+# Maintainer: 115dkk <33408534+115dkk@users.noreply.github.com>
+# 이 파일은 템플릿이다. 릴리스 파이프라인(.github/workflows/publish.yml의
+# publish-aur job)이 @PKGVER@ / @SHA256@를 실제 릴리스 값으로 치환해
+# AUR(impulcifer-py313-bin)에 푸시한다. 손으로 AUR에 올릴 때도 같은
+# 자리표시자만 바꾸면 된다.
+
+pkgname=impulcifer-py313-bin
+pkgver=@PKGVER@
+pkgrel=1
+pkgdesc="HRIR measurement and binaural BRIR processing for headphone surround virtualization (Nuitka binary release)"
+arch=('x86_64')
+url="https://github.com/115dkk/Impulcifer-pip313"
+license=('MIT')
+provides=('impulcifer-py313')
+conflicts=('impulcifer-py313')
+# Nuitka standalone 번들은 Python 런타임과 대부분의 .so를 포함하지만,
+# 오디오 재생/녹음(PortAudio)과 WebView UI(WebKit2GTK)는 시스템
+# 라이브러리를 런타임에 로드한다 (typelib만 번들됨).
+depends=('glibc' 'gcc-libs' 'portaudio')
+optdepends=(
+  'webkit2gtk-4.1: WebView(Pulse Studio) UI — 없으면 CustomTkinter UI로 폴백'
+  'ffmpeg: TrueHD/MLP 테스트 신호 디코드 지원'
+)
+options=('!strip' '!debug')
+source=("${url}/releases/download/v${pkgver}/Impulcifer-${pkgver}-linux-x86_64.tar.gz")
+sha256sums=('@SHA256@')
+
+package() {
+  install -dm755 "$pkgdir/opt/$pkgname"
+  cp -a "$srcdir/Impulcifer-linux/." "$pkgdir/opt/$pkgname/"
+
+  # 실행 런처
+  install -dm755 "$pkgdir/usr/bin"
+  cat > "$pkgdir/usr/bin/impulcifer-py313" << 'EOF'
+#!/bin/bash
+exec /opt/impulcifer-py313-bin/Impulcifer "$@"
+EOF
+  chmod 755 "$pkgdir/usr/bin/impulcifer-py313"
+
+  # 데스크톱 엔트리 + 아이콘 (아이콘은 번들에 포함된 Pulse 로고 재사용)
+  install -Dm644 "$srcdir/Impulcifer-linux/logo/pulse-256.png" \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/impulcifer-py313.png"
+  install -dm755 "$pkgdir/usr/share/applications"
+  cat > "$pkgdir/usr/share/applications/impulcifer-py313.desktop" << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Impulcifer
+Comment=HRIR measurement and binaural BRIR processing for headphone surround virtualization
+Comment[ko]=HRIR 측정 및 헤드폰 서라운드 가상화용 바이노럴 BRIR 생성
+Exec=impulcifer-py313
+Icon=impulcifer-py313
+Categories=AudioVideo;Audio;
+Terminal=false
+EOF
+
+  install -Dm644 "$srcdir/Impulcifer-linux/LICENSE" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$srcdir/Impulcifer-linux/THIRD_PARTY_LICENSES.md" \
+    "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_LICENSES.md"
+}

@@ -7,6 +7,10 @@ been fixed and old features improved.
 ## 2.10.6 - 2026-08-06
 ### 인터랙티브 분석 플롯 수치 정합성 수정 + 플롯 메모리 잔류 해소·병렬화
 
+#### 🔧 빌드 / 설정 변경 (릴리스 후 추가 — 출하물 변화 없음)
+- **AUR 패키지 `impulcifer-py313-bin` 자동 발행**: 릴리스 파이프라인에 `publish-aur` job을 추가했다. `create-release` 성공 후 Linux tarball의 SHA-256을 계산해 `packaging/aur/PKGBUILD.in` 템플릿을 치환하고 AUR에 푸시한다(.SRCINFO는 배포 액션이 생성). `AUR_SSH_PRIVATE_KEY` 시크릿이 없으면 조용히 스킵되어 파이프라인은 그린 유지 — 설정 절차는 `packaging/aur/README.md` 참조. 패키지는 `/opt` 설치 + `impulcifer-py313` 런처 + 데스크톱 엔트리/Pulse 아이콘을 제공하며, `portaudio`를 의존성으로, `webkit2gtk-4.1`(WebView UI)·`ffmpeg`(TrueHD)를 선택 의존성으로 선언한다.
+- **릴리스 게이트 제외 경로 추가**: `packaging/*`는 출하물에 포함되지 않으므로 `release_gate.py`의 EXCLUDE에 추가했다 (`tests/test_release_gate.py`로 고정).
+
 #### 🐛 버그 수정
 - **IACC 플롯이 쓰레기값을 표시하던 문제**: "Cross-Correlation Coefficient" 축에 정규화되지 않은 상관값(신호 길이에 비례, 완전 상관 신호에서 1.0이 아니라 ~48000)이 그대로 실렸다. ISO 3382-1 정의대로 `sqrt(sum(l²)·sum(r²))`로 정규화한 IACF로 수정해 값이 항상 [-1, 1] 범위이며, IACC(범례 표기)는 탐색 창 내 max |IACF|로 계산한다.
 - **IPD 플롯이 중·고역에서 무의미한 값을 내던 문제**: 대역 내 복소 스펙트럼을 각각 합한 뒤 위상차를 취하는 방식은 빈 간 위상 회전으로 상쇄가 일어나 실제 위상차와 무관한 값을 냈다(0.5ms 지연 신호의 2kHz 대역 정답 0° 대비 128° 등). 크로스 스펙트럼 합 `sum(L·conj(R))`의 위상각(에너지 가중 원형 평균)으로 수정해 순수 지연에 대해 대역 중심 주파수의 이론 위상차와 일치한다.
