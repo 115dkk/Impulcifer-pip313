@@ -106,12 +106,15 @@ class HRIRPlotter:
 
         figure들은 서로 독립이라 병렬 렌더링이 가능하다(4코어에서 직렬
         워커 대비 ~2.5배). matplotlib은 스레드-불안전하므로 free-threaded
-        런타임에서도 항상 프로세스 풀을 사용하며, 워커당 수백 MB의 일시
-        점유를 감안해 워커 수를 4로 캡한다.
+        런타임에서도 항상 프로세스 풀을 사용한다. 워커 수는 워커당 일시
+        점유(수백 MB~1GB)를 감안해 가용 메모리에 맞춰 산정한다
+        (:func:`core.parallel_utils.plot_worker_count`) — 대용량 메모리
+        머신은 CPU/작업 수까지 병렬화하고, 저용량 머신은 자동으로 줄인다.
         """
         import multiprocessing
         from concurrent.futures import ProcessPoolExecutor
 
+        from core.parallel_utils import get_available_memory_bytes, plot_worker_count
         from core.parallel_workers import render_hrir_figure_worker
 
         os.makedirs(dir_path, exist_ok=True)
@@ -125,7 +128,9 @@ class HRIRPlotter:
             return {}
 
         if max_workers is None:
-            max_workers = min(len(tasks), os.cpu_count() or 1, 4)
+            max_workers = plot_worker_count(
+                len(tasks), os.cpu_count() or 1, get_available_memory_bytes()
+            )
 
         ctx = multiprocessing.get_context("spawn")
         with ProcessPoolExecutor(max_workers=max_workers, mp_context=ctx) as pool:

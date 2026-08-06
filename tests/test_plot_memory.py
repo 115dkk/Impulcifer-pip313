@@ -68,6 +68,53 @@ print(f"RSS_DELTA_MB={after - baseline:.1f}")
 """
 
 
+class TestPlotWorkerSizing:
+    """플롯 워커 수는 가용 메모리에 맞춰 산정되어야 한다.
+
+    워커 하나가 렌더링 중 일시적으로 수백 MB~1GB를 점유하므로, 하드코딩된
+    상한 대신 가용 메모리의 절반을 워커당 예산(1.5GiB)으로 나눠 상한을
+    정한다. 대용량 메모리 머신은 CPU/작업 수까지 열리고, 저용량 머신은
+    스왑 폭발 전에 워커 수가 줄어야 한다.
+    """
+
+    def test_large_memory_machine_is_capped_by_cpu_and_tasks(self):
+        from core.parallel_utils import plot_worker_count
+
+        # 64GiB 가용, 24 스레드, figure 14장 -> 메모리는 병목이 아니므로
+        # 작업 수(14)가 상한이 된다.
+        assert plot_worker_count(14, 24, 64 * 1024**3) == 14
+        # CPU가 더 적으면 CPU가 상한.
+        assert plot_worker_count(14, 4, 64 * 1024**3) == 4
+
+    def test_small_memory_machine_reduces_workers(self):
+        from core.parallel_utils import plot_worker_count
+
+        # 16GiB 가용, 24 스레드여도 메모리 예산(절반 / 1.5GiB)이 상한:
+        # 16 * 0.5 / 1.5 = 5
+        assert plot_worker_count(14, 24, 16 * 1024**3) == 5
+        # 4GiB 가용 -> 1 워커
+        assert plot_worker_count(14, 24, 4 * 1024**3) == 1
+
+    def test_unknown_memory_falls_back_conservatively(self):
+        from core.parallel_utils import plot_worker_count
+
+        # 메모리 측정 불가 시 보수적 기본 상한(4)을 쓴다.
+        assert plot_worker_count(14, 24, None) == 4
+        assert plot_worker_count(2, 24, None) == 2
+
+    def test_never_below_one_worker(self):
+        from core.parallel_utils import plot_worker_count
+
+        assert plot_worker_count(14, 24, 0) == 1
+        assert plot_worker_count(1, 1, 512 * 1024**2) == 1
+
+    def test_available_memory_probe_returns_positive_on_linux(self):
+        from core.parallel_utils import get_available_memory_bytes
+
+        mem = get_available_memory_bytes()
+        assert mem is not None and mem > 0
+
+
 def test_plot_does_not_retain_memory_after_completion(tmp_path):
     """플롯 산출(PNG 저장)이 끝나고 HRIR 참조를 해제하면 프로세스 메모리
     점유가 플롯 이전 수준으로 돌아와야 한다."""

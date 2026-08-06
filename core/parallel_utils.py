@@ -163,6 +163,76 @@ def parallel_map(
     )
 
 
+# 플롯 렌더링 워커 1개가 렌더링 중 일시 점유하는 메모리 예산(실측 기반:
+# matplotlib import ~250MB + figure 렌더링 조각화 수백 MB, 여유 포함 1.5GiB).
+PLOT_WORKER_MEMORY_BUDGET = int(1.5 * 1024**3)
+
+# 가용 메모리를 알 수 없을 때의 보수적 워커 상한.
+_PLOT_WORKER_FALLBACK_CAP = 4
+
+
+def get_available_memory_bytes() -> Optional[int]:
+    """가용 물리 메모리(바이트)를 추정한다. 측정 불가 시 None.
+
+    - Linux: /proc/meminfo의 MemAvailable
+    - Windows: GlobalMemoryStatusEx의 ullAvailPhys
+    - macOS: 물리 메모리 총량의 절반(압축 메모리 특성상 근사값)
+    """
+    try:
+        if sys.platform.startswith("linux"):
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemAvailable:"):
+                        return int(line.split()[1]) * 1024
+        elif sys.platform == "win32":
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            status = MEMORYSTATUSEX()
+            status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return int(status.ullAvailPhys)
+        elif sys.platform == "darwin":
+            total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+            if total > 0:
+                return int(total * 0.5)
+    except Exception:
+        return None
+    return None
+
+
+def plot_worker_count(
+    n_tasks: int,
+    cpu_count: int,
+    available_memory_bytes: Optional[int],
+) -> int:
+    """플롯 렌더링 워커 수를 가용 메모리에 맞춰 산정한다.
+
+    가용 메모리의 절반만 워커 풀 예산으로 쓰고(나머지는 부모 파이프라인·
+    시스템 몫), 워커당 :data:`PLOT_WORKER_MEMORY_BUDGET`으로 나눠 상한을
+    얻는다. 예: 가용 64GiB -> 메모리는 병목이 아니라 CPU/작업 수가 상한,
+    가용 16GiB -> 5 워커, 가용 4GiB -> 1 워커. 측정 불가 시 보수적으로
+    4를 상한으로 한다. 결과는 항상 1 이상이다.
+    """
+    if available_memory_bytes is None:
+        by_memory = _PLOT_WORKER_FALLBACK_CAP
+    else:
+        by_memory = int(available_memory_bytes * 0.5 // PLOT_WORKER_MEMORY_BUDGET)
+    return max(1, min(n_tasks, cpu_count, by_memory))
+
+
 def get_parallelization_info() -> dict:
     """
     Get information about current parallelization strategy.
