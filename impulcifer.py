@@ -1,50 +1,8 @@
 # -*- coding: utf-8 -*-
 
-def _get_version() -> str:
-    """Get version from build marker, pyproject.toml, or package metadata."""
-    # Method 0: 빌드 마커 (Nuitka/pip 빌드에서 가장 확실)
-    try:
-        from infra._build_info import VERSION as build_version
-        if build_version is not None:
-            return build_version
-    except ImportError:
-        pass
-
-    # Method 1: pyproject.toml (개발 환경)
-    try:
-        import tomllib
-    except ImportError:
-        try:
-            import tomli as tomllib
-        except ImportError:
-            tomllib = None
-
-    if tomllib:
-        try:
-            from pathlib import Path
-            possible_paths = [
-                Path(__file__).parent / 'pyproject.toml',
-                Path(__file__).parent.parent / 'pyproject.toml',
-            ]
-            for pyproject_path in possible_paths:
-                if pyproject_path.exists():
-                    with open(pyproject_path, 'rb') as f:
-                        data = tomllib.load(f)
-                        version_str = data.get('project', {}).get('version')
-                        if version_str:
-                            return version_str
-        except Exception:
-            pass
-
-    # Method 2: Package metadata (pip 설치, 마커 없는 경우)
-    try:
-        from importlib.metadata import version as get_version
-        return get_version('impulcifer-py313')
-    except Exception:
-        pass
-
-    # Fallback
-    return "2.5.0"
+# Version resolution lives in the lightweight infra.version module so
+# frontends can read it without importing this module's DSP stack.
+from infra.version import get_app_version as _get_version
 
 __version__ = _get_version()
 
@@ -62,12 +20,8 @@ from core.cancellation import (  # noqa: F401
     check_cancelled as _check_cancelled,
 )
 
-# Load-bearing re-export: the bundled demo test-signal pickle
-# (data/sweep-*.pkl) stores its class reference as
-# __main__.ImpulseResponseEstimator because it was created by running
-# impulcifer.py directly. Unpickling therefore resolves the class as an
-# attribute of this module whenever the CLI is the entry point — removing
-# this import breaks every --test_signal=*.pkl run (tests pin it).
+# Convenience re-export for external callers that import the estimator
+# from the top-level module.
 from core.impulse_response_estimator import ImpulseResponseEstimator  # noqa: F401
 
 # Stage helpers now live in core.pipeline_stages (audit #138 C1); re-exported

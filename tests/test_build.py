@@ -71,7 +71,6 @@ def check_dependencies():
     
     data_files = [
         "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
-        "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl",
     ]
     
     missing_files = []

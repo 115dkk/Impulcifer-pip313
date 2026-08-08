@@ -10,7 +10,7 @@ from core.impulse_response_estimator import ImpulseResponseEstimator
 from core.hrir import HRIR
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
-TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl')
+TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav')
 
 
 def plot_stereo_track(data, fs):
@@ -32,7 +32,7 @@ def plot_stereo_track(data, fs):
 
 def main():
     # Open HRIR
-    estimator = ImpulseResponseEstimator.from_pickle(TEST_SIGNAL)
+    estimator = ImpulseResponseEstimator.from_wav(TEST_SIGNAL)
     hrir = HRIR(estimator)
     hrir.open_recording(os.path.join(DIR_PATH, 'FL,FR.wav'), speakers=['FL', 'FR'])
     hrir.crop_heads()

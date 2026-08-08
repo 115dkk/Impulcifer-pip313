@@ -27,7 +27,13 @@ _RECORDING_FIELDS = {
     "append",
     "debug_plots",
     "confirm_warnings",
+    "sweep",
 }
+# On-the-fly sweep sub-object of a recording request. mode "default" and
+# "custom" generate the sequence in memory (no play file needed); "file"
+# (or an absent sweep object) keeps the legacy play_path behaviour.
+_SWEEP_REQUEST_FIELDS = {"mode", "fs", "duration", "speakers", "tracks"}
+_SWEEP_MODES = ("default", "custom", "file")
 
 # Custom EQ files are not ``impulcifer.main`` kwargs: like the CTk GUI's
 # ``sync_custom_eq_files``, they are copied into the measurement directory
@@ -57,6 +63,31 @@ _SKIN_CODES = ("stable", "studio")
 # stays supported for the rest of version 2 (kept frozen like the legacy GUI
 # from version 3 on — not removed).
 _FRONTEND_CODES = ("webview", "ctk")
+
+_dsp_prewarm_started = False
+
+
+def _start_dsp_prewarm() -> None:
+    """Import the heavy DSP stack once in the background.
+
+    Bootstrap itself stays import-light (fast first paint); this daemon
+    thread pays the multi-second scipy/matplotlib/bokeh import bill ahead
+    of time so the user's first recording/BRIR job doesn't stall on it.
+    Python's import lock makes the concurrent-import case safe.
+    """
+    global _dsp_prewarm_started
+    if _dsp_prewarm_started:
+        return
+    _dsp_prewarm_started = True
+
+    def _prewarm() -> None:
+        try:
+            import impulcifer  # noqa: F401
+        except Exception:
+            pass
+
+    threading.Thread(target=_prewarm, name="dsp-prewarm", daemon=True).start()
+
 
 _brir_field_kinds_cache: dict[str, str] | None = None
 
@@ -212,9 +243,14 @@ class ImpulciferApplicationService:
         # readable job/system-info error, not as a dead bootstrap that leaves
         # raw i18n keys and an empty language list on screen (observed with
         # the 2.10.0 standalone, whose bundle was missing a lazy scipy
-        # vendored module).
+        # vendored module). infra.version is deliberately DSP-free — reading
+        # the version via ``import impulcifer`` used to pull scipy/matplotlib/
+        # bokeh in and made bootstrap (= the WebView's first paint) take
+        # seconds.
         try:
-            from impulcifer import __version__ as version
+            from infra.version import get_app_version
+
+            version = get_app_version()
         except Exception:
             version = "unknown"
 
@@ -227,9 +263,34 @@ class ImpulciferApplicationService:
         except Exception:
             brir_defaults = {}
 
+        # On-the-fly sweep presets for the recorder UI (layout choices and
+        # canonical defaults) — degrades to an empty dict like the above.
+        # core.constants is import-light on purpose; do NOT source these
+        # from core.sweep_signal here (that would drag scipy into bootstrap).
+        try:
+            from core.constants import (
+                DEFAULT_SWEEP_DURATION,
+                DEFAULT_SWEEP_FS,
+                SPEAKER_NAMES,
+                SWEEP_TRACK_LAYOUTS,
+            )
+
+            sweep_info = {
+                "layouts": list(SWEEP_TRACK_LAYOUTS),
+                "default_fs": DEFAULT_SWEEP_FS,
+                "default_duration": DEFAULT_SWEEP_DURATION,
+                "speaker_names": list(SPEAKER_NAMES),
+            }
+        except Exception:
+            sweep_info = {}
+
         with self._lock:
             active_job = self._jobs.get(self._active_job_id or "")
             active = active_job.snapshot() if active_job is not None else None
+
+        # Warm the DSP imports off the critical path once the UI is up.
+        _start_dsp_prewarm()
+
         return _ok(
             {
                 "version": version,
@@ -237,6 +298,7 @@ class ImpulciferApplicationService:
                 # (windows/darwin/linux) — JSON API 계약 표면이므로 유지.
                 "platform": platform.system().lower(),
                 "brir_defaults": brir_defaults,
+                "sweep": sweep_info,
                 "capabilities": {
                     "recording": True,
                     "brir": True,
@@ -298,9 +360,15 @@ class ImpulciferApplicationService:
         def run(job_id: str, _cancel_event: threading.Event) -> dict[str, Any]:
             from core import recorder
 
+            play_signal = None
+            if params["sweep_spec"] is not None:
+                from core.sweep_signal import build_sweep_playback
+
+                play_signal = build_sweep_playback(params["sweep_spec"])
             try:
                 recorder.play_and_record(
                     play=params["play_path"],
+                    play_signal=play_signal,
                     record=params["record_path"],
                     input_device=params["input_device"],
                     output_device=params["output_device"],
@@ -311,7 +379,9 @@ class ImpulciferApplicationService:
                     progress_callback=lambda event: self._emit(
                         job_id, "progress", _json_safe(event)
                     ),
-                    mono_to_stereo=params["mode"] == "headphones",
+                    # A generated headphone sweep is already a stereo L→R
+                    # sequence; the mono broadcast only applies to files.
+                    mono_to_stereo=params["mode"] == "headphones" and play_signal is None,
                 )
             except recorder.DeviceNotFoundError as exc:
                 raise _ServiceFailure("DEVICE_ERROR", str(exc), retryable=True) from exc
@@ -320,6 +390,20 @@ class ImpulciferApplicationService:
                     "OUTPUT_MISSING",
                     "Recording finished without producing the expected file.",
                     details={"record_path": params["record_path"]},
+                )
+            sidecar_path = None
+            if (
+                play_signal is not None
+                and params["mode"] == "speakers"
+                and not play_signal.spec.is_default_signal()
+            ):
+                # Custom-parameter captures must stay self-describing: the
+                # BRIR pipeline resolves <dir>/test.wav before any bundled
+                # default, so later processing picks up this exact sweep.
+                from core.sweep_signal import write_sidecar
+
+                sidecar_path = write_sidecar(
+                    os.path.dirname(params["record_path"]), play_signal.estimator
                 )
             summary = None
             try:
@@ -336,6 +420,8 @@ class ImpulciferApplicationService:
                 "mode": params["mode"],
                 "record_path": params["record_path"],
                 "summary": summary,
+                "sweep": play_signal.display_name if play_signal is not None else None,
+                "sidecar_path": sidecar_path,
             }
 
         return self._start_job("recording", False, run)
@@ -548,19 +634,63 @@ class ImpulciferApplicationService:
         record_dir: Any,
         play_path: Any = None,
         mode: str = "speakers",
+        sweep: Any = None,
     ) -> dict[str, Any]:
         """Preview the canonical recording output path for the given inputs."""
-        from core.recording_naming import resolve_headphones_record_path, resolve_record_path
+        from core.recording_naming import (
+            resolve_headphones_record_path,
+            resolve_record_path,
+            resolve_record_path_for_speakers,
+        )
 
         target_dir = _optional_string(record_dir)
         if target_dir is None:
             return _error("INVALID_REQUEST", "record_dir is required.")
         if mode == "headphones":
             return _ok({"record_path": resolve_headphones_record_path(target_dir)})
+        sweep_validation = self._validate_sweep_request(sweep, mode)
+        if not sweep_validation["ok"]:
+            return sweep_validation
+        spec = sweep_validation["data"]["spec"]
+        if spec is not None:
+            return _ok({"record_path": resolve_record_path_for_speakers(target_dir, spec.speakers)})
         play = _optional_string(play_path)
         if play is None:
             return _error("INVALID_REQUEST", "play_path is required for speaker recordings.")
         return _ok({"record_path": resolve_record_path(target_dir, play)})
+
+    def detect_sweep(self, dir_path: Any) -> dict[str, Any]:
+        """Estimate which sweep the folder's recordings were captured with."""
+        target = _optional_string(dir_path)
+        if target is None or not os.path.isdir(target):
+            return _error(
+                "FILE_NOT_FOUND",
+                "Measurement directory does not exist.",
+                details={"path": dir_path},
+            )
+        try:
+            from core.sweep_detection import detect_sweep_parameters
+
+            result = detect_sweep_parameters(target)
+        except Exception as exc:
+            return _error("INTERNAL_ERROR", str(exc) or exc.__class__.__name__)
+        sidecar = os.path.isfile(os.path.join(target, "test.wav"))
+        if result is None:
+            return _ok({"found": False, "sidecar": sidecar})
+        return _ok(
+            {
+                "found": True,
+                "sidecar": sidecar,
+                "fs": result.fs,
+                "duration_seconds": round(result.duration_seconds, 4),
+                "n_segments": result.n_segments,
+                "speakers": list(result.speakers),
+                "confidence": result.confidence,
+                "is_default": result.is_default,
+                "generate_spec": result.generate_spec(),
+                "source_files": list(result.source_files),
+            }
+        )
 
     def generate_sweep_set(self, dir_path: Any) -> dict[str, Any]:
         target = _optional_string(dir_path)
@@ -802,14 +932,23 @@ class ImpulciferApplicationService:
             return _error("INVALID_REQUEST", "Unknown recording fields.", details={"fields": unknown})
 
         mode = request.get("mode", "speakers")
-        play_path = str(request.get("play_path", "")).strip()
         record_dir = str(request.get("record_dir", "")).strip()
         if mode not in {"speakers", "headphones"}:
             return _error("INVALID_REQUEST", "mode must be speakers or headphones.")
-        if not play_path or not os.path.isfile(play_path):
-            return _error("FILE_NOT_FOUND", "Playback file does not exist.", details={"path": play_path})
         if not record_dir:
             return _error("INVALID_REQUEST", "record_dir is required.")
+
+        sweep_validation = self._validate_sweep_request(request.get("sweep"), mode)
+        if not sweep_validation["ok"]:
+            return sweep_validation
+        sweep_spec = sweep_validation["data"]["spec"]
+
+        play_path: str | None = str(request.get("play_path", "")).strip()
+        if sweep_spec is not None:
+            # Generated sweeps need no play file.
+            play_path = None
+        elif not play_path or not os.path.isfile(play_path):
+            return _error("FILE_NOT_FOUND", "Playback file does not exist.", details={"path": play_path})
 
         channels = request.get("channels", 2)
         if isinstance(channels, bool) or not isinstance(channels, int) or not 1 <= channels <= 64:
@@ -822,23 +961,28 @@ class ImpulciferApplicationService:
             return _error("INVALID_REQUEST", "confirm_warnings must be a boolean.")
 
         from core.headphones_recording import inspect_headphones_playback
-        from core.recording_naming import resolve_headphones_record_path, resolve_record_path
+        from core.recording_naming import (
+            resolve_headphones_record_path,
+            resolve_record_path,
+            resolve_record_path_for_speakers,
+        )
         from core.recording_validation import validate_recording_setup
 
         if mode == "headphones":
-            playback = inspect_headphones_playback(play_path)
-            if not playback.is_valid:
-                return _error(
-                    "INVALID_REQUEST",
-                    playback.reason_key,
-                    details={"path": play_path, "channels": playback.channels},
-                )
-            if playback.is_mono and not confirm:
-                return _error(
-                    "CONFIRMATION_REQUIRED",
-                    "Mono playback produces generic L=R headphone compensation.",
-                    details={"warning": "headphones_mono"},
-                )
+            if sweep_spec is None:
+                playback = inspect_headphones_playback(play_path)
+                if not playback.is_valid:
+                    return _error(
+                        "INVALID_REQUEST",
+                        playback.reason_key,
+                        details={"path": play_path, "channels": playback.channels},
+                    )
+                if playback.is_mono and not confirm:
+                    return _error(
+                        "CONFIRMATION_REQUIRED",
+                        "Mono playback produces generic L=R headphone compensation.",
+                        details={"warning": "headphones_mono"},
+                    )
             channels = 2
             append = False
             record_path = resolve_headphones_record_path(record_dir)
@@ -852,7 +996,10 @@ class ImpulciferApplicationService:
             # without a confirmation prompt.
             if not force_channels:
                 channels = 2
-            record_path = resolve_record_path(record_dir, play_path)
+            if sweep_spec is not None:
+                record_path = resolve_record_path_for_speakers(record_dir, sweep_spec.speakers)
+            else:
+                record_path = resolve_record_path(record_dir, play_path)
             channel_validation = validate_recording_setup(record_path, channels, force_channels)
             if channel_validation and channel_validation.has_mismatch and not confirm:
                 return _error(
@@ -864,10 +1011,15 @@ class ImpulciferApplicationService:
         debug_plots = request.get("debug_plots", False)
         if not isinstance(debug_plots, bool):
             return _error("INVALID_REQUEST", "debug_plots must be a boolean.")
-        return _ok(
-            {
+        # Internal-only payload — deliberately NOT `_ok()`-wrapped data
+        # semantics: `_json_safe` would flatten the SweepSpec dataclass to a
+        # dict before `run()` could use it.
+        return {
+            "ok": True,
+            "data": {
                 "mode": mode,
                 "play_path": play_path,
+                "sweep_spec": sweep_spec,
                 "record_path": record_path,
                 "input_device": _optional_string(request.get("input_device")),
                 "output_device": _optional_string(request.get("output_device")),
@@ -875,8 +1027,85 @@ class ImpulciferApplicationService:
                 "channels": channels,
                 "append": append,
                 "debug_plots": debug_plots,
-            }
+            },
+        }
+
+    @staticmethod
+    def _validate_sweep_request(sweep: Any, mode: str) -> dict[str, Any]:
+        """Validate the optional on-the-fly sweep sub-object.
+
+        Returns ``spec=None`` for file mode (or an absent object) so the
+        caller can fall through to the legacy play_path flow. The OK result
+        is a raw dict (not ``_ok``) because the SweepSpec dataclass must
+        survive for internal consumers.
+        """
+        if sweep is None:
+            return {"ok": True, "data": {"spec": None}}
+        if not isinstance(sweep, dict):
+            return _error("INVALID_REQUEST", "sweep must be an object.")
+        unknown = sorted(set(sweep) - _SWEEP_REQUEST_FIELDS)
+        if unknown:
+            return _error("INVALID_REQUEST", "Unknown sweep fields.", details={"fields": unknown})
+        sweep_mode = sweep.get("mode", "default")
+        if sweep_mode not in _SWEEP_MODES:
+            return _error("INVALID_REQUEST", "sweep.mode must be default, custom or file.")
+        if sweep_mode == "file":
+            return {"ok": True, "data": {"spec": None}}
+
+        from core.sweep_signal import (
+            DEFAULT_SWEEP_DURATION,
+            DEFAULT_SWEEP_FS,
+            SweepSpec,
+            validate_sweep_spec,
         )
+
+        if mode == "headphones":
+            # Headphone compensation always plays the L→R stereo sequence;
+            # only the signal parameters (fs/duration) are selectable.
+            speakers: tuple = ("FL", "FR")
+            tracks = "stereo"
+        else:
+            speakers_value = sweep.get("speakers", ["FL", "FR"])
+            if isinstance(speakers_value, str):
+                speakers = tuple(part.strip() for part in speakers_value.split(",") if part.strip())
+            elif isinstance(speakers_value, (list, tuple)):
+                speakers = tuple(str(part) for part in speakers_value)
+            else:
+                return _error(
+                    "INVALID_REQUEST",
+                    "sweep.speakers must be a list or comma-separated string.",
+                )
+            tracks = sweep.get("tracks", "stereo")
+            if not isinstance(tracks, str):
+                return _error("INVALID_REQUEST", "sweep.tracks must be a string.")
+
+        if sweep_mode == "custom":
+            fs = sweep.get("fs", DEFAULT_SWEEP_FS)
+            duration = sweep.get("duration", DEFAULT_SWEEP_DURATION)
+            if (
+                isinstance(fs, bool)
+                or not isinstance(fs, (int, float))
+                or (isinstance(fs, float) and not fs.is_integer())
+            ):
+                return _error("INVALID_REQUEST", "sweep.fs must be an integer.")
+            if isinstance(duration, bool) or not isinstance(duration, (int, float)):
+                return _error("INVALID_REQUEST", "sweep.duration must be a number.")
+        else:
+            fs = DEFAULT_SWEEP_FS
+            duration = DEFAULT_SWEEP_DURATION
+
+        try:
+            spec = validate_sweep_spec(
+                SweepSpec(
+                    fs=int(fs),
+                    duration=float(duration),
+                    speakers=speakers,
+                    tracks=tracks,
+                )
+            )
+        except ValueError as exc:
+            return _error("INVALID_REQUEST", str(exc))
+        return {"ok": True, "data": {"spec": spec}}
 
     @staticmethod
     def _validate_brir_request(request: dict[str, Any]) -> dict[str, Any]:

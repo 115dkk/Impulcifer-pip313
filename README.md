@@ -127,7 +127,7 @@ Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전�
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
 | `--dir_path PATH` | 필수 | 측정 파일을 읽고 결과를 저장할 폴더입니다. |
-| `--test_signal VALUE` | `test.pkl`, `test.wav`, 없으면 내장 `default` | 측정에 쓴 sweep WAV, estimator pickle, TrueHD/MLP 파일 또는 미리 정한 이름입니다. |
+| `--test_signal VALUE` | 자동 감지 (`test.wav` → 녹음 분석 → 내장 `default`) | 측정에 쓴 sweep WAV, TrueHD/MLP 파일, 미리 정한 이름, `auto`(녹음에서 스윕 파라미터 자동 복원) 또는 `generate:<길이>s@<샘플레이트>`(예: `generate:6.15s@48000`, 파라미터로 직접 생성)입니다. |
 | `--room_target PATH` | `dir_path/room-target.csv` | 룸 보정 목표 응답 CSV입니다. 파일이 없으면 flat target을 씁니다. |
 | `--room_mic_calibration PATH` | `dir_path/room-mic-calibration.csv`, 없으면 `.txt` | 룸 측정 마이크 보정 파일입니다. |
 | `--headphone_compensation_file PATH` | `dir_path/headphones.wav` | 헤드폰 보정 측정 WAV입니다. 폴더를 주면 흔히 쓰는 파일명을 찾아봅니다. |
@@ -137,12 +137,15 @@ Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전�
 
 | 값 | 의미 |
 | --- | --- |
-| `default`, `1` | 내장 pickle sweep estimator입니다. |
-| `sweep`, `2` | 내장 기본 sweep WAV입니다. |
+| `auto` | 폴더의 `test.wav` → 녹음 파일 분석(스윕 길이 그리드 복원) → 내장 기본 순으로 해석합니다. 미지정 시 기본 동작과 같습니다. |
+| `generate:<길이>s@<fs>` | 파라미터로 sweep을 직접 생성합니다. 길이는 생성기 그리드에 스냅됩니다. |
+| `default`, `1`, `sweep`, `2` | 내장 기본 sweep WAV입니다. |
 | `stereo`, `3` | `FL,FR` 스테레오 분절 sweep입니다. |
 | `mono-left`, `4` | `FL` 모노 분절 sweep입니다. |
 | `left`, `5` | `FL` 스테레오 분절 sweep입니다. |
 | `right`, `6` | `FR` 스테레오 분절 sweep입니다. |
+
+스윕 파일(.pkl estimator 포함)을 반드시 준비할 필요는 없습니다. 2.11부터 레코더는 기본적으로 sweep을 즉석에서 생성해 재생하며(내장 파일과 비트 단위 동일), 커스텀 파라미터로 녹음하면 `test.wav`가 녹음 폴더에 자동 저장되어 BRIR 처리에서 그대로 인식됩니다. 레거시 `.pkl` estimator 입력은 제거되었습니다.
 
 ### 보정과 목표 응답
 
@@ -220,8 +223,8 @@ impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 
 ## GUI에서 할 수 있는 일
 
-- Recorder에서 sweep 재생과 녹음을 진행합니다. 스피커 측정은 `FL,FR.wav` 같은 이름으로 저장하고, 헤드폰 보정은 별도 버튼으로 `headphones.wav`를 만듭니다.
-- Impulcifer 탭에서 BRIR 생성 옵션을 지정하고 처리 중 취소할 수 있습니다.
+- Recorder에서 sweep 재생과 녹음을 진행합니다. 기본은 파일 없이 sweep을 즉석 생성해 재생하는 방식이며(스피커 목록·레이아웃 선택, 커스텀 모드에서 샘플레이트/길이 지정 — mono/stereo/5.1/7.1/7.1.4/7.1.6 지원), 특수한 녹음을 위해 파일 재생 모드도 유지됩니다. 스피커 측정은 `FL,FR.wav` 같은 이름으로 저장하고, 헤드폰 보정은 별도 버튼으로 `headphones.wav`를 만듭니다.
+- Impulcifer 탭에서 BRIR 생성 옵션을 지정하고 처리 중 취소할 수 있습니다. 테스트 신호는 기본적으로 녹음에서 자동 감지되며, "폴더 분석" 버튼으로 감지 결과(샘플레이트/스윕 길이/신뢰도)를 미리 확인할 수 있습니다.
 - Studio skin에서는 같은 작업을 더 넓은 화면 구성으로 다룹니다.
 - UI Settings에서 언어와 테마를 바꿀 수 있습니다.
 

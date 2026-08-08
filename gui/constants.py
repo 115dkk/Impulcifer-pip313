@@ -33,14 +33,6 @@ FILETYPES_AUDIO = [
     ('All files', '*.*'),
 ]
 
-FILETYPES_AUDIO_WITH_PKL = [
-    ('Audio files', '*.wav *.pkl *.mlp *.thd *.truehd'),
-    ('WAV files', '*.wav'),
-    ('Pickle files', '*.pkl'),
-    ('TrueHD/MLP files', '*.mlp *.thd *.truehd'),
-    ('All files', '*.*'),
-]
-
 FILETYPES_TEXT = [
     ('Text files', '*.csv *.txt'),
     ('All files', '*.*'),

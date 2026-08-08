@@ -103,15 +103,23 @@ HEXADECAGONAL_TRACK_ORDER = ['FL-left', 'FL-right', 'FR-left', 'FR-right', 'FC-l
                              'TFL-right', 'TFR-left', 'TFR-right', 'TSL-left', 'TSL-right', 'TSR-left',
                              'TSR-right', 'TBL-left', 'TBL-right', 'TBR-left', 'TBR-right']
 
+# On-the-fly sweep defaults (parameters of the bundled default sweep) and
+# the sequence layouts the generator supports. Canonical home is here — a
+# light module — so the WebView bootstrap can ship them to the frontend
+# without importing the scipy/matplotlib stack behind core.sweep_signal.
+DEFAULT_SWEEP_FS = 48000
+DEFAULT_SWEEP_DURATION = 5.0
+SWEEP_TRACK_LAYOUTS = ("mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6")
+
 # 기본 테스트 신호 파일 목록
 TEST_SIGNALS = {
-    'default': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl',
+    'default': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     'sweep': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     'stereo': 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     'mono-left': 'sweep-seg-FL-mono-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     'left': 'sweep-seg-FL-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     'right': 'sweep-seg-FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
-    '1': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl',
+    '1': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     '2': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     '3': 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     '4': 'sweep-seg-FL-mono-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',

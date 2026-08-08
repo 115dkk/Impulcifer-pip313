@@ -4,6 +4,22 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.11.0 - 2026-08-08
+### 즉석 스윕 생성·재생 + 스윕 자동 감지 + WebView 기동 최적화 + pkl 지원 삭제
+
+#### ⭐ 새로운 기능 / 개선
+- **파일 없는 스윕 재생(즉석 생성)이 레코더 기본이 됨**: REW처럼 sweep을 재생 시점에 메모리에서 생성한다(`core/sweep_signal.py`). 기본 파라미터의 생성 시퀀스는 번들 `sweep-seg-…wav`와 **비트 단위로 동일**해(인메모리 PCM_32 왕복 양자화 포함) 기존 임펄사이퍼 결과물과 완전 호환된다 — `tests/test_sweep_signal.py`가 이 계약을 고정. 파일 재생 모드는 특수/비통상 녹음용으로 유지된다. CTk(Stable/Studio 스킨)와 WebView 모두 적용.
+- **높이 채널 시퀀스 프리셋 추가**: `sweep_sequence` 트랙 레이아웃에 `7.1.4`(12트랙)·`7.1.6`(14트랙)을 추가해 TFL/TFR/TSL/TSR/TBL/TBR 스피커도 즉석 생성 시퀀스로 측정할 수 있다(7.1 WAVE 순서 + TrueHD 톱레이어 순서).
+- **스윕 자동 감지(신기술)**: 녹음 파일에서 어떤 스윕으로 녹음했는지 복원한다(`core/sweep_detection.py`). 임펄사이퍼 스윕 길이는 이산 그리드(48kHz에서 M×약 3.08초)를 이루므로 파일 길이/엔벨로프 온셋 간격을 그리드에 스냅해 **정확한** 원본 estimator를 재구성하며, 오프그리드(비임펄사이퍼) 신호는 low confidence로 보고하고 번들 기본값으로 폴백한다. BRIR 테스트 신호 소스의 기본값이 자동 감지가 되었고, 양 프론트엔드에 "폴더 분석" 미리보기와 직접 지정(길이/샘플레이트) UI가 추가되었다.
+- **`--test_signal` 스펙 확장**: `auto`(자동 감지)와 `generate:<길이>s@<샘플레이트>`(예: `generate:6.15s@48000`, 그리드 스냅 직접 생성)를 지원한다. 미지정 시 체인은 `test.wav` → 자동 감지 → 번들 기본 wav로 통일(표준 녹음 폴더는 기존과 동일 출력).
+- **커스텀 스윕 사이드카**: 비기본 파라미터(fs/길이)로 녹음하면 `test.wav`가 녹음 폴더에 자동 저장되어, 이후 BRIR 처리가 무설정으로 정확한 스윕을 인식한다(기본 파라미터 녹음은 아무것도 저장하지 않아 기존 폴더 구성 유지).
+
+#### ⚡ 성능 개선
+- **WebView 첫 로딩 지연 해소**: 창 표시 후 UI 로딩까지 수 초(저사양에서 8~10초)가 걸리던 원인은 bootstrap이 버전 하나를 읽으려고 `import impulcifer`(scipy/matplotlib/bokeh 전체)를 동기 수행하던 것. 버전 해석을 경량 `infra/version.py`로 분리하고 스윕 프리셋 상수를 `core/constants.py`에서 직접 읽어 bootstrap을 임포트 경량화했다(실측 1.52s → 0.06s, 저사양에서 체감 폭 더 큼). 무거운 DSP 임포트는 bootstrap이 띄우는 백그라운드 프리웜 스레드가 미리 처리해 첫 잡 시작 지연도 줄였다.
+
+#### 🔧 빌드 / 설정 변경
+- **레거시 pkl(estimator pickle) 지원 전면 삭제**: `from_pickle`/`to_pickle`, `test.pkl` 후크, `.pkl` 입력 분기, 번들 `sweep-…pkl`, 파일 다이얼로그의 pkl 필터를 모두 제거했다. 피클은 `__main__.ImpulseResponseEstimator` 참조 때문에 CLI 직접 실행에서만 우연히 동작하고 GUI/standalone에서는 로드가 실패하던 죽은 레거시였다. `TEST_SIGNALS`의 `default`/`1`은 동일 파라미터의 번들 WAV를 가리키며(수치 동일 경로), CI BRIR 무결성 테스트도 WAV 기준으로 전환했다.
+
 ## 2.10.6 - 2026-08-06
 ### 인터랙티브 분석 플롯 수치 정합성 수정 + 플롯 메모리 잔류 해소·병렬화
 

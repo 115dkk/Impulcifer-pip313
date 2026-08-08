@@ -46,9 +46,12 @@ class ProcessingConfig:
         metadata={
             "cli_flag": "--test_signal",
             "cli_help": (
-                "Path to sine sweep test signal or pickled impulse response estimator. "
-                "You can also use a predefined name or number: "
-                '"default"/"1" (.pkl), "sweep"/"2" (.wav), "stereo"/"3" (FL,FR), '
+                "Test signal source. Defaults to automatic detection: <dir>/test.wav if present, "
+                "otherwise the sweep parameters are recovered from the recordings themselves "
+                "(falling back to the bundled default sweep). Accepts a path to a sine sweep WAV "
+                'file, the literal "auto", "generate:<duration>s@<fs>" (e.g. "generate:6.15s@48000") '
+                "to construct the sweep from parameters, or a predefined name/number: "
+                '"default"/"1", "sweep"/"2", "stereo"/"3" (FL,FR), '
                 '"mono-left"/"4" (FL mono), "left"/"5" (FL stereo), "right"/"6" (FR stereo).'
             ),
             "cli_arg_type": "str",

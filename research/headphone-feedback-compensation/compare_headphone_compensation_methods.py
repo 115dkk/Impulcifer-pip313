@@ -12,11 +12,11 @@ from core.utils import sync_axes, save_fig_as_png, config_fr_axis
 from core.constants import COLORS
 
 DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
-TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl')
+TEST_SIGNAL = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav')
 
 
 def main():
-    estimator = ImpulseResponseEstimator.from_pickle(TEST_SIGNAL)
+    estimator = ImpulseResponseEstimator.from_wav(TEST_SIGNAL)
 
     # Open feedback measurement
     feedback = HRIR(estimator)

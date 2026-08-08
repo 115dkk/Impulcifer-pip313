@@ -19,13 +19,25 @@ import sounddevice
 
 import core.recorder as recorder
 from core.headphones_recording import inspect_headphones_playback
-from core.recording_naming import resolve_headphones_record_path, resolve_record_path
+from core.recording_naming import (
+    resolve_headphones_record_path,
+    resolve_record_path,
+    resolve_record_path_for_speakers,
+)
 from core.recording_validation import resolve_recording_channels, validate_recording_setup
 from core.sweep_set_generator import generate_sweep_set
+from core.sweep_signal import SWEEP_TRACK_LAYOUTS
 from gui.constants import (
     FILETYPES_AUDIO,
     WIDGET_BUTTON_WIDTH_BROWSE,
     WIDGET_ENTRY_WIDTH_DEFAULT,
+)
+from gui.sweep_source import (
+    headphones_sweep_selection,
+    label_to_code,
+    recorder_sweep_mode_labels,
+    resolve_sweep_selection,
+    sweep_summary_text,
 )
 from gui.dialogs import RecordingProgressDialog
 from gui.recording_status import RecordingStatusController, analyze_recording
@@ -124,33 +136,78 @@ class RecorderTab:
             font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
-        ctk.CTkLabel(files_frame, text=self.loc.get('label_file_to_play')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
+        # Sweep source — on-the-fly generation is the default since 2.11;
+        # a play file is only needed for unusual/custom recordings.
+        self._sweep_mode_labels = recorder_sweep_mode_labels(self.loc)
+        ctk.CTkLabel(files_frame, text=self.loc.get('label_sweep_source')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
+        self.sweep_source_var = ctk.StringVar(value=self._sweep_mode_labels['default'])
+        ctk.CTkOptionMenu(
+            files_frame,
+            variable=self.sweep_source_var,
+            values=list(self._sweep_mode_labels.values()),
+            command=lambda *_: self._on_sweep_source_change(),
+        ).grid(row=1, column=1, sticky="w", padx=15, pady=5)
+
+        # Generated-sweep parameters. Speakers + layout apply to both
+        # generate modes; fs + duration only to the custom mode.
+        self.sweep_params_frame = ctk.CTkFrame(files_frame, fg_color="transparent")
+        self.sweep_params_frame.grid(row=2, column=0, columnspan=3, sticky="ew", padx=15, pady=0)
+        self.sweep_params_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(self.sweep_params_frame, text=self.loc.get('label_sweep_speakers')).grid(row=0, column=0, sticky="w", padx=(0, 10), pady=3)
+        self.sweep_speakers_var = ctk.StringVar(value='FL,FR')
+        self.sweep_speakers_var.trace_add('write', lambda *_: self._refresh_resolved_record_path())
+        ctk.CTkEntry(self.sweep_params_frame, textvariable=self.sweep_speakers_var).grid(row=0, column=1, sticky="ew", pady=3)
+
+        ctk.CTkLabel(self.sweep_params_frame, text=self.loc.get('label_sweep_layout')).grid(row=1, column=0, sticky="w", padx=(0, 10), pady=3)
+        self.sweep_layout_var = ctk.StringVar(value='stereo')
+        self.sweep_layout_var.trace_add('write', lambda *_: self._refresh_resolved_record_path())
+        ctk.CTkOptionMenu(
+            self.sweep_params_frame,
+            variable=self.sweep_layout_var,
+            values=list(SWEEP_TRACK_LAYOUTS),
+        ).grid(row=1, column=1, sticky="w", pady=3)
+
+        self.sweep_custom_frame = ctk.CTkFrame(self.sweep_params_frame, fg_color="transparent")
+        self.sweep_custom_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=0)
+        self.sweep_custom_frame.grid_columnconfigure(3, weight=1)
+        ctk.CTkLabel(self.sweep_custom_frame, text=self.loc.get('label_sweep_fs')).grid(row=0, column=0, sticky="w", padx=(0, 10), pady=3)
+        self.sweep_fs_var = ctk.StringVar(value='48000')
+        ctk.CTkEntry(self.sweep_custom_frame, textvariable=self.sweep_fs_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).grid(row=0, column=1, sticky="w", pady=3)
+        ctk.CTkLabel(self.sweep_custom_frame, text=self.loc.get('label_sweep_duration')).grid(row=0, column=2, sticky="w", padx=(15, 10), pady=3)
+        self.sweep_duration_var = ctk.StringVar(value='5.0')
+        ctk.CTkEntry(self.sweep_custom_frame, textvariable=self.sweep_duration_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).grid(row=0, column=3, sticky="w", pady=3)
+
+        self.play_file_frame = ctk.CTkFrame(files_frame, fg_color="transparent")
+        self.play_file_frame.grid(row=3, column=0, columnspan=3, sticky="ew", padx=0, pady=0)
+        self.play_file_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(self.play_file_frame, text=self.loc.get('label_file_to_play')).grid(row=0, column=0, sticky="w", padx=15, pady=5)
         self.play_var = ctk.StringVar(value=os.path.join('data', 'sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
         self.play_var.trace_add('write', lambda *_: self._refresh_resolved_record_path())
-        self.play_entry = ctk.CTkEntry(files_frame, textvariable=self.play_var)
-        self.play_entry.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
+        self.play_entry = ctk.CTkEntry(self.play_file_frame, textvariable=self.play_var)
+        self.play_entry.grid(row=0, column=1, sticky="ew", padx=15, pady=5)
         ctk.CTkButton(
-            files_frame,
+            self.play_file_frame,
             text=self.loc.get('button_browse'),
             command=lambda: browse_file(self.play_var, 'open', FILETYPES_AUDIO),
             width=WIDGET_BUTTON_WIDTH_BROWSE,
-        ).grid(row=1, column=2, padx=15, pady=5)
+        ).grid(row=0, column=2, padx=15, pady=5)
 
         # Recording folder. Impulcifer's BRIR pipeline scans a directory
         # for ``<speakers>.wav`` / ``headphones.wav`` files, so the
         # recorder writes inside this folder using the canonical
-        # filename derived from the play file.
-        ctk.CTkLabel(files_frame, text=self.loc.get('label_record_to_folder')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
+        # filename derived from the sweep speakers (or the play file).
+        ctk.CTkLabel(files_frame, text=self.loc.get('label_record_to_folder')).grid(row=4, column=0, sticky="w", padx=15, pady=5)
         self.record_dir_var = ctk.StringVar(value=os.path.join('data', 'my_hrir'))
         self.record_dir_var.trace_add('write', lambda *_: self._refresh_resolved_record_path())
         self.record_dir_entry = ctk.CTkEntry(files_frame, textvariable=self.record_dir_var)
-        self.record_dir_entry.grid(row=2, column=1, sticky="ew", padx=15, pady=5)
+        self.record_dir_entry.grid(row=4, column=1, sticky="ew", padx=15, pady=5)
         ctk.CTkButton(
             files_frame,
             text=self.loc.get('button_browse'),
             command=lambda: browse_directory(self.record_dir_var),
             width=WIDGET_BUTTON_WIDTH_BROWSE,
-        ).grid(row=2, column=2, padx=(15, 15), pady=5)
+        ).grid(row=4, column=2, padx=(15, 15), pady=5)
 
         # Resolved file preview — read-only hint showing where the WAV
         # will be written so the user can double-check before recording.
@@ -163,15 +220,16 @@ class RecorderTab:
             wraplength=800,
             anchor="w",
             justify="left",
-        ).grid(row=3, column=1, columnspan=2, sticky="ew", padx=15, pady=(0, 5))
-        self._refresh_resolved_record_path()
+        ).grid(row=5, column=1, columnspan=2, sticky="ew", padx=15, pady=(0, 5))
 
         # sweep set은 수십 MB라 온디맨드 생성 — generate_sweep_set docstring 참조
         ctk.CTkButton(
             files_frame,
             text=self.loc.get('button_generate_14ch_sweep_set'),
             command=self.generate_sweep_set,
-        ).grid(row=4, column=1, columnspan=2, sticky="w", padx=15, pady=(0, 15))
+        ).grid(row=6, column=1, columnspan=2, sticky="w", padx=15, pady=(0, 15))
+
+        self._on_sweep_source_change()
 
         # === Recording Options Section ===
         options_frame = ctk.CTkFrame(scroll, corner_radius=0)
@@ -318,6 +376,7 @@ class RecorderTab:
         """Restore user-editable Tk variables after a UI rebuild."""
         restore_tk_vars(self, state)
         self.update_channel_guidance()
+        self._on_sweep_source_change()
 
     def refresh_devices(self, *args: object) -> None:
         """Refresh audio device lists."""
@@ -441,20 +500,59 @@ class RecorderTab:
             ),
         )
 
+    def _sweep_mode(self) -> str:
+        """Current sweep source code ("default" / "custom" / "file")."""
+        return label_to_code(self._sweep_mode_labels, self.sweep_source_var.get(), "default")
+
+    def _on_sweep_source_change(self) -> None:
+        """Show/hide the parameter and play-file rows per sweep source."""
+        mode = self._sweep_mode()
+        if mode == "file":
+            self.sweep_params_frame.grid_remove()
+            self.play_file_frame.grid()
+        else:
+            self.sweep_params_frame.grid()
+            self.play_file_frame.grid_remove()
+            if mode == "custom":
+                self.sweep_custom_frame.grid()
+            else:
+                self.sweep_custom_frame.grid_remove()
+        self._refresh_resolved_record_path()
+
+    def _resolve_sweep_spec(self):
+        """Validated SweepSpec for the current selection (None = file mode).
+
+        Raises ``ValueError`` for invalid custom parameters.
+        """
+        return resolve_sweep_selection(
+            self._sweep_mode(),
+            speakers_text=self.sweep_speakers_var.get(),
+            tracks=self.sweep_layout_var.get(),
+            fs_text=self.sweep_fs_var.get(),
+            duration_text=self.sweep_duration_var.get(),
+        )
+
     def _refresh_resolved_record_path(self) -> None:
         """Recompute the read-only ``<folder>/<derived>.wav`` hint label.
 
-        Runs from a Tk variable trace so any edit to ``play_var`` /
-        ``record_dir_var`` updates the preview without needing the user
-        to click anything.
+        Runs from a Tk variable trace so any edit to the sweep params /
+        ``play_var`` / ``record_dir_var`` updates the preview without
+        needing the user to click anything.
         """
         record_dir = self.record_dir_var.get().strip()
-        play_file = self.play_var.get().strip()
-        if not record_dir or not play_file:
+        if not record_dir:
             self.resolved_record_var.set("")
             return
         try:
-            resolved = resolve_record_path(record_dir, play_file)
+            spec = self._resolve_sweep_spec()
+            if spec is not None:
+                resolved = resolve_record_path_for_speakers(record_dir, spec.speakers)
+            else:
+                play_file = self.play_var.get().strip()
+                if not play_file:
+                    self.resolved_record_var.set("")
+                    return
+                resolved = resolve_record_path(record_dir, play_file)
         except Exception:
             self.resolved_record_var.set("")
             return
@@ -472,12 +570,22 @@ class RecorderTab:
                 self.loc.get('message_record_folder_required'),
             )
             return
-        record_file = resolve_record_path(record_dir, play_file)
+        try:
+            sweep_spec = self._resolve_sweep_spec()
+        except ValueError as exc:
+            messagebox.showerror(self.loc.get('message_error'), str(exc))
+            return
+        if sweep_spec is not None:
+            record_file = resolve_record_path_for_speakers(record_dir, sweep_spec.speakers)
+            play_display = sweep_summary_text(self.loc, sweep_spec)
+        else:
+            record_file = resolve_record_path(record_dir, play_file)
+            play_display = os.path.basename(play_file)
         selected_channels, force_channels = resolve_recording_channels(
             self.channels_check_var.get(), safe_get_int(self.channels_var, 14)
         )
 
-        if not os.path.exists(play_file):
+        if sweep_spec is None and not os.path.exists(play_file):
             messagebox.showerror(self.loc.get('message_error'), self.loc.get('message_play_file_not_exist', file=play_file))
             return
 
@@ -500,7 +608,7 @@ class RecorderTab:
 
         info_msg = self.loc.get(
             'message_recording_setup_info',
-            play_file=os.path.basename(play_file),
+            play_file=play_display,
             record_file=os.path.basename(record_file),
             input_device=self.input_device_var.get() or 'Default',
             output_device=self.output_device_var.get() or 'Default',
@@ -519,7 +627,7 @@ class RecorderTab:
         debug_plots = self.debug_plots_var.get()
 
         self._set_recording_busy(True)
-        self.recording_feedback.start(play_file)
+        self.recording_feedback.start(play_display)
         recording_dialog = RecordingProgressDialog(self.root, self.loc, fonts=self.fonts)
 
         def report_progress(event):
@@ -530,8 +638,14 @@ class RecorderTab:
 
         def run_recording():
             try:
+                play_signal = None
+                if sweep_spec is not None:
+                    from core.sweep_signal import build_sweep_playback
+
+                    play_signal = build_sweep_playback(sweep_spec)
                 recorder.play_and_record(
-                    play=play_file,
+                    play=play_file if play_signal is None else None,
+                    play_signal=play_signal,
                     record=record_file,
                     input_device=input_device,
                     output_device=output_device,
@@ -541,6 +655,13 @@ class RecorderTab:
                     debug_plots=debug_plots,
                     progress_callback=report_progress,
                 )
+                if play_signal is not None and not play_signal.spec.is_default_signal():
+                    # Custom-parameter captures stay self-describing: the
+                    # pipeline resolves <dir>/test.wav before the bundled
+                    # default sweep.
+                    from core.sweep_signal import write_sidecar
+
+                    write_sidecar(os.path.dirname(record_file), play_signal.estimator)
                 summary = analyze_recording(record_file)
                 self.root.after(
                     0,
@@ -633,26 +754,42 @@ class RecorderTab:
             )
             return
 
-        playback = inspect_headphones_playback(play_file)
-        if not playback.is_valid:
-            messagebox.showerror(
-                self.loc.get('message_error'),
-                self.loc.get(playback.reason_key, file=play_file, channels=playback.channels),
+        # Generated sweeps always play the L→R stereo sequence, so the
+        # play-file gating and mono warning only apply in file mode.
+        try:
+            sweep_spec = headphones_sweep_selection(
+                self._sweep_mode(),
+                fs_text=self.sweep_fs_var.get(),
+                duration_text=self.sweep_duration_var.get(),
             )
+        except ValueError as exc:
+            messagebox.showerror(self.loc.get('message_error'), str(exc))
             return
 
-        if playback.is_mono:
-            if not messagebox.askyesno(
-                self.loc.get('message_headphones_mono_warning_title'),
-                self.loc.get('message_headphones_mono_warning'),
-            ):
+        if sweep_spec is None:
+            playback = inspect_headphones_playback(play_file)
+            if not playback.is_valid:
+                messagebox.showerror(
+                    self.loc.get('message_error'),
+                    self.loc.get(playback.reason_key, file=play_file, channels=playback.channels),
+                )
                 return
+
+            if playback.is_mono:
+                if not messagebox.askyesno(
+                    self.loc.get('message_headphones_mono_warning_title'),
+                    self.loc.get('message_headphones_mono_warning'),
+                ):
+                    return
+            play_display = os.path.basename(play_file)
+        else:
+            play_display = sweep_summary_text(self.loc, sweep_spec)
 
         record_file = resolve_headphones_record_path(record_dir)
 
         info_msg = self.loc.get(
             'message_record_headphones_confirm',
-            play_file=os.path.basename(play_file),
+            play_file=play_display,
             record_file=os.path.basename(record_file),
             input_device=self.input_device_var.get() or 'Default',
             output_device=self.output_device_var.get() or 'Default',
@@ -667,7 +804,7 @@ class RecorderTab:
         debug_plots = self.debug_plots_var.get()
 
         self._set_recording_busy(True)
-        self.recording_feedback.start(play_file)
+        self.recording_feedback.start(play_display)
         recording_dialog = RecordingProgressDialog(self.root, self.loc, fonts=self.fonts)
 
         def report_progress(event):
@@ -678,14 +815,22 @@ class RecorderTab:
 
         def run_recording():
             try:
+                play_signal = None
+                if sweep_spec is not None:
+                    from core.sweep_signal import build_sweep_playback
+
+                    play_signal = build_sweep_playback(sweep_spec)
                 # Always 2-channel recording for headphone compensation —
                 # the two in-ear mics. Speaker-side ``force channels`` is
                 # not relevant here so we hard-pin it. ``mono_to_stereo``
                 # only matters when the play file is mono: it duplicates
                 # the sweep onto both headphone drivers so the user gets
-                # an L=R generic EQ (warned about above).
+                # an L=R generic EQ (warned about above). Generated sweeps
+                # are already stereo sequences, so the broadcast is a
+                # file-mode-only concern.
                 recorder.play_and_record(
-                    play=play_file,
+                    play=play_file if play_signal is None else None,
+                    play_signal=play_signal,
                     record=record_file,
                     input_device=input_device,
                     output_device=output_device,
@@ -694,7 +839,7 @@ class RecorderTab:
                     append=False,
                     debug_plots=debug_plots,
                     progress_callback=report_progress,
-                    mono_to_stereo=True,
+                    mono_to_stereo=play_signal is None,
                 )
                 summary = analyze_recording(record_file)
                 self.root.after(

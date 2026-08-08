@@ -17,7 +17,7 @@ import customtkinter as ctk
 import impulcifer
 from core.constants import SPEAKER_NAMES
 from gui.constants import (
-    FILETYPES_AUDIO_WITH_PKL,
+    FILETYPES_AUDIO,
     FILETYPES_TEXT,
     FILETYPES_WAV,
     WIDGET_BUTTON_WIDTH_BROWSE,
@@ -34,6 +34,11 @@ from gui.brir_args import (
     sync_headphone_compensation_file,
 )
 from gui.dialogs import ProcessingDialog
+from gui.sweep_source import (
+    label_to_code,
+    run_detect_preview,
+    test_signal_source_labels,
+)
 from gui.utils import (
     browse_directory,
     browse_file,
@@ -100,16 +105,48 @@ class ImpulciferTab:
             width=WIDGET_BUTTON_WIDTH_BROWSE,
         ).grid(row=1, column=2, padx=15, pady=5)
 
-        ctk.CTkLabel(input_frame, text=self.loc.get('label_test_signal')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
-        self.test_signal_var = ctk.StringVar(value=os.path.join('data', 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
-        self.test_signal_entry = ctk.CTkEntry(input_frame, textvariable=self.test_signal_var)
-        self.test_signal_entry.grid(row=2, column=1, sticky="ew", padx=15, pady=5)
+        # Test signal source — auto detection is the default since 2.11.
+        # The manual and file rows only appear for their modes.
+        self._test_signal_labels = test_signal_source_labels(self.loc)
+        ctk.CTkLabel(input_frame, text=self.loc.get('label_test_signal_source')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
+        self.test_signal_source_var = ctk.StringVar(value=self._test_signal_labels['auto'])
+        ctk.CTkOptionMenu(
+            input_frame,
+            variable=self.test_signal_source_var,
+            values=list(self._test_signal_labels.values()),
+            command=lambda *_: self.toggle_test_signal_source(),
+        ).grid(row=2, column=1, sticky="w", padx=15, pady=5)
         ctk.CTkButton(
             input_frame,
-            text=self.loc.get('button_browse'),
-            command=lambda: browse_file(self.test_signal_var, 'open', FILETYPES_AUDIO_WITH_PKL),
+            text=self.loc.get('button_detect_sweep'),
+            command=self.detect_sweep_preview,
             width=WIDGET_BUTTON_WIDTH_BROWSE,
-        ).grid(row=2, column=2, padx=(15, 15), pady=(5, 15))
+        ).grid(row=2, column=2, padx=(15, 15), pady=5)
+
+        self.test_signal_manual_frame = ctk.CTkFrame(input_frame, fg_color="transparent")
+        self.test_signal_manual_frame.grid(row=3, column=0, columnspan=3, sticky="ew", padx=15, pady=0)
+        ctk.CTkLabel(self.test_signal_manual_frame, text=self.loc.get('label_sweep_duration')).grid(row=0, column=0, sticky="w", padx=(0, 10), pady=3)
+        self.test_signal_duration_var = ctk.StringVar(value='6.15')
+        ctk.CTkEntry(self.test_signal_manual_frame, textvariable=self.test_signal_duration_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).grid(row=0, column=1, sticky="w", pady=3)
+        ctk.CTkLabel(self.test_signal_manual_frame, text=self.loc.get('label_sweep_fs')).grid(row=0, column=2, sticky="w", padx=(15, 10), pady=3)
+        self.test_signal_fs_var = ctk.StringVar(value='48000')
+        ctk.CTkEntry(self.test_signal_manual_frame, textvariable=self.test_signal_fs_var, width=WIDGET_ENTRY_WIDTH_DEFAULT).grid(row=0, column=3, sticky="w", pady=3)
+
+        self.test_signal_file_frame = ctk.CTkFrame(input_frame, fg_color="transparent")
+        self.test_signal_file_frame.grid(row=4, column=0, columnspan=3, sticky="ew", padx=0, pady=0)
+        self.test_signal_file_frame.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(self.test_signal_file_frame, text=self.loc.get('label_test_signal')).grid(row=0, column=0, sticky="w", padx=15, pady=(5, 15))
+        self.test_signal_var = ctk.StringVar(value=os.path.join('data', 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav'))
+        self.test_signal_entry = ctk.CTkEntry(self.test_signal_file_frame, textvariable=self.test_signal_var)
+        self.test_signal_entry.grid(row=0, column=1, sticky="ew", padx=15, pady=(5, 15))
+        ctk.CTkButton(
+            self.test_signal_file_frame,
+            text=self.loc.get('button_browse'),
+            command=lambda: browse_file(self.test_signal_var, 'open', FILETYPES_AUDIO),
+            width=WIDGET_BUTTON_WIDTH_BROWSE,
+        ).grid(row=0, column=2, padx=(15, 15), pady=(5, 15))
+
+        self.toggle_test_signal_source()
 
         # === Processing Options Section ===
         processing_frame = ctk.CTkFrame(scroll, corner_radius=0)
@@ -519,6 +556,27 @@ class ImpulciferTab:
         self.toggle_decay_per_channel()
         self.toggle_vbass()
         self.toggle_mic_deviation()
+        self.toggle_test_signal_source()
+
+    def _test_signal_source(self) -> str:
+        """Current test-signal source code (auto/default/manual/file)."""
+        return label_to_code(self._test_signal_labels, self.test_signal_source_var.get(), "auto")
+
+    def toggle_test_signal_source(self) -> None:
+        """Show only the rows relevant to the selected test-signal source."""
+        source = self._test_signal_source()
+        if source == "manual":
+            self.test_signal_manual_frame.grid()
+        else:
+            self.test_signal_manual_frame.grid_remove()
+        if source == "file":
+            self.test_signal_file_frame.grid()
+        else:
+            self.test_signal_file_frame.grid_remove()
+
+    def detect_sweep_preview(self) -> None:
+        """Analyze the recordings folder and report the detected sweep."""
+        run_detect_preview(self)
 
     def toggle_room_correction(self) -> None:
         """Show or hide room correction options."""
@@ -580,10 +638,16 @@ class ImpulciferTab:
 
     def generate_brir(self) -> None:
         """Generate BRIR using Impulcifer with progress dialog."""
+        from tkinter import messagebox
+
         try:
             sync_headphone_compensation_file(self)
             sync_custom_eq_files(self)
             args = build_brir_args(self, self.loc)
+        except ValueError as e:
+            # Invalid manual test-signal parameters etc. — user input error.
+            messagebox.showerror(self.loc.get('message_error'), str(e))
+            return
         except Exception as e:
             logger = get_logger()
             logger.error(f"Processing failed: {e}")

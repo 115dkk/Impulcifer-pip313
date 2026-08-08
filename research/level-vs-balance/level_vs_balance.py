@@ -18,8 +18,8 @@ DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 
 
 def main():
-    test_signal = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl')
-    estimator = ImpulseResponseEstimator.from_pickle(test_signal)
+    test_signal = os.path.join(DIR_PATH, 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav')
+    estimator = ImpulseResponseEstimator.from_wav(test_signal)
 
     for group in ['volume2', 'volume2-48-52', 'objective2', 'None']:
         fig, ax = plt.subplots()

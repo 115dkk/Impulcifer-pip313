@@ -72,6 +72,28 @@ def derive_record_filename(play_path: str) -> str:
     return f"{stem}.wav"
 
 
+def record_filename_for_speakers(speakers) -> str:
+    """Return the canonical recording filename for an explicit speaker list.
+
+    Used by the on-the-fly sweep path where there is no play file to derive
+    the name from — the generated sequence itself knows its speakers.
+    """
+    names = [str(speaker).strip().upper() for speaker in speakers if str(speaker).strip()]
+    if not names:
+        raise ValueError("At least one speaker name is required.")
+    for name in names:
+        if name not in SPEAKER_NAMES:
+            raise ValueError(f'"{name}" is not a recognised speaker name.')
+    if len(set(names)) != len(names):
+        raise ValueError("Speaker names must be unique.")
+    return f'{",".join(names)}.wav'
+
+
+def resolve_record_path_for_speakers(record_dir: str, speakers) -> str:
+    """Join the recording folder with the speaker-list derived filename."""
+    return os.path.join(record_dir, record_filename_for_speakers(speakers))
+
+
 def headphones_record_filename() -> str:
     """Return Impulcifer's canonical headphone-compensation filename."""
     return HEADPHONES_FILENAME
