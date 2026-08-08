@@ -722,15 +722,65 @@ function fillDevices(select, devices) {
 
 /* -------------------------------------------------------------- recorder */
 
+function sweepSourceMode() {
+  return val("rf-sweep-source") || "default";
+}
+
+function gatherSweepPayload() {
+  /* null => legacy play-file flow; otherwise the on-the-fly sweep object
+     understood by the service (mode/speakers/tracks + fs/duration for
+     custom mode). */
+  const mode = sweepSourceMode();
+  if (mode === "file") return null;
+  const sweep = {
+    mode,
+    speakers: val("rf-sweep-speakers"),
+    tracks: val("rf-sweep-layout") || "stereo",
+  };
+  if (mode === "custom") {
+    const defaults = state.sweepDefaults || {};
+    sweep.fs = Math.trunc(numOr("rf-sweep-fs", defaults.default_fs || 48000));
+    sweep.duration = numOr("rf-sweep-duration", defaults.default_duration || 5.0);
+  }
+  return sweep;
+}
+
+function sweepDisplayName(sweep) {
+  if (!sweep) return val("rf-play");
+  const defaults = state.sweepDefaults || {};
+  return fmt(t("label_sweep_generated_summary"), {
+    speakers: sweep.speakers,
+    tracks: sweep.tracks,
+    fs: sweep.fs || defaults.default_fs || 48000,
+    duration: sweep.duration || defaults.default_duration || 5.0,
+  });
+}
+
+function updateSweepSourceVisibility() {
+  const mode = sweepSourceMode();
+  $("rf-sweep-params").hidden = mode === "file";
+  $("rf-sweep-custom").hidden = mode !== "custom";
+  $("rf-play-row").hidden = mode !== "file";
+}
+
+function populateSweepLayouts(layouts) {
+  const select = $("rf-sweep-layout");
+  const previous = select.value;
+  select.replaceChildren();
+  layouts.forEach((layout) => select.add(new Option(layout, layout)));
+  select.value = layouts.includes(previous) ? previous : "stereo";
+}
+
 async function refreshResolvedPath() {
   const node = $("rf-resolved-path");
   const recordDir = val("rf-record-dir");
+  const sweep = gatherSweepPayload();
   const playPath = val("rf-play");
-  if (!recordDir || !playPath || !window.pywebview) {
+  if (!recordDir || (!sweep && !playPath) || !window.pywebview) {
     node.textContent = "";
     return;
   }
-  const response = await api().resolve_recording_paths(recordDir, playPath, "speakers");
+  const response = await api().resolve_recording_paths(recordDir, playPath, "speakers", sweep);
   if (response.ok) {
     state.resolvedRecordPath = response.data.record_path;
     node.textContent = fmt(t("label_record_resolved_path"), { path: response.data.record_path });
@@ -769,14 +819,19 @@ function updateChannelGuidance() {
 }
 
 function gatherRecordingPayload(mode) {
+  const sweep = gatherSweepPayload();
   const payload = {
     mode,
-    play_path: val("rf-play"),
     record_dir: val("rf-record-dir"),
     input_device: val("rf-input-device") || null,
     output_device: val("rf-output-device") || null,
     host_api: val("rf-host-api") || null,
   };
+  if (sweep) {
+    payload.sweep = sweep;
+  } else {
+    payload.play_path = val("rf-play");
+  }
   if (mode === "speakers") {
     payload.force_channels = checked("rf-force-channels");
     payload.channels = payload.force_channels ? Math.trunc(numOr("rf-channels", 2)) : 2;
@@ -790,7 +845,7 @@ async function startSpeakersRecording() {
   const payload = gatherRecordingPayload("speakers");
   await refreshResolvedPath();
   const setup = fmt(t("message_recording_setup_info"), {
-    play_file: payload.play_path,
+    play_file: sweepDisplayName(payload.sweep || null),
     record_file: state.resolvedRecordPath || "—",
     input_device: payload.input_device || "Default",
     output_device: payload.output_device || "Default",
@@ -834,10 +889,66 @@ async function generateSweepSet() {
 
 /* ------------------------------------------------------------------ brir */
 
+function resolveTestSignalValue() {
+  const source = val("bf-test-signal-source") || "auto";
+  if (source === "auto") return "auto";
+  if (source === "default") return "default";
+  if (source === "manual") {
+    const duration = numOr("bf-ts-duration", 6.15);
+    const fs = Math.trunc(numOr("bf-ts-fs", 48000));
+    return `generate:${duration}s@${fs}`;
+  }
+  return val("bf-test-signal") || null;
+}
+
+function updateTestSignalVisibility() {
+  const source = val("bf-test-signal-source") || "auto";
+  $("bf-ts-manual").hidden = source !== "manual";
+  $("bf-ts-file").hidden = source !== "file";
+}
+
+async function detectSweep() {
+  const node = $("bf-detect-result");
+  const button = $("btn-detect-sweep");
+  button.disabled = true;
+  node.hidden = false;
+  node.textContent = "…";
+  try {
+    const response = await api().detect_sweep(val("bf-dir-path"));
+    if (!response.ok) {
+      node.textContent = errorText(response);
+      return;
+    }
+    const data = response.data;
+    if (!data.found) {
+      node.textContent = t("message_sweep_detect_failed");
+      return;
+    }
+    const confidence = t(
+      data.confidence === "high"
+        ? "message_sweep_detect_confidence_high"
+        : "message_sweep_detect_confidence_low"
+    );
+    node.textContent = fmt(t("message_sweep_detected"), {
+      fs: data.fs,
+      duration: data.duration_seconds.toFixed(2),
+      segments: data.n_segments,
+      files: data.source_files.join(", "),
+      confidence,
+    });
+    /* Pre-fill the manual fields so the user can switch to manual mode
+       and tweak from the detected values. */
+    $("bf-ts-duration").value = data.duration_seconds.toFixed(2);
+    $("bf-ts-fs").value = data.fs;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function gatherBrirPayload() {
   const args = {
     dir_path: val("bf-dir-path"),
-    test_signal: val("bf-test-signal") || null,
+    test_signal: resolveTestSignalValue(),
     plot: checked("bf-plot"),
     do_room_correction: isOpen("dis-room"),
     do_headphone_compensation: isOpen("dis-headphone"),
@@ -1040,6 +1151,14 @@ function wireEvents() {
 
   $("rf-play").addEventListener("input", refreshResolvedPath);
   $("rf-record-dir").addEventListener("input", refreshResolvedPath);
+  $("rf-sweep-source").addEventListener("change", () => {
+    updateSweepSourceVisibility();
+    refreshResolvedPath();
+  });
+  $("rf-sweep-speakers").addEventListener("input", refreshResolvedPath);
+  $("rf-sweep-layout").addEventListener("change", refreshResolvedPath);
+  $("bf-test-signal-source").addEventListener("change", updateTestSignalVisibility);
+  $("btn-detect-sweep").addEventListener("click", detectSweep);
   $("rf-force-channels").addEventListener("change", updateChannelGuidance);
   $("rf-channels").addEventListener("input", updateChannelGuidance);
 
@@ -1118,6 +1237,12 @@ async function boot() {
   state.version = data.version;
   state.platform = data.platform;
   state.brirDefaults = data.brir_defaults || {};
+  state.sweepDefaults = data.sweep || {};
+  populateSweepLayouts(
+    (data.sweep && data.sweep.layouts) || ["mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6"]
+  );
+  updateSweepSourceVisibility();
+  updateTestSignalVisibility();
   if (data.ui) {
     state.strings = data.ui.strings || {};
     state.language = data.ui.language || "en";

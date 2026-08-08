@@ -682,3 +682,173 @@ def test_apply_pending_update_reports_false_return() -> None:
     response = service.apply_pending_update()
     assert not response["ok"]
     assert response["error"]["code"] == "UPDATE_FAILED"
+
+
+# ------------------------------------------------------------------
+# On-the-fly sweep (2.11): request validation, playback and sidecars
+# ------------------------------------------------------------------
+
+def test_recording_with_custom_generated_sweep_writes_sidecar(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from core import recorder
+
+    captured = {}
+
+    def fake_play_and_record(**kwargs):
+        captured.update(kwargs)
+        Path(kwargs["record"]).write_bytes(b"recorded")
+
+    monkeypatch.setattr(recorder, "play_and_record", fake_play_and_record)
+    service = ImpulciferApplicationService()
+    started = service.start_recording(
+        {
+            "mode": "speakers",
+            "record_dir": str(tmp_path),
+            "sweep": {
+                "mode": "custom",
+                "fs": 8000,
+                "duration": 1.0,
+                "speakers": "FL,FR",
+                "tracks": "stereo",
+            },
+        }
+    )
+    assert started["ok"]
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+    assert data["job"]["status"] == "succeeded"
+    assert captured["play"] is None
+    assert captured["play_signal"] is not None
+    assert captured["play_signal"].fs == 8000
+    assert captured["play_signal"].record_filename == "FL,FR.wav"
+    assert Path(captured["record"]).name == "FL,FR.wav"
+    # Custom parameters must leave a self-describing test.wav behind.
+    assert (tmp_path / "test.wav").is_file()
+    json.dumps(data)
+
+
+def test_recording_with_default_generated_sweep_writes_no_sidecar(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from core import recorder
+
+    captured = {}
+
+    def fake_play_and_record(**kwargs):
+        captured.update(kwargs)
+        Path(kwargs["record"]).write_bytes(b"recorded")
+
+    monkeypatch.setattr(recorder, "play_and_record", fake_play_and_record)
+    service = ImpulciferApplicationService()
+    started = service.start_recording(
+        {
+            "mode": "speakers",
+            "record_dir": str(tmp_path),
+            "sweep": {"mode": "default", "speakers": ["SL", "SR"], "tracks": "stereo"},
+        }
+    )
+    assert started["ok"]
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"], timeout=15.0)
+    assert data["job"]["status"] == "succeeded"
+    assert Path(captured["record"]).name == "SL,SR.wav"
+    # Default parameters == bundled sweep — no sidecar needed.
+    assert not (tmp_path / "test.wav").exists()
+
+
+def test_headphones_recording_with_generated_sweep(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from core import recorder
+
+    captured = {}
+
+    def fake_play_and_record(**kwargs):
+        captured.update(kwargs)
+        Path(kwargs["record"]).write_bytes(b"recorded")
+
+    monkeypatch.setattr(recorder, "play_and_record", fake_play_and_record)
+    service = ImpulciferApplicationService()
+    started = service.start_recording(
+        {
+            "mode": "headphones",
+            "record_dir": str(tmp_path),
+            "sweep": {"mode": "custom", "fs": 8000, "duration": 1.0},
+        }
+    )
+    assert started["ok"]
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+    assert data["job"]["status"] == "succeeded"
+    assert captured["record"].endswith("headphones.wav")
+    assert captured["channels"] == 2
+    # Generated headphone sweeps are stereo L→R sequences already.
+    assert captured["mono_to_stereo"] is False
+    assert tuple(s.speaker for s in captured["play_signal"].segments) == ("FL", "FR")
+    # Headphone captures never write the speaker-side sidecar.
+    assert not (tmp_path / "test.wav").exists()
+
+
+def test_sweep_request_validation_rejections(tmp_path: Path) -> None:
+    service = ImpulciferApplicationService()
+    base = {"mode": "speakers", "record_dir": str(tmp_path)}
+    assert not service.start_recording({**base, "sweep": {"mode": "bogus"}})["ok"]
+    assert not service.start_recording({**base, "sweep": {"unknown_field": 1}})["ok"]
+    assert not service.start_recording(
+        {**base, "sweep": {"mode": "custom", "speakers": ["TFL"], "tracks": "7.1"}}
+    )["ok"]
+    assert not service.start_recording(
+        {**base, "sweep": {"mode": "custom", "fs": 999, "speakers": "FL", "tracks": "stereo"}}
+    )["ok"]
+    # File mode still demands an existing play file.
+    missing = service.start_recording({**base, "sweep": {"mode": "file"}, "play_path": "nope.wav"})
+    assert missing["error"]["code"] == "FILE_NOT_FOUND"
+
+
+def test_resolve_recording_paths_with_sweep(tmp_path: Path) -> None:
+    service = ImpulciferApplicationService()
+    preview = service.resolve_recording_paths(
+        str(tmp_path), sweep={"mode": "default", "speakers": "BL,BR"}
+    )
+    assert preview["ok"]
+    assert preview["data"]["record_path"].endswith("BL,BR.wav")
+    invalid = service.resolve_recording_paths(
+        str(tmp_path), sweep={"mode": "custom", "speakers": ["TFL"], "tracks": "7.1"}
+    )
+    assert not invalid["ok"]
+
+
+def test_detect_sweep_endpoint(tmp_path: Path) -> None:
+    import numpy as np
+
+    from core.sweep_signal import SweepSpec, build_sweep_playback
+    from core.utils import write_wav
+
+    playback = build_sweep_playback(SweepSpec(fs=8000, duration=1.0, speakers=("FL", "FR")))
+    mix = np.sum(playback.data, axis=0)
+    write_wav(str(tmp_path / "FL,FR.wav"), playback.fs, np.vstack([mix, mix]), bit_depth=32)
+
+    service = ImpulciferApplicationService()
+    response = service.detect_sweep(str(tmp_path))
+    assert response["ok"]
+    assert response["data"]["found"] is True
+    assert response["data"]["fs"] == 8000
+    assert response["data"]["confidence"] == "high"
+    assert response["data"]["is_default"] is False
+    assert response["data"]["generate_spec"].startswith("generate:")
+    json.dumps(response)
+
+    missing = service.detect_sweep(str(tmp_path / "nope"))
+    assert missing["error"]["code"] == "FILE_NOT_FOUND"
+
+
+def test_bootstrap_exposes_sweep_presets() -> None:
+    service = ImpulciferApplicationService()
+    boot = service.bootstrap()
+    assert boot["ok"]
+    sweep = boot["data"]["sweep"]
+    assert "7.1.6" in sweep["layouts"]
+    assert sweep["default_fs"] == 48000
+    assert sweep["default_duration"] == 5.0
+    json.dumps(boot)

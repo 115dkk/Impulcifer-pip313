@@ -77,6 +77,32 @@
             </div>
             <div class="card-body">
               <div class="field-row">
+                <label for="rf-sweep-source" data-i18n="label_sweep_source">Sweep source:</label>
+                <select id="rf-sweep-source">
+                  <option value="default" data-i18n="option_sweep_default">Generate sweep (default parameters)</option>
+                  <option value="custom" data-i18n="option_sweep_custom">Generate sweep (custom parameters)</option>
+                  <option value="file" data-i18n="option_sweep_file">Play an audio file</option>
+                </select>
+              </div>
+              <div id="rf-sweep-params">
+                <div class="field-row">
+                  <label for="rf-sweep-speakers" data-i18n="label_sweep_speakers">Speakers (in order):</label>
+                  <input id="rf-sweep-speakers" class="mono" value="FL,FR" spellcheck="false">
+                </div>
+                <div class="field-row">
+                  <label for="rf-sweep-layout" data-i18n="label_sweep_layout">Track layout:</label>
+                  <select id="rf-sweep-layout">
+                    <option value="stereo">stereo</option>
+                  </select>
+                </div>
+                <div class="field-row" id="rf-sweep-custom" hidden>
+                  <label for="rf-sweep-fs" data-i18n="label_sweep_fs">Sample rate (Hz):</label>
+                  <input id="rf-sweep-fs" class="num mono" type="number" value="48000" min="8000" max="384000">
+                  <label for="rf-sweep-duration" data-i18n="label_sweep_duration">Sweep length (s):</label>
+                  <input id="rf-sweep-duration" class="num mono" type="number" value="5.0" min="0.1" max="60" step="0.05">
+                </div>
+              </div>
+              <div class="field-row" id="rf-play-row" hidden>
                 <label for="rf-play" data-i18n="label_file_to_play">File to Play:</label>
                 <input id="rf-play" class="mono" value="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" spellcheck="false">
                 <button class="btn-link" data-browse="audio" data-target="rf-play" data-i18n="button_browse">Browse</button>
@@ -160,10 +186,27 @@
                 <button class="btn-link" data-browse="dir" data-target="bf-dir-path" data-i18n="button_browse">Browse</button>
               </div>
               <div class="field-row">
+                <label for="bf-test-signal-source" data-i18n="label_test_signal_source">Test signal source:</label>
+                <select id="bf-test-signal-source">
+                  <option value="auto" data-i18n="option_test_signal_auto">Auto-detect from recordings</option>
+                  <option value="default" data-i18n="option_test_signal_default">Bundled default sweep</option>
+                  <option value="manual" data-i18n="option_test_signal_manual">Specify parameters</option>
+                  <option value="file" data-i18n="option_test_signal_file">Custom file</option>
+                </select>
+                <button class="btn-link" id="btn-detect-sweep" data-i18n="button_detect_sweep">Analyze folder</button>
+              </div>
+              <div class="field-row" id="bf-ts-manual" hidden>
+                <label for="bf-ts-duration" data-i18n="label_sweep_duration">Sweep length (s):</label>
+                <input id="bf-ts-duration" class="num mono" type="number" value="6.15" min="0.1" max="200" step="0.01">
+                <label for="bf-ts-fs" data-i18n="label_sweep_fs">Sample rate (Hz):</label>
+                <input id="bf-ts-fs" class="num mono" type="number" value="48000" min="8000" max="384000">
+              </div>
+              <div class="field-row" id="bf-ts-file" hidden>
                 <label for="bf-test-signal" data-i18n="label_test_signal">Test Signal:</label>
                 <input id="bf-test-signal" class="mono" value="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" spellcheck="false">
-                <button class="btn-link" data-browse="audio_pkl" data-target="bf-test-signal" data-i18n="button_browse">Browse</button>
+                <button class="btn-link" data-browse="audio" data-target="bf-test-signal" data-i18n="button_browse">Browse</button>
               </div>
+              <p class="hint" id="bf-detect-result" hidden></p>
             </div>
           </div>
 

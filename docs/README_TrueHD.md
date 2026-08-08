@@ -18,7 +18,6 @@
 | 확장자 | 설명 |
 | --- | --- |
 | `.wav` | 일반 sweep WAV입니다. |
-| `.pkl` | ImpulseResponseEstimator pickle입니다. BRIR 처리에서만 씁니다. |
 | `.mlp`, `.thd`, `.truehd` | FFmpeg로 임시 WAV로 변환한 뒤 처리합니다. |
 
 TrueHD/MLP 파일을 실제로 열 때 FFmpeg가 필요합니다. 코드는 FFmpeg와 ffprobe를 늦게 확인하므로, 일반 WAV만 처리할 때는 FFmpeg 확인을 하지 않습니다.

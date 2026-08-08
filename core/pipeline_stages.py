@@ -66,55 +66,95 @@ def _save_bokeh_analysis_plots(hrir, dir_path, logger):
                           title=name, error=str(e))
 
 
+# Direct-generation spec: "generate:<duration>s@<fs>", e.g. "generate:6.15s@48000".
+# The duration is the actual sweep length in seconds; it is snapped to the
+# generator's discrete length grid (see core.sweep_detection).
+_GENERATE_SPEC_RE = re.compile(
+    r"^generate:(?P<duration>\d+(?:\.\d+)?)s?@(?P<fs>\d+)$", flags=re.IGNORECASE
+)
+
+
+def _bundled_signal_path(name):
+    """Resolve a bundled ``data/`` file, with the source-tree fallback."""
+    path = os.path.join(get_data_path(), name)
+    if os.path.isfile(path):
+        return path
+    local_path = os.path.join(_PROJECT_ROOT, "data", name)
+    if os.path.isfile(local_path):
+        return local_path
+    return None
+
+
 def open_impulse_response_estimator(dir_path, file_path=None):
-    """Opens impulse response estimator from a file
+    """Opens impulse response estimator from a file, spec or detection
 
     Args:
         dir_path: Path to directory
-        file_path: Explicitly given (if any) path to impulse response estimator Pickle or test signal WAV file,
-                  or a simple name/number for predefined test signals
+        file_path: Test signal source. May be a path to a sweep WAV (or
+                  TrueHD) file, a predefined name/number ("default",
+                  "stereo", "1" …), the literal "auto" (recover the sweep
+                  from the folder's recordings; also the behaviour when
+                  nothing is given), or "generate:<duration>s@<fs>" to
+                  construct the estimator directly from parameters.
 
     Returns:
         ImpulseResponseEstimator instance
     """
     if file_path in TEST_SIGNALS:
         test_signal_name = TEST_SIGNALS[file_path]
-        test_signal_path = os.path.join(get_data_path(), test_signal_name)
-
-        if os.path.isfile(test_signal_path):
+        test_signal_path = _bundled_signal_path(test_signal_name)
+        if test_signal_path is not None:
             file_path = test_signal_path
         else:
-            local_path = os.path.join(_PROJECT_ROOT, "data", test_signal_name)
-            if os.path.isfile(local_path):
-                file_path = local_path
-            else:
-                logger = get_logger()
-                logger.warning("cli_warning_test_signal_not_found", signal=file_path, name=test_signal_name)
+            logger = get_logger()
+            logger.warning("cli_warning_test_signal_not_found", signal=file_path, name=test_signal_name)
 
-    if file_path is None:
-        if os.path.isfile(os.path.join(dir_path, "test.pkl")):
-            file_path = os.path.join(dir_path, "test.pkl")
-        elif os.path.isfile(os.path.join(dir_path, "test.wav")):
-            file_path = os.path.join(dir_path, "test.wav")
+    if isinstance(file_path, str):
+        generate_match = _GENERATE_SPEC_RE.match(file_path)
+        if generate_match:
+            from core.sweep_detection import snap_sweep_samples
+
+            fs = int(generate_match.group("fs"))
+            duration = float(generate_match.group("duration"))
+            _m, n_samples, _deviation = snap_sweep_samples(duration * fs, fs)
+            # (N-1)/fs mirrors from_wav so the ceil in the generator cannot
+            # overshoot to the next grid point.
+            return ImpulseResponseEstimator(min_duration=(n_samples - 1) / fs, fs=fs)
+
+    if file_path is None or file_path == "auto":
+        sidecar_path = os.path.join(dir_path, "test.wav")
+        if os.path.isfile(sidecar_path):
+            file_path = sidecar_path
         else:
-            default_signal_name = TEST_SIGNALS["default"]
-            default_signal_path = os.path.join(get_data_path(), default_signal_name)
+            from core.sweep_detection import detect_sweep_parameters
 
-            if os.path.isfile(default_signal_path):
-                file_path = default_signal_path
-            else:
-                local_path = os.path.join(_PROJECT_ROOT, "data", default_signal_name)
-                if os.path.isfile(local_path):
-                    file_path = local_path
-                else:
-                    raise FileNotFoundError(
-                        f"기본 테스트 신호 파일을 찾을 수 없습니다: {default_signal_name}"
-                    )
+            logger = get_logger()
+            detection = detect_sweep_parameters(dir_path)
+            if (
+                detection is not None
+                and detection.confidence == "high"
+                and not detection.is_default
+            ):
+                logger.info(
+                    "cli_info_sweep_detected",
+                    fs=detection.fs,
+                    duration=f"{detection.duration_seconds:.2f}",
+                )
+                return detection.to_estimator()
+            if detection is None or detection.confidence != "high":
+                logger.warning("cli_warning_sweep_detect_fallback")
+            # Default-equivalent detection (or fallback) uses the bundled
+            # WAV so the legacy byte-exact from_wav path is preserved.
+            default_signal_name = TEST_SIGNALS["default"]
+            default_signal_path = _bundled_signal_path(default_signal_name)
+            if default_signal_path is None:
+                raise FileNotFoundError(
+                    f"기본 테스트 신호 파일을 찾을 수 없습니다: {default_signal_name}"
+                )
+            file_path = default_signal_path
 
     if re.match(r"^.+\.wav$", file_path, flags=re.IGNORECASE):
         estimator = ImpulseResponseEstimator.from_wav(file_path)
-    elif re.match(r"^.+\.pkl$", file_path, flags=re.IGNORECASE):
-        estimator = ImpulseResponseEstimator.from_pickle(file_path)
     elif re.match(r"^.+\.(mlp|thd|truehd)$", file_path, flags=re.IGNORECASE):
         # auto_install=True로 호출해 사용자가 .mlp/.thd/.truehd 파일을 직접
         # 지정한 경우 FFmpeg가 없으면 기존처럼 자동 설치 UX를 시도한다.
@@ -137,7 +177,7 @@ def open_impulse_response_estimator(dir_path, file_path=None):
                 os.remove(temp_wav_path)
     else:
         raise TypeError(
-            f'알 수 없는 파일 확장자: "{file_path}"\n유효한 파일 확장자: .wav, .pkl, .mlp, .thd, .truehd'
+            f'알 수 없는 파일 확장자: "{file_path}"\n유효한 파일 확장자: .wav, .mlp, .thd, .truehd'
         )
 
     return estimator

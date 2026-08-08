@@ -21,7 +21,7 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEMO_SOURCE_DIR = PROJECT_ROOT / "data" / "demo"
 TEST_SIGNAL_PATH = (
-    PROJECT_ROOT / "data" / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl"
+    PROJECT_ROOT / "data" / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
 )
 RUN_ENV_VAR = "IMPULCIFER_RUN_BRIR_INTEGRITY"
 REFERENCE_REF_ENV_VAR = "IMPULCIFER_BRIR_REFERENCE_REF"
@@ -93,7 +93,7 @@ def _required_paths(project_root: Path) -> list[Path]:
     demo_dir = project_root / "data" / "demo"
     return [
         demo_dir,
-        project_root / "data" / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl",
+        project_root / "data" / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
         demo_dir / "headphones.wav",
         demo_dir / "FL,FR.wav",
         demo_dir / "FC.wav",
@@ -106,7 +106,7 @@ def _run_impulcifer(project_root: Path, demo_dir: Path, scenario: BrirScenario) 
     env = os.environ.copy()
     env.setdefault("MPLBACKEND", "Agg")
     timeout = int(env.get(TIMEOUT_ENV_VAR, "600"))
-    test_signal_path = project_root / "data" / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl"
+    test_signal_path = project_root / "data" / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
 
     command = [
         sys.executable,

@@ -99,7 +99,6 @@ FONT_DIR = get_resource_path("font")
 IMG_DIR = get_resource_path("img")
 
 DEFAULT_SWEEP_FILE = get_data_path("sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
-DEFAULT_SWEEP_PICKLE = get_data_path("sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl")
 DEFAULT_FONT_FILE = find_pretendard_font_path() or get_font_path("PretendardVariable.ttf")
 
 def ensure_dir_exists(directory):

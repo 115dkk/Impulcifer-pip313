@@ -304,12 +304,20 @@ def play_and_record(
         progress_callback=None,
         progress_interval=0.25,
         debug_plots=False,
-        mono_to_stereo=False):
+        mono_to_stereo=False,
+        play_signal=None):
     """Plays one file and records another at the same time.
 
     Now supports TrueHD/MLP files in addition to WAV.
 
     Args:
+        play_signal: Optional in-memory sweep sequence
+            (``core.sweep_signal.SweepPlayback``). When given, ``play`` is
+            ignored — the sequence's samples, sampling rate and exact
+            per-speaker segments come straight from the object, so no file
+            load or filename-based segment inference happens. Everything
+            downstream (device selection, blocking ``sd.play``, recording
+            thread) is identical to the file path.
         mono_to_stereo: When ``True`` and the loaded play file is
             1-channel, the mono signal is duplicated onto both output
             channels. **Speaker-side capture must keep this off**:
@@ -322,22 +330,31 @@ def play_and_record(
             simultaneously (yielding a generic L=R EQ — the user is
             warned about this trade-off in the GUI).
     """
+    if play_signal is None and play is None:
+        raise TypeError('Either "play" or "play_signal" is required.')
+
     # Create output directory
     out_dir, out_file = os.path.split(os.path.abspath(record))
     os.makedirs(out_dir, exist_ok=True)
 
+    play_label = play_signal.display_name if play_signal is not None else str(play or "")
     _emit_progress(
         progress_callback,
-        RecorderProgressEvent(phase="loading", message=str(play or "")),
+        RecorderProgressEvent(phase="loading", message=play_label),
     )
 
-    # ``expand=True`` keeps mono inputs (e.g. the bundled
-    # ``sweep-6.15s-...wav`` headphone-compensation sweep) on a 2-D
-    # ``(channels, samples)`` shape so the channel/duration math below
-    # never indexes a missing axis. Dropping ``expand`` previously caused
-    # ``data.shape[1]`` to raise ``tuple index out of range`` for any
-    # 1-channel file.
-    fs, data, channel_info = read_audio(play, expand=True)
+    if play_signal is not None:
+        fs = int(play_signal.fs)
+        data = np.atleast_2d(np.asarray(play_signal.data))
+        channel_info = None
+    else:
+        # ``expand=True`` keeps mono inputs (e.g. the bundled
+        # ``sweep-6.15s-...wav`` headphone-compensation sweep) on a 2-D
+        # ``(channels, samples)`` shape so the channel/duration math below
+        # never indexes a missing axis. Dropping ``expand`` previously caused
+        # ``data.shape[1]`` to raise ``tuple index out of range`` for any
+        # 1-channel file.
+        fs, data, channel_info = read_audio(play, expand=True)
     if channel_info:
         print(f"Detected TrueHD/MLP file: {play}")
         print(f"Channel layout ({len(channel_info)} channels): {', '.join(channel_info)}")
@@ -346,7 +363,8 @@ def play_and_record(
             print("WARNING: This file contains more than 8 channels.")
             print("Make sure your audio interface supports this many output channels.")
     elif (
-        os.path.splitext(play)[1].lower() in {'.mlp', '.thd', '.truehd'}
+        play is not None
+        and os.path.splitext(play)[1].lower() in {'.mlp', '.thd', '.truehd'}
         and is_truehd_atmos_object_master(play)
     ):
         # Only Atmos-object masters (profile "Dolby TrueHD + Dolby Atmos",
@@ -374,7 +392,10 @@ def play_and_record(
 
     n_channels = data.shape[0]
     duration = data.shape[1] / fs
-    segments = infer_sweep_segments(play, duration)
+    if play_signal is not None:
+        segments = tuple(play_signal.segments)
+    else:
+        segments = infer_sweep_segments(play, duration)
     print(f"Audio info: {fs}Hz, {n_channels} channels, {data.shape[1]} samples")
     print(f"Duration: {duration:.2f} seconds")
 

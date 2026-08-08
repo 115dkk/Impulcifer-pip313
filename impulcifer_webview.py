@@ -13,10 +13,6 @@ from infra.resource_helper import get_resource_path
 # Native file dialog filters, mirroring gui/constants.py FILETYPES_*.
 _FILE_DIALOG_FILTERS: dict[str, tuple[str, ...]] = {
     "audio": ("Audio files (*.wav;*.mlp;*.thd;*.truehd)", "All files (*.*)"),
-    "audio_pkl": (
-        "Audio / estimator files (*.wav;*.pkl;*.mlp;*.thd;*.truehd)",
-        "All files (*.*)",
-    ),
     "text": ("EQ / CSV files (*.csv;*.txt)", "All files (*.*)"),
     "wav": ("WAV files (*.wav)", "All files (*.*)"),
 }
@@ -201,11 +197,15 @@ class WebviewBridge:
         record_dir: Any,
         play_path: Any = None,
         mode: str = "speakers",
+        sweep: Any = None,
     ) -> dict[str, Any]:
-        return self._service.resolve_recording_paths(record_dir, play_path, mode)
+        return self._service.resolve_recording_paths(record_dir, play_path, mode, sweep)
 
     def generate_sweep_set(self, dir_path: Any) -> dict[str, Any]:
         return self._service.generate_sweep_set(dir_path)
+
+    def detect_sweep(self, dir_path: Any) -> dict[str, Any]:
+        return self._service.detect_sweep(dir_path)
 
     def open_path(self, path: Any = None) -> dict[str, Any]:
         return self._service.open_path(path)

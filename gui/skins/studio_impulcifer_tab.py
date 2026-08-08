@@ -17,7 +17,7 @@ from gui.brir_args import (
     sync_custom_eq_files,
     sync_headphone_compensation_file,
 )
-from gui.constants import FILETYPES_AUDIO_WITH_PKL, FILETYPES_TEXT, FILETYPES_WAV
+from gui.constants import FILETYPES_AUDIO, FILETYPES_TEXT, FILETYPES_WAV
 from gui.dialogs import ProcessingDialog
 from gui.skins.studio_widgets import (
     add_card_header,
@@ -28,6 +28,11 @@ from gui.skins.studio_widgets import (
     make_card,
     make_card_body,
     make_page_header,
+)
+from gui.sweep_source import (
+    label_to_code,
+    run_detect_preview,
+    test_signal_source_labels,
 )
 from gui.theme import COLORS
 from gui.utils import (
@@ -58,6 +63,14 @@ class StudioImpulciferTab:
         self.test_signal_var = ctk.StringVar(
             value=os.path.join("data", "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
         )
+        # Test signal source — auto detection default, same contract as
+        # the Stable tab (labels/codes shared via gui.sweep_source).
+        self._test_signal_labels = test_signal_source_labels(self.loc)
+        self.test_signal_source_var = ctk.StringVar(value=self._test_signal_labels["auto"])
+        self.test_signal_duration_var = ctk.StringVar(value="6.15")
+        self.test_signal_fs_var = ctk.StringVar(value="48000")
+        self.test_signal_manual_frame: ctk.CTkFrame | None = None
+        self.test_signal_file_frame: ctk.CTkFrame | None = None
 
         self.do_room_correction_var = ctk.BooleanVar(value=False)
         self.room_target_var = ctk.StringVar()
@@ -163,15 +176,72 @@ class StudioImpulciferTab:
             change_label=self.loc.get("studio_change_button"),
             fonts=self.fonts,
         )
+
+        # Test signal source selector + detect preview. The manual and
+        # file rows live in sub-frames so each mode shows only its own.
+        source_row = ctk.CTkFrame(body, fg_color="transparent")
+        source_row.grid(row=1, column=0, columnspan=2, sticky="ew", pady=6)
+        source_row.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(
+            source_row,
+            text=self.loc.get("label_test_signal_source"),
+            font=(self.fonts or {}).get("small") or ctk.CTkFont(size=12),
+            text_color=COLORS["fg-1"],
+            anchor="w",
+            width=140,
+        ).grid(row=0, column=0, sticky="w", padx=(0, 16))
+        ctk.CTkOptionMenu(
+            source_row,
+            variable=self.test_signal_source_var,
+            values=list(self._test_signal_labels.values()),
+            command=lambda *_: self.toggle_test_signal_source(),
+        ).grid(row=0, column=1, sticky="w")
+        ctk.CTkButton(
+            source_row,
+            text=self.loc.get("button_detect_sweep"),
+            command=lambda: run_detect_preview(self),
+        ).grid(row=0, column=2, padx=(10, 0))
+
+        self.test_signal_manual_frame = ctk.CTkFrame(body, fg_color="transparent")
+        self.test_signal_manual_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=2)
+        ctk.CTkLabel(
+            self.test_signal_manual_frame,
+            text=self.loc.get("label_sweep_duration"),
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["fg-1"],
+            anchor="w",
+            width=140,
+        ).grid(row=0, column=0, sticky="w", padx=(0, 16))
+        ctk.CTkEntry(
+            self.test_signal_manual_frame,
+            textvariable=self.test_signal_duration_var,
+            width=100,
+        ).grid(row=0, column=1, sticky="w")
+        ctk.CTkLabel(
+            self.test_signal_manual_frame,
+            text=self.loc.get("label_sweep_fs"),
+            font=ctk.CTkFont(size=12),
+            text_color=COLORS["fg-1"],
+            anchor="w",
+        ).grid(row=0, column=2, sticky="w", padx=(16, 8))
+        ctk.CTkEntry(
+            self.test_signal_manual_frame,
+            textvariable=self.test_signal_fs_var,
+            width=100,
+        ).grid(row=0, column=3, sticky="w")
+
+        self.test_signal_file_frame = ctk.CTkFrame(body, fg_color="transparent")
+        self.test_signal_file_frame.grid(row=3, column=0, columnspan=2, sticky="ew")
         add_field_row(
-            body,
-            row=1,
+            self.test_signal_file_frame,
+            row=0,
             label=self.loc.get("label_test_signal"),
             value_var=self.test_signal_var,
-            on_change=lambda: browse_file(self.test_signal_var, "open", FILETYPES_AUDIO_WITH_PKL),
+            on_change=lambda: browse_file(self.test_signal_var, "open", FILETYPES_AUDIO),
             change_label=self.loc.get("studio_change_button"),
             fonts=self.fonts,
         )
+        self.toggle_test_signal_source()
 
     # ------------------------------------------------------------------
     # Card 02 — Processing options (disclosures)
@@ -608,16 +678,41 @@ class StudioImpulciferTab:
         self.update_balance_entry()
         self.toggle_decay_per_channel()
         self.toggle_mic_deviation()
+        self.toggle_test_signal_source()
+
+    def _test_signal_source(self) -> str:
+        """Current test-signal source code (auto/default/manual/file)."""
+        return label_to_code(self._test_signal_labels, self.test_signal_source_var.get(), "auto")
+
+    def toggle_test_signal_source(self) -> None:
+        """Show only the rows relevant to the selected test-signal source."""
+        source = self._test_signal_source()
+        if self.test_signal_manual_frame is not None:
+            if source == "manual":
+                self.test_signal_manual_frame.grid()
+            else:
+                self.test_signal_manual_frame.grid_remove()
+        if self.test_signal_file_frame is not None:
+            if source == "file":
+                self.test_signal_file_frame.grid()
+            else:
+                self.test_signal_file_frame.grid_remove()
 
     # ------------------------------------------------------------------
     # Generate
     # ------------------------------------------------------------------
     def generate_brir(self) -> None:
         """Run :func:`impulcifer.main` in a worker thread with progress dialog."""
+        from tkinter import messagebox
+
         try:
             sync_headphone_compensation_file(self)
             sync_custom_eq_files(self)
             args = build_brir_args(self, self.loc)
+        except ValueError as e:
+            # Invalid manual test-signal parameters etc. — user input error.
+            messagebox.showerror(self.loc.get("message_error"), str(e))
+            return
         except Exception as e:
             logger = get_logger()
             logger.error(f"Processing failed: {e}")

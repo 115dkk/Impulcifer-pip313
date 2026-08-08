@@ -807,9 +807,8 @@ def main_gui():
             command=lambda: openfile(
                 test_signal,
                 (
-                    ("Audio files", "*.wav *.pkl *.mlp *.thd *.truehd"),
+                    ("Audio files", "*.wav *.mlp *.thd *.truehd"),
                     ("WAV files", "*.wav"),
-                    ("Pickle files", "*.pkl"),
                     ("TrueHD/MLP files", "*.mlp *.thd *.truehd"),
                     ("All files", "*.*"),
                 ),

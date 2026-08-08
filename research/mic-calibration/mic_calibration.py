@@ -18,7 +18,7 @@ DIR_PATH = os.path.abspath(os.path.join(__file__, os.pardir))
 
 
 def main(test_signal):
-    estimator = ImpulseResponseEstimator.from_pickle(test_signal)
+    estimator = ImpulseResponseEstimator.from_wav(test_signal)
 
     # Room mic calibration
     room_mic_calibration = os.path.join(DIR_PATH, 'room-mic-calibration.csv')
@@ -121,7 +121,7 @@ def main(test_signal):
 def create_cli():
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument('--test_signal', type=str, required=True,
-                            help='Path to sine sweep test signal or pickled impulse response estimator.')
+                            help='Path to sine sweep test signal WAV file.')
     cli_args = arg_parser.parse_args()
     return vars(cli_args)
 

@@ -9,6 +9,7 @@ from typing import Any
 
 from core.constants import SPEAKER_NAMES
 from core.pipeline import ProcessingConfig
+from gui.sweep_source import resolve_test_signal_arg
 from gui.utils import safe_get_double, safe_get_int, safe_get_string
 
 _PROCESSING_DEFAULTS = {field.name: field.default for field in fields(ProcessingConfig)}
@@ -61,7 +62,7 @@ def build_brir_args(tab: Any, loc: Any) -> dict:
     """Build ``impulcifer.main`` kwargs from a GUI tab instance."""
     args = {
         "dir_path": tab.dir_path_var.get(),
-        "test_signal": tab.test_signal_var.get(),
+        "test_signal": resolve_test_signal_arg(tab, loc),
         "plot": tab.plot_var.get(),
         "do_room_correction": tab.do_room_correction_var.get(),
         "do_headphone_compensation": tab.do_headphone_compensation_var.get(),

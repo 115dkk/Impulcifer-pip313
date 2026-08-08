@@ -42,7 +42,12 @@ core/
   ffmpeg_discovery.py     ← FFmpeg 검색/설치 + lazy 초기화 globals (audit #115-9 분리)
   audio_truehd.py         ← TrueHD/MLP 디코드 + read_audio (audit #115-9 분리)
   ffmpeg_utils.py         ← 위 둘의 하위 호환 re-export 셸
-  constants.py            ← 스피커 이름/딜레이/speaker_side() 등 상수
+  constants.py            ← 스피커 이름/딜레이/speaker_side()/스윕 기본 파라미터 등
+                            임포트 경량 상수 (bootstrap이 직접 참조)
+  sweep_signal.py         ← 즉석 스윕 시퀀스 생성 (SweepSpec/SweepPlayback,
+                            test.wav 사이드카; 같은 머신의 파일 재생과 비트 동일,
+                            번들 WAV 대비 1 float32 ULP 이내[플랫폼 libm] — 2.11)
+  sweep_detection.py      ← 녹음에서 스윕 파라미터 복원 (M-그리드 스냅 자동 감지 — 2.11)
   pipeline.py             ← ProcessingConfig + BRIRPipeline (stage table 기반
                             오케스트레이터, 이슈 #138 C1에서 run() 분할)
   pipeline_stages.py      ← DSP 스테이지 헬퍼 7종 (이슈 #138 C1에서
@@ -76,6 +81,7 @@ infra/
                             get_install_kind, normalized_platform — 이슈 #138
                             C3에서 4개 프로브·6개 래더를 단일화)
   resource_helper.py      ← 리소스 경로 헬퍼
+  version.py              ← 경량 버전 해석 정본 (DSP 임포트 없음 — bootstrap/impulcifer 공용)
   _build_info.py          ← 빌드 시 생성되는 버전/타입 마커
 updater/
   update_checker.py       ← GitHub 릴리스 기반 업데이트 확인
@@ -93,7 +99,9 @@ updater/
 
 `impulcifer.py`의 `main()`은 `**kwargs`를 받아 `core.pipeline.ProcessingConfig.from_kwargs()`로 전달하는 얇은 래퍼다(이슈 #113/#115 audit에서 기존의 32개 명시적 인자 시그니처를 통합). GUI의 `generate_brir()`/`gui.brir_args.build_brir_args`와 CLI(`create_cli`)가 인자 딕셔너리를 조립해 넘기며, `ProcessingConfig`에 없는 키(예: 폐기된 호환 플래그)는 `from_kwargs`가 무시한다. 따라서 파라미터의 정본 기본값은 `ProcessingConfig` 필드에만 존재하므로, 새 파라미터는 `ProcessingConfig`에 필드를 추가하면 CLI·GUI·파이프라인에 자동 반영된다. 실제 BRIR 파이프라인 단계 시퀀스는 `core.pipeline.BRIRPipeline._stage_table()`이 보유한다 — 단계별 게이트·진행률 스텝 수·메서드가 한 테이블에 있고, 진행률 총계도 같은 테이블에서 도출된다(이슈 #138 C1에서 510줄 `run()`을 분할). DSP 단계 헬퍼는 `core/pipeline_stages.py`에 있으며 `impulcifer.py`는 하위 호환 재export만 유지한다.
 
-데모 테스트 신호 pkl(`data/sweep-*.pkl`)은 `__main__.ImpulseResponseEstimator`로 피클되어 있다. CLI 실행 시(`python impulcifer.py`) `__main__`이 곧 impulcifer 모듈이므로, impulcifer 모듈 네임스페이스에 `ImpulseResponseEstimator` 이름이 반드시 남아 있어야 한다(제거하면 모든 `--test_signal=*.pkl` 실행이 죽는다). `tests/test_pickle_compat.py`가 이 계약을 고정한다.
+테스트 신호의 정본은 WAV(및 즉석 생성)다. 레거시 `.pkl` estimator 지원은 2.11.0에서 전면 삭제되었다(GUI/standalone에서는 `__main__` 불일치로 원래 동작하지 않던 죽은 기능) — `.pkl` 입력을 다시 추가하지 말 것. 스윕은 `ImpulseResponseEstimator(min_duration, fs)`로 결정론적으로 재생성되며 유효 길이는 이산 그리드(M×단위, 48kHz에서 약 3.08s)를 이룬다. 즉석 생성/사이드카(`test.wav`)는 `core/sweep_signal.py`, 녹음에서의 스윕 파라미터 복원(자동 감지)과 `auto`/`generate:<길이>s@<fs>` 스펙은 `core/sweep_detection.py` + `core/pipeline_stages.open_impulse_response_estimator`가 담당한다. `--test_signal` 미지정은 `auto`와 동일 체인(test.wav → 감지 → 번들 기본 wav)이다. `tests/test_sweep_signal.py`가 "즉석 생성 == 번들 WAV 비트 동일" 계약을, `tests/test_sweep_detection.py`가 그리드 스냅 복원을 고정한다.
+
+`application/impulcifer_service.py`의 `bootstrap()`은 **임포트 경량이어야 한다**(WebView 첫 페인트가 이 응답을 기다린다). 버전은 `infra/version.py`(DSP 스택 무관), 스윕 프리셋 상수는 `core/constants.py`에서 가져온다 — bootstrap 경로에 `import impulcifer`나 `core.sweep_signal`(scipy 유발) 같은 무거운 임포트를 넣지 말 것. 무거운 DSP 임포트는 bootstrap이 띄우는 백그라운드 프리웜 스레드(`_start_dsp_prewarm`)가 미리 처리한다.
 
 `core/recorder.py`의 `play_and_record()`는 `sd.play(blocking=True)` + `Thread.join()`으로 완전한 블로킹 함수다. 이 동작을 변경하지 말 것.
 
@@ -280,7 +288,7 @@ else:
 ```bash
 python impulcifer.py \
     --dir_path=data/demo \
-    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl \
+    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav \
     --vbass --vbass_freq=250
 ```
 
@@ -289,7 +297,7 @@ python impulcifer.py \
 ```bash
 python impulcifer.py \
     --dir_path=data/demo \
-    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl
+    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav
 ```
 
 출력 파일: `data/demo/hesuvi.wav`
@@ -305,7 +313,7 @@ sha256sum data/demo/hesuvi.wav
 # 기준(master) 출력 — 작업 트리를 건드리지 않도록 임시 worktree 사용
 git worktree add /tmp/brir-baseline origin/master
 cd /tmp/brir-baseline && python impulcifer.py --dir_path=data/demo \
-    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl \
+    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav \
     --vbass --vbass_freq=250
 sha256sum data/demo/hesuvi.wav
 cd - && git worktree remove --force /tmp/brir-baseline
@@ -332,7 +340,7 @@ git stash
 git checkout master
 python impulcifer.py \
     --dir_path=data/demo \
-    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.pkl \
+    --test_signal=data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav \
     --vbass --vbass_freq=250
 cp data/demo/hesuvi.wav /tmp/hesuvi_ref.wav
 
