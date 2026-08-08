@@ -45,7 +45,8 @@ core/
   constants.py            ← 스피커 이름/딜레이/speaker_side()/스윕 기본 파라미터 등
                             임포트 경량 상수 (bootstrap이 직접 참조)
   sweep_signal.py         ← 즉석 스윕 시퀀스 생성 (SweepSpec/SweepPlayback,
-                            test.wav 사이드카; 기본 파라미터는 번들 WAV와 비트 동일 — 2.11)
+                            test.wav 사이드카; 같은 머신의 파일 재생과 비트 동일,
+                            번들 WAV 대비 1 float32 ULP 이내[플랫폼 libm] — 2.11)
   sweep_detection.py      ← 녹음에서 스윕 파라미터 복원 (M-그리드 스냅 자동 감지 — 2.11)
   pipeline.py             ← ProcessingConfig + BRIRPipeline (stage table 기반
                             오케스트레이터, 이슈 #138 C1에서 run() 분할)

@@ -39,13 +39,39 @@ BUNDLED_STEREO = (
 FAST_SPEC_KWARGS = {"fs": 8000, "duration": 1.0}
 
 
-def test_default_playback_is_bit_identical_to_bundled_wav():
+def test_default_playback_matches_bundled_wav():
+    """Generated default sequence ≡ bundled sweep-seg WAV.
+
+    Strict bit-identity to the committed artifact only holds on the
+    platform whose libm produced it (transcendental functions differ by
+    1 ULP across platforms — same reason BRIR hashes are compared
+    same-machine, not against absolute baselines). The cross-platform
+    contract is: same shape/fs and at most 1 float32 ULP per sample.
+    """
     playback = build_sweep_playback(SweepSpec())
     fs, data = read_wav(str(BUNDLED_STEREO))
     assert playback.fs == fs == DEFAULT_SWEEP_FS
     assert playback.data.shape == data.shape
-    assert np.array_equal(playback.data, data)
+    assert np.max(np.abs(playback.data - data)) <= 2**-23  # 1 float32 ULP at |x|<=1
     assert playback.record_filename == "FL,FR.wav"
+
+
+def test_playback_is_bit_identical_to_locally_written_wav(tmp_path):
+    """On any one machine, on-the-fly playback == playing a materialized file.
+
+    This is the real compatibility contract: the in-memory PCM_32
+    round trip must reproduce exactly what write_wav would put on disk,
+    so recording without a file behaves bit-for-bit like recording with
+    one generated on the same machine.
+    """
+    from core.utils import write_wav
+
+    playback = build_sweep_playback(SweepSpec(speakers=("FL", "FR")))
+    path = tmp_path / "sweep-seg-local.wav"
+    write_wav(str(path), playback.fs, playback.estimator.sweep_sequence(["FL", "FR"], "stereo"), bit_depth=32)
+    fs, data = read_wav(str(path))
+    assert fs == playback.fs
+    assert np.array_equal(playback.data, data)
 
 
 def test_default_segments_match_filename_inference():
