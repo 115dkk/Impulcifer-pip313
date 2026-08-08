@@ -28,9 +28,8 @@ def get_ffmpeg_version(ffmpeg_path):
                               capture_output=True, text=True, timeout=10,
                               encoding='utf-8', errors='replace')
         if result.returncode == 0:
-            # 첫 번째 줄에서 버전 정보 추출
+            # 'ffmpeg version X.Y.Z' 형태의 첫 줄에서 버전 추출
             first_line = result.stdout.split('\n')[0]
-            # 'ffmpeg version X.Y.Z' 형태에서 버전 추출
             if 'version' in first_line:
                 version_part = first_line.split('version')[1].strip().split()[0]
                 
@@ -51,11 +50,9 @@ def get_ffmpeg_version(ffmpeg_path):
                     except (ValueError, IndexError):
                         return (1, 0)  # 파싱 실패시 구버전으로 간주
                 
-                # 숫자로 시작하는 일반 버전 추출
                 version_nums = []
                 for part in version_part.split('.'):
                     try:
-                        # 숫자가 아닌 문자가 나오면 중단
                         clean_part = ''
                         for char in part:
                             if char.isdigit():
@@ -143,9 +140,7 @@ def install_ffmpeg():
     
     try:
         if system == 'windows':
-            # Windows: Chocolatey 또는 winget 사용
-            
-            # 먼저 chocolatey 시도
+            # Chocolatey → winget 순으로 시도
             try:
                 subprocess.run(['choco', '--version'], capture_output=True, check=True, timeout=10,
                              encoding='utf-8', errors='replace')
@@ -158,7 +153,6 @@ def install_ffmpeg():
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 pass
 
-            # winget 시도
             try:
                 subprocess.run(['winget', '--version'], capture_output=True, check=True, timeout=10,
                              encoding='utf-8', errors='replace')
@@ -171,8 +165,7 @@ def install_ffmpeg():
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 pass
                 
-        elif system == 'darwin':  # macOS
-            # Homebrew 사용
+        elif system == 'darwin':
             try:
                 subprocess.run(['brew', '--version'], capture_output=True, check=True, timeout=10,
                              encoding='utf-8', errors='replace')

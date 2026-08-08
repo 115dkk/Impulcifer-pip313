@@ -121,7 +121,6 @@ def optimize_png_size(file_path, n_colors=60):
 
 def save_fig_as_png(file_path, fig, n_colors=60):
     """Saves figure and optimizes file size."""
-    # Ensure the directory exists before saving
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     
     fig.savefig(file_path, bbox_inches='tight')

@@ -638,7 +638,7 @@ def _parse_lines(lines, state, base_dir, depth, visited):
                 continue
             condition = _try_evaluate_condition(value, state.srate)
             if condition is None:
-                # 평가 불가: 블록 전체를 보수적으로 바이패스(기존 동작).
+                # 평가 불가: 블록 전체를 보수적으로 바이패스.
                 state.bypassed.append(
                     EqApoCommandReport(line_number, key, line.strip(), REASON_CONDITIONAL)
                 )

@@ -29,9 +29,6 @@ _RECORDING_FIELDS = {
     "confirm_warnings",
     "sweep",
 }
-# On-the-fly sweep sub-object of a recording request. mode "default" and
-# "custom" generate the sequence in memory (no play file needed); "file"
-# (or an absent sweep object) keeps the legacy play_path behaviour.
 _SWEEP_REQUEST_FIELDS = {"mode", "fs", "duration", "speakers", "tracks"}
 _SWEEP_MODES = ("default", "custom", "file")
 
@@ -59,9 +56,6 @@ _THEME_CODES = ("dark", "light", "system")
 # Mirrors gui.skins.SKIN_CHOICES without importing the gui package (this
 # module must stay importable without tkinter).
 _SKIN_CODES = ("stable", "studio")
-# gui_main launcher targets; ``webview`` is the default since 2.10 and CTk
-# stays supported for the rest of version 2 (kept frozen like the legacy GUI
-# from version 3 on — not removed).
 _FRONTEND_CODES = ("webview", "ctk")
 
 _dsp_prewarm_started = False
@@ -143,7 +137,7 @@ def _brir_field_defaults() -> dict[str, Any]:
     """Map every defaulted ``ProcessingConfig`` field to its canonical default.
 
     Shipped to frontends via ``bootstrap()`` so they never hardcode copies of
-    pipeline defaults (audit #138 F020).
+    pipeline defaults.
     """
     global _brir_field_defaults_cache
     if _brir_field_defaults_cache is None:
@@ -241,12 +235,9 @@ class ImpulciferApplicationService:
         # The DSP stack (impulcifer → core → scipy …) must never be able to
         # kill the UI shell: a packaging regression there should surface as a
         # readable job/system-info error, not as a dead bootstrap that leaves
-        # raw i18n keys and an empty language list on screen (observed with
-        # the 2.10.0 standalone, whose bundle was missing a lazy scipy
-        # vendored module). infra.version is deliberately DSP-free — reading
-        # the version via ``import impulcifer`` used to pull scipy/matplotlib/
-        # bokeh in and made bootstrap (= the WebView's first paint) take
-        # seconds.
+        # raw i18n keys on screen. infra.version is deliberately DSP-free —
+        # ``import impulcifer`` would pull scipy/matplotlib/bokeh into the
+        # WebView's first paint and cost seconds.
         try:
             from infra.version import get_app_version
 
@@ -263,8 +254,6 @@ class ImpulciferApplicationService:
         except Exception:
             brir_defaults = {}
 
-        # On-the-fly sweep presets for the recorder UI (layout choices and
-        # canonical defaults) — degrades to an empty dict like the above.
         # core.constants is import-light on purpose; do NOT source these
         # from core.sweep_signal here (that would drag scipy into bootstrap).
         try:
@@ -288,7 +277,6 @@ class ImpulciferApplicationService:
             active_job = self._jobs.get(self._active_job_id or "")
             active = active_job.snapshot() if active_job is not None else None
 
-        # Warm the DSP imports off the critical path once the UI is up.
         _start_dsp_prewarm()
 
         return _ok(
@@ -945,7 +933,6 @@ class ImpulciferApplicationService:
 
         play_path: str | None = str(request.get("play_path", "")).strip()
         if sweep_spec is not None:
-            # Generated sweeps need no play file.
             play_path = None
         elif not play_path or not os.path.isfile(play_path):
             return _error("FILE_NOT_FOUND", "Playback file does not exist.", details={"path": play_path})

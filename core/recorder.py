@@ -121,7 +121,6 @@ def record_target(file_path, length, fs, channels=2, append=False, debug_plots=F
     recording = sd.rec(length, samplerate=fs, channels=channels, blocking=True)
     _debug_recording(debug_plots, f"  Raw recording shape: {recording.shape}")
     
-    # Analyze recording content
     if debug_plots:
         print("  Recording content analysis:")
         for ch in range(recording.shape[1] if len(recording.shape) > 1 else 1):
@@ -139,7 +138,6 @@ def record_target(file_path, length, fs, channels=2, append=False, debug_plots=F
         recording = np.transpose(recording)
         _debug_recording(debug_plots, f"  After transpose: {recording.shape}")
     elif len(recording.shape) == 1:
-        # Mono recording, expand dimensions
         recording = np.expand_dims(recording, axis=0)
         _debug_recording(debug_plots, f"  Mono expanded to: {recording.shape}")
     
@@ -147,7 +145,6 @@ def record_target(file_path, length, fs, channels=2, append=False, debug_plots=F
     _debug_recording(debug_plots, f"  Maximum gain: {max_gain:.2f} dB (headroom: {-1.0*max_gain:.1f} dB)")
     
     if append and os.path.isfile(file_path):
-        # Adding to existing file, read the file
         _debug_recording(debug_plots, "  Appending to existing file...")
         _fs, data = read_wav(file_path, expand=True)
         _debug_recording(debug_plots, f"  Existing file shape: {data.shape}")
@@ -162,7 +159,6 @@ def record_target(file_path, length, fs, channels=2, append=False, debug_plots=F
             recording = np.pad(recording, [(0, 0), (0, padding)])
             _debug_recording(debug_plots, f"  Padded new recording by {padding} samples")
         
-        # Add recording to the end of the existing data
         recording = np.vstack([data, recording])
         _debug_recording(debug_plots, f"  Final appended shape: {recording.shape}")
     
@@ -192,7 +188,6 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
         raise TypeError('Device name is required and cannot be None')
     if kind is None:
         raise TypeError('Kind is required and cannot be None')
-    # Available host APIs
     host_api_names = get_host_api_names()
 
     for i in range(len(host_api_names)):
@@ -201,16 +196,13 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
     if host_api is not None:
         host_api = host_api.replace('Windows ', '')
 
-    # Host API check pattern
     host_api_pattern = f'({"|".join([re.escape(name) for name in host_api_names])})$'
 
-    # Find with the given name
     device = None
     if re.search(host_api_pattern, device_name):
         # Host API in the name, this should return only one device
         device = sd.query_devices(device_name, kind=kind)
         if device[f'max_{kind}_channels'] < min_channels:
-            # Channel count not satisfied
             raise DeviceNotFoundError(f'Found {kind} device "{device["name"]} {host_api_names[device["hostapi"]]}"" '
                                       f'but minimum number of channels is not satisfied. 1')
     elif not re.search(host_api_pattern, device_name) and host_api is not None:
@@ -219,17 +211,14 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
             # This should give one or zero devices
             device = sd.query_devices(f'{device_name} {host_api}', kind=kind)
         except ValueError:
-            # Zero devices
             raise DeviceNotFoundError(f'No device found with name "{device_name}" and host API "{host_api}". ')
         if device[f'max_{kind}_channels'] < min_channels:
-            # Channel count not satisfied
             raise DeviceNotFoundError(f'Found {kind} device "{device["name"]} {host_api_names[device["hostapi"]]}" '
                                       f'but minimum number of channels is not satisfied.')
     else:
         # Host API not in the name and host API is not given as parameter
         host_api_preference = [x for x in ['DirectSound', 'MME', 'WASAPI'] if x in host_api_names]
         for host_api_name in host_api_preference:
-            # Looping in the order of preference
             try:
                 device = sd.query_devices(f'{device_name} {host_api_name}', kind=kind)
                 if device[f'max_{kind}_channels'] >= min_channels:
@@ -257,18 +246,13 @@ def get_devices(input_device=None, output_device=None, host_api=None, min_channe
         - Input device object
         - Output device object
     """
-    # Find devices
     devices = sd.query_devices()
 
-    # Select input device
     if input_device is None:
-        # Not given, use default
         input_device = devices[sd.default.device[0]]['name']
     input_device = get_device(input_device, 'input', host_api=host_api)
 
-    # Select output device
     if output_device is None:
-        # Not given, use default
         output_device = devices[sd.default.device[1]]['name']
     output_device = get_device(output_device, 'output', host_api=host_api, min_channels=min_channels)
 
@@ -333,7 +317,6 @@ def play_and_record(
     if play_signal is None and play is None:
         raise TypeError('Either "play" or "play_signal" is required.')
 
-    # Create output directory
     out_dir, out_file = os.path.split(os.path.abspath(record))
     os.makedirs(out_dir, exist_ok=True)
 
@@ -383,10 +366,8 @@ def play_and_record(
             "multi-channel sweep WAV generated by Impulcifer instead."
         )
 
-    # Opt-in mono→stereo broadcast — only the dedicated headphone path
-    # asks for this. For speaker-side capture the mono signal must be
-    # left on output channel 0 alone (see the ``mono_to_stereo`` docstring
-    # above for the rationale).
+    # Opt-in broadcast — speaker-side capture must keep this off (see the
+    # ``mono_to_stereo`` docstring).
     if mono_to_stereo and data.shape[0] == 1:
         data = np.broadcast_to(data, (2, data.shape[1])).copy()
 
@@ -399,7 +380,6 @@ def play_and_record(
     print(f"Audio info: {fs}Hz, {n_channels} channels, {data.shape[1]} samples")
     print(f"Duration: {duration:.2f} seconds")
 
-    # Find and set devices as default
     try:
         input_device, output_device = get_devices(
             input_device=input_device,
@@ -428,14 +408,12 @@ def play_and_record(
         ),
     )
 
-    # If recording with TrueHD source, save channel info
     if channel_info and record:
         info_file = os.path.splitext(record)[0] + '_channels.txt'
         with open(info_file, 'w') as f:
             f.write(','.join(channel_info))
         print(f"Channel info saved to: {info_file}")
 
-    # Check if output device supports required channels
     if output_device["max_output_channels"] < n_channels:
         print(f"WARNING: Output device only supports {output_device['max_output_channels']} channels")
         print(f"but file has {n_channels} channels. Audio will be truncated.")

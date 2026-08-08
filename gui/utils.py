@@ -28,11 +28,8 @@ from gui.theme import get_ico_path, get_png_path
 def setup_app_icon(root: ctk.CTk) -> bool:
     """Apply the bundled pulse logo to the GUI window and Windows taskbar.
 
-    Why this exists. The redesign hands off ``logo/pulse.ico``
-    (multi-resolution 16/24/32/48/64/
-    128/256) and ``logo/pulse-*.png``; this helper wires both paths so the
-    Windows title bar, the Windows taskbar (including pinned shortcuts),
-    and the X11 / macOS dock icons all render the Pulse mark.
+    Wires both ``logo/pulse.ico`` (multi-resolution) and ``logo/pulse-*.png``
+    so the title bar, Windows taskbar and X11/macOS dock all render the mark.
 
     On Windows we also call ``SetCurrentProcessExplicitAppUserModelID`` so
     the taskbar groups by our AppUserModelID instead of ``python.exe``
@@ -92,7 +89,6 @@ def open_data_folder() -> None:
     data_dir = Path(DATA_DIR)
 
     if not data_dir.exists():
-        # Fallback: executable 디렉토리 기준
         from infra.environment import is_standalone_build
 
         if is_standalone_build():
@@ -101,7 +97,7 @@ def open_data_folder() -> None:
             data_dir = Path(__file__).parent.parent / "data"
 
     if not data_dir.exists():
-        data_dir = Path.home() / "Documents"  # 최종 폴백
+        data_dir = Path.home() / "Documents"
 
     system = platform.system()
 
@@ -117,15 +113,7 @@ def open_data_folder() -> None:
 
 
 def safe_get_double(var: Any, default: float = 0.0) -> float:
-    """Safely read a DoubleVar.
-
-    Args:
-        var: Tk variable with a ``get`` method.
-        default: Value returned when the variable is empty or invalid.
-
-    Returns:
-        The variable value or ``default``.
-    """
+    """Read a DoubleVar, returning ``default`` when empty or invalid."""
     try:
         return var.get()
     except (TclError, ValueError):
@@ -133,15 +121,7 @@ def safe_get_double(var: Any, default: float = 0.0) -> float:
 
 
 def safe_get_int(var: Any, default: int = 0) -> int:
-    """Safely read an IntVar.
-
-    Args:
-        var: Tk variable with a ``get`` method.
-        default: Value returned when the variable is empty or invalid.
-
-    Returns:
-        The variable value or ``default``.
-    """
+    """Read an IntVar, returning ``default`` when empty or invalid."""
     try:
         return var.get()
     except (TclError, ValueError):
@@ -149,15 +129,7 @@ def safe_get_int(var: Any, default: int = 0) -> int:
 
 
 def safe_get_string(var: Any, default: str = "") -> str:
-    """Safely read a StringVar.
-
-    Args:
-        var: Tk variable with a ``get`` method.
-        default: Value returned when the variable is empty or invalid.
-
-    Returns:
-        The variable value or ``default``.
-    """
+    """Read a StringVar, returning ``default`` when empty or invalid."""
     try:
         return var.get()
     except (TclError, ValueError):
@@ -317,11 +289,6 @@ def _tk_renders_family(desired: str) -> Optional[str]:
     can render with the requested family, ``actual`` returns that family
     verbatim; otherwise it returns whatever Tk fell back to (e.g. the
     system default like Malgun Gothic), which we treat as a miss.
-
-    This was the bug behind issue #87 follow-up: ``setup_pretendard_font``
-    bailed to ``None`` because ``families()`` lacked Pretendard even though
-    GDI / Tk render layer would have used it. CTk widgets then defaulted
-    to the system font (Malgun Gothic / 명조 fallback on Korean Windows).
     """
     try:
         probe = tkfont.Font(family=desired, size=10)
@@ -459,7 +426,6 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
         _font_cache[current_language] = value
         return value
 
-    # Only use Pretendard for the languages we bundle a cut for (ko/en/ja).
     if current_language not in _PRETENDARD_LANGUAGES:
         # Even when we don't pick Pretendard for the language, still register
         # any bundled font so other code paths (e.g. matplotlib, dialogs that
@@ -473,22 +439,14 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
     )
 
     try:
-        # Register every bundled font once — Pretendard is the primary, but
-        # any companion font the user drops into ``font/`` becomes addressable
-        # too.
         register_all_bundled_fonts_for_tk()
 
-        # PRIMARY check: ask Tk's render layer directly.
-        # tkfont.families() caches at startup and AddFontResourceExW does NOT
-        # always invalidate that cache, but Tk renders via GDI which DOES see
-        # process-private fonts immediately. So we trust actual() resolution
-        # over the families() snapshot.
-        #
-        # We try the "* Variable" family FIRST: the bundled file's family-name
-        # (name table id 1) is "Pretendard Variable" / "Pretendard JP Variable",
-        # not the plain "Pretendard". Hitting this directly avoids one
-        # render-probe miss + lets Win32 GDI auto-map weight="bold" to the fvar
-        # wght=700 instance instead of falling through to synthetic bold.
+        # Ask Tk's render layer directly (see _tk_renders_family for why
+        # families() cannot be trusted). The "* Variable" family goes FIRST:
+        # the bundled file's name-table family is "Pretendard Variable" /
+        # "Pretendard JP Variable", and hitting it directly lets Win32 GDI
+        # map weight="bold" to the fvar wght=700 instance instead of
+        # synthetic bold.
         for candidate in family_candidates:
             rendered = _tk_renders_family(candidate)
             if rendered:
@@ -515,9 +473,8 @@ def setup_pretendard_font(current_language: str = 'en') -> Optional[str]:
             for font_name in (available_fonts or set()):
                 if "Pretendard" not in font_name:
                     continue
-                # For Japanese only accept a JP cut — the standard Pretendard
-                # has no kanji, so the OS font is a better fallback than a
-                # Pretendard that would tofu every ideograph.
+                # For Japanese only accept a JP cut (standard Pretendard has
+                # no kanji — see _PRETENDARD_FAMILIES_BY_LANG).
                 if prefer_jp != ("JP" in font_name):
                     continue
                 rendered = _tk_renders_family(font_name)
@@ -634,7 +591,6 @@ def browse_file(var: Any, mode: str, filetypes: Optional[list[tuple[str, str]]] 
         )
 
     if filename:
-        # Convert to relative path if possible
         try:
             filename = os.path.relpath(filename, os.getcwd())
         except Exception:
@@ -649,7 +605,6 @@ def browse_directory(var: Any) -> None:
     )
 
     if dirname:
-        # Convert to relative path if possible
         try:
             dirname = os.path.relpath(dirname, os.getcwd())
         except Exception:
@@ -1030,7 +985,6 @@ def install_smooth_scrolling(scroll_frame: ctk.CTkScrollableFrame) -> None:
     # CTkScrollableFrame installs is the unconditional one.
     scroll_frame.unbind("<Configure>")
 
-    # Use a list so the closure can mutate without `nonlocal`.
     last_size: list[Optional[int]] = [None, None]
 
     def _on_configure(event):

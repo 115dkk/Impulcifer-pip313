@@ -81,9 +81,9 @@ class StudioRecorderTab:
         self.play_var = ctk.StringVar(
             value=os.path.join("data", "sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
         )
-        # Sweep source — on-the-fly generation is the default since 2.11;
-        # the play file only applies in file mode (labels/codes shared
-        # with the Stable skin via gui.sweep_source).
+        # Sweep source — on-the-fly generation is the default; the play file
+        # only applies in file mode (labels/codes shared with the Stable
+        # skin via gui.sweep_source).
         self._sweep_mode_labels = recorder_sweep_mode_labels(self.loc)
         self.sweep_source_var = ctk.StringVar(value=self._sweep_mode_labels["default"])
         self.sweep_speakers_var = ctk.StringVar(value="FL,FR")
@@ -211,7 +211,6 @@ class StudioRecorderTab:
         body = make_card_body(card)
         body.grid_columnconfigure(0, weight=1)
 
-        # Host API
         api_row = self._labelled_row(body, row=0, label=self.loc.get("label_host_api"))
         self.host_api_menu = ctk.CTkOptionMenu(
             api_row,
@@ -221,14 +220,12 @@ class StudioRecorderTab:
         )
         self.host_api_menu.grid(row=0, column=1, sticky="ew", padx=0, pady=4)
 
-        # Output
         out_row = self._labelled_row(body, row=1, label=self.loc.get("label_playback_device"))
         self.output_device_menu = ctk.CTkOptionMenu(
             out_row, variable=self.output_device_var, values=["—"]
         )
         self.output_device_menu.grid(row=0, column=1, sticky="ew", padx=0, pady=4)
 
-        # Input
         in_row = self._labelled_row(body, row=2, label=self.loc.get("label_recording_device"))
         self.input_device_menu = ctk.CTkOptionMenu(
             in_row, variable=self.input_device_var, values=["—"]
@@ -309,7 +306,6 @@ class StudioRecorderTab:
                 if self.channels_custom_row:
                     self.channels_custom_row.grid_remove()
                 return
-        # Custom path
         if self.channels_custom_row:
             self.channels_custom_row.grid()
         if self.channels_custom_entry:
@@ -626,8 +622,7 @@ class StudioRecorderTab:
         # Stable's force-channels checkbox is expressed here by the channel
         # preset itself: picking anything other than stereo IS the explicit
         # multi-channel request. The resolution contract is shared with the
-        # stable tab (audit #138 F021/Q5 — the old max(2, entry) reading was
-        # drift, not intent).
+        # stable tab.
         requested_channels = safe_get_int(self.channels_var, 2)
         channels, force_channels = resolve_recording_channels(
             requested_channels != 2, requested_channels
@@ -852,12 +847,9 @@ class StudioRecorderTab:
                     from core.sweep_signal import build_sweep_playback
 
                     play_signal = build_sweep_playback(sweep_spec)
-                # ``mono_to_stereo=True`` only matters when the play file
-                # is mono: it duplicates the sweep onto both headphone
-                # drivers so the user gets an L=R generic EQ. The user
-                # has already been warned about this trade-off above.
-                # Generated sweeps are stereo sequences, so the broadcast
-                # is a file-mode-only concern.
+                # File mode only: a mono play file is broadcast onto both
+                # headphone drivers (L=R generic EQ — the user was warned
+                # above). Generated sweeps are already stereo sequences.
                 recorder.play_and_record(
                     play=play_file if play_signal is None else None,
                     play_signal=play_signal,

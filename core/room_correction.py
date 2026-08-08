@@ -38,7 +38,6 @@ def room_correction(
         - Room Impulse Responses as HRIR or None
         - Equalization frequency responses as dict of dicts (similar to HRIR) or None
     """
-    # Open files
     target = open_room_target(estimator, dir_path, target=target)
     mic_calibration = open_mic_calibration(estimator, dir_path, mic_calibration=mic_calibration)
     rir = open_room_measurements(estimator, dir_path, debug=plot)
@@ -61,7 +60,6 @@ def room_correction(
     fr_axes = []
     figs = None
     if len(rir.irs):
-        # Crop heads and tails from room impulse responses
         for speaker, pair in rir.irs.items():
             for side, ir in pair.items():
                 ir.crop_head()
@@ -69,7 +67,6 @@ def room_correction(
         rir.write_wav(os.path.join(dir_path, 'room-responses.wav'))
 
         if plot:
-            # Plot all but frequency response
             plot_dir = os.path.join(dir_path, 'plots', 'room')
             os.makedirs(plot_dir, exist_ok=True)
             figs = rir.plot(plot_fr=False, close_plots=False)
@@ -82,7 +79,6 @@ def room_correction(
                 fr = ir.frequency_response()
 
                 if mic_calibration is not None:
-                    # Calibrate frequency response
                     fr.raw -= mic_calibration.raw
 
                 # Sync gains
@@ -94,7 +90,6 @@ def room_correction(
                 # Adjust target level with the (negative) gain caused by speaker-ear distance in reverberant room
                 target_adjusted = target.copy()
                 target_adjusted.raw += IR_ROOM_SPL[speaker][side]
-                # Compensate with the adjusted room target
                 fr.compensate(target_adjusted, min_mean_error=False)
 
                 # Zero error above limit
@@ -133,9 +128,7 @@ def room_correction(
     if plot and figs is not None:
         room_plots_dir = os.path.join(dir_path, 'plots', 'room')
         os.makedirs(room_plots_dir, exist_ok=True)
-        # Sync FR plot axes
         sync_axes(fr_axes)
-        # Save specific fR figures
         for speaker, pair in figs.items():
             for side, fig in pair.items():
                 save_fig_as_png(os.path.join(room_plots_dir, f'{speaker}-{side}.png'), fig)
@@ -154,17 +147,14 @@ def open_room_measurements(estimator, dir_path, debug=False):
     Returns:
         HRIR instance with the room measurements
     """
-    # Read room measurement files
     rir = HRIR(estimator)
     # room-BL,SL.wav, room-left-FL,FR.wav, room-right-FC.wav, etc...
     pattern = rf'^room-{SPEAKER_LIST_PATTERN}(-(left|right))?\.wav$'
     for i, file_name in enumerate([f for f in os.listdir(dir_path) if re.match(pattern, f)]):
-        # Read the speaker names from the file name into a list
         speakers = re.search(SPEAKER_LIST_PATTERN, file_name)
         if speakers is not None:
             speakers = speakers[0].split(',')
         file_path = os.path.join(dir_path, file_name)
-        # Read side if present
         side = re.search(r'(left|right)', file_name)
         if side is not None:
             side = side[0]
@@ -213,16 +203,13 @@ def open_generic_room_measurement(estimator,
             # Ends at start plus one more (current) sweep
             end = int(start + 2 * estimator.fs + len(estimator))
             end = min(end, len(track))
-            # Select current sweep
             sweep = track[start:end]
-            # Deconvolve as impulse response
             ir = ImpulseResponse(estimator.estimate(sweep), estimator.fs, sweep)
             # Crop harmonic distortion from the head
             # Noise in the tail should not affect frequency response so it doesn't have to be cropped
             ir.crop_head(head_ms=1)
             irs.append(ir)
 
-    # Frequency response for the generic room measurement
     room_fr = FrequencyResponse(
         name='generic_room',
         frequency=FrequencyResponse.generate_frequencies(f_min=10, f_max=estimator.fs / 2, f_step=1.01),
@@ -250,7 +237,6 @@ def open_generic_room_measurement(estimator,
     errors = np.vstack(errors)
 
     if errors.shape[0] > 1:
-        # Combine errors
         if method == 'conservative':
             # Conservative error curve is zero everywhere else but on indexes where both have the same sign,
             # at these indexes the smaller absolute value is selected.
@@ -291,19 +277,16 @@ def open_generic_room_measurement(estimator,
         room_plots_dir = os.path.join(dir_path, 'plots', 'room')
         os.makedirs(room_plots_dir, exist_ok=True)
 
-        # Create generic FR plot
         fr = room_fr.copy()
         fr.name = 'Generic room measurement'
         fr.raw = fr.smoothed.copy()
         fr.error = fr.error_smoothed.copy()
 
-        # Create figure and axes
         fig, ax = plt.subplots()
         fig.set_size_inches(15, 9)
         config_fr_axis(ax)
         ax.set_title('Generic room measurement')
 
-        # Plot target, raw and error
         ax.plot(fr.frequency, fr.target, color=COLORS['lightpurple'], linewidth=5, label='Target')
         for raw in raws:
             raw.smoothen(window_size=1/3, treble_window_size=1/3)
@@ -337,11 +320,9 @@ def open_room_target(estimator, dir_path, target=None):
     Returns:
         Room response target FrequencyResponse
     """
-    # Room target
     if target is None:
         target = os.path.join(dir_path, 'room-target.csv')
     if os.path.isfile(target):
-        # File exists, create frequency response
         target = FrequencyResponse.read_csv(target)
         target.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
         target.center()
@@ -370,14 +351,11 @@ def open_mic_calibration(estimator, dir_path, mic_calibration=None):
         if not os.path.isfile(mic_calibration):
             mic_calibration = os.path.join(dir_path, 'room-mic-calibration.txt')
     elif not os.path.isfile(mic_calibration):
-        # Room mic calibration file path given, but the file doesn't exist
         raise FileNotFoundError(f'Room mic calibration file doesn\'t exist at "{mic_calibration}"')
     if os.path.isfile(mic_calibration):
-        # File found, create frequency response
         mic_calibration = FrequencyResponse.read_csv(mic_calibration)
         mic_calibration.interpolate(f_step=1.01, f_min=10, f_max=estimator.fs / 2)
         mic_calibration.center()
     else:
-        # File not found, skip calibration
         mic_calibration = None
     return mic_calibration

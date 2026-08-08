@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 """BRIR pipeline stage helpers.
 
-Moved out of the top-level ``impulcifer`` script (audit #138 C1) so
-:class:`core.pipeline.BRIRPipeline` no longer has to import back into the
-script module. ``impulcifer`` re-exports every helper for legacy callers.
+``impulcifer`` re-exports every helper for legacy callers.
 """
 
 import os
@@ -39,8 +37,7 @@ from core.utils import (
 )
 from infra.logger import get_logger
 
-# Repo root for the source-tree ``data/`` fallback (this module lives in
-# ``core/``; the fallback previously resolved relative to impulcifer.py).
+# Repo root for the source-tree ``data/`` fallback.
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -370,7 +367,6 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
     logger = get_logger()
 
     if headphone_file_path:
-        # Normalize the path to handle Windows/Unix path separators
         normalized_path = os.path.normpath(headphone_file_path)
         logger.info("cli_info_hp_param_provided", file=normalized_path)
 
@@ -585,7 +581,6 @@ def write_readme(file_path, hrir, fs, estimator, applied_gain):
 
             peak_idx_current_ir = ir_obj.peak_index()
             if peak_idx_current_ir is not None:
-                # PNR 계산
                 peak_val_linear = np.abs(ir_obj.data[peak_idx_current_ir])
                 peak_val_db = 20 * np.log10(
                     peak_val_linear + 1e-9

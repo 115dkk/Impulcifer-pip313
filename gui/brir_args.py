@@ -130,7 +130,6 @@ def build_brir_args(tab: Any, loc: Any) -> dict:
                 try:
                     decay_val = float(decay_str) / 1000
                     # 단일값 decay는 CLI와 동일하게 전체 SPEAKER_NAMES로 fan-out
-                    # (기존 7채널 하드코딩은 드리프트 — 감사 #138 F018/Q2 판정)
                     args["decay"] = {ch: decay_val for ch in SPEAKER_NAMES}
                 except ValueError:
                     pass

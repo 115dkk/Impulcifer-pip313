@@ -102,7 +102,6 @@ class UpdateChecker:
         Returns:
             Normalized semantic version (X.Y.Z format)
         """
-        # Remove leading 'v' if present
         ver_string = ver_string.lstrip('v')
 
         # Extract base semantic version (X.Y.Z or X.Y.Z.W)
@@ -150,24 +149,19 @@ class UpdateChecker:
         """
         assets = release_data.get('assets', [])
 
-        # Detect platform
         system = platform.system()
 
-        # Look for installer file
         for asset in assets:
             name = asset.get('name', '').lower()
             download_url = asset.get('browser_download_url')
 
             if system == 'Windows':
-                # Look for .exe installer
                 if name.endswith('.exe') and 'setup' in name:
                     return download_url
-            elif system == 'Darwin':  # macOS
-                # Look for .dmg or .pkg
+            elif system == 'Darwin':
                 if name.endswith(('.dmg', '.pkg')):
                     return download_url
             elif system == 'Linux':
-                # Look for .deb, .rpm, or .AppImage
                 if name.endswith(('.deb', '.rpm', '.appimage')):
                     return download_url
 

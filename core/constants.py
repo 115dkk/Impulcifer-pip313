@@ -111,7 +111,7 @@ DEFAULT_SWEEP_FS = 48000
 DEFAULT_SWEEP_DURATION = 5.0
 SWEEP_TRACK_LAYOUTS = ("mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6")
 
-# 기본 테스트 신호 파일 목록
+# CLI --test_signal 별칭 → 번들 WAV 파일명
 TEST_SIGNALS = {
     'default': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',
     'sweep': 'sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav',

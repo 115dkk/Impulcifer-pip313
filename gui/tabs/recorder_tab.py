@@ -136,8 +136,8 @@ class RecorderTab:
             font=self.fonts['heading']
         ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
 
-        # Sweep source — on-the-fly generation is the default since 2.11;
-        # a play file is only needed for unusual/custom recordings.
+        # Sweep source — on-the-fly generation is the default; a play file
+        # is only needed for unusual/custom recordings.
         self._sweep_mode_labels = recorder_sweep_mode_labels(self.loc)
         ctk.CTkLabel(files_frame, text=self.loc.get('label_sweep_source')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
         self.sweep_source_var = ctk.StringVar(value=self._sweep_mode_labels['default'])
@@ -820,14 +820,11 @@ class RecorderTab:
                     from core.sweep_signal import build_sweep_playback
 
                     play_signal = build_sweep_playback(sweep_spec)
-                # Always 2-channel recording for headphone compensation —
-                # the two in-ear mics. Speaker-side ``force channels`` is
-                # not relevant here so we hard-pin it. ``mono_to_stereo``
-                # only matters when the play file is mono: it duplicates
-                # the sweep onto both headphone drivers so the user gets
-                # an L=R generic EQ (warned about above). Generated sweeps
-                # are already stereo sequences, so the broadcast is a
-                # file-mode-only concern.
+                # Always 2-channel recording (the two in-ear mics) —
+                # speaker-side ``force channels`` is irrelevant here. File
+                # mode only: a mono play file is broadcast onto both
+                # headphone drivers (L=R generic EQ, warned above);
+                # generated sweeps are already stereo sequences.
                 recorder.play_and_record(
                     play=play_file if play_signal is None else None,
                     play_signal=play_signal,

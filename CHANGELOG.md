@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.11.1 - 2026-08-09
+### 주석(각주) 전면 청소
+
+#### 🔧 빌드 / 설정 변경
+- **코드 주석 정리(동작 변경 없음)**: 출하 코드 전반(core/gui/application/i18n/infra/updater/build_scripts)에서 ①코드를 재기술할 뿐인 주석, ②작업 이력·감사 번호 등 유래 서술("audit #NNN에서 이동" 류), ③중복 설명을 삭제했다(27개 파일, 약 −310줄/+68줄). DSP 수식 근거·플랫폼 특이사항(Win32 스크롤 blit, GDI 폰트, Nuitka 화이트리스트 등)·수정 전 필수 지식에 해당하는 주석은 전부 유지. `core/hrir.py`의 `correct_channel_balance()`에서 생성만 되고 사용되지 않던 죽은 `stacks` 블록도 함께 제거했다. BRIR 출력 바이트 동일성은 같은 머신 자기비교로 확인(default `3F9297…`, vbass `3AD84C…` — 2.11.0 오라클과 일치).
+
 ## 2.11.0 - 2026-08-08
 ### 즉석 스윕 생성·재생 + 스윕 자동 감지 + WebView 기동 최적화 + pkl 지원 삭제
 
