@@ -105,8 +105,8 @@ class ImpulciferTab:
             width=WIDGET_BUTTON_WIDTH_BROWSE,
         ).grid(row=1, column=2, padx=15, pady=5)
 
-        # Test signal source — auto detection is the default since 2.11.
-        # The manual and file rows only appear for their modes.
+        # Test signal source — auto detection is the default. The manual
+        # and file rows only appear for their modes.
         self._test_signal_labels = test_signal_source_labels(self.loc)
         ctk.CTkLabel(input_frame, text=self.loc.get('label_test_signal_source')).grid(row=2, column=0, sticky="w", padx=15, pady=5)
         self.test_signal_source_var = ctk.StringVar(value=self._test_signal_labels['auto'])
@@ -703,6 +703,5 @@ class ImpulciferTab:
                 except Exception:
                     pass
 
-        # Start processing thread
         thread = threading.Thread(target=run_processing, daemon=True)
         thread.start()

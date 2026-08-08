@@ -24,7 +24,6 @@ from core.parallel_utils import is_gil_disabled, _run_parallel_map
 T = TypeVar('T')
 R = TypeVar('R')
 
-# Python 버전 및 Free-Threaded 지원 확인
 PYTHON_VERSION = sys.version_info
 IS_PYTHON_314_PLUS = PYTHON_VERSION >= (3, 14)
 IS_FREE_THREADED = is_gil_disabled()
@@ -132,7 +131,6 @@ def parallel_map(
     if max_workers is None:
         max_workers = get_optimal_worker_count()
 
-    # 항목 수가 워커 수보다 적으면 조정
     max_workers = min(max_workers, len(items))
 
     # 실제 실행 루프는 core.parallel_utils와 공유한다. ``use_threads`` 기본값을
@@ -183,7 +181,6 @@ def parallel_process_dict(
     keys = list(data_dict.keys())
     values = list(data_dict.values())
 
-    # 키-값 쌍을 함수에 전달하는 래퍼
     def wrapper(item):
         key, value = item
         return key, func(key, value)
@@ -220,19 +217,16 @@ def enable_parallel_processing(func: Callable) -> Callable:
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        # parallel 파라미터 확인
         use_parallel = kwargs.pop('use_parallel', False)
         max_workers = kwargs.pop('max_workers', None)
 
         if not use_parallel:
             return func(*args, **kwargs)
 
-        # 첫 번째 인자가 iterable인지 확인
         if args and hasattr(args[0], '__iter__'):
             iterable = args[0]
             remaining_args = args[1:]
 
-            # 병렬 처리 함수 생성
             def parallel_func(item):
                 return func(item, *remaining_args, **kwargs)
 

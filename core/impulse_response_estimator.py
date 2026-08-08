@@ -45,11 +45,8 @@ class ImpulseResponseEstimator(object):
         self.w1 = self.low / self.fs * 2 * np.pi
         self.w2 = self.high / self.fs * 2 * np.pi
 
-        # Generate test signal
         self.test_signal = self.generate_test_signal(min_duration)
         self.duration = len(self.test_signal) / self.fs
-
-        # Generate inverse filter
         self.inverse_filter = self.generate_inverse_filter()
 
     def __len__(self):
@@ -74,11 +71,7 @@ class ImpulseResponseEstimator(object):
         plt.show()
 
     def generate_inverse_filter(self):
-        """Generates inverse filter for test signal.
-
-        Returns:
-
-        """
+        """Generates inverse filter for test signal."""
         P = self.n_octaves
         N = len(self.test_signal)
         inverse_filter = np.flip(self.test_signal) * (2**(P / N))**(np.arange(N)*-1) * P * np.log(2) / (1 - 2**-P)
@@ -128,7 +121,6 @@ class ImpulseResponseEstimator(object):
 
         seconds_per_octave = N / self.fs / P
 
-        # Fade-in window
         if fade_in is None:
             fade_in_window = []
         else:
@@ -137,7 +129,6 @@ class ImpulseResponseEstimator(object):
                 fade_in += 1
             fade_in_window = hann(fade_in)[:fade_in // 2]
 
-        # Fade-out window
         if fade_out is None:
             fade_out_window = []
         else:
@@ -146,7 +137,6 @@ class ImpulseResponseEstimator(object):
                 fade_out += 1
             fade_out_window = hann(fade_out)[fade_out // 2:]
 
-        # Create window from fade-in window and fade-out window with ones in the middle
         win = np.concatenate([
             fade_in_window,
             np.ones(len(test_signal) - len(fade_in_window) - len(fade_out_window)),
@@ -198,7 +188,6 @@ class ImpulseResponseEstimator(object):
             if speaker in unique_speakers:
                 raise ValueError('All speaker names in speakers must be unique.')
 
-        # Remap channels
         if tracks in SEQUENCE_TRACK_ORDERS:
             standard_order = SEQUENCE_TRACK_ORDERS[tracks]
             n_tracks = len(standard_order)
@@ -228,7 +217,6 @@ class ImpulseResponseEstimator(object):
                 ))
         speaker_indices = [standard_order.index(ch) for ch in speakers]
 
-        # Create test signal sequence
         data = np.zeros((n_tracks, int((self.fs * 2.0 + len(self)) * len(speakers) + self.fs * 2.0)))
         for i, speaker in enumerate(speakers):
             start_zeros = int((self.fs * 2.0 + len(self)) * i + self.fs * 2.0)
@@ -248,33 +236,27 @@ class ImpulseResponseEstimator(object):
         """Creates ImpulseResponseEstimator instance from test signal WAV."""
         fs, data = read_wav(file_path)
 
-        # Handle multi-channel data by using the first channel only
         if len(data.shape) > 1:
             data_for_comparison = data[0, :]
         else:
             data_for_comparison = data
 
-        # Calculate duration from actual data length
+        # (N-1)/fs keeps the ceil() in generate_test_signal from overshooting
+        # to the next sweep-grid length.
         duration = (len(data_for_comparison) - 1) / fs
 
-        # Create estimator with the correct duration (this calculates proper n_octaves)
         ire = cls(min_duration=duration, fs=fs)
 
         # Handle length mismatch (can occur due to rounding in signal generation)
         if len(ire.test_signal) != len(data_for_comparison):
-            # Length differs - use the loaded data and regenerate inverse filter
-            # with correct n_octaves (already calculated from duration)
             ire.test_signal = data_for_comparison
             ire.duration = len(data_for_comparison) / fs
-            # Regenerate inverse filter using correct n_octaves
             ire.inverse_filter = ire.generate_inverse_filter()
 
         # Handle value mismatch (32-bit vs 64-bit float precision)
         elif np.max(np.abs(ire.test_signal - data_for_comparison)) > 1e-4:
-            # Values differ slightly - use loaded data and regenerate
             print("Warning: Loaded WAV differs slightly from generated signal. Re-calculating inverse filter based on WAV.")
             ire.test_signal = data_for_comparison
-            # n_octaves is already correct, just regenerate inverse filter
             ire.inverse_filter = ire.generate_inverse_filter()
 
         return ire
@@ -317,13 +299,11 @@ def create_cli():
                                  '"mono" will force speakers to "FL".')
     cli_args = arg_parser.parse_args()
     if not os.path.isdir(cli_args.dir_path):
-        # File path is required
         raise TypeError('--dir_path must be a directory.')
     return cli_args
 
 
 def main():
-    # Handle command line arguments
     cli_args = create_cli()
     dir_path = cli_args.dir_path
     fs = cli_args.fs
@@ -332,7 +312,6 @@ def main():
     speakers = cli_args.speakers.split(',')
     tracks = cli_args.tracks
 
-    # Create sweep sequence WAV data
     ire = ImpulseResponseEstimator(min_duration=duration, fs=fs)
     wav_data = ire.sweep_sequence(speakers, tracks)
 

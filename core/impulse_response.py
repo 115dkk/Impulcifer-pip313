@@ -381,17 +381,14 @@ class ImpulseResponse(ImpulseResponsePlotter):
                 # Targets not found on the Schroeder curve
                 continue
 
-            # Check if we have valid data range for linear regression
+            # Need at least 2 points for linear regression
             if start >= end or (end - start) < 2:
-                # Need at least 2 points for linear regression
                 continue
 
-            # Check if the sliced arrays are not empty
             t_slice = t[start:end]
             schroeder_slice = schroeder[start:end]
 
             if len(t_slice) == 0 or len(schroeder_slice) == 0:
-                # Empty arrays, skip this decay time calculation
                 continue
 
             slope, intercept, _, _, _ = stats.linregress(t_slice, schroeder_slice)

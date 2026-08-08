@@ -38,15 +38,14 @@ def get_center_value(fr, frequency_range):
     Returns:
         The negative of the gain shift that would be applied by center()
     """
-    # Create interpolator - use linear interpolation to avoid overshoot/undershoot
-    k_order = 1  # Always use linear interpolation to prevent artifacts
+    # Linear interpolation (k=1) avoids overshoot/undershoot artifacts.
+    k_order = 1
     try:
         interpolator = InterpolatedUnivariateSpline(np.log10(fr.frequency), fr.raw, k=k_order)
     except ValueError:
         interpolator = InterpolatedUnivariateSpline(np.log10(fr.frequency), fr.raw, k=1)
 
     if isinstance(frequency_range, (list, np.ndarray)) and len(frequency_range) > 1:
-        # Use the average of the gain values between the given frequencies
         diff = np.mean(fr.raw[np.logical_and(
             fr.frequency >= frequency_range[0],
             fr.frequency <= frequency_range[1]
@@ -54,7 +53,6 @@ def get_center_value(fr, frequency_range):
     else:
         if isinstance(frequency_range, (list, np.ndarray)):
             frequency_range = frequency_range[0]
-        # Use the gain value at the given frequency
         diff = interpolator(np.log10(frequency_range))
 
     return -diff
@@ -150,7 +148,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
             f"  WARNING: Not enough tracks in recording! Need {len(speakers) * tracks_k}, have {recording.shape[0]}"
         )
 
-    # Crop out initial silence
     recording = recording[:, silence_length:]
     print(f"  After silence crop: {recording.shape}")
 
@@ -190,7 +187,7 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
         start_sample = i * column_size
         end_sample = min(
             (i + 1) * column_size, recording.shape[1]
-        )  # Ensure we don't exceed recording length
+        )
 
         if end_sample > start_sample and (end_sample - start_sample) >= len(
             estimator
@@ -210,7 +207,7 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
 
         # Option 1: Reduce silence length
         if silence_length > 0:
-            min_silence = int(0.5 * fs)  # Minimum 0.5 seconds silence
+            min_silence = int(0.5 * fs)
             available_for_silence = recording.shape[1] - len(estimator)
 
             if available_for_silence >= min_silence:
@@ -263,7 +260,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                     f"  Fallback 2: Single column with {available_length} samples"
                 )
             else:
-                # Divide equally among columns
                 column_size = available_length // n_columns
                 for i in range(n_columns):
                     start_sample = i * column_size
@@ -332,7 +328,6 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                         f"  WARNING: Not enough tracks for stereo processing of {speaker}"
                     )
             else:
-                # Only the given side
                 data = column[i, :]
                 print(
                     f"  Processing {speaker} {side}: Track {i} (max={np.max(np.abs(data)):.6f})"
@@ -426,7 +421,6 @@ class HRIR(HRIRPlotter):
         if track_order is None:
             track_order = HEXADECAGONAL_TRACK_ORDER
 
-        # Add only the requested impulse responses in output order.
         irs_by_name = {}
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
@@ -461,7 +455,6 @@ class HRIR(HRIRPlotter):
             left.append(pair["left"].data)
             right.append(pair["right"].data)
 
-        # Filter out empty arrays before stacking
         left = [arr for arr in left if arr.size > 0]
         right = [arr for arr in right if arr.size > 0]
 
@@ -474,7 +467,6 @@ class HRIR(HRIRPlotter):
         right_lengths = [len(arr) for arr in right]
 
         if len(set(left_lengths)) > 1 or len(set(right_lengths)) > 1:
-            # Arrays have different lengths, pad shorter ones to match the longest
             max_left_len = max(left_lengths) if left_lengths else 0
             max_right_len = max(right_lengths) if right_lengths else 0
 
@@ -520,7 +512,6 @@ class HRIR(HRIRPlotter):
 
         if PARALLEL_PROCESSING_AVAILABLE and len(self.irs) > 4:
             def apply_gain_to_pair(speaker, pair):
-                """각 스피커 채널에 gain을 적용"""
                 for ir in pair.values():
                     ir.data *= gain_scalar
                 return pair
@@ -532,7 +523,6 @@ class HRIR(HRIRPlotter):
             if is_free_threaded_available():
                 print(f"  🚀 Free-Threaded 병렬 정규화 완료 ({len(self.irs)} 채널)")
         else:
-            # 순차 처리 (채널 수가 적거나 병렬 처리 모듈 없음)
             for speaker, pair in self.irs.items():
                 for ir in pair.values():
                     ir.data *= gain_scalar
@@ -558,7 +548,6 @@ class HRIR(HRIRPlotter):
             peak_left = pair["left"].peak_index()
             peak_right = pair["right"].peak_index()
 
-            # Handle cases where peak_index returns None (empty arrays)
             if peak_left is None or peak_right is None:
                 print(
                     f"Warning: Could not find peaks for {speaker}. Skipping crop_heads processing for this speaker."
@@ -567,17 +556,12 @@ class HRIR(HRIRPlotter):
 
             itd = np.abs(peak_left - peak_right) / self.fs
 
-            # Speaker channel delay
             head = int(head_ms * self.fs / 1000)
-            delay = (
-                int(np.round(SPEAKER_DELAYS[speaker] * self.fs)) + head
-            )  # Channel delay in samples
+            delay = int(np.round(SPEAKER_DELAYS[speaker] * self.fs)) + head
 
             if peak_left < peak_right:
                 # Delay to left ear is smaller, this must be a left side speaker
                 if speaker_side(speaker) == "right":
-                    # Speaker name indicates this is right side speaker but delay to left ear is smaller than to right.
-                    # There is something wrong with the measurement
                     warnings.warn(
                         f"Warning: {speaker} measurement has lower delay to left ear than to right ear. "
                         f"{speaker} should be at the right side of the head so the sound should arrive first "
@@ -594,8 +578,6 @@ class HRIR(HRIRPlotter):
             else:
                 # Delay to right ear is smaller, this must be a right side speaker
                 if speaker_side(speaker) == "left":
-                    # Speaker name indicates this is left side speaker but delay to right ear is smaller than to left.
-                    # There si something wrong with the measurement
                     warnings.warn(
                         f"Warning: {speaker} measurement has lower delay to right ear than to left ear. "
                         f"{speaker} should be at the left side of the head so the sound should arrive first "
@@ -607,8 +589,7 @@ class HRIR(HRIRPlotter):
                 pair["right"].data = pair["right"].data[crop_index:]
                 pair["left"].data = pair["left"].data[crop_index:]
 
-            # Make sure impulse response starts from silence
-            # Ensure we have enough data for the windowing
+            # Fade in so the impulse response starts from silence
             if len(pair["left"].data) >= head and len(pair["right"].data) >= head:
                 window = hann(head * 2)[:head]
                 pair["left"].data[:head] *= window
@@ -635,7 +616,6 @@ class HRIR(HRIRPlotter):
                     _, tail_ind, _, _ = ir.decay_params()
                     tail_indices.append(tail_ind)
                 except Exception:
-                    # If decay_params fails, use full length as fallback
                     tail_indices.append(len(ir.data))
                 lengths.append(len(ir.data))
 
@@ -652,7 +632,6 @@ class HRIR(HRIRPlotter):
         for speaker, pair in self.irs.items():
             for ir in pair.values():
                 ir.data = ir.data[:tail_ind]
-                # Apply fade-out window
                 ir.data *= np.concatenate([np.ones(len(ir.data) - len(window)), window])
 
         return tail_ind
@@ -691,9 +670,7 @@ class HRIR(HRIRPlotter):
                 treble_f_lower=20000,
                 treble_f_upper=int(round(self.fs / 2)),
             )
-            # Trend is the equalization target
             right_fr.equalization = trend.smoothed
-            # Unit impulse for left side and equalization FIR filter for right side
             fir = right_fr.minimum_phase_impulse_response(fs=self.fs, normalize=False)
             firs = [signal.unit_impulse((len(fir))), fir]
 
@@ -705,16 +682,13 @@ class HRIR(HRIRPlotter):
                 ref = right_fr
                 subj = left_fr
 
-            # Smoothen reference
             ref.smoothen_fractional_octave(
                 window_size=1 / 3,
                 treble_f_lower=20000,
                 treble_f_upper=int(round(self.fs / 2)),
             )
-            # Center around 0 dB
             gain = ref.center([100, 10000])
             subj.raw += gain
-            # Compensate and equalize to reference
             subj.target = ref.smoothed
             subj.error = subj.raw - subj.target
             subj.smoothen_heavy_light()
@@ -732,7 +706,6 @@ class HRIR(HRIRPlotter):
             left_fr.raw += gain
             right_fr.raw += gain
 
-            # Smoothen
             left_fr.smoothen_fractional_octave(
                 window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999
             )
@@ -740,18 +713,15 @@ class HRIR(HRIRPlotter):
                 window_size=1 / 3, treble_f_lower=20000, treble_f_upper=23999
             )
 
-            # Target
             if method == "avg":
-                # Target is the average between the two FRs
                 target = (left_fr.raw + right_fr.raw) / 2
             else:
-                # Target is the  frequency-vise minimum of the two FRs
                 target = np.min([left_fr.raw, right_fr.raw], axis=0)
 
-            # Compensate and equalize both to the target
             firs = []
             for fr in [left_fr, right_fr]:
-                # Optimized: No need to copy target array since it's not modified
+                # ``target`` is shared (not copied) between both FRs; safe only
+                # while nothing downstream mutates fr.target in place.
                 fr.target = target
                 fr.error = fr.raw - fr.target
                 fr.smoothen_fractional_octave(
@@ -790,14 +760,6 @@ class HRIR(HRIRPlotter):
         Returns:
             HRIR with FIR filter for equalizing each speaker-side
         """
-        # Create frequency responses for left and right side IRs
-        stacks = [[], []]
-        for speaker, pair in self.irs.items():
-            if speaker not in ["FL", "FR"]:
-                continue
-            for i, ir in enumerate(pair.values()):
-                stacks[i].append(ir.data)
-
         # Group the same left and right side speakers
         eqir = HRIR(self.estimator)
         for speakers in [["FC"], ["FL", "FR"], ["SL", "SR"], ["BL", "BR"]]:
@@ -808,16 +770,13 @@ class HRIR(HRIRPlotter):
             for speaker in speakers:
                 left.append(self.irs[speaker]["left"].data)
                 right.append(self.irs[speaker]["right"].data)
-            # Create frequency responses
             left_fr = ImpulseResponse(
                 np.mean(np.vstack(left), axis=0), self.fs
             ).frequency_response()
             right_fr = ImpulseResponse(
                 np.mean(np.vstack(right), axis=0), self.fs
             ).frequency_response()
-            # Create EQ FIR filters
             firs = self.channel_balance_firs(left_fr, right_fr, method)
-            # Assign to speakers in EQ HRIR
             for speaker in speakers:
                 self.irs[speaker]["left"].equalize(firs[0])
                 self.irs[speaker]["right"].equalize(firs[1])
@@ -854,7 +813,6 @@ class HRIR(HRIRPlotter):
 
         print("마이크 착용 편차 보정 v4.0 중...")
 
-        # 플롯 디렉토리 설정
         if plot_analysis and plot_dir:
             mic_deviation_plot_dir = os.path.join(plot_dir, "microphone_deviation")
             os.makedirs(mic_deviation_plot_dir, exist_ok=True)
@@ -927,14 +885,11 @@ class HRIR(HRIRPlotter):
             None
         """
         if PARALLEL_PROCESSING_AVAILABLE and len(self.irs) > 4:
-            # 병렬 처리: 각 스피커 채널 리샘플링
             def resample_pair(speaker, pair):
-                """각 스피커 채널을 리샘플링"""
                 for side, ir in pair.items():
                     ir.resample(fs)
                 return pair
 
-            # 병렬 실행
             self.irs = parallel_process_dict(resample_pair, self.irs, use_threads=True)
 
             if is_free_threaded_available():
@@ -942,7 +897,6 @@ class HRIR(HRIRPlotter):
                     f"  🚀 Free-Threaded 병렬 리샘플링 완료 ({len(self.irs)} 채널, {self.fs}Hz → {fs}Hz)"
                 )
         else:
-            # 순차 처리
             for speaker, pair in self.irs.items():
                 for side, ir in pair.items():
                     ir.resample(fs)
@@ -1066,7 +1020,6 @@ class HRIR(HRIRPlotter):
                     }
                     continue
 
-                # Convert ms to samples
                 direct_end_sample = peak_idx + int(
                     direct_sound_duration_ms * self.fs / 1000
                 )
@@ -1075,7 +1028,6 @@ class HRIR(HRIRPlotter):
                 late_start_sample = peak_idx + int(late_ref_start_ms * self.fs / 1000)
                 late_end_sample = peak_idx + int(late_ref_end_ms * self.fs / 1000)
 
-                # Ensure slices are within bounds
                 data_len = len(ir.data)
                 direct_sound_segment = ir.data[
                     peak_idx : min(direct_end_sample, data_len)
@@ -1087,7 +1039,6 @@ class HRIR(HRIRPlotter):
                     min(late_start_sample, data_len) : min(late_end_sample, data_len)
                 ]
 
-                # Calculate RMS, handle potentially empty segments
                 rms_direct = (
                     np.sqrt(np.mean(direct_sound_segment**2))
                     if len(direct_sound_segment) > 0
@@ -1104,7 +1055,6 @@ class HRIR(HRIRPlotter):
                     else 0
                 )
 
-                # Add epsilon to rms_direct before division to prevent log(0) or division by zero
                 rms_direct = rms_direct if rms_direct > epsilon else epsilon
 
                 db_early = (

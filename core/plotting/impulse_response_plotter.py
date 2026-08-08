@@ -58,7 +58,6 @@ class ImpulseResponsePlotter:
             Figure
         """
         if fig is None:
-            # Create figure and axises for the plots
             fig = plt.figure()
             fig.set_size_inches(22, 10)
             ax = []

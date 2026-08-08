@@ -100,7 +100,6 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
         build_nuitka_args,
     )
 
-    # 플랫폼 감지
     if target_platform is None:
         target_platform = get_platform()
 
@@ -167,7 +166,6 @@ def main():
     """메인 빌드 프로세스"""
     print("=== Impulcifer Nuitka 크로스 플랫폼 빌드 스크립트 ===\n", flush=True)
 
-    # 플랫폼 감지 및 표시
     current_platform = get_platform()
     print(f"감지된 플랫폼: {current_platform}", flush=True)
 
@@ -191,7 +189,6 @@ def main():
     if build_impulcifer(project_version=current_version, output_base_dir="dist"):
         print("\n빌드가 완료되었습니다!", flush=True)
 
-        # 플랫폼별 출력 경로 확인
         if current_platform == "windows":
             final_path = Path('dist/Impulcifer_Distribution/ImpulciferGUI').resolve()
         elif current_platform == "macos":

@@ -50,10 +50,8 @@ def convert_truehd_to_wav(truehd_path, output_path=None):
         fd, output_path = tempfile.mkstemp(suffix='.wav')
         os.close(fd)
 
-    # Get channel layout info first
     channel_info = get_truehd_channel_info(truehd_path)
 
-    # Convert to WAV with proper channel mapping
     cmd = [
         _discovery.FFMPEG_PATH, '-i', truehd_path,
         '-acodec', 'pcm_f32le',  # 32-bit float PCM
@@ -92,13 +90,11 @@ def get_truehd_channel_info(file_path):
         channels = stream.get('channels', 0)
         stream.get('channel_layout', '')
 
-        # Map channel layouts to speaker names
         from core.constants import CHANNEL_LAYOUT_MAP
 
         if channels in CHANNEL_LAYOUT_MAP:
             return CHANNEL_LAYOUT_MAP[channels]
         else:
-            # Unknown layout, return None
             return None
     except Exception:
         return None
@@ -164,7 +160,6 @@ def read_audio(file_path, expand=False):
     # 기반 빠른 분기로 모듈 import / 일반 처리 경로의 ffmpeg 탐색 비용을 제거.
     ext = os.path.splitext(file_path)[1].lower()
     if ext in _TRUEHD_EXTENSIONS and is_truehd_file(file_path):
-        # Convert TrueHD to temporary WAV
         temp_wav, channel_info = convert_truehd_to_wav(file_path)
         try:
             data, fs = sf.read(temp_wav)
@@ -179,7 +174,6 @@ def read_audio(file_path, expand=False):
             if os.path.exists(temp_wav):
                 os.remove(temp_wav)
     else:
-        # Original WAV reading logic
         data, fs = sf.read(file_path)
         if len(data.shape) > 1:
             # Soundfile has tracks on columns, we want them on rows

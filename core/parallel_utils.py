@@ -252,7 +252,6 @@ def get_parallelization_info() -> dict:
 
 
 if __name__ == "__main__":
-    # Print parallelization info when run directly
     info = get_parallelization_info()
     print("=== Parallelization Configuration ===")
     for key, value in info.items():

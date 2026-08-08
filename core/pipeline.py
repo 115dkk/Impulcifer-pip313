@@ -457,13 +457,12 @@ class BRIRPipeline:
         ]
 
     def run(self) -> None:
-        """Run the full stage sequence (estimator -> room/headphone/
-        EQ -> target -> HRIR open -> crop/align -> virtual bass ->
-        mic-deviation -> equalize -> decay -> balance -> normalize -> plots ->
-        resample -> write). Output byte-exactness is guarded by
-        tests/test_brir_integrity.py. DSP stage helpers live in
-        core.pipeline_stages and are imported lazily inside the stage methods
-        so constructing a pipeline stays cheap until run() is called."""
+        """Run the enabled stages from :meth:`_stage_table` in order.
+
+        Output byte-exactness is guarded by tests/test_brir_integrity.py.
+        DSP stage helpers live in core.pipeline_stages and are imported
+        lazily inside the stage methods so constructing a pipeline stays
+        cheap until run() is called."""
         import os
 
         from core.cancellation import check_cancelled
@@ -633,7 +632,7 @@ class BRIRPipeline:
         check_cancelled()
 
     def _stage_write_responses(self):
-        """Write multi-channel WAV file with sine sweeps for debugging."""
+        """Write all impulse responses to responses.wav (debug artifact)."""
         import os
 
         from core.cancellation import check_cancelled
@@ -730,7 +729,6 @@ class BRIRPipeline:
         check_cancelled()
 
     def _stage_write_readme(self):
-        """Write info and stats in readme."""
         import os
 
         from core.cancellation import check_cancelled
@@ -764,12 +762,10 @@ class BRIRPipeline:
             for side, ir in pair.items():
                 ir.recording = convolve(self.estimator.test_signal, ir.data, mode="full")
 
-        # Plot post processing
         self.hrir.plot(os.path.join(self.dir_path, "plots", "post"))
         check_cancelled()
 
     def _stage_plot_results(self):
-        """Plot results, always."""
         import os
 
         from core.cancellation import check_cancelled
@@ -861,12 +857,10 @@ class BRIRPipeline:
         from core.cancellation import check_cancelled
         from core.constants import HESUVI_TRACK_ORDER
 
-        # Write multi-channel WAV file with standard track order
         self.logger.step("cli_writing_brirs")
         check_cancelled()
         self.hrir.write_wav(os.path.join(self.dir_path, "hrir.wav"))
 
-        # Write multi-channel WAV file with HeSuVi track order
         check_cancelled()
         self.hrir.write_wav(os.path.join(self.dir_path, "hesuvi.wav"), track_order=HESUVI_TRACK_ORDER)
 
@@ -878,10 +872,6 @@ class BRIRPipeline:
 
         self.logger.step("cli_generating_truehd")
 
-        # 레이아웃별로 보유 채널을 세고, 최소 채널 수를 만족하면 좌/우 트랙
-        # 순서를 만들어 기록한다. (구 core/channel_generation.py 인라인 —
-        # validate가 만든 리스트를 버리고 같은 것을 다시 계산하던 3-함수
-        # 시퀀스였다.)
         for layout_name, layout_order, min_channels, ok_key, fail_key in (
             ("11ch", TRUEHD_11CH_ORDER, 8, "cli_success_truehd_11ch", "cli_warning_truehd_11ch_fail"),  # 7.0.4
             ("13ch", TRUEHD_13CH_ORDER, 10, "cli_success_truehd_13ch", "cli_warning_truehd_13ch_fail"),  # 7.0.6
@@ -923,7 +913,6 @@ class BRIRPipeline:
                 avg_target=cfg.target_level,
             )
 
-        # FL-L, FL-R, FR-L, FR-R 순서로 파일 생성
         jd_order = ["FL-left", "FL-right", "FR-left", "FR-right"]
         out_path = os.path.join(self.dir_path, "jamesdsp.wav")
         dsp_hrir.write_wav(out_path, track_order=jd_order)
@@ -953,10 +942,9 @@ class BRIRPipeline:
         check_cancelled()
 
     def _cleanup(self):
-        """중간 산출물 참조 해제 + figure 정리 + GC.
+        """중간 산출물 참조 해제 + figure 정리 + GC (성공 경로에서만).
 
-        기존 run() 꼬리의 del 블록과 동일하게 성공 경로에서만 수행한다. 스테이지
-        메서드의 지역 변수(eq_tasks 등)는 메서드 반환 시점에 이미 해제되므로,
+        스테이지 메서드의 지역 변수는 메서드 반환 시점에 이미 해제되므로,
         여기서는 루트 객체 참조만 끊으면 된다.
         """
         import gc

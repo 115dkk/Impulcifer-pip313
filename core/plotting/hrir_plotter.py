@@ -363,14 +363,12 @@ class HRIRPlotter:
             ["Left raw", "Right raw", "Left smoothed", "Right smoothed", "Difference"]
         )
 
-        # Save figures
         file_path = os.path.join(dir_path, "results.png")
 
         os.makedirs(dir_path, exist_ok=True)
 
         fig.savefig(file_path, bbox_inches="tight")
         plt.close(fig)
-        # Optimize file size
         im = Image.open(file_path)
         im = im.convert("P", palette=ADAPTIVE_PALETTE, colors=60)
         im.save(file_path, optimize=True)

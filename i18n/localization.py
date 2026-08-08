@@ -150,7 +150,6 @@ class LocalizationManager:
 
         self.settings = self.load_settings()
 
-        # Set language (from settings or detect system)
         if 'language' in self.settings:
             self.set_language(self.settings['language'])
         else:
@@ -198,14 +197,12 @@ class LocalizationManager:
         self.settings['language'] = language_code
         self.save_settings()
 
-        # Load translation file
         self.load_translations(language_code)
 
     def load_translations(self, language_code: str):
         """Load translation file for specified language"""
         locale_file = self.locales_dir / f'{language_code}.json'
 
-        # Debug: print locales directory and file path
         if not locale_file.exists():
             print(f"Translation file not found: {locale_file}")
             print(f"Locales directory: {self.locales_dir}")

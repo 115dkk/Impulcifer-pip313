@@ -81,7 +81,6 @@ def read_wav(file_path, expand=False):
 
 def write_wav(file_path, fs, data, bit_depth=32):
     """Writes WAV file."""
-    # Ensure the directory exists before saving
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     
     if bit_depth == 16:

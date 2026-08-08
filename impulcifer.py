@@ -12,7 +12,7 @@ import matplotlib.font_manager as fm
 from core.utils import set_matplotlib_font
 from core.constants import SPEAKER_NAMES
 
-# Cancellation now lives in core.cancellation; these re-exports keep the
+# Cancellation lives in core.cancellation; these re-exports keep the
 # historical import surface (GUI tabs, application service, tests) working.
 from core.cancellation import (  # noqa: F401
     CancelledError,
@@ -24,8 +24,8 @@ from core.cancellation import (  # noqa: F401
 # from the top-level module.
 from core.impulse_response_estimator import ImpulseResponseEstimator  # noqa: F401
 
-# Stage helpers now live in core.pipeline_stages (audit #138 C1); re-exported
-# for legacy callers (tests import equalization from here, etc.).
+# Stage helpers live in core.pipeline_stages; re-exported for legacy
+# callers (tests import equalization from here, etc.).
 from core.pipeline_stages import (  # noqa: F401
     _find_eq_settings_file,
     _read_eq_settings,
