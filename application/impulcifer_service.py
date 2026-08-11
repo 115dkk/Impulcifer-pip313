@@ -465,6 +465,28 @@ class ImpulciferApplicationService:
 
         return self._start_job("brir", True, run)
 
+    def start_output_recovery(self, request: dict[str, Any]) -> dict[str, Any]:
+        """Restore missing HRIR/HeSuVi/Hangloose outputs by channel reordering."""
+        validation = self._validate_output_recovery_request(request)
+        if not validation["ok"]:
+            return validation
+        params = validation["data"]["params"]
+
+        def run(_job_id: str, _cancel_event: threading.Event) -> dict[str, Any]:
+            from core.brir_recovery import BrirRecoveryError, recover_brir_outputs
+
+            try:
+                result = recover_brir_outputs(**params)
+            except BrirRecoveryError as exc:
+                raise _ServiceFailure(
+                    exc.code,
+                    str(exc),
+                    details=exc.details,
+                ) from None
+            return asdict(result)
+
+        return self._start_job("output_recovery", False, run)
+
     def poll_job(self, job_id: str, after_seq: int = 0) -> dict[str, Any]:
         if not isinstance(job_id, str) or not job_id:
             return _error("INVALID_REQUEST", "job_id is required.")
@@ -1093,6 +1115,39 @@ class ImpulciferApplicationService:
         except ValueError as exc:
             return _error("INVALID_REQUEST", str(exc))
         return {"ok": True, "data": {"spec": spec}}
+
+    @staticmethod
+    def _validate_output_recovery_request(request: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(request, dict):
+            return _error("INVALID_REQUEST", "Output recovery request must be an object.")
+        unknown = sorted(set(request) - {"dir_path", "include_hangloose"})
+        if unknown:
+            return _error(
+                "INVALID_REQUEST",
+                "Unknown output recovery fields.",
+                details={"fields": unknown},
+            )
+        dir_path = request.get("dir_path")
+        if not isinstance(dir_path, str) or not dir_path.strip():
+            return _error("INVALID_REQUEST", "dir_path must be a directory path.")
+        dir_path = dir_path.strip()
+        if not os.path.isdir(dir_path):
+            return _error(
+                "FILE_NOT_FOUND",
+                "Recovery directory does not exist.",
+                details={"path": dir_path},
+            )
+        include_hangloose = request.get("include_hangloose", False)
+        if not isinstance(include_hangloose, bool):
+            return _error("INVALID_REQUEST", "include_hangloose must be a boolean.")
+        return _ok(
+            {
+                "params": {
+                    "directory": dir_path,
+                    "include_hangloose": include_hangloose,
+                }
+            }
+        )
 
     @staticmethod
     def _validate_brir_request(request: dict[str, Any]) -> dict[str, Any]:
