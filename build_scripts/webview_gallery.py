@@ -140,7 +140,9 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
     }}),
     poll_job: (jobId, afterSeq) => respond({{
       job: jobFor(activeKind || "brir", pollStatus),
-      events: afterSeq === 0 ? (SCENARIO === "brir-failed" ? [
+      events: afterSeq === 0 ? (activeKind === "output_recovery" ? [
+        {{ seq: 1, timestamp_ms: 0, type: "status", payload: {{ status: "running" }} }},
+      ] : SCENARIO === "brir-failed" ? [
         {{ seq: 1, timestamp_ms: 0, type: "status", payload: {{ status: "running" }} }},
         {{ seq: 2, timestamp_ms: 0, type: "log",
            payload: {{ level: "INFO", message: STRINGS["cli_opening_measurements"] }} }},
