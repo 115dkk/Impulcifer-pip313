@@ -547,6 +547,8 @@ def test_bootstrap_ships_processing_config_defaults() -> None:
 
     assert shipped["specific_limit"] == 400
     assert shipped["generic_limit"] == 300
+    assert response["data"]["capabilities"]["output_recovery"] is True
+    assert response["data"]["capabilities"]["output_recovery_cancel"] is False
 
 
 def test_system_info_reports_environment() -> None:

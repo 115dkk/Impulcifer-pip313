@@ -16,6 +16,7 @@ from gui.event_bus import EventBus
 from gui.skins import SKIN_STABLE, SKIN_STUDIO
 from gui.tabs.impulcifer_tab import ImpulciferTab
 from gui.tabs.info_tab import InfoTab
+from gui.tabs.recovery_tab import RecoveryTab
 from gui.tabs.recorder_tab import RecorderTab
 from gui.tabs.settings_tab import SettingsTab
 from gui.theme import get_ctk_theme_json_path
@@ -185,6 +186,7 @@ class ModernImpulciferGUI:
             self.create_tabs()
             self.recorder_tab = RecorderTab(self)
             self.impulcifer_tab = ImpulciferTab(self)
+            self.recovery_tab = RecoveryTab(self)
             self.settings_tab = SettingsTab(self)
             self.info_tab = InfoTab(self)
 
@@ -196,6 +198,7 @@ class ModernImpulciferGUI:
         self.tab_keys = {
             'recorder': 'tab_recorder',
             'impulcifer': 'tab_impulcifer',
+            'recovery': 'tab_output_recovery',
             'settings': 'tab_ui_settings',
             'info': 'tab_info',
         }
@@ -377,7 +380,11 @@ class ModernImpulciferGUI:
             return self.studio_shell.get_state()
 
         tabs_state: dict[str, dict] = {}
-        for key, name in (('recorder', 'recorder_tab'), ('impulcifer', 'impulcifer_tab')):
+        for key, name in (
+            ('recorder', 'recorder_tab'),
+            ('impulcifer', 'impulcifer_tab'),
+            ('recovery', 'recovery_tab'),
+        ):
             tab = getattr(self, name, None)
             if tab is not None and hasattr(tab, 'get_state'):
                 tabs_state[key] = tab.get_state()
@@ -399,7 +406,11 @@ class ModernImpulciferGUI:
                 })
             return
 
-        for key, name in (('recorder', 'recorder_tab'), ('impulcifer', 'impulcifer_tab')):
+        for key, name in (
+            ('recorder', 'recorder_tab'),
+            ('impulcifer', 'impulcifer_tab'),
+            ('recovery', 'recovery_tab'),
+        ):
             tab_state = tabs_state.get(key)
             tab = getattr(self, name, None)
             if tab_state is not None and tab is not None and hasattr(tab, 'apply_state'):

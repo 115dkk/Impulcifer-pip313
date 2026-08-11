@@ -24,6 +24,9 @@
           <button class="nav-item" data-view="processing">
             <span class="nav-glyph">≡</span><span data-i18n="sidebar_processing">Processing</span>
           </button>
+          <button class="nav-item" data-view="recovery">
+            <span class="nav-glyph">↺</span><span data-i18n="sidebar_output_recovery">Output Recovery</span>
+          </button>
           <button class="nav-item" data-view="settings">
             <span class="nav-glyph">⚙</span><span data-i18n="sidebar_settings">Settings</span>
           </button>
@@ -463,6 +466,70 @@
               <pre class="log" data-log aria-live="polite"></pre>
               <div class="actions-row">
                 <button class="btn btn-secondary" id="btn-open-output" data-i18n="webview_open_output_folder" hidden>Open output folder</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================== OUTPUT RECOVERY ======================== -->
+        <section class="view" id="view-recovery">
+          <header class="page-header">
+            <div>
+              <h1 data-i18n="studio_recovery_title">Output Recovery</h1>
+              <p class="subtitle" data-i18n="studio_recovery_subtitle">Restore missing Impulcifer output layouts without running DSP again.</p>
+            </div>
+            <button class="btn btn-primary" id="btn-start-recovery" data-start data-i18n="recovery_action">Restore outputs</button>
+          </header>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">01</span>
+              <span class="card-title" data-i18n="recovery_card_source">Recovery source</span>
+            </div>
+            <div class="card-body">
+              <div class="field-row">
+                <label for="recovery-dir-path" data-i18n="recovery_source_label">Output folder:</label>
+                <input id="recovery-dir-path" class="mono" value="data/my_hrir" spellcheck="false">
+                <button class="btn-link" data-browse="dir" data-target="recovery-dir-path" data-i18n="button_browse">Browse</button>
+              </div>
+              <p class="hint" data-i18n="recovery_source_hint">Select the output folder, its Hangloose folder, or a folder containing split speaker WAVs.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">02</span>
+              <span class="card-title" data-i18n="recovery_card_options">Outputs</span>
+            </div>
+            <div class="card-body">
+              <div class="check-row">
+                <input type="checkbox" id="recovery-include-hangloose">
+                <label for="recovery-include-hangloose" data-i18n="recovery_include_hangloose">Also create Hangloose files</label>
+              </div>
+              <p class="hint" data-i18n="recovery_include_hangloose_hint">When hrir.wav or hesuvi.wav is the source, also restore one stereo WAV per speaker.</p>
+              <p class="hint" data-i18n="recovery_preserve_hint">Existing files are validated and preserved; recovery never overwrites them.</p>
+            </div>
+          </div>
+
+          <div class="card recovery-result" aria-live="polite">
+            <div class="card-head">
+              <span class="card-num mono">03</span>
+              <span class="card-title" data-i18n="recovery_card_result">Result</span>
+              <span class="card-meta mono" id="recovery-status-meta" data-i18n="webview_job_idle">Idle</span>
+            </div>
+            <div class="card-body">
+              <p class="recovery-status" id="recovery-status-title" data-i18n="webview_job_idle">Idle</p>
+              <p id="recovery-status-detail" data-i18n="recovery_idle_detail">Choose a source folder to inspect and restore its missing output files.</p>
+              <div class="recovery-file-row" id="recovery-created-row" hidden>
+                <span data-i18n="recovery_created_label">Created</span>
+                <span class="mono" id="recovery-created-files"></span>
+              </div>
+              <div class="recovery-file-row" id="recovery-existing-row" hidden>
+                <span data-i18n="recovery_existing_label">Preserved</span>
+                <span class="mono" id="recovery-existing-files"></span>
+              </div>
+              <div class="actions-row">
+                <button class="btn btn-secondary" id="btn-open-recovery-output" data-i18n="webview_open_output_folder" hidden>Open output folder</button>
               </div>
             </div>
           </div>

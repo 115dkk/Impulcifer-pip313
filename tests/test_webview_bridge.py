@@ -29,6 +29,10 @@ def test_module_import_does_not_require_pywebview(monkeypatch) -> None:
         ("list_audio_devices", ("API",)),
         ("start_recording", ({"mode": "speakers"},)),
         ("start_brir", ({"dir_path": "C:/measurements"},)),
+        (
+            "start_output_recovery",
+            ({"dir_path": "C:/outputs", "include_hangloose": True},),
+        ),
         ("poll_job", ("job", 4)),
         ("cancel_job", ("job",)),
         ("get_ui_settings", ()),

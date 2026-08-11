@@ -290,8 +290,10 @@ class ImpulciferApplicationService:
                 "capabilities": {
                     "recording": True,
                     "brir": True,
+                    "output_recovery": True,
                     "recording_cancel": False,
                     "brir_cancel": True,
+                    "output_recovery_cancel": False,
                 },
                 "active_job": active,
                 "ui": self._ui_settings_payload(get_localization_manager()),
