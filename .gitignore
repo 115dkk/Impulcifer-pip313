@@ -142,6 +142,9 @@ Impulcifer_Distribution/*
 # WebView gallery local render output (CI publishes to the webview-gallery branch)
 webview-gallery/
 
+# Local Superloopy planning and evidence state
+.superloopy/
+
 # Biweekly-audit outputs (published to the audit issue, never committed;
 # change-summary.txt is .txt so the release gate would treat it as shippable)
 ARCHITECTURE_AUDIT.md

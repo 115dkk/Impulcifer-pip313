@@ -385,6 +385,80 @@ def test_brir_runtime_failure_reports_structured_error(monkeypatch, tmp_path: Pa
     assert statuses[-1] == "failed"
 
 
+def test_output_recovery_job_maps_request_and_returns_manifest(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from core import brir_recovery
+
+    captured = {}
+
+    def fake_recovery(directory, *, include_hangloose=False):
+        captured["directory"] = directory
+        captured["include_hangloose"] = include_hangloose
+        return brir_recovery.BrirRecoveryResult(
+            source_kind="hrir",
+            source_path=str(tmp_path / "hrir.wav"),
+            output_dir=str(tmp_path),
+            sample_rate=48_000,
+            sample_count=4096,
+            speakers=("FL", "FR"),
+            created_files=(str(tmp_path / "hesuvi.wav"),),
+            existing_files=(str(tmp_path / "hrir.wav"),),
+        )
+
+    monkeypatch.setattr(brir_recovery, "recover_brir_outputs", fake_recovery)
+    service = ImpulciferApplicationService()
+    started = service.start_output_recovery(
+        {"dir_path": str(tmp_path), "include_hangloose": True}
+    )
+    assert started["ok"], started
+
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+
+    assert data["job"]["status"] == "succeeded"
+    assert captured == {"directory": str(tmp_path), "include_hangloose": True}
+    assert data["job"]["result"]["source_kind"] == "hrir"
+    assert data["job"]["result"]["speakers"] == ["FL", "FR"]
+
+
+def test_output_recovery_request_validation_and_structured_failure(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from core import brir_recovery
+
+    service = ImpulciferApplicationService()
+    for request in (
+        [],
+        {},
+        {"dir_path": str(tmp_path), "include_hangloose": "yes"},
+        {"dir_path": str(tmp_path), "unknown": True},
+    ):
+        response = service.start_output_recovery(request)
+        assert not response["ok"], request
+        assert response["error"]["code"] == "INVALID_REQUEST", request
+
+    def fail_recovery(*_args, **_kwargs):
+        raise brir_recovery.BrirRecoveryError(
+            "SOURCE_MISMATCH",
+            "The surviving outputs disagree.",
+            details={"tracks": ["FL-left"]},
+        )
+
+    monkeypatch.setattr(brir_recovery, "recover_brir_outputs", fail_recovery)
+    started = service.start_output_recovery({"dir_path": str(tmp_path)})
+    data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
+
+    assert data["job"]["status"] == "failed"
+    assert data["job"]["error"] == {
+        "code": "SOURCE_MISMATCH",
+        "message": "The surviving outputs disagree.",
+        "details": {"tracks": ["FL-left"]},
+        "retryable": False,
+    }
+
+
 class _FakeLocalization:
     def __init__(self, locales_dir: Path) -> None:
         self.current_language = "en"
@@ -473,6 +547,8 @@ def test_bootstrap_ships_processing_config_defaults() -> None:
 
     assert shipped["specific_limit"] == 400
     assert shipped["generic_limit"] == 300
+    assert response["data"]["capabilities"]["output_recovery"] is True
+    assert response["data"]["capabilities"]["output_recovery_cancel"] is False
 
 
 def test_system_info_reports_environment() -> None:

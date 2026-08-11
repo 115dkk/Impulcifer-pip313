@@ -3,10 +3,10 @@
 """Studio skin shell — sidebar navigation + content panel.
 
 Replaces the Stable skin's CTkTabview with a sidebar-driven layout. Each
-sidebar item swaps a tab implementation into the content panel. The four
+sidebar item swaps a tab implementation into the content panel. The five
 Studio tab classes (StudioRecorderTab / StudioImpulciferTab /
-StudioSettingsTab / StudioInfoTab) are responsible for filling the panel
-they receive.
+StudioRecoveryTab / StudioSettingsTab / StudioInfoTab) are responsible for
+filling the panel they receive.
 """
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ class StudioShell:
         # (key, icon-glyph, i18n-key)
         ("recorder", "●", "sidebar_recorder"),
         ("impulcifer", "≡", "sidebar_processing"),
+        ("recovery", "↺", "sidebar_output_recovery"),
         ("settings", "⚙", "sidebar_settings"),
         ("info", "ⓘ", "sidebar_info"),
     )
@@ -232,6 +233,10 @@ class StudioShell:
             from gui.skins.studio_impulcifer_tab import StudioImpulciferTab
 
             self.tabs[key] = StudioImpulciferTab(self.app, parent)
+        elif key == "recovery":
+            from gui.skins.studio_recovery_tab import StudioRecoveryTab
+
+            self.tabs[key] = StudioRecoveryTab(self.app, parent)
         elif key == "settings":
             from gui.skins.studio_settings_tab import StudioSettingsTab
 

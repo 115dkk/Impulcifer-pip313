@@ -72,8 +72,10 @@ jobs:
           mkdir -p "/tmp/gallery-branch/$RUN_DIR"
           cp webview-gallery/*.png "/tmp/gallery-branch/$RUN_DIR/"
           git -C /tmp/gallery-branch add "$RUN_DIR"
-          git -C /tmp/gallery-branch commit -m "gallery: run ${GITHUB_RUN_NUMBER} (${GITHUB_SHA})"
-          git -C /tmp/gallery-branch push origin "$BRANCH"
+          if ! git -C /tmp/gallery-branch diff --cached --quiet; then
+            git -C /tmp/gallery-branch commit -m "gallery: run ${GITHUB_RUN_NUMBER} (${GITHUB_SHA})"
+            git -C /tmp/gallery-branch push origin "$BRANCH"
+          fi
           echo "run_dir=$RUN_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Open or update review issue
@@ -81,6 +83,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          retry_gh() {
+            local attempt
+            for attempt in 1 2 3; do
+              if gh "$@"; then
+                return 0
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                sleep $((attempt * 5))
+              fi
+            done
+            return 1
+          }
           RAW_BASE="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/webview-gallery/${{ steps.publish.outputs.run_dir }}"
           if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
             CONTEXT="PR #${{ github.event.pull_request.number }}"
@@ -105,13 +119,13 @@ jobs:
               echo "</details>"
             done
           } > issue-body.md
-          EXISTING="$(gh issue list --state open --search "in:title \"${TITLE}\"" --json number,title \
+          EXISTING="$(retry_gh issue list --state open --search "in:title \"${TITLE}\"" --json number,title \
             --jq "[.[] | select(.title == \"${TITLE}\")][0].number // empty")"
           if [ -n "$EXISTING" ]; then
-            gh issue comment "$EXISTING" --body-file issue-body.md
+            retry_gh issue comment "$EXISTING" --body-file issue-body.md
             echo "Updated review issue #$EXISTING"
           else
-            gh issue create --title "$TITLE" --body-file issue-body.md \
+            retry_gh issue create --title "$TITLE" --body-file issue-body.md \
               --label webview-gallery 2>/dev/null \
-              || gh issue create --title "$TITLE" --body-file issue-body.md
+              || retry_gh issue create --title "$TITLE" --body-file issue-body.md
           fi

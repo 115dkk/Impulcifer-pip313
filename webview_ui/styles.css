@@ -302,6 +302,25 @@ input[type="checkbox"] {
 
 .actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
+.recovery-status { font-size: 14px; font-weight: 700; }
+
+.recovery-result[data-status="running"] .recovery-status,
+.recovery-result[data-status="running"] .card-meta { color: var(--accent); }
+.recovery-result[data-status="succeeded"] .recovery-status,
+.recovery-result[data-status="succeeded"] .card-meta { color: var(--ok); }
+.recovery-result[data-status="failed"] .recovery-status,
+.recovery-result[data-status="failed"] .card-meta { color: var(--err); }
+
+.recovery-file-row {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.recovery-file-row > span:first-child { color: var(--fg-1); font-weight: 700; }
+.recovery-file-row > span:last-child { color: var(--fg-2); font-size: 11px; overflow-wrap: anywhere; }
+
 /* -------------------------------------------------------------- buttons */
 
 .btn {

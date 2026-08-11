@@ -149,6 +149,9 @@ class WebviewBridge:
     def start_brir(self, request: dict[str, Any]) -> dict[str, Any]:
         return self._service.start_brir(request)
 
+    def start_output_recovery(self, request: dict[str, Any]) -> dict[str, Any]:
+        return self._service.start_output_recovery(request)
+
     def poll_job(self, job_id: str, after_seq: int = 0) -> dict[str, Any]:
         return self._service.poll_job(job_id, after_seq)
 

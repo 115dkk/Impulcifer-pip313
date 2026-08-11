@@ -101,6 +101,18 @@ def test_visible_locale_strings_are_not_english_fallbacks() -> None:
         "studio_card_channel_status",
         "studio_record_start",
         "update_restart_done",
+        "sidebar_output_recovery",
+        "studio_recovery_title",
+        "studio_recovery_subtitle",
+        "recovery_action",
+        "recovery_running_action",
+        "recovery_source_hint",
+        "recovery_include_hangloose",
+        "recovery_preserve_hint",
+        "recovery_idle_detail",
+        "recovery_running_detail",
+        "recovery_created_label",
+        "recovery_existing_label",
     )
 
     for locale_file, locale in locales:

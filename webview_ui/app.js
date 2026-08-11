@@ -18,10 +18,13 @@ const state = {
   jobId: null,
   jobKind: null,
   lastJob: null,
+  lastRecoveryJob: null,
+  startPending: false,
   nextSeq: 0,
   pollTimer: null,
   resolvedRecordPath: "",
   lastOutputDir: null,
+  lastRecoveryOutputDir: null,
   systemThemeQuery: null,
   stageIndex: -1,
   stageAbort: null,
@@ -96,6 +99,7 @@ function applyStrings() {
   refreshResolvedPath();
   renderSteps();
   renderJobState(state.lastJob);
+  renderRecoveryJob(state.lastRecoveryJob);
   applySkin(state.skin);
 }
 
@@ -187,18 +191,34 @@ function setProgress(value) {
 
 function renderJobState(job) {
   state.lastJob = job;
-  const busy = Boolean(job && !["succeeded", "failed", "cancelled"].includes(job.status));
-  document.querySelectorAll("[data-start]").forEach((button) => {
-    button.disabled = busy;
-  });
-  $("btn-cancel-brir").disabled = !busy || !job.cancellable;
+  updateStartControls(job);
   const label = job
-    ? `${job.kind} · ${t(`webview_status_${job.status}`)}`
+    ? `${jobKindLabel(job.kind)} · ${t(`webview_status_${job.status}`)}`
     : t("webview_job_idle");
   document.querySelectorAll("[data-job-state]").forEach((node) => {
     node.textContent = label;
   });
-  updateJobModal(job, busy);
+  if (job?.kind === "output_recovery") renderRecoveryJob(job);
+  const active = Boolean(job && !["succeeded", "failed", "cancelled"].includes(job.status));
+  updateJobModal(job, active);
+}
+
+function updateStartControls(job) {
+  const active = Boolean(job && !["succeeded", "failed", "cancelled"].includes(job.status));
+  const busy = state.startPending || active;
+  document.querySelectorAll("[data-start]").forEach((button) => {
+    button.disabled = busy;
+  });
+  $("btn-cancel-brir").disabled = !active || !job.cancellable;
+}
+
+function jobKindLabel(kind) {
+  const key = {
+    recording: "sidebar_recorder",
+    brir: "sidebar_processing",
+    output_recovery: "sidebar_output_recovery",
+  }[kind];
+  return key ? t(key) : kind;
 }
 
 /* Stable skin shows running jobs in a separate dialog, mirroring the CTk
@@ -209,11 +229,12 @@ function updateJobModal(job, busy) {
     modal.hidden = true;
     return;
   }
-  $("job-modal-title").textContent = t(
-    job.kind === "recording" ? "dialog_recording_title" : "dialog_processing_title",
-  );
+  const titleKey = job.kind === "recording"
+    ? "dialog_recording_title"
+    : job.kind === "output_recovery" ? "dialog_recovery_title" : "dialog_processing_title";
+  $("job-modal-title").textContent = t(titleKey);
   const cancel = $("job-modal-cancel");
-  cancel.hidden = !busy;
+  cancel.hidden = !busy || !job.cancellable;
   cancel.disabled = !job.cancellable;
   $("job-modal-close").hidden = busy;
   modal.hidden = false;
@@ -418,28 +439,147 @@ function finishRecorderStatus(job) {
   }
 }
 
+/* ------------------------------------------------------ output recovery */
+
+function recoveryFileNames(paths, outputDir) {
+  if (!Array.isArray(paths)) return [];
+  const root = String(outputDir || "").replace(/\\/g, "/").replace(/\/$/, "");
+  return paths.map((rawPath) => {
+    const path = String(rawPath).replace(/\\/g, "/");
+    return root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path.split("/").pop();
+  });
+}
+
+function recoverySourceLabel(kind) {
+  return {
+    hangloose: "Hangloose",
+    hrir: "hrir.wav",
+    hesuvi: "hesuvi.wav",
+    "hrir+hesuvi": "hrir.wav + hesuvi.wav",
+  }[kind] || kind || "—";
+}
+
+function setRecoveryFiles(created, existing) {
+  const createdRow = $("recovery-created-row");
+  const existingRow = $("recovery-existing-row");
+  createdRow.hidden = created === null;
+  existingRow.hidden = existing === null;
+  if (created !== null) $("recovery-created-files").textContent = created.length
+    ? created.join(", ") : t("recovery_none");
+  if (existing !== null) $("recovery-existing-files").textContent = existing.length
+    ? existing.join(", ") : t("recovery_none");
+}
+
+function renderRecoveryJob(job) {
+  state.lastRecoveryJob = job;
+  const resultCard = document.querySelector(".recovery-result");
+  const meta = $("recovery-status-meta");
+  const title = $("recovery-status-title");
+  const detail = $("recovery-status-detail");
+  const openButton = $("btn-open-recovery-output");
+
+  if (!job) {
+    resultCard.dataset.status = "idle";
+    meta.textContent = t("webview_job_idle");
+    title.textContent = t("webview_job_idle");
+    detail.textContent = t("recovery_idle_detail");
+    setRecoveryFiles(null, null);
+    openButton.hidden = true;
+    return;
+  }
+
+  resultCard.dataset.status = job.status;
+  meta.textContent = t(`webview_status_${job.status}`);
+  title.textContent = t(`webview_status_${job.status}`);
+  setRecoveryFiles(null, null);
+  openButton.hidden = true;
+
+  if (!["succeeded", "failed", "cancelled"].includes(job.status)) {
+    detail.textContent = t("recovery_running_detail");
+    return;
+  }
+
+  if (job.status === "succeeded" && job.result) {
+    const result = job.result;
+    const created = recoveryFileNames(result.created_files, result.output_dir);
+    const existing = recoveryFileNames(result.existing_files, result.output_dir);
+    state.lastRecoveryOutputDir = result.output_dir;
+    detail.textContent = fmt(t("recovery_success_summary"), {
+      source: recoverySourceLabel(result.source_kind),
+      sample_rate: result.sample_rate,
+      samples: result.sample_count,
+      created: created.length,
+      existing: existing.length,
+    });
+    setRecoveryFiles(created, existing);
+    openButton.hidden = false;
+    return;
+  }
+
+  const error = job.error || { code: "UNKNOWN_ERROR", message: "" };
+  state.lastRecoveryOutputDir = null;
+  detail.textContent = fmt(t("recovery_failed_summary"), {
+    code: error.code,
+    message: error.message,
+  });
+}
+
 /* ------------------------------------------------------------------ jobs */
 
-async function begin(start, payload) {
-  let response = await start(payload);
-  if (response?.error?.code === "CONFIRMATION_REQUIRED") {
-    if (!window.confirm(confirmationText(response))) return;
-    payload.confirm_warnings = true;
+async function begin(start, payload, kindHint = null) {
+  if (state.startPending || state.jobId) return;
+  state.startPending = true;
+  updateStartControls(state.lastJob);
+
+  let response;
+  try {
     response = await start(payload);
+    if (response?.error?.code === "CONFIRMATION_REQUIRED") {
+      if (!window.confirm(confirmationText(response))) {
+        state.startPending = false;
+        updateStartControls(state.lastJob);
+        return;
+      }
+      payload.confirm_warnings = true;
+      response = await start(payload);
+    }
+  } catch (error) {
+    response = {
+      ok: false,
+      error: { code: "BRIDGE_ERROR", message: String(error), details: {} },
+    };
   }
-  if (!response) return;
+  state.startPending = false;
+  if (!response) {
+    updateStartControls(state.lastJob);
+    return;
+  }
   if (!response.ok) {
     appendLog(errorText(response));
+    if (kindHint === "output_recovery") {
+      renderRecoveryJob({
+        kind: "output_recovery",
+        status: "failed",
+        result: null,
+        error: response.error,
+      });
+    }
+    updateStartControls(state.lastJob);
     // Stable hides the inline activity cards (jobs run in the modal), so a
     // pre-start validation error would otherwise be invisible there.
-    if (state.skin === "stable") window.alert(errorText(response));
+    if (state.skin === "stable" && kindHint !== "output_recovery") {
+      window.alert(errorText(response));
+    }
     return;
   }
   const job = response.data.job;
   state.jobId = job.job_id;
   state.jobKind = job.kind;
   state.nextSeq = 0;
-  state.lastOutputDir = job.kind === "brir" ? val("bf-dir-path") : null;
+  if (job.kind === "brir") state.lastOutputDir = val("bf-dir-path");
+  if (job.kind === "output_recovery") {
+    state.lastRecoveryOutputDir = val("recovery-dir-path");
+  }
   state.modalDismissed = false;
   resetSteps(job.kind === "brir");
   resetRecorderStatus();
@@ -513,6 +653,7 @@ async function pollJob() {
       }
     }
     if (job.kind === "recording") finishRecorderStatus(job);
+    if (job.kind === "output_recovery") renderRecoveryJob(job);
     state.jobId = null;
     return;
   }
@@ -1186,6 +1327,16 @@ function wireEvents() {
   $("btn-generate-brir").addEventListener("click", () =>
     begin((request) => api().start_brir(request), gatherBrirPayload()),
   );
+  $("btn-start-recovery").addEventListener("click", () =>
+    begin(
+      (request) => api().start_output_recovery(request),
+      {
+        dir_path: val("recovery-dir-path"),
+        include_hangloose: checked("recovery-include-hangloose"),
+      },
+      "output_recovery",
+    ),
+  );
   $("btn-cancel-brir").addEventListener("click", cancelActiveJob);
   $("job-modal-cancel").addEventListener("click", cancelActiveJob);
   $("job-modal-close").addEventListener("click", () => {
@@ -1194,6 +1345,9 @@ function wireEvents() {
   });
   $("btn-open-output").addEventListener("click", () => {
     if (state.lastOutputDir) api().open_path(state.lastOutputDir);
+  });
+  $("btn-open-recovery-output").addEventListener("click", () => {
+    if (state.lastRecoveryOutputDir) api().open_path(state.lastRecoveryOutputDir);
   });
 
   $("btn-open-data").addEventListener("click", () => api().open_path());
