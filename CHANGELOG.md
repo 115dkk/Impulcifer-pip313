@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.12.0 - 2026-08-11
+### BRIR 출력 형식 복원
+
+#### ⭐ 새로운 기능 / 개선
+- **출력 복원 코어 추가**: `Hangloose/<speaker>.wav`만 남은 폴더에서 정본 트랙 순서로 32채널 `hrir.wav`(무음 LFE 자리 포함)와 30채널 `hesuvi.wav`를 재조립한다. `hrir.wav` 또는 `hesuvi.wav` 한쪽만 남은 경우에는 다른 쪽을 복원하며, 선택적으로 스피커별 Hangloose stereo WAV도 함께 만든다. 샘플레이트·길이·유한값·채널 수·LFE 무음·중복 파일명·표현 간 일치 여부를 먼저 검증하고, 임시 파일 전체를 쓴 뒤 원자적으로 확정하므로 기존 파일을 덮어쓰거나 부분 결과를 남기지 않는다.
+- **별도 Output Recovery 탭**: WebView와 CustomTkinter의 Stable/Studio 스킨 모두에 Recorder/Processing과 분리된 복원 화면을 추가했다. 출력 루트·`Hangloose` 하위 폴더·분할 WAV 직속 폴더를 직접 입력하거나 선택할 수 있고, Hangloose 추가 생성 옵션과 실행 중 중복 제출 방지, 생성/보존 파일을 구분한 성공 상태, 구조화된 실패 상태를 제공한다. CTk는 네이티브 GUI 계약대로 복원 코어를 직접 호출하고 WebView만 application service job을 사용한다.
+- **9개 언어 동시 지원**: 새 탭의 경로·옵션·진행·결과 문자열을 en/ko/fr/de/es/ja/zh_CN/zh_TW/ru에 추가하고 중국어 BCP-47 별칭 파일의 byte-mirror 계약을 유지했다.
+
+#### 🔧 빌드 / 설정 변경
+- **복원·프론트엔드 검증 추가**: 채널 재조립, 한쪽 형식 복원, 선택적 Hangloose 생성, 충돌/부분 파일/롤백 실패 경로와 서비스·CTk/WebView 경계를 유닛 테스트로 고정했다. WebView 갤러리는 새 탭의 모든 스킨·테마·언어 조합과 성공/충돌 상태를 실제 Chromium으로 렌더한다.
+
 ## 2.11.1 - 2026-08-09
 ### 주석(각주) 전면 청소
 
@@ -1997,4 +2008,3 @@ Modern GUI에서 마이크 편차 보정 v2.0의 모든 고급 기능을 사용�
 
 ## 1.0.0 - 2020-07-20
 Performance improvements. Main features are supported and Impulcifer is relatively stable.
-

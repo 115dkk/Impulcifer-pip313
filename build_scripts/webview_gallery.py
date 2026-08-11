@@ -27,14 +27,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SKINS = ("studio", "stable")
 LANGUAGES = ("en", "ko")
 THEMES = ("dark", "light")
-VIEWS = ("recorder", "processing", "settings", "info")
+VIEWS = ("recorder", "processing", "recovery", "settings", "info")
 
-# 2 skins x 2 themes x 2 languages x 4 views + 3 busy-state shots
+# 2 skins x 2 themes x 2 languages x 5 views + 3 busy-state shots
 # (studio checklist BRIR run, studio recording run, stable modal dialog)
 # + 2 failure shots (studio checklist abort, stable modal error)
 # + 2 auto-update prompt shots (studio en, stable ko)
-# + 1 first-run language picker shot.
-EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3 + 2 + 2 + 1
+# + 1 first-run language picker shot + 2 recovery terminal-state shots.
+EXPECTED_SHOTS = len(SKINS) * len(LANGUAGES) * len(THEMES) * len(VIEWS) + 3 + 2 + 2 + 1 + 2
 
 VIEWPORT_WIDTH = 1280
 MIN_HEIGHT = 860
@@ -75,26 +75,41 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
   const SCENARIO = {json.dumps(scenario)};
   const VERSION = {json.dumps(version)};
   const respond = (data) => Promise.resolve({{ ok: true, data }});
+  const recoveryResult = {{
+    source_kind: "hangloose",
+    source_path: "C:/Impulcifer/output/Hangloose",
+    output_dir: "C:/Impulcifer/output",
+    sample_rate: 48000,
+    sample_count: 8192,
+    speakers: ["FL", "FR", "FC", "BL", "BR", "SL", "SR"],
+    created_files: ["C:/Impulcifer/output/hrir.wav", "C:/Impulcifer/output/hesuvi.wav"],
+    existing_files: ["C:/Impulcifer/output/Hangloose/FL.wav", "C:/Impulcifer/output/Hangloose/FR.wav"],
+  }};
   const jobFor = (kind, status) => ({{
     job_id: "gallery", kind, status,
     cancellable: kind === "brir" && status === "running",
-    result: null,
+    result: kind === "output_recovery" && status === "succeeded" ? recoveryResult : null,
     error: status === "failed" ? {{
-      code: "INTERNAL_ERROR",
-      message: "Impulse response peak not found for FL-left — test signal does not match the recording.",
+      code: kind === "output_recovery" ? "CONFLICTING_OUTPUTS" : "INTERNAL_ERROR",
+      message: kind === "output_recovery"
+        ? "hrir.wav and hesuvi.wav contain different impulse responses."
+        : "Impulse response peak not found for FL-left — test signal does not match the recording.",
       details: {{}},
       retryable: false,
     }} : null,
   }});
   const runningJob = (kind) => jobFor(kind, "running");
   const activeKind = SCENARIO === "brir-running" || SCENARIO === "brir-failed" ? "brir"
+    : SCENARIO === "recovery-succeeded" || SCENARIO === "recovery-failed" ? "output_recovery"
     : SCENARIO === "recording-running" ? "recording" : null;
-  const pollStatus = SCENARIO === "brir-failed" ? "failed" : "running";
+  const pollStatus = SCENARIO === "brir-failed" || SCENARIO === "recovery-failed" ? "failed"
+    : SCENARIO === "recovery-succeeded" ? "succeeded" : "running";
   window.pywebview = {{ api: {{
     bootstrap: () => respond({{
       version: VERSION,
       platform: "windows",
-      capabilities: {{ recording: true, brir: true, recording_cancel: false, brir_cancel: true }},
+      capabilities: {{ recording: true, brir: true, output_recovery: true,
+                       recording_cancel: false, brir_cancel: true }},
       active_job: activeKind ? runningJob(activeKind) : null,
       ui: {{ language: LANGUAGE, theme: THEME, skin: SKIN, frontend: "webview",
              first_run: SCENARIO === "first-run",
@@ -189,6 +204,7 @@ def _mock_bridge_js(language: str, theme: str, scenario: str, version: str, skin
     select_directory: () => respond({{ path: null }}),
     start_recording: () => respond({{ job: runningJob("recording") }}),
     start_brir: () => respond({{ job: runningJob("brir") }}),
+    start_output_recovery: () => respond({{ job: runningJob("output_recovery") }}),
   }} }};
 }})();
 """
@@ -296,6 +312,25 @@ def render_gallery(out_dir: Path) -> list[Path]:
         page.eval_on_selector(".nav-item[data-view='processing']", "node => node.click()")
         page.wait_for_timeout(400)
         shots.append(_shoot(page, out_dir, "processing-stable-en-dark-failed"))
+        context.close()
+
+        # Output recovery terminal states use the real result surface rather
+        # than a generic success toast. Capture both the rebuilt-file manifest
+        # and the highest-risk conflict failure.
+        context, page = _open_page(
+            browser, index_uri, "ko", "dark", "recovery-succeeded", version
+        )
+        page.click(".nav-item[data-view='recovery']")
+        page.wait_for_timeout(250)
+        shots.append(_shoot(page, out_dir, "recovery-studio-ko-dark-succeeded"))
+        context.close()
+
+        context, page = _open_page(
+            browser, index_uri, "en", "light", "recovery-failed", version, "stable"
+        )
+        page.eval_on_selector(".nav-item[data-view='recovery']", "node => node.click()")
+        page.wait_for_timeout(250)
+        shots.append(_shoot(page, out_dir, "recovery-stable-en-light-failed"))
         context.close()
 
         # First-run language picker (CTk LanguageSelectionDialog port).

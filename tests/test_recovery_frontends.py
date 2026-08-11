@@ -62,8 +62,6 @@ class _Harness(RecoveryActionsMixin):
 
 
 def test_ctk_recovery_calls_core_and_blocks_duplicate_submit(monkeypatch, tmp_path: Path) -> None:
-    import gui.recovery_actions as actions
-
     calls: list[tuple[str, bool]] = []
 
     def fake_recovery(directory, *, include_hangloose=False):
@@ -89,8 +87,12 @@ def test_ctk_recovery_calls_core_and_blocks_duplicate_submit(monkeypatch, tmp_pa
         def start(self) -> None:
             return None
 
-    monkeypatch.setattr(actions, "recover_brir_outputs", fake_recovery)
-    monkeypatch.setattr(actions.threading, "Thread", DeferredThread)
+    # ``test_entrypoints`` deliberately evicts ``gui.*`` from ``sys.modules``.
+    # Patch the globals owned by the already-collected mixin so this contract
+    # remains order-independent when the full suite is run in one process.
+    globals_ = RecoveryActionsMixin.start_recovery.__globals__
+    monkeypatch.setitem(globals_, "recover_brir_outputs", fake_recovery)
+    monkeypatch.setattr(globals_["threading"], "Thread", DeferredThread)
 
     harness = _Harness(tmp_path)
     harness.start_recovery()
