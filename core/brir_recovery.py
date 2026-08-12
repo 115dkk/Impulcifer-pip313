@@ -5,7 +5,8 @@ Impulcifer writes the same speaker/ear impulse responses in three layouts:
 * ``hrir.wav`` uses :data:`HEXADECAGONAL_TRACK_ORDER` (32 tracks, including
   two silent LFE placeholders).
 * ``hesuvi.wav`` uses :data:`HESUVI_TRACK_ORDER` (30 tracks).
-* ``Hangloose/<speaker>.wav`` stores one stereo file per measured speaker.
+* ``Hangloose/[prefix]<speaker>.wav`` stores one stereo file per measured
+  speaker.  The optional prefix is shared by all files in one output set.
 
 This module validates one surviving representation and rebuilds the missing
 representations by channel reordering only.  It never applies gain, DSP, or
@@ -39,6 +40,7 @@ _SPEAKER_TRACKS = tuple(
     for speaker in SPEAKER_NAMES
     for side in ("left", "right")
 )
+_SPEAKER_SUFFIXES = tuple(sorted(SPEAKER_NAMES, key=len, reverse=True))
 
 
 class BrirRecoveryError(ValueError):
@@ -262,14 +264,27 @@ def _find_named_dir(directory: Path, name: str) -> Path | None:
 def _find_split_files(directory: Path) -> dict[str, Path]:
     if not directory.is_dir():
         return {}
-    canonical = {speaker.casefold(): speaker for speaker in SPEAKER_NAMES}
     found: dict[str, Path] = {}
+    prefix: str | None = None
     for path in directory.iterdir():
         if not path.is_file() or path.suffix.casefold() != ".wav":
             continue
-        speaker = canonical.get(path.stem.casefold())
-        if speaker is None:
+        match = _match_split_stem(path.stem)
+        if match is None:
             continue
+        file_prefix, speaker = match
+        normalized_prefix = file_prefix.casefold()
+        if prefix is None:
+            prefix = normalized_prefix
+        elif normalized_prefix != prefix:
+            raise BrirRecoveryError(
+                "AMBIGUOUS_SOURCE",
+                "Hangloose files must use one shared filename prefix.",
+                details={
+                    "files": [str(found_path) for found_path in found.values()]
+                    + [str(path)]
+                },
+            )
         if speaker in found:
             raise BrirRecoveryError(
                 "AMBIGUOUS_SOURCE",
@@ -278,6 +293,15 @@ def _find_split_files(directory: Path) -> dict[str, Path]:
             )
         found[speaker] = path
     return found
+
+
+def _match_split_stem(stem: str) -> tuple[str, str] | None:
+    normalized = stem.casefold()
+    for speaker in _SPEAKER_SUFFIXES:
+        suffix = speaker.casefold()
+        if normalized.endswith(suffix):
+            return stem[: -len(speaker)], speaker
+    return None
 
 
 def _read_combined(path: Path, order: Iterable[str], kind: str) -> _TrackSet:

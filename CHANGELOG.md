@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.12.1 - 2026-08-13
+### 접두사가 붙은 Hangloose 파일 복원 수정
+
+#### 🐛 버그 수정
+- **Hangloose 파일 탐지 수정**: `400se7chdelayBL.wav`처럼 공통 출력 이름 뒤에 스피커 코드가 붙은 Hangloose 파일을 복원 원본으로 인식한다. 3글자 높이 채널(`TFL` 등)은 짧은 채널명(`FL`)보다 먼저 판별하며, 서로 다른 출력 세트를 한 폴더에서 잘못 합치지 않도록 파일 접두사의 일치 여부를 검증한다.
+
 ## 2.12.0 - 2026-08-11
 ### BRIR 출력 형식 복원
 

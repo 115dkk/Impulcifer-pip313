@@ -84,6 +84,71 @@ def test_hangloose_directory_rebuilds_both_canonical_layouts(tmp_path: Path) -> 
     np.testing.assert_array_equal(hesuvi, _stack(tracks, HESUVI_TRACK_ORDER))
 
 
+def test_prefixed_hangloose_filenames_rebuild_both_layouts(tmp_path: Path) -> None:
+    speakers = ("FL", "FR", "FC", "BL", "BR", "SL", "SR")
+    tracks = _speaker_tracks(speakers)
+    prefix = "400se7chdelay"
+    for speaker in speakers:
+        write_wav(
+            str(tmp_path / f"{prefix}{speaker}.wav"),
+            FS,
+            np.vstack(
+                (tracks[f"{speaker}-left"], tracks[f"{speaker}-right"])
+            ),
+            bit_depth=32,
+        )
+
+    result = recover_brir_outputs(tmp_path)
+
+    assert result.source_kind == "hangloose"
+    assert result.speakers == speakers
+    assert {Path(path).name for path in result.created_files} == {
+        "hrir.wav",
+        "hesuvi.wav",
+    }
+    assert {Path(path).name for path in result.existing_files} == {
+        f"{prefix}{speaker}.wav" for speaker in speakers
+    }
+    _, hrir = _read_matrix(tmp_path / "hrir.wav")
+    _, hesuvi = _read_matrix(tmp_path / "hesuvi.wav")
+    np.testing.assert_array_equal(hrir, _stack(tracks, HEXADECAGONAL_TRACK_ORDER))
+    np.testing.assert_array_equal(hesuvi, _stack(tracks, HESUVI_TRACK_ORDER))
+
+
+def test_longest_speaker_suffix_wins_for_prefixed_top_channel(tmp_path: Path) -> None:
+    tracks = _speaker_tracks(("TFL",))
+    write_wav(
+        str(tmp_path / "profileTFL.wav"),
+        FS,
+        np.vstack((tracks["TFL-left"], tracks["TFL-right"])),
+        bit_depth=32,
+    )
+
+    result = recover_brir_outputs(tmp_path)
+
+    assert result.speakers == ("TFL",)
+
+
+def test_mixed_hangloose_filename_prefixes_are_ambiguous(tmp_path: Path) -> None:
+    tracks = _speaker_tracks(("FL", "FR"))
+    for filename, speaker in (("firstFL.wav", "FL"), ("secondFR.wav", "FR")):
+        write_wav(
+            str(tmp_path / filename),
+            FS,
+            np.vstack(
+                (tracks[f"{speaker}-left"], tracks[f"{speaker}-right"])
+            ),
+            bit_depth=32,
+        )
+
+    with pytest.raises(BrirRecoveryError) as error:
+        recover_brir_outputs(tmp_path)
+
+    assert error.value.code == "AMBIGUOUS_SOURCE"
+    assert not (tmp_path / "hrir.wav").exists()
+    assert not (tmp_path / "hesuvi.wav").exists()
+
+
 def test_hrir_only_restores_hesuvi_and_optional_hangloose(tmp_path: Path) -> None:
     speakers = ("FL", "FR", "FC", "BL", "BR", "SL", "SR")
     tracks = _speaker_tracks(speakers)
