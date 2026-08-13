@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.12.3 - 2026-08-13
+### Windows 시작 제목 표시줄 적용 순서 수정
+
+#### 🐛 버그 수정
+- **최초 표시 전에 앱 테마 확정**: `webview.start()` 작업 스레드에서 적용한 앱 테마를 pywebview의 WinForms 창 생성 과정이 Windows 시스템 테마로 다시 덮어쓰던 문제를 수정했다. 네이티브 폼 생성이 끝난 뒤 화면에 나타나기 직전인 동기식 `before_show` 이벤트에서 제목 표시줄 테마를 적용하여 첫 프레임부터 앱 테마와 일치하게 한다.
+
 ## 2.12.2 - 2026-08-13
 ### Windows 시작 제목 표시줄 수정
 
