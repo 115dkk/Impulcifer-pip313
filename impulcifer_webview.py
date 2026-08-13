@@ -73,8 +73,8 @@ def apply_windows_titlebar_theme(window: Any, dark: bool) -> bool:
     """Match the OS title bar to the app theme via DWM, like CustomTkinter.
 
     Without this the WebView window wears the default white Windows title
-    bar over the dark Pulse UI. Returns False only when the native handle
-    is not available yet (caller may retry); True otherwise (done or no-op).
+    bar over the dark Pulse UI. Returns False while the native handle or
+    frame is not ready (caller may retry); True otherwise (done or no-op).
     """
     if platform.system() != "Windows":
         return True
@@ -94,12 +94,34 @@ def apply_windows_titlebar_theme(window: Any, dark: bool) -> bool:
         for attribute in (20, 19):
             if set_attribute(hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)) == 0:
                 break
-        # SWP_NOSIZE|NOMOVE|NOZORDER|FRAMECHANGED — repaint the frame so the
-        # new title bar color shows without waiting for a resize.
-        ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0020)
+        set_window_pos = ctypes.windll.user32.SetWindowPos
+        set_window_pos.argtypes = [
+            wintypes.HWND,
+            wintypes.HWND,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        ]
+        set_window_pos.restype = wintypes.BOOL
+        # SWP_NOSIZE|NOMOVE|NOZORDER|FRAMECHANGED recalculates the frame.
+        frame_changed = set_window_pos(hwnd, 0, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0020)
+
+        redraw_window = ctypes.windll.user32.RedrawWindow
+        redraw_window.argtypes = [
+            wintypes.HWND,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            wintypes.UINT,
+        ]
+        redraw_window.restype = wintypes.BOOL
+        # RDW_INVALIDATE|UPDATENOW|FRAME explicitly paints the non-client
+        # area; otherwise Windows may wait for an activation change.
+        frame_redrawn = redraw_window(hwnd, None, None, 0x0001 | 0x0100 | 0x0400)
+        return bool(frame_changed and frame_redrawn)
     except Exception:
-        pass
-    return True
+        return False
 
 
 # open_url() is allowlist-only so the JS side can never navigate the host

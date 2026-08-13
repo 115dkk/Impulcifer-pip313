@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.12.2 - 2026-08-13
+### Windows 시작 제목 표시줄 수정
+
+#### 🐛 버그 수정
+- **시작 직후 제목 표시줄 테마 적용**: Windows에서 DWM 테마 속성만 바뀌고 비클라이언트 영역의 페인트가 다음 활성화 변경까지 미뤄지던 문제를 수정했다. Win32 함수 서명을 명시하고 제목 표시줄을 즉시 다시 그리며, 프레임 갱신 실패 시 재시도하여 창 바깥을 클릭하기 전까지 기본 제목 표시줄이 남는 현상을 없앴다.
+
 ## 2.12.1 - 2026-08-13
 ### 접두사가 붙은 Hangloose 파일 복원 수정
 
