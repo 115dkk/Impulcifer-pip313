@@ -178,6 +178,98 @@ def test_main_rejects_unsupported_platform(monkeypatch) -> None:
         impulcifer_webview.main()
 
 
+def test_windows_titlebar_repaint_preserves_64_bit_handle(monkeypatch) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    import impulcifer_webview
+
+    class _FakeFunction:
+        def __init__(self, result) -> None:
+            self.result = result
+            self.calls: list[tuple] = []
+
+        def __call__(self, *args):
+            self.calls.append(args)
+            return self.result
+
+    set_attribute = _FakeFunction(0)
+    set_window_pos = _FakeFunction(1)
+    redraw_window = _FakeFunction(1)
+    monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        SimpleNamespace(
+            dwmapi=SimpleNamespace(DwmSetWindowAttribute=set_attribute),
+            user32=SimpleNamespace(
+                SetWindowPos=set_window_pos,
+                RedrawWindow=redraw_window,
+            ),
+        ),
+        raising=False,
+    )
+    native_handle = 0x1_0000_1234
+    window = SimpleNamespace(
+        native=SimpleNamespace(Handle=SimpleNamespace(ToInt64=lambda: native_handle)),
+    )
+
+    assert impulcifer_webview.apply_windows_titlebar_theme(window, dark=True)
+    assert set_window_pos.argtypes == [
+        wintypes.HWND,
+        wintypes.HWND,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        wintypes.UINT,
+    ]
+    assert set_window_pos.restype is wintypes.BOOL
+    assert set_window_pos.calls == [
+        (native_handle, 0, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0004 | 0x0020),
+    ]
+    assert redraw_window.argtypes == [
+        wintypes.HWND,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.UINT,
+    ]
+    assert redraw_window.restype is wintypes.BOOL
+    assert redraw_window.calls == [
+        (native_handle, None, None, 0x0001 | 0x0100 | 0x0400),
+    ]
+
+
+def test_windows_titlebar_retries_when_frame_repaint_fails(monkeypatch) -> None:
+    import ctypes
+
+    import impulcifer_webview
+
+    class _FakeFunction:
+        def __init__(self, result) -> None:
+            self.result = result
+
+        def __call__(self, *args):
+            return self.result
+
+    monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        ctypes,
+        "windll",
+        SimpleNamespace(
+            dwmapi=SimpleNamespace(DwmSetWindowAttribute=_FakeFunction(0)),
+            user32=SimpleNamespace(
+                SetWindowPos=_FakeFunction(0),
+                RedrawWindow=_FakeFunction(0),
+            ),
+        ),
+        raising=False,
+    )
+    window = SimpleNamespace(native=SimpleNamespace(Handle=1234))
+
+    assert not impulcifer_webview.apply_windows_titlebar_theme(window, dark=True)
+
+
 def test_bootstrap_reports_webview_backend(monkeypatch) -> None:
     import impulcifer_webview
     from impulcifer_webview import WebviewBridge
