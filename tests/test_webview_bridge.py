@@ -69,6 +69,19 @@ class _FakeWindow:
         return self.selection
 
 
+class _FakeEvent:
+    def __init__(self) -> None:
+        self.handlers = []
+
+    def __iadd__(self, handler):
+        self.handlers.append(handler)
+        return self
+
+    def fire(self) -> None:
+        for handler in self.handlers:
+            handler()
+
+
 def _install_fake_webview(monkeypatch) -> SimpleNamespace:
     fake_webview = SimpleNamespace(
         FileDialog=SimpleNamespace(OPEN="OPEN", FOLDER="FOLDER", SAVE="SAVE"),
@@ -150,8 +163,13 @@ def test_main_forces_platform_backend(monkeypatch, system, expected_backend) -> 
     import impulcifer_webview
 
     calls = []
+
+    def create_window(*args, **kwargs):
+        calls.append(("create", args, kwargs))
+        return SimpleNamespace(events=SimpleNamespace(before_show=_FakeEvent()))
+
     fake_webview = SimpleNamespace(
-        create_window=lambda *args, **kwargs: calls.append(("create", args, kwargs)),
+        create_window=create_window,
         start=lambda *args, **kwargs: calls.append(("start", args, kwargs)),
     )
     monkeypatch.setattr(impulcifer_webview.platform, "system", lambda: system)
@@ -166,8 +184,38 @@ def test_main_forces_platform_backend(monkeypatch, system, expected_backend) -> 
     start_name, start_args, start_kwargs = calls[1]
     assert start_name == "start"
     assert start_kwargs == {"gui": expected_backend, "debug": False}
-    # First positional arg is the on-shown callback that themes the title bar.
-    assert len(start_args) == 1 and callable(start_args[0])
+    # The title-bar callback belongs to before_show, not webview.start(): the
+    # latter starts its worker before pywebview constructs the native form.
+    assert start_args == ()
+
+
+def test_create_window_applies_titlebar_after_pywebview_setup_before_show(monkeypatch) -> None:
+    import impulcifer_webview
+
+    before_show = _FakeEvent()
+    window = SimpleNamespace(events=SimpleNamespace(before_show=before_show))
+    fake_webview = SimpleNamespace(create_window=lambda *args, **kwargs: window)
+    bridge = impulcifer_webview.WebviewBridge(_FakeService())
+    calls = []
+
+    monkeypatch.setattr(impulcifer_webview, "_index_uri", lambda: "file:///index.html")
+    monkeypatch.setattr(impulcifer_webview, "resolve_effective_theme", lambda: "dark")
+    monkeypatch.setattr(
+        impulcifer_webview,
+        "apply_windows_titlebar_theme",
+        lambda attached_window, dark: calls.append((attached_window, dark)) or True,
+    )
+
+    created = impulcifer_webview.create_app_window(fake_webview, bridge)
+
+    assert created is window
+    assert calls == []
+    assert before_show.handlers == [bridge.apply_titlebar_theme]
+
+    # pywebview fires this only after BrowserForm.__init__ has applied its own
+    # system theme, and immediately before BrowserForm.Show().
+    before_show.fire()
+    assert calls == [(window, True)]
 
 
 def test_main_rejects_unsupported_platform(monkeypatch) -> None:
@@ -339,4 +387,5 @@ def test_webview_entrypoint_contains_no_qt_backend() -> None:
     assert '"Windows": "edgechromium"' in source
     assert '"Darwin": "cocoa"' in source
     assert '"Linux": "gtk"' in source
-    assert "webview.start(bridge.apply_titlebar_theme, gui=backend" in source
+    assert "window.events.before_show += bridge.apply_titlebar_theme" in source
+    assert "webview.start(gui=backend" in source

@@ -195,9 +195,8 @@ class WebviewBridge:
     def apply_titlebar_theme(self) -> None:
         """Sync the native title bar with the current app theme (Windows).
 
-        The webview.start callback can fire before the native window handle
-        exists, so poll briefly instead of silently doing nothing (observed:
-        the packaged app kept the default white title bar).
+        ``before_show`` normally runs with the native handle ready. Keep the
+        short retry for runtime theme changes and unusually slow handle setup.
         """
         window = self._window
         if window is None:
@@ -307,6 +306,12 @@ def create_app_window(webview_module: Any, bridge: "WebviewBridge") -> Any:
         background_color=_WINDOW_BACKGROUNDS[resolve_effective_theme()],
     )
     bridge.attach_window(window)
+    # pywebview applies the Windows system theme inside BrowserForm.__init__.
+    # Run after that assignment but before BrowserForm.Show() so the app theme
+    # is the final value and the first visible frame already has the right
+    # caption. A webview.start callback begins before BrowserForm is created
+    # and can therefore be overwritten by pywebview during construction.
+    window.events.before_show += bridge.apply_titlebar_theme
     return window
 
 
@@ -324,8 +329,7 @@ def main() -> None:
 
     bridge = WebviewBridge()
     create_app_window(webview, bridge)
-    # Runs once the window is shown: the native handle exists only then.
-    webview.start(bridge.apply_titlebar_theme, gui=backend, debug=False)
+    webview.start(gui=backend, debug=False)
 
 
 if __name__ == "__main__":
