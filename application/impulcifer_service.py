@@ -14,6 +14,7 @@ from typing import Any, Callable, Optional
 from uuid import uuid4
 
 from core.constants import SPEAKER_NAMES
+from infra.environment import normalized_platform
 
 
 _TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
@@ -286,9 +287,9 @@ class ImpulciferApplicationService:
         return _ok(
             {
                 "version": version,
-                # infra.environment.normalized_platform()과 동일 어휘
-                # (windows/darwin/linux) — JSON API 계약 표면이므로 유지.
-                "platform": platform.system().lower(),
+                # windows/darwin/linux — JSON API 계약 표면 (audit F027:
+                # 어휘 정본은 infra.environment.normalized_platform).
+                "platform": normalized_platform(),
                 "brir_defaults": brir_defaults,
                 "sweep": sweep_info,
                 "capabilities": {
@@ -403,12 +404,16 @@ class ImpulciferApplicationService:
             try:
                 # Tk-free analysis helper (numpy/soundfile only) shared with
                 # the CTk RecordingStatusController's completion summary.
-                from gui.recording_status import analyze_recording
+                from core.recording_status import analyze_recording
 
                 analyzed = analyze_recording(params["record_path"])
                 if analyzed is not None:
                     summary = asdict(analyzed)
-            except Exception:
+            except Exception as e:
+                # Summary is best-effort garnish over a recording that already
+                # succeeded — never fail the job for it, but surface the cause
+                # instead of swallowing it silently (audit F029).
+                print(f"recording summary analysis failed: {e!r}")
                 summary = None
             return {
                 "mode": params["mode"],
@@ -439,18 +444,36 @@ class ImpulciferApplicationService:
             logger = get_logger()
             previous_gui_callback = logger.gui_callback
             previous_progress_callback = logger.progress_callback
-            logger.set_gui_callback(
-                lambda level, message: self._emit(
-                    job_id, "log", {"level": level, "message": message}
-                )
-            )
-            logger.set_progress_callback(
-                lambda progress, message: self._emit(
-                    job_id,
-                    "progress",
-                    {"progress": max(0.0, min(1.0, float(progress) / 100.0)), "message": message},
-                )
-            )
+
+            def on_log(
+                level: str,
+                message: str,
+                *,
+                key: Optional[str] = None,
+                args: Optional[dict[str, Any]] = None,
+            ) -> None:
+                payload = {"level": level, "message": message}
+                if key is not None:
+                    payload["key"] = key
+                self._emit(job_id, "log", payload)
+
+            def on_progress(
+                progress: int,
+                message: str,
+                *,
+                key: Optional[str] = None,
+                args: Optional[dict[str, Any]] = None,
+            ) -> None:
+                payload = {
+                    "progress": max(0.0, min(1.0, float(progress) / 100.0)),
+                    "message": message,
+                }
+                if key is not None:
+                    payload["key"] = key
+                self._emit(job_id, "progress", payload)
+
+            logger.set_gui_callback(on_log)
+            logger.set_progress_callback(on_progress)
             try:
                 with cancellation_scope(cancel_event):
                     impulcifer.main(**params)

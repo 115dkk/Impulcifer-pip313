@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from core.audio_io import read_wav, write_wav
 from core.impulse_response_estimator import ImpulseResponseEstimator
 from core.recording_naming import (
     record_filename_for_speakers,
@@ -28,7 +29,6 @@ from core.sweep_signal import (
     validate_sweep_spec,
     write_sidecar,
 )
-from core.utils import read_wav
 
 PROJECT_ROOT = Path(__file__).parent.parent
 BUNDLED_STEREO = (
@@ -64,8 +64,6 @@ def test_playback_is_bit_identical_to_locally_written_wav(tmp_path):
     so recording without a file behaves bit-for-bit like recording with
     one generated on the same machine.
     """
-    from core.utils import write_wav
-
     playback = build_sweep_playback(SweepSpec(speakers=("FL", "FR")))
     path = tmp_path / "sweep-seg-local.wav"
     write_wav(str(path), playback.fs, playback.estimator.sweep_sequence(["FL", "FR"], "stereo"), bit_depth=32)

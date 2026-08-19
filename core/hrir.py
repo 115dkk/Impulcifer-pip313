@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import builtins
 import os
 import warnings
 import numpy as np
@@ -8,8 +7,8 @@ from scipy import signal, fftpack
 from scipy.signal.windows import hann
 from scipy.interpolate import InterpolatedUnivariateSpline
 from autoeq.frequency_response import FrequencyResponse
+from core.audio_io import magnitude_response, read_wav, write_wav
 from core.impulse_response import ImpulseResponse
-from core.utils import read_wav, write_wav, magnitude_response
 from core.constants import (
     HEXADECAGONAL_TRACK_ORDER,
     IPSILATERAL_PAIRS,
@@ -19,6 +18,10 @@ from core.constants import (
     track_name,
 )
 from core.plotting.hrir_plotter import HRIRPlotter
+from infra.logger import get_logger
+
+
+logger = get_logger()
 
 try:
     from core.parallel_processing import parallel_process_dict, is_free_threaded_available
@@ -80,7 +83,8 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
     returned mapping into ``self.irs``.
     """
     irs: dict = {}
-    print = builtins.print if debug else lambda *args, **kwargs: None
+    debug_log = logger.debug if debug else lambda *args, **kwargs: None
+    debug_warning = logger.warning if debug else lambda *args, **kwargs: None
 
     fs, recording = read_wav(file_path, expand=True)
     if fs != expected_fs:
@@ -88,54 +92,54 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
             "Sampling rate of recording must match sampling rate of test signal."
         )
 
-    print(">>>>>>>>> Recording Analysis Debug Info:")
-    print(f"  File: {file_path}")
-    print(f"  Recording shape: {recording.shape}")
-    print(f"  Requested speakers: {speakers}")
-    print(f"  Side: {side}")
-    print(f"  Silence length: {silence_length} seconds")
-    print("  Estimator info:")
-    print(
+    debug_log(">>>>>>>>> Recording Analysis Debug Info:")
+    debug_log(f"  File: {file_path}")
+    debug_log(f"  Recording shape: {recording.shape}")
+    debug_log(f"  Requested speakers: {speakers}")
+    debug_log(f"  Side: {side}")
+    debug_log(f"  Silence length: {silence_length} seconds")
+    debug_log("  Estimator info:")
+    debug_log(
         f"    Length: {len(estimator)} samples ({len(estimator) / fs:.2f} seconds)"
     )
-    print(f"    Sample rate: {estimator.fs} Hz")
-    print(f"    Type: {type(estimator).__name__}")
+    debug_log(f"    Sample rate: {estimator.fs} Hz")
+    debug_log(f"    Type: {type(estimator).__name__}")
     if (
         hasattr(estimator, "test_signal")
         and estimator.test_signal is not None
     ):
-        print(
+        debug_log(
             f"    Test signal length: {len(estimator.test_signal)} samples ({len(estimator.test_signal) / estimator.fs:.2f} seconds)"
         )
     else:
-        print("    Test signal: Not available or None")
+        debug_log("    Test signal: Not available or None")
 
     expected_length_with_silence = silence_length + len(estimator)
-    print(
+    debug_log(
         f"  Expected minimum recording length: {expected_length_with_silence} samples ({expected_length_with_silence / fs:.2f} seconds)"
     )
-    print(
+    debug_log(
         f"  Actual recording length: {recording.shape[1]} samples ({recording.shape[1] / fs:.2f} seconds)"
     )
     length_difference = recording.shape[1] - expected_length_with_silence
-    print(
+    debug_log(
         f"  Length difference: {length_difference} samples ({length_difference / fs:.2f} seconds)"
     )
 
     if length_difference < 0:
-        print(
+        debug_warning(
             f"  WARNING: Recording is {abs(length_difference)} samples ({abs(length_difference) / fs:.2f} seconds) too short!"
         )
-        print("  This could be caused by:")
-        print("    1. Recording stopped too early")
-        print("    2. Wrong test signal file used")
-        print("    3. Estimator was created with different parameters")
+        debug_log("  This could be caused by:")
+        debug_log("    1. Recording stopped too early")
+        debug_log("    2. Wrong test signal file used")
+        debug_log("    3. Estimator was created with different parameters")
 
-    print("  Channel content analysis:")
+    debug_log("  Channel content analysis:")
     for ch in range(recording.shape[0]):
         max_val = np.max(np.abs(recording[ch, :]))
         rms_val = np.sqrt(np.mean(recording[ch, :] ** 2))
-        print(
+        debug_log(
             f"    Channel {ch}: Max={max_val:.6f}, RMS={rms_val:.6f}, {'ACTIVE' if max_val > 1e-6 else 'EMPTY'}"
         )
 
@@ -147,51 +151,51 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
 
     # 2 tracks per speaker when side is not specified, only 1 track per speaker when it is
     tracks_k = 2 if side is None else 1
-    print(f"  Tracks per speaker: {tracks_k}")
+    debug_log(f"  Tracks per speaker: {tracks_k}")
 
     # Number of speakers in each track
     n_columns = round(len(speakers) / (recording.shape[0] // tracks_k))
-    print(f"  Calculated n_columns: {n_columns}")
-    print(f"  Expected total tracks needed: {len(speakers) * tracks_k}")
-    print(f"  Available tracks in recording: {recording.shape[0]}")
+    debug_log(f"  Calculated n_columns: {n_columns}")
+    debug_log(f"  Expected total tracks needed: {len(speakers) * tracks_k}")
+    debug_log(f"  Available tracks in recording: {recording.shape[0]}")
 
     if len(speakers) * tracks_k > recording.shape[0]:
-        print(
+        debug_warning(
             f"  WARNING: Not enough tracks in recording! Need {len(speakers) * tracks_k}, have {recording.shape[0]}"
         )
 
     recording = recording[:, silence_length:]
-    print(f"  After silence crop: {recording.shape}")
+    debug_log(f"  After silence crop: {recording.shape}")
 
     # Split sections in time to columns
     columns = []
     column_size = silence_length + len(estimator)
-    print(f"  Column size (silence + estimator): {column_size}")
-    print(f"  Estimator length: {len(estimator)}")
-    print(f"  Available recording length after silence crop: {recording.shape[1]}")
+    debug_log(f"  Column size (silence + estimator): {column_size}")
+    debug_log(f"  Estimator length: {len(estimator)}")
+    debug_log(f"  Available recording length after silence crop: {recording.shape[1]}")
 
     if column_size > recording.shape[1]:
-        print(
+        debug_warning(
             f"  WARNING: Calculated column_size ({column_size}) exceeds recording length ({recording.shape[1]})"
         )
-        print(
+        debug_log(
             "  This suggests the recording was too short or estimator is longer than expected"
         )
 
         if n_columns <= 1:
             column_size = recording.shape[1]
             n_columns = 1
-            print(f"  Adjusted to single column with size: {column_size}")
+            debug_log(f"  Adjusted to single column with size: {column_size}")
         else:
             column_size = recording.shape[1] // n_columns
-            print(
+            debug_log(
                 f"  Adjusted column_size to: {column_size} (divided by {n_columns} columns)"
             )
             if column_size < len(estimator):
-                print(
+                debug_warning(
                     f"  ERROR: Even after adjustment, column_size ({column_size}) is smaller than estimator length ({len(estimator)})"
                 )
-                print(
+                debug_log(
                     "  This recording is too short for proper impulse response estimation"
                 )
 
@@ -206,16 +210,16 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
         ):
             column_data = recording[:, start_sample:end_sample]
             columns.append(column_data)
-            print(
+            debug_log(
                 f"  Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
             )
         else:
-            print(
+            debug_log(
                 f"  Column {i}: SKIPPED - insufficient length ({end_sample - start_sample} < {len(estimator)})"
             )
 
     if not columns:
-        print("  Attempting fallback solutions for short recording...")
+        debug_log("  Attempting fallback solutions for short recording...")
 
         # Option 1: Reduce silence length
         if silence_length > 0:
@@ -224,7 +228,7 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
 
             if available_for_silence >= min_silence:
                 adjusted_silence = max(min_silence, available_for_silence)
-                print(
+                debug_log(
                     f"  Fallback 1: Reducing silence from {silence_length} to {adjusted_silence} samples"
                 )
 
@@ -242,16 +246,16 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                     ) >= len(estimator):
                         column_data = adjusted_recording[:, start_sample:end_sample]
                         columns.append(column_data)
-                        print(
+                        debug_log(
                             f"  Fallback Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
                         )
                     else:
-                        print(
+                        debug_log(
                             f"  Fallback Column {i}: SKIPPED - still insufficient length"
                         )
 
                 if columns:
-                    print(
+                    debug_log(
                         f"  Fallback 1 successful: Created {len(columns)} columns with reduced silence"
                     )
                     recording = adjusted_recording
@@ -260,15 +264,15 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
         if (
             not columns and recording.shape[1] > len(estimator) * 0.8
         ):  # At least 80% of estimator length
-            print(
+            debug_log(
                 "  Fallback 2: Using available recording length even though it's shorter than estimator"
             )
-            print("  WARNING: This may result in reduced impulse response quality")
+            debug_warning("  WARNING: This may result in reduced impulse response quality")
 
             available_length = recording.shape[1]
             if n_columns == 1:
                 columns.append(recording)
-                print(
+                debug_log(
                     f"  Fallback 2: Single column with {available_length} samples"
                 )
             else:
@@ -279,7 +283,7 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                     if end_sample > start_sample:
                         column_data = recording[:, start_sample:end_sample]
                         columns.append(column_data)
-                        print(
+                        debug_log(
                             f"  Fallback 2 Column {i}: samples {start_sample}-{end_sample}, shape {column_data.shape}"
                         )
 
@@ -294,7 +298,7 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                 f"  3. Check if the correct test signal file was used for recording"
             )
 
-    print(f"  Successfully created {len(columns)} columns")
+    debug_log(f"  Successfully created {len(columns)} columns")
 
     # Split each track by columns
     i = 0
@@ -304,7 +308,7 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
         for j, column in enumerate(columns):
             n = int(i // 2 * len(columns) + j)
             if n >= len(speakers):
-                print(
+                debug_log(
                     f"  Speaker index {n} exceeds speakers list length {len(speakers)} - skipping"
                 )
                 continue
@@ -313,7 +317,7 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
             speaker_track_mapping.append(f"Track {i}: Speaker {speaker}")
 
             if speaker not in SPEAKER_NAMES:
-                print(f"  Skipping non-standard speaker: {speaker}")
+                debug_log(f"  Skipping non-standard speaker: {speaker}")
                 continue
 
             if speaker not in irs:
@@ -325,7 +329,7 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                     left_data = column[i, :]
                     right_data = column[i + 1, :]
 
-                    print(
+                    debug_log(
                         f"  Processing {speaker}: Left track {i} (max={np.max(np.abs(left_data)):.6f}), Right track {i + 1} (max={np.max(np.abs(right_data)):.6f})"
                     )
 
@@ -336,12 +340,12 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                         estimator.estimate(right_data), fs, right_data
                     )
                 else:
-                    print(
+                    debug_warning(
                         f"  WARNING: Not enough tracks for stereo processing of {speaker}"
                     )
             else:
                 data = column[i, :]
-                print(
+                debug_log(
                     f"  Processing {speaker} {side}: Track {i} (max={np.max(np.abs(data)):.6f})"
                 )
 
@@ -350,12 +354,12 @@ def _ingest_recording(estimator, expected_fs, file_path, speakers, side=None,
                 )
         i += tracks_k
 
-    print("  Speaker-Track mapping:")
+    debug_log("  Speaker-Track mapping:")
     for mapping in speaker_track_mapping:
-        print(f"    {mapping}")
+        debug_log(f"    {mapping}")
 
-    print(f"  Final processed speakers: {list(irs.keys())}")
-    print(">>>>>>>>> Recording Analysis Complete")
+    debug_log(f"  Final processed speakers: {list(irs.keys())}")
+    debug_log(">>>>>>>>> Recording Analysis Complete")
     return irs
 
 
@@ -516,7 +520,7 @@ class HRIR(HRIRPlotter):
                 'One and only one of the parameters "peak_target" and "avg_target" must be given!'
             )
 
-        print(
+        logger.info(
             f">>>>>>>>> Applied a normalization gain of {gain:.2f} dB to all channels"
         )
 
@@ -533,7 +537,7 @@ class HRIR(HRIRPlotter):
             )
 
             if is_free_threaded_available():
-                print(f"  🚀 Free-Threaded 병렬 정규화 완료 ({len(self.irs)} 채널)")
+                logger.info(f"  🚀 Free-Threaded 병렬 정규화 완료 ({len(self.irs)} 채널)")
         else:
             for speaker, pair in self.irs.items():
                 for ir in pair.values():
@@ -561,7 +565,7 @@ class HRIR(HRIRPlotter):
             peak_right = pair["right"].peak_index()
 
             if peak_left is None or peak_right is None:
-                print(
+                logger.warning(
                     f"Warning: Could not find peaks for {speaker}. Skipping crop_heads processing for this speaker."
                 )
                 continue
@@ -822,7 +826,7 @@ class HRIR(HRIRPlotter):
             apply_microphone_deviation_correction_to_hrir,
         )
 
-        print("마이크 착용 편차 보정 v4.0 중...")
+        logger.info("마이크 착용 편차 보정 v4.0 중...")
 
         if plot_analysis and plot_dir:
             mic_deviation_plot_dir = os.path.join(plot_dir, "microphone_deviation")
@@ -843,11 +847,11 @@ class HRIR(HRIRPlotter):
             avg_error = analysis_results.get('avg_error_db', 0)
             max_error = analysis_results.get('max_error_db', 0)
 
-            print("마이크 편차 보정 완료:")
-            print(f"  - 처리된 스피커: {len(speakers_processed)}개 ({', '.join(speakers_processed)})")
-            print(f"  - 평균 보정량: {avg_error:.2f} dB, 최대 보정량: {max_error:.2f} dB")
+            logger.info("마이크 편차 보정 완료:")
+            logger.info(f"  - 처리된 스피커: {len(speakers_processed)}개 ({', '.join(speakers_processed)})")
+            logger.info(f"  - 평균 보정량: {avg_error:.2f} dB, 최대 보정량: {max_error:.2f} dB")
         else:
-            print("마이크 편차 보정: 처리된 스피커가 없습니다.")
+            logger.warning("마이크 편차 보정: 처리된 스피커가 없습니다.")
 
         return analysis_results
 
@@ -904,7 +908,7 @@ class HRIR(HRIRPlotter):
             self.irs = parallel_process_dict(resample_pair, self.irs, use_threads=True)
 
             if is_free_threaded_available():
-                print(
+                logger.info(
                     f"  🚀 Free-Threaded 병렬 리샘플링 완료 ({len(self.irs)} 채널, {self.fs}Hz → {fs}Hz)"
                 )
         else:

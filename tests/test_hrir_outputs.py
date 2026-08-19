@@ -56,6 +56,43 @@ def test_write_wav_stacks_only_requested_track_order(monkeypatch) -> None:
     )
 
 
+def test_plot_accepts_recording_without_mutating_ir(monkeypatch) -> None:
+    hrir = _make_hrir()
+    recording = np.array([0.5, -0.25, 0.125])
+    captured = []
+
+    def fake_plot(self, **kwargs):
+        captured.append(kwargs["recording"])
+
+        class _Figure:
+            @staticmethod
+            def get_axes():
+                return []
+
+            @staticmethod
+            def suptitle(_title):
+                return None
+
+        return _Figure()
+
+    monkeypatch.setattr(ImpulseResponse, "plot", fake_plot)
+    monkeypatch.setattr("matplotlib.pyplot.close", lambda _fig: None)
+
+    recordings = {
+        speaker: {side: recording for side in pair}
+        for speaker, pair in hrir.irs.items()
+    }
+    hrir.plot(close_plots=True, recordings=recordings)
+
+    assert len(captured) == 8
+    assert all(value is recording for value in captured)
+    assert all(
+        ir.recording is None
+        for pair in hrir.irs.values()
+        for ir in pair.values()
+    )
+
+
 def test_subset_can_copy_only_requested_speakers() -> None:
     """JamesDSP-style subsets should avoid deep-copying unrelated speakers."""
     hrir = _make_hrir()

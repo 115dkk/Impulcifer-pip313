@@ -22,20 +22,21 @@ def process_plot_worker(args):
 
 
 def process_decay_worker(args):
-    """감쇠 조정 워커.
+    """워커 안에서 감쇠를 분석하고 조정 윈도우를 배열에 적용한다.
 
     Args:
-        args: Tuple of (speaker, side, ir_data, decay_value, fs)
+        args: Tuple of (speaker, side, ir_data, fs, target)
 
     Returns:
         Tuple of (speaker, side, adjusted_data)
     """
-    speaker, side, ir_data, decay_value, fs = args
-    # Lazy import to keep module-level imports minimal
-    from core.impulse_response import ImpulseResponse
-    temp_ir = ImpulseResponse(data=ir_data.copy(), fs=fs)
-    temp_ir.adjust_decay(decay_value)
-    return (speaker, side, temp_ir.data)
+    speaker, side, ir_data, fs, target = args
+    from core.decay import apply_decay_window, decay_adjustment_params
+
+    adjusted_data = ir_data.copy()
+    params = decay_adjustment_params(adjusted_data, fs, target)
+    apply_decay_window(adjusted_data, params)
+    return (speaker, side, adjusted_data)
 
 
 _EQUALIZATION_CONTEXT = None
@@ -167,8 +168,8 @@ def render_hrir_figure_worker(args):
 
     from core.impulse_response import ImpulseResponse
 
-    ir = ImpulseResponse(ir_data, fs, recording=recording)
-    fig = ir.plot(**plot_flags)
+    ir = ImpulseResponse(ir_data, fs)
+    fig = ir.plot(recording=recording, **plot_flags)
     axes_list = fig.get_axes()
 
     limits = []

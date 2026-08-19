@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from core.audio_io import write_wav
 from core.impulse_response_estimator import ImpulseResponseEstimator
 from core.pipeline_stages import open_impulse_response_estimator
 from core.sweep_detection import (
@@ -20,7 +21,6 @@ from core.sweep_detection import (
     sweep_grid_unit,
 )
 from core.sweep_signal import SweepSpec, build_sweep_playback
-from core.utils import write_wav
 
 
 def _write_loopback(dir_path, spec: SweepSpec) -> None:

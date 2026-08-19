@@ -38,9 +38,9 @@ const state = {
 const DECAY_CHANNELS = ["FL", "FR", "FC", "BL", "BR", "SL", "SR", "WL", "WR",
   "TFL", "TFR", "TSL", "TSR", "TBL", "TBR"];
 
-/* BRIR pipeline stages for the Studio activity checklist. The logger
-   emits these exact localized strings (optionally with a suffix), so
-   prefix-matching against the same locale table works in any language. */
+/* BRIR pipeline stages for the Studio activity checklist. Events carry the
+   logger's original stage key (payload.key); the rendered-text prefix match
+   remains only as a fallback for key-less events. */
 const BRIR_STAGES = [
   "cli_opening_measurements",
   "cli_cropping_responses",
@@ -283,8 +283,21 @@ function renderSteps() {
   });
 }
 
-function updateSteps(message) {
-  if (!message || state.jobKind !== "brir") return;
+function updateSteps(message, key) {
+  if (state.jobKind !== "brir") return;
+  if (key) {
+    // A key identifies the event exactly — never fall through to the fuzzy
+    // text match, or non-stage lines could false-match a stage prefix.
+    const keyIndex = BRIR_STAGES.indexOf(key);
+    if (keyIndex >= 0 && keyIndex >= state.stageIndex) {
+      state.stageIndex = keyIndex;
+      renderSteps();
+    }
+    return;
+  }
+  // Fallback for events without a key (older backends): reverse-match the
+  // rendered text against the locale table.
+  if (!message) return;
   for (let index = BRIR_STAGES.length - 1; index >= 0; index -= 1) {
     if (message.startsWith(t(BRIR_STAGES[index]))) {
       if (index >= state.stageIndex) {
@@ -631,12 +644,12 @@ async function pollJob() {
         updateRecorderStatus(payload);
       } else if (payload.message) {
         appendLog(payload.message);
-        updateSteps(payload.message);
+        updateSteps(payload.message, payload.key);
       }
     }
     if (event.type === "log") {
       appendLog(`[${payload.level}] ${payload.message}`);
-      updateSteps(payload.message);
+      updateSteps(payload.message, payload.key);
     }
     if (event.type === "status") appendLog(`· ${t(`webview_status_${payload.status}`)}`);
   }

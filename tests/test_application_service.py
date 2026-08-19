@@ -295,16 +295,19 @@ def test_successful_brir_restores_logger_callbacks(monkeypatch, tmp_path: Path) 
     from infra.logger import get_logger
 
     logger = get_logger()
+
     def old_log(*_args):
         return None
 
     def old_progress(*_args):
         return None
+
     logger.set_gui_callback(old_log)
     logger.set_progress_callback(old_progress)
 
     def fake_main(**kwargs):
-        logger.progress(50, "halfway")
+        logger.info("stage_key", speaker="FL")
+        logger.progress(50, "progress_key", speaker="FR")
         Path(kwargs["dir_path"], "hesuvi.wav").write_bytes(b"brir")
 
     monkeypatch.setattr(impulcifer, "main", fake_main)
@@ -313,7 +316,20 @@ def test_successful_brir_restores_logger_callbacks(monkeypatch, tmp_path: Path) 
     data = _wait_for_terminal(service, started["data"]["job"]["job_id"])
 
     assert data["job"]["status"] == "succeeded"
-    assert any(event["type"] == "progress" for event in data["events"])
+    log_event = next(event for event in data["events"] if event["type"] == "log")
+    assert log_event["payload"] == {
+        "level": "INFO",
+        "message": "stage_key",
+        "key": "stage_key",
+    }
+    progress_event = next(
+        event for event in data["events"] if event["type"] == "progress"
+    )
+    assert progress_event["payload"] == {
+        "progress": 0.5,
+        "message": "progress_key",
+        "key": "progress_key",
+    }
     assert logger.gui_callback is old_log
     assert logger.progress_callback is old_progress
 
@@ -986,8 +1002,8 @@ def test_resolve_recording_paths_with_sweep(tmp_path: Path) -> None:
 def test_detect_sweep_endpoint(tmp_path: Path) -> None:
     import numpy as np
 
+    from core.audio_io import write_wav
     from core.sweep_signal import SweepSpec, build_sweep_playback
-    from core.utils import write_wav
 
     playback = build_sweep_playback(SweepSpec(fs=8000, duration=1.0, speakers=("FL", "FR")))
     mix = np.sum(playback.data, axis=0)

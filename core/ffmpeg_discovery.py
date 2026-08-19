@@ -8,6 +8,8 @@ entry point that mutates them; the TrueHD decode layer (``core.audio_truehd``)
 reads them through this module so it always sees the current values.
 """
 
+from __future__ import annotations
+
 import os
 import platform
 import shutil
@@ -311,6 +313,13 @@ def ensure_ffmpeg_available(auto_install=True):
         if detection_was_done and _FFMPEG_UNAVAILABLE_REASON:
             print(_FFMPEG_UNAVAILABLE_REASON)
         return False
+
+
+def get_ffmpeg_paths(auto_install=False) -> tuple[str, str] | None:
+    """Ensure FFmpeg is available and return its executable paths."""
+    if not ensure_ffmpeg_available(auto_install=auto_install):
+        return None
+    return FFMPEG_PATH, FFPROBE_PATH
 
 
 def check_ffmpeg_available(auto_install=False):

@@ -6,7 +6,7 @@ Supports both CLI output and GUI callbacks with localization
 """
 
 import sys
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import Callable, Optional, TYPE_CHECKING, Union
 from enum import Enum
 
 if TYPE_CHECKING:
@@ -54,6 +54,8 @@ class ImpulciferLogger:
     def __init__(self):
         self.gui_callback: Optional[Callable] = None
         self.progress_callback: Optional[Callable] = None
+        self._gui_callback_accepts_metadata: Optional[bool] = None
+        self._progress_callback_accepts_metadata: Optional[bool] = None
         self.localization: Optional['LocalizationManager'] = None
         self.enabled = True
         self.total_steps = 100  # Default total steps for progress
@@ -63,13 +65,42 @@ class ImpulciferLogger:
         """Set localization manager for translating messages"""
         self.localization = loc_manager
 
-    def set_gui_callback(self, callback: Callable):
-        """Set callback for GUI log output"""
+    def set_gui_callback(self, callback: Optional[Callable]):
+        """Set callback for GUI log output."""
         self.gui_callback = callback
+        self._gui_callback_accepts_metadata = None
 
-    def set_progress_callback(self, callback: Callable):
-        """Set callback for GUI progress updates"""
+    def set_progress_callback(self, callback: Optional[Callable]):
+        """Set callback for GUI progress updates."""
         self.progress_callback = callback
+        self._progress_callback_accepts_metadata = None
+
+    def _invoke_callback(
+        self,
+        callback: Callable,
+        accepts_metadata_attr: str,
+        first_arg: Union[str, int],
+        translated_msg: str,
+        message: str,
+        kwargs: dict,
+    ) -> None:
+        """Call a metadata-aware callback, caching legacy two-argument fallback."""
+        accepts_metadata = getattr(self, accepts_metadata_attr)
+        if accepts_metadata is False:
+            callback(first_arg, translated_msg)
+            return
+
+        if accepts_metadata is True:
+            callback(first_arg, translated_msg, key=message, args=kwargs)
+            return
+
+        try:
+            callback(first_arg, translated_msg, key=message, args=kwargs)
+        except TypeError:
+            setattr(self, accepts_metadata_attr, False)
+            callback(first_arg, translated_msg)
+        else:
+            setattr(self, accepts_metadata_attr, True)
 
     def _translate(self, message: str, **kwargs) -> str:
         """
@@ -146,15 +177,31 @@ class ImpulciferLogger:
 
         print(console_msg)
 
-        if self.gui_callback:
+        # DEBUG stays console-only: plot-gated per-channel diagnostics (F028)
+        # would otherwise flood the GUI activity logs.
+        if self.gui_callback and level != LogLevel.DEBUG:
             try:
-                self.gui_callback(level.value, translated_msg)
+                self._invoke_callback(
+                    self.gui_callback,
+                    "_gui_callback_accepts_metadata",
+                    level.value,
+                    translated_msg,
+                    message,
+                    kwargs,
+                )
             except Exception as e:
                 print(f"Error in GUI callback: {e}")
 
         if level == LogLevel.PROGRESS and self.progress_callback and progress_value is not None:
             try:
-                self.progress_callback(progress_value, translated_msg)
+                self._invoke_callback(
+                    self.progress_callback,
+                    "_progress_callback_accepts_metadata",
+                    progress_value,
+                    translated_msg,
+                    message,
+                    kwargs,
+                )
             except Exception as e:
                 print(f"Error in progress callback: {e}")
 

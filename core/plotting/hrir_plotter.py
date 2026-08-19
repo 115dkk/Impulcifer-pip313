@@ -20,7 +20,6 @@ from bokeh.models import HoverTool, ColumnDataSource, Range1d
 from bokeh.palettes import Category10
 from bokeh.layouts import gridplot
 
-from core.utils import ADAPTIVE_PALETTE
 from core.plotting.analysis import (
     band_interaural_level_difference,
     energy_decay_curve_db,
@@ -28,6 +27,7 @@ from core.plotting.analysis import (
     interaural_cross_correlation,
     octave_bands,
 )
+from core.plotting_utils import ADAPTIVE_PALETTE
 
 
 class HRIRPlotter:
@@ -47,6 +47,7 @@ class HRIRPlotter:
         plot_decay=True,
         plot_waterfall=True,
         close_plots=True,
+        recordings=None,
     ):
         """Plots all impulse responses with 2-pass axis synchronization.
 
@@ -74,6 +75,7 @@ class HRIRPlotter:
                     plot_fr=plot_fr,
                     plot_decay=plot_decay,
                     plot_waterfall=plot_waterfall,
+                    recordings=recordings,
                 )
             except Exception as e:
                 # 워커 프로세스를 띄울 수 없는 환경(스폰 제한 등)에서는
@@ -89,6 +91,7 @@ class HRIRPlotter:
             plot_decay=plot_decay,
             plot_waterfall=plot_waterfall,
             close_plots=close_plots,
+            recordings=recordings,
         )
 
     # ImpulseResponse.plot()이 만드는 6개 축의 생성 순서와 동일한 인덱스.
@@ -101,7 +104,9 @@ class HRIRPlotter:
         "plot_waterfall",
     )
 
-    def _plot_with_workers(self, dir_path, max_workers=None, **plot_flags):
+    def _plot_with_workers(
+        self, dir_path, max_workers=None, recordings=None, **plot_flags
+    ):
         """워커 프로세스에서 2-pass 렌더링을 수행하고 PNG를 저장한다.
 
         figure들은 서로 독립이라 병렬 렌더링이 가능하다(4코어에서 직렬
@@ -120,7 +125,14 @@ class HRIRPlotter:
         os.makedirs(dir_path, exist_ok=True)
 
         tasks = [
-            (speaker, side, ir.data, ir.recording)
+            (
+                speaker,
+                side,
+                ir.data,
+                recordings[speaker][side]
+                if recordings is not None
+                else ir.recording,
+            )
             for speaker, pair in self.irs.items()
             for side, ir in pair.items()
         ]
@@ -197,6 +209,7 @@ class HRIRPlotter:
         plot_decay=True,
         plot_waterfall=True,
         close_plots=True,
+        recordings=None,
     ):
         """호출 프로세스 안에서 렌더링하는 기존 2-pass 구현.
 
@@ -225,7 +238,13 @@ class HRIRPlotter:
 
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
+                recording = (
+                    recordings[speaker][side]
+                    if recordings is not None
+                    else ir.recording
+                )
                 fig = ir.plot(
+                    recording=recording,
                     plot_recording=plot_recording,
                     plot_spectrogram=plot_spectrogram,
                     plot_ir=plot_ir,
@@ -262,7 +281,13 @@ class HRIRPlotter:
 
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
+                recording = (
+                    recordings[speaker][side]
+                    if recordings is not None
+                    else ir.recording
+                )
                 fig = ir.plot(
+                    recording=recording,
                     plot_recording=plot_recording,
                     plot_spectrogram=plot_spectrogram,
                     plot_ir=plot_ir,

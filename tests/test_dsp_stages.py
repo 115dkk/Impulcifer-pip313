@@ -12,9 +12,9 @@ from __future__ import annotations
 import numpy as np
 from scipy import signal
 
+from core.audio_io import magnitude_response
 from core.hrir import HRIR
 from core.impulse_response import ImpulseResponse
-from core.utils import magnitude_response
 
 
 class _DummyEstimator:
