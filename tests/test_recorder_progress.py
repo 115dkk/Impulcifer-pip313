@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -13,31 +13,35 @@ from core.recording_progress import event_for_elapsed, infer_sweep_segments
 
 
 def _import_recorder_without_portaudio(monkeypatch):
-    """Import core.recorder with a fake sounddevice module for CI."""
-    core_package = sys.modules.get("core")
-    previous_recorder_module = sys.modules.pop("core.recorder", None)
-    had_recorder_attr = core_package is not None and hasattr(core_package, "recorder")
-    previous_recorder_attr = (
-        getattr(core_package, "recorder") if had_recorder_attr else None
-    )
+    """Import core.recorder and inject a fake sounddevice backend."""
+    import core.recorder as recorder
 
     fake_sounddevice = SimpleNamespace(
         play=lambda *_args, **_kwargs: None,
         rec=lambda *_args, **_kwargs: np.zeros((10, 2)),
     )
-    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
-    try:
-        recorder = importlib.import_module("core.recorder")
-    finally:
-        sys.modules.pop("core.recorder", None)
-        if previous_recorder_module is not None:
-            sys.modules["core.recorder"] = previous_recorder_module
-        if core_package is not None:
-            if had_recorder_attr:
-                setattr(core_package, "recorder", previous_recorder_attr)
-            elif hasattr(core_package, "recorder"):
-                delattr(core_package, "recorder")
+    recorder._set_backend_for_testing(fake_sounddevice)
     return recorder
+
+
+def test_import_recorder_succeeds_without_sounddevice() -> None:
+    """Importing recorder must not resolve the optional sounddevice package."""
+    command = (
+        "import builtins, sys; "
+        "original_import = builtins.__import__; "
+        "builtins.__import__ = lambda name, *args, **kwargs: "
+        "(_ for _ in ()).throw(ImportError('blocked sounddevice')) "
+        "if name == 'sounddevice' else original_import(name, *args, **kwargs); "
+        "sys.modules.pop('sounddevice', None); "
+        "import core.recorder"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", command],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _patch_recorder_hardware(monkeypatch, recorder):
@@ -171,7 +175,7 @@ def test_speaker_side_mono_sweep_stays_single_channel(monkeypatch) -> None:
     def capture_play(data, *_args, **_kwargs):
         played.append(np.asarray(data))
 
-    monkeypatch.setattr(recorder.sd, "play", capture_play)
+    monkeypatch.setattr(recorder._sounddevice(), "play", capture_play)
     monkeypatch.setattr(
         recorder, "read_audio",
         lambda _path, expand=False: (10, np.zeros((1, 16)), None),
@@ -209,7 +213,7 @@ def test_headphones_path_broadcasts_mono_to_stereo(monkeypatch) -> None:
     def capture_play(data, *_args, **_kwargs):
         played.append(np.asarray(data))
 
-    monkeypatch.setattr(recorder.sd, "play", capture_play)
+    monkeypatch.setattr(recorder._sounddevice(), "play", capture_play)
     monkeypatch.setattr(
         recorder, "read_audio",
         lambda _path, expand=False: (10, np.zeros((1, 16)), None),

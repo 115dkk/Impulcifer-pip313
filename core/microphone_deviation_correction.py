@@ -456,7 +456,7 @@ def apply_microphone_deviation_correction_to_hrir(hrir,
 
 def _plot_mismatch(corrector, plot_dir):
     import matplotlib.pyplot as plt
-    from core.utils import set_matplotlib_font
+    from core.font_setup import set_matplotlib_font
 
     set_matplotlib_font()
     os.makedirs(plot_dir, exist_ok=True)
@@ -487,7 +487,7 @@ def _plot_mismatch(corrector, plot_dir):
 def _plot_single_pair(corrector, original_left, original_right,
                       corrected_left, corrected_right, plot_dir):
     import matplotlib.pyplot as plt
-    from core.utils import set_matplotlib_font
+    from core.font_setup import set_matplotlib_font
 
     set_matplotlib_font()
     os.makedirs(plot_dir, exist_ok=True)

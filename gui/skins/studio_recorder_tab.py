@@ -5,32 +5,18 @@
 from __future__ import annotations
 
 import os
-import threading
 from tkinter import messagebox
 from typing import TYPE_CHECKING
 
 import customtkinter as ctk
 import sounddevice
 
-from core import recorder
-from core.headphones_recording import inspect_headphones_playback
-from core.recording_naming import (
-    resolve_headphones_record_path,
-    resolve_record_path,
-    resolve_record_path_for_speakers,
-)
-from core.recording_validation import resolve_recording_channels, validate_recording_setup
-from core.sweep_set_generator import generate_sweep_set
+from core.recording_validation import resolve_recording_channels
 from core.sweep_signal import SWEEP_TRACK_LAYOUTS
 from gui.constants import FILETYPES_AUDIO
-from gui.recording_status import RecordingStatusController, analyze_recording
-from gui.sweep_source import (
-    headphones_sweep_selection,
-    label_to_code,
-    recorder_sweep_mode_labels,
-    resolve_sweep_selection,
-    sweep_summary_text,
-)
+from gui.recording_actions import RecordingActionsMixin
+from gui.recording_status import RecordingStatusController
+from gui.sweep_source import recorder_sweep_mode_labels
 from gui.skins.studio_widgets import (
     add_card_header,
     add_field_row,
@@ -65,7 +51,7 @@ if TYPE_CHECKING:
     from gui.modern_gui import ModernImpulciferGUI
 
 
-class StudioRecorderTab:
+class StudioRecorderTab(RecordingActionsMixin):
     """Studio recorder tab — focused subset of the Stable recorder UI."""
 
     def __init__(self, app: ModernImpulciferGUI, parent: ctk.CTkBaseClass) -> None:
@@ -137,10 +123,6 @@ class StudioRecorderTab:
         self._on_sweep_source_change()
         self._on_channel_preset(self.channels_preset_var.get())
 
-    def _sweep_mode(self) -> str:
-        """Current sweep source code ("default" / "custom" / "file")."""
-        return label_to_code(self._sweep_mode_labels, self.sweep_source_var.get(), "default")
-
     def _on_sweep_source_change(self) -> None:
         """Show/hide the parameter and play-file rows per sweep source."""
         mode = self._sweep_mode()
@@ -158,19 +140,6 @@ class StudioRecorderTab:
                 else:
                     self.sweep_custom_frame.grid_remove()
         self._refresh_resolved_record_path()
-
-    def _resolve_sweep_spec(self):
-        """Validated SweepSpec for the current selection (None = file mode).
-
-        Raises ``ValueError`` for invalid custom parameters.
-        """
-        return resolve_sweep_selection(
-            self._sweep_mode(),
-            speakers_text=self.sweep_speakers_var.get(),
-            tracks=self.sweep_layout_var.get(),
-            fs_text=self.sweep_fs_var.get(),
-            duration_text=self.sweep_duration_var.get(),
-        )
 
     def _build(self) -> None:
         self.parent.grid_columnconfigure(0, weight=1)
@@ -531,168 +500,65 @@ class StudioRecorderTab:
     # Recording
     # ------------------------------------------------------------------
     def _generate_sweep_set(self) -> None:
-        """Generate the surround sweep set on demand.
+        """Preserve Studio's private button callback name."""
+        self.generate_sweep_set()
 
-        Writes per-group stereo files plus one combined 7.1 file. Defaults
-        the target folder to the play file's parent so the new WAVs land
-        next to the existing bundled sweeps. After writing, the play picker
-        is auto-pointed at the universally playable FL,FR stereo sweep.
-        """
-        from tkinter.filedialog import askdirectory
+    def _recording_play_display(self, play_file: str) -> str:
+        """Preserve Studio's full-path file-mode feedback."""
+        return play_file
 
-        play_file = self.play_var.get().strip()
-        initial_dir = os.path.dirname(play_file) if play_file else os.getcwd()
-        if not os.path.isdir(initial_dir):
-            initial_dir = os.getcwd()
-
-        target_dir = askdirectory(
-            initialdir=initial_dir,
-            title=self.loc.get("dialog_choose_sweep_set_folder"),
-        )
-        if not target_dir:
-            return
-
-        try:
-            paths = generate_sweep_set(target_dir)
-        except Exception as exc:
-            messagebox.showerror(
-                self.loc.get("message_error"),
-                self.loc.get("message_sweep_set_error", error=str(exc)),
-            )
-            return
-
-        if paths:
-            try:
-                self.play_var.set(os.path.relpath(paths[0]))
-            except ValueError:
-                self.play_var.set(paths[0])
-
-        messagebox.showinfo(
-            self.loc.get("message_sweep_set_complete_title"),
-            self.loc.get(
-                "message_sweep_set_complete",
-                count=len(paths),
-                folder=target_dir,
-            ),
-        )
-
-    def _refresh_resolved_record_path(self) -> None:
-        """Recompute the read-only ``<folder>/<derived>.wav`` hint label."""
-        record_dir = self.record_dir_var.get().strip()
-        if not record_dir:
-            self.resolved_record_var.set("")
-            return
-        try:
-            spec = self._resolve_sweep_spec()
-            if spec is not None:
-                resolved = resolve_record_path_for_speakers(record_dir, spec.speakers)
-            else:
-                play_file = self.play_var.get().strip()
-                if not play_file:
-                    self.resolved_record_var.set("")
-                    return
-                resolved = resolve_record_path(record_dir, play_file)
-        except Exception:
-            self.resolved_record_var.set("")
-            return
-        self.resolved_record_var.set(
-            self.loc.get("label_record_resolved_path", path=resolved)
-        )
-
-    def start_recording(self) -> None:
-        play_file = self.play_var.get()
-        record_dir = self.record_dir_var.get().strip()
-        if not record_dir:
-            messagebox.showerror(
-                self.loc.get("message_error"),
-                self.loc.get("message_record_folder_required"),
-            )
-            return
-        try:
-            sweep_spec = self._resolve_sweep_spec()
-        except ValueError as exc:
-            messagebox.showerror(self.loc.get("message_error"), str(exc))
-            return
-        if sweep_spec is not None:
-            record_file = resolve_record_path_for_speakers(record_dir, sweep_spec.speakers)
-            play_display = sweep_summary_text(self.loc, sweep_spec)
-        else:
-            record_file = resolve_record_path(record_dir, play_file)
-            play_display = play_file
-        # Stable's force-channels checkbox is expressed here by the channel
-        # preset itself: picking anything other than stereo IS the explicit
-        # multi-channel request. The resolution contract is shared with the
-        # stable tab.
+    def _resolve_recording_channels(self) -> tuple[int, bool]:
+        """Treat Studio's non-stereo preset as the force-channels control."""
         requested_channels = safe_get_int(self.channels_var, 2)
-        channels, force_channels = resolve_recording_channels(
-            requested_channels != 2, requested_channels
+        return resolve_recording_channels(
+            requested_channels != 2,
+            requested_channels,
         )
 
-        if sweep_spec is None and not os.path.exists(play_file):
-            messagebox.showerror(
-                self.loc.get("message_error"),
-                self.loc.get("message_play_file_not_exist", file=play_file),
-            )
-            return
+    def _confirm_recording_start(
+        self,
+        _play_display: str,
+        _record_file: str,
+        _selected_channels: int,
+    ) -> bool:
+        """Preserve Studio's confirmation-free speaker recording flow."""
+        return True
 
-        validation = validate_recording_setup(record_file, channels, force_channels)
-        if validation and validation.has_mismatch:
-            warning_msg = self.loc.get(
-                "message_channel_mismatch_body",
-                expected_speakers=len(validation.expected_speakers),
-                speaker_names=", ".join(validation.expected_speakers),
-                expected_channels=validation.expected_channels,
-                selected_channels=validation.selected_channels,
-            )
-            if not messagebox.askyesno(self.loc.get("message_channel_mismatch_warning_title"), warning_msg):
-                return
+    def _prepare_speaker_recording(self, play_display: str) -> dict[str, object]:
+        """Start Studio feedback before snapshotting speaker controls."""
+        self._start_recording_feedback(play_display)
+        return {
+            "input_device": self.input_device_var.get(),
+            "output_device": self.output_device_var.get(),
+            "host_api": self.host_api_var.get(),
+            "append": self.append_var.get(),
+            "debug_plots": self.debug_plots_var.get(),
+            "progress_context": None,
+        }
 
-        self._set_recording_busy(True)
-        if self.recording_feedback:
-            self.recording_feedback.start(play_display)
-
-        def report_progress(event):
-            self.root.after(0, lambda event=event: self._on_progress_event(event))
-
+    def _prepare_headphones_recording(self, play_display: str) -> dict[str, object]:
+        """Snapshot headphone controls before starting Studio feedback."""
         input_device = self.input_device_var.get()
         output_device = self.output_device_var.get()
         host_api = self.host_api_var.get()
         debug_plots = self.debug_plots_var.get()
-        append = self.append_var.get()
 
-        def _run() -> None:
-            try:
-                play_signal = None
-                if sweep_spec is not None:
-                    from core.sweep_signal import build_sweep_playback
+        self._start_recording_feedback(play_display)
+        return {
+            "input_device": input_device,
+            "output_device": output_device,
+            "host_api": host_api,
+            "debug_plots": debug_plots,
+            "progress_context": None,
+        }
 
-                    play_signal = build_sweep_playback(sweep_spec)
-                recorder.play_and_record(
-                    play=play_file if play_signal is None else None,
-                    play_signal=play_signal,
-                    record=record_file,
-                    input_device=input_device,
-                    output_device=output_device,
-                    host_api=host_api,
-                    channels=channels,
-                    append=append,
-                    debug_plots=debug_plots,
-                    progress_callback=report_progress,
-                )
-                if play_signal is not None and not play_signal.spec.is_default_signal():
-                    # Custom-parameter captures stay self-describing: the
-                    # pipeline resolves <dir>/test.wav before the bundled
-                    # default sweep.
-                    from core.sweep_signal import write_sidecar
+    def _start_recording_feedback(self, play_display: str) -> None:
+        self._set_recording_busy(True)
+        if self.recording_feedback:
+            self.recording_feedback.start(play_display)
 
-                    write_sidecar(os.path.dirname(record_file), play_signal.estimator)
-                summary = analyze_recording(record_file)
-                self.root.after(0, lambda: self._on_complete(record_file, summary))
-            except Exception as e:
-                err = str(e)
-                self.root.after(0, lambda: self._on_error(err))
-
-        threading.Thread(target=_run, daemon=True).start()
+    def _handle_recording_progress(self, event: object, _context: object) -> None:
+        self._on_progress_event(event)
 
     def _on_progress_event(self, event: object) -> None:
         if self.recording_feedback:
@@ -750,7 +616,12 @@ class StudioRecorderTab:
                     text=self.loc.get("button_record_headphones"),
                 )
 
-    def _on_complete(self, record_file: str, summary: object) -> None:
+    def _finish_recording_success(
+        self,
+        record_file: str,
+        summary: object,
+        _context: object,
+    ) -> None:
         self._set_recording_busy(False)
         if self.recording_feedback:
             self.recording_feedback.complete(record_file, summary)
@@ -760,113 +631,9 @@ class StudioRecorderTab:
             self.loc.get("message_recording_complete", file=record_file),
         )
 
-    def _on_error(self, error_msg: str) -> None:
+    def _finish_recording_error(self, error_msg: str, _context: object) -> None:
         self._set_recording_busy(False)
         if self.recording_feedback:
             self.recording_feedback.error(error_msg)
         self._highlight_segment_chip(None)
         messagebox.showerror(self.loc.get("message_error"), error_msg)
-
-    def start_recording_headphones(self) -> None:
-        """Dedicated headphone-compensation capture path (Studio).
-
-        Mirrors :class:`gui.tabs.recorder_tab.RecorderTab.start_recording_headphones`:
-        locks the output to ``headphones.wav``, gates the play file to
-        mono or stereo, and warns when a true mono playback is used
-        (L=R simultaneous = generic EQ, not per-driver).
-        """
-        play_file = self.play_var.get()
-        record_dir = self.record_dir_var.get().strip()
-        if not record_dir:
-            messagebox.showerror(
-                self.loc.get("message_error"),
-                self.loc.get("message_record_folder_required"),
-            )
-            return
-
-        # Generated sweeps always play the L→R stereo sequence, so the
-        # play-file gating and mono warning only apply in file mode.
-        try:
-            sweep_spec = headphones_sweep_selection(
-                self._sweep_mode(),
-                fs_text=self.sweep_fs_var.get(),
-                duration_text=self.sweep_duration_var.get(),
-            )
-        except ValueError as exc:
-            messagebox.showerror(self.loc.get("message_error"), str(exc))
-            return
-
-        if sweep_spec is None:
-            playback = inspect_headphones_playback(play_file)
-            if not playback.is_valid:
-                messagebox.showerror(
-                    self.loc.get("message_error"),
-                    self.loc.get(playback.reason_key, file=play_file, channels=playback.channels),
-                )
-                return
-
-            if playback.is_mono:
-                if not messagebox.askyesno(
-                    self.loc.get("message_headphones_mono_warning_title"),
-                    self.loc.get("message_headphones_mono_warning"),
-                ):
-                    return
-            play_display = os.path.basename(play_file)
-        else:
-            play_display = sweep_summary_text(self.loc, sweep_spec)
-
-        record_file = resolve_headphones_record_path(record_dir)
-
-        info_msg = self.loc.get(
-            "message_record_headphones_confirm",
-            play_file=play_display,
-            record_file=os.path.basename(record_file),
-            input_device=self.input_device_var.get() or "Default",
-            output_device=self.output_device_var.get() or "Default",
-            host_api=self.host_api_var.get() or "Auto",
-        )
-        if not messagebox.askyesno(self.loc.get("message_record_headphones_title"), info_msg):
-            return
-
-        input_device = self.input_device_var.get()
-        output_device = self.output_device_var.get()
-        host_api = self.host_api_var.get()
-        debug_plots = self.debug_plots_var.get()
-
-        self._set_recording_busy(True)
-        if self.recording_feedback:
-            self.recording_feedback.start(play_display)
-
-        def report_progress(event):
-            self.root.after(0, lambda event=event: self._on_progress_event(event))
-
-        def _run() -> None:
-            try:
-                play_signal = None
-                if sweep_spec is not None:
-                    from core.sweep_signal import build_sweep_playback
-
-                    play_signal = build_sweep_playback(sweep_spec)
-                # File mode only: a mono play file is broadcast onto both
-                # headphone drivers (L=R generic EQ — the user was warned
-                # above). Generated sweeps are already stereo sequences.
-                recorder.play_and_record(
-                    play=play_file if play_signal is None else None,
-                    play_signal=play_signal,
-                    record=record_file,
-                    input_device=input_device,
-                    output_device=output_device,
-                    host_api=host_api,
-                    channels=2,
-                    append=False,
-                    debug_plots=debug_plots,
-                    progress_callback=report_progress,
-                    mono_to_stereo=play_signal is None,
-                )
-                summary = analyze_recording(record_file)
-                self.root.after(0, lambda: self._on_complete(record_file, summary))
-            except Exception as e:
-                err = str(e)
-                self.root.after(0, lambda: self._on_error(err))
-
-        threading.Thread(target=_run, daemon=True).start()

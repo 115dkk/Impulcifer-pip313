@@ -703,7 +703,12 @@ class BRIRPipeline:
         for speaker, pair in self.hrir.irs.items():
             if speaker in decay:
                 for side, ir in pair.items():
-                    decay_tasks.append((speaker, side, ir.data, decay[speaker], self.estimator.fs))
+                    adjustment_params = ir.decay_adjustment_params(
+                        decay[speaker]
+                    )
+                    decay_tasks.append(
+                        (speaker, side, ir.data, adjustment_params)
+                    )
 
         if decay_tasks:
             self.logger.info("cli_info_parallel_decay", count=len(decay_tasks))
@@ -757,16 +762,25 @@ class BRIRPipeline:
         self.logger.step("cli_plotting_post")
 
         # Compute convolutions for recording plots serially. Each convolution is
-        # ~scipy.signal.convolve一행짜리 작업이라 ProcessPoolExecutor 14개 워커
-        # (각 ~150MB) 비용이 직렬 실행보다 훨씬 비싸다. 추가로, 워커가 반환한
-        # recording 배열을 plot_tasks/plot_results 튜플이 보유하면 hrir 메모리
-        # 회수 시점까지 참조가 살아남아 ~3GB 잔류를 일으킨다.
+        # ~scipy.signal.convolve 한 줄짜리 작업이라 ProcessPoolExecutor 14개 워커
+        # (각 ~150MB) 비용이 직렬 실행보다 훨씬 비싸다. 플로터에 직접 전달해
+        # DSP 값 객체인 ImpulseResponse에 플롯 전용 상태를 주입하지 않는다.
         from scipy.signal import convolve
-        for speaker, pair in self.hrir.irs.items():
-            for side, ir in pair.items():
-                ir.recording = convolve(self.estimator.test_signal, ir.data, mode="full")
 
-        self.hrir.plot(os.path.join(self.dir_path, "plots", "post"))
+        recordings = {
+            speaker: {
+                side: convolve(
+                    self.estimator.test_signal, ir.data, mode="full"
+                )
+                for side, ir in pair.items()
+            }
+            for speaker, pair in self.hrir.irs.items()
+        }
+
+        self.hrir.plot(
+            os.path.join(self.dir_path, "plots", "post"),
+            recordings=recordings,
+        )
         check_cancelled()
 
     def _stage_plot_results(self):
@@ -798,34 +812,30 @@ class BRIRPipeline:
         from bokeh.models import TabPanel, Tabs
         from bokeh.plotting import output_file as bokeh_output_file, save as bokeh_save
         from core.cancellation import check_cancelled
+        from core.plotting.bokeh_registry import BOKEH_ANALYSIS_GENERATORS
 
         self.logger.step("cli_generating_interactive")
         interactive_plot_dir = os.path.join(self.dir_path, "interactive_plots")
         os.makedirs(interactive_plot_dir, exist_ok=True)
 
         panels = []
-        plot_functions_map = {
-            "Interaural Overlay": self.hrir.generate_interaural_impulse_overlay_bokeh_layout,
-            "ILD": self.hrir.generate_ild_bokeh_layout,
-            "IPD": self.hrir.generate_ipd_bokeh_layout,
-            "IACC": self.hrir.generate_iacc_bokeh_layout,
-            "EDC": self.hrir.generate_etc_bokeh_layout,
-            "Result Overview": self.hrir.generate_result_bokeh_figure,
-        }
-
-        for title, func in plot_functions_map.items():
+        for config in BOKEH_ANALYSIS_GENERATORS:
             try:
-                plot_obj = func()
+                plot_obj = getattr(self.hrir, config.method_name)()
                 if plot_obj:
                     # Bokeh 3.x 에서는 Panel이 TabPanel로 이름 변경됨
-                    panel = TabPanel(
-                        child=plot_obj, title=title
-                    )
+                    panel = TabPanel(child=plot_obj, title=config.title)
                     panels.append(panel)
                 else:
-                    self.logger.debug("cli_warning_plot_skipped", title=title)
+                    self.logger.debug(
+                        "cli_warning_plot_skipped", title=config.title
+                    )
             except Exception as e:
-                self.logger.warning("cli_warning_interactive_plot_error", title=title, error=str(e))
+                self.logger.warning(
+                    "cli_warning_interactive_plot_error",
+                    title=config.title,
+                    error=str(e),
+                )
 
         if panels:
             tabs = Tabs(tabs=panels, sizing_mode="stretch_both")
@@ -899,8 +909,6 @@ class BRIRPipeline:
         check_cancelled()
 
     def _stage_jamesdsp(self):
-        import contextlib
-        import io
         import os
 
         from core.cancellation import check_cancelled
@@ -910,12 +918,10 @@ class BRIRPipeline:
 
         dsp_hrir = self.hrir.subset(["FL", "FR"], copy_irs=True)
 
-        # normalize 내부의 print문 출력을 숨기기 위해 stdout 리디렉션
-        with contextlib.redirect_stdout(io.StringIO()):
-            dsp_hrir.normalize(
-                peak_target=None if cfg.target_level is not None else -0.1,
-                avg_target=cfg.target_level,
-            )
+        dsp_hrir.normalize(
+            peak_target=None if cfg.target_level is not None else -0.1,
+            avg_target=cfg.target_level,
+        )
 
         jd_order = [
             track_name(speaker, side)

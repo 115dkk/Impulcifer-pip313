@@ -107,6 +107,33 @@ class FfmpegLazySetupTest(unittest.TestCase):
             self.assertFalse(discovery._FFMPEG_AUTO_INSTALL_ATTEMPTED,
                              "_FFMPEG_AUTO_INSTALL_ATTEMPTED must be False until ensure runs")
 
+    def test_get_ffmpeg_paths_returns_none_when_ensure_fails(self):
+        """The accessor should expose failure as ``None``."""
+        import core.ffmpeg_discovery as discovery
+
+        with mock.patch.object(
+            discovery, "ensure_ffmpeg_available", return_value=False
+        ) as ensure_mock:
+            self.assertIsNone(discovery.get_ffmpeg_paths(auto_install=True))
+
+        ensure_mock.assert_called_once_with(auto_install=True)
+
+    def test_get_ffmpeg_paths_returns_initialized_paths(self):
+        """The accessor should return the live paths after successful setup."""
+        import core.ffmpeg_discovery as discovery
+
+        discovery.FFMPEG_PATH = "/tools/ffmpeg"
+        discovery.FFPROBE_PATH = "/tools/ffprobe"
+        with mock.patch.object(
+            discovery, "ensure_ffmpeg_available", return_value=True
+        ) as ensure_mock:
+            self.assertEqual(
+                discovery.get_ffmpeg_paths(auto_install=False),
+                ("/tools/ffmpeg", "/tools/ffprobe"),
+            )
+
+        ensure_mock.assert_called_once_with(auto_install=False)
+
     def test_detection_only_path_is_cached(self):
         """Repeated detection-only checks should not repeat setup work."""
         utils, setup_spy, _ = self._import_with_spies()

@@ -2,11 +2,10 @@
 
 import numpy as np
 from scipy import signal, stats
-from scipy.signal.windows import hann
 import nnresample
 from copy import deepcopy
 from autoeq.frequency_response import FrequencyResponse
-from core.utils import magnitude_response, running_mean
+from core.audio_io import magnitude_response, running_mean
 from core.plotting.impulse_response_plotter import ImpulseResponsePlotter
 
 EPSILON = 1e-20
@@ -456,15 +455,8 @@ class ImpulseResponse(ImpulseResponsePlotter):
         """
         return signal.convolve(x, self.data, mode="full")
 
-    def adjust_decay(self, target):
-        """Adjusts decay time in place.
-
-        Args:
-            target: Target 60 dB decay time in seconds
-
-        Returns:
-            None
-        """
+    def decay_adjustment_params(self, target):
+        """Calculate the array-only parameters for a decay adjustment."""
         peak_index, knee_point_index, _, _ = self.decay_params()
         edt, rt20, rt30, rt60 = self.decay_times()
         rt_slope = None
@@ -477,7 +469,7 @@ class ImpulseResponse(ImpulseResponsePlotter):
         target_slope = -60 / target  # Target dB/s
         if target_slope > rt_slope:
             # We're not going to adjust decay and noise floor up
-            return
+            return None
         knee_point_time = knee_point_index / self.fs
         knee_point_level = (
             rt_slope * knee_point_time
@@ -488,21 +480,20 @@ class ImpulseResponse(ImpulseResponsePlotter):
         half_window = (
             knee_point_index - window_start
         )  # Half Hanning window length, from peak to knee
-        window = (
-            np.concatenate(
-                [  # Adjustment window
-                    np.ones(window_start),  # Start with ones until peak
-                    hann(half_window * 2)[half_window:],  # Slope down to knee point
-                    np.zeros(
-                        len(self) - knee_point_index
-                    ),  # Fill with zeros to full length
-                ]
-            )
-            - 1.0
-        )  # Slopes down from 0.0 to -1.0
-        window *= -window_level  # Scale with adjustment level at knee point
-        window = 10 ** (window / 20)  # Linear scale
-        self.data *= window  # Scale impulse response data wit the window
+        return window_start, half_window, knee_point_index, window_level
+
+    def adjust_decay(self, target):
+        """Adjusts decay time in place.
+
+        Args:
+            target: Target 60 dB decay time in seconds
+
+        Returns:
+            None
+        """
+        from core.decay import apply_decay_window
+
+        apply_decay_window(self.data, self.decay_adjustment_params(target))
 
     def magnitude_response(self):
         """Calculates magnitude response for the data."""

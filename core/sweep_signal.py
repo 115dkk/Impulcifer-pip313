@@ -34,9 +34,9 @@ from core.constants import (  # noqa: F401 — re-exported for existing importer
     SWEEP_TRACK_LAYOUTS,
 )
 from core.impulse_response_estimator import SEQUENCE_TRACK_ORDERS, ImpulseResponseEstimator
+from core.audio_io import write_wav
 from core.recording_naming import record_filename_for_speakers
 from core.recording_progress import SweepSegment
-from core.utils import write_wav
 
 # Silence used by ``ImpulseResponseEstimator.sweep_sequence``: 2 s lead
 # followed by (sweep + 2 s) per speaker.

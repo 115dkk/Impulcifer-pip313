@@ -4,6 +4,28 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.13.2 - 2026-08-20
+### 격주 감사(#164) 대응 3차 — 구조 리팩토링과 테스트 부채 해소 (BRIR 출력 비트 동일)
+
+#### ⭐ 새로운 기능 / 개선
+- **파이프라인 스테이지 키가 프론트엔드까지 원형 유지**: 로거 콜백이 렌더 문자열과 함께 원본 키를 전달하고(구형 2-인자 콜백과 완전 호환), WebView는 로케일 문자열 역매칭 대신 키로 스테이지를 판정한다 — 9개 로케일 접두 충돌·작업 중 언어 전환에 안전. (감사 F004, Top-5 #2)
+- **core/hrir.py 67개 print를 통합 로거로 전환**: 채널 밸런스·ITD 정렬·정규화 경고가 GUI 사용자에게 보이게 됐고, 파이프라인의 `redirect_stdout` 워크어라운드를 제거. (감사 F028, Top-5 #5)
+- **레코딩 오케스트레이션 단일화**: Stable/Studio에 복제돼 있던 ~430줄의 녹음 흐름을 `RecordingActionsMixin`으로 추출(순수 이동, 스킨별 차이는 훅으로 보존)하고 Tk 없는 계약 테스트 10개로 고정. (감사 F003, Top-5 #3)
+- **room_correction 테스트 시임**: 파일 발견(순수 함수)과 보정 수학을 분리하고 matplotlib을 plot 경로로 지연화, 신규 테스트 15개. (감사 F011, Top-5 #4)
+- **BRIRPipeline 직접 테스트**: 어느 플랫폼에서나 도는 합성 측정 폴더 완주 테스트(1.4초)와 스테이지 게이팅 테이블 검증 — 기존에는 Linux+환경변수 게이트 무결성 잡이 유일한 커버리지였다. (감사 F012, Top-5 #4)
+- **DSP 핵심 경로 테스트 62개 추가**: sweep→IR 역합성 왕복(F013), decay 경로 특성화(F014), pipeline_stages 헬퍼(F015), sweep_source 순수 로직(F016).
+
+#### ⚡ 성능 개선
+- **sounddevice 임포트 지연화**: `core.recorder` 임포트가 PortAudio를 dlopen하지 않는다(사용 시점 로드, 블로킹 녹음 계약 불변). (감사 F019)
+- **utils 셸 경유 내부 임포트를 정본 모듈로 이주**(외부 호환 셸은 유지, magnitude_response 비트 동일 계약 핀 보존). (감사 F020)
+
+#### 🐛 버그 수정
+- **로케일 per-key 폴백**: 로케일 파일에 키가 빠지면 raw 키가 렌더되던 것을 en 베이스 병합으로 수정. (감사 F050)
+- **Tk-free 녹음 분석을 core로 이동**하고 서비스의 `except Exception`을 좁혀 미포장 모듈이 조용히 요약을 삼키지 않게 수정. (감사 F029)
+
+#### 🔧 빌드 / 설정 변경
+- FFmpeg 경로 순서 불변식을 `get_ffmpeg_paths()` 접근자로 캡슐화(감사 F036), Bokeh 분석 생성기 이중 레지스트리 단일화(F041), 플로터 전용 `ir.recording` 주입 제거(F042), decay 워커 경계 단순화 — 워커 출력과 `adjust_decay` 직접 호출의 `np.array_equal` 동일성 테스트 포함(F043), 서비스 platform 어휘를 `normalized_platform()` 정본으로(F027).
+
 ## 2.13.1 - 2026-08-20
 ### 격주 감사(#164) 대응 2차 — quick wins·죽은 코드 청소·계약 테스트
 

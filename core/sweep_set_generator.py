@@ -40,8 +40,8 @@ import argparse
 import os
 from typing import Sequence
 
+from core.audio_io import write_wav
 from core.impulse_response_estimator import ImpulseResponseEstimator
-from core.utils import write_wav
 
 
 # Combined file: all seven ground speakers played sequentially on a 7.1

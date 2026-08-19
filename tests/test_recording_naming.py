@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 
 from core.recording_naming import (
     HEADPHONES_FILENAME,
@@ -77,3 +79,31 @@ def test_resolve_headphones_record_path_uses_canonical_filename() -> None:
 def test_empty_play_path_falls_back_to_headphones_filename_for_preview_label() -> None:
     """Empty-path edge case is preserved so the GUI preview label has something to show."""
     assert derive_record_filename("") == HEADPHONES_FILENAME
+
+
+def test_core_recording_status_does_not_import_tkinter() -> None:
+    """The application-facing recording analysis module must remain Tk-free."""
+    command = (
+        "import sys; import core.recording_status; "
+        "raise SystemExit(any(name == 'tkinter' or name.startswith('tkinter.') "
+        "for name in sys.modules))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", command],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_gui_recording_status_reexports_core_helpers() -> None:
+    """Existing GUI imports should resolve to the new core implementations."""
+    from core import recording_status as core_status
+    from gui import recording_status as gui_status
+
+    assert gui_status.PlaybackInfo is core_status.PlaybackInfo
+    assert gui_status.RecordingSummary is core_status.RecordingSummary
+    assert gui_status.inspect_playback_file is core_status.inspect_playback_file
+    assert gui_status.analyze_recording is core_status.analyze_recording
+    assert gui_status.format_duration is core_status.format_duration

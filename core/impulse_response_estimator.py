@@ -8,7 +8,7 @@ from scipy.signal import convolve
 from scipy.signal.windows import hann
 import numpy as np
 import matplotlib.pyplot as plt
-from core.utils import read_wav, write_wav, magnitude_response
+from core.audio_io import magnitude_response, read_wav, write_wav
 from core.constants import SPEAKER_NAMES
 
 # Track orders for the fixed multichannel sequence layouts. 5.1/7.1 follow

@@ -20,6 +20,24 @@ from core.impulse_response import ImpulseResponse
 FS = 48000
 
 
+def test_bokeh_generator_registry_uses_interactive_titles_and_stage_subset():
+    from core.plotting.bokeh_registry import BOKEH_ANALYSIS_GENERATORS
+
+    assert [config.title for config in BOKEH_ANALYSIS_GENERATORS] == [
+        "Interaural Overlay",
+        "ILD",
+        "IPD",
+        "IACC",
+        "EDC",
+        "Result Overview",
+    ]
+    assert [
+        config.name
+        for config in BOKEH_ANALYSIS_GENERATORS
+        if config.save_individually
+    ] == ["ild", "ipd", "iacc", "etc"]
+
+
 def make_hrir(left_data, right_data, fs=FS, speaker="FL"):
     """합성 IR 한 쌍으로 HRIR 인스턴스를 구성한다."""
     hrir = HRIR(types.SimpleNamespace(fs=fs))

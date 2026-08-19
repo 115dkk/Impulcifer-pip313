@@ -17,8 +17,9 @@ from scipy import signal, ndimage, interpolate
 from scipy.signal import spectrogram
 from scipy.signal.windows import hann
 
-from core.utils import get_ylim, running_mean
+from core.audio_io import running_mean
 from core.constants import COLORS
+from core.plotting_utils import get_ylim
 
 
 class ImpulseResponsePlotter:
@@ -40,6 +41,7 @@ class ImpulseResponsePlotter:
         plot_fr=True,
         plot_decay=True,
         plot_waterfall=True,
+        recording=None,
     ):
         """Plots all plots into the same figure
 
@@ -53,6 +55,8 @@ class ImpulseResponsePlotter:
             plot_fr: Plot frequency response?
             plot_decay: Plot decay curve?
             plot_waterfall: Plot waterfall graph?
+            recording: Convolved recording for the recording and spectrogram plots.
+                Falls back to ``self.recording`` for backward compatibility.
 
         Returns:
             Figure
@@ -66,9 +70,9 @@ class ImpulseResponsePlotter:
             ax.append(fig.add_subplot(2, 3, 6, projection="3d"))
             ax = np.vstack([ax[:3], ax[3:]])
         if plot_recording:
-            self.plot_recording(fig=fig, ax=ax[0, 0])
+            self.plot_recording(fig=fig, ax=ax[0, 0], recording=recording)
         if plot_spectrogram:
-            self.plot_spectrogram(fig=fig, ax=ax[1, 0])
+            self.plot_spectrogram(fig=fig, ax=ax[1, 0], recording=recording)
         if plot_ir:
             self.plot_ir(fig=fig, ax=ax[0, 1])
         if plot_fr:
@@ -82,15 +86,19 @@ class ImpulseResponsePlotter:
             fig.savefig(plot_file_path)
         return fig
 
-    def plot_recording(self, fig=None, ax=None, plot_file_path=None):
+    def plot_recording(
+        self, fig=None, ax=None, plot_file_path=None, recording=None
+    ):
         """Plots recording wave form."""
-        if self.recording is None or len(np.nonzero(self.recording)[0]) == 0:
+        if recording is None:
+            recording = self.recording
+        if recording is None or len(np.nonzero(recording)[0]) == 0:
             return
         if fig is None:
             fig, ax = plt.subplots()
 
-        t = np.linspace(0, len(self.recording) / self.fs, len(self.recording))
-        ax.plot(t, self.recording, color=COLORS["blue"], linewidth=0.5)
+        t = np.linspace(0, len(recording) / self.fs, len(recording))
+        ax.plot(t, recording, color=COLORS["blue"], linewidth=0.5)
 
         ax.grid(True)
         ax.set_xlabel("Time (s)")
@@ -104,10 +112,18 @@ class ImpulseResponsePlotter:
         return fig, ax
 
     def plot_spectrogram(
-        self, fig=None, ax=None, plot_file_path=None, f_res=10, n_segments=200
+        self,
+        fig=None,
+        ax=None,
+        plot_file_path=None,
+        f_res=10,
+        n_segments=200,
+        recording=None,
     ):
         """Plots spectrogram of the recorded sweep."""
-        if self.recording is None:
+        if recording is None:
+            recording = self.recording
+        if recording is None:
             return
         if fig is None or ax is None:
             fig, ax = plt.subplots(figsize=(16 / 2.54, 9 / 2.54))
@@ -115,9 +131,9 @@ class ImpulseResponsePlotter:
         target_f_res_nfft = round(self.fs / f_res)
         min_time_segments = 3
 
-        if len(self.recording) == 0:
+        if len(recording) == 0:
             print(
-                f"  Warning: self.recording is empty. Skipping spectrogram for {self.name if hasattr(self, 'name') else 'current IR'}."
+                f"  Warning: recording is empty. Skipping spectrogram for {self.name if hasattr(self, 'name') else 'current IR'}."
             )
             if ax is not None:
                 ax.text(
@@ -131,12 +147,12 @@ class ImpulseResponsePlotter:
             return fig, ax
 
         max_nfft_for_segments = (
-            (2 * len(self.recording)) // (min_time_segments + 1)
+            (2 * len(recording)) // (min_time_segments + 1)
             if min_time_segments > 0
-            else len(self.recording)
+            else len(recording)
         )
         if max_nfft_for_segments <= 0:
-            max_nfft_for_segments = len(self.recording)
+            max_nfft_for_segments = len(recording)
 
         nfft = target_f_res_nfft
         if nfft > max_nfft_for_segments and max_nfft_for_segments > 0:
@@ -145,8 +161,8 @@ class ImpulseResponsePlotter:
             )
             nfft = max_nfft_for_segments
 
-        if nfft > len(self.recording):
-            nfft = len(self.recording)
+        if nfft > len(recording):
+            nfft = len(recording)
 
         if nfft == 0:
             print(
@@ -163,8 +179,8 @@ class ImpulseResponsePlotter:
                 )
             return fig, ax
 
-        if n_segments > 0 and (len(self.recording) - nfft) > 0:
-            step_size = (len(self.recording) - nfft) / n_segments
+        if n_segments > 0 and (len(recording) - nfft) > 0:
+            step_size = (len(recording) - nfft) / n_segments
             if step_size <= 1:
                 noverlap = nfft // 2
                 print(
@@ -183,7 +199,7 @@ class ImpulseResponsePlotter:
                 )
             else:
                 print(
-                    f"  Info: len(self.recording) ({len(self.recording)}) <= nfft ({nfft}). Using 50% overlap."
+                    f"  Info: len(recording) ({len(recording)}) <= nfft ({nfft}). Using 50% overlap."
                 )
 
         if noverlap >= nfft:
@@ -197,7 +213,7 @@ class ImpulseResponsePlotter:
 
         window_arg = signal.get_window("hann", nfft)
         freqs, t, spectrum = spectrogram(
-            self.recording,
+            recording,
             fs=self.fs,
             window=window_arg,
             nperseg=nfft,

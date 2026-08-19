@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
-"""TrueHD/MLP detection, conversion and the TrueHD-aware audio reader.
-
-Depends on ``core.ffmpeg_discovery`` for FFmpeg availability; the
-``_discovery.FFMPEG_PATH`` / ``_discovery.FFPROBE_PATH`` references read the
-live paths that ``ensure_ffmpeg_available`` populates.
-"""
+"""TrueHD/MLP detection, conversion and the TrueHD-aware audio reader."""
 
 import json
 import os
@@ -14,19 +9,20 @@ import tempfile
 import numpy as np
 import soundfile as sf
 
-from core import ffmpeg_discovery as _discovery
-from core.ffmpeg_discovery import ensure_ffmpeg_available, check_ffmpeg_available
+from core.ffmpeg_discovery import check_ffmpeg_available, get_ffmpeg_paths
 
 
 def is_truehd_file(file_path):
     """Check if file is TrueHD/MLP format"""
     # TrueHD/MLP 처리 경로 — 자동 설치를 허용한다.
-    if not ensure_ffmpeg_available(auto_install=True):
+    ffmpeg_paths = get_ffmpeg_paths(auto_install=True)
+    if ffmpeg_paths is None:
         return False
+    _, ffprobe_path = ffmpeg_paths
 
     try:
         result = subprocess.run(
-            [_discovery.FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
+            [ffprobe_path, '-v', 'error', '-select_streams', 'a:0',
              '-show_entries', 'stream=codec_name', '-of', 'default=noprint_wrappers=1:nokey=1',
              file_path],
             capture_output=True, text=True, timeout=10,
@@ -43,8 +39,10 @@ def is_truehd_file(file_path):
 
 def convert_truehd_to_wav(truehd_path, output_path=None):
     """Convert TrueHD/MLP file to WAV format"""
-    if not ensure_ffmpeg_available(auto_install=True):
+    ffmpeg_paths = get_ffmpeg_paths(auto_install=True)
+    if ffmpeg_paths is None:
         raise RuntimeError("FFmpeg is not available for TrueHD conversion")
+    ffmpeg_path, _ = ffmpeg_paths
 
     if output_path is None:
         fd, output_path = tempfile.mkstemp(suffix='.wav')
@@ -53,7 +51,7 @@ def convert_truehd_to_wav(truehd_path, output_path=None):
     channel_info = get_truehd_channel_info(truehd_path)
 
     cmd = [
-        _discovery.FFMPEG_PATH, '-i', truehd_path,
+        ffmpeg_path, '-i', truehd_path,
         '-acodec', 'pcm_f32le',  # 32-bit float PCM
         '-ar', '48000',
         output_path, '-y'
@@ -69,12 +67,14 @@ def convert_truehd_to_wav(truehd_path, output_path=None):
 
 def get_truehd_channel_info(file_path):
     """Get channel layout information from TrueHD file"""
-    if not ensure_ffmpeg_available(auto_install=True):
+    ffmpeg_paths = get_ffmpeg_paths(auto_install=True)
+    if ffmpeg_paths is None:
         return None
+    _, ffprobe_path = ffmpeg_paths
 
     try:
         result = subprocess.run(
-            [_discovery.FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
+            [ffprobe_path, '-v', 'error', '-select_streams', 'a:0',
              '-show_entries', 'stream=channel_layout,channels',
              '-of', 'json', file_path],
             capture_output=True, text=True, timeout=10,
@@ -110,12 +110,14 @@ def get_truehd_profile(file_path):
     discrete channels (it only emits the 7.1 bed). Callers reject the
     Atmos case while letting ordinary TrueHD play with its decoded PCM.
     """
-    if not ensure_ffmpeg_available(auto_install=True):
+    ffmpeg_paths = get_ffmpeg_paths(auto_install=True)
+    if ffmpeg_paths is None:
         return None
+    _, ffprobe_path = ffmpeg_paths
 
     try:
         result = subprocess.run(
-            [_discovery.FFPROBE_PATH, '-v', 'error', '-select_streams', 'a:0',
+            [ffprobe_path, '-v', 'error', '-select_streams', 'a:0',
              '-show_entries', 'stream=profile',
              '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
             capture_output=True, text=True, timeout=10,

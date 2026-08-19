@@ -3,8 +3,8 @@
 import os
 import re
 import time
-import sounddevice as sd
-from core.utils import read_wav, write_wav, read_audio, is_truehd_atmos_object_master
+from core.audio_io import read_wav, write_wav
+from core.audio_truehd import is_truehd_atmos_object_master, read_audio
 from core.recording_progress import (
     RecorderProgressEvent,
     event_for_elapsed,
@@ -13,6 +13,24 @@ from core.recording_progress import (
 import numpy as np
 from threading import Event, Thread
 import argparse
+
+
+_sd = None
+
+
+def _sounddevice():
+    """Import and cache sounddevice only when audio hardware is needed."""
+    global _sd
+    if _sd is None:
+        import sounddevice as sounddevice_module
+        _sd = sounddevice_module
+    return _sd
+
+
+def _set_backend_for_testing(module):
+    """Inject a sounddevice-compatible backend for tests."""
+    global _sd
+    _sd = module
 
 
 class DeviceNotFoundError(Exception):
@@ -118,7 +136,7 @@ def record_target(file_path, length, fs, channels=2, append=False, debug_plots=F
     _debug_recording(debug_plots, f"  Channels: {channels}")
     _debug_recording(debug_plots, f"  Append mode: {append}")
     
-    recording = sd.rec(length, samplerate=fs, channels=channels, blocking=True)
+    recording = _sounddevice().rec(length, samplerate=fs, channels=channels, blocking=True)
     _debug_recording(debug_plots, f"  Raw recording shape: {recording.shape}")
     
     if debug_plots:
@@ -169,7 +187,7 @@ def record_target(file_path, length, fs, channels=2, append=False, debug_plots=F
 
 def get_host_api_names():
     """Gets names of available host APIs in a list"""
-    return [hostapi['name'] for hostapi in sd.query_hostapis()]
+    return [hostapi['name'] for hostapi in _sounddevice().query_hostapis()]
 
 
 def get_device(device_name, kind, host_api=None, min_channels=1):
@@ -201,7 +219,7 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
     device = None
     if re.search(host_api_pattern, device_name):
         # Host API in the name, this should return only one device
-        device = sd.query_devices(device_name, kind=kind)
+        device = _sounddevice().query_devices(device_name, kind=kind)
         if device[f'max_{kind}_channels'] < min_channels:
             raise DeviceNotFoundError(f'Found {kind} device "{device["name"]} {host_api_names[device["hostapi"]]}"" '
                                       f'but minimum number of channels is not satisfied. 1')
@@ -209,7 +227,7 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
         # Host API not specified in the name but host API is given as parameter
         try:
             # This should give one or zero devices
-            device = sd.query_devices(f'{device_name} {host_api}', kind=kind)
+            device = _sounddevice().query_devices(f'{device_name} {host_api}', kind=kind)
         except ValueError:
             raise DeviceNotFoundError(f'No device found with name "{device_name}" and host API "{host_api}". ')
         if device[f'max_{kind}_channels'] < min_channels:
@@ -220,7 +238,7 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
         host_api_preference = [x for x in ['DirectSound', 'MME', 'WASAPI'] if x in host_api_names]
         for host_api_name in host_api_preference:
             try:
-                device = sd.query_devices(f'{device_name} {host_api_name}', kind=kind)
+                device = _sounddevice().query_devices(f'{device_name} {host_api_name}', kind=kind)
                 if device[f'max_{kind}_channels'] >= min_channels:
                     break
                 else:
@@ -246,14 +264,14 @@ def get_devices(input_device=None, output_device=None, host_api=None, min_channe
         - Input device object
         - Output device object
     """
-    devices = sd.query_devices()
+    devices = _sounddevice().query_devices()
 
     if input_device is None:
-        input_device = devices[sd.default.device[0]]['name']
+        input_device = devices[_sounddevice().default.device[0]]['name']
     input_device = get_device(input_device, 'input', host_api=host_api)
 
     if output_device is None:
-        output_device = devices[sd.default.device[1]]['name']
+        output_device = devices[_sounddevice().default.device[1]]['name']
     output_device = get_device(output_device, 'output', host_api=host_api, min_channels=min_channels)
 
     return input_device, output_device
@@ -273,7 +291,7 @@ def set_default_devices(input_device, output_device):
     host_api_names = get_host_api_names()
     input_device_str = f'{input_device["name"]} {host_api_names[input_device["hostapi"]]}'
     output_device_str = f'{output_device["name"]} {host_api_names[output_device["hostapi"]]}'
-    sd.default.device = (input_device_str, output_device_str)
+    _sounddevice().default.device = (input_device_str, output_device_str)
     return input_device_str, output_device_str
 
 
@@ -444,7 +462,7 @@ def play_and_record(
         progress_thread.start()
 
     try:
-        sd.play(np.transpose(data), samplerate=fs, blocking=True)
+        _sounddevice().play(np.transpose(data), samplerate=fs, blocking=True)
     except Exception as e:
         print(f"Playback error: {e}")
         progress_stop_event.set()

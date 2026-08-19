@@ -16,9 +16,9 @@ import numpy as np
 import pytest
 
 from autoeq.frequency_response import FrequencyResponse
+from core.audio_io import magnitude_response
 from core.hrir import HRIR
 from core.impulse_response import ImpulseResponse
-from core.utils import magnitude_response
 
 FS = 48_000
 

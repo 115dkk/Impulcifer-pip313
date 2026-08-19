@@ -27,16 +27,13 @@ from core.constants import (
     get_data_path,
     speaker_side,
 )
+from core.audio_truehd import convert_truehd_to_wav, is_truehd_file
 from core.eqapo import looks_like_eqapo_config, parse_eqapo_config
+from core.ffmpeg_discovery import check_ffmpeg_available
 from core.hrir import HRIR, get_center_value
 from core.impulse_response_estimator import ImpulseResponseEstimator
-from core.utils import (
-    check_ffmpeg_available,
-    convert_truehd_to_wav,
-    is_truehd_file,
-    save_fig_as_png,
-    sync_axes,
-)
+from core.plotting.bokeh_registry import BOKEH_ANALYSIS_GENERATORS
+from core.plotting_utils import save_fig_as_png, sync_axes
 from infra.logger import get_logger
 
 # Repo root for the source-tree ``data/`` fallback.
@@ -45,24 +42,25 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _save_bokeh_analysis_plots(hrir, dir_path, logger):
     """분석 플롯(ILD/IPD/IACC/ETC)을 Bokeh HTML로 저장."""
-    plot_configs = {
-        "ild": ("ILD Analysis", hrir.generate_ild_bokeh_layout),
-        "ipd": ("IPD Analysis", hrir.generate_ipd_bokeh_layout),
-        "iacc": ("IACC Analysis", hrir.generate_iacc_bokeh_layout),
-        "etc": ("EDC Analysis", hrir.generate_etc_bokeh_layout),
-    }
-    for name, (title, func) in plot_configs.items():
+    for config in BOKEH_ANALYSIS_GENERATORS:
+        if not config.save_individually:
+            continue
         try:
-            layout = func()
+            layout = getattr(hrir, config.method_name)()
             if layout is not None:
-                out_dir = os.path.join(dir_path, "plots", name)
+                out_dir = os.path.join(dir_path, "plots", config.name)
                 os.makedirs(out_dir, exist_ok=True)
-                out_path = os.path.join(out_dir, f"{name}_analysis.html")
-                bokeh_output_file(out_path, title=title)
+                out_path = os.path.join(
+                    out_dir, f"{config.name}_analysis.html"
+                )
+                bokeh_output_file(out_path, title=config.title)
                 bokeh_save(layout)
         except Exception as e:
-            logger.warning("cli_warning_interactive_plot_error",
-                          title=name, error=str(e))
+            logger.warning(
+                "cli_warning_interactive_plot_error",
+                title=config.name,
+                error=str(e),
+            )
 
 
 # Direct-generation spec: "generate:<duration>s@<fs>", e.g. "generate:6.15s@48000".
