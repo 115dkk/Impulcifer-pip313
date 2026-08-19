@@ -119,18 +119,17 @@ def test_decay_worker_matches_direct_adjust_decay() -> None:
 
     data = _decaying_sine(FS, duration_s=4.0, rt60=1.5, floor_db=-90.0)
     direct = _ir(data.copy())
-    params = direct.decay_adjustment_params(0.3)
 
     direct.adjust_decay(0.3)
     speaker, side, adjusted = process_decay_worker(
-        ("FL", "left", data, params)
+        ("FL", "left", data, FS, 0.3)
     )
 
     assert (speaker, side) == ("FL", "left")
     assert np.array_equal(adjusted, direct.data)
 
 
-def test_parallel_workers_import_stays_matplotlib_free() -> None:
+def test_decay_worker_imports_stay_lightweight() -> None:
     import subprocess
     import sys
 
@@ -138,8 +137,10 @@ def test_parallel_workers_import_stays_matplotlib_free() -> None:
         [
             sys.executable,
             "-c",
-            "import sys; import core.parallel_workers; "
-            "assert 'matplotlib' not in sys.modules",
+            "import sys; import core.parallel_workers; import core.decay; "
+            "forbidden = ('matplotlib', 'bokeh', 'seaborn', 'PIL'); "
+            "loaded = [name for name in forbidden if name in sys.modules]; "
+            "assert not loaded, loaded",
         ],
         capture_output=True,
         text=True,

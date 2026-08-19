@@ -128,6 +128,50 @@ def test_stage_table_gates_and_progress_total(
     assert sum(steps for steps, _ in enabled_rows) == expected_total_steps
 
 
+def test_decay_stage_sends_raw_analysis_inputs_to_worker(monkeypatch):
+    """메인 프로세스는 분석하지 않고 data/fs/target만 워커에 전달한다."""
+
+    class FakeIR:
+        def __init__(self, data, fs):
+            self.data = data
+            self.fs = fs
+
+        def decay_adjustment_params(self, _target):
+            raise AssertionError("decay analysis must run inside the worker")
+
+    class FakeLogger:
+        def step(self, _message):
+            pass
+
+        def info(self, _message, **_metadata):
+            pass
+
+    left_data = np.array([1.0, 0.5])
+    right_data = np.array([0.8, 0.4])
+    left = FakeIR(left_data, 48_000)
+    right = FakeIR(right_data, 44_100)
+    pipeline = BRIRPipeline(ProcessingConfig(decay={"FL": 0.3}))
+    pipeline.hrir = type("FakeHRIR", (), {"irs": {"FL": {"left": left, "right": right}}})()
+    pipeline.logger = FakeLogger()
+    captured = []
+
+    def fake_parallel_map(worker, tasks):
+        captured.extend(tasks)
+        return [(speaker, side, data.copy()) for speaker, side, data, _fs, _target in tasks]
+
+    monkeypatch.setattr("core.parallel_utils.parallel_map", fake_parallel_map)
+
+    pipeline._stage_decay()
+
+    assert len(captured) == 2
+    assert captured[0][0:2] == ("FL", "left")
+    assert captured[0][2] is left_data
+    assert captured[0][3:] == (48_000, 0.3)
+    assert captured[1][0:2] == ("FL", "right")
+    assert captured[1][2] is right_data
+    assert captured[1][3:] == (44_100, 0.3)
+
+
 def _delayed_sweep(estimator, delay, gain):
     """지연 단위 임펄스와 스윕을 컨볼브해 한 귀의 녹음을 만든다."""
     delayed_impulse = np.zeros(RECORDING_MARGIN + 1)

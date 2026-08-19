@@ -703,11 +703,8 @@ class BRIRPipeline:
         for speaker, pair in self.hrir.irs.items():
             if speaker in decay:
                 for side, ir in pair.items():
-                    adjustment_params = ir.decay_adjustment_params(
-                        decay[speaker]
-                    )
                     decay_tasks.append(
-                        (speaker, side, ir.data, adjustment_params)
+                        (speaker, side, ir.data, ir.fs, decay[speaker])
                     )
 
         if decay_tasks:

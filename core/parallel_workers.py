@@ -22,19 +22,20 @@ def process_plot_worker(args):
 
 
 def process_decay_worker(args):
-    """감쇠 조정 윈도우를 배열에 적용하는 워커.
+    """워커 안에서 감쇠를 분석하고 조정 윈도우를 배열에 적용한다.
 
     Args:
-        args: Tuple of (speaker, side, ir_data, adjustment_params)
+        args: Tuple of (speaker, side, ir_data, fs, target)
 
     Returns:
         Tuple of (speaker, side, adjusted_data)
     """
-    speaker, side, ir_data, adjustment_params = args
-    from core.decay import apply_decay_window
+    speaker, side, ir_data, fs, target = args
+    from core.decay import apply_decay_window, decay_adjustment_params
 
     adjusted_data = ir_data.copy()
-    apply_decay_window(adjusted_data, adjustment_params)
+    params = decay_adjustment_params(adjusted_data, fs, target)
+    apply_decay_window(adjusted_data, params)
     return (speaker, side, adjusted_data)
 
 

@@ -13,14 +13,19 @@ from core.recording_progress import event_for_elapsed, infer_sweep_segments
 
 
 def _import_recorder_without_portaudio(monkeypatch):
-    """Import core.recorder and inject a fake sounddevice backend."""
+    """Import core.recorder and inject a fake sounddevice backend.
+
+    The fake is registered through monkeypatch so the module-global backend
+    is restored after each test — leaking it would make later tests that
+    call other sounddevice APIs order-dependent.
+    """
     import core.recorder as recorder
 
     fake_sounddevice = SimpleNamespace(
         play=lambda *_args, **_kwargs: None,
         rec=lambda *_args, **_kwargs: np.zeros((10, 2)),
     )
-    recorder._set_backend_for_testing(fake_sounddevice)
+    monkeypatch.setattr(recorder, "_sd", fake_sounddevice)
     return recorder
 
 

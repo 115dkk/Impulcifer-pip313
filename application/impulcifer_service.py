@@ -409,9 +409,11 @@ class ImpulciferApplicationService:
                 analyzed = analyze_recording(params["record_path"])
                 if analyzed is not None:
                     summary = asdict(analyzed)
-            except (OSError, ValueError, RuntimeError):
-                # Unreadable/corrupt recording only — a missing module must
-                # surface, not silently drop summaries (audit F029).
+            except Exception as e:
+                # Summary is best-effort garnish over a recording that already
+                # succeeded — never fail the job for it, but surface the cause
+                # instead of swallowing it silently (audit F029).
+                print(f"recording summary analysis failed: {e!r}")
                 summary = None
             return {
                 "mode": params["mode"],

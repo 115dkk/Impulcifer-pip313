@@ -177,7 +177,9 @@ class ImpulciferLogger:
 
         print(console_msg)
 
-        if self.gui_callback:
+        # DEBUG stays console-only: plot-gated per-channel diagnostics (F028)
+        # would otherwise flood the GUI activity logs.
+        if self.gui_callback and level != LogLevel.DEBUG:
             try:
                 self._invoke_callback(
                     self.gui_callback,
