@@ -23,6 +23,7 @@ been fixed and old features improved.
 - **경량 임포트 정리**: 서비스의 버전 조회 2곳과 sweep 감지의 `DEFAULT_SWEEP_FS`가 scipy/matplotlib 스택을 끌어오던 임포트를 경량 정본으로 교체, `infra/resource_helper`의 임포트 시점 폰트 디렉터리 스캔 제거. (감사 F006/F007/F038)
 
 #### 🔧 빌드 / 설정 변경
+- **의존성 상한**: bokeh를 `<3.10`으로 제한 — 3.10.0이 Nuitka 4.1.3 컴파일에서 `bokeh.settings` NameError로 기동 불가(릴리스 파이프라인 Linux 스모크 실측). Nuitka 대응 시 해제 예정.
 - **릴리스 빌드 환경 드리프트 수정**: (1) sounddevice 0.5.6이 휠 데이터로 실은 Windows DLL이 macOS/Linux Nuitka 빌드를 "cannot use file ... to build arch" FATAL로 죽이던 것을 빌드 전 제거 단계(`build_nuitka.py`)로 차단, (2) 러너의 CPython 3.14.7에서 Nuitka 4.1.3 tk-inter가 Tcl을 못 찾아 Windows 빌드가 죽던 것을 3.14.6 고정으로 우회(2.13.0 릴리스 파이프라인 실측 — 스탠드얼론 미발행, 본 버전이 대체).
 - **검증된 죽은 코드 삭제**: `core/ffmpeg_utils.py` 셸, `updater/pip_updater.py`, `get_optimal_executor`, `enable_parallel_processing`, resource_helper 죽은 심볼 5종, `impulcifer.py`의 무소비 스테이지 재export. (감사 F021/F022/F024/F038/F044)
 - **병렬 모듈 정리**: 두 `parallel_map`을 정본+위임으로 단일화(기본값·시그니처 보존), free-threaded 판정을 라이브 프로브로 통일. (감사 F025/F026)
