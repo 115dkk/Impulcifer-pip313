@@ -286,14 +286,14 @@ function renderSteps() {
 function updateSteps(message, key) {
   if (state.jobKind !== "brir") return;
   if (key) {
+    // A key identifies the event exactly — never fall through to the fuzzy
+    // text match, or non-stage lines could false-match a stage prefix.
     const keyIndex = BRIR_STAGES.indexOf(key);
-    if (keyIndex >= 0) {
-      if (keyIndex >= state.stageIndex) {
-        state.stageIndex = keyIndex;
-        renderSteps();
-      }
-      return;
+    if (keyIndex >= 0 && keyIndex >= state.stageIndex) {
+      state.stageIndex = keyIndex;
+      renderSteps();
     }
+    return;
   }
   // Fallback for events without a key (older backends): reverse-match the
   // rendered text against the locale table.
