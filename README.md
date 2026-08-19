@@ -247,9 +247,13 @@ impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 
 ## 업데이트
 
+pip 설치본은 pip으로 갱신합니다.
+
 ```bash
 pip install --upgrade impulcifer-py313
 ```
+
+스탠드얼론 빌드는 앱 안의 업데이트 확인으로 갱신합니다. Windows 인스톨러 설치본은 Velopack이 자동 업데이트를 처리하고, macOS(DMG)/Linux(AppImage)는 새 릴리스 파일을 내려받아 SHA-256 검증(릴리스의 `SHA256SUMS.txt`) 후 설치합니다 — AppImage로 실행 중이면 실행 파일이 제자리에서 새 버전으로 교체됩니다.
 
 ## 라이선스
 

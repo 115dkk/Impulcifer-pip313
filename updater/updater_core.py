@@ -13,7 +13,7 @@ New module layout:
     updater/environment.py       — runtime probes (Velopack/Pip/standalone)
     updater/velopack.py          — VelopackUpdater + VelopackDownloadError
     updater/pip_updater.py       — PipUpdater
-    updater/legacy.py            — LegacyInstallerUpdater + Updater + URL
+    updater/legacy.py            — LegacyInstallerUpdater + URL
     updater/executors.py         — UpdateExecutor + 3 subclasses + factory
 
 Prefer importing from the focused modules in new code; this shim is kept for
@@ -38,7 +38,6 @@ from updater.executors import (  # noqa: F401  (re-export)
 from updater.legacy import (  # noqa: F401  (re-export)
     GITHUB_RELEASES_URL,
     LegacyInstallerUpdater,
-    Updater,
 )
 from updater.pip_updater import PipUpdater  # noqa: F401  (re-export)
 from updater.velopack import (  # noqa: F401  (re-export)

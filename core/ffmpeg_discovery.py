@@ -133,11 +133,19 @@ def find_ffmpeg_in_common_paths():
 
 
 def install_ffmpeg():
-    """운영체제에 맞는 방법으로 FFmpeg를 설치합니다."""
+    """FFmpeg를 설치합니다. Linux에서는 수동 설치 방법만 안내합니다."""
     system = platform.system().lower()
-    
+
+    if system not in ('windows', 'darwin'):
+        print("Linux에서는 FFmpeg 자동 설치를 시도하지 않습니다.")
+        print(
+            "FFmpeg를 수동으로 설치해주세요. 예: "
+            "sudo apt install ffmpeg 또는 sudo dnf install ffmpeg"
+        )
+        return None, None
+
     print("FFmpeg가 감지되지 않았거나 버전이 너무 오래되었습니다. 자동 설치를 시도합니다...")
-    
+
     try:
         if system == 'windows':
             # Chocolatey → winget 순으로 시도
@@ -178,37 +186,6 @@ def install_ffmpeg():
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 pass
 
-        else:  # Linux
-            # apt (Ubuntu/Debian) 시도
-            try:
-                subprocess.run(['apt', '--version'], capture_output=True, check=True, timeout=10,
-                             encoding='utf-8', errors='replace')
-                print("APT를 사용하여 FFmpeg를 설치합니다...")
-                result = subprocess.run(['sudo', 'apt', 'update'],
-                                      capture_output=True, text=True, timeout=120,
-                                      encoding='utf-8', errors='replace')
-                if result.returncode == 0:
-                    result = subprocess.run(['sudo', 'apt', 'install', '-y', 'ffmpeg'],
-                                          capture_output=True, text=True, timeout=300,
-                                          encoding='utf-8', errors='replace')
-                    if result.returncode == 0:
-                        return find_ffmpeg_in_common_paths()
-            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-                pass
-
-            # yum (CentOS/RHEL) 시도
-            try:
-                subprocess.run(['yum', '--version'], capture_output=True, check=True, timeout=10,
-                             encoding='utf-8', errors='replace')
-                print("YUM을 사용하여 FFmpeg를 설치합니다...")
-                result = subprocess.run(['sudo', 'yum', 'install', '-y', 'ffmpeg'],
-                                      capture_output=True, text=True, timeout=300,
-                                      encoding='utf-8', errors='replace')
-                if result.returncode == 0:
-                    return find_ffmpeg_in_common_paths()
-            except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-                pass
-        
         print("자동 설치에 실패했습니다. 수동으로 FFmpeg를 설치해주세요.")
         return None, None
         
@@ -221,9 +198,9 @@ def setup_ffmpeg(auto_install=True):
     """FFmpeg를 설정하고 경로를 반환합니다.
 
     Args:
-        auto_install: 시스템 PATH 및 일반 경로 검색에 실패한 경우 자동 설치
-            를 시도할지 여부. TrueHD/MLP 처리 경로에서는 기본값 ``True``를
-            유지해 사용자 편의 기능을 보존한다.
+        auto_install: 시스템 PATH 및 일반 경로 검색에 실패한 경우 Windows와
+            macOS에서 자동 설치를 시도할지 여부. Linux에서는 ``True``여도
+            자동 설치하지 않고 수동 설치 방법을 안내한다.
     """
     # 1. 시스템 PATH에서 ffmpeg 확인
     ffmpeg_path = shutil.which('ffmpeg')
@@ -266,6 +243,7 @@ FFMPEG_PATH = None
 FFPROBE_PATH = None
 _FFMPEG_DETECTION_DONE = False
 _FFMPEG_AUTO_INSTALL_ATTEMPTED = False
+_FFMPEG_UNAVAILABLE_REASON = None
 # Backward-compatible state name for older tests/importers. It mirrors whether
 # any detection/install path has already been attempted.
 _FFMPEG_SETUP_DONE = False
@@ -275,8 +253,20 @@ _FFMPEG_SETUP_DONE = False
 _FFMPEG_LOCK = threading.Lock()
 
 
+def get_ffmpeg_unavailable_reason():
+    """``ensure_ffmpeg_available()`` 경유 실패의 마지막 이유를 반환합니다.
+
+    ``setup_ffmpeg()``/``install_ffmpeg()`` 직접 호출은 이 상태를 갱신하지
+    않는다 — lazy 진입점인 ``ensure_ffmpeg_available()`` 전용 상태다.
+    """
+    return _FFMPEG_UNAVAILABLE_REASON
+
+
 def ensure_ffmpeg_available(auto_install=True):
-    """Lazy 초기화. 필요 시 FFmpeg 탐색/자동 설치를 단계별로 수행한다.
+    """Lazy 초기화하고 실패 이유를 출력한다.
+
+    Windows와 macOS에서는 필요 시 FFmpeg 자동 설치를 시도하지만 Linux에서는
+    수동 설치 방법만 안내한다.
 
     Args:
         auto_install: 자동 설치 시도 여부. TrueHD/MLP 실제 사용 경로에서는
@@ -286,28 +276,40 @@ def ensure_ffmpeg_available(auto_install=True):
     Returns:
         FFmpeg/ffprobe 경로가 모두 설정되어 있으면 ``True``, 아니면 ``False``.
     """
-    global FFMPEG_PATH, FFPROBE_PATH
+    global FFMPEG_PATH, FFPROBE_PATH, _FFMPEG_UNAVAILABLE_REASON
     global _FFMPEG_DETECTION_DONE, _FFMPEG_AUTO_INSTALL_ATTEMPTED, _FFMPEG_SETUP_DONE
 
     with _FFMPEG_LOCK:
         if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
+            _FFMPEG_UNAVAILABLE_REASON = None
             return True
 
+        detection_was_done = _FFMPEG_DETECTION_DONE
         if not _FFMPEG_DETECTION_DONE:
             _FFMPEG_DETECTION_DONE = True
             _FFMPEG_SETUP_DONE = True
             FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=False)
             if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
+                _FFMPEG_UNAVAILABLE_REASON = None
                 return True
+            _FFMPEG_UNAVAILABLE_REASON = "FFmpeg를 찾을 수 없습니다."
 
         if auto_install and not _FFMPEG_AUTO_INSTALL_ATTEMPTED:
             _FFMPEG_AUTO_INSTALL_ATTEMPTED = True
             _FFMPEG_SETUP_DONE = True
             FFMPEG_PATH, FFPROBE_PATH = setup_ffmpeg(auto_install=True)
             if FFMPEG_PATH is not None and FFPROBE_PATH is not None:
+                _FFMPEG_UNAVAILABLE_REASON = None
                 return True
-            print("FFmpeg를 찾거나 설치할 수 없습니다. TrueHD/MLP 지원이 비활성화됩니다.")
+            _FFMPEG_UNAVAILABLE_REASON = (
+                "FFmpeg를 찾거나 설치할 수 없습니다. "
+                "TrueHD/MLP 지원이 비활성화됩니다."
+            )
+            print(_FFMPEG_UNAVAILABLE_REASON)
+            return False
 
+        if detection_was_done and _FFMPEG_UNAVAILABLE_REASON:
+            print(_FFMPEG_UNAVAILABLE_REASON)
         return False
 
 

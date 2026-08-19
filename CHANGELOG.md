@@ -4,6 +4,22 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.13.0 - 2026-08-20
+### 격주 감사(#164) 대응 1차 — 보안·업데이트 경로 강화와 채널 밸런스 레이아웃 확장
+
+#### ⭐ 새로운 기능 / 개선
+- **채널 밸런스가 전체 스피커 레이아웃을 보정**: `correct_channel_balance`의 스피커 그룹이 업스트림 7.1 시절 하드코딩(`FC/FL·FR/SL·SR/BL·BR`)에서 `IPSILATERAL_PAIRS` 유도로 교체되어, 와이드(WL/WR)와 상단 6채널(TFL/TFR/TSL/TSR/TBL/TBR)도 채널 밸런스 보정을 받는다. 7.1 측정(demo 포함)은 그룹 스킵 로직에 의해 출력이 비트 동일하다. (감사 F009 — 업스트림 상속 드리프트로 판정)
+- **Linux AppImage 제자리 업데이트**: AppImage로 실행 중이면(`$APPIMAGE`) 업데이트 시 새 AppImage를 내려받아 실행 파일을 원자적으로 교체하고 재실행한다. 확장자 판정이 대소문자 구분이라 실제 자산명(`*.AppImage`)에서 chmod+실행 경로를 타지 못하던 버그도 수정. (감사 개방질문 5)
+- **업데이트 다운로드 SHA-256 검증**: 릴리스에 `SHA256SUMS.txt`를 발행하고, macOS/Linux 인스톨러 업데이트가 다운로드 파일을 검증한다(구 릴리스처럼 목록이 없으면 경고 후 통과). 다운로드에 30초 타임아웃 추가. (감사 F030)
+
+#### 🐛 버그 수정
+- **무인 sudo 자동 설치 제거**: TrueHD/MLP 열람 시 FFmpeg 자동 설치가 Linux에서 `sudo apt/yum`을 사용자 동의 없이 실행하던 동작을 제거하고 수동 설치 안내로 대체. 자동 설치 실패가 래치된 뒤 이후 호출이 무언으로 실패하던 것도 이유를 매번 표면화하도록 수정(`get_ffmpeg_unavailable_reason()` 추가). Windows(choco/winget)/macOS(brew)는 OS 수준 동의가 개입하므로 유지. (감사 F031)
+- **업데이트 자산 오선택 방지**: 플랫폼 매칭에 실패하면 첫 번째 릴리스 자산(현재 `assets.win.json`)을 무조건 반환하던 폴백을 제거 — 매칭 실패 시 수동 다운로드 안내로 정직하게 실패한다.
+
+#### 🔧 빌드 / 설정 변경
+- **CodeQL 정적 분석 도입**: master push/PR/주간 스케줄에 Python·JavaScript CodeQL 스캔을 추가. (감사 개방질문 6 — pip-audit 대신 유지보수자 선택)
+- **죽은 코드 정리**: `updater/legacy.py`의 무호출 `Updater` 호환 클래스 삭제(감사 F023), 업스트림 유물 `webcam.html` 삭제(감사 F056 — 코드·문서 어디서도 참조 없음 확인). `MicrophoneDeviationCorrector` 호환 심은 pip 공개 표면이므로 유지하되 v3 제거 예정을 명시(감사 F045).
+
 ## 2.12.3 - 2026-08-13
 ### Windows 시작 제목 표시줄 적용 순서 수정
 
