@@ -79,9 +79,19 @@ class LegacyInstallerUpdater:
         try:
             with urllib.request.urlopen(req, timeout=self._TIMEOUT) as response:
                 sums_text = response.read().decode('utf-8')
-        except (urllib.error.HTTPError, urllib.error.URLError, OSError, UnicodeError) as e:
-            print(f"Warning: checksum file unavailable; skipping verification: {e}")
-            return True
+        except urllib.error.HTTPError as e:
+            # Fail-open only for releases that never published a checksum list
+            # (pre-2.13.0). Any other fetch failure fails closed.
+            if e.code == 404:
+                print(f"Warning: checksum file not published for this release; skipping verification: {e}")
+                return True
+            print(f"Checksum file fetch failed (HTTP {e.code}); refusing unverified install")
+            self._discard_download()
+            return False
+        except (urllib.error.URLError, OSError, UnicodeError) as e:
+            print(f"Checksum file fetch failed; refusing unverified install: {e}")
+            self._discard_download()
+            return False
 
         expected_hash = None
         checksum_line = re.compile(r'^([0-9a-fA-F]{64}) (?: |\*)(.+)$')
@@ -92,8 +102,9 @@ class LegacyInstallerUpdater:
                 break
 
         if expected_hash is None:
-            print(f"Warning: no checksum found for {filename}; skipping verification")
-            return True
+            print(f"No checksum entry for {filename}; refusing unverified install")
+            self._discard_download()
+            return False
 
         assert self.download_path is not None
         hasher = hashlib.sha256()
@@ -104,12 +115,18 @@ class LegacyInstallerUpdater:
         if hasher.hexdigest().lower() == expected_hash:
             return True
 
+        self._discard_download()
+        print(f"Checksum verification failed for {filename}")
+        return False
+
+    def _discard_download(self) -> None:
+        """Remove a download that failed verification so install() cannot run it."""
+        if self.download_path is None:
+            return
         try:
             self.download_path.unlink()
         except OSError as e:
-            print(f"Warning: failed to remove checksum-mismatched download: {e}")
-        print(f"Checksum verification failed for {filename}")
-        return False
+            print(f"Warning: failed to remove unverified download: {e}")
 
     def install(self) -> bool:
         """Open the downloaded installer or replace the running AppImage."""
@@ -127,15 +144,31 @@ class LegacyInstallerUpdater:
                 if path_str.lower().endswith('.appimage'):
                     current_appimage = os.environ.get('APPIMAGE')
                     if current_appimage:
+                        replacement_path = None
                         try:
-                            replacement_path = Path(f"{current_appimage}.new")
+                            # Exclusive temp file in the target directory keeps
+                            # os.replace() on one filesystem and avoids racing
+                            # or symlink-following a fixed ".new" path.
+                            fd, tmp_name = tempfile.mkstemp(
+                                prefix=Path(current_appimage).name + '.',
+                                suffix='.new',
+                                dir=str(Path(current_appimage).parent),
+                            )
+                            os.close(fd)
+                            replacement_path = Path(tmp_name)
                             shutil.copy2(self.download_path, replacement_path)
                             os.chmod(replacement_path, 0o755)
                             os.replace(replacement_path, current_appimage)
+                            replacement_path = None
                             subprocess.Popen([current_appimage])
                             return True
                         except Exception as e:
                             print(f"AppImage replacement error; launching download instead: {e}")
+                            if replacement_path is not None:
+                                try:
+                                    replacement_path.unlink()
+                                except OSError:
+                                    pass
 
                     os.chmod(self.download_path, 0o755)
                     subprocess.Popen([path_str])

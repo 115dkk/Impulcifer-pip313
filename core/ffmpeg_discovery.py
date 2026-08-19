@@ -254,7 +254,11 @@ _FFMPEG_LOCK = threading.Lock()
 
 
 def get_ffmpeg_unavailable_reason():
-    """마지막 FFmpeg 탐색 또는 설치 실패 이유를 반환합니다."""
+    """``ensure_ffmpeg_available()`` 경유 실패의 마지막 이유를 반환합니다.
+
+    ``setup_ffmpeg()``/``install_ffmpeg()`` 직접 호출은 이 상태를 갱신하지
+    않는다 — lazy 진입점인 ``ensure_ffmpeg_available()`` 전용 상태다.
+    """
     return _FFMPEG_UNAVAILABLE_REASON
 
 

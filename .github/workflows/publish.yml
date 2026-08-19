@@ -682,13 +682,19 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       # 자산별 SHA-256 목록. updater/legacy.py(macOS/Linux 스탠드얼론 업데이트)가
-      # 다운로드 검증에 사용한다 — 파일명은 업로드 자산명(basename)과 일치해야 한다.
+      # 다운로드 검증에 사용한다 — 파일명은 업로드 자산명(basename)과 일치해야
+      # 하므로, 해시 대상은 아래 Create GitHub Release의 files: 집합과 동일한
+      # 4개 아티팩트 디렉터리로 제한하고 basename 중복 시 실패시킨다.
       - name: Generate SHA256SUMS
         run: |
           mkdir -p release-sums
-          find artifacts -type f | while read -r f; do
-            (cd "$(dirname "$f")" && sha256sum "$(basename "$f")")
+          : > release-sums/SHA256SUMS.txt
+          find artifacts/windows-velopack artifacts/macos-dmg artifacts/linux-appimage artifacts/linux-tarball               -type f -print0 | while IFS= read -r -d '' f; do
+            (cd "$(dirname "$f")" && sha256sum -- "$(basename "$f")")
           done | sort -k2 > release-sums/SHA256SUMS.txt
+          if awk '{print $2}' release-sums/SHA256SUMS.txt | sed 's/^\*//' | sort | uniq -d | grep .; then
+            echo "::error::duplicate release asset basenames detected"; exit 1
+          fi
           cat release-sums/SHA256SUMS.txt
 
       - name: Create GitHub Release

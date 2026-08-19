@@ -100,18 +100,46 @@ def test_download_rejects_mismatched_checksum(monkeypatch, tmp_path):
     assert updater.download_path.exists() is False
 
 
-def test_download_skips_checksum_when_sums_fetch_fails(monkeypatch, tmp_path):
-    """Old releases without SHA256SUMS remain downloadable."""
+def test_download_skips_checksum_only_on_http_404(monkeypatch, tmp_path):
+    """Only a 404 (release predates SHA256SUMS publication) is fail-open."""
     updater, _ = _prepare_download(
         monkeypatch,
         tmp_path,
         b"unsigned-appimage",
-        urllib.error.URLError("not found"),
+        urllib.error.HTTPError("https://example.test/SHA256SUMS.txt", 404, "Not Found", None, None),
     )
 
     assert updater.download() is True
     assert updater.download_path is not None
     assert updater.download_path.exists()
+
+
+def test_download_fails_closed_when_sums_fetch_errors(monkeypatch, tmp_path):
+    """Non-404 checksum fetch failures refuse the unverified install."""
+    updater, _ = _prepare_download(
+        monkeypatch,
+        tmp_path,
+        b"unsigned-appimage",
+        urllib.error.URLError("connection reset"),
+    )
+
+    assert updater.download() is False
+    assert updater.download_path is not None
+    assert updater.download_path.exists() is False
+
+
+def test_download_fails_closed_when_entry_missing(monkeypatch, tmp_path):
+    """A published SHA256SUMS without our asset's entry refuses the install."""
+    updater, _ = _prepare_download(
+        monkeypatch,
+        tmp_path,
+        b"unsigned-appimage",
+        ("0" * 64 + "  some-other-asset.dmg\n").encode(),
+    )
+
+    assert updater.download() is False
+    assert updater.download_path is not None
+    assert updater.download_path.exists() is False
 
 
 def test_install_recognizes_capitalized_appimage(monkeypatch, tmp_path):
@@ -154,7 +182,12 @@ def test_install_replaces_running_appimage(monkeypatch, tmp_path):
     monkeypatch.setattr(legacy.subprocess, "Popen", lambda args: popen_calls.append(args))
 
     assert updater.install() is True
-    assert replace_calls == [(Path(f"{current}.new"), str(current))]
+    assert len(replace_calls) == 1
+    tmp_source, replace_target = replace_calls[0]
+    assert replace_target == str(current)
+    assert Path(tmp_source).parent == current.parent
+    assert Path(tmp_source).name.startswith(current.name + ".")
+    assert Path(tmp_source).name.endswith(".new")
     assert popen_calls == [[str(current)]]
 
 
