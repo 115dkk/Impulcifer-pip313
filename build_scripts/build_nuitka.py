@@ -87,6 +87,28 @@ VERSION = "{version}"
     print(f"✓ 빌드 마커 생성: BUILD_TYPE=standalone, VERSION={version}", flush=True)
 
 
+
+def strip_foreign_sounddevice_binaries(target_platform: str) -> None:
+    """비-Windows 타깃에서 sounddevice 데이터의 Windows DLL을 빌드 전에 제거한다.
+
+    sounddevice 0.5.6부터 휠의 ``_sounddevice_data/portaudio-binaries``에
+    Windows용 PE DLL이 함께 실리는데, Nuitka가 이를 macOS/Linux 번들에
+    포함하려다 "cannot use file ... to build arch" FATAL로 중단된다
+    (2026-08-19 릴리스 파이프라인 실측). 해당 플랫폼에서는 어차피 로드
+    불가능한 바이너리이므로 site-packages에서 지워도 무해하다.
+    """
+    if target_platform == "windows":
+        return
+    try:
+        import _sounddevice_data
+    except ImportError:
+        return
+    binroot = Path(_sounddevice_data.__file__).parent / "portaudio-binaries"
+    for dll in sorted(binroot.glob("*.dll")):
+        print(f"비-Windows 빌드에서 Windows DLL 제외: {dll}", flush=True)
+        dll.unlink()
+
+
 def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_platform=None):
     print(f"build_nuitka.py: build_impulcifer() called with version={project_version}", flush=True)
     """Nuitka로 Impulcifer GUI 빌드 (크로스 플랫폼 지원).
@@ -128,6 +150,8 @@ def build_impulcifer(project_version="0.0.0", output_base_dir="dist", target_pla
     from build_scripts.patch_nuitka_pywebview import patch_pywebview_plugin
 
     patch_pywebview_plugin()
+
+    strip_foreign_sounddevice_binaries(target_platform)
 
     nuitka_args = build_nuitka_args(
         target_platform=target_platform,
