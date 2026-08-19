@@ -13,8 +13,12 @@ import time
 from typing import Any, Callable, Optional
 from uuid import uuid4
 
+from core.constants import SPEAKER_NAMES
+
 
 _TERMINAL_STATES = {"succeeded", "failed", "cancelled"}
+_MAX_JOB_EVENTS = 2000
+_MAX_TERMINAL_JOBS = 8
 _RECORDING_FIELDS = {
     "mode",
     "play_path",
@@ -51,7 +55,7 @@ _BRIR_CHOICE_FIELDS = {
     "vbass_polarity": ("auto", "normal", "invert"),
 }
 _CHANNEL_BALANCE_TOKENS = ("trend", "left", "right", "avg", "min", "mids")
-_DECAY_CHANNELS = ("FL", "FC", "FR", "SL", "SR", "BL", "BR")
+_DECAY_CHANNELS = tuple(SPEAKER_NAMES)
 _THEME_CODES = ("dark", "light", "system")
 # Mirrors gui.skins.SKIN_CHOICES without importing the gui package (this
 # module must stay importable without tkinter).
@@ -607,7 +611,9 @@ class ImpulciferApplicationService:
 
     def get_system_info(self) -> dict[str, Any]:
         try:
-            from impulcifer import __version__ as version
+            from infra.version import get_app_version
+
+            version = get_app_version()
         except Exception:
             version = "unknown"
 
@@ -748,11 +754,12 @@ class ImpulciferApplicationService:
 
     def check_for_updates(self) -> dict[str, Any]:
         """Query GitHub releases for a newer version (blocking, ~10s max)."""
-        from impulcifer import __version__
+        from infra.version import get_app_version
         from updater.update_checker import UpdateChecker
 
+        current_version = get_app_version()
         try:
-            checker = UpdateChecker(__version__)
+            checker = UpdateChecker(current_version)
             available, latest_version, download_url = checker.check_for_updates()
         except Exception as exc:
             return _error(
@@ -766,7 +773,7 @@ class ImpulciferApplicationService:
         return _ok(
             {
                 "update_available": update_available,
-                "current_version": __version__,
+                "current_version": current_version,
                 "latest_version": latest_version,
                 "download_url": download_url,
                 "release_notes": checker.get_release_notes() if update_available else None,
@@ -860,6 +867,14 @@ class ImpulciferApplicationService:
                     details={"job": active.snapshot()},
                     retryable=True,
                 )
+            terminal_job_ids = [
+                job_id
+                for job_id, existing_job in self._jobs.items()
+                if existing_job.status in _TERMINAL_STATES
+            ]
+            stale_count = max(0, len(terminal_job_ids) - _MAX_TERMINAL_JOBS + 1)
+            for stale_job_id in terminal_job_ids[:stale_count]:
+                del self._jobs[stale_job_id]
             job = _Job(str(uuid4()), kind, cancellable, threading.Event())
             self._jobs[job.job_id] = job
             self._active_job_id = job.job_id
@@ -935,6 +950,8 @@ class ImpulciferApplicationService:
                 "payload": _json_safe(payload),
             }
         )
+        if len(job.events) > _MAX_JOB_EVENTS:
+            del job.events[: len(job.events) - _MAX_JOB_EVENTS]
 
     def _validate_recording_request(self, request: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(request, dict):

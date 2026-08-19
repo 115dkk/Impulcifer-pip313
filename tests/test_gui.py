@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 
@@ -51,6 +52,94 @@ class DummyEqTab:
         self.eq_file_var = DummyVar(str(eq_file))
         self.eq_left_file_var = DummyVar("eq-left.csv")
         self.eq_right_file_var = DummyVar("eq-right.csv")
+
+
+class _ContractTab:
+    pass
+
+
+def test_brir_tab_protocol_attributes_are_snapshot_compatible() -> None:
+    from gui.brir_args import BrirTabLike
+
+    contract_attributes = set(get_type_hints(BrirTabLike))
+    assert contract_attributes
+    assert all(
+        name.endswith("_var") or name.endswith("_vars")
+        for name in contract_attributes
+    )
+
+    tab = _ContractTab()
+    for name in contract_attributes:
+        if name.endswith("_vars"):
+            setattr(tab, name, {"FL": DummyVar("10")})
+        else:
+            setattr(tab, name, DummyVar(name))
+
+    snapshot = gui_utils.snapshot_tk_vars(tab)
+    assert set(snapshot) == contract_attributes
+
+
+def test_brir_tab_classes_declare_protocol_attributes_in_initializers() -> None:
+    import ast
+    import inspect
+
+    from gui.brir_args import BrirTabLike
+    from gui.skins.studio_impulcifer_tab import StudioImpulciferTab
+    from gui.tabs.impulcifer_tab import ImpulciferTab
+
+    contract_attributes = set(get_type_hints(BrirTabLike))
+
+    def assigned_self_attributes(tab_class) -> set[str]:
+        tree = ast.parse(inspect.getsource(tab_class))
+        return {
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.ctx, ast.Store)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "self"
+        }
+
+    for tab_class in (ImpulciferTab, StudioImpulciferTab):
+        assert contract_attributes <= assigned_self_attributes(tab_class)
+
+
+def test_modern_gui_version_uses_shared_resolver(monkeypatch) -> None:
+    import gui.modern_gui as modern_gui
+
+    monkeypatch.setattr(modern_gui, "get_app_version", lambda: "9.8.7")
+    app = modern_gui.ModernImpulciferGUI.__new__(modern_gui.ModernImpulciferGUI)
+
+    assert app.get_current_version() == "9.8.7"
+
+
+def test_stable_tab_key_lookup_uses_widget_identity() -> None:
+    from gui.modern_gui import ModernImpulciferGUI
+
+    class _FakeTabview:
+        def __init__(self, selected_name: str, selected_widget: object) -> None:
+            self.selected_name = selected_name
+            self.selected_widget = selected_widget
+            self.selected_by_set = None
+
+        def get(self):
+            return self.selected_name
+
+        def tab(self, _name):
+            return self.selected_widget
+
+        def set(self, name):
+            self.selected_by_set = name
+
+    widget = object()
+    app = ModernImpulciferGUI.__new__(ModernImpulciferGUI)
+    app.tabview = _FakeTabview("중복 표시 라벨", widget)
+    app.tab_widget_keys = {str(widget): "settings"}
+    app.tab_labels = {"settings": "중복 표시 라벨"}
+
+    assert app._current_stable_tab_key() == "settings"
+    app.select_tab("settings")
+    assert app.tabview.selected_by_set == "중복 표시 라벨"
 
 
 def test_studio_custom_eq_selection_is_synced_to_recording_dir(tmp_path: Path) -> None:

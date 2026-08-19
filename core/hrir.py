@@ -10,7 +10,14 @@ from scipy.interpolate import InterpolatedUnivariateSpline
 from autoeq.frequency_response import FrequencyResponse
 from core.impulse_response import ImpulseResponse
 from core.utils import read_wav, write_wav, magnitude_response
-from core.constants import SPEAKER_NAMES, SPEAKER_DELAYS, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS, speaker_side
+from core.constants import (
+    HEXADECAGONAL_TRACK_ORDER,
+    IPSILATERAL_PAIRS,
+    SPEAKER_DELAYS,
+    SPEAKER_NAMES,
+    speaker_side,
+    track_name,
+)
 from core.plotting.hrir_plotter import HRIRPlotter
 
 try:
@@ -429,7 +436,7 @@ class HRIR(HRIRPlotter):
         irs_by_name = {}
         for speaker, pair in self.irs.items():
             for side, ir in pair.items():
-                irs_by_name[f"{speaker}-{side}"] = ir.data
+                irs_by_name[track_name(speaker, side)] = ir.data
 
         if not irs_by_name:
             raise ValueError("No impulse responses available for WAV output.")

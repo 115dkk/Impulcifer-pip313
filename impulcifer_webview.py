@@ -7,8 +7,12 @@ import platform
 import time
 from typing import Any
 
-from application import ImpulciferApplicationService
-from infra.resource_helper import get_resource_path
+from _impulcifer_entrypoint import prefer_distribution_root
+
+prefer_distribution_root()
+
+from application import ImpulciferApplicationService  # noqa: E402
+from infra.resource_helper import get_resource_path  # noqa: E402
 
 # Native file dialog filters, mirroring gui/constants.py FILETYPES_*.
 _FILE_DIALOG_FILTERS: dict[str, tuple[str, ...]] = {
@@ -152,7 +156,7 @@ class WebviewBridge:
         self._service = service or ImpulciferApplicationService()
         self._window: Any = None
 
-    def attach_window(self, window: Any) -> None:
+    def _attach_window(self, window: Any) -> None:
         """Give the bridge the window handle needed for native dialogs."""
         self._window = window
 
@@ -189,10 +193,10 @@ class WebviewBridge:
     def set_theme(self, theme: str) -> dict[str, Any]:
         response = self._service.set_theme(theme)
         if response.get("ok"):
-            self.apply_titlebar_theme()
+            self._apply_titlebar_theme()
         return response
 
-    def apply_titlebar_theme(self) -> None:
+    def _apply_titlebar_theme(self) -> None:
         """Sync the native title bar with the current app theme (Windows).
 
         ``before_show`` normally runs with the native handle ready. Keep the
@@ -305,13 +309,13 @@ def create_app_window(webview_module: Any, bridge: "WebviewBridge") -> Any:
         min_size=(980, 640),
         background_color=_WINDOW_BACKGROUNDS[resolve_effective_theme()],
     )
-    bridge.attach_window(window)
+    bridge._attach_window(window)
     # pywebview applies the Windows system theme inside BrowserForm.__init__.
     # Run after that assignment but before BrowserForm.Show() so the app theme
     # is the final value and the first visible frame already has the right
     # caption. A webview.start callback begins before BrowserForm is created
     # and can therefore be overwritten by pywebview during construction.
-    window.events.before_show += bridge.apply_titlebar_theme
+    window.events.before_show += bridge._apply_titlebar_theme
     return window
 
 

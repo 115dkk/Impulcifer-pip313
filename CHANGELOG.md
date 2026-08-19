@@ -4,6 +4,29 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.13.1 - 2026-08-20
+### 격주 감사(#164) 대응 2차 — quick wins·죽은 코드 청소·계약 테스트
+
+#### 🐛 버그 수정
+- **WebView decay 채널 어휘 7→15 수정**: 서비스가 낡은 7채널 사본으로 검증해 상단/와이드 decay 입력 시 BRIR 요청 전체가 거부되고 숫자 decay가 7채널로만 확장되던 문제를 `SPEAKER_NAMES` 참조로 수정 — CLI/CTk 정본과 일치. (감사 F001/F002)
+- **낡은 버전 폴백 제거**: CTk GUI의 버전 해석 3중 재구현("2.4.15" 하드코딩 폴백 포함)을 `infra.version.get_app_version()` 위임으로 교체. (감사 F005)
+- **탭 선택의 라벨 역비교 제거**: 로컬라이즈 라벨 충돌 시 탭이 조용히 recorder로 리셋되던 경로를 위젯명→키 맵으로 교체. (감사 F047)
+- **진입점 가드 비대칭 해소**: CLI·WebView 콘솔 스크립트에도 `prefer_distribution_root()` 가드를 적용하고 4종 전부 테스트로 고정. (감사 F048)
+- **출력 복구 표시 경로 정규화**: Windows에서 상대 경로 표시가 `\` 구분자로 나오던 것을 `/`로 정규화(기존 Windows 로컬 테스트 실패 해소).
+
+#### ⭐ 새로운 기능 / 개선
+- **job 이벤트 로그 상한**: 이벤트 링(2000)·터미널 job 프루닝(8)으로 WebView 폴링의 무한 성장 제거. (감사 F037)
+- **페이지 JS 노출 표면 축소**: pywebview js_api의 `attach_window`/`apply_titlebar_theme`를 내부 메서드로 강등(페이지 스크립트에서 창 핸들 파괴 가능성 차단). (감사 F032)
+- **계약 테스트 확충**: BRIR 탭 속성 Protocol(36속성, AST 검사), 브리지⊇서비스 표면 패리티, `_SKIN_CODES`==`SKIN_CHOICES`, vbass polarity 맵==cli_choices, job status i18n 키, decay 어휘==SPEAKER_NAMES. (감사 F008/F033/F034/F035/F046/F051)
+
+#### ⚡ 성능 개선
+- **경량 임포트 정리**: 서비스의 버전 조회 2곳과 sweep 감지의 `DEFAULT_SWEEP_FS`가 scipy/matplotlib 스택을 끌어오던 임포트를 경량 정본으로 교체, `infra/resource_helper`의 임포트 시점 폰트 디렉터리 스캔 제거. (감사 F006/F007/F038)
+
+#### 🔧 빌드 / 설정 변경
+- **검증된 죽은 코드 삭제**: `core/ffmpeg_utils.py` 셸, `updater/pip_updater.py`, `get_optimal_executor`, `enable_parallel_processing`, resource_helper 죽은 심볼 5종, `impulcifer.py`의 무소비 스테이지 재export. (감사 F021/F022/F024/F038/F044)
+- **병렬 모듈 정리**: 두 `parallel_map`을 정본+위임으로 단일화(기본값·시그니처 보존), free-threaded 판정을 라이브 프로브로 통일. (감사 F025/F026)
+- **일관성 정리**: `headphones.wav`·트랙명 컨벤션 상수화(F053/F054), 도달 불가능한 `room_correction` 시그니처 기본값 정정(F010), 도달 불가능한 영어 `default=` 폴백 제거(F049), isatty 테스트 게이트 제거(F017), 임포트 테스트의 무조건 skip 제거(F018), CLAUDE.md `magnitude_response` 포인터 정정(F055).
+
 ## 2.13.0 - 2026-08-20
 ### 격주 감사(#164) 대응 1차 — 보안·업데이트 경로 강화와 채널 밸런스 레이아웃 확장
 

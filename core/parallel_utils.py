@@ -30,28 +30,6 @@ def is_gil_disabled() -> bool:
     return False
 
 
-def get_optimal_executor(
-    max_workers: Optional[int] = None,
-    initializer: Optional[Callable] = None,
-    initargs: tuple = (),
-):
-    """
-    Get the optimal executor based on Python version and GIL status.
-
-    Args:
-        max_workers: Maximum number of workers. If None, uses CPU count.
-
-    Returns:
-        ThreadPoolExecutor if GIL is disabled, ProcessPoolExecutor otherwise
-    """
-    if is_gil_disabled():
-        # Python 3.13+ free-threaded: Use threads (much faster, no pickling overhead)
-        return ThreadPoolExecutor(max_workers=max_workers, initializer=initializer, initargs=initargs)
-    else:
-        # Standard Python with GIL: Use processes to bypass GIL
-        return ProcessPoolExecutor(max_workers=max_workers, initializer=initializer, initargs=initargs)
-
-
 def _run_parallel_map(
     func: Callable,
     items: List[Any],
@@ -118,23 +96,32 @@ def _run_parallel_map(
 
 def parallel_map(
     func: Callable,
-    items: List[Any],
+    items: Any,
     max_workers: Optional[int] = None,
     initializer: Optional[Callable] = None,
     initargs: tuple = (),
+    *,
+    use_threads: bool = False,
+    timeout: Optional[float] = None,
+    show_progress: bool = False,
 ) -> List[Any]:
     """
     Execute function on items in parallel using the optimal executor.
 
-    Process-first (GIL bypass) unless the runtime is free-threaded. Results are
-    returned in the same order as ``items``. This is the canonical map; the
-    thread-first ``core.parallel_processing.parallel_map`` wraps the same shared
-    loop (:func:`_run_parallel_map`).
+    Process-first (GIL bypass) unless ``use_threads`` is true or the runtime is
+    free-threaded. Results are returned in the same order as ``items``. This is
+    the canonical implementation; ``core.parallel_processing.parallel_map`` is
+    a thread-first compatibility wrapper over this public function.
 
     Args:
         func: Function to execute on each item
-        items: List of items to process
+        items: Items to process
         max_workers: Maximum number of workers (None = CPU count)
+        initializer: Worker initializer
+        initargs: Arguments passed to the initializer
+        use_threads: Prefer threads instead of processes
+        timeout: Overall completion timeout in seconds
+        show_progress: Print periodic completion progress
 
     Returns:
         List of results in the same order as input items
@@ -146,10 +133,10 @@ def parallel_map(
         >>> print(results)
         [2, 4, 6, 8]
     """
+    items = list(items)
     if not items:
         return []
 
-    # 작업 수보다 많은 워커 생성 방지
     if max_workers is None:
         max_workers = min(os.cpu_count() or 4, len(items))
 
@@ -157,9 +144,11 @@ def parallel_map(
         func,
         items,
         max_workers,
-        use_threads=False,
+        use_threads=use_threads,
+        timeout=timeout,
         initializer=initializer,
         initargs=initargs,
+        show_progress=show_progress,
     )
 
 

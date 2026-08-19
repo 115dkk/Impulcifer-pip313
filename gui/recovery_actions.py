@@ -186,7 +186,7 @@ def _relative_names(paths: tuple[str, ...], output_dir: str) -> str:
     for raw_path in paths:
         path = Path(raw_path)
         try:
-            names.append(str(path.relative_to(root)))
+            names.append(str(path.relative_to(root)).replace(os.sep, "/"))
         except ValueError:
             names.append(path.name)
     return ", ".join(names)

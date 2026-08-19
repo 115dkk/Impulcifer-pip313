@@ -5,14 +5,64 @@ from __future__ import annotations
 from dataclasses import fields
 import os
 import shutil
-from typing import Any
+from typing import Any, Protocol
 
-from core.constants import SPEAKER_NAMES
+from core.constants import HEADPHONES_FILENAME, SPEAKER_NAMES
 from core.pipeline import ProcessingConfig
 from gui.sweep_source import resolve_test_signal_arg
 from gui.utils import safe_get_double, safe_get_int, safe_get_string
 
 _PROCESSING_DEFAULTS = {field.name: field.default for field in fields(ProcessingConfig)}
+
+
+class TkReadable(Protocol):
+    """Minimal Tk variable interface used while assembling BRIR arguments."""
+
+    def get(self) -> Any: ...
+
+
+class BrirTabLike(Protocol):
+    """Structural contract shared by the Stable and Studio BRIR tabs."""
+
+    dir_path_var: TkReadable
+    test_signal_var: TkReadable
+    test_signal_source_var: TkReadable
+    test_signal_duration_var: TkReadable
+    test_signal_fs_var: TkReadable
+    plot_var: TkReadable
+    do_room_correction_var: TkReadable
+    do_headphone_compensation_var: TkReadable
+    do_equalization_var: TkReadable
+    room_target_var: TkReadable
+    room_mic_calibration_var: TkReadable
+    specific_limit_var: TkReadable
+    generic_limit_var: TkReadable
+    fr_combination_var: TkReadable
+    show_advanced_var: TkReadable
+    fs_var: TkReadable
+    fs_check_var: TkReadable
+    target_level_var: TkReadable
+    channel_balance_var: TkReadable
+    channel_balance_db_var: TkReadable
+    bass_boost_gain_var: TkReadable
+    bass_boost_fc_var: TkReadable
+    bass_boost_q_var: TkReadable
+    tilt_var: TkReadable
+    decay_per_channel_var: TkReadable
+    decay_channel_vars: dict[str, TkReadable]
+    decay_var: TkReadable
+    pre_response_var: TkReadable
+    jamesdsp_var: TkReadable
+    hangloose_var: TkReadable
+    interactive_plots_var: TkReadable
+    microphone_deviation_correction_var: TkReadable
+    mic_deviation_strength_var: TkReadable
+    mic_deviation_debug_plots_var: TkReadable
+    output_truehd_layouts_var: TkReadable
+    vbass_enable_var: TkReadable
+    vbass_freq_var: TkReadable
+    vbass_hp_var: TkReadable
+    vbass_polarity_var: TkReadable
 
 
 def processing_default(name: str) -> Any:
@@ -41,7 +91,7 @@ def sync_headphone_compensation_file(tab: Any) -> None:
     _copy_to_recording_dir(
         tab.headphone_compensation_file_var.get(),
         tab.dir_path_var.get(),
-        "headphones.wav",
+        HEADPHONES_FILENAME,
     )
 
 
@@ -58,7 +108,7 @@ def sync_custom_eq_files(tab: Any) -> None:
             _copy_to_recording_dir(var.get(), tab.dir_path_var.get(), target_name)
 
 
-def build_brir_args(tab: Any, loc: Any) -> dict:
+def build_brir_args(tab: BrirTabLike, loc: Any) -> dict:
     """Build ``impulcifer.main`` kwargs from a GUI tab instance."""
     args = {
         "dir_path": tab.dir_path_var.get(),

@@ -212,21 +212,20 @@ class SettingsTab:
 
         ctk.CTkLabel(
             data_frame,
-            text=self.loc.get('section_data_access', default="Data Access"),
+            text=self.loc.get('section_data_access'),
             font=self.fonts['heading']
         ).grid(row=0, column=0, sticky="w", padx=15, pady=(15, 10))
 
         ctk.CTkLabel(
             data_frame,
-            text=self.loc.get('label_data_folder_description',
-                             default="Access reference files, test signals, and recordings"),
+            text=self.loc.get('label_data_folder_description'),
             font=self.fonts['subtitle'],
             text_color="gray"
         ).grid(row=1, column=0, sticky="w", padx=15, pady=(0, 10))
 
         open_folder_btn = ctk.CTkButton(
             data_frame,
-            text=self.loc.get('button_open_data_folder', default="Open Data Folder"),
+            text=self.loc.get('button_open_data_folder'),
             command=open_data_folder,
             width=WIDGET_BUTTON_WIDTH_MEDIUM,
         )

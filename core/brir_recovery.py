@@ -29,6 +29,7 @@ from core.constants import (
     HESUVI_TRACK_ORDER,
     HEXADECAGONAL_TRACK_ORDER,
     SPEAKER_NAMES,
+    track_name,
 )
 
 _HRIR_FILE_NAME = "hrir.wav"
@@ -36,7 +37,7 @@ _HESUVI_FILE_NAME = "hesuvi.wav"
 _HANGLOOSE_DIR_NAME = "Hangloose"
 _LFE_TRACKS = ("LFE-left", "LFE-right")
 _SPEAKER_TRACKS = tuple(
-    f"{speaker}-{side}"
+    track_name(speaker, side)
     for speaker in SPEAKER_NAMES
     for side in ("left", "right")
 )
@@ -158,8 +159,8 @@ def recover_brir_outputs(
                     hangloose_dir / f"{speaker}.wav",
                     np.vstack(
                         (
-                            track_set.tracks[f"{speaker}-left"],
-                            track_set.tracks[f"{speaker}-right"],
+                            track_set.tracks[track_name(speaker, "left")],
+                            track_set.tracks[track_name(speaker, "right")],
                         )
                     ),
                 )
@@ -381,8 +382,8 @@ def _read_split_files(directory: Path) -> tuple[_TrackSet, tuple[Path, ...]]:
                     "actual": int(data.shape[1]),
                 },
             )
-        tracks[f"{speaker}-left"] = data[0]
-        tracks[f"{speaker}-right"] = data[1]
+        tracks[track_name(speaker, "left")] = data[0]
+        tracks[track_name(speaker, "right")] = data[1]
         ordered_paths.append(path)
 
     assert sample_rate is not None and sample_count is not None
@@ -429,8 +430,8 @@ def _active_speakers(tracks: dict[str, np.ndarray]) -> tuple[str, ...]:
     return tuple(
         speaker
         for speaker in SPEAKER_NAMES
-        if np.any(tracks[f"{speaker}-left"] != 0.0)
-        or np.any(tracks[f"{speaker}-right"] != 0.0)
+        if np.any(tracks[track_name(speaker, "left")] != 0.0)
+        or np.any(tracks[track_name(speaker, "right")] != 0.0)
     )
 
 
@@ -495,7 +496,7 @@ def _verify_split_subset(
     mismatched = [
         track
         for speaker in split.speakers
-        for track in (f"{speaker}-left", f"{speaker}-right")
+        for track in (track_name(speaker, "left"), track_name(speaker, "right"))
         if not np.array_equal(combined.tracks[track], split.tracks[track])
     ]
     if mismatched:
