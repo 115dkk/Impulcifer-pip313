@@ -81,7 +81,6 @@ def _smoke_test():
         "core.cli_builder",
         "core.plotting.hrir_plotter",
         "core.plotting.impulse_response_plotter",
-        "core.ffmpeg_utils",
         "core.ffmpeg_discovery",
         "core.audio_truehd",
         "i18n.localization",

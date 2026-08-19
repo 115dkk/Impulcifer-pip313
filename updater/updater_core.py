@@ -12,7 +12,6 @@ New module layout:
 
     updater/environment.py       — runtime probes (Velopack/Pip/standalone)
     updater/velopack.py          — VelopackUpdater + VelopackDownloadError
-    updater/pip_updater.py       — PipUpdater
     updater/legacy.py            — LegacyInstallerUpdater + URL
     updater/executors.py         — UpdateExecutor + 3 subclasses + factory
 
@@ -39,7 +38,6 @@ from updater.legacy import (  # noqa: F401  (re-export)
     GITHUB_RELEASES_URL,
     LegacyInstallerUpdater,
 )
-from updater.pip_updater import PipUpdater  # noqa: F401  (re-export)
 from updater.velopack import (  # noqa: F401  (re-export)
     VelopackDownloadError,
     VelopackUpdater,

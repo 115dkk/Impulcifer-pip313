@@ -10,6 +10,7 @@ import threading
 import time
 from types import SimpleNamespace
 
+import application.impulcifer_service as service_module
 from application.impulcifer_service import ImpulciferApplicationService
 from core.recording_progress import RecorderProgressEvent
 
@@ -177,6 +178,65 @@ def test_unforced_default_recording_skips_channel_confirmation(
     assert captured["channels"] == 2
 
 
+def test_job_event_history_keeps_latest_events_and_monotonic_sequences() -> None:
+    service = ImpulciferApplicationService()
+    job = service_module._Job("job", "test", True, threading.Event())
+    service._jobs[job.job_id] = job
+
+    total = service_module._MAX_JOB_EVENTS + 5
+    for index in range(total):
+        service._append_event(job, "progress", {"index": index})
+
+    response = service.poll_job(job.job_id)
+    assert response["ok"]
+    events = response["data"]["events"]
+    assert len(events) == service_module._MAX_JOB_EVENTS
+    assert events[0]["seq"] == 6
+    assert events[0]["payload"]["index"] == 5
+    assert events[-1]["seq"] == total
+    assert events[-1]["payload"]["index"] == total - 1
+    assert [event["seq"] for event in events] == list(range(6, total + 1))
+    assert response["data"]["next_seq"] == total
+
+
+def test_starting_job_prunes_oldest_terminal_jobs() -> None:
+    service = ImpulciferApplicationService()
+    terminal_ids = []
+    for index in range(service_module._MAX_TERMINAL_JOBS + 2):
+        job_id = f"terminal-{index}"
+        terminal_ids.append(job_id)
+        service._jobs[job_id] = service_module._Job(
+            job_id,
+            "test",
+            False,
+            threading.Event(),
+            status="succeeded",
+        )
+
+    release = threading.Event()
+
+    def blocking_target(_job_id, _cancel_event):
+        assert release.wait(timeout=3.0)
+        return {}
+
+    started = service._start_job("test", False, blocking_target)
+    assert started["ok"]
+    retained_terminal_ids = [
+        job_id
+        for job_id, job in service._jobs.items()
+        if job.status in service_module._TERMINAL_STATES
+    ]
+    assert retained_terminal_ids == terminal_ids[-(service_module._MAX_TERMINAL_JOBS - 1) :]
+    for pruned_id in terminal_ids[:3]:
+        assert service.poll_job(pruned_id)["error"]["code"] == "JOB_NOT_FOUND"
+
+    release.set()
+    _wait_for_terminal(service, started["data"]["job"]["job_id"])
+    assert sum(
+        job.status in service_module._TERMINAL_STATES for job in service._jobs.values()
+    ) == service_module._MAX_TERMINAL_JOBS
+
+
 def test_service_allows_only_one_active_job(monkeypatch, tmp_path: Path) -> None:
     from core import recorder
 
@@ -302,13 +362,21 @@ def test_brir_accepts_full_processing_config_surface(monkeypatch, tmp_path: Path
 
 
 def test_brir_numeric_decay_fans_out_to_all_channels(tmp_path: Path) -> None:
+    from core.constants import SPEAKER_NAMES
+
     validation = ImpulciferApplicationService._validate_brir_request(
         {"dir_path": str(tmp_path), "decay": 0.3}
     )
     assert validation["ok"]
     assert validation["data"]["params"]["decay"] == {
-        channel: 0.3 for channel in ("FL", "FC", "FR", "SL", "SR", "BL", "BR")
+        channel: 0.3 for channel in SPEAKER_NAMES
     }
+
+
+def test_decay_channels_match_speaker_names() -> None:
+    from core.constants import SPEAKER_NAMES
+
+    assert service_module._DECAY_CHANNELS == tuple(SPEAKER_NAMES)
 
 
 def test_brir_rejects_unknown_and_invalid_fields(tmp_path: Path) -> None:
@@ -493,6 +561,25 @@ class _FakeLocalization:
         self.marked = True
 
 
+def test_skin_codes_match_gui_choices() -> None:
+    from gui.skins import SKIN_CHOICES
+
+    assert service_module._SKIN_CODES == SKIN_CHOICES
+
+
+def test_job_statuses_have_english_localization_keys() -> None:
+    locale_path = Path(__file__).resolve().parents[1] / "i18n" / "locales" / "en.json"
+    strings = json.loads(locale_path.read_text(encoding="utf-8"))
+    statuses = service_module._TERMINAL_STATES | {"running", "cancel_requested"}
+
+    missing = sorted(
+        f"webview_status_{status}"
+        for status in statuses
+        if f"webview_status_{status}" not in strings
+    )
+    assert not missing, missing
+
+
 def test_ui_settings_language_and_theme_roundtrip(monkeypatch) -> None:
     import i18n.localization as localization
 
@@ -514,8 +601,9 @@ def test_ui_settings_language_and_theme_roundtrip(monkeypatch) -> None:
 
     assert service.set_language("xx")["error"]["code"] == "INVALID_REQUEST"
 
-    assert service.set_theme("light")["ok"]
-    assert fake.theme == "light"
+    for theme in ("dark", "light", "system"):
+        assert service.set_theme(theme)["ok"]
+        assert fake.theme == theme
     assert service.set_theme("neon")["error"]["code"] == "INVALID_REQUEST"
 
     assert settings["data"]["skin"] == "stable"

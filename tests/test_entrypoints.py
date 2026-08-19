@@ -15,13 +15,22 @@ except ImportError:  # pragma: no cover - Python < 3.11
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_gui_console_scripts_use_collision_resistant_bootstrap() -> None:
+def test_console_scripts_use_collision_resistant_bootstrap() -> None:
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     scripts = pyproject["project"]["scripts"]
+    expected_targets = {
+        "impulcifer": "impulcifer_cli:entry_point",
+        "impulcifer_gui": "impulcifer_gui:main_gui",
+        "impulcifer_gui_legacy": "impulcifer_gui_legacy:main_gui",
+        "impulcifer_webview": "impulcifer_webview:main",
+    }
 
-    assert scripts["impulcifer_gui"] == "impulcifer_gui:main_gui"
-    assert scripts["impulcifer_gui_legacy"] == "impulcifer_gui_legacy:main_gui"
+    for script_name, target in expected_targets.items():
+        assert scripts[script_name] == target
+        module_name = target.partition(":")[0]
+        source = (PROJECT_ROOT / f"{module_name}.py").read_text(encoding="utf-8")
+        assert "_impulcifer_entrypoint" in source
 
 
 def test_gui_bootstrap_recovers_from_shadow_gui_module(

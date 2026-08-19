@@ -16,10 +16,9 @@ free-threaded 빌드를 감지합니다. 일반 Python에서는 기존
 import sys
 import os
 from typing import Callable, Iterable, List, TypeVar, Optional, Any
-from functools import wraps
 import time
 
-from core.parallel_utils import is_gil_disabled, _run_parallel_map
+from core.parallel_utils import is_gil_disabled, parallel_map as _parallel_map
 
 T = TypeVar('T')
 R = TypeVar('R')
@@ -41,7 +40,7 @@ def get_optimal_worker_count() -> int:
     """
     cpu_count = os.cpu_count() or 4
 
-    if IS_FREE_THREADED:
+    if is_gil_disabled():
         # Free-Threaded: CPU 집약적 작업에 최적화
         return cpu_count
     else:
@@ -56,7 +55,7 @@ def is_free_threaded_available() -> bool:
     Returns:
         bool: Free-Threaded 사용 가능 여부
     """
-    return IS_FREE_THREADED
+    return is_gil_disabled()
 
 
 def get_python_threading_info() -> dict:
@@ -69,7 +68,7 @@ def get_python_threading_info() -> dict:
     info = {
         'python_version': f"{PYTHON_VERSION.major}.{PYTHON_VERSION.minor}.{PYTHON_VERSION.micro}",
         'is_python_314_plus': IS_PYTHON_314_PLUS,
-        'is_free_threaded': IS_FREE_THREADED,
+        'is_free_threaded': is_gil_disabled(),
         'optimal_workers': get_optimal_worker_count(),
         'cpu_count': os.cpu_count() or 'unknown'
     }
@@ -119,30 +118,24 @@ def parallel_map(
         [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
     """
     items = list(iterable)
-
     if not items:
         return []
-
-    # 단일 항목이면 병렬 처리 불필요 (initializer가 필요한 경우는 제외)
     if len(items) == 1 and initializer is None:
         return [func(items[0])]
-
-    # 워커 수 결정 (thread-first 호출자용 기본값 유지)
     if max_workers is None:
         max_workers = get_optimal_worker_count()
-
     max_workers = min(max_workers, len(items))
 
-    # 실제 실행 루프는 core.parallel_utils와 공유한다. ``use_threads`` 기본값을
-    # True로 두어 기존 thread-first 동작을 그대로 보존한다.
-    return _run_parallel_map(
+    # core.parallel_utils.parallel_map is the canonical implementation. Keep
+    # this wrapper's thread-first default and extended public signature intact.
+    return _parallel_map(
         func,
         items,
-        max_workers,
-        use_threads=use_threads,
-        timeout=timeout,
+        max_workers=max_workers,
         initializer=initializer,
         initargs=initargs,
+        use_threads=use_threads,
+        timeout=timeout,
         show_progress=show_progress,
     )
 
@@ -195,46 +188,6 @@ def parallel_process_dict(
     )
 
     return dict(results)
-
-
-def enable_parallel_processing(func: Callable) -> Callable:
-    """
-    함수를 병렬 처리 가능하게 만드는 데코레이터입니다.
-
-    이 데코레이터를 사용하면 함수가 자동으로 병렬 처리를 활용합니다.
-    첫 번째 인자가 iterable인 경우에만 병렬 처리를 수행합니다.
-
-    Args:
-        func: 병렬화할 함수
-
-    Returns:
-        Callable: 병렬 처리가 가능한 함수
-
-    Example:
-        >>> @enable_parallel_processing
-        ... def process_items(items):
-        ...     return [item * 2 for item in items]
-    """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        use_parallel = kwargs.pop('use_parallel', False)
-        max_workers = kwargs.pop('max_workers', None)
-
-        if not use_parallel:
-            return func(*args, **kwargs)
-
-        if args and hasattr(args[0], '__iter__'):
-            iterable = args[0]
-            remaining_args = args[1:]
-
-            def parallel_func(item):
-                return func(item, *remaining_args, **kwargs)
-
-            return parallel_map(parallel_func, iterable, max_workers=max_workers)
-        else:
-            return func(*args, **kwargs)
-
-    return wrapper
 
 
 def benchmark_parallel_performance(

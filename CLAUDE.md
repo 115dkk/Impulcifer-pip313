@@ -35,13 +35,12 @@ core/
   virtual_bass.py         ← 가상 저음 확장
   microphone_deviation_correction.py  ← 마이크 편차 보정
   recorder.py             ← 녹음/재생
-  utils.py                ← audio_io/font_setup/plotting_utils/ffmpeg_utils 재export 셸 (audit #115-8)
+  utils.py                ← audio_io/font_setup/plotting_utils + ffmpeg 심볼 재export 셸 (audit #115-8)
   audio_io.py             ← WAV I/O + DSP 프리미티브 (magnitude_response 등, audit #115-8 분리)
   font_setup.py           ← matplotlib 한글 폰트 설정 (audit #115-8 분리)
   plotting_utils.py       ← 플롯/PNG 헬퍼 (audit #115-8 분리)
   ffmpeg_discovery.py     ← FFmpeg 검색/설치 + lazy 초기화 globals (audit #115-9 분리)
   audio_truehd.py         ← TrueHD/MLP 디코드 + read_audio (audit #115-9 분리)
-  ffmpeg_utils.py         ← 위 둘의 하위 호환 re-export 셸
   constants.py            ← 스피커 이름/딜레이/speaker_side()/스윕 기본 파라미터 등
                             임포트 경량 상수 (bootstrap이 직접 참조)
   sweep_signal.py         ← 즉석 스윕 시퀀스 생성 (SweepSpec/SweepPlayback,
@@ -90,8 +89,8 @@ updater/
                             다시 export한다. 신규 코드는 아래 실제 모듈을 직접 import.
   environment.py          ← infra/environment.py 재export 셸 (이슈 #138 C3)
   velopack.py             ← Velopack 업데이터
-  pip_updater.py          ← pip 기반 업데이터
-  legacy.py               ← 레거시 인스톨러 업데이터
+  legacy.py               ← macOS/Linux 스탠드얼론 인스톨러 업데이트
+                            (SHA256SUMS 검증 + AppImage 제자리 교체 — 이슈 #164)
   executors.py            ← UpdateExecutor 계열(업데이트 실행)
 ```
 
@@ -105,7 +104,7 @@ updater/
 
 `core/recorder.py`의 `play_and_record()`는 `sd.play(blocking=True)` + `Thread.join()`으로 완전한 블로킹 함수다. 이 동작을 변경하지 말 것.
 
-`core/utils.py`의 `magnitude_response()`는 현재 검증된 NumPy `rfft` 기반 출력과 bit-identical해야 한다. full FFT 경로는 수치적으로 가까워도 BRIR 해시를 바꿀 수 있으므로, `test_magnitude_response_parity.py`가 이 verified 동작을 고정한다.
+`magnitude_response()`(정본은 `core/audio_io.py`, `core/utils.py`는 재export)는 현재 검증된 NumPy `rfft` 기반 출력과 bit-identical해야 한다. full FFT 경로는 수치적으로 가까워도 BRIR 해시를 바꿀 수 있으므로, `test_magnitude_response_parity.py`가 이 verified 동작을 고정한다.
 
 데모 WAV 파일(`data/demo/*.wav`)은 raw 바이너리로 repo에 포함되어 있다(약 55MB). 일반 `git clone`으로 받아진다. `.gitignore`가 demo 폴더를 기본 무시하면서 화이트리스트로 필요한 파일들만 통과시키므로, 새 데모 파일을 추가할 때는 `.gitignore`의 `!data/demo/...` 라인을 갱신해야 한다.
 
@@ -238,7 +237,7 @@ pytest tests/ -v
 
 Tier 1의 `test_suite.py` 외에 아래 테스트가 추가로 실행된다.
 
-`test_magnitude_response_parity.py`는 `core/utils.py`의 `magnitude_response()` 함수가 현재 검증된 NumPy `rfft` 경로와 bit-identical한 출력을 내는지 검증한다. even/odd 길이, 임펄스, sweep-like 신호에 대해 모두 확인한다. `core/utils.py`를 수정했다면 이 테스트가 가장 중요하다.
+`test_magnitude_response_parity.py`는 `magnitude_response()`(정본 `core/audio_io.py`, `core/utils.py` 재export) 함수가 현재 검증된 NumPy `rfft` 경로와 bit-identical한 출력을 내는지 검증한다. even/odd 길이, 임펄스, sweep-like 신호에 대해 모두 확인한다. `core/audio_io.py`나 `core/utils.py`를 수정했다면 이 테스트가 가장 중요하다.
 
 `test_virtual_bass.py`는 `_classify_speaker()`의 좌/우/중앙 분류, `_detect_polarity()`의 극성 감지, `_build_ild_shelf()`의 ILD 셸프 필터 생성, `apply_virtual_bass_to_hrir()`의 전체 플로우를 검증한다.
 
@@ -491,7 +490,7 @@ if __name__ == "__main__":
 
 | 수정 대상 | Tier 1 | Tier 2 테스트 | Tier 3 |
 |-----------|--------|--------------|--------|
-| `core/utils.py` | 필수 | `test_magnitude_response_parity.py` 필수 | 필수 |
+| `core/audio_io.py`, `core/utils.py` | 필수 | `test_magnitude_response_parity.py` 필수 | 필수 |
 | `core/hrir.py`, `impulcifer.py` | 필수 | 전체 | 필수 |
 | `core/virtual_bass.py` | 필수 | `test_virtual_bass.py` 필수 | 필수 |
 | `core/parallel_processing.py` | 필수 | `test_parallel_processing.py` 필수 | 불필요 |

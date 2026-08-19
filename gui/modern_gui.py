@@ -22,6 +22,7 @@ from gui.tabs.settings_tab import SettingsTab
 from gui.theme import get_ctk_theme_json_path
 from gui.utils import build_fonts, setup_app_icon, setup_pretendard_font
 from i18n.localization import get_localization_manager
+from infra.version import get_app_version
 from updater.update_checker import UpdateChecker
 
 # Apply the Pulse audio-equipment palette when the bundled theme JSON is
@@ -89,13 +90,13 @@ class ModernImpulciferGUI:
         # Velopack 업데이트 후 재시작 감지 — 사용자에게 완료 알림
         if os.environ.get('VELOPACK_RESTART'):
             self.root.after(1000, lambda: messagebox.showinfo(
-                self.loc.get('update_complete_title', default="Update Complete"),
-                self.loc.get('update_restart_done', default="The new version has been installed successfully.")
+                self.loc.get('update_complete_title'),
+                self.loc.get('update_restart_done')
             ))
 
         if startup_notice:
             self.root.after(1500, lambda: messagebox.showwarning(
-                self.loc.get('message_webview_fallback_title', default="WebView Unavailable"),
+                self.loc.get('message_webview_fallback_title'),
                 startup_notice,
             ))
 
@@ -202,31 +203,20 @@ class ModernImpulciferGUI:
             'settings': 'tab_ui_settings',
             'info': 'tab_info',
         }
+        self.tab_labels = {}
+        self.tab_widget_keys = {}
 
-        for tab_key in self.tab_keys.values():
-            self.tabview.add(self.loc.get(tab_key))
+        for key, tab_key in self.tab_keys.items():
+            label = self.loc.get(tab_key)
+            widget = self.tabview.add(label)
+            self.tab_labels[key] = label
+            self.tab_widget_keys[str(widget)] = key
 
-        self.tabview.set(self.loc.get('tab_recorder'))
+        self.select_tab('recorder')
 
     def get_current_version(self) -> str:
-        """Get current application version from build marker, pyproject.toml, or metadata."""
-        # Method 0: 빌드 마커 (Nuitka/pip 빌드에서 가장 확실)
-        try:
-            from infra._build_info import VERSION as build_version
-            if build_version is not None:
-                return build_version
-        except ImportError:
-            pass
-
-        # Method 1: impulcifer.__version__ (이미 빌드 마커 → pyproject.toml → metadata 순으로 시도)
-        try:
-            import impulcifer
-            if hasattr(impulcifer, '__version__'):
-                return impulcifer.__version__
-        except Exception:
-            pass
-
-        return "2.4.15"
+        """Get current application version from the shared resolver."""
+        return get_app_version()
 
     def check_for_updates_background(self) -> None:
         """Check for updates in a background thread."""
@@ -424,19 +414,16 @@ class ModernImpulciferGUI:
         if tabview is None:
             return "recorder"
         try:
-            selected_label = tabview.get()
+            selected_widget = tabview.tab(tabview.get())
         except Exception:
             return "recorder"
-        for key, loc_key in self.tab_keys.items():
-            if selected_label == self.loc.get(loc_key):
-                return key
-        return "recorder"
+        return self.tab_widget_keys.get(str(selected_widget), "recorder")
 
     def select_tab(self, tab_key: str) -> None:
         """Select a tab by stable internal key."""
-        loc_key = self.tab_keys.get(tab_key)
-        if loc_key is not None:
-            self.tabview.set(self.loc.get(loc_key))
+        label = self.tab_labels.get(tab_key)
+        if label is not None:
+            self.tabview.set(label)
 
     def run(self) -> None:
         """Start the GUI main loop."""

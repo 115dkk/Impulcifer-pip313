@@ -18,8 +18,8 @@ def room_correction(
         target=None,
         mic_calibration=None,
         fr_combination_method='average',
-        specific_limit=20000,
-        generic_limit=1000,
+        specific_limit=400,
+        generic_limit=300,
         plot=False):
     """Corrects room acoustics
 
@@ -30,8 +30,10 @@ def room_correction(
         mic_calibration: Path to room measurement microphone calibration file
         fr_combination_method: Method for combining generic room measurment frequency responses. "average" or
                                "conservative"
-        specific_limit: Upper limit in Hertz for equalization of specific room eq. 0 disables limit.
-        generic_limit: Upper limit in Hertz for equalization of generic room eq. 0 disables limit.
+        specific_limit: Upper limit in Hertz for equalization of specific room eq. Defaults to 400.
+                        0 disables limit.
+        generic_limit: Upper limit in Hertz for equalization of generic room eq. Defaults to 300.
+                       0 disables limit.
         plot: Plot graphs?
 
     Returns:

@@ -11,7 +11,7 @@ from dataclasses import fields
 from typing import Any
 
 from core.hrir import _channel_balance_groups
-from core.pipeline import ProcessingConfig
+from core.pipeline import ProcessingConfig, VBASS_POLARITY_MAP
 from gui.brir_args import build_brir_args
 
 
@@ -63,6 +63,15 @@ def test_gui_room_limit_fallbacks_match_processing_config_defaults() -> None:
 
     assert args["specific_limit"] == defaults.specific_limit
     assert args["generic_limit"] == defaults.generic_limit
+
+
+def test_vbass_polarity_map_matches_processing_config_choices() -> None:
+    """Runtime polarity handling must cover every canonical CLI choice."""
+    polarity_field = next(
+        field for field in fields(ProcessingConfig) if field.name == "vbass_polarity"
+    )
+
+    assert set(VBASS_POLARITY_MAP) == set(polarity_field.metadata["cli_choices"])
 
 
 def test_main_public_kwargs_are_represented_in_processing_config() -> None:

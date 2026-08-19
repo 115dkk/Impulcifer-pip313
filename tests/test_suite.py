@@ -170,8 +170,10 @@ class TestModuleImports:
         try:
             import core.recorder  # noqa: F401
         except (ImportError, OSError) as e:
-            # CI 환경에서는 PortAudio가 없을 수 있음
-            pytest.skip(f"recorder 모듈 임포트 불가 (정상): {e}")
+            message = str(e).lower()
+            if "portaudio" in message or "sounddevice" in message:
+                pytest.skip(f"recorder 모듈 임포트 불가 (정상): {e}")
+            raise
 
     def test_gui_modules_importable(self):
         """GUI 모듈 임포트 테스트 (선택적)"""
@@ -179,8 +181,11 @@ class TestModuleImports:
             from gui import modern_gui  # noqa: F401
             from gui import legacy_gui  # noqa: F401
         except (ImportError, OSError) as e:
-            # CI 환경에서는 PortAudio가 없을 수 있음
-            pytest.skip(f"GUI 모듈 임포트 불가 (정상): {e}")
+            message = str(e).lower()
+            optional_dependencies = ("portaudio", "sounddevice", "customtkinter")
+            if any(dependency in message for dependency in optional_dependencies):
+                pytest.skip(f"GUI 모듈 임포트 불가 (정상): {e}")
+            raise
 
 
 class TestDataFiles:

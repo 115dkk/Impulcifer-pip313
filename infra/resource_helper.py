@@ -90,22 +90,4 @@ def find_pretendard_font_path():
             return str(path)
     return None
 
-def get_img_path(filename):
-    """img 폴더 내 파일의 경로를 반환"""
-    return get_resource_path(os.path.join("img", filename))
-
 DATA_DIR = get_resource_path("data")
-FONT_DIR = get_resource_path("font")
-IMG_DIR = get_resource_path("img")
-
-DEFAULT_SWEEP_FILE = get_data_path("sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
-DEFAULT_FONT_FILE = find_pretendard_font_path() or get_font_path("PretendardVariable.ttf")
-
-def ensure_dir_exists(directory):
-    """디렉토리가 존재하지 않으면 생성"""
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-def file_exists(filepath):
-    """파일 존재 여부 확인"""
-    return os.path.exists(filepath) 

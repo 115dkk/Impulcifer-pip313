@@ -125,7 +125,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          # 3.14.7(러너 이미지 20260810)에서 hostedtoolcache의 Tcl 배치가 바뀌어
+          # Nuitka 4.1.3 tk-inter가 "Could not find Tcl" FATAL로 죽는다(2026-08-19
+          # 릴리스 실측). Nuitka가 대응하면 부동 '3.14'로 되돌릴 것.
+          python-version: '3.14.6'
 
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@v5

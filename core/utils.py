@@ -6,8 +6,9 @@ core/utils.py was a three-domain grab-bag; it is now split into focused modules
 and re-exports their public surface so the 25+ existing importers keep working:
   - core.audio_io      : WAV I/O + DSP (read_wav, write_wav, magnitude_response, ...)
   - core.font_setup    : matplotlib Korean font setup (set_matplotlib_font, ...)
-  - core.plotting_utils: plot/PNG helpers (sync_axes, save_fig_as_png, ...)
-  - core.ffmpeg_utils  : FFmpeg/TrueHD (itself a shim over ffmpeg_discovery + audio_truehd)
+  - core.plotting_utils  : plot/PNG helpers (sync_axes, save_fig_as_png, ...)
+  - core.ffmpeg_discovery: FFmpeg discovery/install and lazy setup
+  - core.audio_truehd    : TrueHD/MLP decode and TrueHD-aware audio reading
 """
 
 from core.audio_io import (  # noqa: F401  (intentional re-export)
@@ -33,19 +34,21 @@ from core.plotting_utils import (  # noqa: F401  (intentional re-export)
     save_fig_as_png,
     config_fr_axis,
 )
-from core.ffmpeg_utils import (  # noqa: F401  (intentional re-export)
+from core.ffmpeg_discovery import (  # noqa: F401  (intentional re-export)
     MIN_FFMPEG_VERSION,
     get_ffmpeg_version,
     find_ffmpeg_in_common_paths,
     install_ffmpeg,
     setup_ffmpeg,
     ensure_ffmpeg_available,
+    check_ffmpeg_available,
+)
+from core.audio_truehd import (  # noqa: F401  (intentional re-export)
     is_truehd_file,
     convert_truehd_to_wav,
     get_truehd_channel_info,
     get_truehd_profile,
     is_truehd_atmos_object_master,
     read_audio,
-    check_ffmpeg_available,
     get_supported_audio_formats,
 )

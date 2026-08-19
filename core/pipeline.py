@@ -22,6 +22,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field, fields
 from typing import Any, Optional
 
+from core.constants import HEADPHONES_FILENAME, track_name
+
+
+VBASS_POLARITY_MAP = {'auto': None, 'normal': False, 'invert': True}
+
 
 @dataclass
 class ProcessingConfig:
@@ -82,7 +87,7 @@ class ProcessingConfig:
             "cli_flag": "--headphone_compensation_file",
             "cli_help": (
                 'Path to the headphone compensation WAV file. Defaults to '
-                '"headphones.wav" in dir_path.'
+                f'"{HEADPHONES_FILENAME}" in dir_path.'
             ),
             "cli_arg_type": "str",
         },
@@ -601,13 +606,12 @@ class BRIRPipeline:
 
         cfg = self.config
         self.logger.step("vbass_status_processing")
-        polarity_map = {'auto': None, 'normal': False, 'invert': True}
         apply_virtual_bass_to_hrir(
             self.hrir,
             crossover_freq=cfg.vbass_freq,
             head_ms=cfg.head_ms,
             hp_freq=cfg.vbass_hp,
-            invert_polarity=polarity_map.get(cfg.vbass_polarity),
+            invert_polarity=VBASS_POLARITY_MAP.get(cfg.vbass_polarity),
         )
         check_cancelled()
 
@@ -879,7 +883,7 @@ class BRIRPipeline:
             available = [ch for ch in layout_order if ch in self.hrir.irs]
             if len(available) >= min_channels:
                 track_order = [
-                    f"{ch}-{side}" for ch in available for side in ("left", "right")
+                    track_name(ch, side) for ch in available for side in ("left", "right")
                 ]
                 output_path = os.path.join(
                     self.dir_path, f"truehd_{layout_name}_{len(available)}ch.wav"
@@ -913,7 +917,11 @@ class BRIRPipeline:
                 avg_target=cfg.target_level,
             )
 
-        jd_order = ["FL-left", "FL-right", "FR-left", "FR-right"]
+        jd_order = [
+            track_name(speaker, side)
+            for speaker in ("FL", "FR")
+            for side in ("left", "right")
+        ]
         out_path = os.path.join(self.dir_path, "jamesdsp.wav")
         dsp_hrir.write_wav(out_path, track_order=jd_order)
         del dsp_hrir
@@ -933,7 +941,7 @@ class BRIRPipeline:
         processed_speakers = [sp for sp in SPEAKER_NAMES if sp in self.hrir.irs]
 
         for sp in processed_speakers:
-            track_order = [f"{sp}-left", f"{sp}-right"]
+            track_order = [track_name(sp, side) for side in ("left", "right")]
             out_path = os.path.join(output_dir, f"{sp}.wav")
             self.hrir.write_wav(out_path, track_order=track_order)
             self.logger.info("cli_success_hangloose_file", file=f"{sp}.wav")

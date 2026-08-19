@@ -107,6 +107,17 @@ HEXADECAGONAL_TRACK_ORDER = ['FL-left', 'FL-right', 'FR-left', 'FR-right', 'FC-l
 # the sequence layouts the generator supports. Canonical home is here — a
 # light module — so the WebView bootstrap can ship them to the frontend
 # without importing the scipy/matplotlib stack behind core.sweep_signal.
+# Canonical headphone-compensation filename (F053). The fallback tuple lists
+# the alternative names probed by headphone_compensation, primary name first.
+HEADPHONES_FILENAME = 'headphones.wav'
+HEADPHONES_FALLBACK_FILENAMES = (HEADPHONES_FILENAME, 'headphone.wav', 'hp.wav', 'compensation.wav')
+
+
+def track_name(speaker: str, side: str) -> str:
+    """Canonical "<speaker>-<side>" track-name convention (F054)."""
+    return f"{speaker}-{side}"
+
+
 DEFAULT_SWEEP_FS = 48000
 DEFAULT_SWEEP_DURATION = 5.0
 SWEEP_TRACK_LAYOUTS = ("mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6")

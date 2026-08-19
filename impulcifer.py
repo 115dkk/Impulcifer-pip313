@@ -20,24 +20,6 @@ from core.cancellation import (  # noqa: F401
     check_cancelled as _check_cancelled,
 )
 
-# Convenience re-export for external callers that import the estimator
-# from the top-level module.
-from core.impulse_response_estimator import ImpulseResponseEstimator  # noqa: F401
-
-# Stage helpers live in core.pipeline_stages; re-exported for legacy
-# callers (tests import equalization from here, etc.).
-from core.pipeline_stages import (  # noqa: F401
-    _find_eq_settings_file,
-    _read_eq_settings,
-    _save_bokeh_analysis_plots,
-    create_target,
-    equalization,
-    headphone_compensation,
-    open_binaural_measurements,
-    open_impulse_response_estimator,
-    write_readme,
-)
-
 
 def get_pretendard_font_for_gui():
     """Return the bundled or system Pretendard font for legacy callers."""

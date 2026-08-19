@@ -108,7 +108,7 @@ class RecordingProgressDialog(BaseDialog):
             parent,
             loc_manager,
             fonts,
-            loc_manager.get("dialog_recording_title", default="Recording"),
+            loc_manager.get("dialog_recording_title"),
             DIALOG_RECORDING_SIZE,
         )
         self.recording_complete = False
@@ -118,7 +118,7 @@ class RecordingProgressDialog(BaseDialog):
 
         self.title_label = ctk.CTkLabel(
             self,
-            text=self.loc.get("dialog_recording_message", default="Recording sweep..."),
+            text=self.loc.get("dialog_recording_message"),
             font=self.fonts["heading"],
             anchor="w",
         )
@@ -152,7 +152,7 @@ class RecordingProgressDialog(BaseDialog):
 
         self.close_button = ctk.CTkButton(
             button_frame,
-            text=self.loc.get("button_close", default="Close"),
+            text=self.loc.get("button_close"),
             command=self.on_close,
             state="disabled",
         )
@@ -247,7 +247,7 @@ class ProcessingDialog(BaseDialog):
             parent,
             loc_manager,
             fonts,
-            loc_manager.get('dialog_processing_title', default="Processing"),
+            loc_manager.get('dialog_processing_title'),
             DIALOG_PROCESSING_SIZE,
         )
         self.cancel_event = threading.Event()
@@ -261,7 +261,7 @@ class ProcessingDialog(BaseDialog):
 
         title_label = ctk.CTkLabel(
             self,
-            text=self.loc.get('dialog_processing_message', default="Processing BRIR..."),
+            text=self.loc.get('dialog_processing_message'),
             font=self.fonts['heading'],
         )
         title_label.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
@@ -285,7 +285,7 @@ class ProcessingDialog(BaseDialog):
 
         self.close_button = ctk.CTkButton(
             button_frame,
-            text=self.loc.get('button_close', default="Close"),
+            text=self.loc.get('button_close'),
             command=self.on_close,
             state="disabled",
         )
@@ -293,7 +293,7 @@ class ProcessingDialog(BaseDialog):
 
         self.cancel_button = ctk.CTkButton(
             button_frame,
-            text=self.loc.get('button_cancel', default="Cancel"),
+            text=self.loc.get('button_cancel'),
             command=self.on_cancel,
         )
         self.cancel_button.pack(side="right", padx=5)
@@ -353,14 +353,11 @@ class ProcessingDialog(BaseDialog):
             if success:
                 self.progress_bar.set(1.0)
                 self.progress_label.configure(
-                    text="100% - " + self.loc.get(
-                        'message_processing_complete',
-                        default="Complete!",
-                    )
+                    text="100% - " + self.loc.get('message_processing_complete')
                 )
             else:
                 self.progress_label.configure(
-                    text=self.loc.get('message_processing_error', default="Error occurred")
+                    text=self.loc.get('message_processing_error')
                 )
 
         self._schedule_ui("mark_complete", _apply)
@@ -374,10 +371,7 @@ class ProcessingDialog(BaseDialog):
             self.close_button.configure(state="normal")
             self.cancel_button.configure(state="disabled")
             self.progress_label.configure(
-                text=self.loc.get(
-                    'message_processing_cancelled',
-                    default="Processing cancelled.",
-                )
+                text=self.loc.get('message_processing_cancelled')
             )
 
         self._schedule_ui("mark_cancelled", _apply)
@@ -392,10 +386,7 @@ class ProcessingDialog(BaseDialog):
         def _apply() -> None:
             self.cancel_button.configure(state="disabled")
             self.progress_label.configure(
-                text=self.loc.get(
-                    'message_processing_cancelling',
-                    default="Cancelling after the current step...",
-                )
+                text=self.loc.get('message_processing_cancelling')
             )
 
         _run_ui_safe("on_cancel", _apply)
@@ -504,7 +495,7 @@ class UpdateDialog(BaseDialog):
             parent,
             loc_manager,
             fonts,
-            loc_manager.get('update_available_title', default="Update Available"),
+            loc_manager.get('update_available_title'),
             DIALOG_UPDATE_SIZE,
         )
         self.current_version = current_version
@@ -522,15 +513,15 @@ class UpdateDialog(BaseDialog):
 
         title_label = ctk.CTkLabel(
             title_frame,
-            text=self.loc.get('update_available_message', default="A new version is available!"),
+            text=self.loc.get('update_available_message'),
             font=self.fonts['dialog_title'],
         )
         title_label.grid(row=0, column=0, pady=(0, 10))
 
-        version_text = self.loc.get(
-            'update_version_info',
-            default="Current: {current} → New: {latest}",
-        ).format(current=current_version, latest=latest_version)
+        version_text = self.loc.get('update_version_info').format(
+            current=current_version,
+            latest=latest_version,
+        )
         version_label = ctk.CTkLabel(
             title_frame,
             text=version_text,
@@ -540,7 +531,7 @@ class UpdateDialog(BaseDialog):
 
         notes_label = ctk.CTkLabel(
             self,
-            text=self.loc.get('update_release_notes', default="Release Notes:"),
+            text=self.loc.get('update_release_notes'),
             font=self.fonts['small_bold'],
         )
         notes_label.grid(row=1, column=0, padx=20, pady=(0, 5), sticky="w")
@@ -549,14 +540,14 @@ class UpdateDialog(BaseDialog):
         self.notes_text.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
         self.notes_text.insert(
             "1.0",
-            release_notes or self.loc.get('update_no_notes', default="No release notes available."),
+            release_notes or self.loc.get('update_no_notes'),
         )
         self.notes_text.configure(state="disabled")
 
         self.progress_frame = ctk.CTkFrame(self)
         self.progress_label = ctk.CTkLabel(
             self.progress_frame,
-            text=self.loc.get('update_downloading', default="Downloading update..."),
+            text=self.loc.get('update_downloading'),
             font=self.fonts['dialog_small'],
         )
         self.progress_label.pack(pady=(10, 5))
@@ -574,7 +565,7 @@ class UpdateDialog(BaseDialog):
 
         self.update_button = ctk.CTkButton(
             button_frame,
-            text=self.loc.get('update_button_update', default="Update Now"),
+            text=self.loc.get('update_button_update'),
             command=self.on_update,
             fg_color="green",
             hover_color="darkgreen",
@@ -583,14 +574,14 @@ class UpdateDialog(BaseDialog):
 
         self.remind_button = ctk.CTkButton(
             button_frame,
-            text=self.loc.get('update_button_remind', default="Remind Me Later"),
+            text=self.loc.get('update_button_remind'),
             command=self.on_remind_later,
         )
         self.remind_button.grid(row=0, column=1, padx=5, sticky="ew")
 
         self.skip_button = ctk.CTkButton(
             button_frame,
-            text=self.loc.get('update_button_skip', default="Skip This Version"),
+            text=self.loc.get('update_button_skip'),
             command=self.on_skip,
             fg_color="gray",
             hover_color="darkgray",
@@ -622,10 +613,7 @@ class UpdateDialog(BaseDialog):
             self.after(0, lambda error_text=error_text: self.show_error(error_text))
             return
         except Exception as exc:
-            error_msg = self.loc.get(
-                'update_error_general',
-                default="Update error: {error}",
-            ).format(error=str(exc))
+            error_msg = self.loc.get('update_error_general').format(error=str(exc))
             self.after(0, lambda error_msg=error_msg: self.show_error(error_msg))
             return
 
@@ -644,19 +632,17 @@ class UpdateDialog(BaseDialog):
     def _handle_update_result(self, result: UpdateExecutionResult) -> None:
         """Display executor completion and run any deferred final action."""
         self.progress_bar.set(result.progress)
-        self.progress_label.configure(
-            text=self.loc.get(result.status_key, default=result.status_default)
-        )
+        self.progress_label.configure(text=self.loc.get(result.status_key))
         messagebox.showinfo(
-            self.loc.get(result.title_key, default=result.title_default),
-            self.loc.get(result.message_key, default=result.message_default),
+            self.loc.get(result.title_key),
+            self.loc.get(result.message_key),
         )
 
         if result.after_message is not None:
             try:
                 if result.after_message() is False:
                     self.show_error(
-                        self.loc.get('update_error_apply', default="Failed to apply update")
+                        self.loc.get('update_error_apply')
                     )
                     return
             except SystemExit:
@@ -669,7 +655,7 @@ class UpdateDialog(BaseDialog):
 
     def show_error(self, message: str) -> None:
         """Show an update error and close the dialog."""
-        messagebox.showerror(self.loc.get('error_title', default="Error"), message)
+        messagebox.showerror(self.loc.get('error_title'), message)
         self.grab_release()
         self.destroy()
 

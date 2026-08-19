@@ -647,7 +647,7 @@ class TestSniffer:
 
 
 class TestEqualizationIntegration:
-    """impulcifer.equalization()의 EqualizerAPO 파일 지원."""
+    """pipeline_stages.equalization()의 EqualizerAPO 파일 지원."""
 
     @staticmethod
     def _estimator():
@@ -656,7 +656,7 @@ class TestEqualizationIntegration:
         return SimpleNamespace(fs=FS)
 
     def test_eqapo_txt_in_eq_csv(self, tmp_path):
-        from impulcifer import equalization
+        from core.pipeline_stages import equalization
 
         (tmp_path / "eq.csv").write_text(
             "Preamp: -6.4 dB\nFilter 1: ON PK Fc 105 Hz Gain -4.7 dB Q 0.70\n",
@@ -672,7 +672,7 @@ class TestEqualizationIntegration:
         assert abs(left.raw[idx] - (-4.7 - 6.4)) < 0.05
 
     def test_eq_txt_filename_fallback(self, tmp_path):
-        from impulcifer import equalization
+        from core.pipeline_stages import equalization
 
         (tmp_path / "eq.txt").write_text("Preamp: -3 dB\n", encoding="utf-8")
         left, right = equalization(self._estimator(), str(tmp_path))
@@ -680,7 +680,7 @@ class TestEqualizationIntegration:
         np.testing.assert_allclose(left.raw, -3.0, atol=1e-9)
 
     def test_channel_split_produces_two_curves(self, tmp_path):
-        from impulcifer import equalization
+        from core.pipeline_stages import equalization
 
         (tmp_path / "eq.csv").write_text(
             "Channel: L\nPreamp: -3 dB\nChannel: R\nPreamp: -1 dB\n",
@@ -692,7 +692,7 @@ class TestEqualizationIntegration:
         np.testing.assert_allclose(right.raw, -1.0, atol=1e-9)
 
     def test_autoeq_csv_still_works(self, tmp_path):
-        from impulcifer import equalization
+        from core.pipeline_stages import equalization
 
         rows = ["frequency,raw,error"]
         f = 20.0
@@ -706,14 +706,14 @@ class TestEqualizationIntegration:
         np.testing.assert_allclose(left.error, 0.5, atol=1e-6)
 
     def test_no_eq_files(self, tmp_path):
-        from impulcifer import equalization
+        from core.pipeline_stages import equalization
 
         left, right = equalization(self._estimator(), str(tmp_path))
         assert left is None and right is None
 
     def test_two_column_plain_file(self, tmp_path):
         """error 열이 없는 평문 gain 곡선 파일은 error = -raw로 적용된다."""
-        from impulcifer import equalization
+        from core.pipeline_stages import equalization
 
         rows = []
         f = 20.0

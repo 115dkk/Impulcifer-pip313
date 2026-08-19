@@ -59,6 +59,37 @@ def test_bridge_delegates_only_public_service_methods(method, args) -> None:
     assert response["data"]["args"] == list(args)
 
 
+def test_bridge_public_surface_includes_all_service_api_methods() -> None:
+    from application import ImpulciferApplicationService
+    from impulcifer_webview import WebviewBridge
+
+    service_methods = {
+        name
+        for name, value in vars(ImpulciferApplicationService).items()
+        if callable(value) and not name.startswith("_")
+    }
+    bridge_methods = {
+        name
+        for name, value in vars(WebviewBridge).items()
+        if callable(value) and not name.startswith("_")
+    }
+
+    assert service_methods <= bridge_methods
+
+
+def test_bridge_native_window_helpers_are_not_public() -> None:
+    from impulcifer_webview import WebviewBridge
+
+    bridge_methods = {
+        name
+        for name, value in vars(WebviewBridge).items()
+        if callable(value) and not name.startswith("_")
+    }
+
+    assert "attach_window" not in bridge_methods
+    assert "apply_titlebar_theme" not in bridge_methods
+
+
 class _FakeWindow:
     def __init__(self, selection) -> None:
         self.selection = selection
@@ -96,7 +127,7 @@ def test_select_file_uses_native_open_dialog(monkeypatch) -> None:
     _install_fake_webview(monkeypatch)
     window = _FakeWindow(["C:/sounds/sweep.wav"])
     bridge = WebviewBridge(_FakeService())
-    bridge.attach_window(window)
+    bridge._attach_window(window)
 
     response = bridge.select_file("wav")
 
@@ -114,7 +145,7 @@ def test_select_directory_uses_folder_dialog_and_handles_cancel(monkeypatch) -> 
     _install_fake_webview(monkeypatch)
     window = _FakeWindow(None)
     bridge = WebviewBridge(_FakeService())
-    bridge.attach_window(window)
+    bridge._attach_window(window)
 
     response = bridge.select_directory()
 
@@ -210,7 +241,7 @@ def test_create_window_applies_titlebar_after_pywebview_setup_before_show(monkey
 
     assert created is window
     assert calls == []
-    assert before_show.handlers == [bridge.apply_titlebar_theme]
+    assert before_show.handlers == [bridge._apply_titlebar_theme]
 
     # pywebview fires this only after BrowserForm.__init__ has applied its own
     # system theme, and immediately before BrowserForm.Show().
@@ -352,7 +383,7 @@ def test_apply_pending_update_closes_window_on_restart(monkeypatch) -> None:
     destroyed: list[bool] = []
     window = SimpleNamespace(destroy=lambda: destroyed.append(True))
     bridge = WebviewBridge(_RestartingService())
-    bridge.attach_window(window)
+    bridge._attach_window(window)
 
     response = bridge.apply_pending_update()
     assert response["ok"]
@@ -387,5 +418,5 @@ def test_webview_entrypoint_contains_no_qt_backend() -> None:
     assert '"Windows": "edgechromium"' in source
     assert '"Darwin": "cocoa"' in source
     assert '"Linux": "gtk"' in source
-    assert "window.events.before_show += bridge.apply_titlebar_theme" in source
+    assert "window.events.before_show += bridge._apply_titlebar_theme" in source
     assert "webview.start(gui=backend" in source

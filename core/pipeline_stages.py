@@ -19,6 +19,8 @@ from tabulate import tabulate
 
 from autoeq.frequency_response import FrequencyResponse
 from core.constants import (
+    HEADPHONES_FALLBACK_FILENAMES,
+    HEADPHONES_FILENAME,
     SPEAKER_LIST_PATTERN,
     SPEAKER_NAMES,
     TEST_SIGNALS,
@@ -351,13 +353,13 @@ def equalization(estimator, dir_path):
 
 
 def headphone_compensation(estimator, dir_path, headphone_file_path=None):
-    """Equalizes HRIR tracks with headphone compensation measurement.
+    f"""Equalizes HRIR tracks with headphone compensation measurement.
 
     Args:
         estimator: ImpulseResponseEstimator instance
         dir_path: Path to output directory
         headphone_file_path: Optional path to the headphone compensation WAV file.
-                             If None, defaults to 'headphones.wav' in dir_path.
+                             If None, defaults to {HEADPHONES_FILENAME!r} in dir_path.
 
     Returns:
         None
@@ -372,7 +374,7 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
 
         if os.path.isdir(normalized_path):
             logger.info("cli_info_hp_searching_dir")
-            possible_names = ["headphones.wav", "headphone.wav", "hp.wav", "compensation.wav"]
+            possible_names = HEADPHONES_FALLBACK_FILENAMES
             actual_hp_file = None
 
             for name in possible_names:
@@ -404,13 +406,13 @@ def headphone_compensation(estimator, dir_path, headphone_file_path=None):
                 actual_hp_file = normalized_path
                 logger.debug("cli_info_hp_absolute_path", file=actual_hp_file)
     else:
-        actual_hp_file = os.path.join(dir_path, "headphones.wav")
+        actual_hp_file = os.path.join(dir_path, HEADPHONES_FILENAME)
         logger.info("cli_info_hp_default", file=actual_hp_file)
 
     if actual_hp_file is None or not os.path.exists(actual_hp_file):
         if headphone_file_path:
             logger.warning("cli_warning_hp_file_not_found", file=actual_hp_file)
-            actual_hp_file = os.path.join(dir_path, "headphones.wav")
+            actual_hp_file = os.path.join(dir_path, HEADPHONES_FILENAME)
 
         if not os.path.exists(actual_hp_file):
             logger.error("cli_error_hp_file_missing", file=actual_hp_file)

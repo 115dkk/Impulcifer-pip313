@@ -34,7 +34,7 @@ from dataclasses import dataclass
 import numpy as np
 import soundfile as sf
 
-from core.constants import SPEAKER_LIST_PATTERN
+from core.constants import DEFAULT_SWEEP_FS, SPEAKER_LIST_PATTERN
 
 CONFIDENCE_HIGH = "high"
 CONFIDENCE_LOW = "low"
@@ -93,8 +93,6 @@ class SweepDetectionResult:
     @property
     def is_default(self) -> bool:
         """Whether this is the bundled default sweep (48 kHz, M=2 → 6.15 s)."""
-        from core.sweep_signal import DEFAULT_SWEEP_FS
-
         return self.fs == DEFAULT_SWEEP_FS and self.m == 2
 
     def to_estimator(self):
