@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import fields
 from typing import Any
 
+from core.hrir import _channel_balance_groups
 from core.pipeline import ProcessingConfig
 from gui.brir_args import build_brir_args
 
@@ -162,3 +163,21 @@ def test_webview_decay_channels_mirror_speaker_names() -> None:
     assert match, "DECAY_CHANNELS not found in app.js"
     channels = re.findall(r'"([A-Z]+)"', match.group(1))
     assert channels == list(SPEAKER_NAMES)
+
+
+def test_channel_balance_groups_cover_full_speaker_layout() -> None:
+    """Channel balance groups must cover every canonical speaker exactly once."""
+    from core.constants import SPEAKER_NAMES
+
+    groups = _channel_balance_groups()
+
+    assert {speaker for group in groups for speaker in group} == set(SPEAKER_NAMES)
+    assert sum(map(len, groups)) == len(SPEAKER_NAMES)
+
+
+def test_channel_balance_groups_preserve_pair_shape() -> None:
+    """FC is a singleton while every other channel-balance group is a pair."""
+    groups = _channel_balance_groups()
+
+    assert ["FC"] in groups
+    assert all(len(group) == (1 if group == ["FC"] else 2) for group in groups)

@@ -139,17 +139,27 @@ class UpdateChecker:
 
     def _get_download_url(self, release_data: Dict) -> Optional[str]:
         """
-        Get the appropriate download URL for the current platform
+        Get the appropriate installer download URL for the current platform.
+
+        Linux AppImage assets are preferred over distribution packages. If no
+        platform installer matches, return None rather than an unrelated asset.
 
         Args:
             release_data: GitHub release data
 
         Returns:
-            Download URL or None if not found
+            Download URL or None if no platform installer matches
         """
         assets = release_data.get('assets', [])
-
         system = platform.system()
+
+        if system == 'Linux':
+            for extension in ('.appimage', '.deb', '.rpm'):
+                for asset in assets:
+                    name = asset.get('name', '').lower()
+                    if name.endswith(extension):
+                        return asset.get('browser_download_url')
+            return None
 
         for asset in assets:
             name = asset.get('name', '').lower()
@@ -161,13 +171,6 @@ class UpdateChecker:
             elif system == 'Darwin':
                 if name.endswith(('.dmg', '.pkg')):
                     return download_url
-            elif system == 'Linux':
-                if name.endswith(('.deb', '.rpm', '.appimage')):
-                    return download_url
-
-        # Fallback: return first asset
-        if assets:
-            return assets[0].get('browser_download_url')
 
         return None
 

@@ -25,6 +25,11 @@ except ImportError:
         return False
 
 
+def _channel_balance_groups():
+    # Derive channel-balance groups from the canonical ipsilateral pairs.
+    return [[left] if left == right else [left, right] for left, right in IPSILATERAL_PAIRS]
+
+
 def get_center_value(fr, frequency_range):
     """Calculate center value without modifying the FrequencyResponse object.
 
@@ -760,9 +765,8 @@ class HRIR(HRIRPlotter):
         Returns:
             HRIR with FIR filter for equalizing each speaker-side
         """
-        # Group the same left and right side speakers
         eqir = HRIR(self.estimator)
-        for speakers in [["FC"], ["FL", "FR"], ["SL", "SR"], ["BL", "BR"]]:
+        for speakers in _channel_balance_groups():
             if len([ch for ch in speakers if ch in self.irs]) < len(speakers):
                 # All the speakers in the current speaker group must exist, otherwise balancing makes no sense
                 continue

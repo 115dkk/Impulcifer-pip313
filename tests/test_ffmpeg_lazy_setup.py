@@ -79,6 +79,7 @@ class FfmpegLazySetupTest(unittest.TestCase):
         discovery._FFMPEG_DETECTION_DONE = False
         discovery._FFMPEG_AUTO_INSTALL_ATTEMPTED = False
         discovery._FFMPEG_SETUP_DONE = False
+        discovery._FFMPEG_UNAVAILABLE_REASON = None
         return fresh, setup_spy, install_spy
 
     def tearDown(self):
@@ -140,6 +141,52 @@ class FfmpegLazySetupTest(unittest.TestCase):
             )
             self.assertTrue(install_spy.called,
                             "auto_install=True must still get one install opportunity")
+
+    def test_install_ffmpeg_on_linux_requires_manual_installation(self):
+        """Linux installation guidance must not invoke a package manager."""
+        import core.ffmpeg_discovery as discovery
+
+        with mock.patch.object(discovery.platform, "system", return_value="Linux"), \
+             mock.patch.object(discovery.subprocess, "run") as run_mock:
+            self.assertEqual(discovery.install_ffmpeg(), (None, None))
+
+        run_mock.assert_not_called()
+
+    def test_latched_install_failure_prints_reason_on_repeated_ensure(self):
+        """Repeated checks must explain a previously latched install failure."""
+        utils, _, _ = self._import_with_spies()
+        import core.ffmpeg_discovery as discovery
+
+        with mock.patch("shutil.which", return_value=None), \
+             mock.patch.object(
+                 discovery,
+                 "find_ffmpeg_in_common_paths",
+                 return_value=(None, None),
+             ), mock.patch("builtins.print") as print_mock:
+            self.assertFalse(utils.ensure_ffmpeg_available(auto_install=True))
+            reason = discovery.get_ffmpeg_unavailable_reason()
+
+            print_mock.reset_mock()
+            self.assertFalse(utils.ensure_ffmpeg_available(auto_install=True))
+
+        print_mock.assert_any_call(reason)
+
+    def test_get_ffmpeg_unavailable_reason_returns_install_failure(self):
+        """The unavailable reason accessor must expose the last failure."""
+        utils, _, _ = self._import_with_spies()
+        import core.ffmpeg_discovery as discovery
+
+        with mock.patch("shutil.which", return_value=None), \
+             mock.patch.object(
+                 discovery,
+                 "find_ffmpeg_in_common_paths",
+                 return_value=(None, None),
+             ):
+            self.assertFalse(utils.ensure_ffmpeg_available(auto_install=True))
+
+        reason = discovery.get_ffmpeg_unavailable_reason()
+        self.assertIsInstance(reason, str)
+        self.assertTrue(reason)
 
     def test_check_ffmpeg_available_does_not_auto_install_by_default(self):
         """check_ffmpeg_available() defaults to auto_install=False."""

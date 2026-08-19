@@ -681,6 +681,16 @@ jobs:
           echo "$CHANGELOG_BODY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
+      # 자산별 SHA-256 목록. updater/legacy.py(macOS/Linux 스탠드얼론 업데이트)가
+      # 다운로드 검증에 사용한다 — 파일명은 업로드 자산명(basename)과 일치해야 한다.
+      - name: Generate SHA256SUMS
+        run: |
+          mkdir -p release-sums
+          find artifacts -type f | while read -r f; do
+            (cd "$(dirname "$f")" && sha256sum "$(basename "$f")")
+          done | sort -k2 > release-sums/SHA256SUMS.txt
+          cat release-sums/SHA256SUMS.txt
+
       - name: Create GitHub Release
         if: env.TAG_EXISTS == '0'
         uses: softprops/action-gh-release@v3
@@ -743,6 +753,7 @@ jobs:
             artifacts/macos-dmg/*
             artifacts/linux-appimage/*
             artifacts/linux-tarball/*
+            release-sums/SHA256SUMS.txt
           draft: false
           prerelease: false
         env:

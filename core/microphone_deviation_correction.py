@@ -293,10 +293,11 @@ class MicrophoneMatchingCorrector:
 
 
 class MicrophoneDeviationCorrector(MicrophoneMatchingCorrector):
-    """기존 임포트/호출 호환용 래퍼.
+    """기존 임포트/호출 호환용 래퍼 (pip 패키지 공개 표면).
 
     v2.0/v3.0의 사용되지 않는 파라미터(octave_bands, gate_cycles,
-    enable_* 등)는 무시된다.
+    enable_* 등)는 무시된다. 버전 2 동안 유지하고 버전 3에서 제거 예정 —
+    신규 코드는 :class:`MicrophoneMatchingCorrector` 를 직접 사용할 것.
     """
 
     def __init__(self, sample_rate,
