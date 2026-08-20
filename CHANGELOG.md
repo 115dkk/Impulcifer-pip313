@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.13.3 - 2026-08-20
+### 출력 복원 화면 문구를 사용자 관점으로 재작성
+
+#### ⭐ 새로운 기능 / 개선
+- **출력 복원 화면 문구 전면 재작성 (9개 로케일)**: 개발자 관점의 방어적 서술("검증 후 덮어쓰지 않습니다", "DSP를 다시 실행하지 않고")을 사용자가 얻는 것 중심의 긍정 서술("이미 있는 파일은 그대로 보존하고, 누락된 파일만 새로 만듭니다")로 교체. 결과 요약은 생성·보존 파일 수를 앞세우고 내부 지표(샘플 수)를 제거했으며, 실패 메시지는 오류 코드 대신 사람이 읽는 설명을 앞세운다. WebView·CTk 양쪽 프론트엔드에 동일 적용.
+
 ## 2.13.2 - 2026-08-20
 ### 격주 감사(#164) 대응 3차 — 구조 리팩토링과 테스트 부채 해소 (BRIR 출력 비트 동일)
 

@@ -476,7 +476,7 @@
           <header class="page-header">
             <div>
               <h1 data-i18n="studio_recovery_title">Output Recovery</h1>
-              <p class="subtitle" data-i18n="studio_recovery_subtitle">Restore missing Impulcifer output layouts without running DSP again.</p>
+              <p class="subtitle" data-i18n="studio_recovery_subtitle">Rebuild missing output files using only the results you already have.</p>
             </div>
             <button class="btn btn-primary" id="btn-start-recovery" data-start data-i18n="recovery_action">Restore outputs</button>
           </header>
@@ -507,7 +507,7 @@
                 <label for="recovery-include-hangloose" data-i18n="recovery_include_hangloose">Also create Hangloose files</label>
               </div>
               <p class="hint" data-i18n="recovery_include_hangloose_hint">When hrir.wav or hesuvi.wav is the source, also restore one stereo WAV per speaker.</p>
-              <p class="hint" data-i18n="recovery_preserve_hint">Existing files are validated and preserved; recovery never overwrites them.</p>
+              <p class="hint" data-i18n="recovery_preserve_hint">Files you already have are kept as they are — only the missing ones are added.</p>
             </div>
           </div>
 
@@ -519,7 +519,7 @@
             </div>
             <div class="card-body">
               <p class="recovery-status" id="recovery-status-title" data-i18n="webview_job_idle">Idle</p>
-              <p id="recovery-status-detail" data-i18n="recovery_idle_detail">Choose a source folder to inspect and restore its missing output files.</p>
+              <p id="recovery-status-detail" data-i18n="recovery_idle_detail">Choose a folder to bring back its missing output files.</p>
               <div class="recovery-file-row" id="recovery-created-row" hidden>
                 <span data-i18n="recovery_created_label">Created</span>
                 <span class="mono" id="recovery-created-files"></span>
