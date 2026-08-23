@@ -26,11 +26,11 @@
 #   CLAUDE_CODE_OAUTH_TOKEN을 OPENAI_API_KEY로 변경하십시오.
 # ──────────────────────────────────────────────────────────────
 
-name: Biweekly Audit
+name: Monthly Audit
 
 on:
   schedule:
-    - cron: '0 9 1,15 * *'
+    - cron: '0 9 15 * *'
   workflow_dispatch:
     inputs:
       force_run:
