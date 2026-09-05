@@ -53,6 +53,7 @@ class _Harness(RecoveryActionsMixin):
         self.loc = _Loc()
         self.dir_path_var = _Var(str(directory))
         self.include_hangloose_var = _Var(True)
+        self.remove_silent_channels_var = _Var(True)
         self.restore_button = _Widget()
         self.status_label = _Widget()
         self.summary_label = _Widget()
@@ -64,7 +65,8 @@ class _Harness(RecoveryActionsMixin):
 def test_ctk_recovery_calls_core_and_blocks_duplicate_submit(monkeypatch, tmp_path: Path) -> None:
     calls: list[tuple[str, bool]] = []
 
-    def fake_recovery(directory, *, include_hangloose=False):
+    def fake_recovery(directory, *, include_hangloose=False, remove_silent_channels=False):
+        assert remove_silent_channels is True
         calls.append((directory, include_hangloose))
         return BrirRecoveryResult(
             source_kind="hesuvi",

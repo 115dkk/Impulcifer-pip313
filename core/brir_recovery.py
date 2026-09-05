@@ -2,9 +2,9 @@
 
 Impulcifer writes the same speaker/ear impulse responses in three layouts:
 
-* ``hrir.wav`` uses :data:`HEXADECAGONAL_TRACK_ORDER` (32 tracks, including
+* ``hrir.wav`` uses :data:`HEXADECAGONAL_TRACK_ORDER` (16–32 tracks, including
   two silent LFE placeholders).
-* ``hesuvi.wav`` uses :data:`HESUVI_TRACK_ORDER` (30 tracks).
+* ``hesuvi.wav`` uses :data:`HESUVI_TRACK_ORDER` (14–30 tracks).
 * ``Hangloose/[prefix]<speaker>.wav`` stores one stereo file per measured
   speaker.  The optional prefix is shared by all files in one output set.
 
@@ -25,6 +25,13 @@ import numpy as np
 import soundfile as sf
 
 from core.audio_io import read_wav
+from core.brir_layout import (
+    append_track_names,
+    base_channel_count,
+    compact_tracks,
+    read_track_names,
+    trim_silent_extensions,
+)
 from core.constants import (
     HESUVI_TRACK_ORDER,
     HEXADECAGONAL_TRACK_ORDER,
@@ -85,13 +92,16 @@ def recover_brir_outputs(
     directory: str | os.PathLike[str],
     *,
     include_hangloose: bool = False,
+    remove_silent_channels: bool = False,
 ) -> BrirRecoveryResult:
     """Rebuild missing Impulcifer outputs from a surviving output format.
 
     ``directory`` may be the original Impulcifer output directory, its
     ``Hangloose`` subdirectory, or a directory containing the split speaker
     files directly.  Existing files are validated and preserved; this
-    function only creates missing files.
+    function only creates missing files. ``remove_silent_channels=True`` also
+    removes positional zero channels from new combined outputs and embeds their
+    remaining names. The default preserves fixed channel routing.
     """
     selected = _validate_directory(directory)
     output_dir, split_dir = _locate_output_and_split_dirs(selected)
@@ -144,6 +154,20 @@ def recover_brir_outputs(
             (hesuvi_target, _stack_tracks(track_set, HESUVI_TRACK_ORDER))
         )
 
+    channel_maps: dict[Path, tuple[str, ...]] = {}
+    if remove_silent_channels:
+        from infra.logger import get_logger
+
+        get_logger().warning("cli_warning_compact_channels")
+        for index, (target, data) in enumerate(write_plan):
+            order = HEXADECAGONAL_TRACK_ORDER if target.name == _HRIR_FILE_NAME else HESUVI_TRACK_ORDER
+            try:
+                compact, names = compact_tracks(data, order[:len(data)])
+            except ValueError as exc:
+                raise BrirRecoveryError("ALL_CHANNELS_SILENT", str(exc)) from exc
+            write_plan[index] = (target, compact)
+            channel_maps[target] = names
+
     if include_hangloose and source_kind != "hangloose":
         hangloose_dir = split_dir or output_dir / _HANGLOOSE_DIR_NAME
         existing_split = _find_split_files(hangloose_dir)
@@ -166,7 +190,7 @@ def recover_brir_outputs(
                 )
             )
 
-    created_files = _write_all(write_plan, track_set.sample_rate)
+    created_files = _write_all(write_plan, track_set.sample_rate, channel_maps=channel_maps)
     return BrirRecoveryResult(
         source_kind=source_kind,
         source_path=str(source_path),
@@ -220,11 +244,13 @@ def _has_combined_file(directory: Path) -> bool:
 
 
 def _find_split_dir(output_dir: Path) -> Path | None:
+    # A directory with combined outputs can also contain raw measurements
+    # (FC.wav, room-FC.wav, ...). Only its dedicated Hangloose folder is an
+    # unambiguous split-output source. Direct split folders are discovered
+    # separately when no combined output is present.
     nested = _find_named_dir(output_dir, _HANGLOOSE_DIR_NAME)
     if nested is not None and _find_split_files(nested):
         return nested
-    if _find_split_files(output_dir):
-        return output_dir
     return None
 
 
@@ -308,17 +334,28 @@ def _match_split_stem(stem: str) -> tuple[str, str] | None:
 def _read_combined(path: Path, order: Iterable[str], kind: str) -> _TrackSet:
     order = tuple(order)
     sample_rate, data = _read_audio_matrix(path)
-    if data.shape[0] != len(order):
+    minimum = base_channel_count(order)
+    count = data.shape[0]
+    try:
+        mapped_order = read_track_names(path, order, count)
+    except ValueError as exc:
+        raise BrirRecoveryError("INVALID_CHANNEL_MAP", str(exc), details={"path": str(path)}) from exc
+    if mapped_order is not None:
+        order = mapped_order
+    elif count < minimum or count > len(order) or count % 2:
         raise BrirRecoveryError(
             "INVALID_CHANNEL_COUNT",
-            f"{path.name} must contain exactly {len(order)} channels.",
+            f"{path.name} must contain {minimum}–{len(order)} channels in complete stereo pairs.",
             details={
                 "path": str(path),
-                "expected": len(order),
+                "expected": list(range(minimum, len(order) + 1, 2)),
                 "actual": int(data.shape[0]),
             },
         )
-    tracks = {name: data[index] for index, name in enumerate(order)}
+    silence = np.zeros(data.shape[1], dtype=np.float64)
+    tracks = {name: data[index] if index < count else silence for index, name in enumerate(order)}
+    for name in (*_SPEAKER_TRACKS, *_LFE_TRACKS):
+        tracks.setdefault(name, silence)
     if kind == "hrir":
         non_silent_lfe = [name for name in _LFE_TRACKS if np.any(tracks[name] != 0.0)]
         if non_silent_lfe:
@@ -508,13 +545,17 @@ def _verify_split_subset(
 
 
 def _stack_tracks(track_set: _TrackSet, order: Iterable[str]) -> np.ndarray:
+    order = tuple(order)
     silence = np.zeros(track_set.sample_count, dtype=np.float64)
-    return np.vstack([track_set.tracks.get(track, silence) for track in order])
+    data = np.vstack([track_set.tracks.get(track, silence) for track in order])
+    return trim_silent_extensions(data, order)
 
 
 def _write_all(
     write_plan: list[tuple[Path, np.ndarray]],
     sample_rate: int,
+    *,
+    channel_maps: dict[Path, tuple[str, ...]] | None = None,
 ) -> tuple[Path, ...]:
     if not write_plan:
         return ()
@@ -537,6 +578,7 @@ def _write_all(
                 delete=False,
             ) as handle:
                 temp_path = Path(handle.name)
+            temporary.append((temp_path, target))
             try:
                 sf.write(
                     str(temp_path),
@@ -544,13 +586,14 @@ def _write_all(
                     samplerate=sample_rate,
                     subtype="PCM_32",
                 )
+                if channel_maps and target in channel_maps:
+                    append_track_names(temp_path, channel_maps[target])
             except Exception as exc:
                 raise BrirRecoveryError(
                     "OUTPUT_WRITE_FAILED",
                     f"Could not write recovered output {target.name}.",
                     details={"path": str(target), "reason": str(exc)},
                 ) from exc
-            temporary.append((temp_path, target))
 
         for temp_path, target in temporary:
             if _find_named_file(target.parent, target.name) is not None:

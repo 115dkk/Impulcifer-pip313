@@ -385,6 +385,11 @@
                     <input type="number" id="bf-head-ms" class="num mono" value="1.0" step="0.1" min="0">
                   </div>
                   <div class="check-row">
+                    <input type="checkbox" id="bf-remove-silent-channels">
+                    <label for="bf-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label>
+                  </div>
+                  <p class="hint" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
+                  <div class="check-row">
                     <input type="checkbox" id="bf-jamesdsp">
                     <label for="bf-jamesdsp" data-i18n="checkbox_jamesdsp">JamesDSP true stereo IR</label>
                   </div>
@@ -507,6 +512,11 @@
                 <label for="recovery-include-hangloose" data-i18n="recovery_include_hangloose">Also create Hangloose files</label>
               </div>
               <p class="hint" data-i18n="recovery_include_hangloose_hint">When hrir.wav or hesuvi.wav is the source, also restore one stereo WAV per speaker.</p>
+              <div class="check-row">
+                <input type="checkbox" id="recovery-remove-silent-channels">
+                <label for="recovery-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label>
+              </div>
+              <p class="hint" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
               <p class="hint" data-i18n="recovery_preserve_hint">Files you already have are kept as they are — only the missing ones are added.</p>
             </div>
           </div>

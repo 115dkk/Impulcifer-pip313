@@ -30,6 +30,7 @@ class RecoveryActionsMixin:
     loc: Any
     dir_path_var: Any
     include_hangloose_var: Any
+    remove_silent_channels_var: Any
     restore_button: Any
     status_label: Any
     summary_label: Any
@@ -56,12 +57,14 @@ class RecoveryActionsMixin:
 
         directory = self.dir_path_var.get().strip()
         include_hangloose = bool(self.include_hangloose_var.get())
+        remove_silent_channels = bool(self.remove_silent_channels_var.get())
 
         def _run() -> None:
             try:
                 result = recover_brir_outputs(
                     directory,
                     include_hangloose=include_hangloose,
+                    remove_silent_channels=remove_silent_channels,
                 )
             except BrirRecoveryError as exc:
                 code, message = exc.code, str(exc)
@@ -161,6 +164,7 @@ class RecoveryActionsMixin:
         return {
             "dir_path": self.dir_path_var.get(),
             "include_hangloose": bool(self.include_hangloose_var.get()),
+            "remove_silent_channels": bool(self.remove_silent_channels_var.get()),
         }
 
     def apply_state(self, state: dict[str, object]) -> None:
@@ -169,6 +173,8 @@ class RecoveryActionsMixin:
             self.dir_path_var.set(state["dir_path"])
         if isinstance(state.get("include_hangloose"), bool):
             self.include_hangloose_var.set(state["include_hangloose"])
+        if isinstance(state.get("remove_silent_channels"), bool):
+            self.remove_silent_channels_var.set(state["remove_silent_channels"])
 
 
 def _source_label(source_kind: str) -> str:

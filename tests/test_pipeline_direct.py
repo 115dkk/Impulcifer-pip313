@@ -249,7 +249,11 @@ def test_minimal_synthetic_pipeline_writes_finite_hesuvi_and_completes_progress(
     assert output_path.is_file()
     output_fs, output = read_wav(str(output_path), expand=True)
     assert output_fs == ESTIMATOR_FS
-    assert output.shape[0] == len(HESUVI_TRACK_ORDER)
+    assert output.shape[0] == 14
+    active_tracks = np.flatnonzero(np.any(output != 0, axis=1))
+    assert [HESUVI_TRACK_ORDER[i] for i in active_tracks] == [
+        "FL-left", "FL-right", "FR-right", "FR-left",
+    ]
     assert output.shape[1] > 0
     assert np.isfinite(output).all()
 

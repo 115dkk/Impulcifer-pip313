@@ -105,6 +105,7 @@ class StudioImpulciferTab:
         self.pre_response_var = ctk.DoubleVar(value=1.0)
         self.jamesdsp_var = ctk.BooleanVar(value=False)
         self.hangloose_var = ctk.BooleanVar(value=False)
+        self.remove_silent_channels_var = ctk.BooleanVar(value=False)
         self.interactive_plots_var = ctk.BooleanVar(value=False)
         self.microphone_deviation_correction_var = ctk.BooleanVar(value=False)
         self.mic_deviation_strength_var = ctk.DoubleVar(value=0.7)
@@ -532,6 +533,15 @@ class StudioImpulciferTab:
 
         output_row = ctk.CTkFrame(adv_body, fg_color="transparent")
         output_row.grid(row=6, column=0, sticky="ew", pady=4)
+        ctk.CTkCheckBox(
+            output_row, text=self.loc.get("checkbox_remove_silent_channels"),
+            variable=self.remove_silent_channels_var,
+        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(8, 0))
+        ctk.CTkLabel(
+            output_row, text=self.loc.get("tooltip_remove_silent_channels"),
+            font=self.fonts["small"], text_color=COLORS["fg-2"],
+            anchor="w", justify="left", wraplength=680,
+        ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(4, 8))
         for idx, (label, var) in enumerate(
             (
                 (self.loc.get("checkbox_jamesdsp"), self.jamesdsp_var),

@@ -1158,6 +1158,7 @@ function gatherBrirPayload() {
     args.head_ms = numOr("bf-head-ms", brirDefault("head_ms", 1.0));
     args.jamesdsp = checked("bf-jamesdsp");
     args.hangloose = checked("bf-hangloose");
+    args.remove_silent_channels = checked("bf-remove-silent-channels");
     args.interactive_plots = checked("bf-interactive-plots");
     args.microphone_deviation_correction = checked("bf-mic-deviation");
     args.mic_deviation_strength = numOr("bf-mic-strength", brirDefault("mic_deviation_strength", 0.7));
@@ -1346,6 +1347,7 @@ function wireEvents() {
       {
         dir_path: val("recovery-dir-path"),
         include_hangloose: checked("recovery-include-hangloose"),
+        remove_silent_channels: checked("recovery-remove-silent-channels"),
       },
       "output_recovery",
     ),

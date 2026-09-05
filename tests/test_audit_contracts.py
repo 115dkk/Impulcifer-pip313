@@ -139,6 +139,7 @@ class AdvancedDecayBrirTab(MinimalBrirTab):
         self.pre_response_var = DummyVar(1.0)
         self.jamesdsp_var = DummyVar(False)
         self.hangloose_var = DummyVar(False)
+        self.remove_silent_channels_var = DummyVar(False)
         self.interactive_plots_var = DummyVar(False)
         self.microphone_deviation_correction_var = DummyVar(False)
         self.mic_deviation_strength_var = DummyVar(0.7)

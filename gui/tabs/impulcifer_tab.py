@@ -416,6 +416,19 @@ class ImpulciferTab:
         output_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
         adv_row += 1
 
+        self.remove_silent_channels_var = ctk.BooleanVar(value=False)
+        silent_frame = ctk.CTkFrame(self.advanced_options_frame, fg_color="transparent")
+        silent_frame.grid(row=adv_row, column=0, sticky="ew", padx=15, pady=5)
+        adv_row += 1
+        ctk.CTkCheckBox(
+            silent_frame, text=self.loc.get("checkbox_remove_silent_channels"),
+            variable=self.remove_silent_channels_var,
+        ).pack(anchor="w", padx=5)
+        ctk.CTkLabel(
+            silent_frame, text=self.loc.get("tooltip_remove_silent_channels"),
+            anchor="w", justify="left", wraplength=700,
+        ).pack(anchor="w", padx=5, pady=(4, 0))
+
         self.jamesdsp_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(output_frame, text=self.loc.get('checkbox_jamesdsp'), variable=self.jamesdsp_var).pack(side="left", padx=5)
 

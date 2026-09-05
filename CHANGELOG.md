@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.14.0 - 2026-09-05
+### 불필요한 무음 확장 채널 자동 제거
+
+#### ⭐ 새로운 기능 / 개선
+- **출력 채널 자동 정리**: 생성과 복원 모두 HeSuVi의 기본 14채널, HRIR의 기본 16채널을 보존하고, 그 뒤에서 연속된 무음 스피커 쌍만 제거합니다. 일반 7채널 측정은 hesuvi.wav 30→14채널, hrir.wav 32→16채널로 줄어듭니다.
+- **확장 스피커 보존**: 와이드·상단 응답이 있으면 마지막 유효 스피커까지 유지합니다. 중간 빈자리와 한쪽 귀만 무음인 쌍도 보존하며, 샘플이 정확히 0인 쌍만 제거합니다. FL/FR만 측정해도 앞 14채널은 유지합니다(Equalizer APO의 짧은 IR 순환 적용 방지).
+- **출력 복원 호환**: 기존 32/30채널과 정리한 16~32/14~30채널 파일을 모두 읽고, 생략한 뒤쪽 채널은 무음으로 해석합니다. 기존 파일은 보존합니다.
+- **선택적 중간 무음 제거**: 생성·복원에 기본값 꺼짐인 `중간 무음 채널도 제거` 옵션을 추가했습니다. CLI는 `--remove_silent_channels`입니다. WebView·Stable·Studio 화면과 처리 로그에 HeSuVi 호환성 경고를 표시합니다.
+- **축소 파일의 채널 정보 보존**: WAV 내부 ICHL 청크에 남은 채널 이름을 저장하며, 복원에서 옵션을 끄면 원래 채널 위치를 복구합니다. 메타데이터 검증, 한쪽 귀만 남은 모노 파일, 14채널 축소 파일의 오인 방지, 실패 시 임시 파일 정리를 검증합니다.
+
+#### 🐛 버그 수정
+- **측정 폴더에서 복원 실패**: 합본 WAV가 있어도 FC.wav·room-FC.wav 같은 원본 측정을 Hangloose 파일로 오인해 복원을 거부하던 문제를 수정했습니다. 합본이 있는 폴더에서는 Hangloose 하위 폴더만 분할 출력으로 취급합니다.
+
 ## 2.13.3 - 2026-08-20
 ### 출력 복원 화면 문구를 사용자 관점으로 재작성
 

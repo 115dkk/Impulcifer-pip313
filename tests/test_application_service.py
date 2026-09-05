@@ -477,7 +477,8 @@ def test_output_recovery_job_maps_request_and_returns_manifest(
 
     captured = {}
 
-    def fake_recovery(directory, *, include_hangloose=False):
+    def fake_recovery(directory, *, include_hangloose=False, remove_silent_channels=False):
+        assert remove_silent_channels is False
         captured["directory"] = directory
         captured["include_hangloose"] = include_hangloose
         return brir_recovery.BrirRecoveryResult(
@@ -1032,3 +1033,15 @@ def test_bootstrap_exposes_sweep_presets() -> None:
     assert sweep["default_fs"] == 48000
     assert sweep["default_duration"] == 5.0
     json.dumps(boot)
+
+
+def test_recovery_compact_option_defaults_off_and_requires_boolean(tmp_path):
+    service = ImpulciferApplicationService()
+    validate = service._validate_output_recovery_request
+    default = validate({'dir_path': str(tmp_path)})
+    assert default['data']['params']['remove_silent_channels'] is False
+    enabled = validate({'dir_path': str(tmp_path), 'remove_silent_channels': True})
+    assert enabled['data']['params']['remove_silent_channels'] is True
+    for value in ('true', 1, None):
+        invalid = validate({'dir_path': str(tmp_path), 'remove_silent_channels': value})
+        assert invalid['error']['code'] == 'INVALID_REQUEST'
