@@ -431,5 +431,8 @@
   "recovery_existing_label": "보존됨",
   "recovery_none": "없음",
   "recovery_failed_summary": "복원하지 못했습니다: {message} ({code})",
-  "dialog_recovery_title": "출력 복원"
+  "dialog_recovery_title": "출력 복원",
+    "checkbox_remove_silent_channels": "중간 무음 채널도 제거",
+    "tooltip_remove_silent_channels": "주의: 채널 위치가 달라져 HeSuVi 등 고정 채널 배치를 사용하는 컨볼버와 호환되지 않을 수 있습니다. 호환성을 유지하려면 꺼 두세요. 복원할 때 끄면 원래 채널 배치로 되돌릴 수 있습니다.",
+    "cli_warning_compact_channels": "무음 채널을 제거하면 채널 위치가 달라져 HeSuVi와 호환되지 않을 수 있습니다."
 }

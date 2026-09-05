@@ -271,6 +271,14 @@ class ProcessingConfig:
     )
 
     # ---- Misc ----------------------------------------------------------
+    remove_silent_channels: bool = field(
+        default=False,
+        metadata={
+            "cli_flag": "--remove_silent_channels",
+            "cli_help": "Remove all zero channels from combined BRIRs, including gaps. WARNING: changes channel positions and can break HeSuVi compatibility. Default: disabled.",
+            "cli_arg_action": "store_true",
+        },
+    )
     head_ms: float = field(
         default=1.0,
         metadata={
@@ -869,11 +877,22 @@ class BRIRPipeline:
         from core.constants import HESUVI_TRACK_ORDER
 
         self.logger.step("cli_writing_brirs")
+        if self.config.remove_silent_channels:
+            self.logger.warning("cli_warning_compact_channels")
         check_cancelled()
-        self.hrir.write_wav(os.path.join(self.dir_path, "hrir.wav"))
+        self.hrir.write_wav(
+            os.path.join(self.dir_path, "hrir.wav"),
+            trim_extensions=True,
+            remove_silent_channels=self.config.remove_silent_channels,
+        )
 
         check_cancelled()
-        self.hrir.write_wav(os.path.join(self.dir_path, "hesuvi.wav"), track_order=HESUVI_TRACK_ORDER)
+        self.hrir.write_wav(
+            os.path.join(self.dir_path, "hesuvi.wav"),
+            track_order=HESUVI_TRACK_ORDER,
+            trim_extensions=True,
+            remove_silent_channels=self.config.remove_silent_channels,
+        )
 
     def _stage_truehd_layouts(self):
         import os

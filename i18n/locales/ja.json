@@ -431,5 +431,8 @@
   "recovery_existing_label": "保持済み",
   "recovery_none": "なし",
   "recovery_failed_summary": "復元できませんでした: {message} ({code})",
-  "dialog_recovery_title": "出力の復元"
+  "dialog_recovery_title": "出力の復元",
+    "checkbox_remove_silent_channels": "Remove silent channels, including gaps",
+    "tooltip_remove_silent_channels": "Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.",
+    "cli_warning_compact_channels": "Removing silent channels changes channel positions and can break HeSuVi compatibility."
 }

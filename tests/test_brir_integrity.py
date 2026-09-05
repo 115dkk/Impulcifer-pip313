@@ -17,7 +17,6 @@ from pathlib import Path
 
 import pytest
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEMO_SOURCE_DIR = PROJECT_ROOT / "data" / "demo"
 TEST_SIGNAL_PATH = (
@@ -66,6 +65,29 @@ def _sha256_file(path: Path) -> str:
     with path.open("rb") as file:
         for chunk in iter(lambda: file.read(1024 * 1024), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sha256_brir_samples(path: Path) -> str:
+    """Hash exact PCM samples in the full layout, padding omitted silent tails.
+
+    The new writer intentionally changes the WAV channel count/header. Padding
+    to the historical 30-channel layout preserves a strict SHA-256 comparison
+    of every sample, including extensions; no tolerance or channel skipping.
+    """
+    import struct
+
+    import numpy as np
+    import soundfile as sf
+
+    with sf.SoundFile(path) as source:
+        assert source.subtype == "PCM_32"
+        assert 14 <= source.channels <= 30 and source.channels % 2 == 0
+        data = source.read(dtype="int32", always_2d=True)
+        canonical = np.zeros((len(data), 30), dtype="<i4")
+        canonical[:, :source.channels] = data
+        digest = hashlib.sha256(struct.pack("<IQ", source.samplerate, len(data)))
+        digest.update(canonical.tobytes())
     return digest.hexdigest()
 
 
@@ -138,7 +160,7 @@ def _run_impulcifer(project_root: Path, demo_dir: Path, scenario: BrirScenario) 
     assert hesuvi_path.is_file(), (
         f"{scenario.name} BRIR generation did not create {hesuvi_path}"
     )
-    return _sha256_file(hesuvi_path)
+    return _sha256_brir_samples(hesuvi_path)
 
 
 def _add_reference_worktree(tmp_path: Path) -> Path:
@@ -199,7 +221,7 @@ def test_demo_brir_matches_reference_ref_sha256(
         current_sha256 = _run_impulcifer(PROJECT_ROOT, current_demo_dir, scenario)
 
         assert current_sha256 == reference_sha256, (
-            f"{scenario.name} hesuvi.wav SHA-256 changed from verified reference "
+            f"{scenario.name} hesuvi.wav canonical PCM SHA-256 changed from verified reference "
             f"{reference_sha256} to {current_sha256}"
         )
     finally:

@@ -32,6 +32,7 @@ class StudioRecoveryTab(RecoveryActionsMixin):
         self.parent = parent
         self.dir_path_var = ctk.StringVar(value="data/my_hrir")
         self.include_hangloose_var = ctk.BooleanVar(value=False)
+        self.remove_silent_channels_var = ctk.BooleanVar(value=False)
         self._init_recovery_actions()
         self._build()
 
@@ -122,6 +123,18 @@ class StudioRecoveryTab(RecoveryActionsMixin):
             justify="left",
             wraplength=720,
         ).grid(row=2, column=0, sticky="w", pady=(4, 0))
+
+        ctk.CTkCheckBox(
+            body,
+            text=self.loc.get("checkbox_remove_silent_channels"),
+            variable=self.remove_silent_channels_var,
+        ).grid(row=3, column=0, sticky="w", padx=15, pady=(8, 0))
+        ctk.CTkLabel(
+            body,
+            text=self.loc.get("tooltip_remove_silent_channels"),
+            font=self.fonts["small"], text_color=COLORS["fg-2"],
+            anchor="w", justify="left", wraplength=720,
+        ).grid(row=4, column=0, sticky="w", padx=15, pady=(6, 15))
 
     def _build_result_card(self, parent: ctk.CTkBaseClass, *, row: int) -> None:
         card = make_card(parent)

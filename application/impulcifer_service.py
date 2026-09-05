@@ -1162,7 +1162,7 @@ class ImpulciferApplicationService:
     def _validate_output_recovery_request(request: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(request, dict):
             return _error("INVALID_REQUEST", "Output recovery request must be an object.")
-        unknown = sorted(set(request) - {"dir_path", "include_hangloose"})
+        unknown = sorted(set(request) - {"dir_path", "include_hangloose", "remove_silent_channels"})
         if unknown:
             return _error(
                 "INVALID_REQUEST",
@@ -1179,6 +1179,9 @@ class ImpulciferApplicationService:
                 "Recovery directory does not exist.",
                 details={"path": dir_path},
             )
+        remove_silent_channels = request.get("remove_silent_channels", False)
+        if not isinstance(remove_silent_channels, bool):
+            return _error("INVALID_REQUEST", "remove_silent_channels must be a boolean.")
         include_hangloose = request.get("include_hangloose", False)
         if not isinstance(include_hangloose, bool):
             return _error("INVALID_REQUEST", "include_hangloose must be a boolean.")
@@ -1187,6 +1190,7 @@ class ImpulciferApplicationService:
                 "params": {
                     "directory": dir_path,
                     "include_hangloose": include_hangloose,
+                    "remove_silent_channels": remove_silent_channels,
                 }
             }
         )

@@ -431,5 +431,8 @@
   "recovery_existing_label": "Beibehalten",
   "recovery_none": "Keine",
   "recovery_failed_summary": "Wiederherstellung nicht möglich: {message} ({code})",
-  "dialog_recovery_title": "Ausgaben wiederherstellen"
+  "dialog_recovery_title": "Ausgaben wiederherstellen",
+    "checkbox_remove_silent_channels": "Remove silent channels, including gaps",
+    "tooltip_remove_silent_channels": "Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.",
+    "cli_warning_compact_channels": "Removing silent channels changes channel positions and can break HeSuVi compatibility."
 }

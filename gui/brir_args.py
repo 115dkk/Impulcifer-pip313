@@ -54,6 +54,7 @@ class BrirTabLike(Protocol):
     pre_response_var: TkReadable
     jamesdsp_var: TkReadable
     hangloose_var: TkReadable
+    remove_silent_channels_var: TkReadable
     interactive_plots_var: TkReadable
     microphone_deviation_correction_var: TkReadable
     mic_deviation_strength_var: TkReadable
@@ -187,6 +188,7 @@ def build_brir_args(tab: BrirTabLike, loc: Any) -> dict:
         args["head_ms"] = safe_get_double(tab.pre_response_var, 1.0)
         args["jamesdsp"] = tab.jamesdsp_var.get()
         args["hangloose"] = tab.hangloose_var.get()
+        args["remove_silent_channels"] = tab.remove_silent_channels_var.get()
         args["interactive_plots"] = tab.interactive_plots_var.get()
         args["microphone_deviation_correction"] = tab.microphone_deviation_correction_var.get()
         args["mic_deviation_strength"] = safe_get_double(tab.mic_deviation_strength_var, 0.7)

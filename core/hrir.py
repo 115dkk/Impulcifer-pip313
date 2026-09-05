@@ -8,6 +8,7 @@ from scipy.signal.windows import hann
 from scipy.interpolate import InterpolatedUnivariateSpline
 from autoeq.frequency_response import FrequencyResponse
 from core.audio_io import magnitude_response, read_wav, write_wav
+from core.brir_layout import trim_silent_extensions
 from core.impulse_response import ImpulseResponse
 from core.constants import (
     HEXADECAGONAL_TRACK_ORDER,
@@ -423,13 +424,17 @@ class HRIR(HRIRPlotter):
         for speaker, sides in ingested.items():
             self.irs.setdefault(speaker, {}).update(sides)
 
-    def write_wav(self, file_path, track_order=None, bit_depth=32):
+    def write_wav(self, file_path, track_order=None, bit_depth=32, *, trim_extensions=False,
+                  remove_silent_channels=False):
         """Writes impulse responses to a WAV file
 
         Args:
             file_path: Path to output WAV file
             track_order: List of speaker-side names for the order of impulse responses in the output file
             bit_depth: Number of bits per sample. 16, 24 or 32
+            trim_extensions: Omit trailing silent extension pairs from combined BRIR outputs.
+            remove_silent_channels: Also omit zero channels inside the layout.
+                Breaks fixed positional routing; embeds channel names for recovery.
 
         Returns:
             None
@@ -451,6 +456,20 @@ class HRIR(HRIRPlotter):
         for ch in track_order:
             rows.append(irs_by_name.get(ch, np.zeros(reference_len)))
         irs = np.vstack(rows)
+        if remove_silent_channels:
+            import soundfile as sf
+
+            from core.brir_layout import append_track_names, compact_tracks
+
+            irs, names = compact_tracks(irs, track_order)
+            if bit_depth not in (16, 24, 32):
+                raise ValueError("Invalid bit depth. Accepted values are 16, 24 and 32.")
+            os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
+            sf.write(file_path, irs.T, self.fs, subtype=f"PCM_{bit_depth}")
+            append_track_names(file_path, names)
+            return
+        if trim_extensions:
+            irs = trim_silent_extensions(irs, track_order)
 
         write_wav(file_path, self.fs, irs, bit_depth=bit_depth)
 
