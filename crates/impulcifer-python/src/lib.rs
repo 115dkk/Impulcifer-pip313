@@ -1,22 +1,13 @@
 #![forbid(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-//! PyO3 module `impulcifer_native` (built with maturin, feature `python`).
-//! Boundary policy: copy inputs (`PyReadonlyArray` -> Vec), detach for long
-//! work, return newly owned arrays. Implemented by an ASTRA packet.
+//! Owned configuration boundary shared by interpreter-free tests and the wheel.
+use impulcifer_types::config::{ConfigError, ProcessingConfig};
+use serde_json::{Map, Value};
+
+pub fn run_config_dict(kwargs: &Map<String, Value>) -> Result<ProcessingConfig, ConfigError> {
+    ProcessingConfig::from_kwargs(kwargs)
+}
 
 #[cfg(feature = "python")]
-mod module {
-    use pyo3::prelude::*;
-
-    #[pyfunction]
-    fn version() -> &'static str {
-        env!("CARGO_PKG_VERSION")
-    }
-
-    #[pymodule]
-    fn impulcifer_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
-        m.add_function(wrap_pyfunction!(version, m)?)?;
-        Ok(())
-    }
-}
+mod module;

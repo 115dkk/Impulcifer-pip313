@@ -1985,7 +1985,8 @@ dependencies = [
 name = "impulcifer-python"
 version = "3.0.0-alpha.0"
 dependencies = [
- "impulcifer-dsp",
+ "impulcifer-cli",
+ "impulcifer-service",
  "impulcifer-types",
  "pyo3",
  "serde_json",
