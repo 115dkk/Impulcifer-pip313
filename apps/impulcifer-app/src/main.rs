@@ -31,6 +31,16 @@ fn file_path_to_string(path: FilePath) -> String {
     }
 }
 
+/// Maps the persisted UI theme name (2.x vocabulary: "dark", "light", "system")
+/// to a native window theme; "system" follows the OS.
+fn theme_from_name(name: &str) -> Option<Theme> {
+    match name {
+        "dark" => Some(Theme::Dark),
+        "light" => Some(Theme::Light),
+        _ => None,
+    }
+}
+
 struct TauriHost {
     app: AppHandle,
 }
@@ -70,13 +80,8 @@ impl HostAdapter for TauriHost {
     }
 
     fn apply_title_theme(&self, theme: &str) {
-        let theme = match theme {
-            "dark" => Some(Theme::Dark),
-            "light" => Some(Theme::Light),
-            _ => None,
-        };
         if let Some(window) = self.app.get_webview_window("main") {
-            let _ = window.set_theme(theme);
+            let _ = window.set_theme(theme_from_name(theme));
         }
     }
 }
@@ -120,11 +125,21 @@ fn main() {
             app.manage(AppState {
                 service: Arc::new(ImpulciferService::new(Box::new(host))),
             });
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("Impulcifer")
-                .inner_size(1180.0, 820.0)
-                .initialization_script(BRIDGE_JS)
-                .build()?;
+            let window =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .title("Impulcifer")
+                    .inner_size(1180.0, 820.0)
+                    .initialization_script(BRIDGE_JS)
+                    .build()?;
+            // Apply the persisted theme before the first frame so the native
+            // title bar matches the page; 2.x did the same at startup through
+            // its DWM workaround. Later `set_theme` IPC calls go through TauriHost.
+            let settings = app
+                .state::<AppState>()
+                .service
+                .call("get_ui_settings", Vec::new());
+            let theme = settings["data"]["theme"].as_str().unwrap_or("dark");
+            let _ = window.set_theme(theme_from_name(theme));
             Ok(())
         })
         .run(tauri::generate_context!())
