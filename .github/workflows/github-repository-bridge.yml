@@ -17,14 +17,12 @@ jobs:
     if: "${{ startsWith(github.event.head_commit.message, 'chatgpt-bundle: ') }}"
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-
     steps:
       - name: Checkout bridge repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
-
       - name: Parse and validate requested commit
         id: target
         shell: bash
@@ -32,50 +30,66 @@ jobs:
           REQUEST_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           set -euo pipefail
-
           first_line="${REQUEST_MESSAGE%%$'\n'*}"
           target="${first_line#chatgpt-bundle: }"
-
           if [[ ! "$target" =~ ^[0-9a-fA-F]{40}$ ]]; then
             echo "::error::Expected first line: chatgpt-bundle: <40-hex-commit-sha>"
             exit 1
           fi
-
           target="${target,,}"
-
           if ! git cat-file -e "${target}^{commit}" 2>/dev/null; then
             git fetch --no-tags origin "$target"
           fi
-
           git cat-file -e "${target}^{commit}"
           echo "target=$target" >> "$GITHUB_OUTPUT"
-
-      - name: Create verified Git bundle
+      - name: Create verified Git bundle and split transport
         shell: bash
         env:
           TARGET: ${{ steps.target.outputs.target }}
           TRIGGER: ${{ github.sha }}
         run: |
           set -euo pipefail
-
           git branch -f chatgpt-export "$TARGET"
           git bundle create repository.bundle chatgpt-export
           git bundle verify repository.bundle
-
           sha256sum repository.bundle > repository.bundle.sha256
+          split -b 300M -d -a 3 repository.bundle repository.bundle.part-
+          sha256sum repository.bundle.part-* > repository.parts.sha256
           {
             echo "target=$TARGET"
             echo "trigger=$TRIGGER"
             echo "export_ref=refs/heads/chatgpt-export"
+            echo "transport=split-300MiB"
           } > bridge-manifest.txt
-
-      - name: Upload repository bundle
+          if [ -e repository.bundle.part-003 ]; then
+            echo "::error::Bundle exceeds the three-part transport budget"
+            exit 1
+          fi
+      - name: Upload repository bundle part 000 and manifest
         uses: actions/upload-artifact@v7
         with:
-          name: chatgpt-repository-bundle-${{ steps.target.outputs.target }}
+          name: chatgpt-repository-bundle-${{ steps.target.outputs.target }}-part-000
           path: |
-            repository.bundle
+            repository.bundle.part-000
             repository.bundle.sha256
+            repository.parts.sha256
             bridge-manifest.txt
+          compression-level: 0
           if-no-files-found: error
+          retention-days: 1
+      - name: Upload repository bundle part 001
+        uses: actions/upload-artifact@v7
+        with:
+          name: chatgpt-repository-bundle-${{ steps.target.outputs.target }}-part-001
+          path: repository.bundle.part-001
+          compression-level: 0
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Upload repository bundle part 002 if needed
+        uses: actions/upload-artifact@v7
+        with:
+          name: chatgpt-repository-bundle-${{ steps.target.outputs.target }}-part-002
+          path: repository.bundle.part-002
+          compression-level: 0
+          if-no-files-found: warn
           retention-days: 1
