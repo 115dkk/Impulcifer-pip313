@@ -1,0 +1,6848 @@
+{
+  "validation": [
+    {
+      "name": "non_object",
+      "request": null,
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Recording request must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "array",
+      "request": [],
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Recording request must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "unknown_sorted",
+      "request": {
+        "z": 1,
+        "a": 2
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Unknown recording fields.",
+          "details": {
+            "fields": [
+              "a",
+              "z"
+            ]
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "mode_before_dir",
+      "request": {
+        "mode": "bad"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "mode must be speakers or headphones.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "missing_dir",
+      "request": {},
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "record_dir is required.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "blank_dir",
+      "request": {
+        "record_dir": "  "
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "record_dir is required.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "missing_play",
+      "request": {
+        "record_dir": "$ROOT"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "FILE_NOT_FOUND",
+          "message": "Playback file does not exist.",
+          "details": {
+            "path": ""
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "null_play",
+      "request": {
+        "record_dir": "$ROOT",
+        "play_path": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "FILE_NOT_FOUND",
+          "message": "Playback file does not exist.",
+          "details": {
+            "path": "None"
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "directory_play",
+      "request": {
+        "record_dir": "$ROOT",
+        "play_path": "$ROOT"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "FILE_NOT_FOUND",
+          "message": "Playback file does not exist.",
+          "details": {
+            "path": "$ROOT"
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "default",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        }
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "null_dir_python_string",
+      "request": {
+        "record_dir": null,
+        "sweep": {
+          "mode": "default"
+        }
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "None/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "optional_strings",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "input_device": " Mic ",
+        "output_device": " ",
+        "host_api": 5
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": "Mic",
+          "output_device": null,
+          "host_api": "5",
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "channels_unforced",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": 64
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "forced_match",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": 4,
+        "force_channels": true
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 4,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "forced_mismatch",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "force_channels": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "CONFIRMATION_REQUIRED",
+          "message": "Selected recording channels do not match the sweep speaker count.",
+          "details": {
+            "has_mismatch": true,
+            "expected_speakers": [
+              "FL",
+              "FR"
+            ],
+            "expected_channels": 4,
+            "selected_channels": 2
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "confirmed",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "force_channels": true,
+        "confirm_warnings": true
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "headphones_ignore_append",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "mode": "headphones",
+        "channels": 14,
+        "append": "bad"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "mono_generated_path",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "tracks": "mono",
+          "speakers": "FR"
+        }
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FR"
+            ],
+            "tracks": "mono"
+          },
+          "record_path": "$ROOT/out/FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "channels_invalid_0",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "channels must be an integer from 1 to 64.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "channels_invalid_1",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": false
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "channels must be an integer from 1 to 64.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "channels_invalid_2",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "channels must be an integer from 1 to 64.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "channels_invalid_3",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": "2"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "channels must be an integer from 1 to 64.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "channels_invalid_4",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": 2.0
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "channels must be an integer from 1 to 64.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "channels_invalid_5",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": 0
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "channels must be an integer from 1 to 64.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "channels_invalid_6",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": 65
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "channels must be an integer from 1 to 64.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "channels_invalid_7",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "channels": -1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "channels must be an integer from 1 to 64.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "force_channels_invalid_0",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "force_channels": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "force_channels must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "force_channels_invalid_1",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "force_channels": 1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "force_channels must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "force_channels_invalid_2",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "force_channels": "true"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "force_channels must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "confirm_warnings_invalid_0",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "confirm_warnings": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "confirm_warnings must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "confirm_warnings_invalid_1",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "confirm_warnings": 1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "confirm_warnings must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "confirm_warnings_invalid_2",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "confirm_warnings": "true"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "confirm_warnings must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "append_invalid_0",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "append": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "append must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "append_invalid_1",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "append": 1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "append must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "append_invalid_2",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "append": "true"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "append must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "debug_plots_invalid_0",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "debug_plots": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "debug_plots must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "debug_plots_invalid_1",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "debug_plots": 1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "debug_plots must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "debug_plots_invalid_2",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "default"
+        },
+        "debug_plots": "true"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "debug_plots must be a boolean.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_mono.wav_False",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/mono.wav",
+        "confirm_warnings": false
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "CONFIRMATION_REQUIRED",
+          "message": "Mono playback produces generic L=R headphone compensation.",
+          "details": {
+            "warning": "headphones_mono"
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_mono.wav_True",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/mono.wav",
+        "confirm_warnings": true
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": "$ROOT/mono.wav",
+          "sweep_spec": null,
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "headphones_stereo.wav_False",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav",
+        "confirm_warnings": false
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": "$ROOT/stereo.wav",
+          "sweep_spec": null,
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "headphones_stereo.wav_True",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav",
+        "confirm_warnings": true
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": "$ROOT/stereo.wav",
+          "sweep_spec": null,
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "headphones_three.wav_False",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/three.wav",
+        "confirm_warnings": false
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "error_headphones_play_file_too_many_channels",
+          "details": {
+            "path": "$ROOT/three.wav",
+            "channels": 3
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_three.wav_True",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/three.wav",
+        "confirm_warnings": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "error_headphones_play_file_too_many_channels",
+          "details": {
+            "path": "$ROOT/three.wav",
+            "channels": 3
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_broken.wav_False",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/broken.wav",
+        "confirm_warnings": false
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "error_headphones_play_file_unreadable",
+          "details": {
+            "path": "$ROOT/broken.wav",
+            "channels": 0
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_broken.wav_True",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/broken.wav",
+        "confirm_warnings": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "error_headphones_play_file_unreadable",
+          "details": {
+            "path": "$ROOT/broken.wav",
+            "channels": 0
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_absent.wav_False",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/absent.wav",
+        "confirm_warnings": false
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "FILE_NOT_FOUND",
+          "message": "Playback file does not exist.",
+          "details": {
+            "path": "$ROOT/absent.wav"
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_absent.wav_True",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "mode": "headphones",
+        "play_path": "$ROOT/absent.wav",
+        "confirm_warnings": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "FILE_NOT_FOUND",
+          "message": "Playback file does not exist.",
+          "details": {
+            "path": "$ROOT/absent.wav"
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "file_stereo.wav",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "play_path": "$ROOT/stereo.wav",
+        "force_channels": true
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": "$ROOT/stereo.wav",
+          "sweep_spec": null,
+          "record_path": "$ROOT/out/stereo.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "file_sweep-seg-FL,FR-stereo-1s-test.wav",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "play_path": "$ROOT/sweep-seg-FL,FR-stereo-1s-test.wav",
+        "force_channels": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "CONFIRMATION_REQUIRED",
+          "message": "Selected recording channels do not match the sweep speaker count.",
+          "details": {
+            "has_mismatch": true,
+            "expected_speakers": [
+              "FL",
+              "FR"
+            ],
+            "expected_channels": 4,
+            "selected_channels": 2
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_0",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": null,
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": "$ROOT/stereo.wav",
+          "sweep_spec": null,
+          "record_path": "$ROOT/out/stereo.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_1",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": [],
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_2",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": "bad",
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_3",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "z": 1,
+          "a": 2
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Unknown sweep fields.",
+          "details": {
+            "fields": [
+              "a",
+              "z"
+            ]
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_4",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "bad"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.mode must be default, custom or file.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_5",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": null
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.mode must be default, custom or file.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_6",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "file",
+          "fs": false
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": "$ROOT/stereo.wav",
+          "sweep_spec": null,
+          "record_path": "$ROOT/out/stereo.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_7",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {},
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_8",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "fs": false,
+          "duration": "bad"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_9",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": null
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.speakers must be a list or comma-separated string.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_10",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": 1
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.speakers must be a list or comma-separated string.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_11",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": []
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "At least one speaker name is required.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_12",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": " , "
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "At least one speaker name is required.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_13",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": [
+            null
+          ]
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "\"NONE\" is not a recognised speaker name.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_14",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": [
+            true
+          ]
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "\"TRUE\" is not a recognised speaker name.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_15",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": [
+            "XX"
+          ]
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "\"XX\" is not a recognised speaker name.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_16",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": [
+            "FL",
+            " fl "
+          ]
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Speaker names must be unique.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_17",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": " fl, fr, "
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_18",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "tracks": null
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.tracks must be a string.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_19",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "tracks": "bogus"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Unsupported track configuration \"bogus\". Supported: mono, stereo, 5.1, 7.1, 7.1.4, 7.1.6.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_20",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": "FL,FR,FC"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "\"stereo\" track configuration requires one or two speakers.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_21",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": "TFL",
+          "tracks": "7.1"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Speaker \"TFL\" is not available in the \"7.1\" layout.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_22",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": "TSL,TSR",
+          "tracks": "stereo"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "TSL",
+              "TSR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/TSL,TSR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_23",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": "FR",
+          "tracks": "mono"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FR"
+            ],
+            "tracks": "mono"
+          },
+          "record_path": "$ROOT/out/FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_24",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_25",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": true
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_26",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": null
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_27",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": "48000"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_28",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 8000.5
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_29",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 7999
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_30",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 384001
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_31",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": -1
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_32",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 8000
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 8000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_33",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 384000
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 384000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_34",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 8000.0
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 8000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_35",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": true
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_36",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": null
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_37",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": "5"
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_38",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 0
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_39",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 0.099
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_40",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 60.1
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_41",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 0.1
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 0.1,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_speakers_42",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 60
+        },
+        "mode": "speakers",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "speakers",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 60.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/FL,FR.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_0",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": null,
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": "$ROOT/stereo.wav",
+          "sweep_spec": null,
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_1",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": [],
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_2",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": "bad",
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_3",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "z": 1,
+          "a": 2
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Unknown sweep fields.",
+          "details": {
+            "fields": [
+              "a",
+              "z"
+            ]
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_4",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "bad"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.mode must be default, custom or file.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_5",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": null
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.mode must be default, custom or file.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_6",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "file",
+          "fs": false
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": "$ROOT/stereo.wav",
+          "sweep_spec": null,
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_7",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {},
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_8",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "fs": false,
+          "duration": "bad"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_9",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": null
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_10",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": 1
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_11",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": []
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_12",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": " , "
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_13",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": [
+            null
+          ]
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_14",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": [
+            true
+          ]
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_15",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": [
+            "XX"
+          ]
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_16",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": [
+            "FL",
+            " fl "
+          ]
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_17",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": " fl, fr, "
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_18",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "tracks": null
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_19",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "tracks": "bogus"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_20",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": "FL,FR,FC"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_21",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": "TFL",
+          "tracks": "7.1"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_22",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": "TSL,TSR",
+          "tracks": "stereo"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_23",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "speakers": "FR",
+          "tracks": "mono"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_24",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_25",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": true
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_26",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": null
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_27",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": "48000"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_28",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 8000.5
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_29",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 7999
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_30",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 384001
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_31",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": -1
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_32",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 8000
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 8000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_33",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 384000
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 384000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_34",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "fs": 8000.0
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 8000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_35",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": true
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_36",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": null
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_37",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": "5"
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_38",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 0
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_39",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 0.099
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_40",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 60.1
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_41",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 0.1
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 0.1,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    },
+    {
+      "name": "sweep_headphones_42",
+      "request": {
+        "record_dir": "$ROOT/out",
+        "sweep": {
+          "mode": "custom",
+          "duration": 60
+        },
+        "mode": "headphones",
+        "play_path": "$ROOT/stereo.wav"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "mode": "headphones",
+          "play_path": null,
+          "sweep_spec": {
+            "fs": 48000,
+            "duration": 60.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          },
+          "record_path": "$ROOT/out/headphones.wav",
+          "input_device": null,
+          "output_device": null,
+          "host_api": null,
+          "channels": 2,
+          "append": false,
+          "debug_plots": false
+        }
+      }
+    }
+  ],
+  "sweep_validation": [
+    {
+      "name": "speakers_0",
+      "mode": "speakers",
+      "sweep": null,
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": null
+        }
+      }
+    },
+    {
+      "name": "speakers_1",
+      "mode": "speakers",
+      "sweep": [],
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_2",
+      "mode": "speakers",
+      "sweep": "bad",
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_3",
+      "mode": "speakers",
+      "sweep": {
+        "z": 1,
+        "a": 2
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Unknown sweep fields.",
+          "details": {
+            "fields": [
+              "a",
+              "z"
+            ]
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_4",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "bad"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.mode must be default, custom or file.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_5",
+      "mode": "speakers",
+      "sweep": {
+        "mode": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.mode must be default, custom or file.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_6",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "file",
+        "fs": false
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": null
+        }
+      }
+    },
+    {
+      "name": "speakers_7",
+      "mode": "speakers",
+      "sweep": {},
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_8",
+      "mode": "speakers",
+      "sweep": {
+        "fs": false,
+        "duration": "bad"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_9",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.speakers must be a list or comma-separated string.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_10",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": 1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.speakers must be a list or comma-separated string.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_11",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": []
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "At least one speaker name is required.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_12",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": " , "
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "At least one speaker name is required.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_13",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": [
+          null
+        ]
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "\"NONE\" is not a recognised speaker name.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_14",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": [
+          true
+        ]
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "\"TRUE\" is not a recognised speaker name.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_15",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": [
+          "XX"
+        ]
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "\"XX\" is not a recognised speaker name.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_16",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": [
+          "FL",
+          " fl "
+        ]
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Speaker names must be unique.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_17",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": " fl, fr, "
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_18",
+      "mode": "speakers",
+      "sweep": {
+        "tracks": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.tracks must be a string.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_19",
+      "mode": "speakers",
+      "sweep": {
+        "tracks": "bogus"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Unsupported track configuration \"bogus\". Supported: mono, stereo, 5.1, 7.1, 7.1.4, 7.1.6.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_20",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": "FL,FR,FC"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "\"stereo\" track configuration requires one or two speakers.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_21",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": "TFL",
+        "tracks": "7.1"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Speaker \"TFL\" is not available in the \"7.1\" layout.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_22",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": "TSL,TSR",
+        "tracks": "stereo"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "TSL",
+              "TSR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_23",
+      "mode": "speakers",
+      "sweep": {
+        "speakers": "FR",
+        "tracks": "mono"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FR"
+            ],
+            "tracks": "mono"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_24",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_25",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_26",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_27",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": "48000"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_28",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": 8000.5
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_29",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": 7999
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_30",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": 384001
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_31",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": -1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_32",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": 8000
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 8000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_33",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": 384000
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 384000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_34",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "fs": 8000.0
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 8000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_35",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "duration": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_36",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "duration": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_37",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "duration": "5"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_38",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "duration": 0
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_39",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "duration": 0.099
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_40",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "duration": 60.1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "speakers_41",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "duration": 0.1
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 0.1,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "speakers_42",
+      "mode": "speakers",
+      "sweep": {
+        "mode": "custom",
+        "duration": 60
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 60.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_0",
+      "mode": "headphones",
+      "sweep": null,
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": null
+        }
+      }
+    },
+    {
+      "name": "headphones_1",
+      "mode": "headphones",
+      "sweep": [],
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_2",
+      "mode": "headphones",
+      "sweep": "bad",
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_3",
+      "mode": "headphones",
+      "sweep": {
+        "z": 1,
+        "a": 2
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Unknown sweep fields.",
+          "details": {
+            "fields": [
+              "a",
+              "z"
+            ]
+          },
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_4",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "bad"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.mode must be default, custom or file.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_5",
+      "mode": "headphones",
+      "sweep": {
+        "mode": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.mode must be default, custom or file.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_6",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "file",
+        "fs": false
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": null
+        }
+      }
+    },
+    {
+      "name": "headphones_7",
+      "mode": "headphones",
+      "sweep": {},
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_8",
+      "mode": "headphones",
+      "sweep": {
+        "fs": false,
+        "duration": "bad"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_9",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": null
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_10",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": 1
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_11",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": []
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_12",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": " , "
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_13",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": [
+          null
+        ]
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_14",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": [
+          true
+        ]
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_15",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": [
+          "XX"
+        ]
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_16",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": [
+          "FL",
+          " fl "
+        ]
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_17",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": " fl, fr, "
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_18",
+      "mode": "headphones",
+      "sweep": {
+        "tracks": null
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_19",
+      "mode": "headphones",
+      "sweep": {
+        "tracks": "bogus"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_20",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": "FL,FR,FC"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_21",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": "TFL",
+        "tracks": "7.1"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_22",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": "TSL,TSR",
+        "tracks": "stereo"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_23",
+      "mode": "headphones",
+      "sweep": {
+        "speakers": "FR",
+        "tracks": "mono"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_24",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom"
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_25",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_26",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_27",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": "48000"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_28",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": 8000.5
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.fs must be an integer.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_29",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": 7999
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_30",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": 384001
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_31",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": -1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sampling rate must be between 8000 and 384000 Hz.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_32",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": 8000
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 8000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_33",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": 384000
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 384000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_34",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "fs": 8000.0
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 8000,
+            "duration": 5.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_35",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "duration": true
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_36",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "duration": null
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_37",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "duration": "5"
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "sweep.duration must be a number.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_38",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "duration": 0
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_39",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "duration": 0.099
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_40",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "duration": 60.1
+      },
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Sweep duration must be between 0.1 and 60 seconds.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "headphones_41",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "duration": 0.1
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 0.1,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    },
+    {
+      "name": "headphones_42",
+      "mode": "headphones",
+      "sweep": {
+        "mode": "custom",
+        "duration": 60
+      },
+      "response": {
+        "ok": true,
+        "data": {
+          "spec": {
+            "fs": 48000,
+            "duration": 60.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "tracks": "stereo"
+          }
+        }
+      }
+    }
+  ],
+  "paths": [
+    {
+      "args": [
+        ""
+      ],
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "record_dir is required.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "args": [
+        null
+      ],
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "record_dir is required.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "args": [
+        "$ROOT/out"
+      ],
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "play_path is required for speaker recordings.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "args": [
+        "$ROOT/out",
+        null,
+        "headphones",
+        []
+      ],
+      "response": {
+        "ok": true,
+        "data": {
+          "record_path": "$ROOT/out/headphones.wav"
+        }
+      }
+    },
+    {
+      "args": [
+        "$ROOT/out",
+        "foo.mlp"
+      ],
+      "response": {
+        "ok": true,
+        "data": {
+          "record_path": "$ROOT/out/foo.wav"
+        }
+      }
+    },
+    {
+      "args": [
+        "$ROOT/out/../out",
+        "sweep-seg-tfl,tfr-stereo-x.wav"
+      ],
+      "response": {
+        "ok": true,
+        "data": {
+          "record_path": "$ROOT/out/../out/TFL,TFR.wav"
+        }
+      }
+    },
+    {
+      "args": [
+        "$ROOT/out",
+        null,
+        "speakers",
+        {
+          "speakers": "BL,BR"
+        }
+      ],
+      "response": {
+        "ok": true,
+        "data": {
+          "record_path": "$ROOT/out/BL,BR.wav"
+        }
+      }
+    },
+    {
+      "args": [
+        "$ROOT/out",
+        "x.wav",
+        "speakers",
+        {
+          "mode": "file"
+        }
+      ],
+      "response": {
+        "ok": true,
+        "data": {
+          "record_path": "$ROOT/out/x.wav"
+        }
+      }
+    },
+    {
+      "args": [
+        "$ROOT/out",
+        null,
+        "speakers",
+        {
+          "tracks": "bad"
+        }
+      ],
+      "response": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Unsupported track configuration \"bad\". Supported: mono, stereo, 5.1, 7.1, 7.1.4, 7.1.6.",
+          "details": {},
+          "retryable": false
+        }
+      }
+    },
+    {
+      "args": [
+        42,
+        "foo.wav"
+      ],
+      "response": {
+        "ok": true,
+        "data": {
+          "record_path": "42/foo.wav"
+        }
+      }
+    }
+  ],
+  "naming": [
+    {
+      "input": "",
+      "output": "headphones.wav"
+    },
+    {
+      "input": "foo.mlp",
+      "output": "foo.wav"
+    },
+    {
+      "input": ".hidden",
+      "output": ".hidden.wav"
+    },
+    {
+      "input": "...",
+      "output": "....wav"
+    },
+    {
+      "input": "folder/",
+      "output": ".wav"
+    },
+    {
+      "input": "folder/a.b.wav",
+      "output": "a.b.wav"
+    },
+    {
+      "input": "sweep-seg-fl,fr-stereo-x.wav",
+      "output": "FL,FR.wav"
+    },
+    {
+      "input": "prefix-sweep-seg-tfl,tsr-7.1.6-x.wav",
+      "output": "TFL,TSR.wav"
+    },
+    {
+      "input": "sweep-seg-XX-stereo.wav",
+      "output": "sweep-seg-XX-stereo.wav"
+    }
+  ],
+  "speaker_names": [
+    {
+      "input": [],
+      "response": {
+        "ok": false,
+        "message": "At least one speaker name is required."
+      }
+    },
+    {
+      "input": [
+        "FL",
+        "FR"
+      ],
+      "response": {
+        "ok": true,
+        "name": "FL,FR.wav"
+      }
+    },
+    {
+      "input": [
+        " fc "
+      ],
+      "response": {
+        "ok": true,
+        "name": "FC.wav"
+      }
+    },
+    {
+      "input": [
+        "tfl",
+        "TFR"
+      ],
+      "response": {
+        "ok": true,
+        "name": "TFL,TFR.wav"
+      }
+    },
+    {
+      "input": [
+        "FL",
+        "fl"
+      ],
+      "response": {
+        "ok": false,
+        "message": "Speaker names must be unique."
+      }
+    },
+    {
+      "input": [
+        "XX"
+      ],
+      "response": {
+        "ok": false,
+        "message": "\"XX\" is not a recognised speaker name."
+      }
+    },
+    {
+      "input": [
+        "",
+        "FR"
+      ],
+      "response": {
+        "ok": true,
+        "name": "FR.wav"
+      }
+    }
+  ],
+  "playback": [
+    {
+      "input": {
+        "fs": 48000,
+        "duration": 5.0,
+        "speakers": [
+          "FL",
+          "FR"
+        ],
+        "tracks": "stereo"
+      },
+      "spec": {
+        "fs": 48000,
+        "duration": 5.0,
+        "speakers": [
+          "FL",
+          "FR"
+        ],
+        "tracks": "stereo"
+      },
+      "shape": [
+        2,
+        878540
+      ],
+      "segments": [
+        {
+          "speaker": "FL",
+          "index": 1,
+          "total": 2,
+          "start": 2.0,
+          "end": 8.151458333333334
+        },
+        {
+          "speaker": "FR",
+          "index": 2,
+          "total": 2,
+          "start": 10.151458333333334,
+          "end": 16.30291666666667
+        }
+      ],
+      "display_name": "sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz (generated)",
+      "record_filename": "FL,FR.wav",
+      "sha256": "ec7bb8091f58744ca08528712592da9659246a6a247ca0c0120c3e89d26a221a",
+      "signal": "p16_signal_0.pcm32"
+    },
+    {
+      "input": {
+        "fs": 8000,
+        "duration": 1,
+        "speakers": [
+          "FR"
+        ],
+        "tracks": "mono"
+      },
+      "spec": {
+        "fs": 8000,
+        "duration": 1.0,
+        "speakers": [
+          "FL"
+        ],
+        "tracks": "mono"
+      },
+      "shape": [
+        1,
+        46196
+      ],
+      "segments": [
+        {
+          "speaker": "FL",
+          "index": 1,
+          "total": 1,
+          "start": 2.0,
+          "end": 3.7744999999999997
+        }
+      ],
+      "display_name": "sweep-seg-FL-mono-1.77s-8000Hz-32bit-3.91Hz-4000Hz (generated)",
+      "record_filename": "FL.wav",
+      "sha256": "5ad7a071ebfc838899651de49931e7373b49c3b992fb332ef89f1f0879c5bcb6",
+      "signal": "p16_signal_1.pcm32"
+    },
+    {
+      "input": {
+        "fs": 8000,
+        "duration": 1,
+        "speakers": [
+          "FL",
+          "TBR"
+        ],
+        "tracks": "7.1.4"
+      },
+      "spec": {
+        "fs": 8000,
+        "duration": 1.0,
+        "speakers": [
+          "FL",
+          "TBR"
+        ],
+        "tracks": "7.1.4"
+      },
+      "shape": [
+        12,
+        76392
+      ],
+      "segments": [
+        {
+          "speaker": "FL",
+          "index": 1,
+          "total": 2,
+          "start": 2.0,
+          "end": 3.7744999999999997
+        },
+        {
+          "speaker": "TBR",
+          "index": 2,
+          "total": 2,
+          "start": 5.7745,
+          "end": 7.5489999999999995
+        }
+      ],
+      "display_name": "sweep-seg-FL,TBR-7.1.4-1.77s-8000Hz-32bit-3.91Hz-4000Hz (generated)",
+      "record_filename": "FL,TBR.wav",
+      "sha256": "82e857eda0da843dc132a08cd1fdd296bb8ae30f4d4bbd8d07abe5626bb6ebad",
+      "signal": "p16_signal_2.pcm32"
+    },
+    {
+      "input": {
+        "fs": 12000,
+        "duration": 2,
+        "speakers": [
+          "SL",
+          "SR"
+        ],
+        "tracks": "stereo"
+      },
+      "spec": {
+        "fs": 12000,
+        "duration": 2.0,
+        "speakers": [
+          "SL",
+          "SR"
+        ],
+        "tracks": "stereo"
+      },
+      "shape": [
+        2,
+        134460
+      ],
+      "segments": [
+        {
+          "speaker": "SL",
+          "index": 1,
+          "total": 2,
+          "start": 2.0,
+          "end": 4.6025
+        },
+        {
+          "speaker": "SR",
+          "index": 2,
+          "total": 2,
+          "start": 6.6025,
+          "end": 9.205
+        }
+      ],
+      "display_name": "sweep-seg-SL,SR-stereo-2.60s-12000Hz-32bit-2.93Hz-6000Hz (generated)",
+      "record_filename": "SL,SR.wav",
+      "sha256": "4d23a9e7f26cd31dcc4e3b12c27bf8bcd27465acda129dcc3ba814db0ee4e599",
+      "signal": "p16_signal_3.pcm32"
+    }
+  ],
+  "progress": [
+    {
+      "file": "sweep-seg-FL,FR-stereo-6.15s-x",
+      "duration": 18.3,
+      "segments": [
+        {
+          "speaker": "FL",
+          "index": 1,
+          "total": 2,
+          "start": 2.0,
+          "end": 8.15
+        },
+        {
+          "speaker": "FR",
+          "index": 2,
+          "total": 2,
+          "start": 10.15,
+          "end": 16.3
+        }
+      ],
+      "events": [
+        {
+          "elapsed": -1,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 18.3,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 0,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 18.3,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 2,
+          "event": {
+            "phase": "recording",
+            "elapsed": 2,
+            "duration": 18.3,
+            "progress": 0.1092896174863388,
+            "speaker": "FL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 3,
+            "duration": 18.3,
+            "progress": 0.16393442622950818,
+            "speaker": "FL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.16260162601626016,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 4,
+          "event": {
+            "phase": "recording",
+            "elapsed": 4,
+            "duration": 18.3,
+            "progress": 0.2185792349726776,
+            "speaker": "FL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.3252032520325203,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 8.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 8.15,
+            "duration": 18.3,
+            "progress": 0.4453551912568306,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 9,
+          "event": {
+            "phase": "recording",
+            "elapsed": 9,
+            "duration": 18.3,
+            "progress": 0.4918032786885246,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 10.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 10.15,
+            "duration": 18.3,
+            "progress": 0.5546448087431693,
+            "speaker": "FR",
+            "segment_index": 2,
+            "segment_total": 2,
+            "segment_progress": 0.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 16.3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 16.3,
+            "duration": 18.3,
+            "progress": 0.8907103825136612,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 30,
+          "event": {
+            "phase": "recording",
+            "elapsed": 30,
+            "duration": 18.3,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        }
+      ]
+    },
+    {
+      "file": "prefix-sweep-seg-tfl,tsr-7.1.6-1s-x",
+      "duration": 7,
+      "segments": [
+        {
+          "speaker": "TFL",
+          "index": 1,
+          "total": 2,
+          "start": 2.0,
+          "end": 3.0
+        },
+        {
+          "speaker": "TSR",
+          "index": 2,
+          "total": 2,
+          "start": 5.0,
+          "end": 6.0
+        }
+      ],
+      "events": [
+        {
+          "elapsed": -1,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 7,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 0,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 7,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 2,
+          "event": {
+            "phase": "recording",
+            "elapsed": 2,
+            "duration": 7,
+            "progress": 0.2857142857142857,
+            "speaker": "TFL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.0,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 3,
+            "duration": 7,
+            "progress": 0.42857142857142855,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 4,
+          "event": {
+            "phase": "recording",
+            "elapsed": 4,
+            "duration": 7,
+            "progress": 0.5714285714285714,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 8.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 8.15,
+            "duration": 7,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 9,
+          "event": {
+            "phase": "recording",
+            "elapsed": 9,
+            "duration": 7,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 10.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 10.15,
+            "duration": 7,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 16.3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 16.3,
+            "duration": 7,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 30,
+          "event": {
+            "phase": "recording",
+            "elapsed": 30,
+            "duration": 7,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "TFL",
+              "TSR"
+            ],
+            "message": ""
+          }
+        }
+      ]
+    },
+    {
+      "file": "sweep-seg-FL,FR-stereo-0s-x",
+      "duration": 10,
+      "segments": [
+        {
+          "speaker": "FL",
+          "index": 1,
+          "total": 2,
+          "start": 2.0,
+          "end": 4.0
+        },
+        {
+          "speaker": "FR",
+          "index": 2,
+          "total": 2,
+          "start": 6.0,
+          "end": 8.0
+        }
+      ],
+      "events": [
+        {
+          "elapsed": -1,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 10,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 0,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 10,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 2,
+          "event": {
+            "phase": "recording",
+            "elapsed": 2,
+            "duration": 10,
+            "progress": 0.2,
+            "speaker": "FL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 3,
+            "duration": 10,
+            "progress": 0.3,
+            "speaker": "FL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.5,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 4,
+          "event": {
+            "phase": "recording",
+            "elapsed": 4,
+            "duration": 10,
+            "progress": 0.4,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 8.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 8.15,
+            "duration": 10,
+            "progress": 0.8150000000000001,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 9,
+          "event": {
+            "phase": "recording",
+            "elapsed": 9,
+            "duration": 10,
+            "progress": 0.9,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 10.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 10.15,
+            "duration": 10,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 16.3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 16.3,
+            "duration": 10,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 30,
+          "event": {
+            "phase": "recording",
+            "elapsed": 30,
+            "duration": 10,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        }
+      ]
+    },
+    {
+      "file": "sweep-seg-FL,FR-stereo-6.15s-x",
+      "duration": 11,
+      "segments": [
+        {
+          "speaker": "FL",
+          "index": 1,
+          "total": 2,
+          "start": 2.0,
+          "end": 8.15
+        },
+        {
+          "speaker": "FR",
+          "index": 2,
+          "total": 2,
+          "start": 10.15,
+          "end": 11
+        }
+      ],
+      "events": [
+        {
+          "elapsed": -1,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 11,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 0,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 11,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 2,
+          "event": {
+            "phase": "recording",
+            "elapsed": 2,
+            "duration": 11,
+            "progress": 0.18181818181818182,
+            "speaker": "FL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 3,
+            "duration": 11,
+            "progress": 0.2727272727272727,
+            "speaker": "FL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.16260162601626016,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 4,
+          "event": {
+            "phase": "recording",
+            "elapsed": 4,
+            "duration": 11,
+            "progress": 0.36363636363636365,
+            "speaker": "FL",
+            "segment_index": 1,
+            "segment_total": 2,
+            "segment_progress": 0.3252032520325203,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 8.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 8.15,
+            "duration": 11,
+            "progress": 0.740909090909091,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 9,
+          "event": {
+            "phase": "recording",
+            "elapsed": 9,
+            "duration": 11,
+            "progress": 0.8181818181818182,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 10.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 10.15,
+            "duration": 11,
+            "progress": 0.9227272727272727,
+            "speaker": "FR",
+            "segment_index": 2,
+            "segment_total": 2,
+            "segment_progress": 0.0,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 16.3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 16.3,
+            "duration": 11,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 30,
+          "event": {
+            "phase": "recording",
+            "elapsed": 30,
+            "duration": 11,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 2,
+            "segment_progress": null,
+            "speakers": [
+              "FL",
+              "FR"
+            ],
+            "message": ""
+          }
+        }
+      ]
+    },
+    {
+      "file": "sweep-seg-FL-mono-1s-x",
+      "duration": 1,
+      "segments": [],
+      "events": [
+        {
+          "elapsed": -1,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 1,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 0,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 1,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 2,
+          "event": {
+            "phase": "recording",
+            "elapsed": 2,
+            "duration": 1,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 3,
+            "duration": 1,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 4,
+          "event": {
+            "phase": "recording",
+            "elapsed": 4,
+            "duration": 1,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 8.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 8.15,
+            "duration": 1,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 9,
+          "event": {
+            "phase": "recording",
+            "elapsed": 9,
+            "duration": 1,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 10.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 10.15,
+            "duration": 1,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 16.3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 16.3,
+            "duration": 1,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 30,
+          "event": {
+            "phase": "recording",
+            "elapsed": 30,
+            "duration": 1,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        }
+      ]
+    },
+    {
+      "file": "plain.wav",
+      "duration": 0,
+      "segments": [],
+      "events": [
+        {
+          "elapsed": -1,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 0,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 2,
+          "event": {
+            "phase": "recording",
+            "elapsed": 2,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 3,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 4,
+          "event": {
+            "phase": "recording",
+            "elapsed": 4,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 8.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 8.15,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 9,
+          "event": {
+            "phase": "recording",
+            "elapsed": 9,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 10.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 10.15,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 16.3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 16.3,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 30,
+          "event": {
+            "phase": "recording",
+            "elapsed": 30,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        }
+      ]
+    },
+    {
+      "file": "sweep-seg-XX-stereo-1s-x",
+      "duration": 12,
+      "segments": [],
+      "events": [
+        {
+          "elapsed": -1,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 12,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 0,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 12,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 2,
+          "event": {
+            "phase": "recording",
+            "elapsed": 2,
+            "duration": 12,
+            "progress": 0.16666666666666666,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 3,
+            "duration": 12,
+            "progress": 0.25,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 4,
+          "event": {
+            "phase": "recording",
+            "elapsed": 4,
+            "duration": 12,
+            "progress": 0.3333333333333333,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 8.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 8.15,
+            "duration": 12,
+            "progress": 0.6791666666666667,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 9,
+          "event": {
+            "phase": "recording",
+            "elapsed": 9,
+            "duration": 12,
+            "progress": 0.75,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 10.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 10.15,
+            "duration": 12,
+            "progress": 0.8458333333333333,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 16.3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 16.3,
+            "duration": 12,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 30,
+          "event": {
+            "phase": "recording",
+            "elapsed": 30,
+            "duration": 12,
+            "progress": 0.98,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        }
+      ]
+    },
+    {
+      "file": "plain.wav",
+      "duration": -1,
+      "segments": [],
+      "events": [
+        {
+          "elapsed": -1,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 0,
+          "event": {
+            "phase": "recording",
+            "elapsed": 0.0,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 2,
+          "event": {
+            "phase": "recording",
+            "elapsed": 2,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 3,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 4,
+          "event": {
+            "phase": "recording",
+            "elapsed": 4,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 8.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 8.15,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 9,
+          "event": {
+            "phase": "recording",
+            "elapsed": 9,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 10.15,
+          "event": {
+            "phase": "recording",
+            "elapsed": 10.15,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 16.3,
+          "event": {
+            "phase": "recording",
+            "elapsed": 16.3,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        },
+        {
+          "elapsed": 30,
+          "event": {
+            "phase": "recording",
+            "elapsed": 30,
+            "duration": 0.0,
+            "progress": 0.0,
+            "speaker": null,
+            "segment_index": null,
+            "segment_total": 0,
+            "segment_progress": null,
+            "speakers": [],
+            "message": ""
+          }
+        }
+      ]
+    }
+  ],
+  "analysis": [
+    {
+      "file": "p16_analysis_0.wav",
+      "summary": {
+        "sample_rate": 8000,
+        "channels": 1,
+        "duration": 0.002875,
+        "peak_db": -200.0,
+        "active_channels": 0
+      }
+    },
+    {
+      "file": "p16_analysis_1.wav",
+      "summary": {
+        "sample_rate": 8000,
+        "channels": 3,
+        "duration": 0.004625,
+        "peak_db": -6.020599913279624,
+        "active_channels": 1
+      }
+    },
+    {
+      "file": "p16_analysis_2.wav",
+      "summary": {
+        "sample_rate": 8000,
+        "channels": 2,
+        "duration": 1.000375,
+        "peak_db": -2.498774732165999,
+        "active_channels": 2
+      }
+    }
+  ]
+}

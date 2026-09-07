@@ -731,9 +731,10 @@ fn argument_types_defaults_null_and_unknown_methods() {
             failure(f.call(method, vec![value]), "INVALID_REQUEST");
         }
     }
-    failure(
-        f.call("resolve_recording_paths", vec![json!(9), json!("x.wav")]),
-        "INVALID_REQUEST",
+    // Python _optional_string coerces the preview directory to text.
+    assert_eq!(
+        data(f.call("resolve_recording_paths", vec![json!(9), json!("x.wav")]))["record_path"],
+        Path::new("9").join("x.wav").to_string_lossy().as_ref()
     );
     failure(
         f.call(
@@ -960,7 +961,6 @@ fn backend_errors_panics_and_empty_enumeration() {
 fn deferred_methods_keep_not_implemented_envelopes() {
     let f = Fixture::new();
     for method in [
-        "start_recording",
         "start_output_recovery",
         "check_for_updates",
         "start_update",
