@@ -90,17 +90,39 @@ fn room_and_eq_inputs_use_real_measurements_and_write_responses() {
     assert!(events.0.iter().any(|k| k == "cli_eq_plain_gain_curve"));
 }
 #[test]
-fn eqapo_input_is_rejected_with_filename() {
-    let temp = Temp::new();
-    std::fs::write(temp.0.join("eq.txt"), "Preamp: -3 dB").unwrap();
+fn eqapo_input_is_parsed_and_logged() {
+    // core/pipeline_stages.py:199-291 through stages::eqapo (P12): a preamp and a
+    // peaking filter at 1 kHz become an eq curve whose error is -gain.
+    let temp = Temp::demo();
+    std::fs::write(
+        temp.0.join("eq.txt"),
+        "Preamp: -3 dB\nFilter: ON PK Fc 1000 Hz Gain -6 dB Q 1.0\nFilter: ON XX Fc 1 Hz\n",
+    )
+    .unwrap();
     let config = ProcessingConfig {
         do_room_correction: false,
         do_headphone_compensation: false,
         ..Default::default()
     };
     let dir = discover(&temp.0, &config).unwrap();
-    let estimator = impulcifer_dsp::estimator::SweepEstimator::new(0.1, 8000).unwrap();
-    let error = load_inputs(&dir, &estimator, &config, &mut Events::default()).unwrap_err();
-    assert!(matches!(error, BrirError::Unsupported(_)));
-    assert!(error.to_string().contains("eq.txt"));
+    let estimator = impulcifer_dsp::estimator::SweepEstimator::new(5.0, 48000).unwrap();
+    let mut events = Events::default();
+    let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
+    let left = inputs.eq_left.expect("eq.txt becomes eq_left");
+    // No channel scopes: 2.x applies the single curve to both ears (select_eq_pair).
+    assert_eq!(inputs.eq_right.as_ref(), Some(&left));
+    let at_1k = left.frequency.iter().position(|f| *f >= 1000.0).unwrap();
+    assert!(
+        (left.raw[at_1k] + 9.0).abs() < 0.5,
+        "raw at 1 kHz {}",
+        left.raw[at_1k]
+    );
+    assert!((left.error[at_1k] - 9.0).abs() < 0.5, "error = -gain");
+    assert!(events.0.contains(&"cli_eqapo_detected".to_string()));
+    assert!(events.0.contains(&"cli_eqapo_preamp".to_string()));
+    assert!(
+        events.0.contains(&"cli_eqapo_bypassed_line".to_string()),
+        "unknown XX filter is bypassed"
+    );
+    assert!(!events.0.contains(&"cli_eqapo_channel_split".to_string()));
 }

@@ -145,3 +145,14 @@ cargo test -p impulcifer-service --test ipc --test sweep_grid --test readme_trac
 ## README budgets (parent, 2026-09-08)
 
 The English and Korean README checks compare text and table layout byte for byte and only the numeric cells with a tolerance (`tests/brir_support/mod.rs::readme_differences`). Two regimes were measured: with real room tails (default demo) the PNR moves by about 0.03 dB and the tail length by up to 2 samples through the minimum-phase EQ FIR noise (budget 0.1 dB / 2 ms, ITD exact); with virtual bass the tails are 8th-order filter roll-off at the 1e-8 level, so the Lundeby noise floor is numerical noise and PNR/length differ by up to 3 dB / 11 ms while the written WAVs still agree to 5e-8 (budget 5 dB / 20 ms). `readme_trace.rs` shows the Rust decay analysis reproduces the Python numbers exactly when fed the Python samples, so the README arithmetic itself is verified; the end-to-end numbers are limited by the estimator's sensitivity, not by the port.
+
+### Measured oracle sensitivity of the README numbers (2026-09-08)
+
+`tests/migration/oracle_noise_readme.py` runs the 2.x `core.decay.decay_params` on the Python-side final `FR-left` track of each scenario (`p11_<scenario>_readme_FR-left.f64`) and on copies perturbed by white noise of the stated amplitude (six draws each):
+
+| scenario | tail RMS (second half) | 1e-9 noise: max dPNR / dlen | 5e-8 noise | 1e-6 noise |
+|---|---|---|---|---|
+| default | 1.19e-6 (-118.5 dBFS) | 0.70 dB / 0.04 ms | 26.0 dB / 21.3 ms | 52.2 dB / 284.8 ms |
+| vbass | 2.35e-8 (-152.6 dBFS) | 37.2 dB / 104.1 ms | 71.1 dB / 387.2 ms | 97.2 dB / 484.9 ms |
+
+The Lundeby estimate is a threshold search on windowed energies, so once the tail is at the numerical noise floor (the virtual-bass tails are 8th-order filter roll-off at 2e-8) a perturbation far below one PCM_32 LSB (4.7e-10) moves the reported PNR by tens of dB in Python itself. Byte-exact README parity is therefore not a property the 2.x oracle has, and the parity gate compares the README numbers with the budgets above while the WAVs (the actual outputs) agree to 5e-8.

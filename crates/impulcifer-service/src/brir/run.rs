@@ -46,6 +46,9 @@ impl BrirEvents for Events<'_> {
     fn check_cancelled(&self) -> Result<(), BrirError> {
         self.ctx.check_cancelled().map_err(|_| BrirError::Cancelled)
     }
+    fn translate(&self, key: &str) -> String {
+        self.catalog.translate(key, &json!({}))
+    }
 }
 fn stage_key(key: StageKey) -> Option<&'static str> {
     use StageKey::*;

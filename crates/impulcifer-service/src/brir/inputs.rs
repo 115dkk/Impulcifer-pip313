@@ -5,7 +5,8 @@ use impulcifer_dsp::{
     hrir::Hrir,
     pipeline::PipelineInputs,
     stages::{
-        eq_files::{finalize_eq, looks_like_eqapo_config, read_eq_settings_csv, select_eq_pair},
+        eq_files::{finalize_eq, looks_like_eqapo_config, read_eq_settings, select_eq_pair},
+        eqapo::EqApoLoader,
         headphone::headphone_compensation,
         room::{self, FrCombination, RoomCorrectionOptions},
     },
@@ -42,37 +43,95 @@ fn csv(path: &Path) -> Result<FrequencyResponse, BrirError> {
         &text.replace("\r\n", "\n").replace('\r', "\n"),
     )?)
 }
-fn eq(
-    path: Option<&Path>,
-    events: &mut dyn BrirEvents,
-) -> Result<Option<FrequencyResponse>, BrirError> {
-    let Some(path) = path else {
-        return Ok(None);
-    };
-    let bytes = std::fs::read(path)?;
-    // Windows-1252 fallback, matching the oracle's initial format detection.
-    let text = match std::str::from_utf8(&bytes) {
+/// Python's text decoding for eq files: utf-8-sig first, then cp1252.
+fn decode_text(bytes: &[u8]) -> String {
+    match std::str::from_utf8(bytes) {
         Ok(s) => s.trim_start_matches('\u{feff}').to_owned(),
         Err(_) => bytes.iter().map(|b| cp1252(*b)).collect(),
     }
     .replace("\r\n", "\n")
-    .replace('\r', "\n");
-    if looks_like_eqapo_config(&text) {
-        return Err(BrirError::Unsupported(format!(
-            "{}: EqualizerAPO requires P12",
-            path.display()
-        )));
+    .replace('\r', "\n")
+}
+/// File access for `Include:` and `Convolution:` lines of an EqualizerAPO
+/// config (the dsp parser is file-free; core/eqapo.py:593-600, 860-874).
+struct FileLoader;
+impl EqApoLoader for FileLoader {
+    fn read_text(&mut self, path: &Path) -> Result<String, String> {
+        std::fs::read(path)
+            .map(|bytes| decode_text(&bytes))
+            .map_err(|e| e.to_string())
     }
+    fn read_wav(&mut self, path: &Path) -> Result<(u32, Vec<Vec<f64>>), String> {
+        read_wav(path)
+            .map(|w| (w.sample_rate, w.tracks))
+            .map_err(|e| e.to_string())
+    }
+}
+/// Python `%g` for the preamp report (core/pipeline_stages.py:254-258).
+fn fmt_g(v: f64) -> String {
+    if v == v.trunc() && v.abs() < 1e15 {
+        format!("{}", v as i64)
+    } else {
+        let s = format!("{v:.6}");
+        s.trim_end_matches('0').trim_end_matches('.').to_owned()
+    }
+}
+const EQAPO_MAX_BYPASS_WARNINGS: usize = 20;
+/// Python _read_eq_settings, core/pipeline_stages.py:199-291: a plain CSV or
+/// an EqualizerAPO config, returning (left, right-when-channel-split).
+fn eq(
+    path: Option<&Path>,
+    fs: u32,
+    events: &mut dyn BrirEvents,
+) -> Result<Option<(FrequencyResponse, Option<FrequencyResponse>)>, BrirError> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    let text = decode_text(&std::fs::read(path)?);
     let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-    let raw = FrequencyResponse::parse_csv(name, &text)?;
-    if raw.error.is_empty() && !raw.raw.is_empty() {
+    let file = path.file_name().unwrap().to_string_lossy().into_owned();
+    if !looks_like_eqapo_config(&text) {
+        let raw = FrequencyResponse::parse_csv(name, &text)?;
+        if raw.error.is_empty() && !raw.raw.is_empty() {
+            events.log("info", "cli_eq_plain_gain_curve", json!({"file":file}));
+        }
+    }
+    let frequency = impulcifer_dsp::fr::generate_frequencies(10.0, f64::from(fs) / 2.0, 1.01);
+    let (left, right, report) =
+        read_eq_settings(name, &text, fs, &frequency, path.parent(), &mut FileLoader)?;
+    if let Some(report) = report {
         events.log(
             "info",
-            "cli_eq_plain_gain_curve",
-            json!({"file":path.file_name().unwrap().to_string_lossy()}),
+            "cli_eqapo_detected",
+            json!({"file":file,"applied":report.applied.len(),"bypassed":report.bypassed.len(),"skipped":report.skipped_count}),
         );
+        if report.preamp_left != 0.0 || report.preamp_right != 0.0 {
+            events.log(
+                "info",
+                "cli_eqapo_preamp",
+                json!({"left":fmt_g(report.preamp_left),"right":fmt_g(report.preamp_right)}),
+            );
+        }
+        for item in report.bypassed.iter().take(EQAPO_MAX_BYPASS_WARNINGS) {
+            let reason = events.translate(&format!("cli_eqapo_reason_{}", item.reason));
+            events.log(
+                "warning",
+                "cli_eqapo_bypassed_line",
+                json!({"line":item.line_number,"command":item.command,"reason":reason}),
+            );
+        }
+        if report.bypassed.len() > EQAPO_MAX_BYPASS_WARNINGS {
+            events.log(
+                "warning",
+                "cli_eqapo_bypassed_more",
+                json!({"count":report.bypassed.len() - EQAPO_MAX_BYPASS_WARNINGS}),
+            );
+        }
+        if report.channel_split {
+            events.log("info", "cli_eqapo_channel_split", json!({}));
+        }
     }
-    Ok(Some(read_eq_settings_csv(name, &text)?))
+    Ok(Some((left, right)))
 }
 fn cp1252(b: u8) -> char {
     const HIGH: [char; 32] = [
@@ -217,10 +276,15 @@ pub fn load_inputs(
         if dir.eq.deprecated_wav {
             events.log("warning", "cli_warning_eq_wav_deprecated", json!({}));
         }
-        let common = eq(dir.eq.common.as_deref(), events)?;
-        let left = eq(dir.eq.left.as_deref(), events)?;
-        let right = eq(dir.eq.right.as_deref(), events)?;
-        (eq_left, eq_right) = select_eq_pair(common, None, left, right);
+        // Python: eq.csv|txt may be channel-split; eq-left takes a file's left
+        // curve, eq-right takes its right curve when split, else its only one.
+        let (common, common_right) = match eq(dir.eq.common.as_deref(), fs, events)? {
+            Some((l, r)) => (Some(l), r),
+            None => (None, None),
+        };
+        let left = eq(dir.eq.left.as_deref(), fs, events)?.map(|(l, _)| l);
+        let right = eq(dir.eq.right.as_deref(), fs, events)?.map(|(l, r)| r.unwrap_or(l));
+        (eq_left, eq_right) = select_eq_pair(common, common_right, left, right);
         (eq_left, eq_right) = finalize_eq(eq_left, eq_right, fs)?;
         events.check_cancelled()?;
     }

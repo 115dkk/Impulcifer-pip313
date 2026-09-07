@@ -93,4 +93,10 @@ pub trait BrirEvents {
     fn step(&mut self, key: &str, args: Value) -> Result<(), BrirError>;
     fn log(&mut self, level: &str, key: &str, args: Value);
     fn check_cancelled(&self) -> Result<(), BrirError>;
+    /// Translate a catalogue key for messages that embed translated text as an
+    /// argument (2.x passes `loc.get("cli_eqapo_reason_*")` into the bypass
+    /// warning). The default returns the key itself.
+    fn translate(&self, key: &str) -> String {
+        key.to_owned()
+    }
 }
