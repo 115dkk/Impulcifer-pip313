@@ -241,18 +241,40 @@ fn contains_command_constructor(src: &str) -> bool {
     })
 }
 
-/// `Command::new(` counts only when the file reaches `std::process` (clap's
-/// `Command::new("impulcifer")` in the CLI is a parser, not a subprocess).
-fn uses_process_command(src: &str) -> bool {
+/// A file spawns processes when it names the type `process::Command` at all
+/// (directly, through `use ... as Alias`, or through a `type` alias), imports
+/// `std::process::*`, or reaches `std::process` and constructs an identifier
+/// literally called `Command`. clap's `Command::new("impulcifer")` in the CLI is
+/// a parser and never reaches `std::process`, so it stays allowed.
+fn forbidden_subprocess(relative: &Path, src: &str) -> bool {
+    if relative == Path::new("crates/impulcifer-io/src/ffmpeg.rs") {
+        return false;
+    }
     let code = strip_comments_and_strings(src);
-    code.contains("std::process") || code.contains("process::Command")
+    if names_process_command(&code) || code.contains("std::process::*") {
+        return true;
+    }
+    code.contains("std::process")
+        && (contains_command_constructor(&code) || contains_command_constructor(src))
 }
 
-fn forbidden_subprocess(relative: &Path, src: &str) -> bool {
-    relative != Path::new("crates/impulcifer-io/src/ffmpeg.rs")
-        && uses_process_command(src)
-        && (contains_command_constructor(&strip_comments_and_strings(src))
-            || contains_command_constructor(src))
+/// `process::Command`, `process::{Command as X, ..}`, `process::{self, Command}`:
+/// every way a path names the `Command` type of the `process` module.
+fn names_process_command(code: &str) -> bool {
+    code.match_indices("process::").any(|(index, _)| {
+        let rest = code[index + "process::".len()..].trim_start();
+        if let Some(group) = rest.strip_prefix('{') {
+            let inner = group.split('}').next().unwrap_or("");
+            inner.split(',').any(|item| is_command_ident(item.trim()))
+        } else {
+            is_command_ident(rest)
+        }
+    })
+}
+
+fn is_command_ident(text: &str) -> bool {
+    text.strip_prefix("Command")
+        .is_some_and(|after| !after.starts_with(|c: char| c.is_alphanumeric() || c == '_'))
 }
 
 #[test]
@@ -298,10 +320,26 @@ fn subprocess_scanner_checks_code_raw_text_and_exact_allowlist() {
             assert!(forbidden_subprocess(Path::new(impostor), src));
         }
     }
+    // Codex on PR #191: aliases must not slip through.
+    for src in [
+        "use std::process::Command as Shell;\nShell::new(\"cmd.exe\")",
+        "type Launcher = std::process::Command;\nLauncher::new(\"cmd.exe\")",
+        "use std::process::{Command as Sh, Stdio};\nSh::new(\"sh\")",
+        "use std::process::*;\nCommand::new(\"date\")",
+        "use std::process as p;\np::Command::new(\"uname\")",
+    ] {
+        assert!(forbidden_subprocess(service, src), "{src}");
+    }
+    // Naming the type is the violation, whatever is called on it.
     for src in [
         "use std::process::Command;\nCommand::newer()",
         "use std::process::Command;\nOtherCommand::new()",
-        "use std::process::Command;\ncommand()",
+    ] {
+        assert!(forbidden_subprocess(service, src), "{src}");
+    }
+    for src in [
+        "std::process::exit(1)",
+        "use std::process::Stdio;\ncommand()",
         // clap's parser builder, as in crates/impulcifer-cli/src/options.rs
         "use clap::{Arg, Command};\nlet c = Command::new(\"impulcifer\");",
     ] {
