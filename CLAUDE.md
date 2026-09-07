@@ -105,6 +105,7 @@ updater/
 - **작업 분배.** unsafe 단인 `impulcifer-sys-win`은 Daybreak 워커, 나머지 크레이트(`impulcifer-audio-io` 포함)는 ASTRA 워커가 작업서 단위로 구현한다. 작업서는 `docs/rust/packets/`에 둔다.
 - **CI.** `.github/workflows/rust.yml`이 fmt·clippy·게이트·3 OS 테스트를 돈다. Rust 경로는 릴리스 게이트의 `EXCLUDE`에 있어 2.x 발행을 건드리지 않는다.
 - **로컬 검증.** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- --no-deps -D warnings`, `cargo test --workspace`.
+- **성능 감사.** 크레이트가 착륙하면 ASTRA에게 `docs/rust/packets/PA-astra-perf-audit.md` 기반의 `PAnn-astra-perf-<crate>.md`를 맡겨 같은 머신에서 2.x 파이썬과 비교 측정한다(`benches/perf.rs` 대 `tests/migration/bench_oracle_<crate>.py`). 모든 연산에서 파이썬 이상이어야 하고 골든은 그대로 통과해야 하며, 보고서는 `docs/rust/perf/<crate>.md`, 등록부 항목은 `perf.<crate>`다. 파이프라인 전체(M2)와 출시 전(M5)에 한 번씩 더 돈다. 파이썬보다 느리면 완료가 아니다.
 
 ## 수정 시 주의사항
 
