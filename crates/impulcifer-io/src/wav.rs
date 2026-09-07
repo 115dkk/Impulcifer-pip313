@@ -199,28 +199,28 @@ pub fn read_wav(path: &Path) -> Result<Wav, IoError> {
         .try_reserve_exact(fmt.channels)
         .map_err(|e| format_error(&e.to_string()))?;
     for _ in 0..fmt.channels {
-        let mut track = Vec::new();
-        track
-            .try_reserve_exact(frames)
-            .map_err(|e| format_error(&e.to_string()))?;
-        tracks.push(track);
+        tracks.push(Vec::new());
     }
     reader.seek(SeekFrom::Start(start))?;
-    let width = usize::from(fmt.bits / 8);
-    for _ in 0..frames {
-        for track in &mut tracks {
-            let mut b = [0; 8];
-            reader.read_exact(&mut b[..width])?;
-            let sample = match (fmt.float, fmt.bits) {
-                (true, 32) => f32::from_le_bytes(b[..4].try_into().unwrap()) as f64,
-                (true, 64) => f64::from_le_bytes(b),
-                (false, 16) => i16::from_le_bytes(b[..2].try_into().unwrap()) as f64 / 32768.0,
-                (false, 24) => ((u32le(&b) << 8) as i32 >> 8) as f64 / 8388608.0,
-                (false, 32) => i32::from_le_bytes(b[..4].try_into().unwrap()) as f64 / 2147483648.0,
-                _ => unreachable!(),
-            };
-            track.push(sample);
-        }
+    // Dispatch once, then decode bounded frame blocks into contiguous track runs.
+    // Validation above is unchanged, including every RIFF/RF64 chunk boundary.
+    match (fmt.float, fmt.bits) {
+        (true, 32) => decode_blocks::<4>(&mut reader, &mut tracks, frames, |b| {
+            f32::from_le_bytes(b.try_into().unwrap()) as f64
+        })?,
+        (true, 64) => decode_blocks::<8>(&mut reader, &mut tracks, frames, |b| {
+            f64::from_le_bytes(b.try_into().unwrap())
+        })?,
+        (false, 16) => decode_blocks::<2>(&mut reader, &mut tracks, frames, |b| {
+            i16::from_le_bytes(b.try_into().unwrap()) as f64 / 32768.0
+        })?,
+        (false, 24) => decode_blocks::<3>(&mut reader, &mut tracks, frames, |b| {
+            ((u32::from_le_bytes([b[0], b[1], b[2], 0]) << 8) as i32 >> 8) as f64 / 8388608.0
+        })?,
+        (false, 32) => decode_blocks::<4>(&mut reader, &mut tracks, frames, |b| {
+            i32::from_le_bytes(b.try_into().unwrap()) as f64 / 2147483648.0
+        })?,
+        _ => unreachable!(),
     }
     Ok(Wav {
         sample_rate: fmt.rate,
@@ -228,11 +228,140 @@ pub fn read_wav(path: &Path) -> Result<Wav, IoError> {
     })
 }
 
+fn decode_blocks<const WIDTH: usize>(
+    reader: &mut impl Read,
+    tracks: &mut [Vec<f64>],
+    frames: usize,
+    decode: impl Fn(&[u8]) -> f64 + Sync,
+) -> Result<(), IoError> {
+    match tracks.len() {
+        1 => decode_channels::<WIDTH, 1>(reader, tracks, frames, decode),
+        2 => decode_channels::<WIDTH, 2>(reader, tracks, frames, decode),
+        8 => decode_channels::<WIDTH, 8>(reader, tracks, frames, decode),
+        30 => decode_channels::<WIDTH, 30>(reader, tracks, frames, decode),
+        32 => decode_channels::<WIDTH, 32>(reader, tracks, frames, decode),
+        _ => decode_channels::<WIDTH, 0>(reader, tracks, frames, decode),
+    }
+}
+
+fn decode_channels<const WIDTH: usize, const CHANNELS: usize>(
+    reader: &mut impl Read,
+    tracks: &mut [Vec<f64>],
+    frames: usize,
+    decode: impl Fn(&[u8]) -> f64 + Sync,
+) -> Result<(), IoError> {
+    // Common mono, stereo, decoded surround and BRIR layouts have a constant
+    // stride, eliminating runtime division and enabling loop unrolling.
+    let channels = if CHANNELS == 0 {
+        tracks.len()
+    } else {
+        CHANNELS
+    };
+    let align = channels * WIDTH;
+    // Large BRIR layouts amortize four scoped workers; smaller inputs retain
+    // bounded streaming reads. Share only encoded bytes, and allocate each
+    // disjoint output group on its worker rather than serializing allocation.
+    if CHANNELS >= 30 && frames >= 32768 {
+        let size = frames
+            .checked_mul(align)
+            .ok_or_else(|| format_error("data size exceeds address space"))?;
+        thread_local! {
+            static INPUT_BYTES: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+        }
+        let mut bytes = INPUT_BYTES.take();
+        bytes.clear();
+        bytes
+            .try_reserve_exact(size)
+            .map_err(|e| format_error(&e.to_string()))?;
+        reader.take(size as u64).read_to_end(&mut bytes)?;
+        if bytes.len() != size {
+            return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof).into());
+        }
+        let samples = bytes.as_chunks::<WIDTH>().0.as_chunks::<CHANNELS>().0;
+        std::thread::scope(|scope| -> Result<(), IoError> {
+            let mut workers = Vec::new();
+            workers
+                .try_reserve_exact(4)
+                .map_err(|e| format_error(&e.to_string()))?;
+            for (group, tracks) in tracks.chunks_mut(CHANNELS.div_ceil(4)).enumerate() {
+                let decode = &decode;
+                let worker = std::thread::Builder::new().spawn_scoped(
+                    scope,
+                    move || -> Result<(), IoError> {
+                        for track in tracks.iter_mut() {
+                            track
+                                .try_reserve_exact(frames)
+                                .map_err(|e| format_error(&e.to_string()))?;
+                        }
+                        for tile in samples.chunks(256) {
+                            for (offset, track) in tracks.iter_mut().enumerate() {
+                                let channel = group * CHANNELS.div_ceil(4) + offset;
+                                assert!(channel < CHANNELS);
+                                track.extend(tile.iter().map(|frame| decode(&frame[channel])));
+                            }
+                        }
+                        Ok(())
+                    },
+                );
+                workers.push(worker?);
+            }
+            for worker in workers {
+                worker.join().unwrap()?;
+            }
+            Ok(())
+        })?;
+        // Reuse capacity only; every call rereads the file. Cap the
+        // per-caller cache so an unusually large RF64 read cannot pin its buffer.
+        if bytes.capacity() <= 16 * 1024 * 1024 {
+            bytes.clear();
+            INPUT_BYTES.set(bytes);
+        }
+        return Ok(());
+    }
+    for track in tracks.iter_mut() {
+        track
+            .try_reserve_exact(frames)
+            .map_err(|e| format_error(&e.to_string()))?;
+    }
+    let block_frames = (262144 / align).max(1);
+    let mut bytes = vec![0; block_frames * align];
+    for start in (0..frames).step_by(block_frames) {
+        let count = (frames - start).min(block_frames);
+        let block = &mut bytes[..count * align];
+        reader.read_exact(block)?;
+        // Transpose cache-sized tiles without reducing the file read size.
+        // In particular, 32-channel strides must not revisit a 256 KiB block
+        // once per channel, displacing the other channels' cache lines.
+        for tile in block.chunks(256 * align) {
+            if CHANNELS >= 8 {
+                let samples = tile.as_chunks::<WIDTH>().0.as_chunks::<CHANNELS>().0;
+                for (channel, track) in tracks.iter_mut().enumerate() {
+                    assert!(channel < CHANNELS);
+                    track.extend(samples.iter().map(|frame| decode(&frame[channel])));
+                }
+            } else {
+                for (channel, track) in tracks.iter_mut().enumerate() {
+                    track.extend(
+                        tile.chunks_exact(align)
+                            .map(|frame| decode(&frame[channel * WIDTH..(channel + 1) * WIDTH])),
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// libsndfile 1.2.2 normalized/clipped double conversion: scale by 2^31,
 /// round ties to even, saturate to i32; PCM16/24 discard low 16/8 bits using
 /// an arithmetic shift. This is NOT nearest rounding at the target bit depth.
 fn quantize(value: f64) -> i32 {
-    (value * 2147483648.0).round_ties_even() as i32
+    // After saturation, adding signed 2^52 rounds to an integral f64 with
+    // ties-to-even. Subtraction is exact. Avoid a scalar roundeven libcall
+    // per sample on baseline x86 targets without an enabled SSE4.1 target.
+    let scaled = (value * 2147483648.0).clamp(i32::MIN as f64, i32::MAX as f64);
+    let integral_grid = 4503599627370496.0_f64.copysign(scaled);
+    ((scaled + integral_grid) - integral_grid) as i32
 }
 
 /// Quantize through PCM_32 and read back as f64, like the sweep oracle.
@@ -251,6 +380,31 @@ pub fn pcm32_round_trip(tracks: &[Vec<f64>]) -> Vec<Vec<f64>> {
                 .collect()
         })
         .collect()
+}
+
+fn encode_blocks<const WIDTH: usize>(
+    out: &mut impl Write,
+    tracks: &[Vec<f64>],
+    frames: usize,
+) -> Result<(), IoError> {
+    let align = tracks.len() * WIDTH;
+    let block_frames = (65536 / align).max(1);
+    let mut bytes = vec![0; block_frames * align];
+    for start in (0..frames).step_by(block_frames) {
+        let count = (frames - start).min(block_frames);
+        let block = &mut bytes[..count * align];
+        for (channel, track) in tracks.iter().enumerate() {
+            for (&sample, frame) in track[start..start + count]
+                .iter()
+                .zip(block.chunks_exact_mut(align))
+            {
+                frame[channel * WIDTH..(channel + 1) * WIDTH]
+                    .copy_from_slice(&quantize(sample).to_le_bytes()[4 - WIDTH..]);
+            }
+        }
+        out.write_all(block)?;
+    }
+    Ok(())
 }
 
 /// Writes integer PCM only. Multichannel files use extensible DIRECTOUT
@@ -317,11 +471,11 @@ pub fn write_wav(
     }
     out.write_all(b"data")?;
     out.write_all(&(size as u32).to_le_bytes())?;
-    for frame in 0..frames {
-        for track in tracks {
-            let bytes = quantize(track[frame]).to_le_bytes();
-            out.write_all(&bytes[4 - usize::from(bit_depth / 8)..])?;
-        }
+    match bit_depth {
+        16 => encode_blocks::<2>(&mut out, tracks, frames)?,
+        24 => encode_blocks::<3>(&mut out, tracks, frames)?,
+        32 => encode_blocks::<4>(&mut out, tracks, frames)?,
+        _ => unreachable!(),
     }
     if size & 1 != 0 {
         out.write_all(&[0])?;

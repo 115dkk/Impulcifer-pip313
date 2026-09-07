@@ -13,3 +13,10 @@ impulcifer-types = { path = "../impulcifer-types" }
 serde_json.workspace = true
 thiserror.workspace = true
 
+[[bench]]
+name = "perf"
+harness = false
+# The bench main shells out to Python for the paired fixture; `cargo test` must
+# not run it (CI runners have no `python`). The smoke test covers the bench code.
+test = false
+

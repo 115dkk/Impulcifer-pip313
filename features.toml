@@ -898,9 +898,9 @@ tests = ["impulcifer-dsp::golden_magnitude_to_frequency_response_matches_python"
 [[feature]]
 id = "perf.impulcifer-io"
 kind = "perf"
-status = "planned"
-tests = []
-note = "PA01: WAV read/write, pcm32 round trip, sweep names vs soundfile / core.audio_io on py -3.14 (audit running)"
+status = "implemented"
+tests = ["impulcifer-io::bench_smoke_impulcifer_io"]
+note = "PA01 (docs/rust/perf/impulcifer-io.md): 9 ops, python/rust 1.18 to 4.79 against CPython 3.14.5 and 3.14.7t; block I/O, const-width PCM, 4 scoped threads for 30/32-track reads"
 
 [[feature]]
 id = "perf.impulcifer-dsp"
