@@ -2,7 +2,7 @@
 
 Follow `E:/Impulcifer/docs/rust/packets/PA-astra-perf-audit.md` exactly (method, allowed files, hard rules, verification, report). This file only names the crate and its operations. Read the crate first: `E:/Impulcifer/crates/impulcifer-io/src/{wav,ffmpeg,sweep_files}.rs` and the 2.x oracle `E:/Impulcifer/core/audio_io.py` (`read_wav`, `write_wav`), `E:/Impulcifer/core/sweep_signal.py` lines 130 to 205 (the PCM_32 round trip), `E:/Impulcifer/core/hrir.py` lines 427 to 474 (how `write_wav` is fed: 32 tracks, `bit_depth=32`).
 
-Run every command in the foreground. Never use background execution. Other workers are editing `crates/impulcifer-dsp/**`, `tests/migration/export_goldens.py`, `tests/migration/README.md` and `features.toml`; do not touch those.
+Run every command in the foreground. Never use background execution. The Python side of the benchmark runs with `py -3.14` (CPython 3.14.5 with the 2.x requirements), never with the default `python`. Other workers are editing `crates/impulcifer-dsp/**`, `tests/migration/export_goldens.py`, `tests/migration/README.md` and `features.toml`; do not touch those.
 
 ## Operations and sizes (the 2.x pipeline on `data/demo` at 48 kHz)
 
