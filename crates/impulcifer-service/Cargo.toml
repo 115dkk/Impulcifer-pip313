@@ -19,3 +19,8 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
+[[bench]]
+name = "perf"
+harness = false
+test = false
+

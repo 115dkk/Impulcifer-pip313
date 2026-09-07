@@ -963,7 +963,7 @@ note = "IPC call and job event overhead vs the 2.x pywebview bridge; after M3"
 id = "perf.pipeline-demo"
 kind = "perf"
 status = "planned"
-tests = []
+tests = ["impulcifer-service::bench_smoke_pipeline_demo"]
 note = "M2: whole demo BRIR run (time and peak RSS) vs python impulcifer.py on py -3.14 and 3.14t"
 
 [[feature]]
