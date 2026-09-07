@@ -1957,6 +1957,7 @@ name = "impulcifer-io"
 version = "3.0.0-alpha.0"
 dependencies = [
  "impulcifer-types",
+ "serde_json",
  "thiserror 2.0.20",
 ]
 

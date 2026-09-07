@@ -23,6 +23,9 @@ been fixed and old features improved.
 - **`impulcifer-jobs`·`impulcifer-service` (P04)**: 단일 활성 잡·UUID4 id·seq 저널(2,000개 상한)·취소 전이·패닉의 INTERNAL_ERROR 변환을 갖춘 잡 레지스트리와, 2.x pywebview 봉투 그대로의 IPC 메서드 15개(bootstrap, get_ui_settings, set_language/theme/skin/frontend, get_system_info, list_audio_devices, poll_job, cancel_job, resolve_recording_paths, open_path, open_url, select_file, select_directory). 2.x의 `~/.impulcifer/settings.json`을 그대로 읽고 쓴다. 테스트 35개.
 - **`impulcifer-audio-io` 측정 세션과 cpal 백엔드 (P02)**: exclusive 우선/형식 거부 시에만 shared+auto-convert로 폴백하는 open 정책, 2.x `play_and_record`와 같은 순서의 2스레드 세션(입력 준비 확인 → 출력 재생·드레인 → 입력 정지 → 조인)과 이벤트·취소·정리, 모든 OS에서 컴파일되는 cpal 0.18 백엔드. 가짜 백엔드 세션 테스트 11개, 백엔드 단위 7개, 실기 2개(VB-Cable 왕복 -26.02 dBFS 확인).
 - **Tauri 호스트 어댑터**: `pywebview_api` 커맨드가 async + spawn_blocking으로 돌고, 파일/폴더 선택은 dialog 플러그인(2.x와 같은 필터), open_path/open_url은 opener 플러그인, 타이틀바 테마는 창 `set_theme`에 연결됐다. 시작 시 저장된 테마를 먼저 적용한다.
+- **`impulcifer-dsp` 2차 프리미티브 (P05)**: firwin2, homomorphic minimum_phase(설치된 SciPy 1.18.0의 lifter 규칙, 골든은 `scipy.signal.minimum_phase` 출력 그대로), Savitzky-Golay(interp 경계), find_peaks 플래토 규칙과 2.x 첫 피크 탐색, FITPACK k=1/2/3 보간과 ext=0 외삽, 로그 축 보간을 구현했고 골든 175개와 테스트 17개로 고정했다. 워커의 첫 구현이 SciPy 1.17.1 lifter를 전사했던 것을 설치본(오라클) 기준으로 되돌렸고, 빈 입력의 피크 탐색은 Python처럼 0을 돌려준다.
+- **`impulcifer-io` WAV·ffmpeg·스윕 파일명 (P07)**: RIFF/RF64 읽기(PCM 16/24/32, float 32/64, EXTENSIBLE), libsndfile과 바이트 동일한 PCM_16/24/32 쓰기(2^31 스케일·짝수 반올림·포화·시프트, 3트랙 이상은 DIRECTOUT 마스크), `pcm32_round_trip`, ffmpeg/ffprobe 검색·TrueHD/Atmos 판정·디코드(인자 배열, 셸 없음), 스윕 파일명 생성·파싱과 세그먼트 추론을 구현했다. 워커가 직접 만든 JSON 파서는 워크스페이스 serde_json으로 바꿨고, 그 과정에서 serde_json 기본 float 파서가 골든 값을 1 ULP 어긋나게 읽는 것을 확인해 워크스페이스 전체에 `float_roundtrip` 기능을 켰다.
+- **작업서 P06**: nnresample 32001탭 설계·polyphase resample_poly·spectrogram 작업서를 `docs/rust/packets/`에 추가했다.
 
 ## 2.14.0 - 2026-09-05
 ### 불필요한 무음 확장 채널 자동 제거
