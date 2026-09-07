@@ -966,9 +966,9 @@ note = "WASAPI open/probe latency vs PortAudio WASAPI; after M3"
 [[feature]]
 id = "perf.impulcifer-service"
 kind = "perf"
-status = "planned"
-tests = []
-note = "IPC call and job event overhead vs the 2.x pywebview bridge; after M3"
+status = "implemented"
+tests = ["impulcifer-service::bench_smoke_impulcifer_service"]
+note = "PA04 (docs/rust/perf/impulcifer-service.md): 9 ops, python/rust 1.5 to 16.6 against CPython 3.14.5 and 3.14.7t (bootstrap, settings, resolve paths, job start latency, poll drain, event emit, detect_sweep header-first, single-pass translate); catalogue parsed once per language, event payloads not cloned, JobRegistry::join"
 
 [[feature]]
 id = "perf.pipeline-demo"

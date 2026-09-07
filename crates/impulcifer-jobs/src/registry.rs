@@ -30,6 +30,7 @@ struct Job {
     snapshot: JobSnapshot,
     cancel: CancelToken,
     events: VecDeque<(JobEvent, u64)>,
+    worker: Option<std::thread::JoinHandle<()>>,
 }
 
 pub struct JobHandle {
@@ -137,6 +138,7 @@ impl JobRegistry {
             },
             cancel: cancel.clone(),
             events: VecDeque::new(),
+            worker: None,
         };
         job.append(JobEventKind::Status, json!({"status": "running"}));
         let snapshot = job.snapshot.clone();
@@ -159,12 +161,41 @@ impl JobRegistry {
                     }));
                 context.registry.finish(&context.job_id, result);
             });
-        if worker.is_err() {
-            inner.jobs.pop_back();
-            inner.active = None;
-            return Err(ErrorCode::InternalError);
+        match worker {
+            Ok(worker) => inner.jobs.back_mut().expect("new job").worker = Some(worker),
+            Err(_) => {
+                inner.jobs.pop_back();
+                inner.active = None;
+                return Err(ErrorCode::InternalError);
+            }
         }
         Ok(snapshot)
+    }
+
+    /// Wait for a retained worker to exit, without holding the journal lock.
+    /// Headless callers use this after cancellation to release resources before
+    /// removing temporary inputs. Calling from the worker itself is rejected.
+    pub fn join(&self, job_id: &str) -> Result<(), ErrorCode> {
+        let worker = {
+            let mut inner = lock(&self.inner);
+            let job = inner
+                .jobs
+                .iter_mut()
+                .find(|job| job.snapshot.job_id == job_id)
+                .ok_or(ErrorCode::JobNotFound)?;
+            if job
+                .worker
+                .as_ref()
+                .is_some_and(|worker| worker.thread().id() == std::thread::current().id())
+            {
+                return Err(ErrorCode::InvalidRequest);
+            }
+            job.worker.take()
+        };
+        if let Some(worker) = worker {
+            worker.join().map_err(|_| ErrorCode::InternalError)?;
+        }
+        Ok(())
     }
 
     pub fn poll(&self, job_id: &str, after_seq: u64) -> Result<PollResult, ErrorCode> {
@@ -314,6 +345,43 @@ impl JobSink for JobContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn join_waits_for_worker_cleanup_and_rejects_self_join() {
+        let registry = JobRegistry::new();
+        assert_eq!(registry.join("missing"), Err(ErrorCode::JobNotFound));
+        let cleaned = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        struct Cleanup(Arc<std::sync::atomic::AtomicBool>);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        let cleanup = Cleanup(cleaned.clone());
+        let job = registry
+            .start(JobKind::Brir, true, move |ctx| {
+                let _cleanup = cleanup;
+                assert_eq!(
+                    ctx.registry.join(&ctx.job_id),
+                    Err(ErrorCode::InvalidRequest)
+                );
+                Ok(json!({}))
+            })
+            .unwrap();
+        // Wait until the body has exercised the self-join check, then join.
+        while !registry
+            .poll(&job.job_id, 0)
+            .unwrap()
+            .job
+            .status
+            .is_terminal()
+        {
+            std::thread::yield_now();
+        }
+        registry.join(&job.job_id).unwrap();
+        assert!(cleaned.load(std::sync::atomic::Ordering::SeqCst));
+        registry.join(&job.job_id).unwrap();
+    }
+
     #[test]
     fn poisoned_registry_lock_is_recovered() {
         let registry = JobRegistry::new();

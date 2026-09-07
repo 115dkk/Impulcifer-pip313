@@ -124,7 +124,12 @@ impl ImpulciferService {
             return args::invalid(format!("unknown method: {name}"));
         };
         self.execute(method, args)
-            .map(ipc::ok)
+            .map(|data| {
+                Value::Object(serde_json::Map::from_iter([
+                    ("ok".to_owned(), Value::Bool(true)),
+                    ("data".to_owned(), data),
+                ]))
+            })
             .unwrap_or_else(|error| error)
     }
 
@@ -248,8 +253,23 @@ impl ImpulciferService {
                     .jobs
                     .poll(&id, args.after_seq()?)
                     .map_err(|code| self.job_error(code, &id))?;
-                let events: Vec<_> = poll.events.iter().map(|event| json!({"seq":event.seq,"timestamp_ms":poll.timestamps_ms[&event.seq],"type":event.kind,"payload":event.payload})).collect();
-                Ok(json!({"job":snapshot(&poll.job),"events":events,"next_seq":poll.next_seq}))
+                let events = poll
+                    .events
+                    .into_iter()
+                    .map(|event| {
+                        let mut value = serde_json::Map::new();
+                        value.insert("seq".into(), json!(event.seq));
+                        value.insert("timestamp_ms".into(), json!(poll.timestamps_ms[&event.seq]));
+                        value.insert("type".into(), json!(event.kind));
+                        value.insert("payload".into(), event.payload);
+                        Value::Object(value)
+                    })
+                    .collect();
+                Ok(Value::Object(serde_json::Map::from_iter([
+                    ("job".to_owned(), snapshot(&poll.job)),
+                    ("events".to_owned(), Value::Array(events)),
+                    ("next_seq".to_owned(), json!(poll.next_seq)),
+                ])))
             }
             IpcMethod::CancelJob => {
                 args.count(1, 1)?;
@@ -263,10 +283,12 @@ impl ImpulciferService {
             IpcMethod::StartBrir => {
                 args.count(1, 1)?;
                 let request = brir::validation::validate(args.get(0))?;
-                let ui = self.settings().payload();
-                let catalog = brir::Catalog::from_strings(
-                    ui["strings"].as_object().cloned().unwrap_or_default(),
-                );
+                let mut ui = self.settings().payload();
+                let strings = ui.as_object_mut().and_then(|ui| ui.remove("strings"));
+                let catalog = brir::Catalog::from_strings(match strings {
+                    Some(Value::Object(strings)) => strings,
+                    _ => serde_json::Map::new(),
+                });
                 let data = self.data_dir.clone();
                 let job = self
                     .jobs

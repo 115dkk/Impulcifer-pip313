@@ -2,7 +2,18 @@
 #[path = "../examples/demo_brir.rs"]
 mod demo;
 
+#[path = "../tests/bench_support/service.rs"]
+mod service;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::args().any(|arg| arg == "--emit-diagnostic") {
+        service::emit_diagnostic();
+        return Ok(());
+    }
+    if !std::env::args().any(|arg| arg == "--pipeline") {
+        service::run();
+        return Ok(());
+    }
     println!("| scenario | rust median ms | rust min ms |");
     for vbass in [false, true] {
         let mut times = Vec::new();
