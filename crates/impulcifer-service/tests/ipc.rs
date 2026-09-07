@@ -347,7 +347,17 @@ fn ipc_set_language_shape() {
         .unwrap();
         let mut expected = english.as_object().unwrap().clone();
         expected.extend(translated.as_object().unwrap().clone());
-        assert_eq!(out["strings"], Value::Object(expected));
+        // The catalogue equals en + <language>, plus the 3.x-only overlay keys
+        // the service adds itself (settings.rs EXTRA_STRINGS).
+        let strings = out["strings"].as_object().unwrap();
+        for (key, value) in &expected {
+            assert_eq!(strings.get(key), Some(value), "{key}");
+        }
+        let extra: Vec<&String> = strings
+            .keys()
+            .filter(|key| !expected.contains_key(*key))
+            .collect();
+        assert_eq!(extra, vec!["cli_plots_not_available_yet"]);
     }
     assert_eq!(f.saved()["language_selected"], true);
     let error = failure(
@@ -951,10 +961,7 @@ fn deferred_methods_keep_not_implemented_envelopes() {
     let f = Fixture::new();
     for method in [
         "start_recording",
-        "start_brir",
         "start_output_recovery",
-        "detect_sweep",
-        "generate_sweep_set",
         "check_for_updates",
         "start_update",
         "apply_pending_update",

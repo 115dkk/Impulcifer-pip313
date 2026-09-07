@@ -28,6 +28,7 @@ mod test_support;
 #[cfg(test)]
 mod wav_tests;
 
+pub mod brir_layout;
 pub mod ffmpeg;
 pub mod sweep_files;
 pub mod wav;

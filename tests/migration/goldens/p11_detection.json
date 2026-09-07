@@ -1,0 +1,1 @@
+{"fs":48000,"m":2,"samples":295270,"n_segments":7,"speakers":["BL","SL","FC","FL","FR","SR","BR"],"confidence":"high","generate_spec":"generate:6.15s@48000","source_files":["BL,SL.wav","FC.wav","FL,FR.wav","SR,BR.wav"]}

@@ -5,6 +5,7 @@
 //! caught at the outer call boundary, including host and backend panics.
 
 mod args;
+pub mod brir;
 mod paths;
 mod settings;
 
@@ -248,6 +249,62 @@ impl ImpulciferService {
                     .cancel(&id)
                     .map_err(|code| self.job_error(code, &id))?;
                 Ok(json!({"job":snapshot(&job)}))
+            }
+            IpcMethod::StartBrir => {
+                args.count(1, 1)?;
+                let request = brir::validation::validate(args.get(0))?;
+                let ui = self.settings().payload();
+                let catalog = brir::Catalog::from_strings(
+                    ui["strings"].as_object().cloned().unwrap_or_default(),
+                );
+                let data = self.data_dir.clone();
+                let job = self
+                    .jobs
+                    .start(impulcifer_types::job::JobKind::Brir, true, move |ctx| {
+                        ctx.check_cancelled()?;
+                        if request.config.do_equalization {
+                            for (source, target) in request.sidecars {
+                                ctx.check_cancelled()?;
+                                std::fs::copy(source, target)
+                                    .map_err(|e| brir::BrirError::Fs(e).failure())?;
+                            }
+                        }
+                        let run = brir::run::run_with_data(&request.config, &catalog, ctx, &data)?;
+                        Ok(json!({"output_path":run.output_path}))
+                    })
+                    .map_err(|code| {
+                        ipc::error(
+                            code,
+                            "Another job is already running.",
+                            json!({"job":self.jobs.active().as_ref().map(snapshot)}),
+                            code == ErrorCode::JobBusy,
+                        )
+                    })?;
+                Ok(json!({"job":snapshot(&job)}))
+            }
+            IpcMethod::DetectSweep | IpcMethod::GenerateSweepSet => {
+                args.count(1, 1)?;
+                let raw = paths::text(&args, 0, "dir_path")?;
+                let path = std::path::Path::new(raw.as_deref().unwrap_or(""));
+                if !path.is_dir() {
+                    return Err(ipc::error(
+                        ErrorCode::FileNotFound,
+                        "Measurement directory does not exist.",
+                        json!({"path":args.get(0)}),
+                        false,
+                    ));
+                }
+                if method == IpcMethod::GenerateSweepSet {
+                    brir::estimator::generate_sweep_set(path).map_err(|e| e.envelope())
+                } else {
+                    let detection = brir::sweep_grid::detect_sweep_parameters(path)
+                        .map_err(|e| e.envelope())?;
+                    let sidecar = path.join("test.wav").is_file();
+                    Ok(detection.map_or_else(
+                        || json!({"found":false,"sidecar":sidecar}),
+                        |d| d.payload(sidecar),
+                    ))
+                }
             }
             IpcMethod::ResolveRecordingPaths => paths::resolve(&args),
             IpcMethod::OpenPath => {
