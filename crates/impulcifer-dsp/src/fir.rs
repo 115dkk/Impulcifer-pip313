@@ -6,6 +6,41 @@ use crate::{
 };
 use std::f64::consts::PI;
 
+/// Mirrors scipy.signal.firwin (SciPy 1.18.0), lowpass, fs=2, scale=True,
+/// symmetric Kaiser. Pinned by p06_design_*.json and their full tap binaries.
+/// https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.firwin.html
+/// Rejects zero taps, nonfinite beta, and cutoff outside the open interval (0,1).
+/// In particular cutoff=1 is an error, including nnresample 0.2.4.1 same-rate design.
+pub fn firwin_lowpass(numtaps: usize, cutoff: f64, beta: f64) -> Result<Vec<f64>, DspError> {
+    if numtaps == 0 || !cutoff.is_finite() || cutoff <= 0.0 || cutoff >= 1.0 || !beta.is_finite() {
+        return Err(DspError::InvalidArgument(
+            "firwin requires positive taps, finite beta and 0 < cutoff < 1".into(),
+        ));
+    }
+    let midpoint = (numtaps - 1) as f64 / 2.0;
+    let mut taps: Vec<_> = windows::kaiser(numtaps, beta, true)
+        .into_iter()
+        .enumerate()
+        .map(|(i, w)| {
+            let z = cutoff * (i as f64 - midpoint);
+            let sinc = if z == 0.0 {
+                1.0
+            } else {
+                (PI * z).sin() / (PI * z)
+            };
+            cutoff * sinc * w
+        })
+        .collect();
+    let scale: f64 = taps.iter().sum();
+    if !scale.is_finite() || scale == 0.0 {
+        return Err(DspError::InvalidArgument(
+            "firwin DC normalization is not finite and nonzero".into(),
+        ));
+    }
+    taps.iter_mut().for_each(|v| *v /= scale);
+    Ok(taps)
+}
+
 /// Mirrors scipy.signal.firwin2, default symmetric Hamming, antisymmetric=false.
 /// Pinned by p05_firwin2_{smooth,notch,flat,duplicate,odd,custom}.json.
 /// https://docs.scipy.org/doc/scipy-1.16.1/reference/generated/scipy.signal.firwin2.html

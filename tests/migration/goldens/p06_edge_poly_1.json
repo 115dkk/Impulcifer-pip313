@@ -1,0 +1,1 @@
+{"inputs":{"x":[1.0],"up":5,"down":2,"taps":[1.0]},"outputs":{"y":[5.0,0.0,0.0]},"meta":{"scipy":"1.18.1","numpy":"2.5.3","python":"3.14.5","dtype":"float64/complex128","nnresample":"0.2.4.1"}}

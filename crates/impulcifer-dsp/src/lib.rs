@@ -13,6 +13,7 @@ pub enum DspError {
     InvalidArgument(String),
 }
 
+pub mod channel_balance;
 pub mod conv;
 pub mod decay;
 pub mod estimator;
@@ -23,10 +24,13 @@ pub mod fr;
 pub mod hrir;
 pub mod interp;
 pub mod ir;
+pub mod mic_deviation;
 pub mod peaks;
 pub mod pipeline;
 pub mod resample;
 pub mod smoothing;
 pub mod spectrogram;
+pub mod stages;
 pub mod stats;
+pub mod virtual_bass;
 pub mod windows;

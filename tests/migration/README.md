@@ -6,7 +6,7 @@ Run `python E:/Impulcifer/tests/migration/export_goldens.py` from the existing
 named `p03_*.json` files. No timestamps or random global state are used;
 noise comes from `numpy.random.default_rng(1234)`.
 
-The recorded oracle is Python 3.13.3, NumPy 2.4.6, SciPy 1.18.0. These are
+The recorded oracle is Python 3.14.5, NumPy 2.5.3, SciPy 1.18.1. The fixtures were re-exported on 2026-09-07 under that interpreter (`py -3.14`, the newest CPython on the reference machine, with the 2.x requirements installed); the earlier export under Python 3.13.3, NumPy 2.4.6, SciPy 1.18.0 produced numerically identical fixtures (616 files differed only in the recorded `meta` versions), so the interpreter version does not affect the oracle values. The performance audits use the same interpreter and the free-threaded 3.14t venv (docs/rust/packets/PA-astra-perf-audit.md). These are
 actual installed versions, not the SciPy 1.16 documentation version requested
 for API research. Every fixture contains `inputs`, `outputs`, and `meta`.
 Arrays use repr-precision JSON numbers; complex numbers use `[real, imaginary]`.
@@ -123,7 +123,7 @@ float64 values, without a header. The hash covers all raw bytes; first/last
 only the ends. Exporting the same fixtures leaves equal bytes untouched.
 `p05_environment.json` records the actual NumPy build/backend and platform.
 
-The oracle runtime is Python 3.13.3, NumPy 2.4.6, SciPy 1.18.0. **Minimum phase
+The oracle runtime is Python 3.14.5, NumPy 2.5.3, SciPy 1.18.1. **Minimum phase
 follows the installed SciPy 1.18.0 function**: its cepstral lifter midpoint is
 one for even FFT lengths and two for odd lengths (`win[stop] = 1 + n_fft % 2`).
 SciPy 1.17.1 and earlier used zero and one there; 2.x users run the fixed
@@ -194,11 +194,126 @@ cargo test -p impulcifer-dsp --lib -- --nocapture
 cargo test -p impulcifer-dsp --test properties_batch2 -- --nocapture
 ```
 
+## P06 resampling and spectrogram goldens
+
+The exporter adds 55 `p06_*` files (full arrays, not just endpoints). The
+installed oracle is nnresample **0.2.4.1**, SciPy **1.18.1**, NumPy **2.5.3**,
+Python **3.14.5** (values identical under 3.13.3 / 2.4.6 / 1.18.0). `IMPULCIFER_GOLDEN_BATCH=p06` selects only this family;
+without that variable all existing families still run. P06 binaries use P05's
+headerless little-endian f64 format and descriptor fields `file`, `length`,
+`sha256`, `first`, `last`. P06 binaries are not capped at 200 kB: a complete
+32001-tap design requires 256008 bytes. JSON files remain below 200 kB.
+
+The four successful designs include both directions of 44.1/48 and 48/96 kHz.
+Metadata includes reduced factors, N=32001, beta=**5.65326**, cutoff, search
+bounds, local argmin and absolute null bin. Both symmetric Kaiser-sinc designs
+use unity-DC scaling. The initial design is zero-padded to 2^19; the null
+frequency divides by H=262145, not 262144. The default attenuation is 60 dB;
+`compute_filt`'s direct beta=5 default is not used. No optional df-to-N behavior
+is implemented or changed. The composition cache is keyed by reduced ratio
+and locked during first design, ensuring one successful design/FFT per ratio.
+Cloning cached f64 taps does not alter numerical values.
+
+Explicit-tap polyphase tests compare all output samples with SciPy independently
+of Rust's designer, then separately compare the full nnresample composition.
+The kernel computes retained output phases directly in ascending input-sample
+order, O(n_out*ceil(N/up)) time and O(N+n_out) storage. No zero-inserted input
+is allocated. Zero pre/post taps are implicit; minimal post-pad length is
+solved from SciPy's output-length inequality. 48k -> 44.1k has reduced factors
+147/160, half_len=16000, pre_pad=160, pre_remove=101. Short one-tap, even-tap,
+gcd, empty-input, and same-rate cases exercise cropping and post-padding.
+
+Spectrogram parameters are captured from the actual
+`ImpulseResponsePlotter.plot_spectrogram` function (lines 114-222), stopping
+at its SciPy call, not from a second transcription. Default f_res=10 and
+n_segments=200 cases include lengths 0,1,100,4800,48000,295000, plus zero
+segments, negative computed overlap, rounded-zero and ties-to-even cases.
+The fixed min_time_segments=3 formula is (2*n)//4, with its n=1 fallback.
+PSD fixtures cover a 0.5-second windowed 1 kHz sine and seeded noise (606),
+4800-point periodic Hann with overlap 2400, plus odd and singleton windows.
+They retain full frequency-major row-major Sxx, shape, frequencies and times.
+The implementation preserves constant detrend per segment, density scaling,
+one-sided interior doubling, no boundary extension and no tail padding.
+
+### Packet discrepancies established by the installed oracle
+
+- Same-rate `nnresample.resample` 0.2.4.1 **raises ValueError** at the initial
+  firwin cutoff=1. `nnresample_design` and `nnresample` preserve that error;
+  `p06_design_48000_48000.json` records the exception and null taps/cutoff/bin.
+  There is deliberately no fabricated same-rate tap binary. In contrast,
+  SciPy resample_poly returns a copy before validating taps. Its copy property
+  has zero group-delay alignment. The requested same-rate nnresample delayed
+  copy cannot be tested as a success without changing the pinned algorithm.
+- The requested DC per-sample relative deviation <1e-6 is **false in Python**.
+  With 4800 unit samples, 48k -> 44.1k and 200 samples trimmed at either end,
+  the oracle deviation is 1.531320028669292e-5. `p06_dc.json` freezes the full
+  output and this negative result. Rust reproduces it within 1.533e-14; the
+  interior mean error is 3.212e-9 and same-phase periodic error is exactly zero.
+  Those passing mean/phase properties do not replace a claim of samplewise
+  unity, and no coefficients or golden tolerances were changed to force it.
+- `data/demo/FL.wav` does not exist. The actual file is `data/demo/FL,FR.wav`;
+  its first soundfile track, cropped to 8192 samples, is used. The descriptor
+  records that source path and SHA-256.
+- The existing P07 float-WAV exporter was not deterministic: libsndfile writes
+  wall-clock time in PEAK chunks. Exporting all families changed four P07 JSON
+  inputs only at that timestamp. The exporter now preserves an existing
+  fixture's PEAK timestamp, retaining its original bytes. Those accidental
+  timestamp changes were undone only after verifying every other byte matched.
+
+Invalid fs, zero/oversized explicit spectrogram windows and invalid factors
+return DspError. Explicit Hann arrays do not shrink to short input. Parameter
+selection returns None for invalid numeric domains (Python raises). Finite f64
+resampling is the pinned parity contract; nonfinite data is not rejected and
+uses arithmetic propagation, but implicit-zero optimization does not promise
+SciPy's NaN masks for products involving padded zeros. Spectrogram NaNs spread
+through their containing segment. No unsafe code, dependencies, SIMD intrinsics,
+front-end changes, or batch 1/2 behavior changes were added.
+
+| Function / fixture | Required tolerance | Measured maximum absolute error |
+|---|---|---|
+| firwin_lowpass + nnresample_design / p06_design_*, p06_taps_* | rtol 1e-9, atol 1e-11*max(1,peak) | 2.4424906541753444e-15 |
+| design cutoff/beta / p06_design_* | atol 1e-12 | 0 |
+| design argmin / p06_design_* | exact integer | 0 |
+| resample_poly impulse/sine / p06_poly_* | atol 1e-10 | 0 |
+| resample_poly demo / p06_poly_demo_* | atol 1e-9*max(abs(input)) | 0 |
+| nnresample impulse/sine / p06_poly_* | atol 1e-10 | 1.4876988529977098e-14 |
+| nnresample demo / p06_poly_demo_* | atol 1e-9*max(abs(input)) | 2.2768245622195593e-17 |
+| nnresample DC / p06_dc | atol 1e-10 against Python | 1.532107773982716e-14 |
+| resample_poly edges / p06_edge_poly_* | atol 1e-14 | 0 |
+| spectrogram_params / p06_params | exact integer/None | 0 |
+| spectrogram power / p06_spectrogram_* | rtol 1e-9, atol 1e-14 | 3.469446951953614e-17 |
+| spectrogram frequencies/times / p06_spectrogram_* | atol 1e-12 | 0 |
+
+The release timing example includes both FIR designs, FFT planning, allocation,
+and the 2^19 real FFT, without using the composition cache. Three runs per
+ratio measured 9.3774-11.1396 ms on the worker's Windows machine, all below
+200 ms. Ratios 48000/44100, 44100/48000, 96000/48000, 48000/96000 respectively
+measured [11.1396,10.8861,10.1967], [10.3945,10.8405,9.3774],
+[10.1266,9.5039,10.0905], [9.5943,10.0024,10.5360] ms.
+
+Run in the foreground from the repository root:
+
+```text
+python E:/Impulcifer/tests/migration/export_goldens.py
+cargo fmt -p impulcifer-dsp -- --check
+cargo clippy -p impulcifer-dsp --all-targets -- --no-deps -D warnings
+cargo test -p impulcifer-dsp
+cargo test -p impulcifer-policy
+cargo test -p impulcifer-dsp --test golden_batch3 --test properties_batch3 -- --nocapture --test-threads=1
+cargo run -p impulcifer-dsp --release --example p06_design_timing
+```
+
+Official references consulted alongside installed source:
+[firwin](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.firwin.html),
+[resample_poly](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.resample_poly.html),
+[spectrogram](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.spectrogram.html).
+The source, not the rolling reference page, pins the SciPy version.
+
 ## P07 audio I/O goldens
 
 The same no-argument exporter command also writes 28 `p07_*.json` fixtures.
 P07 does not change existing P03/P05 fixture content. Its observed environment
-is soundfile 0.13.1 / libsndfile 1.2.2, Python 3.13.3, NumPy 2.4.6.
+is soundfile 0.14.0 / libsndfile 1.2.2, Python 3.14.5, NumPy 2.5.3 (byte-identical fixtures under soundfile 0.13.1, Python 3.13.3, NumPy 2.4.6).
 
 ### PCM conversion and header evidence
 

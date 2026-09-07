@@ -729,14 +729,14 @@ tests = ["impulcifer-dsp::golden_spline_k3_matches_fitpack", "impulcifer-dsp::na
 [[feature]]
 id = "dsp.nnresample_design"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_nnresample_design_matches_python", "impulcifer-dsp::golden_nnresample_matches_python", "impulcifer-dsp::same_rate_copy_and_nnresample_error_are_distinct"]
 
 [[feature]]
 id = "dsp.resample_poly"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_resample_poly_matches_scipy", "impulcifer-dsp::golden_resample_poly_edges_match_scipy", "impulcifer-dsp::resample_poly_padding_arithmetic_48k_to_44k1"]
 
 [[feature]]
 id = "dsp.linregress"
@@ -759,8 +759,8 @@ tests = ["impulcifer-dsp::golden_uniform_filter_matches_scipy"]
 [[feature]]
 id = "dsp.spectrogram"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_spectrogram_params_match_python", "impulcifer-dsp::golden_spectrogram_matches_scipy", "impulcifer-dsp::spectrogram_zeros_shapes_and_density_energy"]
 
 [[feature]]
 id = "cli.options_match_processing_config"
@@ -820,3 +820,126 @@ id = "io.sweep_file_names"
 kind = "io"
 status = "implemented"
 tests = ["impulcifer-io::sweep_file_name_round_trips", "impulcifer-io::segments_match_pure_oracle_boundaries", "impulcifer-io::segments_match_exported_python"]
+
+[[feature]]
+id = "fr.generate_frequencies"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_generate_frequencies_match_python"]
+
+[[feature]]
+id = "fr.window_size_sigmoid"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_window_size_and_sigmoid_match_python", "impulcifer-dsp::round_half_even_matches_python"]
+
+[[feature]]
+id = "fr.create_target"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_create_target_matches_autoeq"]
+note = "shelf designed at 44100 Hz regardless of project fs (2.x quirk kept)"
+
+[[feature]]
+id = "fr.interpolate"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_interpolate_matches_python", "impulcifer-dsp::interpolate_is_identity_on_its_own_grid"]
+
+[[feature]]
+id = "fr.center"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_center_matches_python", "impulcifer-dsp::center_band_then_center_value_is_zero"]
+
+[[feature]]
+id = "fr.compensate"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_compensate_matches_python", "impulcifer-dsp::compensate_error_is_raw_minus_target"]
+
+[[feature]]
+id = "fr.smoothen"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_smoothen_matches_python"]
+
+[[feature]]
+id = "fr.smoothen_heavy_light"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_smoothen_heavy_light_matches_python"]
+
+[[feature]]
+id = "fr.equalize"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_equalize_matches_python", "impulcifer-dsp::equalize_never_exceeds_max_gain_away_from_kinks"]
+
+[[feature]]
+id = "fr.minimum_phase_impulse_response"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_minimum_phase_impulse_response_matches_python"]
+note = "budget is the measured oracle noise floor (tests/migration/README-fr.md), not the primitive tolerance"
+
+[[feature]]
+id = "fr.read_from_csv"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_read_from_csv_matches_python", "impulcifer-dsp::read_from_csv_rejects_single_digit_numbers"]
+
+[[feature]]
+id = "fr.magnitude_to_frequency_response"
+kind = "fr"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_magnitude_to_frequency_response_matches_python"]
+
+[[feature]]
+id = "perf.impulcifer-io"
+kind = "perf"
+status = "planned"
+tests = []
+note = "PA01: WAV read/write, pcm32 round trip, sweep names vs soundfile / core.audio_io on py -3.14 (audit running)"
+
+[[feature]]
+id = "perf.impulcifer-dsp"
+kind = "perf"
+status = "planned"
+tests = []
+note = "PA02: primitives (conv, fft, filters, fir, savgol, splines, resample, spectrogram) vs scipy/numpy/nnresample on py -3.14"
+
+[[feature]]
+id = "perf.impulcifer-audio-io"
+kind = "perf"
+status = "planned"
+tests = []
+note = "measurement session overhead and capture loop vs sounddevice; after M3"
+
+[[feature]]
+id = "perf.impulcifer-sys-win"
+kind = "perf"
+status = "planned"
+tests = []
+note = "WASAPI open/probe latency vs PortAudio WASAPI; after M3"
+
+[[feature]]
+id = "perf.impulcifer-service"
+kind = "perf"
+status = "planned"
+tests = []
+note = "IPC call and job event overhead vs the 2.x pywebview bridge; after M3"
+
+[[feature]]
+id = "perf.pipeline-demo"
+kind = "perf"
+status = "planned"
+tests = []
+note = "M2: whole demo BRIR run (time and peak RSS) vs python impulcifer.py on py -3.14 and 3.14t"
+
+[[feature]]
+id = "perf.release"
+kind = "perf"
+status = "planned"
+tests = []
+note = "M5: final audit of every crate before 3.0"

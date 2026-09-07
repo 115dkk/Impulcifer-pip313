@@ -199,6 +199,7 @@ fn pywebview_api(state: State<AppState>, method: String, args: Vec<Value>) -> Va
 2. **골든 테스트.** `tests/migration/export_goldens.py`(2.x)가 데모 측정과 합성 픽스처의 스테이지별 f64 배열을 `tests/migration/goldens/`에 내보내고, Rust 테스트가 report-02의 허용오차로 비교합니다. 정수 결정(피크 인덱스, 크롭 길이, 채널 순서)은 정확히 일치해야 합니다.
 3. **하드웨어 프로브.** `impulcifer-sys-win`의 `examples/hardware_probe.rs`로 실제 장치에서 exclusive/shared, 44.1/48/96 kHz, 2/8/16채널 열기와 1초 재생·캡처를 실측하고 결과를 `docs/rust/HARDWARE.md`에 기록합니다.
 4. **CI.** `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --workspace`(정책 게이트 포함), `cargo deny check`. 나머지 잡(Miri, sanitizer, geiger)은 report-11 §3.4에 따라 뒤에 붙입니다.
+5. **성능 감사.** 크레이트가 착륙하면 ASTRA가 `docs/rust/packets/PA-astra-perf-audit.md`(공통 방법)와 `PAnn-astra-perf-<crate>.md`(연산 목록)로 같은 머신에서 2.x와 비교 측정합니다. 상대는 최신 CPython(3.14.5, 2.x 의존성 설치본; 2.x가 스레드로 병렬화하는 연산은 free-threaded 3.14t도)에서 도는 2.x이지 PATH의 기본 파이썬이 아닙니다. 정확성 골든의 오라클 환경(`tests/migration/README.md`)과는 별개입니다. `crates/<crate>/benches/perf.rs`(release, 11회 중앙값, 추가 의존성 없음) 대 `tests/migration/bench_oracle_<crate>.py`, 파이프라인이 실제로 처리하는 크기로, 모든 연산에서 `python/rust >= 1.0`이어야 하고 골든은 그대로 통과해야 합니다. 보고서는 `docs/rust/perf/<crate>.md`, 등록부에는 `perf.<crate>`가 `bench_smoke_<crate>` 테스트를 인용합니다. 파이프라인 전체(M2)와 출시 전(M5)에 한 번씩 더 돌고, 그때는 데모 BRIR 생성의 최대 상주 메모리도 함께 잽니다(Rust rayon 스레드 대 2.x 프로세스 풀 대 3.14t 스레드; 최적화 대상이 아니라 사용자가 궁금해한 측정 항목). 기능의 `implemented` 등록은 패리티 게이트이고 성능 감사는 `perf.<crate>` 항목(초기 `planned`)으로 따로 추적합니다. 크레이트는 그 항목이 `implemented`가 될 때까지 '감사 전'이며, `perf.pipeline-demo`는 M2, `perf.release`는 M5의 종료 조건입니다. 파이썬보다 느린 포팅은 완료가 아닙니다.
 
 ## 10. 작업 분배
 
@@ -212,7 +213,7 @@ fn pywebview_api(state: State<AppState>, method: String, args: Vec<Value>) -> Va
 |---|---|---|
 | M0 | 스켈레톤 컴파일, 게이트 테스트, features.toml 등록 | `cargo test --workspace` 통과 |
 | M1 | 하드웨어 프로브 실측, DSP 프리미티브 1차(fft/conv/filters/windows)와 골든 | 실측 문서, 골든 테스트 통과 |
-| M2 | 파이프라인 전 스테이지 패리티(데모 5 시나리오) | 최종 BRIR 허용오차 게이트 통과 |
+| M2 | 파이프라인 전 스테이지 패리티(데모 5 시나리오) | 최종 BRIR 허용오차 게이트 통과, 데모 BRIR 생성 시간이 `python impulcifer.py` 이하(성능 감사) |
 | M3 | 서비스·잡·Tauri 앱이 기존 webview_ui로 완주 | 녹음·BRIR·복원이 UI에서 동작 |
 | M4 | CLI, Python wheel | 2.x 옵션 호환, `pip install` 후 `run()` |
-| M5 | 패키징(Velopack/Tauri 업데이터), 기존 설치에서 업그레이드 | 설치·업데이트 실측 |
+| M5 | 패키징(Velopack/Tauri 업데이터), 기존 설치에서 업그레이드 | 설치·업데이트 실측 설치·업데이트 실측, 최종 성능 감사(전 크레이트 `perf.*` 등록) |
