@@ -73,15 +73,15 @@ pub fn parse_sweep_file_name(name: &str) -> Option<SweepFileInfo> {
     } else {
         (Vec::new(), String::new(), stem.strip_prefix("sweep-")?)
     };
-    let parts: Vec<_> = suffix.split('-').collect();
-    if parts.len() != 5 {
+    let mut parts = suffix.split('-');
+    let duration_s = decimal(parts.next()?.strip_suffix('s')?)?;
+    let fs = parts.next()?.strip_suffix("hz")?.parse::<u32>().ok()?;
+    let bits = parts.next()?.strip_suffix("bit")?.parse::<u16>().ok()?;
+    let f_lo = decimal(parts.next()?.strip_suffix("hz")?)?;
+    let f_hi = decimal(parts.next()?.strip_suffix("hz")?)?;
+    if parts.next().is_some() {
         return None;
     }
-    let duration_s = decimal(parts[0].strip_suffix('s')?)?;
-    let fs = parts[1].strip_suffix("hz")?.parse::<u32>().ok()?;
-    let bits = parts[2].strip_suffix("bit")?.parse::<u16>().ok()?;
-    let f_lo = decimal(parts[3].strip_suffix("hz")?)?;
-    let f_hi = decimal(parts[4].strip_suffix("hz")?)?;
     if duration_s <= 0.0 || fs == 0 || !matches!(bits, 16 | 24 | 32) || f_hi < f_lo {
         return None;
     }

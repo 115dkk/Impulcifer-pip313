@@ -13,3 +13,7 @@ impulcifer-types = { path = "../impulcifer-types" }
 serde_json.workspace = true
 thiserror.workspace = true
 
+[[bench]]
+name = "perf"
+harness = false
+
