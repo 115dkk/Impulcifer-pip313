@@ -18,3 +18,5 @@ realfft.workspace = true
 rayon.workspace = true
 regex.workspace = true
 
+[dev-dependencies]
+impulcifer-io = { path = "../impulcifer-io" }
