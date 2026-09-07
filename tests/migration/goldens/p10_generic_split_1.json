@@ -1,0 +1,1 @@
+{"inputs":{},"outputs":{"columns":1,"boundaries":[[96000,487270],[96000,487270]],"segments":["p10_generic_segments_1_0.json","p10_generic_segments_1_1.json"]},"meta":{"python":"3.14.5","numpy":"2.5.3","scipy":"1.18.1","dtype":"float64","seed":909,"source":"core/room_correction.py:368-377"}}
