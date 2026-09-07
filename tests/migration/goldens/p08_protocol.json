@@ -1,0 +1,1 @@
+{"inputs":{"sweep":"data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"},"outputs":{"recordings":["BL,SL.wav","FC.wav","FL,FR.wav","SR,BR.wav"],"stages":["open","crop_heads","ipsilateral","onset","crop_tails","normalize"]},"meta":{"scipy":"1.18.1","numpy":"2.5.3","python":"3.14.5","dtype":"float64/complex128"}}

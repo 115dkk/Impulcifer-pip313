@@ -905,9 +905,9 @@ note = "PA01 (docs/rust/perf/impulcifer-io.md): 9 ops, python/rust 1.18 to 4.79 
 [[feature]]
 id = "perf.impulcifer-dsp"
 kind = "perf"
-status = "planned"
-tests = []
-note = "PA02: primitives (conv, fft, filters, fir, savgol, splines, resample, spectrogram) vs scipy/numpy/nnresample on py -3.14"
+status = "implemented"
+tests = ["impulcifer-dsp::bench_smoke_impulcifer_dsp"]
+note = "PA02 (docs/rust/perf/impulcifer-dsp.md): 22 primitive ops, python/rust 1.14 to 9.0 against CPython 3.14.5 (single-threaded ops, so no 3.14t column); thread-local FFT plans and work buffers, real FFT in minimum_phase, contiguous polyphase taps, 4-section sosfilt, reused Kaiser symmetry"
 
 [[feature]]
 id = "perf.impulcifer-audio-io"
@@ -943,3 +943,66 @@ kind = "perf"
 status = "planned"
 tests = []
 note = "M5: final audit of every crate before 3.0"
+
+[[feature]]
+id = "objects.constants"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_constants_match_python"]
+note = "HESUVI/HEXADECAGONAL track orders, side sets, IPSILATERAL_PAIRS, sequence layouts, speaker_side, track_name, base_channel_count copied from core/constants.py"
+
+[[feature]]
+id = "objects.sweep_estimator"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_sweep_estimator_matches_python", "impulcifer-dsp::golden_estimate_matches_scipy", "impulcifer-dsp::golden_sweep_sequence_matches_python", "impulcifer-dsp::golden_from_samples_repair_matches_python", "impulcifer-dsp::golden_file_name_matches_python", "impulcifer-dsp::sweep_fades_reject_invalid_windows"]
+note = "Farina sweep, inverse filter, estimate (mode=same), sweep_sequence, from_wav repair logic on samples; generated sweep quantises to the bundled PCM_32 WAV with 0 mismatches"
+
+[[feature]]
+id = "objects.impulse_response"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_shift_crop_equalize_match_python", "impulcifer-dsp::golden_magnitude_response_matches_python", "impulcifer-dsp::shift_is_length_preserving_and_invertible_for_zeros"]
+note = "shift, crop_head, equalize, convolve, resample, magnitude_response; frequency_response is added with the fr module in P10"
+
+[[feature]]
+id = "objects.decay"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_decay_params_match_python", "impulcifer-dsp::golden_decay_times_match_python", "impulcifer-dsp::golden_decay_adjustment_matches_python", "impulcifer-dsp::python_rounding_helpers_match_cpython", "impulcifer-dsp::decay_first_pass_clamps_windows_to_sample_count", "impulcifer-dsp::zero_decay_target_panics_without_modifying_data"]
+note = "Lundeby decay_params, Schroeder decay_times, decay_adjustment_params, apply_decay_window"
+
+[[feature]]
+id = "objects.hrir_ingest"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_demo_stages_match_python", "impulcifer-dsp::ingest_preserves_single_side_mapping_and_fallback"]
+note = "recording split into per-speaker IRs with the 2.x column rules and quirks (i // 2 mapping, fallbacks)"
+
+[[feature]]
+id = "objects.hrir_crop_align"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_demo_stages_match_python", "impulcifer-dsp::crop_heads_keeps_itd", "impulcifer-dsp::align_ipsilateral_self_pair_converges"]
+note = "crop_heads, align_ipsilateral_all, align_onset_groups_peak_leftref, crop_tails on the demo recordings"
+
+[[feature]]
+id = "objects.hrir_normalize"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_demo_stages_match_python", "impulcifer-dsp::normalize_hits_peak_target"]
+note = "peak and average-band normalisation"
+
+[[feature]]
+id = "objects.hrir_stack_tracks"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_stack_tracks_match_python", "impulcifer-dsp::stack_tracks_trims_only_trailing_pairs", "impulcifer-dsp::stack_tracks_checks_only_selected_lengths"]
+note = "track matrices for the writers: missing tracks zeroed, trailing silent pairs trimmed, compact_tracks"
+
+[[feature]]
+id = "objects.reflection_levels"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_reflection_levels_match_python"]
+note = "early/late reflection dB per ear for the README"

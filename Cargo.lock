@@ -1943,6 +1943,7 @@ dependencies = [
 name = "impulcifer-dsp"
 version = "3.0.0-alpha.0"
 dependencies = [
+ "impulcifer-io",
  "impulcifer-types",
  "rayon",
  "realfft",

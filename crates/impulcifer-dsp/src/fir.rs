@@ -160,22 +160,21 @@ pub fn minimum_phase_default_nfft(len: usize) -> usize {
 /// accepted (SciPy warns, but performs the same arithmetic).
 pub fn minimum_phase(h: &[f64], n_fft: usize, half: bool) -> Result<Vec<f64>, DspError> {
     let (log, lifter) = homomorphic_stages(h, n_fft, half)?;
-    let cepstrum = fft::ifft(
-        &log.iter()
+    let cepstrum = fft::irfft(
+        &log[..n_fft / 2 + 1]
+            .iter()
             .map(|&v| Complex64::new(v, 0.0))
             .collect::<Vec<_>>(),
+        n_fft,
     );
-    let lifted: Vec<_> = cepstrum
-        .iter()
-        .zip(lifter)
-        .map(|(v, w)| Complex64::new(v.re * w, 0.0))
-        .collect();
-    let spectrum: Vec<_> = fft::fft(&lifted).into_iter().map(|v| v.exp()).collect();
-    Ok(fft::ifft(&spectrum)
+    let lifted: Vec<_> = cepstrum.iter().zip(lifter).map(|(v, w)| v * w).collect();
+    let spectrum: Vec<_> = fft::rfft_owned(lifted)
         .into_iter()
-        .take(if half { h.len().div_ceil(2) } else { h.len() })
-        .map(|v| v.re)
-        .collect())
+        .map(|v| v.exp())
+        .collect();
+    let mut output = fft::irfft(&spectrum, n_fft);
+    output.truncate(if half { h.len().div_ceil(2) } else { h.len() });
+    Ok(output)
 }
 
 /// Mirrors pocketfft's real radix butterflies at Nyquist for scipy.signal
