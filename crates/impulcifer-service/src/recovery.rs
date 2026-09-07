@@ -807,13 +807,26 @@ enum WritePhase {
     BeforePublish,
     AfterConflictCheck,
 }
+/// Identity of a staged file: its length and a 64-bit FNV-1a digest of its
+/// bytes. Rollback removes a published output only while it still carries the
+/// bytes this recovery wrote, so a file another process replaced in the
+/// meantime is left alone (the existing-output preservation rule).
+fn fingerprint(path: &Path) -> Option<(u64, u64)> {
+    let bytes = fs::read(path).ok()?;
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in &bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    Some((bytes.len() as u64, hash))
+}
 fn write_all(
     plan: &[PlannedOutput],
     rate: u32,
     mut hook: impl FnMut(WritePhase, usize, &Path) -> std::io::Result<()>,
 ) -> Result<Vec<PathBuf>, RecoveryError> {
-    let mut temporary_files = Vec::new();
-    let mut created = Vec::new();
+    let mut temporary_files: Vec<(PathBuf, Option<(u64, u64)>)> = Vec::new();
+    let mut created: Vec<(PathBuf, Option<(u64, u64)>)> = Vec::new();
     let result = (|| {
         for (index, item) in plan.iter().enumerate() {
             hook(WritePhase::BeforeStage, index, &item.target)
@@ -822,7 +835,7 @@ fn write_all(
                 .map_err(|e| write_error(&item.target, e))?;
             check_conflict(&item.target)?;
             let (path, file) = temporary(&item.target).map_err(|e| write_error(&item.target, e))?;
-            temporary_files.push(path.clone());
+            temporary_files.push((path.clone(), None));
             write_pcm32(file, rate, &item.tracks).map_err(|e| write_error(&item.target, e))?;
             if !item.names.is_empty() {
                 hook(WritePhase::Metadata, index, &item.target)
@@ -833,8 +846,9 @@ fn write_all(
                 )
                 .map_err(|e| write_error(&item.target, io_message(e)))?;
             }
+            temporary_files.last_mut().unwrap().1 = fingerprint(&path);
         }
-        for (index, (temp, item)) in temporary_files.iter().zip(plan).enumerate() {
+        for (index, ((temp, identity), item)) in temporary_files.iter().zip(plan).enumerate() {
             hook(WritePhase::BeforePublish, index, &item.target)
                 .map_err(|e| write_error(&item.target, e))?;
             check_conflict(&item.target)?;
@@ -858,20 +872,24 @@ fn write_all(
                     fs::rename(temp, &item.target).map_err(|e| write_error(&item.target, e))?;
                 }
             }
-            created.push(item.target.clone());
+            created.push((item.target.clone(), *identity));
         }
         Ok(())
     })();
-    for path in temporary_files {
+    for (path, _) in &temporary_files {
         let _ = fs::remove_file(path);
     }
     if let Err(error) = result {
-        for path in created {
-            let _ = fs::remove_file(path);
+        for (path, identity) in created {
+            // Only what this run published: a replacement by another process
+            // has a different fingerprint and stays.
+            if identity.is_none() || fingerprint(&path) == identity {
+                let _ = fs::remove_file(path);
+            }
         }
         return Err(error);
     }
-    Ok(created)
+    Ok(created.into_iter().map(|(path, _)| path).collect())
 }
 // Recovery uses soundfile format WAV, not the general I/O writer's WAVEX.
 // The 44-byte PCM header and ties-even conversion are checked against Python.
@@ -1357,6 +1375,30 @@ mod tests {
             assert!(!outputs[1 - index].target.exists());
             assert_eq!(fs::read_dir(&temp.0).unwrap().count(), 1);
         }
+    }
+    #[test]
+    fn recovery_rollback_keeps_outputs_replaced_by_others() {
+        // Codex on PR #188: another process replaces an already published
+        // output before a later publication fails; rollback must not delete
+        // the replacement.
+        let temp = Temp::new();
+        let outputs = plan(&temp.0, false);
+        let first = outputs[0].target.clone();
+        let error = write_all(&outputs, 48000, |phase, i, _target| {
+            if phase == WritePhase::BeforePublish && i == 1 {
+                fs::write(&first, b"replaced by another process")?;
+                return Err(std::io::Error::other("simulated publish failure"));
+            }
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(error.code, RecoveryErrorCode::OutputWriteFailed);
+        assert_eq!(
+            fs::read(&outputs[0].target).unwrap(),
+            b"replaced by another process"
+        );
+        assert!(!outputs[1].target.exists());
+        assert_eq!(fs::read_dir(&temp.0).unwrap().count(), 1);
     }
     #[test]
     fn recovery_request_validation_matches_all_python_cases() {
