@@ -16,7 +16,7 @@ use std::sync::Arc;
 use impulcifer_service::{HostAdapter, ImpulciferService};
 use impulcifer_types::ipc::{self, ErrorCode};
 use serde_json::{Value, json};
-use tauri::{AppHandle, Manager, State, Theme, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, State, Theme, WebviewUrl, WebviewWindowBuilder, window::Color};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_opener::OpenerExt;
 
@@ -43,6 +43,17 @@ fn theme_from_name(name: &str) -> Option<Theme> {
         "dark" => Some(Theme::Dark),
         "light" => Some(Theme::Light),
         _ => None,
+    }
+}
+
+/// The Pulse `--bg-0` tokens of webview_ui/styles.css, painted as the window's
+/// own background so the pre-load flash matches the page (2.x
+/// `_WINDOW_BACKGROUNDS`). "system" follows the dark default like 2.x's fallback.
+fn window_background(theme: &str) -> Color {
+    if theme == "light" {
+        Color(0xf3, 0xf5, 0xf7, 255)
+    } else {
+        Color(0x10, 0x12, 0x14, 255)
     }
 }
 
@@ -172,8 +183,19 @@ fn main() {
                 )),
                 smoke: smoke.clone(),
             });
+            // Read the persisted theme before the window exists: the native
+            // title bar and the pre-load background must match the page from
+            // the first frame. 2.x applied its DWM dark-title-bar workaround
+            // before show and painted the window with the Pulse background.
+            let theme = app.state::<AppState>().service.call("get_ui_settings", Vec::new())
+                ["data"]["theme"]
+                .as_str()
+                .unwrap_or("dark")
+                .to_owned();
             let mut builder =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    .theme(theme_from_name(&theme))
+                    .background_color(window_background(&theme))
                     // The frozen HTML references sibling logo/ assets outside frontendDist.
                     // Serve the original embedded bytes at those existing URLs.
                     .on_web_resource_request(|request, response| {
@@ -209,18 +231,13 @@ fn main() {
                 builder = builder.initialization_script(driver);
             }
             let window = builder.build()?;
-            // Apply the persisted theme before the first frame so the native
-            // title bar matches the page; 2.x did the same at startup through
-            // its DWM workaround. Later `set_theme` IPC calls go through TauriHost.
-            let settings = app
-                .state::<AppState>()
-                .service
-                .call("get_ui_settings", Vec::new());
-            let theme = settings["data"]["theme"].as_str().unwrap_or("dark");
+            // The builder already applied the theme; repeat it on the live
+            // window for runtimes that only honour it after creation. Later
+            // `set_theme` IPC calls go through TauriHost.
             if smoke.is_some() {
                 eprintln!("app smoke: settings loaded, applying theme");
             }
-            let _ = window.set_theme(theme_from_name(theme));
+            let _ = window.set_theme(theme_from_name(&theme));
             if smoke.is_some() {
                 eprintln!("app smoke: setup completed");
             }
