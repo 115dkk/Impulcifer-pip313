@@ -6,7 +6,7 @@ mod perf;
 #[test]
 fn bench_smoke_impulcifer_io() {
     let dir = perf::TempDir::new();
-    perf::run(&dir.0, true);
+    perf::run(&dir.0, perf::Mode::Smoke);
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn parallel_float_decode_preserves_samples_and_ignores_trailing_chunks() {
     for channels in [30, 32] {
         for bits in [32, 64] {
             let frames = 32769;
-            perf::float_fixture(&path, channels, frames);
+            perf::float_fixture_sized(&path, channels, frames);
             let mut bytes = std::fs::read(&path).unwrap();
             if bits == 64 {
                 bytes.truncate(44);
@@ -142,7 +142,7 @@ fn float_blocks_preserve_ieee_widening_and_special_values() {
     ];
     for channels in [1, 2, 3, 8, 30, 32] {
         let frames = 262144 / (channels * 4) + 257;
-        perf::float_fixture(&path, channels, frames);
+        perf::float_fixture_sized(&path, channels, frames);
         let mut bytes = std::fs::read(&path).unwrap();
         for (i, sample) in bytes[44..].chunks_exact_mut(4).enumerate() {
             sample.copy_from_slice(&patterns[i % patterns.len()].to_le_bytes());

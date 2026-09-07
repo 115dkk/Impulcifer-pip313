@@ -11,6 +11,17 @@ use std::{
 const SWEEP: &str = "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav";
 const NAME: &str = "sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav";
 
+/// How the bench obtains its fixtures. `Paired` reads the files and expected
+/// arrays the Python oracle wrote (bit-exact cross-check); `Standalone` writes
+/// its own fixtures (timings only, no cross-check); `Smoke` is `Standalone` at
+/// tiny sizes for `cargo test`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Smoke,
+    Paired,
+    Standalone,
+}
+
 pub struct TempDir(pub PathBuf);
 impl TempDir {
     pub(crate) fn new() -> Self {
@@ -66,10 +77,33 @@ fn verify(path: &Path, tracks: &[Vec<f64>]) {
     );
 }
 
-pub fn float_fixture(path: &Path, channels: usize, frames: usize) {
-    // Tiny smoke only: IEEE binary32 +/-0.5 encoded using integer bits, no Python.
+/// A float32 fixture of the given shape whose interleaved samples alternate
+/// +0.5 / -0.5 (the smoke tests overwrite the payload and only need a valid
+/// header of the right size).
+pub fn float_fixture_sized(path: &Path, channels: usize, frames: usize) {
+    let tracks: Vec<Vec<f64>> = (0..channels)
+        .map(|c| {
+            (0..frames)
+                .map(|f| {
+                    if (f * channels + c) % 2 == 0 {
+                        0.5
+                    } else {
+                        -0.5
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    float_fixture(path, &tracks);
+}
+
+pub fn float_fixture(path: &Path, tracks: &[Vec<f64>]) {
+    // IEEE binary32 WAV written without Python: each f64 sample is cast to
+    // f32 (round-to-nearest-even, the same conversion soundfile performs).
+    let channels = tracks.len();
+    let frames = tracks.first().map_or(0, Vec::len);
     let size = (channels * frames * 4) as u32;
-    let mut bytes = Vec::new();
+    let mut bytes = Vec::with_capacity(size as usize + 44);
     bytes.extend(b"RIFF");
     bytes.extend((size + 36).to_le_bytes());
     bytes.extend(b"WAVEfmt ");
@@ -82,15 +116,10 @@ pub fn float_fixture(path: &Path, channels: usize, frames: usize) {
     bytes.extend(32u16.to_le_bytes());
     bytes.extend(b"data");
     bytes.extend(size.to_le_bytes());
-    for i in 0..channels * frames {
-        bytes.extend(
-            (if i % 2 == 0 {
-                0x3f000000u32
-            } else {
-                0xbf000000u32
-            })
-            .to_le_bytes(),
-        );
+    for frame in 0..frames {
+        for track in tracks {
+            bytes.extend((track[frame] as f32).to_bits().to_le_bytes());
+        }
     }
     std::fs::write(path, bytes).unwrap();
 }
@@ -114,7 +143,8 @@ fn measure<T>(op: &str, size: &str, smoke: bool, mut f: impl FnMut() -> T) {
     println!("| {op} | {size} | {:.6} | {:.6} |", times[5], times[0]);
 }
 
-pub fn run(dir: &Path, smoke: bool) {
+pub fn run(dir: &Path, mode: Mode) {
+    let smoke = mode == Mode::Smoke;
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let n = if smoke { 17 } else { 96000 };
     let short = if smoke { 19 } else { 295000 };
@@ -124,13 +154,13 @@ pub fn run(dir: &Path, smoke: bool) {
     let pcm = dir.join("pcm32.wav");
     let output = dir.join("rust-output.wav");
     let float = dir.join("float32.wav");
-    if smoke {
-        wav::write_wav(&pcm, 48000, &a, 32).unwrap();
-        float_fixture(&float, 8, 23);
-    } else {
+    if mode == Mode::Paired {
         for (name, tracks) in [("input32", &a), ("input30", &b), ("input2", &c)] {
             verify(&dir.join(format!("{name}.f64")), tracks);
         }
+    } else {
+        wav::write_wav(&pcm, 48000, &a, 32).unwrap();
+        float_fixture(&float, &input(8, if smoke { 23 } else { 480_000 }));
     }
     let sweep = if smoke {
         pcm.clone()
@@ -142,7 +172,7 @@ pub fn run(dir: &Path, smoke: bool) {
     } else {
         root.join("data/demo/FL,FR.wav")
     };
-    if !smoke {
+    if mode == Mode::Paired {
         for (name, path) in [
             ("pcm32", &pcm),
             ("sweep", &sweep),
@@ -204,7 +234,7 @@ pub fn run(dir: &Path, smoke: bool) {
 #[allow(dead_code)]
 fn main() {
     if let Some(dir) = std::env::var_os("IMPULCIFER_PERF_DIR") {
-        run(Path::new(&dir), false);
+        run(Path::new(&dir), Mode::Paired);
     } else {
         let dir = TempDir::new();
         let script = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -220,10 +250,13 @@ fn main() {
             .status()
             .map(|status| status.success())
             .unwrap_or(false);
-        if !python_ok {
-            eprintln!("python fixture unavailable; using the Rust-written float32 fixture");
-            float_fixture(&dir.0.join("float32.wav"), 8, 480_000);
+        if python_ok {
+            run(&dir.0, Mode::Paired);
+        } else {
+            eprintln!(
+                "python fixture unavailable; running standalone (Rust-written fixtures, no cross-check)"
+            );
+            run(&dir.0, Mode::Standalone);
         }
-        run(&dir.0, false);
     }
 }
