@@ -349,7 +349,10 @@ impl Hrir {
             ));
         }
         let head = (head_ms * self.fs as f64 / 1000.0) as usize;
-        let window = windows::hann(head * 2, true);
+        // Built lazily: Python creates the Hann only after both ears are known
+        // to hold at least `head` samples, so a huge head_ms on short IRs
+        // must not allocate.
+        let mut window: Option<Vec<f64>> = None;
         for s in &mut self.speakers {
             let (Some(left), Some(right)) = (&mut s.left, &mut s.right) else {
                 return Err(DspError::InvalidArgument(
@@ -368,8 +371,9 @@ impl Hrir {
             left.data = left.data[start.min(left.len())..].to_vec();
             right.data = right.data[start.min(right.len())..].to_vec();
             if left.len() >= head && right.len() >= head {
+                let window = window.get_or_insert_with(|| windows::hann(head * 2, true));
                 for ir in [left, right] {
-                    for (x, w) in ir.data[..head].iter_mut().zip(&window) {
+                    for (x, w) in ir.data[..head].iter_mut().zip(window.iter()) {
                         *x *= w;
                     }
                 }

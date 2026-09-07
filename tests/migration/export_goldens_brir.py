@@ -91,7 +91,9 @@ def decay_fixture(name, ir, source):
     if not isinstance(outputs["adjustment"], dict):
         adjusted = ir.data.copy()
         decay.apply_decay_window(adjusted, outputs["adjustment"])
-        outputs["adjusted"] = array(f"decay_{name}_adjusted", adjusted)
+        # Full arrays only for one demo ear and the synthetic case; the rest are
+        # endpoint/metric summaries (fixture budget, ARCHITECTURE gate 2).
+        outputs["adjusted"] = array(f"decay_{name}_adjusted", adjusted) if name in ("FL_left", "synthetic") else summary(adjusted)
     save(f"decay_{name}", dict(fs=ir.fs, source=source, target=0.3), outputs)
 
 
@@ -115,7 +117,7 @@ def main():
     recording = np.zeros(len(sweep) + 3000)
     recording[1000:1000+len(sweep)] += sweep
     recording[3000:3000+len(sweep)] += sweep*0.1
-    save("estimator", dict(min_duration=5.0, fs=48000), dict(low=estimator.low, high=estimator.high, n_octaves=estimator.n_octaves, duration=estimator.duration, length=len(estimator), file_name=estimator.file_name(32), test_signal=array("sweep", sweep), inverse_filter=array("inverse", estimator.inverse_filter), estimate=array("estimate", estimator.estimate(recording)), bundled_44100=[p.name for p in sorted((ROOT/"data").glob("*44100*"))]))
+    save("estimator", dict(min_duration=5.0, fs=48000), dict(low=estimator.low, high=estimator.high, n_octaves=estimator.n_octaves, duration=estimator.duration, length=len(estimator), file_name=estimator.file_name(32), test_signal=array("sweep", sweep), inverse_filter=array("inverse", estimator.inverse_filter), estimate=summary(estimator.estimate(recording)), bundled_44100=[p.name for p in sorted((ROOT/"data").glob("*44100*"))]))
     sequences = []
     for speakers, layout in [(["FL", "FR"], "stereo"), (["FL"], "mono"), (["FL", "FR", "FC"], "7.1"), (["FL", "FL"], "stereo"), (["FR"], "mono")]:
         data = estimator.sweep_sequence(speakers, layout)
@@ -151,7 +153,7 @@ def main():
         hrir = HRIR(loaded)
         for p in files:
             hrir.open_recording(str(p), p.stem.split(","))
-        snapshot("open", hrir, full=True)
+        snapshot("open", hrir)
         hrir.crop_heads(head_ms=1)
         snapshot("crop_heads", hrir)
         # 'after crop' means the head-crop stage, before alignment/tail crop.
@@ -164,11 +166,12 @@ def main():
         for label, operation in [("shift_plus", lambda x: x.shift(37)), ("shift_minus", lambda x: x.shift(-37)), ("crop", lambda x: x.crop_head(1)), ("equalize", lambda x: x.equalize(np.array([0.5, -0.125, 0.25, 0.0625])))]:
             instance = ir.copy()
             operation(instance)
-            results[label] = array(label, instance.data)
+            results[label] = summary(instance.data)
         magnitude = hrir.irs["FL"]["left"].magnitude_response()
-        results["frequency"] = array("frequency", magnitude[0])
-        results["magnitude"] = array("magnitude", magnitude[1])
-        save("ir", dict(fs=fs, data=array("ir_input", ir.data), fir=[0.5, -0.125, 0.25, 0.0625]), results)
+        results["frequency"] = summary(magnitude[0])
+        results["magnitude"] = summary(magnitude[1])
+        # The input is the crop_heads-stage FL left ear, which the Rust test rebuilds itself.
+        save("ir", dict(fs=fs, data=summary(ir.data), fir=[0.5, -0.125, 0.25, 0.0625]), results)
         save("reflections", {}, hrir.calculate_reflection_levels())
         hrir.align_ipsilateral_all(speaker_pairs=list(constants.IPSILATERAL_PAIRS), segment_ms=30)
         snapshot("ipsilateral", hrir)
@@ -208,8 +211,8 @@ def main():
     total = sum(WRITTEN.values())
     print(f"P08 exported {len(WRITTEN)} files, {total} bytes; Python {common.META['python']}, NumPy {np.__version__}, SciPy {common.META['scipy']}")
     print(f"Required raw full arrays alone: sweep={sweep.nbytes}, inverse={estimator.inverse_filter.nbytes}, estimate={recording.nbytes}, open_FL_pair={2*391270*8}; sum={sweep.nbytes*2+recording.nbytes+2*391270*8}")
-    if total >= 40_000_000:
-        print("BLOCKER: P08 fixtures exceed the 40 MB budget (docs/rust/ARCHITECTURE.md gate 2); no arrays or tolerances were silently dropped.")
+    if total >= 12_000_000:
+        print("BLOCKER: P08 fixtures exceed the 12 MB budget (docs/rust/ARCHITECTURE.md gate 2); no arrays or tolerances were silently dropped.")
         raise SystemExit(1)
 
 

@@ -353,12 +353,15 @@ fn golden_estimate_matches_scipy() {
     }
     let v = fixture("estimator");
     let o = &v["outputs"]["estimate"];
+    let got = e.estimate(&recording);
+    check_summary("estimate", &got, o, 1e-9 * number(&o["max_abs"]));
+    let rms = (got.iter().map(|x| x * x).sum::<f64>() / got.len() as f64).sqrt();
     compare(
-        "estimate",
-        &e.estimate(&recording),
-        &array(o),
-        1e-9 * number(&o["max_abs"]),
+        "estimate metrics",
+        &[got.iter().fold(0.0f64, |m, x| m.max(x.abs())), rms],
+        &[number(&o["max_abs"]), number(&o["rms"])],
         0.0,
+        1e-9,
     );
 }
 /// Python sweep_sequence:153-232; p08_sequence.json (all samples, shared sweep).
@@ -442,11 +445,14 @@ fn golden_file_name_matches_python() {
 #[test]
 fn golden_shift_crop_equalize_match_python() {
     let v = fixture("ir");
-    let base = ImpulseResponse {
-        data: array(&v["inputs"]["data"]),
-        fs: 48000,
-        recording: None,
-    };
+    // The input is the crop_heads-stage FL left ear (verified against its summary).
+    let base = cropped().pair("FL").unwrap().0.clone();
+    check_summary(
+        "ir input",
+        &base.data,
+        &v["inputs"]["data"],
+        1e-9 * number(&v["inputs"]["data"]["max_abs"]),
+    );
     for name in ["shift_plus", "shift_minus", "crop", "equalize"] {
         let mut ir = base.clone();
         match name {
@@ -455,12 +461,20 @@ fn golden_shift_crop_equalize_match_python() {
             "crop" => ir.crop_head(1.0),
             _ => ir.equalize(&array(&v["inputs"]["fir"])),
         };
-        compare(
+        let o = &v["outputs"][name];
+        check_summary(
             name,
             &ir.data,
-            &array(&v["outputs"][name]),
+            o,
             if name == "equalize" { 1e-12 } else { 0.0 },
+        );
+        let rms = (ir.data.iter().map(|x| x * x).sum::<f64>() / ir.len() as f64).sqrt();
+        compare(
+            &format!("{name} metrics"),
+            &[ir.data.iter().fold(0.0f64, |m, x| m.max(x.abs())), rms],
+            &[number(&o["max_abs"]), number(&o["rms"])],
             0.0,
+            1e-12,
         );
     }
 }
@@ -470,19 +484,19 @@ fn golden_magnitude_response_matches_python() {
     let ir = cropped().pair("FL").unwrap().0;
     let (f, m) = ir.magnitude_response();
     let v = fixture("ir");
+    check_summary("frequency", &f, &v["outputs"]["frequency"], 0.0);
+    check_summary("magnitude dB", &m, &v["outputs"]["magnitude"], 1e-9);
+    let finite: Vec<f64> = m.iter().copied().filter(|x| x.is_finite()).collect();
+    let rms = (finite.iter().map(|x| x * x).sum::<f64>() / finite.len() as f64).sqrt();
     compare(
-        "frequency",
-        &f,
-        &array(&v["outputs"]["frequency"]),
+        "magnitude metrics",
+        &[finite.iter().fold(0.0f64, |a, x| a.max(x.abs())), rms],
+        &[
+            number(&v["outputs"]["magnitude"]["max_abs"]),
+            number(&v["outputs"]["magnitude"]["rms"]),
+        ],
         0.0,
-        0.0,
-    );
-    compare(
-        "magnitude dB",
-        &m,
-        &array(&v["outputs"]["magnitude"]),
         1e-9,
-        0.0,
     );
 }
 /// Python decay_params:44-260; p08_decay_*.json.
@@ -559,13 +573,15 @@ fn golden_decay_adjustment_matches_python() {
         let mut data = ir.data.clone();
         decay::apply_decay_window(&mut data, Some(&p));
         check_summary(&name, &data, &v["outputs"]["adjusted"], 1e-12);
-        compare(
-            &format!("{name} window"),
-            &data,
-            &array(&v["outputs"]["adjusted"]),
-            1e-12,
-            0.0,
-        );
+        if v["outputs"]["adjusted"].get("file").is_some() {
+            compare(
+                &format!("{name} window"),
+                &data,
+                &array(&v["outputs"]["adjusted"]),
+                1e-12,
+                0.0,
+            );
+        }
     }
 }
 /// Python complete sorted demo stage protocol; p08_demo_*.json.

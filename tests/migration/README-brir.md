@@ -85,3 +85,7 @@ recording files via the dev-only `impulcifer-io` dependency. Use the additional
 errors and the PCM32 mismatch count. Quantization is inline ties-to-even
 rounding of `x * 2^31`, saturated to i32. The sweep contains 295,270 samples
 (the packet's 295,000 figure is approximate). No tolerance is widened.
+
+## Fixture budget (2026-09-07)
+
+Full `.f64` arrays are kept only where a stage check needs every sample: the generated sweep and inverse filter (the bit-exact sweep contract), the `FL` pair after `crop_tails`, the synthetic decay input and its adjusted output, and the `FL` left ear's decay adjustment. Everything else (`estimate`, the `open` stage, `shift`/`crop`/`equalize`, `magnitude_response`, the other decay adjustments) is pinned by the first and last 256 samples plus length, max, argmax and RMS. The family stays under the 12 MB budget of ARCHITECTURE gate 2.
