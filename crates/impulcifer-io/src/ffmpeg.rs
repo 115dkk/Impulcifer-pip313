@@ -331,9 +331,17 @@ mod tests {
     // A .cmd fixture would invoke cmd.exe, contradicting the no-shell rule.
     // Use the native Rust test executable as a deliberately failing decoder:
     // libtest rejects FFmpeg's -i option and writes its diagnostic to stderr.
+    /// Serialises the tests that spawn processes. On Linux a fork on another
+    /// thread while a fixture script is still open for writing makes the
+    /// script's own exec fail with ETXTBSY ("Text file busy"), which CI hit.
+    static PROCESS_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    fn process_guard() -> std::sync::MutexGuard<'static, ()> {
+        PROCESS_TESTS.lock().unwrap_or_else(|e| e.into_inner())
+    }
     #[cfg(windows)]
     #[test]
     fn ffmpeg_decode_error_carries_stderr() {
+        let _guard = process_guard();
         let tmp = TempDir::new();
         let executable = std::env::current_exe().unwrap();
         let paths = FfmpegPaths {
@@ -364,6 +372,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn ffmpeg_decode_error_carries_stderr() {
+        let _guard = process_guard();
         let tmp = TempDir::new();
         let paths = script(&tmp, "printf 'decode failed: fixture\\n' >&2\nexit 7");
         let error =
@@ -379,6 +388,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn ffmpeg_probe_json_and_decode_arguments() {
+        let _guard = process_guard();
         let tmp = TempDir::new();
         let paths = script(
             &tmp,
