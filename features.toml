@@ -26,9 +26,9 @@ tests = ["impulcifer-service::ipc_bootstrap_shape"]
 [[feature]]
 id = "ipc.list_audio_devices"
 kind = "ipc"
-status = "planned"
-tests = ["impulcifer-service::ipc_list_audio_devices_shape"]
-note = "service path done and tested with a fake backend; stays planned until the cpal backend enumerates on macOS/Linux (P02)"
+status = "implemented"
+tests = ["impulcifer-service::ipc_list_audio_devices_shape", "impulcifer-audio-io::cpal_play_and_capture_virtual_cable", "impulcifer-audio-io::wasapi_session_virtual_cable"]
+note = "service path tested with a fake backend; cpal (macOS/Linux) and WASAPI (Windows) enumeration exercised by the ignored hardware tests"
 
 [[feature]]
 id = "ipc.start_recording"
@@ -549,8 +549,8 @@ tests = ["impulcifer-sys-win::probe_matrix_runs_without_panic", "impulcifer-sys-
 [[feature]]
 id = "audio.play_and_record_session"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-audio-io::session_starts_input_before_output", "impulcifer-audio-io::session_reports_events_in_order", "impulcifer-audio-io::session_captures_playback_length_plus_tail", "impulcifer-audio-io::session_cancel_stops_both_sides", "impulcifer-audio-io::session_propagates_input_open_error", "impulcifer-audio-io::policy_falls_back_to_shared_on_unsupported_format", "impulcifer-audio-io::policy_does_not_retry_on_other_errors"]
 
 [[feature]]
 id = "audio.cancel_output"
