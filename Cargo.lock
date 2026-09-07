@@ -1946,6 +1946,7 @@ dependencies = [
  "impulcifer-types",
  "rayon",
  "realfft",
+ "regex",
  "rustfft",
  "serde",
  "serde_json",
