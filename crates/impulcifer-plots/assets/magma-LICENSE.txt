@@ -1,0 +1,6 @@
+Magma palette by Nathaniel J. Smith and Stefan van der Walt.
+Source: https://github.com/BIDS/colormap/blob/master/colormaps.py
+The authors dedicate the palettes to the public domain under CC0 1.0:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+magma.rgb contains the 256 matplotlib magma entries, rounded to RGB8.

@@ -206,3 +206,209 @@ Local evidence directories contain `environment.json`, `rows.json`, and per-chil
 The no-argument script labels directories `baseline`, including final runs. These are local temporary evidence, not repository fixtures or durable CI artifacts. Parent logs are `target/pa03-parent-verification.log` and `target/pa03-parent-tests.log`.
 
 Remaining completion requirement: implement and verify Rust's two default plot outputs under a feature packet, then rerun PA03 before changing `perf.pipeline-demo` to `implemented` or claiming M2 full-output completion. No measured timing operation currently fails the numerical speed threshold.
+
+## With plots (P19)
+
+2026-09-08 foreground rerun. Rust now writes `plots/headphones.png` and
+`plots/results.png` on the default run, matching the Python default PNG set.
+The fixed Rust dimensions intentionally omit tight-bbox cropping and palette
+quantization. This is equivalent plot content/workload, not pixel-identical output.
+Other workers' concurrent P18 changes removed the Rust timestamp subprocess;
+these measurements must not be attributed solely to plotting performance.
+No DSP arithmetic was changed by P19.
+
+The numerical performance requirement passes: every CLI/process and main/service
+ratio below is greater than 1.0. **P19 acceptance is not complete**: its fixed
+uncropped image dimensions contradict the required 10% comparison against actual
+cropped Python dimensions, and actual pipeline smoothed FRs exceed the strict P09
+primitive budget because upstream EQ FIR outputs are not bit-exact. Isolated
+plotting preparation from Python IR snapshots passes that strict budget. An old
+service test also still requires five skipped plots and no plots directory.
+The registry is unchanged. Benchmarking was completed despite these acceptance
+failures to provide the requested performance evidence; it is not a green gate.
+
+### Process, in-process and peak memory
+
+Times are milliseconds. Memory is MiB. Zero in-process time on CLI rows means
+there is no inner timer. Method and sampling caveats are the same as PA03 above.
+
+| scenario | side | mode | process median ms | process min ms | in-process median ms | root peak MiB | largest workload process peak MiB | sum historical peaks MiB | concurrent tree RSS MiB |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| default | rust | service | 1137.256500 | 1109.525200 | 1065.435000 | 243.859 | 243.859 | 243.859 | 233.090 |
+| default | python314 | cli | 12930.834000 | 12870.923900 | 0.000000 | 494.711 | 494.711 | 1141.246 | 945.625 |
+| default | python314 | inprocess | 11077.638000 | 11030.408000 | 9285.510500 | 494.871 | 494.871 | 995.566 | 797.113 |
+| default | python314t | cli | 5745.216100 | 5691.823800 | 0.000000 | 4.316 | 521.297 | 525.613 | 525.559 |
+| default | python314t | inprocess | 5827.490400 | 5693.789100 | 3911.648800 | 4.316 | 521.832 | 526.129 | 526.074 |
+| vbass | rust | service | 1159.928400 | 1126.186400 | 1087.379400 | 233.473 | 233.473 | 233.473 | 227.062 |
+| vbass | python314 | cli | 12829.353600 | 12806.844000 | 0.000000 | 494.359 | 494.359 | 1141.875 | 913.402 |
+| vbass | python314 | inprocess | 11090.831400 | 11014.075600 | 9322.330100 | 495.762 | 495.762 | 996.816 | 764.906 |
+| vbass | python314t | cli | 5819.800700 | 5804.782900 | 0.000000 | 4.316 | 520.906 | 525.219 | 525.164 |
+| vbass | python314t | inprocess | 6024.844500 | 5931.416400 | 3896.636300 | 4.316 | 521.586 | 525.902 | 525.848 |
+
+| scenario | comparator | Python CLI / Rust process | Python main / Rust service |
+|---|---|---:|---:|
+| default | python314 | 11.370200 | 8.715229 |
+| default | python314t | 5.051821 | 3.671410 |
+| vbass | python314 | 11.060470 | 8.573208 |
+| vbass | python314t | 5.017379 | 3.583511 |
+
+### Standalone Rust benchmark
+
+| scenario | rust median ms | rust min ms |
+|---|---:|---:|
+| default | 1073.687100 | 1056.924700 |
+| vbass | 1080.120100 | 1048.779100 |
+
+Commands completed with exit 0:
+
+```text
+py -3.14 E:/Impulcifer/tests/migration/bench_oracle_pipeline.py
+cargo bench -p impulcifer-service --bench perf
+```
+
+Raw process/environment evidence:
+`C:/Users/32170336/AppData/Local/Temp/impulcifer-pa03-baseline-iz__au5b/`.
+Verbatim command logs:
+`C:/Users/32170336/AppData/Local/Temp/impulcifer-p19-2x0ia2z6/perf-oracle.log` and
+`C:/Users/32170336/AppData/Local/Temp/impulcifer-p19-2x0ia2z6/perf-rust.log`.
+
+### Independent parent rerun (2026-09-08)
+
+The parent reran the exporter, fmt, clippy, plots tests, service tests (also with
+`--no-fail-fast`), policy tests and both benchmark commands in the foreground.
+The four service failures above reproduced. Plot tests passed 4/4 and policy
+passed 6/6; demo parity and plot/no-plot WAV equality passed. No acceptance
+threshold was relaxed. Benchmarks ran despite the failures and are diagnostic,
+not an acceptance pass. Concurrent worker changes remain part of this working
+copy, so the comparison is not an isolated P19 before/after experiment.
+
+| scenario | side | mode | process median ms | process min ms | in-process median ms | root peak MiB | largest workload process peak MiB | sum historical peaks MiB | concurrent tree RSS MiB |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| default | rust | service | 1173.689500 | 1128.561600 | 1101.663900 | 244.035 | 244.035 | 244.035 | 232.473 |
+| default | python314 | cli | 14057.212500 | 13283.586300 | 0.000000 | 494.301 | 494.301 | 1141.930 | 946.723 |
+| default | python314 | inprocess | 12550.627900 | 11398.117800 | 10727.778900 | 495.145 | 495.145 | 996.051 | 797.680 |
+| default | python314t | cli | 5782.594600 | 5698.330700 | 0.000000 | 4.320 | 521.648 | 525.969 | 525.914 |
+| default | python314t | inprocess | 6112.271400 | 5883.424400 | 4152.744400 | 4.316 | 521.859 | 526.176 | 526.121 |
+| vbass | rust | service | 1235.369900 | 1207.273700 | 1161.647200 | 233.145 | 233.145 | 233.145 | 229.957 |
+| vbass | python314 | cli | 13663.367200 | 13316.166400 | 0.000000 | 496.012 | 496.012 | 1142.777 | 912.340 |
+| vbass | python314 | inprocess | 15401.768100 | 11690.561800 | 12416.261200 | 494.957 | 494.957 | 995.891 | 763.887 |
+| vbass | python314t | cli | 6151.802600 | 6031.218000 | 0.000000 | 4.320 | 521.551 | 525.871 | 525.816 |
+| vbass | python314t | inprocess | 6714.574300 | 5774.198600 | 3768.891600 | 4.320 | 521.957 | 526.273 | 526.219 |
+
+| scenario | comparator | Python CLI / Rust process | Python main / Rust service |
+|---|---|---:|---:|
+| default | python314 | 11.976943 | 9.737797 |
+| default | python314t | 4.926852 | 3.769520 |
+| vbass | python314 | 11.060143 | 10.688496 |
+| vbass | python314t | 4.979725 | 3.244437 |
+
+Every measured time ratio remains above 1.0. Python/Rust largest-workload-process
+peak and concurrent-tree-RSS ratios are also above 1.0; the Python 3.14t launcher
+root peak is not the workload and must not be used for that comparison.
+
+The independent standalone Rust benchmark printed:
+
+```text
+| scenario | rust median ms | rust min ms |
+| default | 1036.509800 | 1020.128300 |
+| vbass | 1044.232300 | 1025.127600 |
+```
+
+Parent evidence is local temporary data, not committed fixtures:
+
+- `C:/Users/32170336/AppData/Local/Temp/impulcifer-pa03-baseline-6vu4zw8c/`
+- `C:/Users/32170336/AppData/Local/Temp/p19-parent-bench-oracle.log`
+- `C:/Users/32170336/AppData/Local/Temp/p19-parent-bench-rust.log`
+- `C:/Users/32170336/AppData/Local/Temp/p19-parent-export.log`
+- `C:/Users/32170336/AppData/Local/Temp/p19-parent-service-required.log`
+- `C:/Users/32170336/AppData/Local/Temp/p19-parent-service-all.log`
+
+### With plots (P19): second-run decisions implemented (2026-09-08)
+
+This continuation implements the packet's canvas oracle, separate strict same-input
+and downstream series budgets, renamed optional-stage test, and generic room plot.
+It supersedes the earlier image-size/series/test-placeholder failure descriptions
+without changing their historical measurements. No numeric pipeline changes were
+made. Default PNG output remains the same two files as Python; optional PNG sets
+also match the canvas oracle exactly. Rust omits tight-bbox cropping and palette
+quantization, and uses the documented 2D waterfall. Shared-tree P18 changes remain
+in the benchmarked implementation; this is not an isolated P19 timing experiment.
+
+Requested exporter, fmt, clippy, plots tests and service tests passed. Service:
+83 passed, 0 failed, 1 ignored (Windows virtual-cable hardware). Policy: 5 passed,
+1 failed because five registry entries still cite the renamed optional-stage test.
+`features.toml` is outside this packet's allowed files. The performance commands
+were run despite that integration failure, completed in the foreground, and both
+returned exit 0. This is successful performance evidence, not a claim that the
+entire packet is accepted before the parent updates and retests the registry.
+
+The canonical demo has no `room.wav`. The generic-only oracle/test uses an
+unchanged `room-FL,FR-left.wav` copied as temporary `room.wav`, plus `FL,FR.wav`
+and `headphones.wav`. This case is not included in the default/vbass perf workload.
+
+#### Process, in-process and peak memory
+
+Times are milliseconds; memory is MiB. CLI inner time 0 means no inner timer.
+The PA03 setup/cleanup, 50 ms sampling, venv-launcher, historical-peak and shared
+memory caveats above continue to apply. No thread limits were imposed.
+
+| scenario | side | mode | process median ms | process min ms | in-process median ms | root peak MiB | largest workload process peak MiB | sum historical peaks MiB | concurrent tree RSS MiB |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| default | rust | service | 1121.079200 | 1114.718300 | 1058.071200 | 245.215 | 245.215 | 245.215 | 232.949 |
+| default | python314 | cli | 13359.916400 | 13291.487200 | 0.000000 | 495.828 | 495.828 | 1141.875 | 946.410 |
+| default | python314 | inprocess | 11485.128500 | 11387.183300 | 9679.011500 | 495.426 | 495.426 | 996.562 | 796.961 |
+| default | python314t | cli | 6131.394600 | 5976.062800 | 0.000000 | 4.320 | 521.336 | 525.652 | 525.598 |
+| default | python314t | inprocess | 5841.608300 | 5751.471000 | 3779.183800 | 4.316 | 522.027 | 526.340 | 526.285 |
+| vbass | rust | service | 1122.878000 | 1110.833500 | 1057.672200 | 233.145 | 233.145 | 233.145 | 233.070 |
+| vbass | python314 | cli | 13444.500100 | 13438.895400 | 0.000000 | 495.129 | 495.129 | 1142.582 | 913.609 |
+| vbass | python314 | inprocess | 11491.582100 | 11436.658200 | 9716.501800 | 495.422 | 495.422 | 996.867 | 765.809 |
+| vbass | python314t | cli | 5788.716100 | 5711.108000 | 0.000000 | 4.316 | 521.441 | 525.742 | 525.688 |
+| vbass | python314t | inprocess | 5887.570700 | 5782.391100 | 3882.520800 | 4.316 | 521.488 | 525.805 | 525.750 |
+
+| scenario | comparator | Python CLI / Rust process | Python main / Rust service |
+|---|---|---:|---:|
+| default | python314 | 11.917014 | 9.147788 |
+| default | python314t | 5.469190 | 3.571767 |
+| vbass | python314 | 11.973251 | 9.186685 |
+| vbass | python314t | 5.155249 | 3.670817 |
+
+Every measured time ratio is above 1.0. Memory ratios below also exceed 1.0.
+The free-threaded venv launcher root peak is not a workload-process measurement.
+
+| scenario | comparator | mode | Python/Rust workload peak | Python/Rust concurrent tree RSS |
+|---|---|---|---:|---:|
+| default | python314 | cli | 2.022015 | 4.062732 |
+| default | python314 | inprocess | 2.020374 | 3.421179 |
+| default | python314t | cli | 2.126037 | 2.256276 |
+| default | python314t | inprocess | 2.128857 | 2.259227 |
+| vbass | python314 | cli | 2.123699 | 3.919887 |
+| vbass | python314 | inprocess | 2.124956 | 3.285741 |
+| vbass | python314t | cli | 2.236559 | 2.255489 |
+| vbass | python314t | inprocess | 2.236760 | 2.255757 |
+
+#### Standalone Rust benchmark
+
+```text
+| scenario | rust median ms | rust min ms |
+| default | 1041.807200 | 1032.193100 |
+| vbass | 1042.240800 | 1033.798700 |
+```
+
+One measured vbass repetition was 1578.8915 ms (including 259 ms result-plot and
+318 ms final-write event intervals); it was retained, not discarded. Medians above
+include every measured repetition, excluding only the defined warmup.
+
+Both required foreground commands completed with exit 0:
+
+```text
+py -3.14 E:/Impulcifer/tests/migration/bench_oracle_pipeline.py
+cargo bench -p impulcifer-service --bench perf
+```
+
+Full command stdout/stderr:
+`C:/Users/32170336/AppData/Local/Temp/impulcifer-p19-final-_jdz_tot/perf-oracle.log`
+and `C:/Users/32170336/AppData/Local/Temp/impulcifer-p19-final-_jdz_tot/perf-rust.log`.
+Raw environment, rows and every measured child log:
+`C:/Users/32170336/AppData/Local/Temp/impulcifer-pa03-baseline-wz3u126q/`.
+All remaining gate logs are in the same `impulcifer-p19-final-_jdz_tot` directory;
+see `tests/migration/README-plots.md` for the exact gate and fixture results.

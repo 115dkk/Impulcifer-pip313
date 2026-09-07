@@ -1,0 +1,17 @@
+[package]
+name = "impulcifer-plots"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+plotters = { version = "0.3.7", default-features = false, features = ["bitmap_backend", "ab_glyph", "line_series"] }
+png = "0.18"
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

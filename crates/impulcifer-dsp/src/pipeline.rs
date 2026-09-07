@@ -39,6 +39,10 @@ pub struct StageProgress {
     pub total: usize,
 }
 pub trait StageObserver {
+    /// Read-only plot snapshot before any later resampling; no progress step added.
+    fn on_plot(&mut self, _key: StageKey, _hrir: &Hrir) -> Result<(), DspError> {
+        Ok(())
+    }
     /// Python logger.step, core/pipeline.py:516-972; p10_stage_table.
     fn on_stage(&mut self, progress: StageProgress);
     /// Python check_cancelled, core/pipeline.py:505-509; p10_stage_table.
@@ -176,6 +180,12 @@ pub fn run_pipeline(
         step += n;
         observer.on_stage(StageProgress { key, step, total });
         match key {
+            StageKey::PlotPre
+            | StageKey::PlotPost
+            | StageKey::PlotResults
+            | StageKey::PlotAdditional => {
+                observer.on_plot(key, &hrir)?;
+            }
             StageKey::Target => {
                 target = Some(crate::stages::target::create_target(
                     estimator.fs,

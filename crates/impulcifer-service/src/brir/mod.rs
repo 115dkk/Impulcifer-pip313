@@ -3,6 +3,7 @@ pub mod discovery;
 pub mod estimator;
 pub mod inputs;
 pub mod outputs;
+mod plots;
 pub mod run;
 pub mod sweep_grid;
 pub(crate) mod validation;

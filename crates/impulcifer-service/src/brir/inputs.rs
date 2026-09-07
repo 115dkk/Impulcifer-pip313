@@ -203,6 +203,12 @@ pub fn load_inputs(
                 generic_limit: config.generic_limit,
             },
         )?;
+        if config.plot
+            && let Some(room) = &room_result
+        {
+            super::plots::room(&dir.dir, &rir, room)?;
+            super::plots::generic_room(&dir.dir, &generic, &target, calibration.as_ref(), config)?;
+        }
         if let Some(room) = &room_result
             && !room.responses_tracks.is_empty()
         {
@@ -256,6 +262,13 @@ pub fn load_inputs(
                 32,
             )?;
             headphone = Some(headphone_compensation(&hp)?);
+            if let Some(hp) = &headphone {
+                super::plots::headphones(
+                    &dir.dir.join("plots/headphones.png"),
+                    &hp.left,
+                    &hp.right,
+                )?;
+            }
         } else {
             events.log(
                 "error",
@@ -286,6 +299,11 @@ pub fn load_inputs(
         let right = eq(dir.eq.right.as_deref(), fs, events)?.map(|(l, r)| r.unwrap_or(l));
         (eq_left, eq_right) = select_eq_pair(common, common_right, left, right);
         (eq_left, eq_right) = finalize_eq(eq_left, eq_right, fs)?;
+        super::plots::eq(
+            &dir.dir.join("plots/eq.png"),
+            eq_left.as_ref(),
+            eq_right.as_ref(),
+        )?;
         events.check_cancelled()?;
     }
     events.step("cli_creating_target", json!({}))?;
