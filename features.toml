@@ -47,8 +47,9 @@ note = "end to end on the demo (M2): WAV tracks within 1e-3*max_abs (observed 1e
 [[feature]]
 id = "ipc.start_output_recovery"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::recovery_ipc_start_and_poll_round_trip", "impulcifer-service::recovery_request_validation_matches_all_python_cases"]
+note = "2.x request validation (25 golden cases), non-cancellable output_recovery job, result and error payloads through poll"
 
 [[feature]]
 id = "ipc.poll_job"
@@ -647,8 +648,9 @@ tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurement
 [[feature]]
 id = "output.recovery"
 kind = "output"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::golden_recovery_scenarios_match_python", "impulcifer-service::golden_recovery_errors_match_python", "impulcifer-service::recovery_never_overwrites_existing_outputs", "impulcifer-service::recovery_cleans_up_partial_writes_on_failure", "impulcifer-service::recovery_atomic_publish_never_overwrites_racing_output"]
+note = "core/brir_recovery.py parity: 97 scenarios, 76 recovered files byte-identical to Python, 52 error envelopes exact (the broken-WAV reason text comes from libsndfile and differs); publish = hard link, rename fallback on filesystems without hard links; raw OSError cases surface as OUTPUT_WRITE_FAILED with the OS reason instead of INTERNAL_ERROR"
 
 [[feature]]
 id = "dsp.rfft_irfft"

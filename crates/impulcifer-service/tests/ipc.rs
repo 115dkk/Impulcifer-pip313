@@ -960,12 +960,7 @@ fn backend_errors_panics_and_empty_enumeration() {
 #[test]
 fn deferred_methods_keep_not_implemented_envelopes() {
     let f = Fixture::new();
-    for method in [
-        "start_output_recovery",
-        "check_for_updates",
-        "start_update",
-        "apply_pending_update",
-    ] {
+    for method in ["check_for_updates", "start_update", "apply_pending_update"] {
         assert_eq!(
             failure(f.call(method, vec![]), "INTERNAL_ERROR")["message"],
             format!("{method} not implemented")
