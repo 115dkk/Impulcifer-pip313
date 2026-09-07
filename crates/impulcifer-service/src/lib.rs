@@ -8,6 +8,7 @@ mod args;
 pub mod brir;
 mod paths;
 pub mod recording;
+pub mod recovery;
 pub mod settings;
 
 use args::Args;
@@ -258,6 +259,35 @@ impl ImpulciferService {
                         let run = brir::run::run_with_data(&request.config, &catalog, ctx, &data)?;
                         Ok(json!({"output_path":run.output_path}))
                     })
+                    .map_err(|code| {
+                        ipc::error(
+                            code,
+                            "Another job is already running.",
+                            json!({"job":self.jobs.active().as_ref().map(snapshot)}),
+                            code == ErrorCode::JobBusy,
+                        )
+                    })?;
+                Ok(json!({"job":snapshot(&job)}))
+            }
+            IpcMethod::StartOutputRecovery => {
+                args.count(1, 1)?;
+                let (directory, options) = recovery::validate_request(args.get(0))?;
+                let job = self
+                    .jobs
+                    .start(
+                        impulcifer_types::job::JobKind::OutputRecovery,
+                        false,
+                        move |_ctx| {
+                            let result = recovery::recover_brir_outputs(&directory, &options)
+                                .map_err(recovery::RecoveryError::failure)?;
+                            serde_json::to_value(result).map_err(|error| {
+                                impulcifer_jobs::registry::JobFailure {
+                                    error: internal(error.to_string())["error"].clone(),
+                                    cancelled: false,
+                                }
+                            })
+                        },
+                    )
                     .map_err(|code| {
                         ipc::error(
                             code,
