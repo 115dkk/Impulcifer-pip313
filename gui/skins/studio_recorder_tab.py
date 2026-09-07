@@ -61,7 +61,7 @@ class StudioRecorderTab(RecordingActionsMixin):
         self.root = app.root
         self.parent = parent
 
-        self.host_api_var = ctk.StringVar(value="Windows DirectSound")
+        self.host_api_var = ctk.StringVar(value="Windows WASAPI")
         self.output_device_var = ctk.StringVar()
         self.input_device_var = ctk.StringVar()
         self.play_var = ctk.StringVar(
@@ -475,7 +475,7 @@ class StudioRecorderTab(RecordingActionsMixin):
             values = list(host_apis.values())
             self.host_api_menu.configure(values=values)
             if not self.host_api_var.get() or self.host_api_var.get() not in values:
-                self.host_api_var.set("Windows DirectSound" if "Windows DirectSound" in values else values[0])
+                self.host_api_var.set("Windows WASAPI" if "Windows WASAPI" in values else values[0])
 
         output_devices: list[str] = []
         input_devices: list[str] = []

@@ -37,6 +37,67 @@ class DeviceNotFoundError(Exception):
     pass
 
 
+WASAPI_HOST_API = 'Windows WASAPI'
+# Host APIs tried, in order, when neither the device name nor the ``host_api``
+# argument pins one. WASAPI is the native Windows audio path; DirectSound and
+# MME have been emulated on top of WASAPI since Vista, so they add a mixer
+# stage without adding capabilities (MME also truncates device names to 31
+# characters). They remain as fallbacks for drivers whose WASAPI endpoint
+# refuses the requested format even with auto-convert.
+HOST_API_PREFERENCE = ('WASAPI', 'DirectSound', 'MME')
+
+
+def _is_wasapi_device(device):
+    """True when ``device`` (a sounddevice device dict) belongs to the WASAPI host API."""
+    try:
+        return get_host_api_names()[device['hostapi']] == WASAPI_HOST_API
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def wasapi_extra_settings(device, kind, fs, channels):
+    """Return WASAPI stream settings for ``device``, or ``None`` when not needed.
+
+    PortAudio's WASAPI shared mode rejects any sample rate or channel count
+    that differs from the Windows mixer format unless the stream asks for the
+    audio engine's resampler and channel matrixer
+    (``AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM``). The flag is attached only when
+    the native format check fails: devices that accept the requested format
+    keep the conversion-free path, and some Windows 11 24H2 communications
+    endpoints are known to deliver silence to auto-converted capture streams.
+
+    Args:
+        device: sounddevice device dict (needs ``index`` and ``hostapi``)
+        kind: ``"input"`` or ``"output"``
+        fs: Requested sample rate, or None to skip the check
+        channels: Requested channel count, or None to skip the check
+
+    Returns:
+        ``sounddevice.WasapiSettings`` with ``auto_convert=True``, or ``None``
+    """
+    if fs is None or channels is None or not _is_wasapi_device(device):
+        return None
+    sd = _sounddevice()
+    check = sd.check_input_settings if kind == 'input' else sd.check_output_settings
+    try:
+        check(device=device['index'], channels=channels, samplerate=fs)
+    except Exception:
+        try:
+            settings = sd.WasapiSettings(auto_convert=True)
+        except TypeError:
+            # sounddevice < 0.4.7 has no ``auto_convert``. Open without conversion
+            # rather than crash; the stream then fails the same way it did before
+            # WASAPI became the preferred host API, with a clearer hint.
+            print(f'WASAPI {kind} device does not natively accept {fs} Hz / {channels} ch and this '
+                  'sounddevice build has no auto_convert option (needs sounddevice >= 0.4.7); '
+                  'opening without conversion.')
+            return None
+        print(f'WASAPI {kind} device does not natively accept {fs} Hz / {channels} ch; '
+              'enabling auto-convert (shared-mode resampler).')
+        return settings
+    return None
+
+
 def _emit_progress(progress_callback, event):
     """Call the optional progress callback without letting UI errors affect audio."""
     if progress_callback is None:
@@ -235,7 +296,7 @@ def get_device(device_name, kind, host_api=None, min_channels=1):
                                       f'but minimum number of channels is not satisfied.')
     else:
         # Host API not in the name and host API is not given as parameter
-        host_api_preference = [x for x in ['DirectSound', 'MME', 'WASAPI'] if x in host_api_names]
+        host_api_preference = [x for x in HOST_API_PREFERENCE if x in host_api_names]
         for host_api_name in host_api_preference:
             try:
                 device = _sounddevice().query_devices(f'{device_name} {host_api_name}', kind=kind)
@@ -277,12 +338,17 @@ def get_devices(input_device=None, output_device=None, host_api=None, min_channe
     return input_device, output_device
 
 
-def set_default_devices(input_device, output_device):
-    """Sets sounddevice default devices
+def set_default_devices(input_device, output_device, fs=None, input_channels=None, output_channels=None):
+    """Sets sounddevice default devices and per-direction WASAPI stream settings
 
     Args:
         input_device: Input device object
         output_device: Output device object
+        fs: Sample rate the streams will be opened with. When given together
+            with the channel counts, WASAPI devices that cannot natively open
+            that format get ``auto_convert`` enabled (see ``wasapi_extra_settings``).
+        input_channels: Channels the recording stream will open
+        output_channels: Channels the playback stream will open
 
     Returns:
         - Input device name and host API as string
@@ -291,7 +357,12 @@ def set_default_devices(input_device, output_device):
     host_api_names = get_host_api_names()
     input_device_str = f'{input_device["name"]} {host_api_names[input_device["hostapi"]]}'
     output_device_str = f'{output_device["name"]} {host_api_names[output_device["hostapi"]]}'
-    _sounddevice().default.device = (input_device_str, output_device_str)
+    sd = _sounddevice()
+    sd.default.device = (input_device_str, output_device_str)
+    sd.default.extra_settings = (
+        wasapi_extra_settings(input_device, 'input', fs, input_channels),
+        wasapi_extra_settings(output_device, 'output', fs, output_channels),
+    )
     return input_device_str, output_device_str
 
 
@@ -412,7 +483,10 @@ def play_and_record(
             print("Consider using a professional audio interface with sufficient outputs.")
         raise
     
-    input_device_str, output_device_str = set_default_devices(input_device, output_device)
+    playback_channels = min(n_channels, output_device["max_output_channels"])
+    input_device_str, output_device_str = set_default_devices(
+        input_device, output_device, fs, channels, playback_channels
+    )
 
     print(f'Input device:  "{input_device_str}"')
     print(f'Output device: "{output_device_str}" (max {output_device["max_output_channels"]} channels)')
@@ -526,7 +600,7 @@ def create_cli():
                             help='Name or number of the input device. Use "python -m sounddevice to '
                                  'find out which devices are available. It\'s possible to add host API at the end of '
                                  'the input device name separated by space to specify which host API to use. For '
-                                 'example: "Zoom H1n DirectSound".')
+                                 'example: "Zoom H1n WASAPI".')
     arg_parser.add_argument('--output_device', type=str, default=argparse.SUPPRESS,
                             help='Name or number of the output device. Use "python -m sounddevice to '
                                  'find out which devices are available. It\'s possible to add host API at the end of '
@@ -534,9 +608,10 @@ def create_cli():
                                  'example: "Zoom H1n WASAPI"')
     arg_parser.add_argument('--host_api', type=str, default=argparse.SUPPRESS,
                             help='Host API name to prefer for input and output devices. Supported options on Windows '
-                                 'are: "MME", "DirectSound" and "WASAPI". This is used when input and '
-                                 'output devices have not been specified (using system defaults) or if they have no '
-                                 'host API specified.')
+                                 'are: "WASAPI", "DirectSound" and "MME"; without this option WASAPI is tried '
+                                 'first, then DirectSound, then MME. This is used when input and output devices '
+                                 'have not been specified (using system defaults) or if they have no host API '
+                                 'specified.')
     arg_parser.add_argument('--channels', type=int, default=2, help='Number of output channels.')
     arg_parser.add_argument('--append', action='store_true',
                             help='Add track(s) to existing file? Silence will be added to the end of all tracks to '
