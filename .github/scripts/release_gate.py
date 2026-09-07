@@ -53,6 +53,10 @@ EXCLUDE = (
     "docs/*", ".github/*", "tests/*", "research/*", ".claude/*",
     "packaging/*",
     "LICENSE*", "CHANGELOG*", "CONTEXT.md", ".gitignore", ".gitattributes",
+    # 3.x Rust workspace (ADR 0002). It does not ship in the 2.x wheel or the
+    # Nuitka bundles, so Rust-only pushes must not bump or publish 2.x.
+    "crates/*", "apps/*", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
+    "features.toml", "unsafe-budget.toml",
 )
 
 

@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "apps/impulcifer-app"]
+
+[workspace.package]
+version = "3.0.0-alpha.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT"
+repository = "https://github.com/115dkk/Impulcifer-pip313"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+missing_safety_doc = "deny"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+toml = "0.8"
+rustfft = "6.4"
+realfft = "3.5"
+rayon = "1.11"
+clap = { version = "4", features = ["derive"] }

@@ -94,6 +94,18 @@ updater/
   executors.py            ← UpdateExecutor 계열(업데이트 실행)
 ```
 
+## 3.x Rust 워크스페이스 (ADR 0002)
+
+3.x는 Rust 코어 + Tauri 2 셸로 재작성 중이다. 정본은 `docs/rust/ARCHITECTURE.md`와 `docs/adr/0002-rust-tauri-rewrite.md`이며, 조사 근거는 `docs/research/rewrite-stack-2026-09/`에 있다. 2.x Python 트리는 그대로 유지되고(오라클 역할), 저장소 루트의 `Cargo.toml` 워크스페이스에 `crates/*`와 `apps/impulcifer-app`이 추가됐다.
+
+- **IPC와 프론트엔드는 2.x 그대로다.** `webview_ui/`와 i18n 카탈로그는 수정하지 않는다. Tauri 커맨드는 `pywebview_api(method, args)` 하나이고 `apps/impulcifer-app/src/bridge.js`가 `window.pywebview.api`를 폴리필한다.
+- **unsafe는 손수 쓰지 않는다.** 모든 크레이트 루트에 `#![forbid(unsafe_code)]`. `unsafe-budget.toml`의 허용치는 전부 0이며 올리려면 ADR이 필요하다. wasapi-rs의 `WaveFormat::parse`, `Device::from_raw`는 쓰지 않는다. 업스트림 이슈는 올리지 않는다.
+- **기능 게이트.** 새 기능은 반드시 루트 `features.toml`에 등록하고, `status = "implemented"`로 바꿀 때는 `tests = ["crate-name::test_fn"]`에 실제로 존재하는 검증 테스트를 적는다. `cargo test -p impulcifer-policy`가 누락을 실패로 만든다. 검증 테스트 없는 구현은 머지하지 않는다.
+- **Windows 오디오는 WASAPI만.** ASIO·DirectSound·MME 없음. exclusive 우선, shared+auto-convert 폴백.
+- **작업 분배.** unsafe 단인 `impulcifer-sys-win`은 Daybreak 워커, 나머지 크레이트(`impulcifer-audio-io` 포함)는 ASTRA 워커가 작업서 단위로 구현한다. 작업서는 `docs/rust/packets/`에 둔다.
+- **CI.** `.github/workflows/rust.yml`이 fmt·clippy·게이트·3 OS 테스트를 돈다. Rust 경로는 릴리스 게이트의 `EXCLUDE`에 있어 2.x 발행을 건드리지 않는다.
+- **로컬 검증.** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- --no-deps -D warnings`, `cargo test --workspace`.
+
 ## 수정 시 주의사항
 
 `impulcifer.py`의 `main()`은 `**kwargs`를 받아 `core.pipeline.ProcessingConfig.from_kwargs()`로 전달하는 얇은 래퍼다(이슈 #113/#115 audit에서 기존의 32개 명시적 인자 시그니처를 통합). GUI의 `generate_brir()`/`gui.brir_args.build_brir_args`와 CLI(`create_cli`)가 인자 딕셔너리를 조립해 넘기며, `ProcessingConfig`에 없는 키(예: 폐기된 호환 플래그)는 `from_kwargs`가 무시한다. 따라서 파라미터의 정본 기본값은 `ProcessingConfig` 필드에만 존재하므로, 새 파라미터는 `ProcessingConfig`에 필드를 추가하면 CLI·GUI·파이프라인에 자동 반영된다. 실제 BRIR 파이프라인 단계 시퀀스는 `core.pipeline.BRIRPipeline._stage_table()`이 보유한다 — 단계별 게이트·진행률 스텝 수·메서드가 한 테이블에 있고, 진행률 총계도 같은 테이블에서 도출된다(이슈 #138 C1에서 510줄 `run()`을 분할). DSP 단계 헬퍼는 `core/pipeline_stages.py`에 있으며 `impulcifer.py`는 하위 호환 재export만 유지한다.

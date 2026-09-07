@@ -1,0 +1,20 @@
+[package]
+name = "impulcifer-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "impulcifer"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+impulcifer-types = { path = "../impulcifer-types" }
+impulcifer-dsp = { path = "../impulcifer-dsp" }
+impulcifer-service = { path = "../impulcifer-service" }
+clap.workspace = true
+serde_json.workspace = true

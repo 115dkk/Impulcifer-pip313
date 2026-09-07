@@ -152,3 +152,7 @@ TECH_DEBT_AUDIT.md
 combined-audit-report.md
 change-summary.txt
 issue-body.md
+
+# Rust workspace
+/target/
+/apps/impulcifer-app/gen/

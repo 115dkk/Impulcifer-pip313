@@ -1,0 +1,4 @@
+# Handwritten `unsafe` allowance per crate. Every crate not listed here has 0.
+# Raising a number requires an ADR (docs/adr) and maintainer approval.
+[budget]
+impulcifer-sys-win = 0
