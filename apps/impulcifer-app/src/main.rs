@@ -6,6 +6,9 @@
 //! the title-bar theme live in `TauriHost`, backed by the dialog and opener
 //! plugins and the core window API.
 
+mod dialog;
+mod smoke;
+
 use std::sync::Arc;
 
 use impulcifer_service::{HostAdapter, ImpulciferService};
@@ -88,6 +91,7 @@ impl HostAdapter for TauriHost {
 
 struct AppState {
     service: Arc<ImpulciferService>,
+    smoke: Option<Arc<smoke::SmokeConfig>>,
 }
 
 /// The single IPC entry point. It is `async` so Tauri runs it off the main
@@ -100,7 +104,13 @@ async fn pywebview_api(
     args: Vec<Value>,
 ) -> Result<Value, String> {
     let service = Arc::clone(&state.service);
-    let outcome = tauri::async_runtime::spawn_blocking(move || service.call(&method, args)).await;
+    let smoke = state.smoke.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        smoke::dispatch(smoke.as_deref(), &method, args, |method, args| {
+            service.call(method, args)
+        })
+    })
+    .await;
     Ok(outcome.unwrap_or_else(|err| {
         ipc::error(
             ErrorCode::InternalError,
@@ -114,23 +124,58 @@ async fn pywebview_api(
 const BRIDGE_JS: &str = include_str!("bridge.js");
 
 fn main() {
+    let smoke = smoke::SmokeConfig::from_environment()
+        .expect("invalid smoke startup configuration")
+        .map(Arc::new);
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(dialog::NativeDialogs::new())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![pywebview_api])
-        .setup(|app| {
+        .setup(move |app| {
             let host = TauriHost {
                 app: app.handle().clone(),
             };
             app.manage(AppState {
                 service: Arc::new(ImpulciferService::new(Box::new(host))),
+                smoke: smoke.clone(),
             });
-            let window =
+            let mut builder =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                    // The frozen HTML references sibling logo/ assets outside frontendDist.
+                    // Serve the original embedded bytes at those existing URLs.
+                    .on_web_resource_request(|request, response| {
+                        let logo: Option<&'static [u8]> = match request.uri().path() {
+                            "/logo/pulse-32.png" => Some(include_bytes!("../../../logo/pulse-32.png")),
+                            "/logo/pulse-128.png" => Some(include_bytes!("../../../logo/pulse-128.png")),
+                            _ => None,
+                        };
+                        if let Some(bytes) = logo {
+                            *response.status_mut() = tauri::http::StatusCode::OK;
+                            *response.body_mut() = std::borrow::Cow::Borrowed(bytes);
+                            response.headers_mut().insert(tauri::http::header::CONTENT_TYPE, tauri::http::HeaderValue::from_static("image/png"));
+                            response.headers_mut().remove(tauri::http::header::CONTENT_LENGTH);
+                        }
+                    })
                     .title("Impulcifer")
                     .inner_size(1180.0, 820.0)
-                    .initialization_script(BRIDGE_JS)
-                    .build()?;
+                    .devtools(cfg!(debug_assertions) || smoke.is_some());
+            if let Some(config) = smoke.as_deref() {
+                builder = builder.initialization_script(include_str!("smoke-observer.js"));
+                if let Some(directory) = &config.data_directory {
+                    builder = builder.data_directory(directory.clone());
+                }
+                #[cfg(windows)]
+                if let Some(port) = config.cdp_port {
+                    builder = builder.additional_browser_args(&format!(
+                        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"
+                    ));
+                }
+            }
+            builder = builder.initialization_script(BRIDGE_JS);
+            if let Some(driver) = smoke.as_ref().and_then(|config| config.driver.as_ref()) {
+                builder = builder.initialization_script(driver);
+            }
+            let window = builder.build()?;
             // Apply the persisted theme before the first frame so the native
             // title bar matches the page; 2.x did the same at startup through
             // its DWM workaround. Later `set_theme` IPC calls go through TauriHost.
@@ -139,7 +184,13 @@ fn main() {
                 .service
                 .call("get_ui_settings", Vec::new());
             let theme = settings["data"]["theme"].as_str().unwrap_or("dark");
+            if smoke.is_some() {
+                eprintln!("app smoke: settings loaded, applying theme");
+            }
             let _ = window.set_theme(theme_from_name(theme));
+            if smoke.is_some() {
+                eprintln!("app smoke: setup completed");
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

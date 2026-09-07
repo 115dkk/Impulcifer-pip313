@@ -814,9 +814,9 @@ note = "dict to ProcessingConfig via from_kwargs: unknown keys and arbitrary Pyt
 [[feature]]
 id = "app.pywebview_polyfill"
 kind = "app"
-status = "planned"
-tests = []
-note = "window.pywebview.api proxy + pywebviewready event; webview_ui unchanged"
+status = "implemented"
+tests = ["impulcifer-app::bridge_script_contract", "impulcifer-app::app_smoke_windows"]
+note = "bridge.js recreates window.pywebview.api over the single pywebview_api command and fires pywebviewready; the frozen 2.x frontend boots unchanged (M3 smoke 2026-09-08)"
 
 [[feature]]
 id = "io.wav_read"
@@ -1166,3 +1166,31 @@ kind = "python"
 status = "implemented"
 tests = ["pytest:crates/impulcifer-python/tests/test_native.py::test_cli_entry_point", "pytest:crates/impulcifer-python/tests/test_native.py::test_cli_main_help_exits_zero", "pytest:crates/impulcifer-python/tests/test_native.py::test_cli_broken_stream_propagates"]
 note = "the impulcifer console script calls impulcifer_cli::run through Python sys.stdout/stderr and exits with its code"
+
+[[feature]]
+id = "app.smoke_brir"
+kind = "app"
+status = "implemented"
+tests = ["impulcifer-app::app_smoke_windows", "impulcifer-app::smoke_report_contract", "impulcifer-app::in_app_driver_failure_contract"]
+note = "local M3 check (ignored in CI): the release app in smoke mode runs an injected driver that fills the processing view with a demo copy and generates hesuvi.wav + README.md through the real UI; evidence in docs/rust/APP-SMOKE.md"
+
+[[feature]]
+id = "app.smoke_recovery"
+kind = "app"
+status = "implemented"
+tests = ["impulcifer-app::app_smoke_windows"]
+note = "the output recovery view recreates hrir.wav from hesuvi.wav alone"
+
+[[feature]]
+id = "app.smoke_settings"
+kind = "app"
+status = "implemented"
+tests = ["impulcifer-app::app_smoke_windows"]
+note = "language ko/en round trip through the settings view, catalogue string and settings.json checked; the updates buttons show the not-implemented envelope without page errors"
+
+[[feature]]
+id = "app.smoke_recording"
+kind = "app"
+status = "implemented"
+tests = ["impulcifer-app::app_smoke_hardware_windows"]
+note = "ignored hardware test: CABLE-A headphone recording from the recorder view (878540 frames, 2 tracks, 48 kHz on 2026-09-08)"
