@@ -6,10 +6,9 @@
 //! readiness, play the whole sweep buffer to completion and drain, stop input,
 //! join both threads. Windows uses `impulcifer-sys-win`, other platforms cpal.
 
-pub mod session;
-
-#[cfg(not(windows))]
 pub mod cpal_backend;
+pub mod policy;
+pub mod session;
 
 use impulcifer_types::audio::AudioBackend;
 
