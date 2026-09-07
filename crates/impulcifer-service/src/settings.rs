@@ -121,15 +121,21 @@ fn truthy(value: &Value) -> bool {
 }
 
 fn normalize_language(code: &str) -> String {
-    let code = code.replace('-', "_");
-    let parts: Vec<_> = code.split('_').collect();
-    let code = if parts.len() == 2 {
-        format!("{}_{}", parts[0].to_lowercase(), parts[1].to_uppercase())
-    } else {
-        code
-    };
-    if LANGUAGES.iter().any(|(candidate, _)| *candidate == code) {
-        code
+    let code = code.replace('-', "_").to_lowercase();
+    let mut parts = code.split('_');
+    let language = parts.next().unwrap_or("");
+    if language == "zh" {
+        let subtags: Vec<_> = parts.collect();
+        if subtags.contains(&"hant") || subtags.contains(&"tw") || subtags.contains(&"hk") {
+            "zh_TW".into()
+        } else {
+            "zh_CN".into()
+        }
+    } else if LANGUAGES
+        .iter()
+        .any(|(candidate, _)| *candidate == language)
+    {
+        language.into()
     } else {
         "en".into()
     }
@@ -141,36 +147,33 @@ fn detect_language() -> String {
     let locale = ["LC_ALL", "LC_CTYPE", "LANG", "LANGUAGE"]
         .iter()
         .find_map(|key| std::env::var(key).ok().filter(|s| !s.is_empty()))
-        .or_else(platform_locale)
-        .unwrap_or_default();
-    let prefix = locale.split(['_', '-', '.', ':']).next().unwrap_or("");
-    if prefix == "zh" {
-        "zh_CN".into()
-    } else {
-        normalize_language(prefix)
+        .or_else(platform_locale);
+    detected_language(locale.as_deref())
+}
+
+fn detected_language(locale: Option<&str>) -> String {
+    let locale = locale.unwrap_or_default();
+    // These are the first entries for each language in Python's ordered map.
+    // Unlike normalization of an explicit choice, all zh prefixes select zh_CN.
+    for (prefix, language) in [
+        ("en", "en"),
+        ("ko", "ko"),
+        ("fr", "fr"),
+        ("de", "de"),
+        ("es", "es"),
+        ("ja", "ja"),
+        ("zh", "zh_CN"),
+        ("ru", "ru"),
+    ] {
+        if locale.starts_with(prefix) {
+            return language.into();
+        }
     }
+    "en".into()
 }
 
 fn platform_locale() -> Option<String> {
-    #[cfg(windows)]
-    let output = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "[System.Globalization.CultureInfo]::CurrentCulture.Name",
-        ])
-        .output()
-        .ok()?;
-    #[cfg(not(windows))]
-    let output = std::process::Command::new("locale")
-        .arg("LC_CTYPE")
-        .output()
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    sys_locale::get_locale()
 }
 
 /// The language saved in a settings file, normalized to the supported set
@@ -227,3 +230,38 @@ const EXTRA_STRINGS: &[(&str, &str, &str)] = &[(
     "Plots are not available in this version yet; the plot stages were skipped.",
     "이 버전에서는 아직 플롯을 만들지 않습니다. 플롯 단계를 건너뛰었습니다.",
 )];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn platform_locale_maps_to_a_supported_language() {
+        let locale = platform_locale();
+        let detected = detected_language(locale.as_deref());
+        assert!(LANGUAGES.iter().any(|(code, _)| *code == detected));
+        if let Some(locale) = locale {
+            let normalized = normalize_language(&locale);
+            assert!(LANGUAGES.iter().any(|(code, _)| *code == normalized));
+        }
+        assert_eq!(detected_language(None), "en");
+        for (locale, normalized, detected) in [
+            ("ko-KR", "ko", "ko"),
+            ("zh-Hans-CN", "zh_CN", "zh_CN"),
+            ("zh-Hant-TW", "zh_TW", "zh_CN"),
+            ("zh-TW", "zh_TW", "zh_CN"),
+            ("zh_HK", "zh_TW", "zh_CN"),
+            ("pt-BR", "en", "en"),
+            ("", "en", "en"),
+        ] {
+            assert_eq!(normalize_language(locale), normalized, "{locale}");
+            assert_eq!(detected_language(Some(locale)), detected, "{locale}");
+        }
+        for (code, _) in LANGUAGES {
+            assert_eq!(normalize_language(code), code);
+        }
+        // Python uses a case-sensitive startswith, not BCP-47 normalization.
+        assert_eq!(detected_language(Some("KO-KR")), "en");
+        assert_eq!(detected_language(Some("korean")), "ko");
+    }
+}
