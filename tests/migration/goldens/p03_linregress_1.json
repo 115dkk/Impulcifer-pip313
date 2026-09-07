@@ -1,1 +1,1 @@
-{"inputs":{"x":[1.0,2.0],"y":[3.0,5.0]},"outputs":{"slope":2.0,"intercept":1.0,"rvalue":1.0,"stderr":"nan"},"meta":{"scipy":"1.18.0","numpy":"2.4.6","python":"3.13.3","dtype":"float64/complex128"}}
+{"inputs":{"x":[1.0,2.0],"y":[3.0,5.0]},"outputs":{"slope":2.0,"intercept":1.0,"rvalue":1.0,"stderr":"nan"},"meta":{"scipy":"1.18.1","numpy":"2.5.3","python":"3.14.5","dtype":"float64/complex128"}}

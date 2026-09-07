@@ -408,6 +408,20 @@ def export_p07():
     def save_io(name, inputs, outputs):
         nonlocal count
         path = OUT / f"p07_{name}.json"
+        # libsndfile's float WAV PEAK chunk contains wall-clock time. Preserve
+        # an existing fixture's timestamp so rerunning P06 cannot change P07.
+        if path.exists() and "wav_base64" in inputs:
+            previous = json.loads(path.read_bytes())["inputs"].get("wav_base64")
+            if previous is not None:
+                old = base64.b64decode(previous)
+                raw = bytearray(base64.b64decode(inputs["wav_base64"]))
+                offset = 12
+                while offset + 8 <= len(raw):
+                    size = int.from_bytes(raw[offset+4:offset+8], "little")
+                    if raw[offset:offset+4] == b"PEAK" and size >= 8 and len(old) == len(raw):
+                        raw[offset+12:offset+16] = old[offset+12:offset+16]
+                    offset += 8 + size + size % 2
+                inputs = {**inputs, "wav_base64": base64.b64encode(raw).decode("ascii")}
         data = (json.dumps(plain({"inputs": inputs, "outputs": outputs, "meta": meta}),
                            allow_nan=False, separators=(",", ":")) + "\n").encode()
         assert len(data) < 200_000, (path.name, len(data))
@@ -487,14 +501,177 @@ def export_p07():
     print("P07: default 3-channel WAV is RIFF PCM; WAVEX is extensible DIRECTOUT + fact; compare payload and WAVEX bytes separately")
 
 
+def export_p06():
+    """Freeze nnresample 0.2.4.1 / scipy.signal.resample_poly/spectrogram in p06_*.
+
+    Full arrays use the existing raw LE-f64 descriptor format (no size cap on
+    binaries: 32001 taps alone need 256008 bytes). Same-rate design freezes the
+    actual installed exception, not an invented 0.2.5 copy or invalid tap file.
+    """
+    import importlib
+    import importlib.metadata
+    import math
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    import soundfile as sf
+    import nnresample
+    from nnresample.utility import disambiguate_params
+    from core.plotting import impulse_response_plotter as plotter
+
+    oracle = importlib.import_module("nnresample.nnresample")
+    version = importlib.metadata.version("nnresample")
+    assert version == "0.2.4.1", version
+    meta = {**META, "nnresample": version}
+    count = 0
+
+    def save06(name, inputs, outputs):
+        """Freeze named Python nnresample/scipy outputs as p06_<name>.json."""
+        nonlocal count
+        path = OUT / f"p06_{name}.json"
+        data = (json.dumps(plain({"inputs": inputs, "outputs": outputs, "meta": meta}),
+                           allow_nan=False, separators=(",", ":")) + "\n").encode()
+        assert len(data) < 200_000, (path.name, len(data))
+        if not path.exists() or path.read_bytes() != data:
+            path.write_bytes(data)
+        count += 1
+
+    def binary06(name, values):
+        """Store full Python nnresample/scipy p06 arrays in P05's LE-f64 format."""
+        nonlocal count
+        values = np.asarray(values, dtype="<f8").ravel()
+        data = values.tobytes()
+        path = OUT / f"p06_{name}.f64"
+        if not path.exists() or path.read_bytes() != data:
+            path.write_bytes(data)
+        count += 1
+        return {"file": path.name, "length": len(values), "sha256": hashlib.sha256(data).hexdigest(),
+                "first": values[:256], "last": values[-256:]}
+
+    n, beta, attenuation = disambiguate_params()
+    designs = {}
+    for up, down in [(48000, 44100), (44100, 48000), (96000, 48000),
+                     (48000, 96000), (48000, 48000)]:
+        g = math.gcd(up, down)
+        u, d = up // g, down // g
+        inputs = {"up": up, "down": down}
+        try:
+            taps, cutoff = oracle.compute_filt(up, down, beta=beta, N=n, return_fc=True)
+        except ValueError as error:
+            assert u == d == 1
+            try:
+                nnresample.resample(np.ones(4800), up, down)
+            except ValueError as resample_error:
+                save06(f"design_{up}_{down}", inputs,
+                       {"up": u, "down": d, "beta": beta, "error": str(error),
+                        "nnresample_error": str(resample_error), "cutoff": None, "argmin": None,
+                        "taps": None})
+            else:
+                raise AssertionError("same-rate oracle unexpectedly succeeded")
+            continue
+        q = max(u, d)
+        initial = signal.firwin(n, 1/q, window=("kaiser", beta))
+        spectrum = np.fft.rfft(initial, n=2**19)
+        h = len(spectrum)
+        bot = math.floor(h/q)
+        top = math.ceil(h*(1/q + 2*np.sqrt(1+(beta/np.pi)**2)/n))
+        argmin = int(np.argmin(np.abs(spectrum[bot:top])))
+        assert cutoff == 2/q - (bot+argmin)/h
+        descriptor = binary06(f"taps_{up}_{down}", taps)
+        designs[up, down] = (taps, descriptor)
+        save06(f"design_{up}_{down}", inputs,
+               {"up": u, "down": d, "N": n, "beta": beta, "attenuation": attenuation,
+                "cutoff": cutoff, "bot": bot, "top": top, "argmin": argmin,
+                "null_bin": bot+argmin, "taps": descriptor})
+
+    t = np.arange(24000) / 48000
+    # The packet names FL.wav; the repository's actual FL recording is FL,FR.wav.
+    demo_source = "data/demo/FL,FR.wav"
+    demo, rate = sf.read(ROOT / demo_source, always_2d=True, dtype="float64")
+    assert rate == 48000
+    cases = {"impulse": np.eye(1, 4800)[0],
+             "sine": np.sin(2*np.pi*1000*t)*signal.windows.hann(len(t), sym=True),
+             "demo": demo[:8192, 0]}
+    for name, x in cases.items():
+        xdesc = binary06(f"input_{name}", x)
+        if name == "demo":
+            xdesc["source"] = demo_source
+            xdesc["source_sha256"] = hashlib.sha256((ROOT / demo_source).read_bytes()).hexdigest()
+        for up in (44100, 96000):
+            taps, descriptor = designs[up, 48000]
+            y = signal.resample_poly(x, up, 48000, window=taps)
+            nn = nnresample.resample(x, up, 48000)
+            save06(f"poly_{name}_{up}", {"up": up, "down": 48000, "x": xdesc, "taps": descriptor},
+                   {"scipy": binary06(f"scipy_{name}_{up}", y),
+                    "nnresample": binary06(f"nnresample_{name}_{up}", nn)})
+
+    dc = nnresample.resample(np.ones(4800), 44100, 48000)
+    save06("dc", {"length": 4800, "up": 44100, "down": 48000, "trim": 200},
+           {"y": binary06("dc_output", dc),
+            "max_deviation_from_unity": float(np.max(np.abs(dc[200:-200]-1))),
+            "requested_unity_budget": 1e-6, "oracle_passes_requested_budget": False})
+
+    # Additional explicit-tap cases isolate even taps, gcd, nontrivial post-pad,
+    # no samples, same-rate copy (even invalid taps), and short tail cropping.
+    for index, (x, up, down, taps) in enumerate([
+            ([1., 2., -1.], 2, 3, [.1, .2, .3, .4]),
+            ([1.], 5, 2, [1.]), ([], 2, 3, [1.]),
+            ([1., -2., 3.], 48000, 48000, []),
+            ([1., 2., 3., 4.], 6, 4, [.25, .5, .25]),
+            ([1., -1.], 1, 7, [.2, .4, .2])]):
+        save06(f"edge_poly_{index}", {"x": x, "up": up, "down": down, "taps": taps},
+               {"y": signal.resample_poly(np.array(x), up, down, window=np.array(taps))})
+
+    selections = []
+    for length, resolution, segments in ([(n, 10., 200) for n in (0, 1, 100, 4800, 48000, 295000)]
+                                         + [(48000, 10., 0), (48000, 10., 1),
+                                            (10, 96000., 200), (100, 19200., 200),
+                                            (100, 13714.285714285714, 200)]):
+        captured = {}
+
+        def capture_spectrogram(x, **kwargs):
+            """Capture actual plot_spectrogram selection for p06_params.json."""
+            captured.update(nfft=kwargs["nperseg"], noverlap=kwargs["noverlap"])
+            raise StopIteration
+
+        dummy = SimpleNamespace(fs=48000, name="p06", recording=np.zeros(length))
+        with patch.object(plotter, "spectrogram", capture_spectrogram), contextlib.redirect_stdout(io.StringIO()):
+            try:
+                plotter.ImpulseResponsePlotter.plot_spectrogram(
+                    dummy, fig=object(), ax=SimpleNamespace(text=lambda *a, **k: None, transAxes=None),
+                    f_res=resolution, n_segments=segments)
+            except StopIteration:
+                pass
+        selections.append({"n": length, "fs": 48000, "f_res": resolution,
+                           "n_segments": segments, "params": captured or None})
+    save06("params", {}, {"cases": selections})
+    rng = np.random.default_rng(606)
+    for name, x, nfft, overlap in [("sine", cases["sine"], 4800, 2400),
+                                   ("noise", rng.normal(size=24000), 4800, 2400),
+                                   ("odd", rng.normal(size=31), 9, 3),
+                                   ("one", np.array([1., 2., 3.]), 1, 0)]:
+        f, times, power = signal.spectrogram(x, fs=48000, window=signal.get_window("hann", nfft),
+                                           nperseg=nfft, noverlap=overlap, mode="psd")
+        save06(f"spectrogram_{name}", {"x": binary06(f"spec_input_{name}", x), "fs": 48000,
+               "nperseg": nfft, "noverlap": overlap},
+               {"freqs": binary06(f"freqs_{name}", f), "times": times,
+                "shape": power.shape, "power": binary06(f"power_{name}", power)})
+    print(f"P06: exported {count} files; nnresample {version}, SciPy {scipy.__version__}; beta={beta}")
+    print("P06: same-rate nnresample raises ValueError at cutoff=1; scipy resample_poly returns a copy")
+    print("P06: params captured from actual plot_spectrogram; full taps/output/PSD arrays are LE-f64")
+
+
 if __name__ == "__main__":
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
         warnings.simplefilter("ignore", signal.BadCoefficients)
-        if os.environ.get("IMPULCIFER_GOLDEN_BATCH") != "p05":
+        batch = os.environ.get("IMPULCIFER_GOLDEN_BATCH")
+        if batch not in ("p05", "p06"):
             main()
         else:
             print(f"Oracle: Python {META['python']}, NumPy {META['numpy']}, SciPy {META['scipy']}")
-        export_p05()
-        if os.environ.get("IMPULCIFER_GOLDEN_BATCH") != "p05":
+        if batch != "p06":
+            export_p05()
+        if batch != "p05":
+            export_p06()
+        if batch not in ("p05", "p06"):
             export_p07()

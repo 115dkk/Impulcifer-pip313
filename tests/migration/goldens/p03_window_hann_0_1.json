@@ -1,1 +1,1 @@
-{"inputs":{"name":"hann","n":0,"sym":true},"outputs":{"y":[],"get_window_error":true},"meta":{"scipy":"1.18.0","numpy":"2.4.6","python":"3.13.3","dtype":"float64/complex128"}}
+{"inputs":{"name":"hann","n":0,"sym":true},"outputs":{"y":[],"get_window_error":true},"meta":{"scipy":"1.18.1","numpy":"2.5.3","python":"3.14.5","dtype":"float64/complex128"}}

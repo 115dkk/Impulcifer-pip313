@@ -1,1 +1,1 @@
-{"inputs":{"rows":1,"cols":1,"data":[-0.2135134225769191]},"outputs":{"y":[-0.02372371361965768]},"meta":{"scipy":"1.18.0","numpy":"2.4.6","python":"3.13.3","dtype":"float64/complex128"}}
+{"inputs":{"rows":1,"cols":1,"data":[-0.2135134225769191]},"outputs":{"y":[-0.02372371361965768]},"meta":{"scipy":"1.18.1","numpy":"2.5.3","python":"3.14.5","dtype":"float64/complex128"}}

@@ -1,1 +1,1 @@
-{"inputs":{"lengths":[3,4,31,32,9600]},"outputs":{"n_fft":[512,1024,8192,8192,2097152]},"meta":{"scipy":"1.18.0","numpy":"2.4.6","python":"3.13.3","dtype":"float64/complex128"}}
+{"inputs":{"lengths":[3,4,31,32,9600]},"outputs":{"n_fft":[512,1024,8192,8192,2097152]},"meta":{"scipy":"1.18.1","numpy":"2.5.3","python":"3.14.5","dtype":"float64/complex128"}}
