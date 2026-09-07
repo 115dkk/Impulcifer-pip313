@@ -1934,6 +1934,7 @@ version = "3.0.0-alpha.0"
 dependencies = [
  "clap",
  "impulcifer-dsp",
+ "impulcifer-jobs",
  "impulcifer-service",
  "impulcifer-types",
  "serde_json",

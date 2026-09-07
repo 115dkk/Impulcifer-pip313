@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "impulcifer",
+    "--dir_path",
+    "measurements"
+  ],
+  "kwargs": {
+    "dir_path": "measurements",
+    "headphone_compensation_file": null,
+    "plot": false,
+    "interactive_plots": false,
+    "fr_combination_method": "average",
+    "specific_limit": 400,
+    "generic_limit": 300,
+    "do_room_correction": true,
+    "do_headphone_compensation": true,
+    "do_equalization": true,
+    "remove_silent_channels": false,
+    "head_ms": 1.0,
+    "jamesdsp": false,
+    "hangloose": false,
+    "microphone_deviation_correction": false,
+    "mic_deviation_strength": 0.7,
+    "mic_deviation_debug_plots": false,
+    "output_truehd_layouts": false,
+    "vbass": false,
+    "vbass_freq": 250,
+    "vbass_hp": 15.0,
+    "vbass_polarity": "auto"
+  },
+  "exit_code": 0
+}

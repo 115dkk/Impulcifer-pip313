@@ -8,7 +8,7 @@ mod args;
 pub mod brir;
 mod paths;
 pub mod recording;
-mod settings;
+pub mod settings;
 
 use args::Args;
 use impulcifer_jobs::registry::{JobRegistry, panic_message};
@@ -389,7 +389,7 @@ fn os_description() -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| platform().to_owned())
 }
-fn default_data_dir() -> PathBuf {
+pub fn default_data_dir() -> PathBuf {
     // Candidates in priority order: an explicit override, executable-adjacent
     // resources (installed builds; the Tauri bundle will place `data` there or
     // under `resources/`), then the checkout-root data directory. Only an

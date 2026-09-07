@@ -1,0 +1,153 @@
+usage: impulcifer.py [-h] [-V] [--info] [--dir_path DIR_PATH]
+                     [--test_signal TEST_SIGNAL] [--room_target ROOM_TARGET]
+                     [--room_mic_calibration ROOM_MIC_CALIBRATION]
+                     [--headphone_compensation_file HEADPHONE_COMPENSATION_FILE]
+                     [--fs FS] [--plot] [--interactive_plots]
+                     [--channel_balance CHANNEL_BALANCE] [--decay DECAY]
+                     [--target_level TARGET_LEVEL]
+                     [--fr_combination_method FR_COMBINATION_METHOD]
+                     [--specific_limit SPECIFIC_LIMIT]
+                     [--generic_limit GENERIC_LIMIT] [--tilt TILT]
+                     [--no_room_correction] [--no_headphone_compensation]
+                     [--no_equalization] [--remove_silent_channels]
+                     [--c HEAD_MS] [--jamesdsp] [--hangloose]
+                     [--microphone_deviation_correction]
+                     [--mic_deviation_strength MIC_DEVIATION_STRENGTH]
+                     [--mic_deviation_debug_plots] [--output_truehd_layouts]
+                     [--vbass] [--vbass_freq VBASS_FREQ] [--vbass_hp VBASS_HP]
+                     [--vbass_polarity {auto,normal,invert}]
+                     [--bass_boost BASS_BOOST]
+
+options:
+  -h, --help            show this help message and exit
+  -V, --version         show program's version number and exit
+  --info                Print diagnostic information (version, Python, OS,
+                        etc.) and exit.
+  --dir_path DIR_PATH   Path to directory for recordings and outputs.
+  --test_signal TEST_SIGNAL
+                        Test signal source. Defaults to automatic detection:
+                        <dir>/test.wav if present, otherwise the sweep
+                        parameters are recovered from the recordings
+                        themselves (falling back to the bundled default
+                        sweep). Accepts a path to a sine sweep WAV file, the
+                        literal "auto", "generate:<duration>s@<fs>" (e.g.
+                        "generate:6.15s@48000") to construct the sweep from
+                        parameters, or a predefined name/number:
+                        "default"/"1", "sweep"/"2", "stereo"/"3" (FL,FR),
+                        "mono-left"/"4" (FL mono), "left"/"5" (FL stereo),
+                        "right"/"6" (FR stereo).
+  --room_target ROOM_TARGET
+                        Path to room target response AutoEQ style CSV file.
+  --room_mic_calibration ROOM_MIC_CALIBRATION
+                        Path to room measurement microphone calibration file.
+  --headphone_compensation_file HEADPHONE_COMPENSATION_FILE
+                        Path to the headphone compensation WAV file. Defaults
+                        to "headphones.wav" in dir_path.
+  --fs FS               Output sampling rate in Hertz.
+  --plot                Plot graphs for debugging.
+  --interactive_plots   Generate interactive Bokeh plots in HTML files.
+  --channel_balance CHANNEL_BALANCE
+                        Channel balance correction by equalizing left and
+                        right ear results to the same level or frequency
+                        response. "trend" equalizes right side by the
+                        difference trend of right and left side. "left"
+                        equalizes right side to left side fr, "right"
+                        equalizes left side to right side fr, "avg" equalizes
+                        both to the average fr, "min" equalizes both to the
+                        minimum of left and right side frs. Number values will
+                        boost or attenuate right side relative to left side by
+                        the number of dBs. "mids" is the same as the numerical
+                        values but guesses the value automatically from mid
+                        frequency levels.
+  --decay DECAY         Target decay time in milliseconds to reach -60 dB.
+                        When the natural decay time is longer than the target
+                        decay time, a downward slope will be applied to decay
+                        tail. Decay cannot be increased with this. By default
+                        no decay time adjustment is done. A comma separated
+                        list of channel name and reverberation time pairs,
+                        separated by a colon. If only a single numeric value
+                        is given, it is used for all channels. When some
+                        channel names are give but not all, the missing
+                        channels are not affected. For example "--decay=300"
+                        or "--decay=FL:500,FC:100,FR:500,SR:700,BR:700,BL:700,
+                        SL:700" or "--decay=FC:100".
+  --target_level TARGET_LEVEL
+                        Target average gain level for left and right channels.
+                        This will sum together all left side impulse responses
+                        and right side impulse responses respectively and take
+                        the average gain from mid frequencies. The averaged
+                        level is then normalized to the given target level.
+                        This makes it possible to compare HRIRs with somewhat
+                        similar loudness levels. This should be negative in
+                        most cases to avoid clipping.
+  --fr_combination_method FR_COMBINATION_METHOD
+                        Method for combining frequency responses of generic
+                        room measurements if there are more than one tracks in
+                        the file. "average" will simply average the
+                        frequencyresponses. "conservative" will take the
+                        minimum absolute value for each frequency but only if
+                        the values in all the measurements are positive or
+                        negative at the same time.
+  --specific_limit SPECIFIC_LIMIT
+                        Upper limit for room equalization with speaker-ear
+                        specific room measurements. Equalization will drop
+                        down to 0 dB at this frequency in the leading octave.
+                        0 disables limit.
+  --generic_limit GENERIC_LIMIT
+                        Upper limit for room equalization with generic room
+                        measurements. Equalization will drop down to 0 dB at
+                        this frequency in the leading octave. 0 disables
+                        limit.
+  --tilt TILT           Target tilt in dB/octave. Positive value (upwards
+                        slope) will result in brighter frequency response and
+                        negative value (downwards slope) will result in darker
+                        frequency response. 1 dB/octave will produce nearly 10
+                        dB difference in desired value between 20 Hz and 20
+                        kHz. Tilt is applied with bass boost and both will
+                        affect the bass gain.
+  --no_room_correction  Skip room correction.
+  --no_headphone_compensation
+                        Skip headphone compensation.
+  --no_equalization     Skip equalization.
+  --remove_silent_channels
+                        Remove all zero channels from combined BRIRs,
+                        including gaps. WARNING: changes channel positions and
+                        can break HeSuVi compatibility. Default: disabled.
+  --c HEAD_MS           Head room in milliseconds for cropping impulse
+                        response heads. Default is 1.0 (ms).
+  --jamesdsp            Generate true stereo IR file (jamesdsp.wav) for
+                        JamesDSP from FL/FR channels.
+  --hangloose           Generate separate stereo IR for each channel for
+                        Hangloose Convolver.
+  --microphone_deviation_correction
+                        Enable v4.0 interaural microphone mismatch correction
+                        (direction-independent left/right level mismatch from
+                        mic placement/sensitivity). Skipped automatically when
+                        headphone compensation is enabled, since the mic
+                        response already cancels there.
+  --mic_deviation_strength MIC_DEVIATION_STRENGTH
+                        Microphone deviation correction strength (0.0-1.0).
+                        0.0 = no correction, 1.0 = full correction. Default is
+                        0.7.
+  --mic_deviation_debug_plots
+                        Save debug plots for microphone deviation correction.
+                        (Default: disabled)
+  --output_truehd_layouts
+                        Generate TrueHD layouts.
+  --vbass               Enable virtual bass synthesis.
+  --vbass_freq VBASS_FREQ
+                        Virtual bass crossover frequency in Hz (default: 250).
+  --vbass_hp VBASS_HP   Virtual bass sub-bass high-pass frequency in Hz
+                        (default: 15.0).
+  --vbass_polarity {auto,normal,invert}
+                        Virtual bass polarity handling (default: auto).
+  --bass_boost BASS_BOOST
+                        Bass boost shelf. Sub-bass frequencies will be boosted
+                        by this amount. Can be either a single value for a
+                        gain in dB or a comma separated list of three values
+                        for parameters of a low shelf filter, where the first
+                        is gain in dB, second is center frequency (Fc) in Hz
+                        and the last is quality (Q). When only a single value
+                        (gain) is given, default values for Fc and Q are used
+                        which are 105 Hz and 0.76, respectively. For example "
+                        --bass_boost=6" or "--bass_boost=6,150,0.69".

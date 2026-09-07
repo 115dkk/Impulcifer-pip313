@@ -3,7 +3,7 @@
 //! selection complete. Writes preserve keys belonging to other frontends.
 
 use serde_json::{Map, Value, json};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub const LANGUAGES: [(&str, &str); 9] = [
     ("en", "English"),
@@ -171,6 +171,29 @@ fn platform_locale() -> Option<String> {
         .status
         .success()
         .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+}
+
+/// The language saved in a settings file, normalized to the supported set
+/// ("en" when the file is absent, unreadable, or names an unknown language).
+/// Read-only: nothing is initialized or persisted, so the CLI can honour the
+/// UI language without rewriting the user's preferences the way `load` does.
+pub fn saved_language(path: &Path) -> String {
+    std::fs::read(path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Map<String, Value>>(&bytes).ok())
+        .and_then(|values| {
+            values
+                .get("language")
+                .and_then(Value::as_str)
+                .map(normalize_language)
+        })
+        .unwrap_or_else(|| "en".into())
+}
+
+/// The merged catalogue for a language: the English base, the locale overlay,
+/// then the 3.x-only keys of `EXTRA_STRINGS`. Read-only.
+pub fn catalog(language: &str) -> crate::brir::Catalog {
+    crate::brir::Catalog::from_strings(strings(language))
 }
 
 fn strings(language: &str) -> Map<String, Value> {

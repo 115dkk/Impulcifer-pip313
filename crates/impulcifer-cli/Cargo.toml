@@ -16,5 +16,6 @@ workspace = true
 impulcifer-types = { path = "../impulcifer-types" }
 impulcifer-dsp = { path = "../impulcifer-dsp" }
 impulcifer-service = { path = "../impulcifer-service" }
+impulcifer-jobs = { path = "../impulcifer-jobs" }
 clap.workspace = true
 serde_json.workspace = true

@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "impulcifer",
+    "--dir_path",
+    "measurements",
+    "--bass_boost=1,2"
+  ],
+  "error": "\"--bass_boost\" must have one value or three values separated by commas!",
+  "exit_code": 1
+}

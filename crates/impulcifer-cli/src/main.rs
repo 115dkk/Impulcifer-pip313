@@ -1,9 +1,13 @@
 #![forbid(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-//! Headless CLI. Options mirror 2.x `impulcifer --help` (derived from
-//! `ProcessingConfig`). Implemented by an ASTRA packet.
-
+//! Process entry point; the implementation is also callable by the Python wheel.
 fn main() {
-    println!("impulcifer 3.x CLI skeleton (not implemented)");
+    let argv = std::env::args().collect::<Vec<_>>();
+    let code = impulcifer_cli::run(
+        &argv,
+        &mut std::io::stdout().lock(),
+        &mut std::io::stderr().lock(),
+    );
+    std::process::exit(code);
 }

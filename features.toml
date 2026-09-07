@@ -791,8 +791,9 @@ tests = ["impulcifer-dsp::golden_spectrogram_params_match_python", "impulcifer-d
 [[feature]]
 id = "cli.options_match_processing_config"
 kind = "cli"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-cli::golden_cli_options_match_python", "impulcifer-cli::cli_help_mentions_every_option"]
+note = "the 33 options of create_cli() in dataclass order with the 2.x flags, dests, help strings, choices and (suppressed) defaults, checked against p13_options.json exported from the real argparse parser"
 
 [[feature]]
 id = "python.run_config_dict"
@@ -1120,3 +1121,24 @@ kind = "recording"
 status = "implemented"
 tests = ["impulcifer-service::recording_virtual_cable_end_to_end"]
 note = "ignored test; run on the CABLE-A pair of docs/rust/HARDWARE.md"
+
+[[feature]]
+id = "cli.decay_and_bass_boost"
+kind = "cli"
+status = "implemented"
+tests = ["impulcifer-cli::golden_cli_parsing_matches_python", "impulcifer-cli::cli_repeated_options_negative_values_and_suppression"]
+note = "twelve argv sets produce the same kwargs as create_cli(): --bass_boost one or three values, --decay uniform or FL:300 pairs (ms to s, uppercased), --c as head_ms, store_false flags, omitted suppressed defaults; the bad --bass_boost text and exit code 1"
+
+[[feature]]
+id = "cli.argparse_diagnostics"
+kind = "cli"
+status = "implemented"
+tests = ["impulcifer-cli::cli_missing_dir_path_exits_2_like_argparse", "impulcifer-cli::cli_reports_argument_errors_with_argparse_prefixes", "impulcifer-cli::cli_version_prints_crate_version", "impulcifer-cli::cli_info_does_not_require_dir_path"]
+note = "usage line + the impulcifer: error: prefix on stderr with exit 2 for unknown options, missing values, bad ints and bad choices; --version, --info and -h exit 0"
+
+[[feature]]
+id = "cli.run_brir"
+kind = "cli"
+status = "implemented"
+tests = ["impulcifer-cli::cli_runs_demo_and_writes_hesuvi", "impulcifer-cli::cli_reports_service_failure_with_exit_1", "impulcifer-cli::console_formats_python_levels_and_progress_once"]
+note = "JobRegistry + NoopHost, 100 ms polling, the 2.x console prefixes and [NN%] progress lines, README echoed at the end, service failure message on stderr with exit 1; language from ~/.impulcifer/settings.json read-only; no Ctrl-C handler"
