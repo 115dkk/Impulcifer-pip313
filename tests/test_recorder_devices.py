@@ -156,6 +156,24 @@ def test_set_default_devices_leaves_non_wasapi_devices_untouched(fake_backend):
     assert backend.checked == []
 
 
+class _LegacyWasapiSettings:
+    """sounddevice < 0.4.7: WasapiSettings without the auto_convert keyword."""
+
+    def __init__(self, exclusive=False):
+        self.exclusive = exclusive
+
+
+def test_set_default_devices_tolerates_sounddevice_without_auto_convert(fake_backend):
+    backend = fake_backend(failing_checks={("output", 2)})
+    backend.WasapiSettings = _LegacyWasapiSettings
+    microphone = recorder.get_device("Mic", "input")
+    speakers = recorder.get_device("Speakers", "output")
+
+    recorder.set_default_devices(microphone, speakers, 44100, 2, 8)
+
+    assert backend.default.extra_settings == (None, None)
+
+
 def test_set_default_devices_without_format_skips_checks(fake_backend):
     backend = fake_backend(failing_checks={("output", 2), ("input", 6)})
     microphone = recorder.get_device("Mic", "input")

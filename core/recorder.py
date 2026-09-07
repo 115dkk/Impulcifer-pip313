@@ -82,9 +82,19 @@ def wasapi_extra_settings(device, kind, fs, channels):
     try:
         check(device=device['index'], channels=channels, samplerate=fs)
     except Exception:
+        try:
+            settings = sd.WasapiSettings(auto_convert=True)
+        except TypeError:
+            # sounddevice < 0.4.7 has no ``auto_convert``. Open without conversion
+            # rather than crash; the stream then fails the same way it did before
+            # WASAPI became the preferred host API, with a clearer hint.
+            print(f'WASAPI {kind} device does not natively accept {fs} Hz / {channels} ch and this '
+                  'sounddevice build has no auto_convert option (needs sounddevice >= 0.4.7); '
+                  'opening without conversion.')
+            return None
         print(f'WASAPI {kind} device does not natively accept {fs} Hz / {channels} ch; '
               'enabling auto-convert (shared-mode resampler).')
-        return sd.WasapiSettings(auto_convert=True)
+        return settings
     return None
 
 
