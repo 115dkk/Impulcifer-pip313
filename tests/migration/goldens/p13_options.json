@@ -1,0 +1,416 @@
+[
+  {
+    "option_strings": [
+      "-h",
+      "--help"
+    ],
+    "dest": "help",
+    "help": "show this help message and exit",
+    "type": null,
+    "action": "_HelpAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "-V",
+      "--version"
+    ],
+    "dest": "version",
+    "help": "show program's version number and exit",
+    "type": null,
+    "action": "_VersionAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--info"
+    ],
+    "dest": "info",
+    "help": "Print diagnostic information (version, Python, OS, etc.) and exit.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--dir_path"
+    ],
+    "dest": "dir_path",
+    "help": "Path to directory for recordings and outputs.",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--test_signal"
+    ],
+    "dest": "test_signal",
+    "help": "Test signal source. Defaults to automatic detection: <dir>/test.wav if present, otherwise the sweep parameters are recovered from the recordings themselves (falling back to the bundled default sweep). Accepts a path to a sine sweep WAV file, the literal \"auto\", \"generate:<duration>s@<fs>\" (e.g. \"generate:6.15s@48000\") to construct the sweep from parameters, or a predefined name/number: \"default\"/\"1\", \"sweep\"/\"2\", \"stereo\"/\"3\" (FL,FR), \"mono-left\"/\"4\" (FL mono), \"left\"/\"5\" (FL stereo), \"right\"/\"6\" (FR stereo).",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--room_target"
+    ],
+    "dest": "room_target",
+    "help": "Path to room target response AutoEQ style CSV file.",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--room_mic_calibration"
+    ],
+    "dest": "room_mic_calibration",
+    "help": "Path to room measurement microphone calibration file.",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--headphone_compensation_file"
+    ],
+    "dest": "headphone_compensation_file",
+    "help": "Path to the headphone compensation WAV file. Defaults to \"headphones.wav\" in dir_path.",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": null,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--fs"
+    ],
+    "dest": "fs",
+    "help": "Output sampling rate in Hertz.",
+    "type": "int",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--plot"
+    ],
+    "dest": "plot",
+    "help": "Plot graphs for debugging.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--interactive_plots"
+    ],
+    "dest": "interactive_plots",
+    "help": "Generate interactive Bokeh plots in HTML files.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--channel_balance"
+    ],
+    "dest": "channel_balance",
+    "help": "Channel balance correction by equalizing left and right ear results to the same level or frequency response. \"trend\" equalizes right side by the difference trend of right and left side. \"left\" equalizes right side to left side fr, \"right\" equalizes left side to right side fr, \"avg\" equalizes both to the average fr, \"min\" equalizes both to the minimum of left and right side frs. Number values will boost or attenuate right side relative to left side by the number of dBs. \"mids\" is the same as the numerical values but guesses the value automatically from mid frequency levels.",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--decay"
+    ],
+    "dest": "decay",
+    "help": "Target decay time in milliseconds to reach -60 dB. When the natural decay time is longer than the target decay time, a downward slope will be applied to decay tail. Decay cannot be increased with this. By default no decay time adjustment is done. A comma separated list of channel name and  reverberation time pairs, separated by a colon. If only a single numeric value is given, it is used for all channels. When some channel names are give but not all, the missing channels are not affected. For example \"--decay=300\" or \"--decay=FL:500,FC:100,FR:500,SR:700,BR:700,BL:700,SL:700\" or \"--decay=FC:100\".",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--target_level"
+    ],
+    "dest": "target_level",
+    "help": "Target average gain level for left and right channels. This will sum together all left side impulse responses and right side impulse responses respectively and take the average gain from mid frequencies. The averaged level is then normalized to the given target level. This makes it possible to compare HRIRs with somewhat similar loudness levels. This should be negative in most cases to avoid clipping.",
+    "type": "float",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--fr_combination_method"
+    ],
+    "dest": "fr_combination_method",
+    "help": "Method for combining frequency responses of generic room measurements if there are more than one tracks in the file. \"average\" will simply average the frequencyresponses. \"conservative\" will take the minimum absolute value for each frequency but only if the values in all the measurements are positive or negative at the same time.",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "average",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--specific_limit"
+    ],
+    "dest": "specific_limit",
+    "help": "Upper limit for room equalization with speaker-ear specific room measurements. Equalization will drop down to 0 dB at this frequency in the leading octave. 0 disables limit.",
+    "type": "float",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 400,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--generic_limit"
+    ],
+    "dest": "generic_limit",
+    "help": "Upper limit for room equalization with generic room measurements. Equalization will drop down to 0 dB at this frequency in the leading octave. 0 disables limit.",
+    "type": "float",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 300,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--tilt"
+    ],
+    "dest": "tilt",
+    "help": "Target tilt in dB/octave. Positive value (upwards slope) will result in brighter frequency response and negative value (downwards slope) will result in darker frequency response. 1 dB/octave will produce nearly 10 dB difference in desired value between 20 Hz and 20 kHz. Tilt is applied with bass boost and both will affect the bass gain.",
+    "type": "float",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--no_room_correction"
+    ],
+    "dest": "do_room_correction",
+    "help": "Skip room correction.",
+    "type": null,
+    "action": "_StoreFalseAction",
+    "choices": null,
+    "default": true,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--no_headphone_compensation"
+    ],
+    "dest": "do_headphone_compensation",
+    "help": "Skip headphone compensation.",
+    "type": null,
+    "action": "_StoreFalseAction",
+    "choices": null,
+    "default": true,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--no_equalization"
+    ],
+    "dest": "do_equalization",
+    "help": "Skip equalization.",
+    "type": null,
+    "action": "_StoreFalseAction",
+    "choices": null,
+    "default": true,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--remove_silent_channels"
+    ],
+    "dest": "remove_silent_channels",
+    "help": "Remove all zero channels from combined BRIRs, including gaps. WARNING: changes channel positions and can break HeSuVi compatibility. Default: disabled.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--c"
+    ],
+    "dest": "head_ms",
+    "help": "Head room in milliseconds for cropping impulse response heads. Default is 1.0 (ms).",
+    "type": "float",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 1.0,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--jamesdsp"
+    ],
+    "dest": "jamesdsp",
+    "help": "Generate true stereo IR file (jamesdsp.wav) for JamesDSP from FL/FR channels.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--hangloose"
+    ],
+    "dest": "hangloose",
+    "help": "Generate separate stereo IR for each channel for Hangloose Convolver.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--microphone_deviation_correction"
+    ],
+    "dest": "microphone_deviation_correction",
+    "help": "Enable v4.0 interaural microphone mismatch correction (direction-independent left/right level mismatch from mic placement/sensitivity). Skipped automatically when headphone compensation is enabled, since the mic response already cancels there.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--mic_deviation_strength"
+    ],
+    "dest": "mic_deviation_strength",
+    "help": "Microphone deviation correction strength (0.0-1.0). 0.0 = no correction, 1.0 = full correction. Default is 0.7.",
+    "type": "float",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 0.7,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--mic_deviation_debug_plots"
+    ],
+    "dest": "mic_deviation_debug_plots",
+    "help": "Save debug plots for microphone deviation correction. (Default: disabled)",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--output_truehd_layouts"
+    ],
+    "dest": "output_truehd_layouts",
+    "help": "Generate TrueHD layouts.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--vbass"
+    ],
+    "dest": "vbass",
+    "help": "Enable virtual bass synthesis.",
+    "type": null,
+    "action": "_StoreTrueAction",
+    "choices": null,
+    "default": false,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--vbass_freq"
+    ],
+    "dest": "vbass_freq",
+    "help": "Virtual bass crossover frequency in Hz (default: 250).",
+    "type": "int",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 250,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--vbass_hp"
+    ],
+    "dest": "vbass_hp",
+    "help": "Virtual bass sub-bass high-pass frequency in Hz (default: 15.0).",
+    "type": "float",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": 15.0,
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--vbass_polarity"
+    ],
+    "dest": "vbass_polarity",
+    "help": "Virtual bass polarity handling (default: auto).",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": [
+      "auto",
+      "normal",
+      "invert"
+    ],
+    "default": "auto",
+    "required": false
+  },
+  {
+    "option_strings": [
+      "--bass_boost"
+    ],
+    "dest": "bass_boost",
+    "help": "Bass boost shelf. Sub-bass frequencies will be boosted by this amount. Can be either a single value for a gain in dB or a comma separated list of three values for parameters of a low shelf filter, where the first is gain in dB, second is center frequency (Fc) in Hz and the last is quality (Q). When only a single value (gain) is given, default values for Fc and Q are used which are 105 Hz and 0.76, respectively. For example \"--bass_boost=6\" or \"--bass_boost=6,150,0.69\".",
+    "type": "str",
+    "action": "_StoreAction",
+    "choices": null,
+    "default": "SUPPRESS",
+    "required": false
+  }
+]
