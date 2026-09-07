@@ -275,8 +275,15 @@ fn children(dir: &Path) -> Result<Vec<PathBuf>, RecoveryError> {
     if !dir.is_dir() {
         return Ok(Vec::new());
     }
+    // Sorted: Python's iterdir follows the filesystem (alphabetical on NTFS,
+    // where the goldens were made; arbitrary on APFS/ext4), so a fixed order
+    // keeps error lists and scans identical on every platform.
     fs::read_dir(dir)
         .and_then(|it| it.map(|e| e.map(|e| e.path())).collect())
+        .map(|mut paths: Vec<PathBuf>| {
+            paths.sort();
+            paths
+        })
         .map_err(|e| {
             RecoveryError::new(
                 RecoveryErrorCode::InvalidDirectory,
