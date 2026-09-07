@@ -85,7 +85,7 @@ pub fn float_fixture_sized(path: &Path, channels: usize, frames: usize) {
         .map(|c| {
             (0..frames)
                 .map(|f| {
-                    if (f * channels + c) % 2 == 0 {
+                    if (f * channels + c).is_multiple_of(2) {
                         0.5
                     } else {
                         -0.5
