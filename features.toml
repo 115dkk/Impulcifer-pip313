@@ -20,14 +20,14 @@ tests = ["impulcifer-policy::canonical_features_registered", "impulcifer-policy:
 [[feature]]
 id = "ipc.bootstrap"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_bootstrap_shape"]
 
 [[feature]]
 id = "ipc.list_audio_devices"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_list_audio_devices_shape"]
 
 [[feature]]
 id = "ipc.start_recording"
@@ -50,56 +50,56 @@ tests = []
 [[feature]]
 id = "ipc.poll_job"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_poll_job_shape"]
 
 [[feature]]
 id = "ipc.cancel_job"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_cancel_job_shape"]
 
 [[feature]]
 id = "ipc.get_ui_settings"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_get_ui_settings_shape"]
 
 [[feature]]
 id = "ipc.set_language"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_set_language_shape"]
 
 [[feature]]
 id = "ipc.set_theme"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_set_theme_shape"]
 
 [[feature]]
 id = "ipc.set_skin"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_set_skin_shape"]
 
 [[feature]]
 id = "ipc.set_frontend"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_set_frontend_shape"]
 
 [[feature]]
 id = "ipc.get_system_info"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_get_system_info_shape"]
 
 [[feature]]
 id = "ipc.resolve_recording_paths"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_resolve_recording_paths_shape"]
 
 [[feature]]
 id = "ipc.detect_sweep"
@@ -116,8 +116,8 @@ tests = []
 [[feature]]
 id = "ipc.open_path"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_open_path_shape"]
 
 [[feature]]
 id = "ipc.check_for_updates"
@@ -140,20 +140,20 @@ tests = []
 [[feature]]
 id = "ipc.select_file"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_select_file_shape"]
 
 [[feature]]
 id = "ipc.select_directory"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_select_directory_shape"]
 
 [[feature]]
 id = "ipc.open_url"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::ipc_open_url_shape"]
 
 [[feature]]
 id = "config.dir_path"
