@@ -16,4 +16,5 @@ thiserror.workspace = true
 rustfft.workspace = true
 realfft.workspace = true
 rayon.workspace = true
+regex.workspace = true
 

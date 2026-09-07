@@ -14,10 +14,15 @@ pub enum DspError {
 }
 
 pub mod conv;
+pub mod decay;
+pub mod estimator;
 pub mod fft;
 pub mod filters;
 pub mod fir;
+pub mod fr;
+pub mod hrir;
 pub mod interp;
+pub mod ir;
 pub mod peaks;
 pub mod pipeline;
 pub mod resample;

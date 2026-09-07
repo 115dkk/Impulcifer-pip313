@@ -681,26 +681,26 @@ tests = ["impulcifer-dsp::golden_rbj_matches_autoeq", "impulcifer-dsp::golden_tf
 [[feature]]
 id = "dsp.firwin2"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_firwin2_matches_scipy", "impulcifer-dsp::firwin2_output_symmetry"]
 
 [[feature]]
 id = "dsp.minimum_phase"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_minimum_phase_matches_scipy", "impulcifer-dsp::golden_homomorphic_log_and_lifter_match_scipy", "impulcifer-dsp::minimum_phase_energy_concentrated"]
 
 [[feature]]
 id = "dsp.savgol_filter"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_savgol_matches_scipy", "impulcifer-dsp::golden_savgol_thousand_passes_stay_within_budget", "impulcifer-dsp::golden_fractional_octave_window_matches_python"]
 
 [[feature]]
 id = "dsp.find_peaks"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_find_peaks_matches_scipy", "impulcifer-dsp::golden_first_peak_index_matches_python"]
 
 [[feature]]
 id = "dsp.windows"
@@ -711,20 +711,20 @@ tests = ["impulcifer-dsp::golden_windows_match_scipy", "impulcifer-dsp::golden_k
 [[feature]]
 id = "dsp.spline_k1"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_spline_k1_matches_fitpack", "impulcifer-dsp::golden_interp_log_axis_matches_python"]
 
 [[feature]]
 id = "dsp.spline_k2"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_spline_k2_matches_fitpack"]
 
 [[feature]]
 id = "dsp.spline_k3"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_spline_k3_matches_fitpack", "impulcifer-dsp::natural_cubic_fails_not_a_knot_fixture", "impulcifer-dsp::spline_hits_knots_and_scales_to_eight_thousand"]
 
 [[feature]]
 id = "dsp.nnresample_design"
@@ -781,3 +781,42 @@ status = "planned"
 tests = []
 note = "window.pywebview.api proxy + pywebviewready event; webview_ui unchanged"
 
+[[feature]]
+id = "io.wav_read"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::golden_read_wav_matches_python", "impulcifer-io::golden_read_riff_rf64_extensible_pcm_and_float", "impulcifer-io::read_handles_padding_reordered_chunks_and_rf64_size_table", "impulcifer-io::read_rejects_truncated_header"]
+note = "RIFF/RF64, PCM 16/24/32 and IEEE float 32/64, WAVE_FORMAT_EXTENSIBLE with any mask; integers scale by 2^(bits-1) like soundfile"
+
+[[feature]]
+id = "io.wav_write_pcm"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::golden_write_wav_bytes_match_soundfile", "impulcifer-io::read_write_round_trip_32_tracks_extensible_directout_mask", "impulcifer-io::write_validates_before_truncating_and_handles_empty_frames"]
+note = "PCM_16/24/32 with the libsndfile conversion (scale 2^31, ties-to-even, saturate, arithmetic shift); more than two tracks write EXTENSIBLE with the DIRECTOUT mask"
+
+[[feature]]
+id = "io.pcm32_round_trip"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::golden_pcm32_round_trip_matches_python"]
+
+[[feature]]
+id = "io.ffmpeg_discovery"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::ffmpeg_discovery_prefers_bundled_dir", "impulcifer-io::ffmpeg_version_and_absolute_executable_policy"]
+note = "bundled directory, then PATH, then a platform install hint; never runs an installer"
+
+[[feature]]
+id = "io.ffmpeg_decode"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::ffmpeg_decode_error_carries_stderr"]
+note = "argument-array spawn (CREATE_NO_WINDOW on Windows), stderr drained into the error; ffprobe JSON via serde_json for codec/TrueHD/Atmos checks; no process timeout yet (2.x has one)"
+
+[[feature]]
+id = "io.sweep_file_names"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::sweep_file_name_round_trips", "impulcifer-io::segments_match_pure_oracle_boundaries", "impulcifer-io::segments_match_exported_python"]
