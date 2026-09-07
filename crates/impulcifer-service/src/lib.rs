@@ -7,6 +7,7 @@
 mod args;
 pub mod brir;
 mod paths;
+pub mod recording;
 mod settings;
 
 use args::Args;
@@ -19,7 +20,7 @@ use impulcifer_types::job::JobSnapshot;
 use serde_json::{Value, json};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 pub trait HostAdapter: Send + Sync {
     fn select_file(&self, kind: &str) -> Option<String>;
@@ -50,7 +51,7 @@ impl HostAdapter for NoopHost {
 pub struct ImpulciferService {
     host: Box<dyn HostAdapter>,
     settings: Mutex<settings::Settings>,
-    backend: Box<dyn AudioBackend>,
+    backend: Arc<dyn AudioBackend>,
     jobs: JobRegistry,
     data_dir: PathBuf,
 }
@@ -78,7 +79,7 @@ impl ImpulciferService {
         Self {
             host,
             settings: Mutex::new(settings::Settings::new(settings_path)),
-            backend,
+            backend: Arc::from(backend),
             jobs,
             data_dir,
         }
@@ -193,43 +194,28 @@ impl ImpulciferService {
             IpcMethod::ListAudioDevices => {
                 args.count(0, 1)?;
                 let filter = args.optional_string(0, "host_api")?;
-                let endpoints = self.backend.enumerate().map_err(|error| {
-                    ipc::error(ErrorCode::DeviceError, error.to_string(), json!({}), true)
-                })?;
-                let mut apis = Vec::new();
-                for endpoint in &endpoints {
-                    if !apis.contains(&endpoint.host_api) {
-                        apis.push(endpoint.host_api.clone());
-                    }
-                }
-                if let Some(api) = filter.as_deref().filter(|s| !s.is_empty())
-                    && !apis.iter().any(|name| name == api)
-                {
-                    return Err(ipc::error(
-                        ErrorCode::InvalidRequest,
-                        "Unknown host API.",
-                        json!({"host_api":api}),
+                recording::devices::list_audio_devices(&*self.backend, filter.as_deref())
+            }
+            IpcMethod::StartRecording => {
+                args.count(1, 1)?;
+                let request = recording::request::validate(args.get(0))?;
+                let backend = Arc::clone(&self.backend);
+                let job = self
+                    .jobs
+                    .start(
+                        impulcifer_types::job::JobKind::Recording,
                         false,
-                    ));
-                }
-                let index = |input| {
-                    endpoints
-                        .iter()
-                        .position(|ep| {
-                            if input {
-                                ep.is_default_input
-                            } else {
-                                ep.is_default_output
-                            }
-                        })
-                        .map(|n| n as i64)
-                        .unwrap_or(-1)
-                };
-                let devices: Vec<_> = endpoints.iter().enumerate().filter(|(_, ep)| filter.as_ref().is_none_or(|name| name.is_empty() || *name == ep.host_api))
-                    .map(|(index, ep)| json!({"index":index,"name":ep.name,"host_api":ep.host_api,"max_input_channels":ep.max_input_channels,"max_output_channels":ep.max_output_channels})).collect();
-                Ok(
-                    json!({"host_apis":apis,"devices":devices,"default_input_index":index(true),"default_output_index":index(false)}),
-                )
+                        move |ctx| recording::run::run_recording(&request, &*backend, ctx),
+                    )
+                    .map_err(|code| {
+                        ipc::error(
+                            code,
+                            "Another job is already running.",
+                            json!({"job":self.jobs.active().as_ref().map(snapshot)}),
+                            code == ErrorCode::JobBusy,
+                        )
+                    })?;
+                Ok(json!({"job":snapshot(&job)}))
             }
             IpcMethod::PollJob => {
                 args.count(1, 2)?;
