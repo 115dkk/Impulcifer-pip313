@@ -894,3 +894,52 @@ id = "fr.magnitude_to_frequency_response"
 kind = "fr"
 status = "implemented"
 tests = ["impulcifer-dsp::golden_magnitude_to_frequency_response_matches_python"]
+
+[[feature]]
+id = "perf.impulcifer-io"
+kind = "perf"
+status = "planned"
+tests = []
+note = "PA01: WAV read/write, pcm32 round trip, sweep names vs soundfile / core.audio_io on py -3.14 (audit running)"
+
+[[feature]]
+id = "perf.impulcifer-dsp"
+kind = "perf"
+status = "planned"
+tests = []
+note = "PA02: primitives (conv, fft, filters, fir, savgol, splines, resample, spectrogram) vs scipy/numpy/nnresample on py -3.14"
+
+[[feature]]
+id = "perf.impulcifer-audio-io"
+kind = "perf"
+status = "planned"
+tests = []
+note = "measurement session overhead and capture loop vs sounddevice; after M3"
+
+[[feature]]
+id = "perf.impulcifer-sys-win"
+kind = "perf"
+status = "planned"
+tests = []
+note = "WASAPI open/probe latency vs PortAudio WASAPI; after M3"
+
+[[feature]]
+id = "perf.impulcifer-service"
+kind = "perf"
+status = "planned"
+tests = []
+note = "IPC call and job event overhead vs the 2.x pywebview bridge; after M3"
+
+[[feature]]
+id = "perf.pipeline-demo"
+kind = "perf"
+status = "planned"
+tests = []
+note = "M2: whole demo BRIR run (time and peak RSS) vs python impulcifer.py on py -3.14 and 3.14t"
+
+[[feature]]
+id = "perf.release"
+kind = "perf"
+status = "planned"
+tests = []
+note = "M5: final audit of every crate before 3.0"
