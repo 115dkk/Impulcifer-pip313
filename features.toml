@@ -357,158 +357,175 @@ tests = []
 [[feature]]
 id = "stage.estimator"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
+note = "in-memory: SweepEstimator from samples; file resolution in P11"
 
 [[feature]]
 id = "stage.room_correction"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-dsp::golden_generic_room_matches_python"]
+note = "specific + generic room corrections, limit masks; room-responses matrix returned for P11 to write"
 
 [[feature]]
 id = "stage.headphone_compensation"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-dsp::golden_headphone_resolution_matches_python"]
+note = "DSP part and the file-resolution truth table; file read/write in P11"
 
 [[feature]]
 id = "stage.equalization_files"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_eq_files_match_python"]
+note = "plain CSV (+ error=-raw fixup) and precedence; EqualizerAPO configs return the P12 error"
 
 [[feature]]
 id = "stage.target"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
 
 [[feature]]
 id = "stage.open_measurements"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
 
 [[feature]]
 id = "stage.plot_pre"
 kind = "stage"
 status = "planned"
 tests = []
+note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
 
 [[feature]]
 id = "stage.crop_and_align"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
 
 [[feature]]
 id = "stage.virtual_bass"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_vbass_matches_python"]
 
 [[feature]]
 id = "stage.mic_deviation_skipped"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_stage_table_matches_python"]
 
 [[feature]]
 id = "stage.mic_deviation"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_mic_deviation_matches_python"]
 
 [[feature]]
 id = "stage.write_responses"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
+note = "matrix only; the WAV write is output.responses_wav (P11)"
 
 [[feature]]
 id = "stage.equalize"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-dsp::golden_frozen_eq_firs_isolate_downstream_noise"]
+note = "per-speaker EQ FIR chain; budget is the FIR oracle-noise envelope (README-fr.md)"
 
 [[feature]]
 id = "stage.decay"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_decay_matches_python"]
 
 [[feature]]
 id = "stage.channel_balance"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_channel_balance_matches_python"]
 
 [[feature]]
 id = "stage.normalize"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
 
 [[feature]]
 id = "stage.write_readme"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
+note = "ReadmeData numbers only; markdown + i18n rendering is output.readme_txt (P11)"
 
 [[feature]]
 id = "stage.plot_post"
 kind = "stage"
 status = "planned"
 tests = []
+note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
 
 [[feature]]
 id = "stage.plot_results"
 kind = "stage"
 status = "planned"
 tests = []
+note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
 
 [[feature]]
 id = "stage.plot_additional"
 kind = "stage"
 status = "planned"
 tests = []
+note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
 
 [[feature]]
 id = "stage.interactive_plots"
 kind = "stage"
 status = "planned"
 tests = []
+note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
 
 [[feature]]
 id = "stage.resample"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_resample_matches_python"]
+note = "second normalize gain discarded like 2.x"
 
 [[feature]]
 id = "stage.write_brirs"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
+note = "hrir/hesuvi matrices; WAV writes are output.hrir_wav / output.hesuvi_wav (P11)"
 
 [[feature]]
 id = "stage.truehd_layouts"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python"]
+note = "matrices only"
 
 [[feature]]
 id = "stage.jamesdsp"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python"]
+note = "subset re-normalised; matrix only"
 
 [[feature]]
 id = "stage.hangloose"
 kind = "stage"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python"]
+note = "matrices only"
 
 [[feature]]
 id = "audio.enumerate"
@@ -1006,3 +1023,10 @@ kind = "objects"
 status = "implemented"
 tests = ["impulcifer-dsp::golden_reflection_levels_match_python"]
 note = "early/late reflection dB per ear for the README"
+
+[[feature]]
+id = "pipeline.run_pipeline"
+kind = "pipeline"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-dsp::pipeline_observer_cancels_before_and_after_each_stage", "impulcifer-dsp::golden_option_variants_match_python"]
+note = "in-memory driver over the 26-row stage table (same gates and step counts as core/pipeline.py); file I/O and plots are the service layer (P11)"

@@ -1,1 +1,9 @@
-//! `stages`: see docs/rust/ARCHITECTURE.md section 5 and docs/rust/survey/pipeline-object-model.md. Implemented by worker packet P10.
+#![forbid(unsafe_code)]
+//! File-free counterparts of core/pipeline_stages.py; P10 fixtures.
+pub mod decay;
+pub mod eq_files;
+pub mod equalize;
+pub mod headphone;
+pub mod readme;
+pub mod room;
+pub mod target;
