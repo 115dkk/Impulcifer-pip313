@@ -54,7 +54,11 @@ def samples(path):
 def test_version(package):
     assert package.impulcifer_native.version() == package.__version__ == "3.0.0-alpha.0"
     assert distribution("impulcifer").version == "3.0.0a0"
-    assert Path(os.environ["IMPULCIFER_DATA_DIR"]) == Path(package.__file__).parent / "data"
+    # Resolve both sides: the package sets the variable from a resolved path,
+    # while __file__ may be the 8.3 short form of a temp directory on Windows.
+    assert Path(os.environ["IMPULCIFER_DATA_DIR"]).resolve() == (
+        Path(package.__file__).resolve().parent / "data"
+    )
     if sysconfig.get_config_var("Py_GIL_DISABLED"):
         assert not sys._is_gil_enabled()
 
