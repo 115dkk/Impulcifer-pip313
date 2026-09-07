@@ -169,6 +169,52 @@ fn append_packet<S: PacketSource>(
     })
 }
 
+/// Samples read from the device but not yet handed to the caller, together
+/// with the packet flags that apply to them. Keeping the flags next to the
+/// queued samples lets a later `read_into` still report SILENT/discontinuity
+/// for frames that were captured during an earlier call.
+#[derive(Default)]
+struct CaptureQueue {
+    pending: VecDeque<f32>,
+    flags: PacketFlags,
+}
+
+impl CaptureQueue {
+    /// Move queued samples into `dst[*written..]`. Returns the flags that
+    /// applied to the samples handed out (all false when nothing was queued)
+    /// and clears the stored flags once the queue runs empty.
+    fn drain_into(&mut self, dst: &mut [f32], written: &mut usize) -> PacketFlags {
+        if self.pending.is_empty() {
+            return PacketFlags::default();
+        }
+        while *written < dst.len() {
+            let Some(sample) = self.pending.pop_front() else {
+                break;
+            };
+            dst[*written] = sample;
+            *written += 1;
+        }
+        let flags = self.flags;
+        if self.pending.is_empty() {
+            self.flags = PacketFlags::default();
+        }
+        flags
+    }
+
+    /// Read one packet from `source` into the queue and remember its flags.
+    fn push_packet<S: PacketSource>(
+        &mut self,
+        source: &mut S,
+        scratch: &mut [u8],
+        channels: u16,
+    ) -> Result<CaptureRead, AudioError> {
+        let packet = append_packet(source, scratch, &mut self.pending, channels)?;
+        self.flags.silent |= packet.silent;
+        self.flags.discontinuity |= packet.discontinuity;
+        Ok(packet)
+    }
+}
+
 trait SampleSink {
     fn capacity_frames(&self) -> Result<usize, AudioError>;
     fn padding_frames(&self) -> Result<usize, AudioError>;
@@ -492,41 +538,72 @@ mod windows_backend {
                 .get_iaudioclient()
                 .map_err(|err| backend_error("failed to create WASAPI audio client", err))?;
             let format = requested_format(spec);
-            let query = match mode {
-                ShareMode::Exclusive => client
-                    .is_supported_exclusive_with_quirks(&format)
-                    .map(|_| {
+            let (supported, detail) = match mode {
+                ShareMode::Exclusive => match client.is_supported_exclusive_with_quirks(&format) {
+                    Ok(_) => (
+                        true,
                         "exclusive float32 format accepted verbatim (possibly with a driver-compatible channel mask)"
-                            .to_string()
-                    }),
+                            .to_string(),
+                    ),
+                    Err(err) => (false, format!("exclusive float32 format rejected: {err}")),
+                },
                 ShareMode::SharedAutoConvert => {
                     match client.is_supported(&format, &WasapiShareMode::Shared) {
-                        Ok(None) => Ok("shared float32 format is native; auto-convert enabled".into()),
-                        Ok(Some(nearest)) => Ok(format!(
-                            "shared auto-convert enabled; engine mix format is {} Hz/{} channels (IsFormatSupported nearest: {} Hz/{} channels)",
-                            native_rate,
-                            native_channels,
-                            nearest.get_samplespersec(),
-                            nearest.get_nchannels()
-                        )),
-                        Err(err) => Ok(format!(
-                            "shared auto-convert enabled; IsFormatSupported returned {err}, but AUTOCONVERTPCM initialization may accept rate conversion"
-                        )),
+                        Ok(None) => (
+                            true,
+                            "shared float32 format is native; auto-convert enabled".into(),
+                        ),
+                        Ok(Some(nearest)) => (
+                            true,
+                            format!(
+                                "shared auto-convert enabled; engine mix format is {} Hz/{} channels (IsFormatSupported nearest: {} Hz/{} channels)",
+                                native_rate,
+                                native_channels,
+                                nearest.get_samplespersec(),
+                                nearest.get_nchannels()
+                            ),
+                        ),
+                        Err(query_err) => {
+                            // IsFormatSupported does not model AUTOCONVERTPCM, so a
+                            // rejected query is not conclusive. A short authoritative
+                            // initialization decides; the trial client is dropped
+                            // immediately and no stream is started.
+                            let mut trial = device.get_iaudioclient().map_err(|err| {
+                                backend_error("failed to create WASAPI audio client", err)
+                            })?;
+                            let stream_mode = StreamMode::PollingShared {
+                                autoconvert: true,
+                                buffer_duration_hns: SHARED_BUFFER_HNS,
+                            };
+                            match trial.initialize_client(
+                                &format,
+                                &wasapi_direction(direction),
+                                &stream_mode,
+                            ) {
+                                Ok(()) => (
+                                    true,
+                                    format!(
+                                        "shared auto-convert accepted by initialization (IsFormatSupported said: {query_err})"
+                                    ),
+                                ),
+                                Err(init_err) => (
+                                    false,
+                                    format!(
+                                        "shared auto-convert rejected: IsFormatSupported {query_err}; Initialize {init_err}"
+                                    ),
+                                ),
+                            }
+                        }
                     }
                 }
             };
-            Ok(match query {
-                Ok(detail) => {
-                    probe_result_from_format(mode, native_rate, native_channels, true, detail)
-                }
-                Err(err) => probe_result_from_format(
-                    mode,
-                    native_rate,
-                    native_channels,
-                    false,
-                    format!("exclusive float32 format rejected: {err}"),
-                ),
-            })
+            Ok(probe_result_from_format(
+                mode,
+                native_rate,
+                native_channels,
+                supported,
+                detail,
+            ))
         }
 
         fn open_output(
@@ -595,7 +672,7 @@ mod windows_backend {
                 client,
                 spec,
                 scratch: vec![0; scratch_len],
-                pending: VecDeque::new(),
+                queue: CaptureQueue::default(),
                 started: false,
                 stats: CaptureStats::default(),
                 _com: com,
@@ -699,7 +776,7 @@ mod windows_backend {
         client: AudioClient,
         spec: StreamSpec,
         scratch: Vec<u8>,
-        pending: VecDeque<f32>,
+        queue: CaptureQueue,
         started: bool,
         stats: CaptureStats,
         _com: ComGuard,
@@ -752,13 +829,9 @@ mod windows_backend {
             let mut any_silent = false;
             let mut any_discontinuity = false;
             while written < dst.len() {
-                while written < dst.len() {
-                    let Some(sample) = self.pending.pop_front() else {
-                        break;
-                    };
-                    dst[written] = sample;
-                    written += 1;
-                }
+                let drained = self.queue.drain_into(dst, &mut written);
+                any_silent |= drained.silent;
+                any_discontinuity |= drained.discontinuity;
                 if written == dst.len() || cancel.is_cancelled() {
                     break;
                 }
@@ -769,20 +842,15 @@ mod windows_backend {
                 let mut source = WasapiPacketSource {
                     capture: &self.capture,
                 };
-                let packet = append_packet(
-                    &mut source,
-                    &mut self.scratch,
-                    &mut self.pending,
-                    self.spec.channels,
-                )?;
+                let packet =
+                    self.queue
+                        .push_packet(&mut source, &mut self.scratch, self.spec.channels)?;
                 if packet.silent {
                     self.stats.silent_packets = self.stats.silent_packets.saturating_add(1);
-                    any_silent = true;
                 }
                 if packet.discontinuity {
                     self.stats.discontinuity_packets =
                         self.stats.discontinuity_packets.saturating_add(1);
-                    any_discontinuity = true;
                 }
             }
             Ok(CaptureRead {
@@ -938,6 +1006,40 @@ mod tests {
         let mut pending = VecDeque::new();
         let report = append_packet(&mut source, &mut scratch, &mut pending, 1).unwrap();
         assert!(report.discontinuity);
+    }
+
+    #[test]
+    fn pending_packet_keeps_silent_flag_across_reads() {
+        let mut source = FakePacket {
+            bytes: f32_to_bytes(&[0.1, 0.2, 0.3, 0.4]),
+            flags: PacketFlags {
+                silent: true,
+                discontinuity: false,
+            },
+        };
+        let mut scratch = vec![0; source.bytes.len()];
+        let mut queue = CaptureQueue::default();
+        queue.push_packet(&mut source, &mut scratch, 1).unwrap();
+
+        let mut dst = [1.0f32; 2];
+        let mut written = 0;
+        let first = queue.drain_into(&mut dst, &mut written);
+        assert!(first.silent);
+        assert_eq!(written, 2);
+        assert_eq!(dst, [0.0, 0.0]);
+
+        let mut written = 0;
+        let second = queue.drain_into(&mut dst, &mut written);
+        assert!(
+            second.silent,
+            "flags must survive across reads while samples remain queued"
+        );
+        assert_eq!(written, 2);
+
+        let mut written = 0;
+        let third = queue.drain_into(&mut dst, &mut written);
+        assert!(!third.silent, "flags reset once the queue is empty");
+        assert_eq!(written, 0);
     }
 
     #[test]
