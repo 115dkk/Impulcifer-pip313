@@ -8,6 +8,7 @@
 
 mod dialog;
 mod smoke;
+mod updater;
 
 use std::sync::Arc;
 
@@ -46,9 +47,22 @@ fn theme_from_name(name: &str) -> Option<Theme> {
 
 struct TauriHost {
     app: AppHandle,
+    update: updater::StagedUpdate,
 }
 
 impl HostAdapter for TauriHost {
+    fn download_update(
+        &self,
+        latest_version: &str,
+        progress: &(dyn Fn(f64, &str) + Sync),
+    ) -> Result<(), String> {
+        self.update.download(&self.app, latest_version, progress)
+    }
+
+    fn apply_staged_update(&self) -> Result<(), String> {
+        self.update.apply(&self.app)
+    }
+
     fn select_file(&self, kind: &str) -> Option<String> {
         let (name, extensions) = dialog_filters(kind);
         self.app
@@ -124,16 +138,23 @@ async fn pywebview_api(
 const BRIDGE_JS: &str = include_str!("bridge.js");
 
 fn main() {
+    #[cfg(windows)]
+    velopack::VelopackApp::build().run();
     let smoke = smoke::SmokeConfig::from_environment()
         .expect("invalid smoke startup configuration")
         .map(Arc::new);
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Windows installs use only Velopack, never the Tauri updater.
+    #[cfg(not(windows))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    builder
         .plugin(dialog::NativeDialogs::new())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![pywebview_api])
         .setup(move |app| {
             let host = TauriHost {
                 app: app.handle().clone(),
+                update: updater::StagedUpdate::default(),
             };
             app.manage(AppState {
                 service: Arc::new(ImpulciferService::new(Box::new(host))),

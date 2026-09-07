@@ -72,6 +72,33 @@ fn smoke_report_contract() {
     // checks live beside the actual helper in smoke::tests::smoke_report_contract.
 }
 
+#[test]
+fn updater_plugin_registered_with_public_key() {
+    let config: serde_json::Value =
+        serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+    let updater = &config["plugins"]["updater"];
+    let public = updater["pubkey"].as_str().unwrap();
+    assert!(public.len() > 80);
+    assert!(!public.contains("secret"));
+    assert_eq!(
+        updater["endpoints"],
+        serde_json::json!([
+            "https://github.com/115dkk/Impulcifer-pip313/releases/latest/download/latest.json"
+        ])
+    );
+    let source = include_str!("../src/main.rs");
+    assert!(source.contains("#[cfg(not(windows))]\n    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build())"));
+    assert!(source.contains("#[cfg(windows)]\n    velopack::VelopackApp::build().run()"));
+    let permissions: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+    assert!(
+        permissions["permissions"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("updater:default"))
+    );
+}
+
 /// Local M3 integration check, like recording.hardware: requires Windows,
 /// installed WebView2, Python 3.14 and an already built release app. The
 /// harness drives the frozen UI from an injected script (in-app path).

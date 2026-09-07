@@ -10,6 +10,7 @@ mod paths;
 pub mod recording;
 pub mod recovery;
 pub mod settings;
+pub mod update;
 
 use args::Args;
 use impulcifer_jobs::registry::{JobRegistry, panic_message};
@@ -29,6 +30,16 @@ pub trait HostAdapter: Send + Sync {
     fn open_path(&self, path: &str) -> Result<(), String>;
     fn open_url(&self, url: &str) -> Result<(), String>;
     fn apply_title_theme(&self, theme: &str);
+    fn download_update(
+        &self,
+        _latest_version: &str,
+        _progress: &(dyn Fn(f64, &str) + Sync),
+    ) -> Result<(), String> {
+        Err("not supported".into())
+    }
+    fn apply_staged_update(&self) -> Result<(), String> {
+        Err("not supported".into())
+    }
 }
 
 /// Host adapter for headless contexts (CLI, tests): dialogs return None.
@@ -50,7 +61,9 @@ impl HostAdapter for NoopHost {
 }
 
 pub struct ImpulciferService {
-    host: Box<dyn HostAdapter>,
+    host: Arc<dyn HostAdapter>,
+    update_options: update::UpdateOptions,
+    updates: Arc<update::UpdateState>,
     settings: Mutex<settings::Settings>,
     backend: Arc<dyn AudioBackend>,
     jobs: JobRegistry,
@@ -78,12 +91,21 @@ impl ImpulciferService {
         data_dir: PathBuf,
     ) -> Self {
         Self {
-            host,
+            host: Arc::from(host),
+            update_options: update::UpdateOptions::default(),
+            updates: Arc::new(update::UpdateState::default()),
             settings: Mutex::new(settings::Settings::new(settings_path)),
             backend: Arc::from(backend),
             jobs,
             data_dir,
         }
+    }
+
+    /// Configure update endpoints and install probes before sharing the service.
+    /// Offline tests must supply local endpoints, never the production defaults.
+    pub fn with_update_options(mut self, options: update::UpdateOptions) -> Self {
+        self.update_options = options;
+        self
     }
 
     pub fn call(&self, method: &str, args: Vec<Value>) -> Value {
@@ -118,6 +140,7 @@ impl ImpulciferService {
                     .remove("dir_path");
                 Ok(json!({
                     "version": env!("CARGO_PKG_VERSION"), "platform": platform(),
+                    "install_kind": self.update_options.install_kind.as_str(),
                     "brir_defaults": defaults,
                     "sweep": {"layouts": SWEEP_TRACK_LAYOUTS, "default_fs": paths::DEFAULT_SWEEP_FS,
                         "default_duration": paths::DEFAULT_SWEEP_DURATION, "speaker_names": SPEAKER_NAMES},
@@ -187,7 +210,7 @@ impl ImpulciferService {
                 // Frozen JS still prints PYTHON and GIL labels. Preserve its keys
                 // with an honest Rust value and null GIL; no translated labels invented.
                 Ok(
-                    json!({"version":env!("CARGO_PKG_VERSION"), "install_kind":"dev",
+                    json!({"version":env!("CARGO_PKG_VERSION"), "install_kind":self.update_options.install_kind.as_str(),
                     "python_version":env!("IMPULCIFER_RUSTC_VERSION"), "os":os_description(),
                     "cpu_count":cpus,"gil_enabled":null,"optimal_workers":cpus}),
                 )
@@ -372,7 +395,37 @@ impl ImpulciferService {
                 args.count(0, 0)?;
                 Ok(json!({"path":self.host.select_directory()}))
             }
-            _ => Err(internal(format!("{} not implemented", method.wire_name()))),
+            IpcMethod::CheckForUpdates => {
+                args.count(0, 0)?;
+                update::check::check(&self.update_options).map_err(|message| {
+                    ipc::error(ErrorCode::UpdateCheckFailed, message, json!({}), true)
+                })
+            }
+            IpcMethod::StartUpdate => {
+                args.count(1, 1)?;
+                let request = update::validate(args.get(0))?;
+                let host = Arc::clone(&self.host);
+                let options = self.update_options.clone();
+                let updates = Arc::clone(&self.updates);
+                let job = self
+                    .jobs
+                    .start(impulcifer_types::job::JobKind::Update, false, move |ctx| {
+                        updates.run(request, &options, host, ctx)
+                    })
+                    .map_err(|code| {
+                        ipc::error(
+                            code,
+                            "Another job is already running.",
+                            json!({"job":self.jobs.active().as_ref().map(snapshot)}),
+                            code == ErrorCode::JobBusy,
+                        )
+                    })?;
+                Ok(json!({"job":snapshot(&job)}))
+            }
+            IpcMethod::ApplyPendingUpdate => {
+                args.count(0, 0)?;
+                self.updates.apply()
+            }
         }
     }
 

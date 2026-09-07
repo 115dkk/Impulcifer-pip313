@@ -135,20 +135,23 @@ tests = ["impulcifer-service::ipc_open_path_shape"]
 [[feature]]
 id = "ipc.check_for_updates"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::check_for_updates_reads_github_latest_from_mock_server", "impulcifer-service::golden_asset_selection_and_version_compare_match_python"]
+note = "GitHub releases/latest through ureq (rustls, 10 s), 2.x response fields, asset rules per platform and version compare checked against 30 golden payloads; UPDATE_CHECK_FAILED retryable"
 
 [[feature]]
 id = "ipc.start_update"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::start_update_validation_matches_python", "impulcifer-service::legacy_executor_downloads_verifies_and_opens", "impulcifer-service::tauri_kind_delegates_to_host"]
+note = "non-cancellable update job with the 2.x progress keys and result fields; executor by install kind (velopack on Windows, tauri through HostAdapter elsewhere, legacy download + SHA256SUMS otherwise)"
 
 [[feature]]
 id = "ipc.apply_pending_update"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::apply_pending_update_without_stage_is_invalid_request", "impulcifer-service::tauri_kind_delegates_to_host"]
+note = "runs the staged action (Velopack apply-and-restart, Tauri install-and-relaunch), then restarting=true"
 
 [[feature]]
 id = "ipc.select_file"
@@ -1194,3 +1197,31 @@ kind = "app"
 status = "implemented"
 tests = ["impulcifer-app::app_smoke_hardware_windows"]
 note = "ignored hardware test: CABLE-A headphone recording from the recorder view (878540 frames, 2 tracks, 48 kHz on 2026-09-08)"
+
+[[feature]]
+id = "updater.install_kind"
+kind = "updater"
+status = "implemented"
+tests = ["impulcifer-service::golden_install_kind_matches_python", "impulcifer-service::velopack_kind_selected_on_windows_with_update_exe"]
+note = "velopack (Update.exe in the parent of the executable directory), tauri (.app bundle or APPIMAGE), dev; reported by bootstrap and get_system_info"
+
+[[feature]]
+id = "updater.velopack"
+kind = "updater"
+status = "implemented"
+tests = ["impulcifer-service::velopack_kind_selected_on_windows_with_update_exe"]
+note = "Windows only: velopack 1.2 Rust SDK, feed releases/latest/download with channel win and releases.win.json shared with 2.x installs; VelopackApp::build().run() first in the app; live SDK path verified by the packaging packet (ignored test velopack_check_against_live_feed)"
+
+[[feature]]
+id = "updater.tauri"
+kind = "updater"
+status = "implemented"
+tests = ["impulcifer-service::tauri_kind_delegates_to_host", "impulcifer-app::updater_plugin_registered_with_public_key"]
+note = "macOS/Linux: tauri-plugin-updater in the app behind HostAdapter::download_update / apply_staged_update; endpoint latest.json of the GitHub release, public key in tauri.conf.json, private key kept outside the repository (CI secret TAURI_SIGNING_PRIVATE_KEY)"
+
+[[feature]]
+id = "updater.legacy"
+kind = "updater"
+status = "implemented"
+tests = ["impulcifer-service::legacy_executor_downloads_verifies_and_opens"]
+note = "dev and unmatched bundles: download to the temp directory with progress, SHA256SUMS.txt verification, open the installer or replace the running AppImage as 2.x"

@@ -13,6 +13,12 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERDMDJDN0QxN0RBNjFFMkYKUldRdkhxWjkwY2NDM0d3RXN4d1VJRlE4UFNQZHRESDY0TE56L210TlliVm1ROEE4bGtNVEpGRTUK",
+      "endpoints": ["https://github.com/115dkk/Impulcifer-pip313/releases/latest/download/latest.json"]
+    }
+  },
   "bundle": {
     "active": false,
     "icon": ["icons/icon.ico", "icons/icon.png"]
