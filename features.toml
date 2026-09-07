@@ -26,8 +26,9 @@ tests = ["impulcifer-service::ipc_bootstrap_shape"]
 [[feature]]
 id = "ipc.list_audio_devices"
 kind = "ipc"
-status = "implemented"
+status = "planned"
 tests = ["impulcifer-service::ipc_list_audio_devices_shape"]
+note = "service path done and tested with a fake backend; stays planned until the cpal backend enumerates on macOS/Linux (P02)"
 
 [[feature]]
 id = "ipc.start_recording"

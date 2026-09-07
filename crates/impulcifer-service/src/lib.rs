@@ -347,18 +347,51 @@ fn os_description() -> String {
         .unwrap_or_else(|| platform().to_owned())
 }
 fn default_data_dir() -> PathBuf {
-    // Installed binaries use executable-adjacent resources. A debug source
-    // build mirrors Python's checkout-root data directory. Packaged shells may
-    // inject their own resource directory using with_dependencies.
-    let adjacent = std::env::current_exe()
-        .ok()
-        .and_then(|path| path.parent().map(|parent| parent.join("data")));
-    if let Some(path) = adjacent.as_ref().filter(|path| path.is_dir()) {
-        return path.clone();
+    // Candidates in priority order: an explicit override, executable-adjacent
+    // resources (installed builds; the Tauri bundle will place `data` there or
+    // under `resources/`), then the checkout-root data directory. Only an
+    // existing directory is returned so `open_path` never reports a path that
+    // was merely assumed; when none exists the first candidate is returned and
+    // `open_path` answers FILE_NOT_FOUND with that path.
+    let mut candidates = Vec::new();
+    if let Some(dir) = std::env::var_os("IMPULCIFER_DATA_DIR") {
+        candidates.push(PathBuf::from(dir));
     }
-    if cfg!(debug_assertions) {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data")
-    } else {
-        adjacent.unwrap_or_else(|| PathBuf::from("data"))
+    if let Some(parent) = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(PathBuf::from))
+    {
+        candidates.push(parent.join("data"));
+        candidates.push(parent.join("resources").join("data"));
+    }
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data"));
+    pick_data_dir(&candidates).unwrap_or_else(|| {
+        candidates
+            .first()
+            .cloned()
+            .unwrap_or_else(|| PathBuf::from("data"))
+    })
+}
+
+/// First candidate that is an existing directory.
+fn pick_data_dir(candidates: &[PathBuf]) -> Option<PathBuf> {
+    candidates.iter().find(|path| path.is_dir()).cloned()
+}
+
+#[cfg(test)]
+mod data_dir_tests {
+    use super::pick_data_dir;
+
+    #[test]
+    fn data_dir_picks_first_existing_candidate() {
+        let unique = format!("impulcifer-data-dir-{}", std::process::id());
+        let existing = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&existing).unwrap();
+        let missing = existing.join("does-not-exist");
+        let picked = pick_data_dir(&[missing.clone(), existing.clone()]);
+        assert_eq!(picked, Some(existing.clone()));
+        assert_eq!(pick_data_dir(std::slice::from_ref(&missing)), None);
+        assert_eq!(pick_data_dir(&[]), None);
+        std::fs::remove_dir_all(&existing).unwrap();
     }
 }
