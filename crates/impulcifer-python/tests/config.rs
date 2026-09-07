@@ -28,4 +28,18 @@ fn run_config_dict_matches_from_kwargs() {
         ProcessingConfig::default()
     );
     assert!(run_config_dict(json!({"plot":"wrong type"}).as_object().unwrap()).is_err());
+    // Codex on PR #190: a numeric dB channel balance is a 2.x form.
+    for (value, text) in [(json!(3), "3"), (json!(-1.5), "-1.5")] {
+        let kwargs = json!({"dir_path":"measurements", "channel_balance":value});
+        let actual = run_config_dict(kwargs.as_object().unwrap()).unwrap();
+        assert_eq!(actual.channel_balance.as_deref(), Some(text));
+    }
+    let named = json!({"dir_path":"measurements", "channel_balance":"trend"});
+    assert_eq!(
+        run_config_dict(named.as_object().unwrap())
+            .unwrap()
+            .channel_balance
+            .as_deref(),
+        Some("trend")
+    );
 }
