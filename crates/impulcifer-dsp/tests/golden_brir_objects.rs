@@ -11,6 +11,13 @@ use serde_json::{Value, json};
 use std::{fs, path::PathBuf, sync::OnceLock};
 
 /// Python oracle fixture directory, export_goldens_brir.py.
+/// Sweep-signal budget. The Python values were exported on Windows; the glibc
+/// and macOS libm `sin`/`exp` differ from that by up to about 8e-12 at the
+/// large sweep arguments (CI, 2026-09-07), so the f64 contract is 1e-10 and
+/// the PCM_32 contract below is "no sample differs by more than one LSB" (the
+/// 2.x test_sweep_signal.py contract: within one ULP, platform libm).
+const SWEEP_ATOL: f64 = 1e-10;
+
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -303,12 +310,14 @@ fn golden_sweep_estimator_matches_python() {
             .round_ties_even()
             .clamp(-2147483648.0, 2147483647.0) as i32
     };
-    let mismatches = e
+    let (mismatches, max_lsb) = e
         .test_signal
         .iter()
         .zip(&reference)
-        .filter(|(a, b)| quantize(**a) != quantize(**b))
-        .count();
+        .map(|(a, b)| (quantize(*a) as i64 - quantize(*b) as i64).abs())
+        .fold((0usize, 0i64), |(n, m), d| {
+            (n + usize::from(d != 0), m.max(d))
+        });
     let max = e
         .test_signal
         .iter()
@@ -316,7 +325,7 @@ fn golden_sweep_estimator_matches_python() {
         .map(|(a, b)| comparison_error(*a, *b))
         .fold(0.0, f64::max);
     println!(
-        "MEASURE PCM_32 mismatches={mismatches}/{}; sweep max_abs={max:.17e}",
+        "MEASURE PCM_32 mismatches={mismatches}/{} (max {max_lsb} LSB); sweep max_abs={max:.17e}",
         reference.len()
     );
     assert_eq!(e.test_signal.len(), o["length"].as_u64().unwrap() as usize);
@@ -336,11 +345,14 @@ fn golden_sweep_estimator_matches_python() {
         "inverse_filter",
         &e.inverse_filter,
         &array(&o["inverse_filter"]),
-        1e-12,
+        SWEEP_ATOL,
         0.0,
     );
-    compare("test_signal", &e.test_signal, &reference, 1e-12, 0.0);
-    assert!(mismatches <= 8, "PCM32 mismatches={mismatches}");
+    compare("test_signal", &e.test_signal, &reference, SWEEP_ATOL, 0.0);
+    assert!(
+        max_lsb <= 1 && mismatches <= reference.len() / 50,
+        "PCM32 mismatches={mismatches} (max {max_lsb} LSB)"
+    );
 }
 /// Python estimate:149-151; p08_estimator.json.
 #[test]
@@ -387,12 +399,12 @@ fn golden_sweep_sequence_matches_python() {
                 let offset = active["sweep_offset"].as_u64().unwrap() as usize;
                 expected[start..stop].copy_from_slice(&reference[offset..offset + stop - start]);
             }
-            check_summary("sequence", row, track, 1e-12);
+            check_summary("sequence", row, track, SWEEP_ATOL);
             compare(
                 &format!("sequence {layout}/{i}"),
                 row,
                 &expected,
-                1e-12,
+                SWEEP_ATOL,
                 0.0,
             );
         }
@@ -405,12 +417,17 @@ fn golden_from_samples_repair_matches_python() {
     let v = fixture("repair");
     let o = &v["outputs"];
     assert_eq!(e.duration, number(&o["duration"]));
-    check_summary("repair signal", &e.test_signal, &o["test_signal"], 1e-12);
+    check_summary(
+        "repair signal",
+        &e.test_signal,
+        &o["test_signal"],
+        SWEEP_ATOL,
+    );
     check_summary(
         "repair inverse",
         &e.inverse_filter,
         &o["inverse_filter"],
-        1e-12,
+        SWEEP_ATOL,
     );
     let original = array(&fixture("estimator")["outputs"]["test_signal"]);
     for case in fixture("repair_branches")["outputs"].as_array().unwrap() {
@@ -426,7 +443,7 @@ fn golden_from_samples_repair_matches_python() {
             "forced repair inverse",
             &repaired.inverse_filter,
             &case["inverse_filter"],
-            1e-12,
+            SWEEP_ATOL,
         );
     }
 }
