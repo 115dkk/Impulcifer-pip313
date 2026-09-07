@@ -385,9 +385,31 @@ fn implemented_features_have_existing_tests() {
             continue;
         }
         for t in &f.tests {
+            if let Some(reference) = t.strip_prefix("pytest:") {
+                // `pytest:<repo-relative file>::<test_fn>` for checks that need
+                // an interpreter (the installed-wheel tests of
+                // crates/impulcifer-python, run by the `wheel` job of rust.yml).
+                let Some((file, fn_name)) = reference.split_once("::") else {
+                    failures.push(format!(
+                        "{}: test reference '{}' must be pytest:path::test_fn",
+                        f.id, t
+                    ));
+                    continue;
+                };
+                let found = fs::read_to_string(repo_root().join(file))
+                    .map(|src| src.contains(&format!("def {fn_name}(")))
+                    .unwrap_or(false);
+                if !found {
+                    failures.push(format!(
+                        "{}: pytest fn '{}' not found in '{}'",
+                        f.id, fn_name, file
+                    ));
+                }
+                continue;
+            }
             let Some((crate_name, fn_name)) = t.split_once("::") else {
                 failures.push(format!(
-                    "{}: test reference '{}' must be crate-name::test_fn",
+                    "{}: test reference '{}' must be crate-name::test_fn or pytest:path::test_fn",
                     f.id, t
                 ));
                 continue;

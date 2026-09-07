@@ -1,0 +1,51 @@
+# P19 (ASTRA): `impulcifer-plots`, the PNG plot outputs of the pipeline (results, headphones, eq, pre/post, interaural overlay)
+
+You are extending the Impulcifer 3.x Rust workspace at `E:/Impulcifer`. Read first: the 2.x plotting code `E:/Impulcifer/core/plotting/hrir_plotter.py` (`plot` with the two-pass axis synchronization and the per-speaker `{speaker}-{side}.png` files, `plot_result` = `results.png`, `plot_interaural_impulse_overlay` = `{speaker}_interaural_overlay.png`), `E:/Impulcifer/core/plotting/impulse_response_plotter.py` (the 2x3 panel figure: recording, spectrogram, IR, FR, decay, waterfall; `plot_fr` styling), `E:/Impulcifer/core/pipeline_stages.py` (`headphones.png` in `headphone_compensation` lines 440 to 490, `eq.png` in the eq stage lines 325 to 352, `save_fig_as_png`), `E:/Impulcifer/core/plotting_utils.py`, `E:/Impulcifer/core/pipeline.py` (`_stage_plot_pre/_stage_plot_post/_stage_plot_results/_stage_plot_additional`; which stages run by default: `plot_results` always, `plot_pre/post/additional` only with `--plot`), then the Rust side: `crates/impulcifer-dsp/src/pipeline.rs` (stage table rows `PlotPre/PlotPost/PlotResults/PlotAdditional/InteractivePlots`), `crates/impulcifer-service/src/brir/run.rs` (the stages currently log `cli_plots_not_available_yet` and skip), `crates/impulcifer-dsp/src/fr.rs` and `fr/**` (`FrequencyResponse`, `smoothen`, `generate_frequencies`), `crates/impulcifer-dsp/src/ir.rs` (`ImpulseResponse`: `frequency_response`, `decay`, spectrogram helpers from P06), `crates/impulcifer-service/tests/demo_parity.rs` and `brir_outputs.rs` (how the demo is driven in tests), `docs/rust/ARCHITECTURE.md` section 9 (gates; fixture budget 12 MB per packet), `docs/rust/perf/pipeline-demo.md` (PA03: Python writes `plots/headphones.png` and `results.png` on every default run; the perf gate is blocked on these plots).
+
+Run every command in the foreground. Never use background execution. Other workers are editing `crates/impulcifer-service/src/{settings.rs,lib.rs,brir/outputs.rs}`, `crates/impulcifer-io/**`, `crates/impulcifer-policy/**`, `apps/**`, `tests/app_smoke/**`; treat those as read-only. You are the only one editing the root `Cargo.toml` (workspace members); put crate dependencies in `crates/impulcifer-plots/Cargo.toml`.
+
+## Design (fixed)
+- New crate `crates/impulcifer-plots` (`#![forbid(unsafe_code)]`), rendering with `plotters` (`default-features = false`, features `bitmap_backend`, `ab_glyph`, `line_series`, `histogram`/`surface_series` only if used) and an embedded TTF (`assets/DejaVuSans.ttf` from the DejaVu fonts release with its license file `assets/DejaVu-LICENSE.txt`; verify the download with WebFetch). No `font-kit`, no system font lookup. PNG encoding through plotters' bitmap backend (the `image` feature) or the `png` crate.
+- Figures reproduce matplotlib's sizes at 100 dpi: `results.png` 1200x900, `headphones.png` 2200x1000 (2 rows x 3 columns grid: left/right FR panels in column 0, comparison spanning columns 1 to 2), `eq.png` 1200x900 (one curve) or 2200x900 (two), per-speaker panel figures 2200x1000 (2x3 panels), interaural overlay as in Python. `bbox_inches="tight"` cropping and the 60-colour palette quantization of `results.png` are not reproduced (document).
+- Public API (data in, file out; the service computes the data with the dsp crate so the plotted series are the pipeline's own):
+  - `pub fn plot_results(path: &Path, left: &FrSeries, right: &FrSeries) -> Result<(), PlotError>` where `FrSeries { frequency, raw, smoothed }`; draws left/right raw (`#7db4db`, `#dd8081`), left/right smoothed (`#1f77b4`, `#d62728`), difference (`#680fb9`), legend `["Left raw","Right raw","Left smoothed","Right smoothed","Difference"]`, log-x 20 to 20000 Hz, grid, the same axis labels as `plot_fr`.
+  - `pub fn plot_headphones(path, left: &FrCurve, right: &FrCurve, gain_left_db: f64, gain_right_db: f64)`: title `Headphones`, panels `Left`/`Right` (`FrequencyResponse.plot` styling), `Comparison` with the y-limits rule of the Python code (`min*1.1`, `max*1.1` over 20 to 20000 Hz) and the legend texts `Left raw {gain:+.1f} dB` etc.
+  - `pub fn plot_eq(path, left: Option<&FrCurve>, right: Option<&FrCurve>)`.
+  - `pub fn plot_ir_panels(path, panels: &IrPanels)` with `IrPanels { recording: Option<Vec<f64>>, spectrogram: Option<Spectrogram>, ir: Vec<f64>, fs, fr: FrSeries, decay: Vec<f64>, waterfall: Option<Waterfall>, limits: PanelLimits }`, the 2x3 layout of `ImpulseResponse.plot`; the 3D waterfall may be drawn as a 2D stacked-line or heat map (document the deviation).
+  - `pub fn plot_interaural_overlay(path, speaker: &str, left_ir: &[f64], right_ir: &[f64], fs, time_range_ms: (f64, f64))`.
+  - `PanelLimits` implements the two-pass axis synchronization of `HRIR.plot` (the service collects limits over all speaker/side figures, then renders).
+- Service wiring in `crates/impulcifer-service/src/brir/run.rs` (and a small `brir/plots.rs` module if you prefer): `PlotResults` always writes `results.png` from the summed left/right stacks smoothed exactly like `plot_result` (window 1/3, treble window 1/5, treble 20000 to 23999); the headphone compensation stage writes `plots/headphones.png` and the eq stage `plots/eq.png` when eq curves exist; `PlotPre`/`PlotPost` write `plots/pre/{speaker}-{side}.png` and `plots/post/...` with `--plot`; `PlotAdditional` writes the overlays with `--plot`. Render the per-speaker figures in parallel with rayon (Python uses a process pool). `InteractivePlots` (bokeh) and the mic-deviation debug plots stay skipped with the existing `cli_plots_not_available_yet` warning. Plotting must not change any WAV or README output: `demo_parity` stays green.
+- Progress keys and step counts are already in the stage table; do not change them.
+
+### Golden exporter and tests
+`E:/Impulcifer/tests/migration/export_goldens_plots.py` (`py -3.14`, temp copy of `data/demo`, `--test_signal` = the bundled `data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav`): run 2.x once with defaults and once with `--plot`; dump `p19_plots.json` = for both runs the list of PNG files (relative paths) with width/height, and the series matplotlib was given for `results.png` (left/right `frequency`, `raw`, `smoothed`, difference), `headphones.png` (left/right `frequency`, `raw`, difference, `gain_l`, `gain_r`, the y-limits), `eq.png` (curves) at their native grids. Obtain the series by calling the same 2.x functions the stages call (monkeypatch `Axes.plot`/`Axes.semilogx` to record the x/y arrays, or recompute with `core` exactly as `plot_result` does; say which). Keep the fixture under 3 MB (thin the arrays with a documented stride if needed, and store the stride).
+
+Rust tests: `crates/impulcifer-plots/tests/render.rs` (`png_outputs_have_matplotlib_sizes`, `png_is_not_blank` (pixel variance above a floor and at least three distinct colours), `axis_limits_synchronize_across_panels`), `crates/impulcifer-service/tests/brir_plots.rs` (`golden_results_series_match_python` within the FR budgets of `tests/migration/README-fr.md` (smoothed) and 0.05 dB (raw), `golden_headphones_series_match_python`, `golden_eq_series_match_python`, `plot_files_match_python_default_run` (same relative PNG set as Python's default run, dimensions within 10 percent), `plot_files_match_python_plot_run` (`--plot` set), `plots_do_not_change_wavs` (hesuvi.wav bytes identical with and without `--plot`)).
+
+Do not edit `features.toml`; report the test names for `stage.plot_results`, `stage.plot_pre`, `stage.plot_post`, `stage.plot_additional`.
+
+### Performance follow-up (part of this packet)
+After everything passes, rerun the PA03 orchestrator in the foreground: `py -3.14 E:/Impulcifer/tests/migration/bench_oracle_pipeline.py` and `cargo bench -p impulcifer-service --bench perf`, and append a section "With plots (P19)" to `docs/rust/perf/pipeline-demo.md` with the same tables (process median, in-process median, peak RSS, ratios). The Rust default run now produces the same PNG set as Python, so the comparison is like for like. Report whether every ratio is above 1.0; do not edit `features.toml`.
+
+## Allowed files
+`E:/Impulcifer/crates/impulcifer-plots/**` (new), `E:/Impulcifer/Cargo.toml` (workspace `members` only), `E:/Impulcifer/Cargo.lock`, `E:/Impulcifer/crates/impulcifer-service/Cargo.toml`, `E:/Impulcifer/crates/impulcifer-service/src/brir/run.rs`, `E:/Impulcifer/crates/impulcifer-service/src/brir/plots.rs` (new, optional), `E:/Impulcifer/crates/impulcifer-service/src/brir/mod.rs` (a `mod plots;` line only), `E:/Impulcifer/crates/impulcifer-service/tests/brir_plots.rs`, `E:/Impulcifer/crates/impulcifer-dsp/src/fr.rs`, `E:/Impulcifer/crates/impulcifer-dsp/src/fr/**`, `E:/Impulcifer/crates/impulcifer-dsp/src/ir.rs` (only to expose an existing computation as `pub`; no numeric change), `E:/Impulcifer/tests/migration/export_goldens_plots.py`, `E:/Impulcifer/tests/migration/goldens/p19_*`, `E:/Impulcifer/tests/migration/README-plots.md`, `E:/Impulcifer/docs/rust/perf/pipeline-demo.md` (append only). Nothing else.
+
+## Hard rules
+- `#![forbid(unsafe_code)]` in the new crate root; the policy test `every_crate_root_forbids_unsafe` must pass with the new member.
+- Fixture budget 12 MB (the font is an asset, not a fixture; keep the font under 800 KB, subset if needed).
+- Temp directories only; never write into `data/`.
+- No change to any numeric pipeline output.
+
+## Verification (foreground, paste output)
+```
+py -3.14 E:/Impulcifer/tests/migration/export_goldens_plots.py
+cargo fmt --all -- --check
+cargo clippy -p impulcifer-plots -p impulcifer-service --all-targets -- --no-deps -D warnings
+cargo test -p impulcifer-plots
+cargo test -p impulcifer-service
+cargo test -p impulcifer-policy
+py -3.14 E:/Impulcifer/tests/migration/bench_oracle_pipeline.py
+```
+
+## Report format
+(1) files changed, dependencies with versions and licenses, the font source; (2) verification outputs verbatim; (3) table: PNG file, Python size, Rust size, series budget result; (4) deviations from matplotlib (tight bbox, palette, waterfall, fonts); (5) the perf rerun tables and the ratio verdict; (6) test names for the registry; (7) anything undone. Do not end your turn before the commands complete.

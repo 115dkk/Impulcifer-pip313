@@ -156,3 +156,5 @@ issue-body.md
 # Rust workspace
 /target/
 /apps/impulcifer-app/gen/
+# Wheel package data staged by crates/impulcifer-python/sync_data.py (copies of data/)
+/crates/impulcifer-python/python/impulcifer/data/

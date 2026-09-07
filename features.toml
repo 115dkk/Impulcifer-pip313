@@ -800,8 +800,9 @@ note = "the 33 options of create_cli() in dataclass order with the 2.x flags, de
 [[feature]]
 id = "python.run_config_dict"
 kind = "python"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-python::run_config_dict_matches_from_kwargs", "pytest:crates/impulcifer-python/tests/test_native.py::test_unknown_objects_and_decay_forms"]
+note = "dict to ProcessingConfig via from_kwargs: unknown keys and arbitrary Python objects ignored, decay as seconds (number or per-speaker dict)"
 
 [[feature]]
 id = "app.pywebview_polyfill"
@@ -1144,3 +1145,17 @@ kind = "cli"
 status = "implemented"
 tests = ["impulcifer-cli::cli_runs_demo_and_writes_hesuvi", "impulcifer-cli::cli_reports_service_failure_with_exit_1", "impulcifer-cli::console_formats_python_levels_and_progress_once"]
 note = "JobRegistry + NoopHost, 100 ms polling, the 2.x console prefixes and [NN%] progress lines, README echoed at the end, service failure message on stderr with exit 1; language from ~/.impulcifer/settings.json read-only; no Ctrl-C handler"
+
+[[feature]]
+id = "python.wheel_main"
+kind = "python"
+status = "implemented"
+tests = ["pytest:crates/impulcifer-python/tests/test_native.py::test_main_runs_demo_and_writes_hesuvi", "pytest:crates/impulcifer-python/tests/test_native.py::test_progress_and_log_callbacks_receive_cli_keys", "pytest:crates/impulcifer-python/tests/test_native.py::test_error_raises_runtime_error_with_code", "pytest:crates/impulcifer-python/tests/test_native.py::test_concurrent_runs_release_interpreter", "pytest:crates/impulcifer-python/tests/test_native.py::test_generate_sweep_set_and_recovery", "pytest:crates/impulcifer-python/tests/test_native.py::test_package_data_override_is_preserved"]
+note = "maturin wheel (abi3-py39; separate cp314t wheel because PyO3 0.27 ignores abi3 on free-threaded builds): impulcifer.main(**kwargs) runs the service BRIR job with the GIL released, callbacks per event, RuntimeError with the service code; detect_sweep, generate_sweep_set, recover_brir_outputs; package data staged by sync_data.py and found through IMPULCIFER_DATA_DIR; run by the wheel job of rust.yml on Ubuntu and Windows"
+
+[[feature]]
+id = "python.cli_entry"
+kind = "python"
+status = "implemented"
+tests = ["pytest:crates/impulcifer-python/tests/test_native.py::test_cli_entry_point", "pytest:crates/impulcifer-python/tests/test_native.py::test_cli_main_help_exits_zero", "pytest:crates/impulcifer-python/tests/test_native.py::test_cli_broken_stream_propagates"]
+note = "the impulcifer console script calls impulcifer_cli::run through Python sys.stdout/stderr and exits with its code"

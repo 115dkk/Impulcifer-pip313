@@ -112,3 +112,50 @@ jobs:
 
       - name: cargo test --doc
         run: cargo test --workspace --doc
+
+  wheel:
+    name: python wheel (${{ matrix.os }})
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install audio system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libasound2-dev
+
+      - name: Install toolchain (rust-toolchain.toml)
+        run: rustup show
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-wheel-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: rust-wheel-${{ runner.os }}-
+
+      - name: Install maturin and pytest
+        run: python -m pip install "maturin>=1.7,<2" pytest
+
+      - name: Stage package data (copies of data/ into the wheel)
+        run: python crates/impulcifer-python/sync_data.py
+
+      - name: Build the abi3 wheel
+        run: python -m maturin build --release --features python -m crates/impulcifer-python/Cargo.toml
+
+      - name: Test the installed wheel (crates/impulcifer-python/tests)
+        run: python -m pytest crates/impulcifer-python/tests -q
