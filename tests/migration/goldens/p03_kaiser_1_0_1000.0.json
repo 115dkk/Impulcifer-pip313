@@ -1,0 +1,1 @@
+{"inputs":{"n":1,"sym":false,"beta":1000.0},"outputs":{"y":[1.0]},"meta":{"scipy":"1.18.0","numpy":"2.4.6","python":"3.13.3","dtype":"float64/complex128"}}

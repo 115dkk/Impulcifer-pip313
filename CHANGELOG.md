@@ -15,6 +15,12 @@ been fixed and old features improved.
 - **`sounddevice>=0.4.7`로 하한 상향**: `WasapiSettings(auto_convert=...)`가 0.4.7(2024-05-27)에서 추가됐기 때문입니다(`pyproject.toml`과 `requirements.txt` 동기화). 그보다 오래된 sounddevice가 설치돼 있으면 TypeError로 죽지 않고 변환 없이 여는 폴백을 둡니다(Codex 리뷰 P1 반영).
 - `core.recorder.set_default_devices()`가 샘플레이트와 채널 수를 선택 인자로 받아 방향별 `sounddevice.default.extra_settings`를 정합니다. BRIR DSP 경로는 건드리지 않았으므로 출력 해시는 그대로입니다. Tk 없는 계약 테스트 `tests/test_recorder_devices.py`(호스트 API 우선순위, 폴백, auto-convert 부착 조건)를 추가했습니다.
 
+#### ⭐ 3.x Rust 재작성 시작 (2.x 출하물과 무관)
+- **ADR 0002와 아키텍처 정본**: 3.x를 Rust 코어 + Tauri 2 셸로 재작성하기로 결정하고 `docs/adr/0002-rust-tauri-rewrite.md`, `docs/rust/ARCHITECTURE.md`에 크레이트 경계·타입·IPC 계약을 적었다. 2.x의 pywebview IPC(메서드 23개, 봉투, `poll_job` 커서)와 `webview_ui/`를 그대로 쓰고, Windows 오디오는 WASAPI만(ASIO·DirectSound·MME 없음), PyPI는 PyO3/maturin으로 유지한다. 조사 근거는 `docs/research/rewrite-stack-2026-09/`.
+- **루트 Cargo 워크스페이스와 게이트**: `crates/*`(types, dsp, io, analysis, audio-io, sys-win, jobs, service, cli, python, policy)와 `apps/impulcifer-app`(Tauri, `pywebview_api` 커맨드 1개 + `bridge.js` 폴리필). 모든 크레이트 루트 `#![forbid(unsafe_code)]`, `unsafe-budget.toml` 허용치 0, `features.toml` 기능 등록부와 `impulcifer-policy` 게이트 테스트(구현 표시된 기능에 실존 검증 테스트가 없으면 실패). `.github/workflows/rust.yml`이 fmt·clippy·게이트·3 OS 테스트를 돌리고, 릴리스 게이트 `EXCLUDE`에 Rust 경로를 넣어 Rust 전용 변경이 2.x를 발행하지 않는다.
+- **`impulcifer-sys-win` WASAPI 백엔드 (P01)**: wasapi-rs 0.24 위에서 엔드포인트 열거, exclusive/shared 프로브, exclusive 또는 shared+auto-convert 렌더·캡처, SILENT 패킷 0 채움, 스레드 한정 COM 가드. `WaveFormat::parse`·`Device::from_raw` 미사용, 손수 쓰는 unsafe 0. `hardware_probe` 예제로 실기 측정한 결과를 `docs/rust/HARDWARE.md`에 기록했다(exclusive float32는 대부분 거부, shared+auto-convert는 44.1/48/96 kHz 전부 동작, VB-Cable 왕복 -26.02 dBFS 확인).
+- **`impulcifer-dsp` 1차 프리미티브 (P03)**: fft/conv/windows/filters/stats를 scipy 의미론으로 구현하고, `tests/migration/export_goldens.py`가 2.x 환경에서 내보낸 골든 468개와 골든·성질 테스트 27개로 고정했다.
+
 ## 2.14.0 - 2026-09-05
 ### 불필요한 무음 확장 채널 자동 제거
 

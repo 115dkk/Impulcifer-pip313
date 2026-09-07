@@ -1,0 +1,1 @@
+{"inputs":{"spectrum":[[-1.0,0.0],[5.0,0.0]],"n":2},"outputs":{"x":[2.0,-3.0]},"meta":{"scipy":"1.18.0","numpy":"2.4.6","python":"3.13.3","dtype":"float64/complex128"}}

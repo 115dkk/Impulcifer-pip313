@@ -11,7 +11,7 @@ workspace = true
 [dependencies]
 impulcifer-types = { path = "../impulcifer-types" }
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 thiserror.workspace = true
 rustfft.workspace = true
 realfft.workspace = true

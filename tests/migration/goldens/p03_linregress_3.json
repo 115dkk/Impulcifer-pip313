@@ -1,0 +1,1 @@
+{"inputs":{"x":[1.0,1.0,1.0],"y":[0.0,1.0,2.0]},"outputs":{"slope":"nan","intercept":"nan","rvalue":"nan","stderr":"nan"},"meta":{"scipy":"1.18.0","numpy":"2.4.6","python":"3.13.3","dtype":"float64/complex128"}}
