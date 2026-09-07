@@ -1,0 +1,47 @@
+# BRIR Info
+
+Processed on 2026-09-07 12:00:00. Output sampling rate is 48000 Hz.
+
+## Applied Normalization Gain
+-29.49 dB was applied to all channels.
+
+| Speaker   | Side   | PNR      | ITD      | Length   | RT60     |
+|:----------|:-------|:---------|:---------|:---------|:---------|
+| FL        | left   | 100.3 dB | 0.0 us   | 684.5 ms | 342.3 ms |
+| FL        | right  | 72.3 dB  | 208.3 us | 678.7 ms | 426.0 ms |
+| FR        | left   | 76.7 dB  | 187.5 us | 685.7 ms | 376.4 ms |
+| FR        | right  | 100.6 dB | 0.0 us   | 674.7 ms | 362.9 ms |
+| FC        | left   | 92.8 dB  | 0.0 us   | 674.5 ms | 353.7 ms |
+| FC        | right  | 83.3 dB  | 0.0 us   | 675.8 ms | 414.3 ms |
+| BL        | left   | 90.7 dB  | 0.0 us   | 678.6 ms | 388.1 ms |
+| BL        | right  | 71.9 dB  | 208.3 us | 685.7 ms | 419.0 ms |
+| BR        | left   | 76.9 dB  | 270.8 us | 678.1 ms | 377.7 ms |
+| BR        | right  | 97.2 dB  | 0.0 us   | 687.6 ms | 406.2 ms |
+| SL        | left   | 100.2 dB | 0.0 us   | 673.8 ms | 346.9 ms |
+| SL        | right  | 77.0 dB  | 791.7 us | 681.2 ms | 423.5 ms |
+| SR        | left   | 73.1 dB  | 770.8 us | 688.6 ms | 384.1 ms |
+| SR        | right  | 102.3 dB | 0.0 us   | 682.9 ms | 377.2 ms |
+
+## Reflection Levels (Direct vs. Early/Late)
+### FL
+- Left Ear: Early (20-50ms): -13.69 dB, Late (50-150ms): -19.78 dB
+- Right Ear: Early (20-50ms): -3.15 dB, Late (50-150ms): -10.78 dB
+### FR
+- Left Ear: Early (20-50ms): -5.50 dB, Late (50-150ms): -12.98 dB
+- Right Ear: Early (20-50ms): -13.94 dB, Late (50-150ms): -23.49 dB
+### FC
+- Left Ear: Early (20-50ms): -13.48 dB, Late (50-150ms): -19.35 dB
+- Right Ear: Early (20-50ms): -8.57 dB, Late (50-150ms): -16.38 dB
+### BL
+- Left Ear: Early (20-50ms): -7.99 dB, Late (50-150ms): -14.24 dB
+- Right Ear: Early (20-50ms): -5.49 dB, Late (50-150ms): -12.74 dB
+### BR
+- Left Ear: Early (20-50ms): -4.70 dB, Late (50-150ms): -12.51 dB
+- Right Ear: Early (20-50ms): -8.37 dB, Late (50-150ms): -18.35 dB
+### SL
+- Left Ear: Early (20-50ms): -13.29 dB, Late (50-150ms): -21.63 dB
+- Right Ear: Early (20-50ms): -5.33 dB, Late (50-150ms): -14.51 dB
+### SR
+- Left Ear: Early (20-50ms): -7.39 dB, Late (50-150ms): -13.90 dB
+- Right Ear: Early (20-50ms): -13.50 dB, Late (50-150ms): -21.11 dB
+

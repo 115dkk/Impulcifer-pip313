@@ -188,5 +188,19 @@ fn strings(language: &str) -> Map<String, Value> {
     };
     let mut merged: Map<String, Value> = serde_json::from_str(english).unwrap_or_default();
     merged.extend(serde_json::from_str::<Map<String, Value>>(selected).unwrap_or_default());
+    for (key, en, ko) in EXTRA_STRINGS {
+        merged
+            .entry((*key).to_owned())
+            .or_insert_with(|| Value::String((if language == "ko" { ko } else { en }).to_string()));
+    }
     merged
 }
+
+/// Keys that only the 3.x service emits. They live here instead of
+/// `i18n/locales/*.json` so the shared 2.x catalogue (and its release gate)
+/// stay untouched; a catalogue entry with the same key wins if one appears.
+const EXTRA_STRINGS: &[(&str, &str, &str)] = &[(
+    "cli_plots_not_available_yet",
+    "Plots are not available in this version yet; the plot stages were skipped.",
+    "이 버전에서는 아직 플롯을 만들지 않습니다. 플롯 단계를 건너뛰었습니다.",
+)];

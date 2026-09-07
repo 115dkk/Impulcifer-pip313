@@ -39,8 +39,9 @@ tests = []
 [[feature]]
 id = "ipc.start_brir"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::start_brir_emits_progress_with_cli_keys_and_total_eleven", "impulcifer-service::start_brir_rejects_missing_dir", "impulcifer-service::start_brir_cancel_mid_run_reports_cancelled", "impulcifer-service::start_brir_output_missing_when_write_fails"]
+note = "end to end on the demo (M2): WAV tracks within 1e-3*max_abs (observed 1e-6), README text exact and numbers within the decay-noise budgets; events carry the 2.x cli_* keys with 11 steps"
 
 [[feature]]
 id = "ipc.start_output_recovery"
@@ -105,14 +106,15 @@ tests = ["impulcifer-service::ipc_resolve_recording_paths_shape"]
 [[feature]]
 id = "ipc.detect_sweep"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::detect_sweep_reports_demo_parameters", "impulcifer-service::snap_sweep_samples_matches_python"]
 
 [[feature]]
 id = "ipc.generate_sweep_set"
 kind = "ipc"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::generate_sweep_set_writes_named_files_and_sidecar"]
+note = "also writes test.wav (2.x writes only the five playback files; kept because the sidecar makes later detection exact)"
 
 [[feature]]
 id = "ipc.open_path"
@@ -584,56 +586,61 @@ tests = ["impulcifer-sys-win::silent_packet_is_zero_filled"]
 [[feature]]
 id = "output.hrir_wav"
 kind = "output"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
+note = "PCM_32, hexadecagonal order, trailing silent pairs trimmed; ICHL map when remove_silent_channels"
 
 [[feature]]
 id = "output.hesuvi_wav"
 kind = "output"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
 
 [[feature]]
 id = "output.responses_wav"
 kind = "output"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget"]
+note = "written after the in-memory pipeline finishes (2.x writes it mid-run); same bytes"
 
 [[feature]]
 id = "output.readme_txt"
 kind = "output"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::demo_readme_korean_bytes_match_python"]
+note = "markdown + i18n rendering; text exact, numbers within the decay-noise budgets (README-service.md)"
 
 [[feature]]
 id = "output.plots_png"
 kind = "output"
 status = "planned"
 tests = []
+note = "not ported; the service logs cli_plots_not_available_yet and still emits the progress steps so totals match 2.x"
 
 [[feature]]
 id = "output.interactive_html"
 kind = "output"
 status = "planned"
 tests = []
+note = "not ported; the service logs cli_plots_not_available_yet and still emits the progress steps so totals match 2.x"
 
 [[feature]]
 id = "output.hangloose_wavs"
 kind = "output"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
 
 [[feature]]
 id = "output.jamesdsp_wav"
 kind = "output"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
 
 [[feature]]
 id = "output.truehd_layout_wavs"
 kind = "output"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
 
 [[feature]]
 id = "output.recovery"
@@ -1037,3 +1044,10 @@ kind = "eq"
 status = "implemented"
 tests = ["impulcifer-dsp::golden_eqapo_corpus_matches_python", "impulcifer-dsp::golden_looks_like_eqapo_matches_python", "impulcifer-dsp::golden_eqapo_include_and_convolution_match_python", "impulcifer-dsp::eqapo_rejects_recursive_include", "impulcifer-dsp::eqapo_reports_unreadable_files_like_python", "impulcifer-dsp::eqapo_channel_split_false_when_scopes_symmetric", "impulcifer-dsp::eqapo_invalid_scalar_arithmetic_returns_error"]
 note = "core/eqapo.py port: 14 biquad names, IIR, GraphicEQ, Preamp, Channel scopes, If/ElseIf/Else, Include (depth 8, cycle check), Convolution through an EqApoLoader; report strings match Python verbatim"
+
+[[feature]]
+id = "io.brir_layout"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::brir_layout_four_track_round_trip", "impulcifer-io::brir_layout_odd_json_padding_and_riff_size", "impulcifer-io::brir_layout_reads_python_fixture", "impulcifer-io::brir_layout_rejects_invalid_json_version_and_duplicate_names"]
+note = "ICHL RIFF chunk with the track-name JSON (core/brir_layout.py)"
