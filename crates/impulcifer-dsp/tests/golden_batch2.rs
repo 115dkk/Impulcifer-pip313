@@ -202,10 +202,19 @@ fn golden_minimum_phase_matches_scipy() {
         )
         .unwrap();
         let expected = array(&v["outputs"]["y"]);
-        // Time coefficients are diagnostic; spectral budget is the specified gate.
-        assert_eq!(got.len(), expected.len());
-        for (&a, &b) in got.iter().zip(&expected) {
-            taps.max = taps.max.max((a - b).abs());
+        // Time-domain gate: the FIR-coefficient budget of report-02 section 3.2
+        // (rtol 1e-9, atol 1e-11 * max(1, peak)). The spectral budget below
+        // discards phase, so this assertion is what pins the waveform/timing.
+        assert_eq!(got.len(), expected.len(), "{name}");
+        let peak = expected.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+        let atol = 1e-11 * peak.max(1.0);
+        for (k, (&a, &b)) in got.iter().zip(&expected).enumerate() {
+            let err = (a - b).abs();
+            assert!(
+                err <= atol + 1e-9 * b.abs(),
+                "{name}: tap {k} differs by {err:e} (expected {b:e}, got {a:e})"
+            );
+            taps.max = taps.max.max(err);
             taps.count += 1;
         }
         spectral(
@@ -217,7 +226,7 @@ fn golden_minimum_phase_matches_scipy() {
             &mut deep,
         );
     }
-    taps.report("minimum_phase_taps_diagnostic");
+    taps.report("minimum_phase_taps");
     db.report("minimum_phase_spectrum_db");
     deep.report("minimum_phase_deep_absolute");
     println!("MEASURE minimum_phase_default_nfft: max_abs=0 (exact integers)");
