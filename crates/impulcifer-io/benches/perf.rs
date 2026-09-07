@@ -209,16 +209,21 @@ fn main() {
         let dir = TempDir::new();
         let script = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/migration/bench_oracle_impulcifer_io.py");
-        assert!(
-            std::process::Command::new("python")
-                .arg(script)
-                .arg("--fixture-only")
-                .arg(&dir.0)
-                .env("PYTHONDONTWRITEBYTECODE", "1")
-                .status()
-                .unwrap()
-                .success()
-        );
+        // Paired runs share the soundfile-written float32 fixture. Without a
+        // usable Python (CI runners, plain `cargo bench` elsewhere) fall back to
+        // the Rust-written fixture so the bench still runs standalone.
+        let python_ok = std::process::Command::new("python")
+            .arg(script)
+            .arg("--fixture-only")
+            .arg(&dir.0)
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if !python_ok {
+            eprintln!("python fixture unavailable; using the Rust-written float32 fixture");
+            float_fixture(&dir.0.join("float32.wav"), 8, 480_000);
+        }
         run(&dir.0, false);
     }
 }
