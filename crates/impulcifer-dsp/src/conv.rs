@@ -1,5 +1,5 @@
 //! SciPy one-dimensional real convolution and correlation.
-use crate::fft::{irfft, next_fast_len, rfft};
+use crate::fft::{irfft, next_fast_len, rfft_owned};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Mode {
@@ -35,11 +35,10 @@ pub fn convolve(a: &[f64], v: &[f64], mode: Mode) -> Vec<f64> {
             let mut vp = vec![0.0; n];
             ap[..a.len()].copy_from_slice(a);
             vp[..v.len()].copy_from_slice(v);
-            let product: Vec<_> = rfft(&ap)
-                .iter()
-                .zip(rfft(&vp))
-                .map(|(x, y)| x * y)
-                .collect();
+            let mut product = rfft_owned(ap);
+            for (x, y) in product.iter_mut().zip(rfft_owned(vp)) {
+                *x *= y;
+            }
             let mut result = irfft(&product, n);
             result.truncate(len);
             result
@@ -49,7 +48,11 @@ pub fn convolve(a: &[f64], v: &[f64], mode: Mode) -> Vec<f64> {
         Mode::Same => ((v.len() - 1) / 2, a.len()),
         Mode::Valid => (a.len().min(v.len()) - 1, a.len().abs_diff(v.len()) + 1),
     };
-    full[start..start + count].to_vec()
+    if start == 0 && count == full.len() {
+        full
+    } else {
+        full[start..start + count].to_vec()
+    }
 }
 
 /// Real scipy.signal.correlate. Same crop/panic policies as `convolve`.

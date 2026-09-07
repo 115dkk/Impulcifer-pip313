@@ -53,12 +53,18 @@ pub fn kaiser(n: usize, beta: f64, sym: bool) -> Vec<f64> {
     }
     let alpha = (if sym { n - 1 } else { n }) as f64 / 2.0;
     let denominator = i0(beta);
-    (0..n)
-        .map(|i| {
-            let arg = beta * (1.0 - ((i as f64 - alpha) / alpha).powi(2)).max(0.0).sqrt();
-            i0(arg) / denominator
-        })
-        .collect()
+    let mut output = vec![0.0; n];
+    // Squared distances from alpha are identical on the mirrored half.
+    for i in 0..=n / 2 {
+        let arg = beta * (1.0 - ((i as f64 - alpha) / alpha).powi(2)).max(0.0).sqrt();
+        let value = i0(arg) / denominator;
+        output[i] = value;
+        let mirror = if sym { n - 1 - i } else { n - i };
+        if mirror < n {
+            output[mirror] = value;
+        }
+    }
+    output
 }
 
 /// Named subset of scipy.signal.get_window: fftbins=true means periodic.

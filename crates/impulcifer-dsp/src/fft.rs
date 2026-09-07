@@ -4,14 +4,52 @@
 use realfft::RealFftPlanner;
 use rustfft::FftPlanner;
 pub use rustfft::num_complex::Complex64;
+use std::cell::RefCell;
+
+thread_local! {
+    // Plans are cached by length; work buffers retain only their largest capacity
+    // per thread, rather than one allocation per cached transform length.
+    static REAL_PLANNER: RefCell<RealFftPlanner<f64>> = RefCell::new(RealFftPlanner::new());
+    static REAL_WORK: RefCell<RealWork> = RefCell::new(RealWork::default());
+    static COMPLEX_PLANNER: RefCell<FftPlanner<f64>> = RefCell::new(FftPlanner::new());
+}
+
+#[derive(Default)]
+struct RealWork {
+    input: Vec<f64>,
+    spectrum: Vec<Complex64>,
+    scratch: Vec<Complex64>,
+}
 
 /// Unnormalized real transform, including the last bin for odd lengths.
 pub fn rfft(x: &[f64]) -> Vec<Complex64> {
     assert!(!x.is_empty(), "FFT length must be positive");
-    let plan = RealFftPlanner::<f64>::new().plan_fft_forward(x.len());
+    let plan = REAL_PLANNER.with(|p| p.borrow_mut().plan_fft_forward(x.len()));
+    REAL_WORK.with(|work| {
+        let mut work = work.borrow_mut();
+        let RealWork { input, scratch, .. } = &mut *work;
+        input.resize(x.len(), 0.0);
+        input.copy_from_slice(x);
+        scratch.resize(plan.get_scratch_len(), Complex64::default());
+        let mut output = plan.make_output_vec();
+        plan.process_with_scratch(input, &mut output, scratch)
+            .expect("valid FFT buffers");
+        output
+    })
+}
+
+/// Internal consuming transform avoids copying freshly padded/centered data.
+pub(crate) fn rfft_owned(mut x: Vec<f64>) -> Vec<Complex64> {
+    assert!(!x.is_empty(), "FFT length must be positive");
+    let plan = REAL_PLANNER.with(|p| p.borrow_mut().plan_fft_forward(x.len()));
     let mut output = plan.make_output_vec();
-    plan.process(&mut x.to_vec(), &mut output)
-        .expect("valid FFT buffers");
+    REAL_WORK.with(|work| {
+        let mut work = work.borrow_mut();
+        work.scratch
+            .resize(plan.get_scratch_len(), Complex64::default());
+        plan.process_with_scratch(&mut x, &mut output, &mut work.scratch)
+            .expect("valid FFT buffers");
+    });
     output
 }
 
@@ -23,17 +61,25 @@ pub fn rfft(x: &[f64]) -> Vec<Complex64> {
 pub fn irfft(spec: &[Complex64], n: usize) -> Vec<f64> {
     assert!(n > 0, "FFT length must be positive");
     assert!(!spec.is_empty(), "inverse FFT spectrum must be nonempty");
-    let plan = RealFftPlanner::<f64>::new().plan_fft_inverse(n);
-    let mut input = plan.make_input_vec();
-    let len = input.len().min(spec.len());
-    input[..len].copy_from_slice(&spec[..len]);
-    input[0].im = 0.0;
-    if n.is_multiple_of(2) {
-        input[n / 2].im = 0.0;
-    }
+    let plan = REAL_PLANNER.with(|p| p.borrow_mut().plan_fft_inverse(n));
     let mut output = plan.make_output_vec();
-    plan.process(&mut input, &mut output)
-        .expect("valid Hermitian spectrum");
+    REAL_WORK.with(|work| {
+        let mut work = work.borrow_mut();
+        let RealWork {
+            spectrum, scratch, ..
+        } = &mut *work;
+        spectrum.resize(n / 2 + 1, Complex64::default());
+        let len = spectrum.len().min(spec.len());
+        spectrum[..len].copy_from_slice(&spec[..len]);
+        spectrum[len..].fill(Complex64::default());
+        spectrum[0].im = 0.0;
+        if n.is_multiple_of(2) {
+            spectrum[n / 2].im = 0.0;
+        }
+        scratch.resize(plan.get_scratch_len(), Complex64::default());
+        plan.process_with_scratch(spectrum, &mut output, scratch)
+            .expect("valid Hermitian spectrum");
+    });
     output.iter_mut().for_each(|v| *v /= n as f64);
     output
 }
@@ -42,8 +88,8 @@ pub fn irfft(spec: &[Complex64], n: usize) -> Vec<f64> {
 pub fn fft(x: &[Complex64]) -> Vec<Complex64> {
     assert!(!x.is_empty(), "FFT length must be positive");
     let mut result = x.to_vec();
-    FftPlanner::<f64>::new()
-        .plan_fft_forward(x.len())
+    COMPLEX_PLANNER
+        .with(|p| p.borrow_mut().plan_fft_forward(x.len()))
         .process(&mut result);
     result
 }
@@ -52,8 +98,8 @@ pub fn fft(x: &[Complex64]) -> Vec<Complex64> {
 pub fn ifft(x: &[Complex64]) -> Vec<Complex64> {
     assert!(!x.is_empty(), "FFT length must be positive");
     let mut result = x.to_vec();
-    FftPlanner::<f64>::new()
-        .plan_fft_inverse(x.len())
+    COMPLEX_PLANNER
+        .with(|p| p.borrow_mut().plan_fft_inverse(x.len()))
         .process(&mut result);
     result.iter_mut().for_each(|v| *v /= x.len() as f64);
     result
@@ -63,6 +109,15 @@ pub fn ifft(x: &[Complex64]) -> Vec<Complex64> {
 /// Panics if no such length is representable by usize.
 pub fn next_fast_len_legacy(n: usize) -> usize {
     if n <= 1 {
+        return n;
+    }
+    let mut remainder = n;
+    for factor in [2, 3, 5] {
+        while remainder.is_multiple_of(factor) {
+            remainder /= factor;
+        }
+    }
+    if remainder == 1 {
         return n;
     }
     let mut best = None;
@@ -110,8 +165,33 @@ pub fn next_fast_len(n: usize) -> usize {
 /// core.audio_io.magnitude_response: first ceil(N/2) bins, no epsilon;
 /// exact zero magnitudes return -infinity. Panics on empty input.
 pub fn magnitude_response(x: &[f64]) -> Vec<f64> {
-    rfft(x)[..x.len().div_ceil(2)]
-        .iter()
-        .map(|v| 20.0 * v.norm().log10())
-        .collect()
+    assert!(!x.is_empty(), "FFT length must be positive");
+    let plan = REAL_PLANNER.with(|p| p.borrow_mut().plan_fft_forward(x.len()));
+    REAL_WORK.with(|work| {
+        let mut work = work.borrow_mut();
+        let RealWork {
+            input,
+            spectrum,
+            scratch,
+        } = &mut *work;
+        input.resize(x.len(), 0.0);
+        input.copy_from_slice(x);
+        spectrum.resize(x.len() / 2 + 1, Complex64::default());
+        scratch.resize(plan.get_scratch_len(), Complex64::default());
+        plan.process_with_scratch(input, spectrum, scratch)
+            .expect("valid FFT buffers");
+        spectrum[..x.len().div_ceil(2)]
+            .iter()
+            .map(|v| {
+                let square = v.norm_sqr();
+                // 20 log10(|z|) = 10 log10(|z|^2). Preserve hypot's
+                // range handling if squaring underflows or overflows.
+                if square.is_normal() {
+                    10.0 * square.log10()
+                } else {
+                    20.0 * v.norm().log10()
+                }
+            })
+            .collect()
+    })
 }

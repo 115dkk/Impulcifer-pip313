@@ -129,7 +129,23 @@ pub fn sosfilt(sos: &Sos, x: &[f64]) -> Vec<f64> {
         "invalid normalized SOS"
     );
     let mut output = x.to_vec();
-    for s in &sos.0 {
+    // Process four sections together: independent section states let the CPU
+    // overlap their feedback arithmetic, without changing per-section ordering.
+    let mut groups = sos.0.chunks_exact(4);
+    for group in groups.by_ref() {
+        let mut state = [[0.0; 2]; 4];
+        for sample in &mut output {
+            let mut value = *sample;
+            for (s, z) in group.iter().zip(&mut state) {
+                let y = s[0] * value + z[0];
+                z[0] = s[1] * value - s[4] * y + z[1];
+                z[1] = s[2] * value - s[5] * y;
+                value = y;
+            }
+            *sample = value;
+        }
+    }
+    for s in groups.remainder() {
         let mut z1 = 0.0;
         let mut z2 = 0.0;
         for x in &mut output {

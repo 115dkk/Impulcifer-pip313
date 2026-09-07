@@ -126,7 +126,17 @@ pub fn resample_poly(
         return Ok(Vec::new());
     }
     let (n_out, pre, remove, _post) = padding(x.len(), taps.len(), up, down)?;
-    let scaled: Vec<_> = taps.iter().map(|v| v * up as f64).collect();
+    // Reverse each phase once so both operands are contiguous in input order.
+    let phases: Vec<Vec<f64>> = (0..up.min(taps.len()))
+        .map(|phase| {
+            taps[phase..]
+                .iter()
+                .step_by(up)
+                .map(|v| v * up as f64)
+                .rev()
+                .collect()
+        })
+        .collect();
     let mut y = vec![0.0; n_out];
     for (i, output) in y.iter_mut().enumerate() {
         // padding() already checked the last retained high-rate coordinate.
@@ -134,9 +144,23 @@ pub fn resample_poly(
         let first = t.saturating_sub(taps.len() - 1).div_ceil(up);
         let last = (t / up).min(x.len() - 1);
         if first <= last {
-            // Ascending input order matches scipy's reversed phase coefficients.
-            for j in first..=last {
-                *output += x[j] * scaled[t - j * up];
+            // Ascending input order still matches SciPy; independent accumulators
+            // allow vectorization of long dot products without fused operations.
+            let phase = &phases[t % up];
+            let start = phase.len() - 1 - (t - first * up) / up;
+            let coefficients = &phase[start..start + last - first + 1];
+            let samples = &x[first..=last];
+            let mut sums = [0.0; 4];
+            let mut a = samples.chunks_exact(4);
+            let mut b = coefficients.chunks_exact(4);
+            for (a, b) in a.by_ref().zip(b.by_ref()) {
+                for k in 0..4 {
+                    sums[k] += a[k] * b[k];
+                }
+            }
+            *output = (sums[0] + sums[1]) + (sums[2] + sums[3]);
+            for (a, b) in a.remainder().iter().zip(b.remainder()) {
+                *output += a * b;
             }
         }
     }

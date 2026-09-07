@@ -20,3 +20,9 @@ regex.workspace = true
 
 [dev-dependencies]
 impulcifer-io = { path = "../impulcifer-io" }
+
+[[bench]]
+name = "perf"
+harness = false
+# `cargo test` must not run the full benchmark; the smoke test covers the bench code.
+test = false

@@ -905,9 +905,9 @@ note = "PA01 (docs/rust/perf/impulcifer-io.md): 9 ops, python/rust 1.18 to 4.79 
 [[feature]]
 id = "perf.impulcifer-dsp"
 kind = "perf"
-status = "planned"
-tests = []
-note = "PA02: primitives (conv, fft, filters, fir, savgol, splines, resample, spectrogram) vs scipy/numpy/nnresample on py -3.14"
+status = "implemented"
+tests = ["impulcifer-dsp::bench_smoke_impulcifer_dsp"]
+note = "PA02 (docs/rust/perf/impulcifer-dsp.md): 22 primitive ops, python/rust 1.14 to 9.0 against CPython 3.14.5 (single-threaded ops, so no 3.14t column); thread-local FFT plans and work buffers, real FFT in minimum_phase, contiguous polyphase taps, 4-section sosfilt, reused Kaiser symmetry"
 
 [[feature]]
 id = "perf.impulcifer-audio-io"
