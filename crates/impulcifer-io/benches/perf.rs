@@ -25,9 +25,13 @@ pub enum Mode {
 pub struct TempDir(pub PathBuf);
 impl TempDir {
     pub(crate) fn new() -> Self {
+        // pid + timestamp alone collided on macOS (coarse clock, parallel test
+        // threads): add a per-process counter.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
-            "impulcifer-perf-{}-{}",
+            "impulcifer-perf-{}-{}-{}",
             std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()

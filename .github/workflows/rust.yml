@@ -6,7 +6,7 @@ name: Rust
 
 on:
   push:
-    branches: [ master, claude/* ]
+    branches: [ master ]   # PR branches run through pull_request only (no double runs)
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
