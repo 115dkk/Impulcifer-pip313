@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
+// The WASAPI backend below is `cfg(windows)`; the platform-independent helpers
+// (format validation, byte conversion, packet handling) are exercised by the
+// unit tests on every OS but only reached by the backend on Windows.
+#![cfg_attr(not(windows), allow(dead_code))]
 
 //! WASAPI-only Windows audio backend.
 //!
