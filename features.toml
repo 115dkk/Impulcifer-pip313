@@ -1225,3 +1225,24 @@ kind = "updater"
 status = "implemented"
 tests = ["impulcifer-service::legacy_executor_downloads_verifies_and_opens", "impulcifer-service::slow_installer_body_uses_download_timeout_policy"]
 note = "dev and unmatched bundles: download to the temp directory with progress, SHA256SUMS.txt verification, open the installer or replace the running AppImage as 2.x"
+
+[[feature]]
+id = "package.bundle_config"
+kind = "package"
+status = "implemented"
+tests = ["impulcifer-app::bundle_config_contract"]
+note = "tauri.conf.json: bundle active, app+dmg on macOS, appimage on Linux, none on Windows (Velopack packs the raw exe), runtime data (sweeps, Harman targets) under resources/data, createUpdaterArtifacts, generated icon set; the app resolves the bundled data dir through with_dependencies (no env mutation)"
+
+[[feature]]
+id = "package.velopack_pack"
+kind = "package"
+status = "implemented"
+tests = ["impulcifer-app::velopack_upgrade_from_2x_windows", "impulcifer-app::bundle_config_contract"]
+note = "build_scripts/pack_velopack.ps1: release build, staged exe + data, vpk pack with pack id Impulcifer (shared with 2.x installs), Setup.exe + full nupkg + releases.win.json; unsigned locally, signing is the release workflow job"
+
+[[feature]]
+id = "package.upgrade_from_2x"
+kind = "package"
+status = "planned"
+tests = ["impulcifer-app::velopack_upgrade_from_2x_windows"]
+note = "the ignored local test proves check + download + apply plan for a simulated 2.13.3 locator against the packed 3.x feed without touching the live install; the real Update.exe apply and relaunch run on a fresh CI Windows runner in the 3.x release workflow (pending)"

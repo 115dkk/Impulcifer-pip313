@@ -2045,6 +2045,8 @@ dependencies = [
 name = "impulcifer-app"
 version = "3.0.0-alpha.0"
 dependencies = [
+ "impulcifer-audio-io",
+ "impulcifer-jobs",
  "impulcifer-service",
  "impulcifer-types",
  "serde",

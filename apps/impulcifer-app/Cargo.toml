@@ -14,6 +14,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 impulcifer-types = { path = "../../crates/impulcifer-types" }
 impulcifer-service = { path = "../../crates/impulcifer-service" }
+impulcifer-audio-io = { path = "../../crates/impulcifer-audio-io" }
+impulcifer-jobs = { path = "../../crates/impulcifer-jobs" }
 tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
@@ -23,3 +25,6 @@ serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 velopack = "1.2.0"
+
+[target.'cfg(windows)'.dev-dependencies]
+velopack = { version = "1.2.0", features = ["public-utils"] }
