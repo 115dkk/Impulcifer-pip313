@@ -148,13 +148,13 @@ def test_generate_sweep_set_and_recovery(package, demo, tmp_path):
         package.recover_brir_outputs(str(empty))
 
 
-@pytest.mark.parametrize("decay", [0.35, {"FL": 0.35, "FR": 0.42}])
 def test_numeric_channel_balance_is_accepted(package, demo):
     # 2.x: impulcifer.main(channel_balance=3) means a +3 dB correction.
     path = package.main(dir_path=str(demo), test_signal="auto", channel_balance=3)
     assert Path(path).name == "hesuvi.wav" and Path(path).is_file()
 
 
+@pytest.mark.parametrize("decay", [0.35, {"FL": 0.35, "FR": 0.42}])
 def test_unknown_objects_and_decay_forms(package, demo, decay):
     circular = []
     circular.append(circular)

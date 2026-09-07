@@ -68,10 +68,19 @@ fn run(
         }
     }
     let kwargs = from_python(py, &filtered).map_err(invalid)?;
-    let config =
-        crate::run_config_dict(kwargs.as_object().ok_or_else(|| invalid("expected dict"))?)
-            .map_err(invalid)?;
-    let request = serde_json::to_value(config).map_err(invalid)?;
+    let kwargs = kwargs.as_object().ok_or_else(|| invalid("expected dict"))?;
+    // 2.x sends a numeric channel balance (a dB correction) to the service as a
+    // number; the typed conversion below stores its string form, so hand the
+    // number back to the request for the service's own normalisation.
+    let numeric_balance = kwargs
+        .get("channel_balance")
+        .filter(|v| v.is_number())
+        .cloned();
+    let config = crate::run_config_dict(kwargs).map_err(invalid)?;
+    let mut request = serde_json::to_value(config).map_err(invalid)?;
+    if let Some(number) = numeric_balance {
+        request["channel_balance"] = number;
+    }
     let result = py.detach(move || run_job("start_brir", request, progress, log))?;
     to_python(py, &result)
 }
