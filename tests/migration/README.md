@@ -197,8 +197,8 @@ cargo test -p impulcifer-dsp --test properties_batch2 -- --nocapture
 ## P06 resampling and spectrogram goldens
 
 The exporter adds 55 `p06_*` files (full arrays, not just endpoints). The
-installed oracle is nnresample **0.2.4.1**, SciPy **1.18.0**, NumPy **2.4.6**,
-Python **3.13.3**. `IMPULCIFER_GOLDEN_BATCH=p06` selects only this family;
+installed oracle is nnresample **0.2.4.1**, SciPy **1.18.1**, NumPy **2.5.3**,
+Python **3.14.5** (values identical under 3.13.3 / 2.4.6 / 1.18.0). `IMPULCIFER_GOLDEN_BATCH=p06` selects only this family;
 without that variable all existing families still run. P06 binaries use P05's
 headerless little-endian f64 format and descriptor fields `file`, `length`,
 `sha256`, `first`, `last`. P06 binaries are not capped at 200 kB: a complete
@@ -313,7 +313,7 @@ The source, not the rolling reference page, pins the SciPy version.
 
 The same no-argument exporter command also writes 28 `p07_*.json` fixtures.
 P07 does not change existing P03/P05 fixture content. Its observed environment
-is soundfile 0.13.1 / libsndfile 1.2.2, Python 3.13.3, NumPy 2.4.6.
+is soundfile 0.14.0 / libsndfile 1.2.2, Python 3.14.5, NumPy 2.5.3 (byte-identical fixtures under soundfile 0.13.1, Python 3.13.3, NumPy 2.4.6).
 
 ### PCM conversion and header evidence
 
