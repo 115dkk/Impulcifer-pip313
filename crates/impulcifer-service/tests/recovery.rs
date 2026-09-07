@@ -53,9 +53,27 @@ fn map_strings(value: &Value, f: &impl Fn(&str) -> String) -> Value {
     }
 }
 fn normalize(value: &Value, root: &Path) -> Value {
+    // Results carry canonical paths: macOS resolves the /var temp directory to
+    // /private/var and Windows canonicalization adds the \\?\ prefix the
+    // crate strips again. Replace the canonical form first so no
+    // "/private$ROOT" remains.
+    let mut roots = vec![root.to_str().unwrap().to_owned()];
+    if let Ok(canonical) = fs::canonicalize(root) {
+        let text = canonical.to_string_lossy();
+        let text = text
+            .strip_prefix(r"\\?\")
+            .map(str::to_owned)
+            .unwrap_or_else(|| text.into_owned());
+        if !roots.contains(&text) {
+            roots.insert(0, text);
+        }
+    }
     map_strings(value, &|s| {
-        s.replace(root.to_str().unwrap(), "$ROOT")
-            .replace('\\', "/")
+        let mut s = s.to_owned();
+        for r in &roots {
+            s = s.replace(r, "$ROOT");
+        }
+        s.replace('\\', "/")
     })
 }
 fn signal(name: &str, count: usize) -> Vec<f64> {
