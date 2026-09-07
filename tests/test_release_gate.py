@@ -55,6 +55,15 @@ def test_nested_excluded_dirs_match_at_any_depth():
     ]) == []
 
 
+def test_rust_workspace_is_not_shippable():
+    """3.x Rust crates do not ship in the 2.x wheel/bundles (ADR 0002)."""
+    assert release_gate.classify_shippable([
+        "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "features.toml", "unsafe-budget.toml",
+        "crates/impulcifer-dsp/src/fft.rs", "apps/impulcifer-app/src/main.rs",
+        "apps/impulcifer-app/tauri.conf.json",
+    ]) == []
+
+
 def test_packaging_metadata_is_not_shippable():
     # AUR PKGBUILD 등 배포 채널 메타데이터는 출하물(wheel/standalone)에
     # 포함되지 않으므로 릴리스를 트리거하면 안 된다.

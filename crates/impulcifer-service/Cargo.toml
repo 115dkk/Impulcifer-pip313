@@ -1,0 +1,21 @@
+[package]
+name = "impulcifer-service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+impulcifer-types = { path = "../impulcifer-types" }
+impulcifer-jobs = { path = "../impulcifer-jobs" }
+impulcifer-dsp = { path = "../impulcifer-dsp" }
+impulcifer-io = { path = "../impulcifer-io" }
+impulcifer-analysis = { path = "../impulcifer-analysis" }
+impulcifer-audio-io = { path = "../impulcifer-audio-io" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+

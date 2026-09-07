@@ -1,0 +1,23 @@
+[package]
+name = "impulcifer-python"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "impulcifer_native"
+crate-type = ["cdylib", "rlib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+impulcifer-types = { path = "../impulcifer-types" }
+impulcifer-dsp = { path = "../impulcifer-dsp" }
+serde_json.workspace = true
+pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
+
+[features]
+default = []
+python = ["dep:pyo3"]

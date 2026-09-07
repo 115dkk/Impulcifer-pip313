@@ -1,0 +1,12 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "impulcifer-native"
+requires-python = ">=3.10"
+dynamic = ["version"]
+
+[tool.maturin]
+features = ["python"]
+module-name = "impulcifer_native"

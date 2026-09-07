@@ -1,0 +1,782 @@
+# Feature registry. Every user-visible or contract-level capability of Impulcifer 3.x
+# must be listed here. The gate test in crates/impulcifer-policy fails when:
+#   * a canonical IPC method / config field / pipeline stage is missing from this file,
+#   * a feature marked status = "implemented" has no tests, or a listed test function
+#     ("crate-name::test_fn") does not exist in that crate's sources.
+# Marking a feature implemented without a verification test is a CI failure by design.
+
+[[feature]]
+id = "policy.unsafe_forbid_everywhere"
+kind = "policy"
+status = "implemented"
+tests = ["impulcifer-policy::every_crate_root_forbids_unsafe", "impulcifer-policy::no_unsafe_outside_budget"]
+
+[[feature]]
+id = "policy.feature_registry"
+kind = "policy"
+status = "implemented"
+tests = ["impulcifer-policy::canonical_features_registered", "impulcifer-policy::implemented_features_have_existing_tests"]
+
+[[feature]]
+id = "ipc.bootstrap"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.list_audio_devices"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.start_recording"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.start_brir"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.start_output_recovery"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.poll_job"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.cancel_job"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.get_ui_settings"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.set_language"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.set_theme"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.set_skin"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.set_frontend"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.get_system_info"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.resolve_recording_paths"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.detect_sweep"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.generate_sweep_set"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.open_path"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.check_for_updates"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.start_update"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.apply_pending_update"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.select_file"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.select_directory"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "ipc.open_url"
+kind = "ipc"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.dir_path"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.test_signal"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.room_target"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.room_mic_calibration"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.headphone_compensation_file"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.fs"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.plot"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.interactive_plots"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.channel_balance"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.decay"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.target_level"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.fr_combination_method"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.specific_limit"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.generic_limit"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.bass_boost_gain"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.bass_boost_fc"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.bass_boost_q"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.tilt"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.do_room_correction"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.do_headphone_compensation"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.do_equalization"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.remove_silent_channels"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.head_ms"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.jamesdsp"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.hangloose"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.microphone_deviation_correction"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.mic_deviation_strength"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.mic_deviation_debug_plots"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.output_truehd_layouts"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.vbass"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.vbass_freq"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.vbass_hp"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "config.vbass_polarity"
+kind = "config"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.estimator"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.room_correction"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.headphone_compensation"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.equalization_files"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.target"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.open_measurements"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.plot_pre"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.crop_and_align"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.virtual_bass"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.mic_deviation_skipped"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.mic_deviation"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.write_responses"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.equalize"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.decay"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.channel_balance"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.normalize"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.write_readme"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.plot_post"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.plot_results"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.plot_additional"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.interactive_plots"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.resample"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.write_brirs"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.truehd_layouts"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.jamesdsp"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "stage.hangloose"
+kind = "stage"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.enumerate"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.probe"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.output_exclusive"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.output_shared_autoconvert"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.input_exclusive"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.input_shared_autoconvert"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.play_and_record_session"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.cancel_output"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "audio.silent_packet_zero_fill"
+kind = "audio"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.hrir_wav"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.hesuvi_wav"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.responses_wav"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.readme_txt"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.plots_png"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.interactive_html"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.hangloose_wavs"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.jamesdsp_wav"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.truehd_layout_wavs"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "output.recovery"
+kind = "output"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.rfft_irfft"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.next_fast_len_legacy"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.next_fast_len"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.convolve"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.correlate"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.correlation_lags"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.butter_sos"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.sosfilt"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.rbj_biquad"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.firwin2"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.minimum_phase"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.savgol_filter"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.find_peaks"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.windows"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.spline_k1"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.spline_k2"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.spline_k3"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.nnresample_design"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.resample_poly"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.linregress"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.expit"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.uniform_filter2d"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "dsp.spectrogram"
+kind = "dsp"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "cli.options_match_processing_config"
+kind = "cli"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "python.run_config_dict"
+kind = "python"
+status = "planned"
+tests = []
+
+[[feature]]
+id = "app.pywebview_polyfill"
+kind = "app"
+status = "planned"
+tests = []
+note = "window.pywebview.api proxy + pywebviewready event; webview_ui unchanged"
+
