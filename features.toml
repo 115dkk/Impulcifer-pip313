@@ -379,8 +379,8 @@ note = "DSP part and the file-resolution truth table; file read/write in P11"
 id = "stage.equalization_files"
 kind = "stage"
 status = "implemented"
-tests = ["impulcifer-dsp::golden_eq_files_match_python"]
-note = "plain CSV (+ error=-raw fixup) and precedence; EqualizerAPO configs return the P12 error"
+tests = ["impulcifer-dsp::golden_eq_files_match_python", "impulcifer-dsp::eq_files_routes_eqapo_text_to_parser"]
+note = "plain CSV (+ error=-raw fixup), eq/eq-left/eq-right precedence, and EqualizerAPO configs through stages::eqapo (P12); file loading is the service loader"
 
 [[feature]]
 id = "stage.target"
@@ -1030,3 +1030,10 @@ kind = "pipeline"
 status = "implemented"
 tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-dsp::pipeline_observer_cancels_before_and_after_each_stage", "impulcifer-dsp::golden_option_variants_match_python"]
 note = "in-memory driver over the 26-row stage table (same gates and step counts as core/pipeline.py); file I/O and plots are the service layer (P11)"
+
+[[feature]]
+id = "eq.eqapo_config"
+kind = "eq"
+status = "implemented"
+tests = ["impulcifer-dsp::golden_eqapo_corpus_matches_python", "impulcifer-dsp::golden_looks_like_eqapo_matches_python", "impulcifer-dsp::golden_eqapo_include_and_convolution_match_python", "impulcifer-dsp::eqapo_rejects_recursive_include", "impulcifer-dsp::eqapo_reports_unreadable_files_like_python", "impulcifer-dsp::eqapo_channel_split_false_when_scopes_symmetric", "impulcifer-dsp::eqapo_invalid_scalar_arithmetic_returns_error"]
+note = "core/eqapo.py port: 14 biquad names, IIR, GraphicEQ, Preamp, Channel scopes, If/ElseIf/Else, Include (depth 8, cycle check), Convolution through an EqApoLoader; report strings match Python verbatim"
