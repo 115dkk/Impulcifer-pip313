@@ -83,11 +83,11 @@ class RecorderTab(RecordingActionsMixin):
         ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
 
         ctk.CTkLabel(devices_frame, text=self.loc.get('label_host_api')).grid(row=1, column=0, sticky="w", padx=15, pady=5)
-        self.host_api_var = ctk.StringVar(value="Windows DirectSound" if platform.system() == "Windows" else "")
+        self.host_api_var = ctk.StringVar(value="Windows WASAPI" if platform.system() == "Windows" else "")
         self.host_api_menu = ctk.CTkOptionMenu(
             devices_frame,
             variable=self.host_api_var,
-            values=["Windows DirectSound"],
+            values=["Windows WASAPI"],
             command=self.refresh_devices
         )
         self.host_api_menu.grid(row=1, column=1, sticky="ew", padx=15, pady=5)
@@ -373,8 +373,8 @@ class RecorderTab(RecordingActionsMixin):
         if host_apis:
             self.host_api_menu.configure(values=list(host_apis.values()))
             if not self.host_api_var.get() or self.host_api_var.get() not in host_apis.values():
-                if "Windows DirectSound" in host_apis.values():
-                    self.host_api_var.set("Windows DirectSound")
+                if "Windows WASAPI" in host_apis.values():
+                    self.host_api_var.set("Windows WASAPI")
                 else:
                     self.host_api_var.set(list(host_apis.values())[0])
 

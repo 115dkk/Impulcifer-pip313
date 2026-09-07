@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.14.1 - 2026-09-07
+### Windows 녹음 경로를 WASAPI 우선으로 전환
+
+#### ⭐ 새로운 기능 / 개선
+- **호스트 API 자동 선택이 WASAPI를 먼저 고릅니다**: 장치 이름에 호스트 API를 붙이지 않고 `--host_api`도 주지 않으면 지금까지 DirectSound → MME → WASAPI 순으로 장치를 찾았습니다. DirectSound와 MME는 Vista 이후 WASAPI 위의 에뮬레이션이라 믹서 단계만 하나 더 거치고(MME는 장치 이름을 31자에서 자릅니다) WASAPI에 없는 기능이 없습니다. 이제 WASAPI → DirectSound → MME 순입니다. CTk Stable/Studio 레코더 탭의 기본 호스트 API도 `Windows WASAPI`로 바꿨습니다.
+- **WASAPI 공유 모드에서 44.1/96 kHz 스윕과 2채널 캡처가 열립니다**: PortAudio의 WASAPI 공유 모드는 Windows 믹서 형식과 다른 샘플레이트나 채널 수를 거부합니다(`Invalid sample rate [PaErrorCode -9997]`). 이것이 DirectSound가 기본값이었던 실제 이유였습니다. 이제 선택된 WASAPI 장치가 요청 형식을 그대로 받지 못할 때만 `WasapiSettings(auto_convert=True)`(엔진 리샘플러와 채널 매트릭서)를 해당 방향에만 붙입니다. 형식을 그대로 받는 장치는 변환 없는 경로를 유지하므로, Windows 11 24H2 일부 통신용 마이크에서 auto-convert 캡처가 무음이 되는 사례(cpal #1200)를 피합니다.
+
+#### 🔧 빌드 / 설정 변경
+- `core.recorder.set_default_devices()`가 샘플레이트와 채널 수를 선택 인자로 받아 방향별 `sounddevice.default.extra_settings`를 정합니다. BRIR DSP 경로는 건드리지 않았으므로 출력 해시는 그대로입니다. Tk 없는 계약 테스트 `tests/test_recorder_devices.py`(호스트 API 우선순위, 폴백, auto-convert 부착 조건)를 추가했습니다.
+
 ## 2.14.0 - 2026-09-05
 ### 불필요한 무음 확장 채널 자동 제거
 
