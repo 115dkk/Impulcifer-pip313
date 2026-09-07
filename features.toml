@@ -512,38 +512,38 @@ tests = []
 [[feature]]
 id = "audio.enumerate"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-sys-win::enumerate_lists_default_endpoints", "impulcifer-sys-win::endpoint_from_mix_format_fields"]
 
 [[feature]]
 id = "audio.probe"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-sys-win::probe_matrix_runs_without_panic", "impulcifer-sys-win::shared_mode_rejects_more_channels_than_mix_format"]
 
 [[feature]]
 id = "audio.output_exclusive"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-sys-win::open_and_play_silence_exclusive_or_shared"]
 
 [[feature]]
 id = "audio.output_shared_autoconvert"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-sys-win::open_and_play_silence_exclusive_or_shared"]
 
 [[feature]]
 id = "audio.input_exclusive"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-sys-win::probe_matrix_runs_without_panic", "impulcifer-sys-win::discontinuity_flag_is_reported"]
 
 [[feature]]
 id = "audio.input_shared_autoconvert"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-sys-win::probe_matrix_runs_without_panic", "impulcifer-sys-win::dst_length_must_be_frame_aligned"]
 
 [[feature]]
 id = "audio.play_and_record_session"
@@ -554,14 +554,14 @@ tests = []
 [[feature]]
 id = "audio.cancel_output"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-sys-win::play_reports_cancelled_when_token_set"]
 
 [[feature]]
 id = "audio.silent_packet_zero_fill"
 kind = "audio"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-sys-win::silent_packet_is_zero_filled"]
 
 [[feature]]
 id = "output.hrir_wav"
@@ -626,56 +626,56 @@ tests = []
 [[feature]]
 id = "dsp.rfft_irfft"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_rfft_matches_numpy", "impulcifer-dsp::golden_irfft_matches_numpy", "impulcifer-dsp::golden_complex_fft_matches_numpy", "impulcifer-dsp::golden_magnitude_response_matches_python", "impulcifer-dsp::real_fft_parseval_and_roundtrip"]
 
 [[feature]]
 id = "dsp.next_fast_len_legacy"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_fast_lengths_match_scipy", "impulcifer-dsp::fast_lengths_are_minimal_and_handle_overflow"]
 
 [[feature]]
 id = "dsp.next_fast_len"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_fast_lengths_match_scipy"]
 
 [[feature]]
 id = "dsp.convolve"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_convolve_modes_match_scipy", "impulcifer-dsp::convolution_linearity_and_identity"]
 
 [[feature]]
 id = "dsp.correlate"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_correlate_modes_match_scipy"]
 
 [[feature]]
 id = "dsp.correlation_lags"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_correlation_lags_match_scipy"]
 
 [[feature]]
 id = "dsp.butter_sos"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_butter_sos_matches_scipy", "impulcifer-dsp::butter_lowpass_dc_gain_and_filter_reset", "impulcifer-dsp::golden_butter_sosfilt_chain_matches_scipy"]
 
 [[feature]]
 id = "dsp.sosfilt"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_sosfilt_matches_scipy"]
 
 [[feature]]
 id = "dsp.rbj_biquad"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_rbj_matches_autoeq", "impulcifer-dsp::golden_tf2sos_matches_scipy"]
 
 [[feature]]
 id = "dsp.firwin2"
@@ -704,8 +704,8 @@ tests = []
 [[feature]]
 id = "dsp.windows"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_windows_match_scipy", "impulcifer-dsp::golden_kaiser_matches_scipy", "impulcifer-dsp::windows_symmetry_periodicity_and_i0_limits"]
 
 [[feature]]
 id = "dsp.spline_k1"
@@ -740,20 +740,20 @@ tests = []
 [[feature]]
 id = "dsp.linregress"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_linregress_matches_scipy", "impulcifer-dsp::golden_running_mean_matches_python"]
 
 [[feature]]
 id = "dsp.expit"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_expit_matches_scipy"]
 
 [[feature]]
 id = "dsp.uniform_filter2d"
 kind = "dsp"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_uniform_filter_matches_scipy"]
 
 [[feature]]
 id = "dsp.spectrogram"

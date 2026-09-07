@@ -6,6 +6,13 @@
 //! docs/research/rewrite-stack-2026-09/report-02-dsp.md section 2.4 for the
 //! exact contracts each function must satisfy.
 
+/// Invalid arguments for fallible DSP entry points.
+#[derive(Debug, thiserror::Error)]
+pub enum DspError {
+    #[error("invalid DSP argument: {0}")]
+    InvalidArgument(String),
+}
+
 pub mod conv;
 pub mod fft;
 pub mod filters;
