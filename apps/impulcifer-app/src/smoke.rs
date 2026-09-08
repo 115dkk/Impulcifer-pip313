@@ -14,6 +14,8 @@ pub struct SmokeConfig {
     ack_directory: Option<PathBuf>,
     pub driver: Option<String>,
     pub data_directory: Option<PathBuf>,
+    /// Only the Windows shell passes the port to WebView2 (CDP is Windows-only).
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub cdp_port: Option<u16>,
 }
 
