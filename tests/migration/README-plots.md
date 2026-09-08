@@ -42,14 +42,25 @@ synchronization without storing large image fixtures.
   smoothed difference 0.1 dB (two 0.05 dB curves; the CI Windows runner measured
   0.052 dB where this machine measured 0.008), per the packet's
   second-run downstream-budget decision and README-stages.md oracle-noise policy.
-  The pipeline raw and smoothed series use that 0.05 dB for bins within 40 dB of
-  the reference maximum; deeper bins keep the same linear tolerance as the bin at
-  the floor, so their dB budget grows by 10^((depth - 40) / 20). The last grid bin
-  (23950 Hz) is 67.6 dB below the right channel maximum (budget there 1.2 dB): the
-  Ubuntu runner and Debian WSL (glibc) measured 0.081 dB, the Windows runner
-  0.091 dB, this machine 0.001 dB, and macOS passed; the Python series itself
-  moves 0.002 dB at that bin under a 1e-8 relative perturbation of the summed IR
-  (`oracle_noise_plots_raw.py`).
+  The pipeline raw, smoothed and left-minus-right series use 0.05 dB for bins
+  within 50 dB of the reference maximum (the difference takes the depth of the
+  quieter ear at each bin); deeper bins keep the same linear tolerance as the bin
+  at the floor, so their dB budget grows by 10^((depth - 50) / 20). Only the last
+  grid bin (23950 Hz, 67.6 dB below the right ear's maximum) is deeper than 50 dB.
+  Cross-platform evidence (2026-09-08): Rust versus the Windows golden is at most
+  0.0007 dB within 40 dB of the maximum and 0.003 dB within 50 dB on Windows,
+  Debian 13 (glibc) and the Ubuntu/Windows runners; at the last bin Debian and
+  Ubuntu measured 0.081 dB, the Windows runner 0.091 dB, this machine 0.001 dB,
+  macOS passed. The 2.x Python pipeline itself, re-exported on Debian with the same
+  NumPy 2.5.3/SciPy 1.18.1, differs from the Windows goldens by 4.2e-4 of the peak
+  end to end (`p11_default` products, `p10_default_normalize` onwards; the
+  measurement stages agree to 1e-14), so a flat dB budget at a bin 67 dB down would
+  test platform rounding, not the port. The Python raw series moves 0.002 dB at
+  that bin under a 1e-8 relative perturbation of the summed IR
+  (`oracle_noise_plots_raw.py`). Re-exporting the P19 plot golden on Linux is not
+  usable as a reference: the exporter's Linux capture is offset by 0.254 dB on
+  every bin (a harness artefact of the forked plot worker, not a pipeline
+  difference).
   The isolated checks do not inherit the downstream budget. Synthetic synchronized
   limits use 1e-7 in axis units.
 - Both PNG set tests compare Rust's encoded dimensions to the captured Python

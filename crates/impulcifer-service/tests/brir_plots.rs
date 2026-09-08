@@ -73,22 +73,34 @@ fn compare(actual: &[f64], expected: &[f64], budget: f64, label: &str) -> f64 {
     assert!(max <= budget, "{label}: {max} > {budget} at index {index}");
     max
 }
-/// dB comparison with a level-aware budget: `budget` applies to bins within `floor` dB
-/// of the reference maximum; deeper bins get the same linear tolerance as the bin at
-/// the floor, so their dB budget grows by 10^((depth - floor) / 20). The last grid bin
-/// (23950 Hz) sits 67.6 dB below the right channel maximum: glibc (Ubuntu runner and
-/// Debian WSL) measured 0.081 dB and the Windows runner 0.091 dB there, where this
-/// machine measured 0.001 dB and macOS passed; the Python raw series itself moves
-/// 0.002 dB at that bin under a 1e-8 relative perturbation of the summed IR.
-fn compare_levels(actual: &[f64], expected: &[f64], budget: f64, floor: f64, label: &str) -> f64 {
+/// Per-bin dB budget: `budget` for bins whose reference level is within `floor` dB
+/// of the maximum, growing by 10^((depth - floor) / 20) below that, which keeps the
+/// linear tolerance constant (0.05 dB at 50 dB down is 1.8e-5 of the maximum).
+fn level_budget(depth: f64, budget: f64, floor: f64) -> f64 {
+    budget * 10f64.powf(((depth - floor) / 20.0).max(0.0))
+}
+/// dB comparison whose budget follows the given per-bin depths below the maximum.
+/// Evidence (2026-09-08, `tests/migration/README-plots.md`): within 50 dB of the
+/// maximum Rust differs from the Windows golden by at most 0.003 dB on Windows,
+/// Debian (glibc) and the CI runners; the last grid bin (23950 Hz, 67.6 dB down on
+/// the right ear) measured 0.081 dB on glibc and 0.091 dB on the Windows runner
+/// against 0.001 dB here, while the 2.x pipeline itself moves 4.2e-4 of the peak
+/// between the same two platforms end to end.
+fn compare_with_depths(
+    actual: &[f64],
+    expected: &[f64],
+    depths: &[f64],
+    budget: f64,
+    floor: f64,
+    label: &str,
+) -> f64 {
     assert_eq!(actual.len(), expected.len(), "{label} shape");
-    let top = expected.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    assert_eq!(depths.len(), expected.len(), "{label} depth shape");
     let mut max = 0.0_f64;
     let mut worst = 0.0_f64;
-    for (i, (a, b)) in actual.iter().zip(expected).enumerate() {
+    for (i, ((a, b), depth)) in actual.iter().zip(expected).zip(depths).enumerate() {
         assert!(a.is_finite(), "{label}[{i}] is not finite");
-        let depth = top - b;
-        let allowed = budget * 10f64.powf(((depth - floor) / 20.0).max(0.0));
+        let allowed = level_budget(*depth, budget, floor);
         let d = (a - b).abs();
         assert!(
             d <= allowed,
@@ -103,6 +115,12 @@ fn compare_levels(actual: &[f64], expected: &[f64], budget: f64, floor: f64, lab
         worst * 100.0
     );
     max
+}
+/// Level-aware comparison with the depths taken from the reference series itself.
+fn compare_levels(actual: &[f64], expected: &[f64], budget: f64, floor: f64, label: &str) -> f64 {
+    let top = expected.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let depths: Vec<f64> = expected.iter().map(|b| top - b).collect();
+    compare_with_depths(actual, expected, &depths, budget, floor, label)
 }
 #[derive(Default)]
 struct Capture {
@@ -178,11 +196,25 @@ fn golden_results_series_match_python() {
         .zip(&r.smoothed)
         .map(|(l, r)| l - r)
         .collect();
-    compare(
+    // Left minus right at each bin is only as certain as the quieter ear there:
+    // the depth is taken from the lower of the two smoothed references.
+    let (left_ref, right_ref) = (values(&lines[2]["y"]), values(&lines[3]["y"]));
+    let top = left_ref
+        .iter()
+        .chain(&right_ref)
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let depths: Vec<f64> = left_ref
+        .iter()
+        .zip(&right_ref)
+        .map(|(l, r)| top - l.min(*r))
+        .collect();
+    compare_with_depths(
         &difference,
         &values(&lines[4]["y"]),
-        // Left minus right: two 0.05 dB curves (the CI Windows runner measured 0.052).
-        0.1,
+        &depths,
+        0.05,
+        50.0,
         "pipeline smoothed difference",
     );
     for (side, s, raw_index, smooth_index) in [("left", l, 0, 2), ("right", r, 1, 3)] {
@@ -190,7 +222,7 @@ fn golden_results_series_match_python() {
             &s.raw,
             &values(&lines[raw_index]["y"]),
             0.05,
-            40.0,
+            50.0,
             &format!("{side} pipeline raw"),
         );
         compare(
@@ -203,7 +235,7 @@ fn golden_results_series_match_python() {
             &s.smoothed,
             &values(&lines[smooth_index]["y"]),
             0.05,
-            40.0,
+            50.0,
             &format!("{side} pipeline smoothed"),
         );
     }
