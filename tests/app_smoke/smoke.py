@@ -442,6 +442,11 @@ class Smoke:
 
 
 def main():
+    # The driver records carry the UI's own strings (ellipsis, Korean labels); a
+    # cp1252 console on the Windows runners must not turn that into a harness error.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe", type=Path, required=True)
     parser.add_argument("--hardware", action="store_true")

@@ -143,6 +143,9 @@ jobs:
 
       - name: Install the newest 2.x release, apply the 3.x package, start the 3.x app
         shell: pwsh
+        env:
+          PYTHONUTF8: "1"
+          PYTHONIOENCODING: utf-8
         run: |
           $ErrorActionPreference = 'Stop'
           $root = Join-Path $env:LOCALAPPDATA 'Impulcifer'
