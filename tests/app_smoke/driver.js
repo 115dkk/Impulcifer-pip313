@@ -111,14 +111,26 @@
         });
         await step("updates", async () => {
           await navigate("info"); const start = observer.events.length; click("#btn-check-updates");
-          const expected = "INTERNAL_ERROR: check_for_updates not implemented";
-          await wait(() => node("#update-check-status").textContent === expected, "update error display");
+          // The button sets the "checking" line synchronously; the check itself is real since P20
+          // (GitHub releases): it settles as "up to date", as the update modal, or as an error
+          // line when the network is unavailable. Any of those passes; the envelope must be
+          // well-formed and the UI must leave the checking state.
+          const status = node("#update-check-status");
+          const checking = status.textContent;
+          await wait(() => responses("check_for_updates", start).length === 1, "update check response");
           const result = responses("check_for_updates", start);
           const actual = result[0]?.response;
-          assert(result.length === 1 && actual.ok === false && actual.error.code === "INTERNAL_ERROR"
-            && actual.error.message === "check_for_updates not implemented" && actual.error.retryable === false
-            && Object.keys(actual.error.details).length === 0, `update envelope: ${JSON.stringify(result)}`);
-          return { ui_text: expected, expected_envelope: result[0].response };
+          const okShape = !!actual && actual.ok === true && !!actual.data
+            && typeof actual.data.update_available === "boolean" && typeof actual.data.current_version === "string";
+          const errShape = !!actual && actual.ok === false && !!actual.error
+            && typeof actual.error.message === "string" && actual.error.message.length > 0;
+          assert(okShape || errShape, `update envelope: ${JSON.stringify(result)}`);
+          await wait(() => status.hidden || status.textContent !== checking
+            || !node("#update-modal").hidden, "update status settled");
+          const modal = !node("#update-modal").hidden;
+          assert(!okShape || actual.data.update_available === modal,
+            `update modal ${modal} does not match update_available ${actual.data && actual.data.update_available}`);
+          return { ui_text: modal ? "modal" : status.textContent, modal, envelope: actual };
         });
         if (params.hardware) await step("recording", async () => {
           await navigate("recorder"); const devices = {};
