@@ -835,14 +835,32 @@ pub fn plot_ir_panels(path: &Path, panels: &IrPanels) -> Result<(), PlotError> {
         Ok(())
     })
 }
+/// Input of the interaural overlay: the two ears of one speaker with the time
+/// origins the pipeline computed (ImpulseResponse.peak_index semantics).
+#[derive(Clone, Copy, Debug)]
+pub struct InterauralOverlay<'a> {
+    pub speaker: &'a str,
+    pub left_ir: &'a [f64],
+    pub right_ir: &'a [f64],
+    pub left_peak: usize,
+    pub right_peak: usize,
+    pub fs: u32,
+    pub time_range_ms: (f64, f64),
+}
+
 pub fn plot_interaural_overlay(
     path: &Path,
-    speaker: &str,
-    left_ir: &[f64],
-    right_ir: &[f64],
-    fs: u32,
-    time_range_ms: (f64, f64),
+    overlay: &InterauralOverlay<'_>,
 ) -> Result<(), PlotError> {
+    let InterauralOverlay {
+        speaker,
+        left_ir,
+        right_ir,
+        left_peak,
+        right_peak,
+        fs,
+        time_range_ms,
+    } = *overlay;
     if fs == 0
         || !time_range_ms.0.is_finite()
         || !time_range_ms.1.is_finite()
@@ -854,28 +872,11 @@ pub fn plot_interaural_overlay(
             "invalid overlay range or samples".into(),
         ));
     }
-    let segment = |ir: &[f64]| {
-        // Same first local peak above -18 dB as ImpulseResponse.peak_index.
-        let max = ir.iter().map(|v| v.abs()).fold(0.0, f64::max);
-        let mut peak = ir.iter().position(|v| v.abs() == max).unwrap_or(0);
-        let mut i = 1;
-        while i + 1 < ir.len() {
-            if ir[i].abs() > ir[i - 1].abs() {
-                let mut end = i;
-                while end + 1 < ir.len() && ir[end + 1].abs() == ir[i].abs() {
-                    end += 1;
-                }
-                if end + 1 < ir.len()
-                    && ir[end].abs() > ir[end + 1].abs()
-                    && ir[i].abs() >= max * 0.12589
-                {
-                    peak = (i + end) / 2;
-                    break;
-                }
-                i = end;
-            }
-            i += 1;
-        }
+    // The time origin comes from the caller: ImpulseResponse.peak_index semantics
+    // (the first signed extremum above -18 dB, core/impulse_response.py:62-64),
+    // computed by impulcifer-dsp. The renderer never re-derives it.
+    let segment = |ir: &[f64], peak: usize| {
+        let peak = peak.min(ir.len().saturating_sub(1));
         let offset = (time_range_ms.0 * f64::from(fs) / 1000.0) as i64;
         let start = (peak as i64 + offset).max(0) as usize;
         let end = (peak as i64 + (time_range_ms.1 * f64::from(fs) / 1000.0) as i64)
@@ -888,8 +889,8 @@ pub fn plot_interaural_overlay(
             .collect();
         (t, ir[start..end].to_vec())
     };
-    let (lt, l) = segment(left_ir);
-    let (rt, r) = segment(right_ir);
+    let (lt, l) = segment(left_ir, left_peak);
+    let (rt, r) = segment(right_ir, right_peak);
     let max = l.iter().chain(&r).map(|v| v.abs()).fold(0.0, f64::max);
     let lim = AxisLimits {
         x: padded_range(lt.iter().chain(&rt).copied()),

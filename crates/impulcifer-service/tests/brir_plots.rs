@@ -149,7 +149,8 @@ fn golden_results_series_match_python() {
     compare(
         &difference,
         &values(&lines[4]["y"]),
-        0.05,
+        // Left minus right: two 0.05 dB curves (the CI Windows runner measured 0.052).
+        0.1,
         "pipeline smoothed difference",
     );
     for (side, s, raw_index, smooth_index) in [("left", l, 0, 2), ("right", r, 1, 3)] {
@@ -506,4 +507,65 @@ fn smoothing_from_python_raw_meets_fr_budget() {
                 .all(|(a, b)| (a - b).abs() <= 1e-9 + 1e-11 * b.abs())
         );
     }
+}
+
+#[test]
+fn overlay_peaks_follow_signed_extrema() {
+    // Codex on PR #193: ImpulseResponse.peak_index searches positive and negative
+    // extrema (core/impulse_response.py:62-64); the renderer receives that index
+    // from impulcifer-dsp instead of deriving one from abs().
+    assert_eq!(
+        impulcifer_dsp::peaks::first_peak_index(&[0.0, 0.8, -1.0, 0.0], 0, None, 0.12589),
+        1
+    );
+}
+
+struct CancelAtPlot<'a> {
+    dir: std::path::PathBuf,
+    estimator: &'a impulcifer_dsp::estimator::SweepEstimator,
+    calls: usize,
+}
+impl StageObserver for CancelAtPlot<'_> {
+    fn on_stage(&mut self, _: StageProgress) {}
+    fn check_cancelled(&self) -> Result<(), DspError> {
+        Ok(())
+    }
+    fn on_plot(&mut self, key: StageKey, hrir: &Hrir) -> Result<(), DspError> {
+        if key == StageKey::PlotPre {
+            self.calls += 1;
+            // Codex on PR #193: a job cancelled after the entry check must stop at
+            // the first per-speaker task of the batch, not after the whole batch.
+            let result = impulcifer_service::brir::plots::render_stage(
+                &self.dir,
+                key,
+                hrir,
+                self.estimator,
+                &|| true,
+            );
+            assert!(result.is_err(), "a cancelled job must not render the batch");
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn plot_batches_stop_when_cancelled() {
+    let t = Temp::demo();
+    let c = config(&t, true);
+    let d = discover(&t.0, &c).unwrap();
+    let e = open_estimator(&d, c.test_signal.as_deref()).unwrap();
+    let mut observer = CancelAtPlot {
+        dir: t.0.clone(),
+        estimator: &e,
+        calls: 0,
+    };
+    run_pipeline(&c, inputs(&t, &c), &mut observer).unwrap();
+    assert_eq!(observer.calls, 1);
+    let rendered = std::fs::read_dir(t.0.join("plots").join("pre"))
+        .map(|it| it.count())
+        .unwrap_or(0);
+    assert_eq!(
+        rendered, 0,
+        "no per-speaker PNG may be written after cancellation"
+    );
 }

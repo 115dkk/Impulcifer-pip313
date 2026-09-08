@@ -56,11 +56,15 @@ fn png_outputs_have_matplotlib_sizes() {
     plot_eq(&d.join("eq-two.png"), Some(&c), Some(&right)).unwrap();
     plot_interaural_overlay(
         &d.join("overlay.png"),
-        "FL",
-        &[0.0, 1.0, -0.1, 0.0],
-        &[0.0, 0.5, 0.0, 0.0],
-        48000,
-        (-5.0, 30.0),
+        &impulcifer_plots::InterauralOverlay {
+            speaker: "FL",
+            left_ir: &[0.0, 1.0, -0.1, 0.0],
+            right_ir: &[0.0, 0.5, 0.0, 0.0],
+            left_peak: 1,
+            right_peak: 1,
+            fs: 48000,
+            time_range_ms: (-5.0, 30.0),
+        },
     )
     .unwrap();
     let panels = IrPanels {

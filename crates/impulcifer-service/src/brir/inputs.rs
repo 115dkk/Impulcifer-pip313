@@ -206,8 +206,17 @@ pub fn load_inputs(
         if config.plot
             && let Some(room) = &room_result
         {
-            super::plots::room(&dir.dir, &rir, room)?;
-            super::plots::generic_room(&dir.dir, &generic, &target, calibration.as_ref(), config)?;
+            let token = events.cancel_token();
+            let cancelled = move || token.as_ref().is_some_and(|t| t.is_cancelled());
+            super::plots::room(&dir.dir, &rir, room, &cancelled)?;
+            super::plots::generic_room(
+                &dir.dir,
+                &generic,
+                &target,
+                calibration.as_ref(),
+                config,
+                &cancelled,
+            )?;
         }
         if let Some(room) = &room_result
             && !room.responses_tracks.is_empty()

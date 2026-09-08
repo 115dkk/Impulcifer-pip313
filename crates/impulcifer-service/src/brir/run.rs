@@ -49,6 +49,9 @@ impl BrirEvents for Events<'_> {
     fn translate(&self, key: &str) -> String {
         self.catalog.translate(key, &json!({}))
     }
+    fn cancel_token(&self) -> Option<impulcifer_types::audio::CancelToken> {
+        Some(self.ctx.cancel.clone())
+    }
 }
 fn stage_key(key: StageKey) -> Option<&'static str> {
     use StageKey::*;
@@ -90,7 +93,9 @@ impl StageObserver for Observer<'_, '_> {
         hrir: &impulcifer_dsp::hrir::Hrir,
     ) -> Result<(), DspError> {
         self.check_cancelled()?;
-        super::plots::render_stage(self.directory, key, hrir, self.estimator)
+        let token = self.events.cancel_token();
+        let cancelled = move || token.as_ref().is_some_and(|t| t.is_cancelled());
+        super::plots::render_stage(self.directory, key, hrir, self.estimator, &cancelled)
     }
     fn on_stage(&mut self, progress: StageProgress) {
         let key = progress.key;

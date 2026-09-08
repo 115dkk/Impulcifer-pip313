@@ -264,9 +264,11 @@ pub fn room(
     dir: &Path,
     rir: &Hrir,
     room: &impulcifer_dsp::stages::room::RoomCorrection,
+    cancelled: &(dyn Fn() -> bool + Sync),
 ) -> Result<(), DspError> {
     let mut panels = Vec::new();
     for s in &rir.speakers {
+        check(cancelled)?;
         for (side, ir) in [
             (impulcifer_types::constants::Side::Left, &s.left),
             (impulcifer_types::constants::Side::Right, &s.right),
@@ -314,6 +316,7 @@ pub fn room(
         p.limits = limits.clone();
     }
     panels.par_iter().try_for_each(|p| {
+        check(cancelled)?;
         impulcifer_plots::plot_ir_panels(
             &dir.join("plots/room").join(format!("{}.png", p.title)),
             p,
@@ -329,10 +332,12 @@ pub fn generic_room(
     target: &FrequencyResponse,
     calibration: Option<&FrequencyResponse>,
     config: &impulcifer_types::config::ProcessingConfig,
+    cancelled: &(dyn Fn() -> bool + Sync),
 ) -> Result<(), DspError> {
     if irs.is_empty() {
         return Ok(());
     }
+    check(cancelled)?;
     use impulcifer_dsp::{
         fr::CenterAt,
         stages::room::{FrCombination, calculate_generic_room_correction},
@@ -365,11 +370,23 @@ pub fn generic_room(
     impulcifer_plots::plot_generic_room(&dir.join("plots/room/room.png"), &curve(&room), &raws)
         .map_err(error)
 }
+/// The cooperative-cancellation contract (ARCHITECTURE section 4): every
+/// per-speaker task of a rayon batch consults the job before it renders, so a
+/// cancel request never waits for a whole batch. The message matches the
+/// observer's `check_cancelled` mapping.
+fn check(cancelled: &(dyn Fn() -> bool + Sync)) -> Result<(), DspError> {
+    if cancelled() {
+        Err(DspError::InvalidArgument("cancelled".into()))
+    } else {
+        Ok(())
+    }
+}
 pub fn render_stage(
     dir: &Path,
     key: StageKey,
     hrir: &Hrir,
     estimator: &SweepEstimator,
+    cancelled: &(dyn Fn() -> bool + Sync),
 ) -> Result<(), DspError> {
     let plots = dir.join("plots");
     match key {
@@ -397,6 +414,7 @@ pub fn render_stage(
             let mut panels: Vec<_> = tasks
                 .par_iter()
                 .map(|(name, ir)| {
+                    check(cancelled)?;
                     let recording = if key == StageKey::PlotPost {
                         Some(ir.convolve(&estimator.test_signal))
                     } else {
@@ -411,6 +429,7 @@ pub fn render_stage(
                 p.limits = sync.clone();
             }
             panels.par_iter().try_for_each(|p| {
+                check(cancelled)?;
                 impulcifer_plots::plot_ir_panels(
                     &plots.join(stage).join(format!("{}.png", p.title)),
                     p,
@@ -422,16 +441,25 @@ pub fn render_stage(
             hrir.speakers
                 .par_iter()
                 .try_for_each(|s| -> Result<(), DspError> {
+                    check(cancelled)?;
                     if let (Some(l), Some(r)) = (&s.left, &s.right) {
                         impulcifer_plots::plot_interaural_overlay(
                             &plots
                                 .join("interaural_overlay")
                                 .join(format!("{}_interaural_overlay.png", s.speaker)),
-                            &s.speaker,
-                            &l.data,
-                            &r.data,
-                            hrir.fs,
-                            (-5.0, 30.0),
+                            &impulcifer_plots::InterauralOverlay {
+                                speaker: &s.speaker,
+                                left_ir: &l.data,
+                                right_ir: &r.data,
+                                left_peak: impulcifer_dsp::peaks::first_peak_index(
+                                    &l.data, 0, None, 0.12589,
+                                ),
+                                right_peak: impulcifer_dsp::peaks::first_peak_index(
+                                    &r.data, 0, None, 0.12589,
+                                ),
+                                fs: hrir.fs,
+                                time_range_ms: (-5.0, 30.0),
+                            },
                         )
                         .map_err(error)?;
                     }
