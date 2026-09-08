@@ -16,7 +16,9 @@ ROOT = CRATE.parents[1]
 _TARGET = tempfile.TemporaryDirectory(prefix="impulcifer-p14-wheel-", ignore_cleanup_errors=True)
 _TAG = "cp314-cp314t" if sysconfig.get_config_var("Py_GIL_DISABLED") else "cp39-abi3"
 _WHEEL_DIR = Path(os.environ.get("IMPULCIFER_WHEEL_DIR", ROOT / "target" / "wheels"))
-_WHEELS = sorted(_WHEEL_DIR.glob(f"impulcifer-*-{_TAG}-*.whl"), key=lambda p: p.stat().st_mtime)
+# The distribution is impulcifer-py313 (the 2.x PyPI project); wheel file names
+# normalise the hyphen to an underscore.
+_WHEELS = sorted(_WHEEL_DIR.glob(f"impulcifer_py313-*-{_TAG}-*.whl"), key=lambda p: p.stat().st_mtime)
 if not _WHEELS:
     raise RuntimeError(f"Build the {_TAG} wheel first in {_WHEEL_DIR}")
 subprocess.run(

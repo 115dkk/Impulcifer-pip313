@@ -72,7 +72,7 @@ def main():
                             shutil.copyfile(source, target)
                     emit(f"Staged pure-Python test dependency {name} {dist.version}\n")
                 run([python, "-m", "pytest", str(CRATE / "tests"), "-q"])
-        for wheel in sorted((ROOT / "target" / "wheels").glob("impulcifer-*.whl")):
+        for wheel in sorted((ROOT / "target" / "wheels").glob("impulcifer_py313-*.whl")):
             emit(f"wheel={wheel.name} size_bytes={wheel.stat().st_size}\n")
 
 
