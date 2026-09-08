@@ -1,4 +1,5 @@
 # PA03: demo pipeline time and memory audit
+2026-09-08 재측정과 M5 판정은 [PA06 출시 전 성능 감사](release.md)를 참고한다.
 
 Date: 2026-09-08. Registry: `perf.pipeline-demo`. Test: `impulcifer-service::bench_smoke_pipeline_demo`.
 

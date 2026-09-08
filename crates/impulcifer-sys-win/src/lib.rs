@@ -386,6 +386,91 @@ mod windows_backend {
     // Retain four periods; a successful render submission alone cannot prove
     // that the shared engine/cable delivered every source frame.
     const SHARED_BUFFER_PERIODS: i64 = 4;
+    // Session leases share one thread-local registration, never nested MMCSS calls.
+    // Rc keeps the handle and its destructor on the promoted session worker.
+    std::thread_local! {
+        static REALTIME: std::cell::RefCell<std::rc::Weak<RealtimeGuard>> =
+            const { std::cell::RefCell::new(std::rc::Weak::new()) };
+    }
+
+    struct RealtimeGuard {
+        handle: Option<audio_thread_priority::RtPriorityHandle>,
+        trace: Option<TraceHandle>,
+    }
+
+    impl RealtimeGuard {
+        fn acquire(
+            frames: usize,
+            rate: u32,
+            trace: Option<&TraceHandle>,
+        ) -> Result<Rc<Self>, AudioError> {
+            REALTIME.with(|slot| {
+                if let Some(guard) = slot.borrow().upgrade() {
+                    return Ok(guard);
+                }
+                let frames = u32::try_from(frames)
+                    .map_err(|err| backend_error("MMCSS buffer frames", err))?;
+                let handle = trace_stage(trace, "mmcss_promote", || {
+                    audio_thread_priority::promote_current_thread_to_real_time(frames, rate)
+                        .map_err(|err| backend_error("MMCSS Audio promotion failed", err))
+                })?;
+                let guard = Rc::new(Self {
+                    handle: Some(handle),
+                    trace: trace.cloned(),
+                });
+                *slot.borrow_mut() = Rc::downgrade(&guard);
+                Ok(guard)
+            })
+        }
+    }
+
+    impl Drop for RealtimeGuard {
+        fn drop(&mut self) {
+            if let Some(handle) = self.handle.take() {
+                let result = trace_stage(self.trace.as_ref(), "mmcss_demote", || {
+                    audio_thread_priority::demote_current_thread_from_real_time(handle)
+                        .map_err(|err| backend_error("MMCSS Audio demotion failed", err))
+                });
+                // Drop cannot return an error; never silently claim demotion succeeded.
+                if let Err(error) = result {
+                    eprintln!("{error}");
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod realtime_tests {
+        use super::*;
+
+        #[test]
+        fn realtime_session_leases_share_one_registration() {
+            let first = RealtimeGuard::acquire(480, 48000, None).unwrap();
+            let second = RealtimeGuard::acquire(480, 48000, None).unwrap();
+            assert!(Rc::ptr_eq(&first, &second));
+            drop(first);
+            assert!(REALTIME.with(|slot| slot.borrow().upgrade().is_some()));
+            drop(second);
+            assert!(REALTIME.with(|slot| slot.borrow().upgrade().is_none()));
+        }
+
+        #[test]
+        fn realtime_session_lease_drops_on_error_and_unwind() {
+            let fail = || -> Result<(), AudioError> {
+                let _guard = RealtimeGuard::acquire(480, 48000, None)?;
+                Err(AudioError::Cancelled)
+            };
+            assert!(matches!(fail(), Err(AudioError::Cancelled)));
+            assert!(REALTIME.with(|slot| slot.borrow().upgrade().is_none()));
+            let result = std::panic::catch_unwind(|| {
+                let _guard = RealtimeGuard::acquire(480, 48000, None).unwrap();
+                panic!("test worker unwind");
+            });
+            assert!(result.is_err());
+            assert!(REALTIME.with(|slot| slot.borrow().upgrade().is_none()));
+        }
+    }
+
     const AUDCLNT_E_UNSUPPORTED_FORMAT: u32 = 0x8889_0008;
     const TRACE_ENV: &str = "IMPULCIFER_PA05_TRACE_PREFIX";
     static TRACE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -608,13 +693,22 @@ mod windows_backend {
         if period <= 0 {
             return Err(AudioError::Backend("invalid shared device period".into()));
         }
-        let duration = period.saturating_mul(SHARED_BUFFER_PERIODS);
+        let periods = match std::env::var("IMPULCIFER_PA05_SHARED_PERIODS") {
+            Ok(value) => value
+                .parse::<i64>()
+                .ok()
+                .filter(|n| (2..=4).contains(n))
+                .ok_or_else(|| AudioError::Backend("shared periods must be 2, 3 or 4".into()))?,
+            Err(std::env::VarError::NotPresent) => SHARED_BUFFER_PERIODS,
+            Err(error) => return Err(backend_error("shared periods", error)),
+        };
+        let duration = period.saturating_mul(periods);
         if let Some(trace) = trace {
             trace.record(TraceRecord {
                 category: "open",
                 event: "shared_period",
                 detail: format!(
-                    "device_period_hns={period} requested_periods={SHARED_BUFFER_PERIODS} requested_duration_hns={duration}"
+                    "device_period_hns={period} requested_periods={periods} requested_duration_hns={duration}"
                 ),
                 ..TraceRecord::default()
             });
@@ -1176,6 +1270,7 @@ mod windows_backend {
                     buffer_frames * usize::from(spec.channels) * 4,
                 ))
             })?;
+            let realtime = RealtimeGuard::acquire(buffer_frames, spec.sample_rate, trace.as_ref())?;
             Ok(WasapiOutputSession {
                 event,
                 scratch,
@@ -1187,6 +1282,7 @@ mod windows_backend {
                 trace,
                 _enumerator: enumerator,
                 _com: com,
+                _realtime: realtime,
                 _trace_owner: trace_owner,
             })
         }
@@ -1246,6 +1342,7 @@ mod windows_backend {
                     },
                 ))
             })?;
+            let realtime = RealtimeGuard::acquire(buffer_frames, spec.sample_rate, trace.as_ref())?;
             Ok(WasapiInputSession {
                 event,
                 capture: TracedDrop::new(capture, "capture_service_release", trace.as_ref()),
@@ -1262,6 +1359,7 @@ mod windows_backend {
                 trace,
                 _enumerator: enumerator,
                 _com: com,
+                _realtime: realtime,
                 _trace_owner: trace_owner,
             })
         }
@@ -1278,6 +1376,7 @@ mod windows_backend {
         trace: Option<TraceHandle>,
         _enumerator: EnumeratorLease,
         _com: ComGuard,
+        _realtime: Rc<RealtimeGuard>,
         _trace_owner: TraceOwner,
     }
 
@@ -1499,6 +1598,7 @@ mod windows_backend {
         trace: Option<TraceHandle>,
         _enumerator: EnumeratorLease,
         _com: ComGuard,
+        _realtime: Rc<RealtimeGuard>,
         _trace_owner: TraceOwner,
     }
 

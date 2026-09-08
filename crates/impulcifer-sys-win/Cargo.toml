@@ -15,6 +15,7 @@ thiserror.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.24"
+audio_thread_priority = { version = "0.37.0", default-features = false }
 
 [[bench]]
 name = "perf"

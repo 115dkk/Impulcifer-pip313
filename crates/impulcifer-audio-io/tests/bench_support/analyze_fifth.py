@@ -24,7 +24,7 @@ def reference():
 def waveform(ref, y, segment_frames):
     metrics = integrity(ref, y)
     windows, splices = [], []
-    for seg in range(7):
+    for seg in range(len(ref) // segment_frames):
         ch = seg % 2
         start_seg, end_seg = seg * segment_frames, (seg+1)*segment_frames
         segment_windows = []

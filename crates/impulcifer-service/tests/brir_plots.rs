@@ -330,14 +330,7 @@ fn golden_eq_series_match_python() {
                 &format!("eq {name} error"),
             );
         }
-        assert_eq!(
-            png_dimensions(&t.0.join("plots/eq.png")),
-            if axes.len() == 1 {
-                (1200, 900)
-            } else {
-                (2200, 900)
-            }
-        );
+        assert_eq!(png_dimensions(&t.0.join("plots/eq.png")), (1600, 1000));
     }
 }
 fn png_dimensions(path: &Path) -> (u32, u32) {
@@ -417,7 +410,16 @@ fn compare_files(plot: bool) {
         );
         assert_eq!(
             (f64::from(w), f64::from(h)),
-            (canvas[0], canvas[1]),
+            if name.contains("/interaural_overlay/") {
+                (1600.0, 900.0)
+            } else if name.contains("/pre/")
+                || name.contains("/post/")
+                || (name.contains("/room/") && !name.ends_with("/room.png"))
+            {
+                (2400.0, 1350.0)
+            } else {
+                (1600.0, 1000.0)
+            },
             "{name}"
         );
     }
@@ -457,10 +459,7 @@ fn generic_only_room_plot_matches_python_canvas() {
         poll.job.error
     );
     let size = png_dimensions(&t.0.join("plots/room/room.png"));
-    let o = oracle();
-    let canvas = values(&o["generic_room"]["canvas"]);
-    assert_eq!(size, (canvas[0] as u32, canvas[1] as u32));
-    assert_eq!(size, (1500, 900));
+    assert_eq!(size, (1600, 1000));
     assert_eq!(
         std::fs::read_dir(t.0.join("plots/room")).unwrap().count(),
         1

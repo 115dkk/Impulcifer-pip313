@@ -627,8 +627,8 @@ note = "markdown + i18n rendering; text exact, numbers within the decay-noise bu
 id = "output.plots_png"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::plot_files_match_python_default_run", "impulcifer-service::plot_files_match_python_plot_run", "impulcifer-service::golden_headphones_series_match_python", "impulcifer-service::golden_eq_series_match_python", "impulcifer-plots::png_outputs_have_matplotlib_sizes", "impulcifer-plots::png_is_not_blank"]
-note = "the same relative PNG set as 2.x (2 by default, 51 with --plot) rendered by impulcifer-plots (plotters + embedded DejaVu Sans); headphones/eq/room plots included; tight-bbox cropping, palette quantization, bokeh and mic-deviation debug plots not reproduced"
+tests = ["impulcifer-service::plot_files_match_python_default_run", "impulcifer-service::plot_files_match_python_plot_run", "impulcifer-service::golden_headphones_series_match_python", "impulcifer-service::golden_eq_series_match_python", "impulcifer-plots::png_outputs_have_p23_sizes", "impulcifer-plots::chart_kinds_use_their_actual_tokens", "impulcifer-plots::ir_sheet_renders_present_and_absent_optional_panels", "impulcifer-plots::overlay_chart_preserves_supplied_peak_delay", "impulcifer-plots::png_is_not_blank"]
+note = "P23: the pictures are designed for readers, not copies of matplotlib (paper style, plain titles, key numbers on the chart, band strip, first-reflections panel instead of the waterfall; docs/rust/PLOTS.md); the series behind them and the file set are unchanged; the same relative PNG set as 2.x (2 by default, 51 with --plot) rendered by impulcifer-plots (plotters + embedded DejaVu Sans); headphones/eq/room plots included; tight-bbox cropping, palette quantization, bokeh and mic-deviation debug plots not reproduced"
 
 [[feature]]
 id = "output.interactive_html"

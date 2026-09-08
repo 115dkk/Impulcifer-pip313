@@ -86,8 +86,11 @@ def analysis_path(prefix):
 
 def analyze(prefix, observer):
     ref, nseg = reference()
+    op = observer.get('op', 'play_record_7_speaker_set')
+    if op == 'play_record_headphones_sweep':
+        ref = np.repeat(ref[:nseg, :1], 2, axis=1)
     py = np.fromfile(str(prefix)+'-python.f32', dtype='<f4').reshape(-1, 2)
-    rust = np.fromfile(str(prefix)+'-play_record_7_speaker_set-0.f32', dtype='<f4').reshape(-1, 2)
+    rust = np.fromfile(str(prefix)+f'-{op}-0.f32', dtype='<f4').reshape(-1, 2)
     try:
         pw, rw = waveform(ref, py.astype(np.float64), nseg), waveform(ref, rust.astype(np.float64), nseg)
     except (ValueError, IndexError) as error:
@@ -153,7 +156,23 @@ def analyze(prefix, observer):
     accepted = (conclusive and pair_exact and not rust_only and trace['underruns'] == 0 and
                 not trace['index_gaps'] and trace['post_initial_discontinuities'] == 0 and
                 trace['silent_packets'] == 0)
-    result = dict(prefix=str(prefix), observer=observer, rust=rw, python=pw, trace=trace,
+    # Strict PA05b acceptance additionally requires an intact full source at one
+    # fixed stereo offset in EACH contemporaneous recording, with no gain fit.
+    def full_source(w, samples):
+        lags = [m['lag_frames'] for m in w['metrics']]
+        lag = lags[0]
+        if len(set(lags)) != 1 or lag < 0 or lag + len(ref) > len(samples):
+            return dict(passed=False, lags=lags, max_error=None)
+        residual = samples[lag:lag+len(ref)].astype(np.float64) - ref
+        maximum = np.max(np.abs(residual), axis=0).tolist()
+        return dict(passed=bool(max(maximum) <= 4e-6), lags=lags, max_error=maximum)
+
+    rust_source, python_source = full_source(rw, rust), full_source(pw, py)
+    strict_clean = (accepted and not external and rust_source['passed'] and python_source['passed']
+                    and not rr and not pr
+                    and not any(m['repeated_128_blocks'] for w in (rw, pw) for m in w['metrics']))
+    result = dict(strict_clean=strict_clean, rust_source=rust_source, python_source=python_source,
+                  prefix=str(prefix), observer=observer, rust=rw, python=pw, trace=trace,
                   python_minus_rust_offset=offset, common_frames=common, pair_bit_exact=pair_exact,
                   pair_residual_rms=pair_rms, offsets=sorted(set(offsets)),
                   external_regions=external if conclusive else [],
@@ -179,8 +198,11 @@ def main():
     parser.add_argument('--run', type=int, required=True)
     parser.add_argument('--exe', type=Path)
     parser.add_argument('--analyze-only', action='store_true')
+    parser.add_argument('--op', choices=('play_record_headphones_sweep', 'play_record_7_speaker_set'),
+                        default='play_record_7_speaker_set')
     args = parser.parse_args()
-    prefix = HERE / f'sixth-p{args.period}-{args.run:02d}'
+    suffix = '-headphones' if args.op == 'play_record_headphones_sweep' else '-seven'
+    prefix = HERE / f'sixth-p{args.period}-{args.run:02d}{suffix}'
     metadata = Path(str(prefix)+'-observer.json')
     if args.analyze_only:
         analyze(prefix, json.loads(metadata.read_text(encoding='utf-8')))
@@ -199,7 +221,8 @@ def main():
             statuses.append(str(status))
         ready.set()
 
-    env = dict(os.environ, IMPULCIFER_PA05_OP='play_record_7_speaker_set',
+    env = dict(os.environ, IMPULCIFER_PA05_OP=args.op,
+               IMPULCIFER_PA05_SHARED_PERIODS=str(args.period),
                IMPULCIFER_PA05_INTEGRITY='1', IMPULCIFER_PA05_INTEGRITY_RUNS='1',
                IMPULCIFER_PA05_TAIL='1', IMPULCIFER_PA05_CAPTURE_PREFIX=str(prefix),
                IMPULCIFER_PA05_TRACE_PREFIX=str(prefix))
@@ -211,7 +234,7 @@ def main():
                 raise RuntimeError('independent capture did not start')
             observer = dict(device=stream.device, dtype=stream.dtype, latency=stream.latency,
                             samplerate=stream.samplerate, channels=stream.channels,
-                            blocksize=stream.blocksize, statuses=statuses, exe=str(args.exe))
+                            blocksize=stream.blocksize, statuses=statuses, exe=str(args.exe), op=args.op)
             # No cargo invocation here: all compilation precedes opening capture.
             with Path(str(prefix)+'-rust.log').open('w', encoding='utf-8') as log:
                 completed = subprocess.run([str(args.exe)], cwd=ROOT, env=env,

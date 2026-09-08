@@ -1,4 +1,5 @@
 # PA02: impulcifer-dsp primitive performance audit
+2026-09-08 재측정과 M5 판정은 [PA06 출시 전 성능 감사](release.md)를 참고한다.
 
 Date: 2026-09-07. Scope: the 22 landed primitive operations in `../packets/PA02-astra-perf-dsp.md`, following `../packets/PA-astra-perf-audit.md`.
 
