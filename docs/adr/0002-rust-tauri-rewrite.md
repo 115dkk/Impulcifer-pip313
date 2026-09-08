@@ -16,7 +16,7 @@
 4. **Windows 오디오는 WASAPI만 쓴다.** ASIO는 지원하지 않는다. DirectSound/MME 폴백도 없다. 백엔드는 wasapi-rs(exclusive 우선, shared+auto-convert 폴백), macOS/Linux는 cpal이다. PortAudio는 버린다.
 5. **PyPI를 유지한다.** PyO3 + maturin으로 DSP 코어를 wheel로 내고 CLI 진입점을 보존한다.
 6. **손수 쓰는 unsafe는 0이 기본이다.** 모든 크레이트가 `#![forbid(unsafe_code)]`로 시작한다. 예외 후보는 `impulcifer-sys-win` 하나뿐이며, 예외를 여는 것은 개별 승인 사항이다.
-7. **wasapi-rs의 불건전한 안전 API(`WaveFormat::parse`, `Device::from_raw`)는 어댑터에서 쓰지 않는다.** 업스트림 이슈는 올리지 않는다. 저장소에 AI 작성 이슈를 허용하는 명시적 분위기가 없기 때문이다(README·CONTRIBUTING·이슈 템플릿에 관련 언급 없음, 2026-09-07 확인).
+7. **wasapi-rs의 불건전한 안전 API(`WaveFormat::parse`, `Device::from_raw`)는 어댑터에서 쓰지 않는다.** 업스트림 이슈는 올리지 않는 것을 우선하되, 저장소가 AI 자동 리뷰를 받아들이는 분위기가 확인되면 올린다. 2026-09-07에는 README·CONTRIBUTING·이슈 템플릿에 관련 언급이 없어 올리지 않았다. 2026-09-08에 다시 확인하니 유지보수자가 자기 PR(#57, #60, #61, #64)에 GitHub Copilot 자동 리뷰를 켜 두고 있어 조건이 충족됐고, wasapi 0.24에서 `Device::from_raw`는 이미 `unsafe fn`이 됐지만 `WaveFormat::parse`는 `&WAVEFORMATEX`를 받아 그 뒤 22바이트를 더 읽는 안전 함수로 남아 있어(열린 이슈 #62는 24비트 폴백 문제라 별개) HEnquist/wasapi-rs#65로 보고했다(AI 도움으로 작성했음을 명시). 어댑터는 그대로 두 API를 쓰지 않는다.
 8. **기능 게이트.** 루트 `features.toml`에 모든 기능(IPC 메서드, 설정 필드, 파이프라인 스테이지, 출력물, 오디오 세션 동작)을 등록하고, `impulcifer-policy`의 게이트 테스트가 등록 누락과 검증 테스트 누락을 실패로 만든다. 구현된 기능에 검증 테스트가 하나라도 없으면 CI가 실패한다.
 9. **작업 분배.** unsafe 단(`impulcifer-sys-win`)과 오디오 백엔드는 Daybreak Blue 워커가, 나머지 크레이트는 ASTRA 워커가 작업서 단위로 구현한다. 아키텍처·작업서·검토·게이트·커밋은 Claude가 쥔다.
 10. **장치 문제는 실측한다.** `impulcifer-sys-win`의 `hardware_probe` 예제로 이 머신의 실제 장치에서 exclusive/shared, 44.1/48/96 kHz, 2/8/16채널을 재보고 결과를 문서에 남긴다.
