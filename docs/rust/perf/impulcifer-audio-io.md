@@ -1,6 +1,248 @@
 # PA05: audio-io and sys-win measurement-session overhead
 2026-09-08 재측정과 M5 판정은 [PA06 출시 전 성능 감사](release.md)를 참고한다.
 
+## Seventh run (PA05b), 2026-09-08: audit NOT PASSED
+
+MMCSS 승격을 추가했지만 작은 버퍼는 무결성 기준을 통과하지 못했다. 기본 버퍼는 **4주기, 1920프레임, 40 ms를 유지**한다. 4주기도 엄격한 독립 동시 관찰에서 10/10 통과하지 못했으므로 승인된 설정이라고 주장하지 않는다. 명시적 Python 스트림에 대한 wall time, overhead, 첫 샘플 전달 비율은 두 인터프리터 모두 1.0 미만이다. PA05의 0.2% 예외를 적용하지 않았다. M5 미통과이며 `features.toml`은 변경하지 않았다.
+
+### 1. 환경과 절차 위반
+
+- Intel Core i5-12600KF, 물리 10코어 / 논리 16코어(기존 PA06 하드웨어 기록), Windows 11 Education 10.0.22621, x86-64. Rust/Cargo 1.97.0, MSVC, release/bench 프로필.
+- 일반 CPython 3.14.5: `C:/Users/32170336/AppData/Local/Programs/Python/Python314/python.exe`.
+- CPython 3.14.7 free-threaded, GIL 비활성: `C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe`.
+- 두 환경 모두 NumPy 2.5.3, SciPy 1.18.1, sounddevice 0.5.6, PortAudio V19.7.0-devel. NumPy OpenBLAS ILP64/pocketfft, SciPy OpenBLAS LP64/duccfft. 환경 원문은 `seventh-environment.log`, `seventh-environment-ft.log`에 있다. OMP/MKL/OPENBLAS/NUMEXPR 스레드 변수는 미설정이다.
+- CABLE-A Input → CABLE-A Output, WASAPI, 48000 Hz, stereo float32. Exclusive 거절 후 기존 shared auto-convert 폴백을 측정했다. f32 전송·골든·공개 시그니처는 그대로다.
+- **caller kept machine quiet.** 다른 워커나 빌드를 동시에 실행하지 않았고 모든 명령은 포그라운드에서 종료했다. 단, 워커가 기존 Python 오라클의 `--environment-only`를 호출하면서 **금지된 프로세스 조회를 한 번 실행했다.** 프로세스를 종료하거나 종료를 요청하지 않았다. 따라서 요청한 `other processes were not queried` 문구는 사실과 달라 사용할 수 없다. 이후 환경 수집에는 프로세스를 조회하지 않는 `seventh_environment.py`를 사용했다.
+- 모든 측정 자료와 로그는 `crates/impulcifer-audio-io/tests/bench_support/` 안에 있으며 git에서 무시한다. 아래 파일명은 이 디렉터리를 기준으로 한다. 캡처는 추적 파일에 추가하지 않았다.
+
+워밍업 3회, headphones 5회, seven-segment 3회, 첫 전달 10회, 열거·open/close는 20 calls/batch를 유지했다. Headphones는 295270프레임(6.151458333333초), seven-segment는 2066890프레임(43.060208333333초)이다. 진단 캡처는 끝부분 검증을 위해 12000프레임을 추가한다. Wall에는 읽기·준비·해석·세션 열기·재생/캡처·정지·해제·join을 포함하고 출력 파일 쓰기는 제외한다. 성능 측정에서는 trace를 끈다. CPU는 ACK observer로 같은 headphones 구간의 Rust user+kernel을 측정하며 Windows의 15.625 ms 카운터 단위를 유지한다.
+
+### 2. 구현과 API 확인
+
+Windows 전용 의존성 `audio_thread_priority = { version = "0.37.0", default-features = false }`를 추가했다. 기본 `dbus` 기능을 끄며 Windows 의존성에 D-Bus를 추가하지 않는다. Cargo가 생성한 lock 변경은 새 의존성과 그 전이 의존성 `mach2 0.4.3`, 기존 mach2 버전 구분뿐이다.
+
+확인한 공개 함수는 다음과 같다.
+
+```rust
+pub fn promote_current_thread_to_real_time(
+    audio_buffer_frames: u32,
+    audio_samplerate_hz: u32,
+) -> Result<RtPriorityHandle, AudioThreadPriorityError>
+// demote_current_thread_from_real_time consumes RtPriorityHandle
+// and returns Result<(), AudioThreadPriorityError>.
+```
+
+[공개 API](https://docs.rs/audio_thread_priority/0.37.0/audio_thread_priority/), [승격 함수](https://docs.rs/audio_thread_priority/0.37.0/audio_thread_priority/fn.promote_current_thread_to_real_time.html), [Windows 구현](https://docs.rs/crate/audio_thread_priority/0.37.0/source/src/rt_win.rs)을 확인했다. **문서 설명은 Pro Audio지만 0.37.0의 Windows 구현은 `Audio` 작업을 등록한다.** 버퍼·샘플레이트 인자는 Windows 구현에서 사용하지 않는다. 별도 `AvSetMmThreadPriority` 호출도 없다. 이번 결과는 Pro Audio 승격 실험이 아니다. 허용 범위를 벗어나 의존성을 패치하거나 직접 Win32 unsafe를 추가하지 않았다.
+
+`RealtimeGuard`는 세션이 소유하는 `Rc`와 thread-local `Weak`를 사용한다. 같은 스레드의 두 세션은 한 등록을 공유하며 마지막 소유자가 사라질 때 같은 스레드에서 해제한다. 승격 실패는 세션 열기 오류로 반환한다. 해제 실패는 trace와 stderr에 남긴다. 오류·unwind·중복 세션 수명 테스트 2개를 추가했고 성공한 80회 진단의 render/capture trace에서 승격 160회와 해제 성공 160회를 확인했다. `Rc`의 비-Send 성질로 스레드 간 이동을 막는다.
+
+기존 하네스 `--period`는 컴파일된 설정만 검사했다. 반복 측정을 위해 비공개 환경 변수 `IMPULCIFER_PA05_SHARED_PERIODS=2|3|4`를 추가했고 미설정 시 4를 사용한다. 다른 값은 오류다. 공개 Rust API는 추가하지 않았다. `sixth_paired.py`는 headphones 선택, 신호별 파일 이름, 각 동시 녹음 전체를 한 고정 오프셋에서 원본과 비교하는 판정을 추가했다. 이 검사는 gain fit 없이 두 채널 최대 오차 4e-6 이하를 요구한다(기존 CABLE-A 양자화 기준). 골든 허용 오차를 바꾼 것이 아니다. 공통 외부 손실을 허용하던 `accepted=true`만으로 통과시키지 않는다.
+
+직접 작성한 **unsafe는 0**이며 `#![forbid(unsafe_code)]`와 `unsafe-budget.toml`은 그대로다. 의존성 내부 Win32 호출은 해당 크레이트가 구현한다. `HARDWARE.md`는 기본 버퍼가 바뀌지 않아 수정하지 않았다. CHANGELOG·서비스·Python 오라클 및 production 트리는 변경하지 않았다.
+
+### 3. 주기별 무결성
+
+아래 카운터는 각 10회의 합계다. D는 첫 패킷을 제외한 discontinuity 수, G는 packet index gap 프레임 수다. 모든 그룹의 SILENT 패킷 수는 0이며 독립 Python observer의 callback status 목록은 비어 있었다. **빈 status 목록은 파형 무결성을 보장하지 않는다.** 통과 수는 원본과 두 동시 녹음의 온전한 일치, 카운터 0, 누락·반복·미분류 구간 없음까지 요구한다.
+
+| 주기 | 실제 버퍼 | 신호 / run | underrun | D | G | 엄격한 동시 관찰 통과 |
+|---:|---:|---|---:|---:|---:|---:|
+| 2 | 1056 | headphones 150~159 | 16 | 2 | 768 | 0/10 |
+| 2 | 1056 | seven 160~169 | 16 | 8 | 3072 | 0/10 |
+| 3 | 1440 | headphones 150~159 | 13 | 1 | 0 | 0/10 |
+| 3 | 1440 | seven 160~169 | 14 | 0 | 0 | 0/10 |
+| 4 | 1920 | headphones 150~159 | 0 | 5 | 0 | 6/10 |
+| 4 | 1920 | seven 160~169 | 0 | 0 | 0 | 7/10 |
+| 4, 최종 | 1920 | headphones 200~209 | 0 | 1 | 0 | 6/10 |
+| 4, 최종 | 1920 | seven 200~209 | 0 | 0 | 0 | 8/10 |
+
+최종 headphones 202·203에는 각각 공통 손실 480프레임이 있고 200·204는 분석을 확정하지 못했다. 최종 seven 206에는 공통 손실 353프레임이 있으며 205는 미확정이다. 손실의 원인이 Windows 엔진인지 VB-Cable인지 확정하지 못했다. 4주기를 유지하는 결정은 작은 버퍼를 승인하지 않았다는 뜻이며 4주기의 무손실 보장이 아니다.
+
+80회 개별 행, 공통 손실·분석 확정 여부, 소스 최대 오차는 `seventh-evidence.log`와 `seventh-evidence.json`에 보존했다. 각 원본은 `sixth-p{period}-{run}-{headphones|seven}-*`다. 2주기 seven 150~154를 처음 시도했을 때 기존 산출물 충돌로 **종료 코드 1**을 반환했다. 재생 전 덮어쓰기 방지 검사에서 중단됐으며 로그를 삭제하지 않았다. 새 번호 160~169로 측정했다. 이 다섯 명령을 성공으로 세지 않는다. 최종 200~209는 별도 검증이며 이전 실패를 교체하지 않는다.
+
+### 4. PA06 전후 비율
+
+비율은 Python median / Rust median이며 일반 / FT 순서다. 이후 비율의 Rust 분모는 CPU ACK observer를 붙인 전체 실행 `seventh-rust-observed.log`로 고정했다. 별도 standalone 실행도 아래에 보존하며 유리한 행만 골라 섞지 않는다. Open/close는 기존 **duplex `sd.Stream`** 비교다.
+
+| 연산 | PA06 일반 / FT | 이후 명시적 스트림 일반 / FT | 판정 |
+|---|---:|---:|---|
+| 캐시 열거 | 75.650558 / 74.828996 | 78.547893 / 76.911877 | 통과 |
+| duplex open/close | 1.273951 / 1.292799 | 1.363745 / 1.245404 | 통과 |
+| headphones wall | 0.996738 / 0.996549 | 0.997478 / 0.997627 | 미달 |
+| headphones overhead | 0.660448 / 0.640820 | 0.723585 / 0.739944 | 미달 |
+| seven wall | 0.999532 / 0.999568 | 0.999639 / 0.999685 | 미달 |
+| seven overhead | 0.719489 / 0.740656 | 0.777739 / 0.805918 | 미달 |
+| 첫 샘플 전달 | 0.869886 / 0.890895 | 0.764189 / 0.711882 | 미달 |
+| CPU | 2.333333 / 2.000000 | 3.000000 / 2.500000 | 통과, 카운터 정밀도 제한 |
+
+실제 `core.recorder.play_and_record`를 쓰는 production 실행도 두 인터프리터로 완료했다. 첫 샘플 행은 그 실행에서도 별도 입력 시작→첫 callback 측정이다. production 재생 자체의 첫 소스 도착 지연으로 해석하지 않는다. 기존 convenience-stream 특성과 파형 무결성은 위 sixth-run의 제한이 계속 적용된다.
+
+| 연산 | 이후 production 일반 / FT |
+|---|---:|
+| 캐시 열거 | 77.068966 / 77.486590 |
+| duplex open/close | 1.273735 / 1.338634 |
+| headphones wall | 0.998808 / 0.999423 |
+| headphones overhead | 0.869391 / 0.936721 |
+| seven wall | 1.000164 / 1.000020 |
+| seven overhead | 1.100785 / 1.012603 |
+| 첫 샘플 전달 | 0.739952 / 1.131744 |
+| CPU | 2.500000 / 3.000000 |
+
+#### Rust 원문 표 (CPU observer 포함)
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 0.026100 | 0.026000 |
+| open_close_session | 20 calls/batch | 178.484200 | 175.320900 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6208.106200 | 6204.961300 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 56.647867 | 53.502967 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43130.304400 | 43129.595200 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 70.096067 | 69.386867 |
+| first_sample_latency | input session start call to first nonempty application read return; 10 runs | 31.037100 | 20.105700 |
+| capture_loop_cpu | process user+kernel; 5 runs | 31.250000 | 15.625000 |
+
+#### Rust 원문 표 (standalone)
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 0.026800 | 0.026100 |
+| open_close_session | 20 calls/batch | 176.419600 | 175.520600 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6208.774500 | 6206.400700 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 57.316167 | 54.942367 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43128.979100 | 43119.491200 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 68.770767 | 59.282867 |
+| first_sample_latency | input session start call to first nonempty application read return; 10 runs | 31.175650 | 19.893100 |
+
+sys-win fresh COM 열거는 20 calls/batch 중앙값 **272.007700 ms**, 최소 **270.334700 ms**다. Python PortAudio의 캐시 조회와 작업이 다르므로 같은 연산의 비율로 판정하지 않는다.
+
+#### Python 3.14.5 원문 표 (명시적 스트림)
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.050100 | 2.025900 |
+| open_close_session | 20 calls/batch | 243.406900 | 241.085100 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6192.447900 | 6188.740800 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 40.989567 | 37.282467 |
+| capture_loop_cpu | process user+kernel; 5 runs | 93.750000 | 78.125000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43114.724800 | 43105.355600 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 54.516467 | 45.147267 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 23.718200 | 17.174400 |
+
+#### Python 3.14.7t 원문 표 (명시적 스트림)
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.007400 | 1.983300 |
+| open_close_session | 20 calls/batch | 222.284900 | 220.148400 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6193.374600 | 6189.124300 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 41.916267 | 37.665967 |
+| capture_loop_cpu | process user+kernel; 5 runs | 78.125000 | 31.250000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43116.700000 | 43112.304700 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 56.491667 | 52.096367 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 22.094750 | 13.434700 |
+
+#### Python 3.14.5 원문 표 (production)
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.011500 | 1.995500 |
+| open_close_session | 20 calls/batch | 227.341600 | 226.420600 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6200.707500 | 6199.466500 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 49.249167 | 48.008167 |
+| capture_loop_cpu | process user+kernel; 5 runs | 78.125000 | 62.500000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43137.369000 | 43128.033400 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 77.160667 | 67.825067 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 22.965950 | 20.969800 |
+
+#### Python 3.14.7t 원문 표 (production)
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.022400 | 2.018000 |
+| open_close_session | 20 calls/batch | 238.925100 | 228.275300 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6204.521600 | 6201.772300 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 53.063267 | 50.313967 |
+| capture_loop_cpu | process user+kernel; 5 runs | 93.750000 | 62.500000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43131.187800 | 43128.724200 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 70.979467 | 68.515867 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 35.126050 | 23.390700 |
+
+### 5. 미달 연산의 프로파일과 남은 작업
+
+- 승격/해제 중앙값은 각각 **106.5 / 9 μs**였다. `initialize_client` 중앙값 **7296.5 μs**, enumerator **899 μs**이며 두 세션은 동시에 열기 때문에 이 중앙값들을 더해 duplex wall time으로 해석하면 안 된다. Open/close 비율은 1.5 미만이지만 1.0 이상이다.
+- 첫 캡처 패킷→호출자 전달은 33표본 중앙값 **1 μs**, 최대 **2 μs**다. 첫 전달의 약 31 ms는 이 복사 단계의 CPU 비용 때문이라고 볼 수 없다. 기존 capture worker가 직접 애플리케이션 전달을 처리하므로 제거할 추가 전달 스레드는 없다. 입력 시작·엔진 패킷 도착·이벤트 대기에 대한 추가 조사가 필요하다.
+- 첫 render buffer는 **이미 Start 전에 제출**한다. preroll→Start 중앙값은 **375.5 μs**다. 같은 최적화를 다시 추가하지 않았다.
+- 최종 4주기 seven 20회에서 마지막 write→MMCSS 해제 중앙값은 **41.330 ms**(최소 40.678, 최대 42.200 ms)다. 이 구간은 drain과 정지·해제 비용을 함께 포함한다. 전부 불필요한 대기라고 단정할 수 없다. 프레임 수에 정확히 맞춘 drain 단축은 구현하지 못했다.
+- 승격만으로 작은 버퍼의 underrun을 해결하지 못했다. 4주기의 공통 손실·관찰자 불일치·미확정 원인도 해결하지 못했다. `Audio`와 `Pro Audio` 차이의 영향은 측정하지 않았다.
+
+근거는 `seventh-profile-summary.json`, `seventh-latency-profile-*.csv`, 80회 원본 trace다. 골든이나 수치 합산 순서는 바뀌지 않았으며 recording golden 테스트는 그대로 통과했다. 새 골든 최대 오차 측정이나 전체 pipeline 감사 완료를 주장하지 않는다.
+
+### 6. 실행 명령과 검증
+
+작업 디렉터리는 `E:/Impulcifer`다. `seventh_run.py <name> <command...>`는 해당 명령을 동기 실행하고 `seventh-<name>.log`에 argv·전체 출력·종료 코드를 보존한다. 성공 로그를 덮어쓰지 않는다. 아래 벤치·오라클·검증 명령은 모두 종료 코드 0이다. 부모 세션은 fmt·clippy·두 오디오 크레이트 테스트·service recording·CABLE-A 실기·policy를 별도로 재실행했다(`seventh-parent-*.log`).
+
+```powershell
+cargo bench -p impulcifer-audio-io --bench perf --no-run
+cargo fmt --all -- --check
+cargo clippy -p impulcifer-audio-io -p impulcifer-sys-win -p impulcifer-service --all-targets -- --no-deps -D warnings
+cargo test -p impulcifer-audio-io -p impulcifer-sys-win
+cargo test -p impulcifer-service recording
+cargo test -p impulcifer-service --test recording -- --ignored recording_virtual_cable_end_to_end
+cargo test -p impulcifer-policy
+cargo bench -p impulcifer-audio-io --bench perf
+cargo bench -p impulcifer-sys-win --bench perf
+py -3.14 E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py
+py -3.14 E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py --explicit-streams
+& C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py
+& C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py --explicit-streams
+py -3.14 E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py --observe-rust cargo bench -p impulcifer-audio-io --bench perf
+```
+
+무결성 명령은 다음 템플릿의 모든 조합으로 실행했다. P=2/3/4, headphones N=150~159, seven N=160~169이며 최종 P=4는 두 신호 모두 N=200~209다. 실행 파일은 이 빌드의 해시이며 다른 빌드에서 그대로 사용하면 안 된다. `--period`는 이제 하네스가 자식에게 전달하는 환경 변수로 실제 설정한다.
+
+```powershell
+py -3.14 E:/Impulcifer/crates/impulcifer-audio-io/tests/bench_support/sixth_paired.py --period <P> --run <N> --op <play_record_headphones_sweep|play_record_7_speaker_set> --exe E:/Impulcifer/target/release/deps/perf-8808d997687b49b0.exe
+py -3.14 E:/Impulcifer/crates/impulcifer-audio-io/tests/bench_support/seventh_environment.py
+& C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe E:/Impulcifer/crates/impulcifer-audio-io/tests/bench_support/seventh_environment.py
+```
+
+일반 환경 수집은 처음에 오라클의 `--environment-only`를 사용했다(위 프로세스 조회 위반). 위 별도 환경 스크립트는 FT 수집에 사용했다. 명령별 실제 argv는 각 로그 첫 줄에 있다. 순차 실행기 `seventh_series.py`는 부모 검토에서 실패 종료 코드를 반환하도록 수정하고 실행 파일 인자를 추가했다. 측정 코드는 바꾸지 않았으므로 재생을 다시 하거나 기존 결과를 교체하지 않았다.
+
+부모 검증의 실행된 테스트 묶음 원문은 다음과 같다. 0개 실행된 필터 대상·doc-test 행은 로그에 보존했다.
+
+```text
+# audio-io/sys-win: 41 passed, 5 hardware ignored
+ test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+ test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+# service recording filter
+ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.00s
+ test result: ok. 9 passed; 0 failed; 1 ignored; 0 measured; 4 filtered out; finished in 0.67s
+# CABLE-A integration
+ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 23.27s
+# policy
+ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.75s
+```
+
+`bench_smoke_impulcifer_audio_io`와 `bench_smoke_impulcifer_sys_win`은 통과했다. fmt·clippy도 부모 재실행에서 종료 코드 0이다. 커밋·푸시·CI 실행은 요청하지 않아 수행하지 않았다. Rust 검증 통과는 성능·무결성 기준 통과와 다르다.
+
+최종 변경 파일은 아래 `git status --porcelain`과 같다. 대용량 산출물은 없다.
+
+```text
+ M Cargo.lock
+ M crates/impulcifer-audio-io/tests/bench_support/analyze_fifth.py
+ M crates/impulcifer-audio-io/tests/bench_support/sixth_paired.py
+ M crates/impulcifer-sys-win/Cargo.toml
+ M crates/impulcifer-sys-win/src/lib.rs
+ M docs/rust/perf/impulcifer-audio-io.md
+?? crates/impulcifer-audio-io/tests/bench_support/seventh_environment.py
+?? crates/impulcifer-audio-io/tests/bench_support/seventh_evidence.py
+?? crates/impulcifer-audio-io/tests/bench_support/seventh_run.py
+?? crates/impulcifer-audio-io/tests/bench_support/seventh_series.py
+```
+
 ## Sixth run, 2026-09-08: audit NOT PASSED
 
 ### Verdict
