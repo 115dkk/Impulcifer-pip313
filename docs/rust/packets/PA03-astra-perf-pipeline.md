@@ -25,7 +25,7 @@ Acceptance: `python_median / rust_median >= 1.0` for both scenarios against **bo
 ## Verification (foreground, paste output)
 ```
 cargo build --release -p impulcifer-service --example demo_brir
-cargo bench -p impulcifer-service --bench perf
+cargo bench -p impulcifer-service --bench perf -- --pipeline
 py -3.14 E:/Impulcifer/tests/migration/bench_oracle_pipeline.py
 cargo fmt -p impulcifer-service -p impulcifer-dsp -- --check
 cargo clippy -p impulcifer-service -p impulcifer-dsp --all-targets -- --no-deps -D warnings

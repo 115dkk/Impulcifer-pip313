@@ -2,6 +2,9 @@
 
 Date: 2026-09-08. Registry: `perf.pipeline-demo`. Test: `impulcifer-service::bench_smoke_pipeline_demo`.
 
+
+> PA04부터 `cargo bench -p impulcifer-service --bench perf`의 기본 워크로드는 서비스 계층 벤치입니다. 파이프라인 벤치는 `-- --pipeline`을 붙여야 합니다(Codex #196).
+
 ## Verdict
 
 The current Rust implementation passes the numerical runtime threshold for both demo scenarios against CPython 3.14.5 and 3.14.7t. No DSP optimization was needed or performed. All whole-run ratios exceed 1.5, including separate in-process comparisons.
@@ -157,7 +160,7 @@ All parent verification commands ran in the foreground with 600-second deadlines
 cargo build --release -p impulcifer-service --example demo_brir
     Finished `release` profile [optimized] target(s) in 0.88s
 
-cargo bench -p impulcifer-service --bench perf
+cargo bench -p impulcifer-service --bench perf -- --pipeline
     Finished `bench` profile [optimized] target(s) in 0.22s
 | scenario | rust median ms | rust min ms |
 | default | 1162.476000 | 1134.730100 |
@@ -263,7 +266,7 @@ Commands completed with exit 0:
 
 ```text
 py -3.14 E:/Impulcifer/tests/migration/bench_oracle_pipeline.py
-cargo bench -p impulcifer-service --bench perf
+cargo bench -p impulcifer-service --bench perf -- --pipeline
 ```
 
 Raw process/environment evidence:
@@ -402,7 +405,7 @@ Both required foreground commands completed with exit 0:
 
 ```text
 py -3.14 E:/Impulcifer/tests/migration/bench_oracle_pipeline.py
-cargo bench -p impulcifer-service --bench perf
+cargo bench -p impulcifer-service --bench perf -- --pipeline
 ```
 
 Full command stdout/stderr:

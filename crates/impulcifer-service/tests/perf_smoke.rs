@@ -1,6 +1,17 @@
 #![forbid(unsafe_code)]
 #[path = "../examples/demo_brir.rs"]
 mod demo;
+#[path = "bench_support/service.rs"]
+#[allow(dead_code)]
+mod service;
+
+#[test]
+fn bench_smoke_impulcifer_service() {
+    let fixture = service::Fixture::new();
+    for (op, _) in service::OPS {
+        assert!(fixture.sample(op, 1, true) > 0.0);
+    }
+}
 
 #[test]
 fn bench_smoke_pipeline_demo() {

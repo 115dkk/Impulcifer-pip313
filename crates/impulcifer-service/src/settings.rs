@@ -200,6 +200,20 @@ pub fn catalog(language: &str) -> crate::brir::Catalog {
 }
 
 fn strings(language: &str) -> Map<String, Value> {
+    // Embedded catalogues cannot change at runtime. Parse each supported locale
+    // once, but return an owned copy so callers cannot mutate the cache.
+    static CATALOGS: [std::sync::OnceLock<Map<String, Value>>; 9] =
+        [const { std::sync::OnceLock::new() }; 9];
+    let index = LANGUAGES
+        .iter()
+        .position(|(code, _)| *code == language)
+        .unwrap_or(0);
+    CATALOGS[index]
+        .get_or_init(|| parse_strings(LANGUAGES[index].0))
+        .clone()
+}
+
+fn parse_strings(language: &str) -> Map<String, Value> {
     let english = include_str!("../../../i18n/locales/en.json");
     let selected = match language {
         "ko" => include_str!("../../../i18n/locales/ko.json"),
@@ -234,6 +248,17 @@ const EXTRA_STRINGS: &[(&str, &str, &str)] = &[(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_catalogues_match_parsing_and_are_independent() {
+        for (language, _) in LANGUAGES {
+            let mut first = strings(language);
+            assert_eq!(first, parse_strings(language));
+            first.clear();
+            assert_eq!(strings(language), parse_strings(language));
+        }
+        assert_eq!(strings("unknown"), strings("en"));
+    }
 
     #[test]
     fn platform_locale_maps_to_a_supported_language() {
