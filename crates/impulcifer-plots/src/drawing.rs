@@ -599,6 +599,71 @@ pub(crate) fn valid_limits(l: AxisLimits) -> Result<(), PlotError> {
         Ok(())
     }
 }
+/// A data-space segment clipped to the axes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ClippedSegment {
+    pub start: (f64, f64),
+    pub end: (f64, f64),
+    /// The original start was inside the axes (nothing was cut there).
+    pub starts_inside: bool,
+    /// The original end was inside the axes.
+    pub ends_inside: bool,
+}
+/// Liang-Barsky clipping of the segment `p0`-`p1` against the axis limits, done in
+/// the axes' own coordinates (log10 on logarithmic axes) so a straight line on the
+/// picture stays straight; the endpoints come back in data space. `None` when the
+/// segment lies entirely outside.
+pub(crate) fn clip_segment(a: &Axes, p0: (f64, f64), p1: (f64, f64)) -> Option<ClippedSegment> {
+    let tx = |v: f64| if a.log_x { v.log10() } else { v };
+    let ty = |v: f64| if a.log_y { v.log10() } else { v };
+    let (u0, v0) = (tx(p0.0), ty(p0.1));
+    let (du, dv) = (tx(p1.0) - u0, ty(p1.1) - v0);
+    let (u_min, u_max) = (tx(a.limits.x.0), tx(a.limits.x.1));
+    let (v_min, v_max) = (ty(a.limits.y.0), ty(a.limits.y.1));
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    for (p, q) in [
+        (-du, u0 - u_min),
+        (du, u_max - u0),
+        (-dv, v0 - v_min),
+        (dv, v_max - v0),
+    ] {
+        if p == 0.0 {
+            if q < 0.0 {
+                return None;
+            }
+            continue;
+        }
+        let r = q / p;
+        if p < 0.0 {
+            if r > t1 {
+                return None;
+            }
+            t0 = t0.max(r);
+        } else {
+            if r < t0 {
+                return None;
+            }
+            t1 = t1.min(r);
+        }
+    }
+    let back_x = |u: f64| if a.log_x { 10_f64.powf(u) } else { u };
+    let back_y = |v: f64| if a.log_y { 10_f64.powf(v) } else { v };
+    let at = |t: f64| {
+        if t == 0.0 {
+            p0
+        } else if t == 1.0 {
+            p1
+        } else {
+            (back_x(u0 + t * du), back_y(v0 + t * dv))
+        }
+    };
+    Some(ClippedSegment {
+        start: at(t0),
+        end: at(t1),
+        starts_inside: t0 == 0.0,
+        ends_inside: t1 == 1.0,
+    })
+}
 pub(crate) fn draw_lines(area: &Area<'_>, a: Axes, lines: &[Line<'_>]) -> Result<(), PlotError> {
     for s in lines {
         if s.y.is_empty() {
@@ -609,31 +674,38 @@ pub(crate) fn draw_lines(area: &Area<'_>, a: Axes, lines: &[Line<'_>]) -> Result
                 "matching finite line arrays required".into(),
             ));
         }
-        let mut points = Vec::new();
-        for (&x, &y) in s.x.iter().zip(s.y) {
-            if a.contains(x, y) {
+        let color = s.color.mix(if s.raw { RAW_ALPHA } else { 1. });
+        let width = if s.raw { RAW_WIDTH } else { SMOOTH_WIDTH };
+        let mut points: Vec<(i32, i32)> = Vec::new();
+        if s.x.len() == 1 && a.contains(s.x[0], s.y[0]) {
+            points.push(a.map(s.x[0], s.y[0]));
+        }
+        // Every segment is clipped to the axes, so a curve that leaves the frame is
+        // drawn up to the boundary and picked up again where it comes back, instead
+        // of vanishing between its last inside sample and its first outside one.
+        let mut last_ended_inside = false;
+        for i in 1..s.x.len() {
+            let Some(c) = clip_segment(&a, (s.x[i - 1], s.y[i - 1]), (s.x[i], s.y[i])) else {
+                if !points.is_empty() {
+                    stroke(area, &points, color, width, s.dash)?;
+                    points.clear();
+                }
+                last_ended_inside = false;
+                continue;
+            };
+            if !(c.starts_inside && last_ended_inside) && !points.is_empty() {
+                stroke(area, &points, color, width, s.dash)?;
+                points.clear();
+            }
+            for (x, y) in [c.start, c.end] {
                 let p = a.map(x, y);
                 if points.last() != Some(&p) {
                     points.push(p);
                 }
-            } else if !points.is_empty() {
-                stroke(
-                    area,
-                    &points,
-                    s.color.mix(if s.raw { RAW_ALPHA } else { 1. }),
-                    if s.raw { RAW_WIDTH } else { SMOOTH_WIDTH },
-                    s.dash,
-                )?;
-                points.clear();
             }
+            last_ended_inside = c.ends_inside;
         }
-        stroke(
-            area,
-            &points,
-            s.color.mix(if s.raw { RAW_ALPHA } else { 1. }),
-            if s.raw { RAW_WIDTH } else { SMOOTH_WIDTH },
-            s.dash,
-        )?;
+        stroke(area, &points, color, width, s.dash)?;
     }
     Ok(())
 }
@@ -695,6 +767,92 @@ pub(crate) fn empty(area: &Area<'_>, title: &str, reason: &str) -> Result<(), Pl
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn segments_are_clipped_to_the_axes_in_axis_space() {
+        let a = Axes {
+            bounds: (0, 0, 100, 100),
+            limits: AxisLimits {
+                x: (0., 10.),
+                y: (0., 1.),
+            },
+            log_x: false,
+            log_y: false,
+        };
+        let inside = clip_segment(&a, (2., 0.2), (4., 0.8)).unwrap();
+        assert_eq!(inside.start, (2., 0.2));
+        assert_eq!(inside.end, (4., 0.8));
+        assert!(inside.starts_inside && inside.ends_inside);
+        let top = clip_segment(&a, (2., 0.5), (4., 1.5)).unwrap();
+        assert_eq!(top.start, (2., 0.5));
+        assert!((top.end.0 - 3.).abs() < 1e-12 && (top.end.1 - 1.).abs() < 1e-12);
+        assert!(top.starts_inside && !top.ends_inside);
+        let through = clip_segment(&a, (0., -1.), (10., 3.)).unwrap();
+        assert!((through.start.0 - 2.5).abs() < 1e-12 && through.start.1.abs() < 1e-12);
+        assert!((through.end.0 - 5.).abs() < 1e-12 && (through.end.1 - 1.).abs() < 1e-12);
+        assert!(!through.starts_inside && !through.ends_inside);
+        assert!(clip_segment(&a, (0., 2.), (10., 3.)).is_none());
+        assert!(clip_segment(&a, (11., 0.5), (12., 0.5)).is_none());
+        let log = Axes {
+            bounds: (0, 0, 100, 100),
+            limits: AxisLimits {
+                x: (10., 1000.),
+                y: (0., 1.),
+            },
+            log_x: true,
+            log_y: false,
+        };
+        let left = clip_segment(&log, (1., 0.5), (100., 0.5)).unwrap();
+        assert!((left.start.0 - 10.).abs() < 1e-9 && (left.start.1 - 0.5).abs() < 1e-12);
+        assert_eq!(left.end, (100., 0.5));
+        assert!(!left.starts_inside && left.ends_inside);
+    }
+    #[test]
+    fn curves_leaving_the_frame_are_drawn_up_to_the_boundary() {
+        font().unwrap();
+        let (w, h) = (200_usize, 100_usize);
+        let mut buffer = vec![255_u8; w * h * 3];
+        {
+            let root =
+                BitMapBackend::with_buffer(&mut buffer, (w as u32, h as u32)).into_drawing_area();
+            let a = Axes {
+                bounds: (0, 0, w as i32 - 1, h as i32 - 1),
+                limits: AxisLimits {
+                    x: (0., 10.),
+                    y: (0., 1.),
+                },
+                log_x: false,
+                log_y: false,
+            };
+            // A spike above the frame: the curve must reach the top edge at x = 2.5
+            // and come back at x = 7.5, not stop at the last inside sample.
+            let x = [0., 5., 10.];
+            let y = [0.5, 1.5, 0.5];
+            draw_lines(
+                &root,
+                a,
+                &[Line {
+                    x: &x,
+                    y: &y,
+                    label: "",
+                    color: RGBColor(0, 0, 255),
+                    raw: false,
+                    dash: Dash::Solid,
+                }],
+            )
+            .unwrap();
+            root.present().unwrap();
+        }
+        let inked = |px: usize, py: usize| {
+            let i = (py * w + px) * 3;
+            buffer[i] != 255 || buffer[i + 1] != 255 || buffer[i + 2] != 255
+        };
+        for cx in [50_usize, 149] {
+            assert!(
+                (0..3).any(|dy| (cx.saturating_sub(3)..=cx + 3).any(|px| inked(px, dy))),
+                "no ink at the top edge near x={cx}"
+            );
+        }
+    }
     #[test]
     fn nice_linear_steps_cover_asymmetric_tiny_and_large_ranges() {
         for exponent in -12..=12 {
