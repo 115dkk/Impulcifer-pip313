@@ -99,7 +99,7 @@ updater/
 3.x는 Rust 코어 + Tauri 2 셸로 재작성 중이다. 정본은 `docs/rust/ARCHITECTURE.md`와 `docs/adr/0002-rust-tauri-rewrite.md`이며, 조사 근거는 `docs/research/rewrite-stack-2026-09/`에 있다. 2.x Python 트리는 그대로 유지되고(오라클 역할), 저장소 루트의 `Cargo.toml` 워크스페이스에 `crates/*`와 `apps/impulcifer-app`이 추가됐다.
 
 - **IPC와 프론트엔드는 2.x 그대로다.** `webview_ui/`와 i18n 카탈로그는 수정하지 않는다. Tauri 커맨드는 `pywebview_api(method, args)` 하나이고 `apps/impulcifer-app/src/bridge.js`가 `window.pywebview.api`를 폴리필한다.
-- **unsafe는 손수 쓰지 않는다.** 모든 크레이트 루트에 `#![forbid(unsafe_code)]`. `unsafe-budget.toml`의 허용치는 전부 0이며 올리려면 ADR이 필요하다. wasapi-rs의 `WaveFormat::parse`, `Device::from_raw`는 쓰지 않는다. 업스트림 이슈는 올리지 않는다.
+- **unsafe는 손수 쓰지 않는다.** 모든 크레이트 루트에 `#![forbid(unsafe_code)]`. `unsafe-budget.toml`의 허용치는 전부 0이며 올리려면 ADR이 필요하다. wasapi-rs의 `WaveFormat::parse`, `Device::from_raw`는 쓰지 않는다. 업스트림에는 `parse`의 건전성 문제를 HEnquist/wasapi-rs#65로 보고했고(ADR 0002 7항), 그 밖의 이슈는 올리지 않는다.
 - **기능 게이트.** 새 기능은 반드시 루트 `features.toml`에 등록하고, `status = "implemented"`로 바꿀 때는 `tests = ["crate-name::test_fn"]`에 실제로 존재하는 검증 테스트를 적는다. `cargo test -p impulcifer-policy`가 누락을 실패로 만든다. 검증 테스트 없는 구현은 머지하지 않는다.
 - **Windows 오디오는 WASAPI만.** ASIO·DirectSound·MME 없음. exclusive 우선, shared+auto-convert 폴백.
 - **작업 분배.** unsafe 단인 `impulcifer-sys-win`은 Daybreak 워커, 나머지 크레이트(`impulcifer-audio-io` 포함)는 ASTRA 워커가 작업서 단위로 구현한다. 작업서는 `docs/rust/packets/`에 둔다.
