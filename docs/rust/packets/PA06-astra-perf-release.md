@@ -22,6 +22,7 @@ cargo bench -p impulcifer-dsp --bench perf
 py -3.14 E:/Impulcifer/tests/migration/bench_oracle_impulcifer_dsp.py
 cargo bench -p impulcifer-service --bench perf
 py -3.14 E:/Impulcifer/tests/migration/bench_oracle_impulcifer_service.py
+cargo bench -p impulcifer-service --bench perf -- --pipeline
 py -3.14 E:/Impulcifer/tests/migration/bench_oracle_pipeline.py
 cargo bench -p impulcifer-audio-io --bench perf
 cargo bench -p impulcifer-sys-win --bench perf
