@@ -46,9 +46,46 @@ fn theme_from_name(name: &str) -> Option<Theme> {
     }
 }
 
+/// The OS colour preference, as far as the platform reports it.
+fn system_mode() -> dark_light::Mode {
+    dark_light::detect().unwrap_or(dark_light::Mode::Unspecified)
+}
+
+/// Resolves the saved theme name to the theme the page will actually show:
+/// "system" follows the OS preference, exactly as webview_ui/app.js resolves
+/// `prefers-color-scheme` (an unspecified OS answer is light, the browser default).
+fn effective_theme(setting: &str, system: dark_light::Mode) -> &'static str {
+    match setting {
+        "dark" => "dark",
+        "light" => "light",
+        _ => match system {
+            dark_light::Mode::Dark => "dark",
+            _ => "light",
+        },
+    }
+}
+
+const STABLE_FEED: &str =
+    "https://github.com/115dkk/Impulcifer-pip313/releases/latest/download/latest.json";
+const PRERELEASE_FEED: &str =
+    "https://github.com/115dkk/Impulcifer-pip313/releases/download/updater-3x-pre/latest.json";
+
+/// Tauri updater endpoints for this build: a prerelease install reads the rolling
+/// prerelease feed first (GitHub's `/releases/latest` never resolves a
+/// prerelease, so alpha-to-alpha updates would be invisible), a stable install
+/// reads the stable feed only.
+#[cfg_attr(windows, allow(dead_code))]
+fn updater_endpoints(version: &str) -> Vec<&'static str> {
+    if impulcifer_service::update::check::is_prerelease(version) {
+        vec![PRERELEASE_FEED, STABLE_FEED]
+    } else {
+        vec![STABLE_FEED]
+    }
+}
+
 /// The Pulse `--bg-0` tokens of webview_ui/styles.css, painted as the window's
 /// own background so the pre-load flash matches the page (2.x
-/// `_WINDOW_BACKGROUNDS`). "system" follows the dark default like 2.x's fallback.
+/// `_WINDOW_BACKGROUNDS`). `theme` is the resolved theme (see `effective_theme`).
 fn window_background(theme: &str) -> Color {
     if theme == "light" {
         Color(0xf3, 0xf5, 0xf7, 255)
@@ -158,7 +195,17 @@ fn main() {
     let builder = tauri::Builder::default();
     // Windows installs use only Velopack, never the Tauri updater.
     #[cfg(not(windows))]
-    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    let builder = builder.plugin(
+        tauri_plugin_updater::Builder::new()
+            .endpoints(
+                updater_endpoints(env!("CARGO_PKG_VERSION"))
+                    .iter()
+                    .map(|endpoint| endpoint.parse().expect("updater endpoint URL"))
+                    .collect(),
+            )
+            .expect("updater endpoints")
+            .build(),
+    );
     builder
         .plugin(dialog::NativeDialogs::new())
         .plugin(tauri_plugin_opener::init())
@@ -187,15 +234,19 @@ fn main() {
             // title bar and the pre-load background must match the page from
             // the first frame. 2.x applied its DWM dark-title-bar workaround
             // before show and painted the window with the Pulse background.
-            let theme = app.state::<AppState>().service.call("get_ui_settings", Vec::new())
+            let setting = app.state::<AppState>().service.call("get_ui_settings", Vec::new())
                 ["data"]["theme"]
                 .as_str()
                 .unwrap_or("dark")
                 .to_owned();
+            // "system" is resolved against the OS here so the pre-load background
+            // matches the page on a light OS too; the native title bar keeps
+            // following the OS on its own (theme None).
+            let theme = effective_theme(&setting, system_mode());
             let mut builder =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                    .theme(theme_from_name(&theme))
-                    .background_color(window_background(&theme))
+                    .theme(theme_from_name(&setting))
+                    .background_color(window_background(theme))
                     // The frozen HTML references sibling logo/ assets outside frontendDist.
                     // Serve the original embedded bytes at those existing URLs.
                     .on_web_resource_request(|request, response| {
@@ -237,7 +288,7 @@ fn main() {
             if smoke.is_some() {
                 eprintln!("app smoke: settings loaded, applying theme");
             }
-            let _ = window.set_theme(theme_from_name(&theme));
+            let _ = window.set_theme(theme_from_name(&setting));
             if smoke.is_some() {
                 eprintln!("app smoke: setup completed");
             }
@@ -245,4 +296,35 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Impulcifer");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prerelease_installs_read_the_rolling_feed_first() {
+        assert_eq!(
+            updater_endpoints("3.0.0-alpha.0"),
+            vec![PRERELEASE_FEED, STABLE_FEED]
+        );
+        assert_eq!(updater_endpoints("3.0.0"), vec![STABLE_FEED]);
+        for endpoint in [PRERELEASE_FEED, STABLE_FEED] {
+            assert!(endpoint.starts_with("https://github.com/115dkk/Impulcifer-pip313/releases/"));
+            assert!(endpoint.ends_with("/latest.json"));
+            let _: tauri::Url = endpoint.parse().unwrap();
+        }
+    }
+
+    #[test]
+    fn system_theme_resolves_to_the_os_preference() {
+        use dark_light::Mode;
+        assert_eq!(effective_theme("dark", Mode::Light), "dark");
+        assert_eq!(effective_theme("light", Mode::Dark), "light");
+        assert_eq!(effective_theme("system", Mode::Dark), "dark");
+        assert_eq!(effective_theme("system", Mode::Light), "light");
+        assert_eq!(effective_theme("system", Mode::Unspecified), "light");
+        assert_eq!(window_background("light"), Color(0xf3, 0xf5, 0xf7, 255));
+        assert_eq!(window_background("dark"), Color(0x10, 0x12, 0x14, 255));
+    }
 }

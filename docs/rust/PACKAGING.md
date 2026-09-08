@@ -113,7 +113,7 @@ These are requirements for the workflow author, **not commands to execute on thi
 5. Assert `current/sq.version` now names the 3.x version and `impulcifer-app.exe`. Confirm the restarted process executable is inside that install's `current/`, and obtain `bootstrap` through the existing bridge; compare the returned version with the package version. Manifest or PE version alone is not proof that the app started. Check that bundled sweep/Harman data work with `IMPULCIFER_DATA_DIR` unset. Use the smoke observer described in `APP-SMOKE.md`; do not add another Tauri command or assume an unsupported `--version` CLI switch.
 6. Record install_kind, old/new versions, apply exit status, restart/bridge output, and all touched paths. In a `finally` cleanup, stop only fixture-owned processes and run the installed updater's documented `--silent uninstall`. Check that the disposable install/registration was removed and save uninstall output even if earlier assertions failed.
 
-Do not count the local simulated locator test as completion of this real-install M5 requirement. Actual apply behavior and old `--restart` compatibility remain unmeasured here.
+Do not count the local simulated locator test as completion of this real-install M5 requirement. The workflow's `upgrade-windows` job runs `Update.exe apply --package <nupkg>` through `tests/app_smoke/smoke.py --launch-command`, so the updater's own restart relaunches the app with the harness environment, the harness attaches to that process by executable path (`launch.details.relaunched_by_updater`) and drives it like any smoke run.
 
 ## macOS and Linux builds
 
@@ -177,11 +177,11 @@ Example only, using the literal dummy signature `P21-DUMMY-SIGNATURE-NOT-VALID`:
 
 Generate the real JSON using a JSON serializer and the **contents** of each corresponding `.sig` file, not its path, URL, or another encoding of that content. `version` must match the selected release; `pub_date` is RFC 3339. Add `darwin-x86_64` only when its payload was built and signed. Do not add Windows here: installed Windows apps use Velopack. Dummy signatures are intentionally invalid and must never enter the production feed.
 
-The `/releases/latest/` endpoint normally resolves a stable release, not a GitHub prerelease. The successful local test of `3.0.0-alpha.0` does not prove production prerelease discoverability. Decide publication/channel policy in the release workflow without silently changing the preserved P20 endpoint.
+The `/releases/latest/` endpoint resolves the newest stable release only, never a GitHub prerelease. Channel policy (Codex #197): a **stable** install reads the stable feed only (`releases/latest/download/latest.json` for the Tauri updater, `GithubSource` without prereleases for Velopack). A **prerelease** install (the running version has a PEP 440 pre segment such as `3.0.0-alpha.0`) reads the rolling `updater-3x-pre` release's `latest.json` first and the stable feed second (`apps/impulcifer-app/src/main.rs::updater_endpoints`), and on Windows asks the GitHub API with prereleases included (`crates/impulcifer-service/src/update/velopack.rs::source_kind`). `release-3x.yml` refreshes `updater-3x-pre/latest.json` on every 3.x release, stable ones included, so an alpha install is offered the following stable. The `latest.json` URLs point at the versioned release assets; the rolling release holds the manifest only.
 
 ## Python wheel and sdist
 
-The 3.x PyPI project is **`impulcifer`**, not the 2.x **`impulcifer-py313`**. Run these from `crates/impulcifer-python` so maturin uses its pyproject, not the root 2.x Hatch project:
+The 3.x PyPI project is **`impulcifer`**, not the 2.x **`impulcifer-py313`**. The Linux wheel links ALSA (`libasound.so.2`, through cpal) and manylinux does not guarantee that library, so the workflow tags it `linux_x86_64`, attaches it to the GitHub Release only and never uploads it to PyPI; Linux `pip install impulcifer` builds from the sdist (Rust toolchain and `libasound2-dev` required). A manylinux wheel needs an ALSA-free or dlopen build of the audio backend first. Run these from `crates/impulcifer-python` so maturin uses its pyproject, not the root 2.x Hatch project:
 
 ```sh
 cd crates/impulcifer-python

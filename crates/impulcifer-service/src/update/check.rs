@@ -69,6 +69,18 @@ pub fn is_newer_version(current: &str, latest: &str) -> bool {
     }
 }
 
+/// True for a PEP 440 pre-release such as `3.0.0-alpha.0` or `v3.0.0-rc1`: a
+/// prerelease install must be able to see the next prerelease, which GitHub's
+/// `/releases/latest` never resolves. Stable, post, dev and unparsable strings
+/// are not prereleases.
+pub fn is_prerelease(version: &str) -> bool {
+    version
+        .trim_start_matches(['v', 'V'])
+        .parse::<pep440_rs::Version>()
+        .map(|version| version.pre().is_some())
+        .unwrap_or(false)
+}
+
 pub fn download_url(release: &Value, platform: &str) -> Value {
     let Some(assets) = release["assets"].as_array() else {
         return Value::Null;

@@ -258,6 +258,51 @@ fn golden_asset_selection_and_version_compare_match_python() {
 }
 
 #[test]
+fn prerelease_detection_follows_the_pep440_pre_segment() {
+    for (version, expected) in [
+        ("3.0.0-alpha.0", true),
+        ("v3.0.0-rc1", true),
+        ("3.0.0a1", true),
+        ("3.0.0", false),
+        ("2.13.3", false),
+        ("2.3.1.post1", false),
+        ("3.0.0.dev0", false),
+        ("garbage", false),
+    ] {
+        assert_eq!(update::check::is_prerelease(version), expected, "{version}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn velopack_source_follows_the_feed_url_and_the_release_channel() {
+    use update::velopack::{SourceKind, source_kind};
+    let repo = "https://github.com/115dkk/Impulcifer-pip313".to_owned();
+    assert_eq!(
+        source_kind(update::RELEASES_URL, "3.0.0-alpha.0"),
+        SourceKind::Github {
+            repo: repo.clone(),
+            prerelease: true
+        }
+    );
+    assert_eq!(
+        source_kind(update::RELEASES_URL, "3.0.0"),
+        SourceKind::Github {
+            repo,
+            prerelease: false
+        }
+    );
+    assert_eq!(
+        source_kind("http://127.0.0.1:8000", "3.0.0-alpha.0"),
+        SourceKind::Http("http://127.0.0.1:8000".into())
+    );
+    assert_eq!(
+        source_kind("https://github.com/", "3.0.0"),
+        SourceKind::Http("https://github.com/".into())
+    );
+}
+
+#[test]
 fn prerelease_ordering_compares_equal_normalized_bases() {
     for (current, latest, expected) in [
         ("3.0.0-alpha.0", "v3.0.0", true),

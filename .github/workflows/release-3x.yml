@@ -8,15 +8,22 @@ name: Release 3.x
 #   version            read [workspace.package].version from Cargo.toml
 #   build-windows      cargo build + vpk pack (Velopack, pack id Impulcifer)
 #   upgrade-windows    disposable runner: install the newest 2.x Setup, apply the
-#                      3.x package with its Update.exe, start the 3.x app through
-#                      the smoke harness (M5: upgrade from an existing install)
+#                      3.x package with its Update.exe (normal restart path), attach
+#                      the smoke harness to the relaunched app (M5: upgrade from an
+#                      existing install)
 #   build-macos        tauri build --bundles app,dmg + signed updater archive
 #   build-linux        tauri build --bundles appimage + signature
-#   wheels             maturin wheels on three OSes + sdist (PyPI project impulcifer)
+#   wheels             maturin wheels on three OSes + sdist (PyPI project impulcifer;
+#                      the Linux wheel is tagged linux_x86_64 because it links ALSA,
+#                      so it goes to the GitHub Release only, Linux pip uses the sdist)
 #   publish-pypi       only when dispatched with publish_pypi=true (OIDC, env PyPI)
 #   create-release     GitHub Release v<version> with latest.json, releases.win.json,
 #                      SHA256SUMS.txt; prerelease when the version has a suffix, so
 #                      /releases/latest keeps pointing at the 2.x stable release.
+#                      latest.json is also copied to the rolling updater-3x-pre
+#                      release that prerelease installs read (GitHub's /latest never
+#                      resolves a prerelease); Windows prerelease installs ask the
+#                      GitHub API through Velopack's GithubSource instead.
 #
 # Secrets: TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD) for the macOS/Linux updater
 # signatures (public key in apps/impulcifer-app/tauri.conf.json).
@@ -166,22 +173,24 @@ jobs:
           $copied = Join-Path $packages $nupkg.Name
           if ((Get-FileHash $copied).Hash -ne (Get-FileHash $nupkg.FullName).Hash) { throw 'nupkg hash mismatch after copy' }
           $update = Join-Path $root 'Update.exe'
-          "Applying $($nupkg.Name) with $update"
-          $apply = Start-Process -FilePath $update -ArgumentList @('apply', '--package', $copied, '--norestart') -Wait -PassThru
-          "Update.exe apply exit code: $($apply.ExitCode)"
-          if ($apply.ExitCode -ne 0) { throw "apply failed with $($apply.ExitCode)" }
+          $exe = Join-Path $root 'current\impulcifer-app.exe'
+          # The harness runs Update.exe apply itself (no --norestart): the updater
+          # relaunches the app with the harness environment, the harness attaches to
+          # that process by executable path and drives it like any smoke run.
+          "Applying $($nupkg.Name) with $update through the smoke harness (restart path)"
+          & py -3.14 tests/app_smoke/smoke.py --exe $exe --launch-command $update apply --package $copied
+          if ($LASTEXITCODE -ne 0) { throw "smoke harness failed: $LASTEXITCODE" }
+          $summary = Get-Content (Join-Path 'target' 'app-smoke' 'summary.json') -Raw | ConvertFrom-Json
+          if (-not $summary.ok) { throw 'smoke summary reports failure' }
+          $launch = $summary.steps | Where-Object { $_.name -eq 'launch' } | Select-Object -First 1
+          if (-not $launch.details.relaunched_by_updater) { throw 'the app was not relaunched by Update.exe' }
+          "Update.exe apply exit code: $($launch.details.launcher_exit_code); relaunched pid $($launch.details.pid)"
           [xml]$after = Get-Content -LiteralPath $sq
           $afterVersion = $after.package.metadata.version
           "Version after apply: $afterVersion"
           if ($afterVersion -ne '${{ needs.version.outputs.version }}') { throw "expected ${{ needs.version.outputs.version }}, found $afterVersion" }
-          $exe = Join-Path $root 'current\impulcifer-app.exe'
           if (-not (Test-Path $exe)) { throw "3.x executable missing: $exe" }
           if (-not (Test-Path (Join-Path $root 'current\data'))) { throw 'bundled data directory missing after apply' }
-          "Running the in-app smoke harness against the upgraded install"
-          & py -3.14 tests/app_smoke/smoke.py --exe $exe
-          if ($LASTEXITCODE -ne 0) { throw "smoke harness failed: $LASTEXITCODE" }
-          $summary = Get-Content (Join-Path 'target' 'app-smoke' 'summary.json') -Raw | ConvertFrom-Json
-          if (-not $summary.ok) { throw 'smoke summary reports failure' }
           "UPGRADE_OK $before -> $afterVersion"
 
       - name: Uninstall the disposable install
@@ -349,9 +358,11 @@ jobs:
           set -euo pipefail
           extra=""
           if [ "${{ runner.os }}" = "Linux" ]; then
-            # The wheel links libasound2 (ALSA) dynamically like the 2.x PortAudio
-            # dependency did; manylinux tagging is declared, auditing is skipped.
-            extra="--compatibility manylinux_2_34 --auditwheel skip"
+            # The extension links libasound2 (ALSA) through cpal, which manylinux
+            # does not guarantee, so the wheel is tagged linux_x86_64 honestly. It
+            # ships on the GitHub Release only; publish-pypi drops it and Linux pip
+            # installs build from the sdist.
+            extra="--compatibility linux"
           fi
           python -m maturin build --release --features python -m crates/impulcifer-python/Cargo.toml $extra
 
@@ -385,8 +396,12 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: List distributions
-        run: ls -la dist
+      - name: Drop the Linux wheel (linux_x86_64 is not a PyPI tag; Linux installs use the sdist)
+        run: |
+          set -euo pipefail
+          rm -fv dist/*linux_x86_64*.whl
+          ls -la dist
+          ls dist/*.tar.gz >/dev/null
 
       - name: Publish
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -473,6 +488,18 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber
           else
-            gh release create "$TAG" release/* --title "Impulcifer ${VERSION}" --notes "$notes" "${flags[@]}"
+            # A missing tag is created at the checked-out commit, never at the
+            # default branch head (manual dispatch from another branch).
+            gh release create "$TAG" release/* --target "$GITHUB_SHA" --title "Impulcifer ${VERSION}" --notes "$notes" "${flags[@]}"
           fi
           gh release view "$TAG" --json assets -q '.assets[].name'
+          # Prerelease installs (macOS/Linux Tauri updater) cannot see GitHub
+          # prereleases through /releases/latest; they read latest.json from the
+          # rolling updater-3x-pre release, refreshed on every 3.x release (stable
+          # ones too, so an alpha install is offered the following stable).
+          feed=updater-3x-pre
+          if ! gh release view "$feed" >/dev/null 2>&1; then
+            gh release create "$feed" --target "$GITHUB_SHA" --prerelease --title "Impulcifer 3.x prerelease updater feed" --notes "Rolling feed for prerelease installs: latest.json of the newest 3.x release (stable or prerelease). Not a release to install; use the versioned releases."
+          fi
+          gh release upload "$feed" release/latest.json --clobber
+          gh release view "$feed" --json assets -q '.assets[].name'
