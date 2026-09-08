@@ -15,3 +15,10 @@ cpal = "0.18"
 
 [target.'cfg(windows)'.dependencies]
 impulcifer-sys-win = { path = "../impulcifer-sys-win" }
+
+[dev-dependencies]
+impulcifer-io = { path = "../impulcifer-io" }
+
+[[bench]]
+name = "perf"
+harness = false

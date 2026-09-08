@@ -258,6 +258,17 @@ pub fn play_and_record(
         });
         let output = scope.spawn(move || {
             let result = guarded(|| {
+                check(peer_ref)?;
+                // Initialize concurrently, but retain the capture-start permit.
+                // The thread-affine session is created and destroyed here.
+                let (mut session, mode) = open_output_with_policy(
+                    backend,
+                    &request.output,
+                    StreamSpec {
+                        sample_rate,
+                        channels: request.playback.channels,
+                    },
+                )?;
                 loop {
                     check(peer_ref)?;
                     match permit_rx.recv_timeout(POLL) {
@@ -268,15 +279,6 @@ pub fn play_and_record(
                         }
                     }
                 }
-                check(peer_ref)?;
-                let (mut session, mode) = open_output_with_policy(
-                    backend,
-                    &request.output,
-                    StreamSpec {
-                        sample_rate,
-                        channels: request.playback.channels,
-                    },
-                )?;
                 check(peer_ref)?;
                 tx.send(Message::Started(mode))
                     .map_err(|_| AudioError::Cancelled)?;

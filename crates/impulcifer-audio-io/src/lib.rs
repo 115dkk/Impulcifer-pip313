@@ -6,6 +6,7 @@
 //! readiness, play the whole sweep buffer to completion and drain, stop input,
 //! join both threads. Windows uses `impulcifer-sys-win`, other platforms cpal.
 
+pub mod cached_backend;
 pub mod cpal_backend;
 pub mod policy;
 pub mod session;
@@ -16,10 +17,14 @@ use impulcifer_types::audio::AudioBackend;
 pub fn default_backend() -> Box<dyn AudioBackend> {
     #[cfg(windows)]
     {
-        Box::new(impulcifer_sys_win::WasapiBackend::new())
+        Box::new(cached_backend::CachedBackend::new(Box::new(
+            impulcifer_sys_win::WasapiBackend::new(),
+        )))
     }
     #[cfg(not(windows))]
     {
-        Box::new(cpal_backend::CpalBackend::new())
+        Box::new(cached_backend::CachedBackend::new(Box::new(
+            cpal_backend::CpalBackend::new(),
+        )))
     }
 }

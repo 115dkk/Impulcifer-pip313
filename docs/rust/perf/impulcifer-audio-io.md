@@ -1,0 +1,1162 @@
+# PA05: audio-io and sys-win measurement-session overhead
+
+## Sixth run, 2026-09-08: audit NOT PASSED
+
+### Verdict
+
+- Cached enumeration passes: Python/Rust **75.83 / 78.43**. Requested duplex open/close comparator passes: **1.283 / 1.275**.
+- Seven-segment wall time passes the new 0.2% allowance: Rust is **0.028383% / 0.040157%** slower. Headphones wall time **fails**: **0.268353% / 0.245488%** slower. CPU passes: **2.0 / 2.5**.
+- Keep **four shared periods, 1920 frames, 40 ms**. Three periods (1440 frames) and two requested periods (actually 1056 frames) each reported render underruns in **all ten trials**.
+- Four periods: zero render underruns in ten trials. Eight trials have complete independent paired verification, including two externally lost regions totaling **912 frames**. Two further trials have **Python-observer-only deletions**, not Rust deletions; full Rust/source residual matches the clean quantization baseline. Strict contemporaneous paired coverage is missing in those observer gaps, so **10/10 paired acceptance is not claimed**.
+- No safe thread-priority API was found in the allowed libraries. No priority change, unsafe, dependency, public API or registry-status change. Hardware integration and all requested local gates pass. Performance acceptance remains incomplete; passing tests is not a performance pass.
+
+This section supersedes the fifth-run verdict below. Historical data and failed analyses are retained. This run does not establish CPU load as the cause of any loss, nor distinguish the Windows engine from VB-Cable.
+
+### Environment and measurement contract
+
+Same dedicated CABLE-A endpoints: output `CABLE-A Input (VB-Audio Cable A)`, input `CABLE-A Output (VB-Audio Cable A)`, WASAPI, 48000 Hz, stereo float32 transport. Exclusive is refused; memoized shared auto-convert fallback is used. CPU: Intel Core i5-12600KF (Family 6 Model 151), 10 physical/16 logical cores; Windows 11 build 22621; Rust/Cargo 1.97.0. CPython 3.14.5 at `C:/Users/32170336/AppData/Local/Programs/Python/Python314/python.exe`; free-threaded 3.14.7 at `C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe`. Both have NumPy 2.5.3, SciPy 1.18.1, sounddevice 0.5.6, PortAudio V19.7.0-devel. NumPy OpenBLAS ILP64/pocketfft and SciPy OpenBLAS LP64/duccfft configuration output is retained in the sixth environment logs. OMP/MKL/OPENBLAS/NUMEXPR thread variables were unset; no affinity restriction or installation.
+
+Observed audio-related processes: Discord 3128/13112/17004/17824/19580/20044, HLConvolverHost 71740, audiodg 113280. No user process was terminated or asked to close. Commands and agents ran foreground. Independent Python callbacks capture while a synchronous, prebuilt Rust child plays; compilation is not performed during those captures. The machine was not isolated from unrelated applications. The working tree acquired unrelated changes during this session; absence of other system activity was not independently established.
+
+Three warmups; five measured runs/batches, except seven segments use three and first-data/integrity ten. Enumeration/open-close batches contain 20 operations. Wall spans include read/preparation, resolution, open, playback/capture, stop/drop/join; exclude file writes. CPU is user+kernel during the same five headphones runs, observed with psutil, with Windows 15.625 ms counter granularity retained. Timing traces are disabled. All final Rust timing runs report zero render underruns; their aggregate discontinuity boolean is true and does not distinguish the initial flag. Python timing callback status lists are empty. Integrity traces exclude the first discontinuity from abnormal counts.
+
+Headphones: 295270 frames, 6.151458333333 s, bundled mono sweep duplicated to stereo. Seven alternating-channel segments: 2066890 frames, 43.060208333333 s. Timed capture length equals playback length; diagnostic capture adds 12000 frames (250 ms), yielding 2078890 frames. Full trailing-source integrity is established only by the diagnostic captures. Python timing uses explicit `InputStream`/`OutputStream`, **not** `core.recorder.play_and_record`. The unchanged 2.x COM and sounddevice global convenience-stream observations remain documented below. Open/close retains the user's separate **duplex `sd.Stream`** comparator. A worker briefly changed that comparator to two streams; parent restored duplex and uses the original sixth-final logs below. The later `sixth-explicit-open-*` logs and their ratios are retained but **not the acceptance comparator**.
+
+### Final timing output, verbatim
+
+Artifacts below are relative to `crates/impulcifer-audio-io/tests/bench_support/`. The raw captures (`.f32`, `.csv`, `.wav`, `.json`, logs) are not committed; the directory's `.gitignore` keeps them local and only the harness (`mod.rs`) and the analysis scripts are tracked. Primary logs are `sixth-final-rust.log`, `sixth-final-python314.log`, `sixth-final-python314t.log`. Note that `sixth-final-evidence.log` was produced before parent review and substitutes the subsequently rejected two-stream open/close comparator; use the primary logs for that row.
+
+#### Rust
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 0.026300 | 0.026100 |
+| open_close_session | 20 calls/batch | 179.141300 | 175.896800 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6206.751900 | 6200.810200 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 55.293567 | 49.351867 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43132.911500 | 43128.949500 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 72.703167 | 68.741167 |
+| first_sample_latency | input session start call to first nonempty application read return; 10 runs | 31.216850 | 20.019100 |
+| capture_loop_cpu | process user+kernel; 5 runs | 31.250000 | 15.625000 |
+
+#### CPython 3.14.5
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 1.994300 | 1.983400 |
+| open_close_session | 20 calls/batch | 229.870800 | 228.093100 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6190.140500 | 6187.856700 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 38.682167 | 36.398367 |
+| capture_loop_cpu | process user+kernel; 5 runs | 62.500000 | 46.875000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43120.672500 | 43115.736500 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 60.464167 | 55.528167 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 21.811900 | 15.056400 |
+
+#### CPython 3.14.7t
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.062800 | 2.033900 |
+| open_close_session | 20 calls/batch | 228.423800 | 221.445100 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6191.552400 | 6188.091100 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 40.094067 | 36.632767 |
+| capture_loop_cpu | process user+kernel; 5 runs | 78.125000 | 31.250000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43115.597600 | 43113.316600 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 55.389267 | 53.108267 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 22.912350 | 14.235000 |
+
+#### Ratios and remaining costs
+
+Ratio = Python median / Rust median. Excess percentage = `(Rust/Python - 1) * 100`, not `1-ratio`.
+
+| Operation | Python/Rust | Python-t/Rust | Verdict |
+|---|---:|---:|---|
+| Cached enumeration | 75.828897 | 78.433460 | Pass |
+| Duplex open/close | 1.283181 | 1.275104 | Pass |
+| Headphones wall | 0.997324 | 0.997551 | Fail, excess 0.268353% / 0.245488% |
+| Headphones overhead | 0.699578 | 0.725113 | Diagnostic |
+| Seven-segment wall | 0.999716 | 0.999599 | Pass within 0.2%, excess 0.028383% / 0.040157% |
+| Seven-segment overhead | 0.831658 | 0.761855 | Diagnostic |
+| First 480-frame delivery | 0.698722 | 0.733974 | Diagnostic |
+| Process CPU | 2.000000 | 2.500000 | Pass |
+
+Direct fresh sys-win enumeration is 273.570900 median / 267.333800 minimum ms per 20 calls; this is unequal work versus PortAudio's cached enumeration and remains diagnostic. Four-period buffering means a requested 40 ms buffer, not a measured decomposition of all 55–73 ms overhead. The retained concurrent initialization still costs about 8.96 ms per pair; its detailed fifth-run profile remains below, and no new per-stage profile is claimed. Reducing buffering did not pass the underrun gate, so these remaining costs were not hidden by retaining a failing smaller buffer. No sixth-run speedup is claimed for instrumentation alone.
+
+First-data compares **input-start invocation to first 480-frame application delivery**, not playback-start to callback or physical ADC latency. Rust 1024-frame diagnostic median/min: 41.529900/39.392500 ms; Python cumulative >=1024: 42.730900/41.427400; Python-t: 44.132450/42.842400. The original playback-start latency remains unmeasured. Python explicit timing uses automatic blocksize; first callback was 480 frames and reported per-direction latency 22 ms. The independent observer instead explicitly requests 480-frame callbacks.
+
+### impulcifer-sys-win: settings and priority
+
+Only opt-in negotiated-format/period trace details and the explanatory buffer comment were retained from this run's source edits. `SHARED_BUFFER_PERIODS` was tried at 3, then 2, then restored to 4. Actual negotiated buffers were 1440, **1056**, and 1920 frames respectively; the two-period request was 20 ms but the backend reported a 22 ms buffer. All capture packet sizes were 480 frames. The negotiated period trace records 100000 hns (10 ms), requested duration, actual buffer size and transport format. There is no public API change and no added allocation/checksum work in trace-disabled timing.
+
+[wasapi 0.24 documentation](https://docs.rs/wasapi/0.24.0/wasapi/) and installed source, plus [std::thread](https://doc.rust-lang.org/std/thread/index.html), exposed no safe MMCSS or thread-priority setter. None was added. No new native crate or unsafe was permitted. Priority stayed unchanged throughout; its effect on external loss was **not measured**.
+
+### impulcifer-audio-io: independent capture and classification
+
+Every trial opens an independent Python WASAPI InputStream before synchronously launching the prebuilt Rust benchmark. Capture artifacts, callback metadata and in-memory render/capture traces are retained. All **126605** render writes across 30 trials matched immutable source float32 checksums and contiguously submitted all 2066890 source frames per trial. Successful release does not prove engine consumption.
+
+In the tables, `M[a,b)` is missing source frames and `Z[a,b)` is an active zero interval, zero-based half-open stereo frame coordinates. External frame counts combine those kinds; they do not count duplicated channels. `U` is unresolved, never zero. `O` means an observer-only loss diagnosed by the follow-up; strict contemporaneous coverage is unavailable. The original analyzer supports limited splices and failed on some complex observer recordings; original errors and later analyses are retained, not replaced by clean reruns. Smaller-buffer unresolved trials were not accepted even though underruns already disqualified the setting.
+
+#### Three requested periods, 1440-frame buffer
+
+| Run | Internal frames | External frames | Render underruns | Shared source regions / limitation |
+|---:|---:|---:|---:|---|
+| 0 | 0 | 480 | 2 | M[126240,126720) |
+| 1 | 0 | 480 | 2 | M[142560,143040) |
+| 2 | 0 | 480 | 2 | M[1317120,1317600) |
+| 3 | 0 | 0 | 1 | None |
+| 4 | 0 | 0 | 1 | None |
+| 5 | 0 | 0 | 1 | None |
+| 6 | 0 | 0 | 1 | None |
+| 7 | U | U | 1 | Observer alignment failed; post-initial flag 1 |
+| 8 | U | U | 2 | Observer alignment failed; post-initial flags 3 |
+| 9 | 0 | 480 | 2 | M[1982880,1983360) |
+
+All ten fail the underrun gate. Confirmed shared loss totals 1920 frames; not an exhaustive total including unresolved runs.
+
+#### Two requested periods, actual 1056-frame buffer
+
+| Run | Internal frames | External frames | Render underruns | Shared source regions / limitation |
+|---:|---:|---:|---:|---|
+| 0 | 0 | 384 | 1 | Z[672,1056) |
+| 1 | 0 | 1306 | 1 | M[1304736,1305216), M[1585488,1585872); Z[672,1056), Z[2066832,2066890) |
+| 2 | U | U | 1 | Incomplete alignment; 4608 index-gap frames, 12 post-initial flags |
+| 3 | 0 | 384 | 1 | Z[672,1056) |
+| 4 | U | U | 1 | Alignment failed; 8832 index-gap frames, 23 post-initial flags |
+| 5 | 0 | 384 | 1 | Z[672,1056) |
+| 6 | 0 | 768 | 2 | Z[288,672), Z[1728,2112) |
+| 7 | 0 | 1354 | 2 | M[401472,401952); Z[288,672), Z[1728,2112), Z[2066784,2066890) |
+| 8 | U | U | 1 | Unexplained residual; candidates retained |
+| 9 | 0 | 442 | 1 | Z[672,1056), Z[2066832,2066890) |
+
+All ten fail the underrun gate. Run 1 also has one post-initial discontinuity and a 384-frame packet-index gap. Confirmed shared missing/zero frames total 5022, excluding unresolved runs. Shared zeros here do not establish a VB-Cable-only fault: render underruns coexist.
+
+#### Four periods retained, 1920-frame buffer
+
+| Run | Internal frames | External frames | Observer-only frames | Render underruns | Result / source region |
+|---:|---:|---:|---:|---:|---|
+| 0 | 0 | 0 | 0 | 0 | Complete paired verification |
+| 1 | 0 | 432 | 0 | 0 | Complete paired verification; M[1322880,1323312) |
+| 2 | O | O | 4992 | 0 | Full source match; incomplete contemporaneous observer coverage |
+| 3 | 0 | 0 | 0 | 0 | Complete paired verification |
+| 4 | 0 | 0 | 0 | 0 | Complete paired verification |
+| 5 | 0 | 0 | 0 | 0 | Complete paired verification |
+| 6 | 0 | 0 | 0 | 0 | Complete paired verification |
+| 7 | O | O | 384 | 0 | Full source match; observer M[1080384,1080768) |
+| 8 | 0 | 480 | 0 | 0 | Complete paired verification; M[25920,26400) |
+| 9 | 0 | 0 | 0 | 0 | Complete paired verification |
+
+No four-period run had a post-initial capture discontinuity, SILENT packet, packet-index gap or render underrun. Complete paired trials overlap all 2078890 captured frames and are bit-identical between observers, residual 0/0. Clean source-relative unfitted RMS is 1.6122093906661403e-6 / 1.396214288536708e-6. Run 1 has 0.44431154814465135 / 0.3511580109200847; run 8 has 0.02102263844585834 / 1.396214288536708e-6. These nonzero source-relative residuals are retained: external classification is not a claim that the waveform is intact.
+
+Run 8's lost source [25920,26400) was submitted with padding 1440, free/requested/written 480, FNV `93b7a18661d7803a`; capture packet 58 had no SILENT/discontinuity flag. Combined with the independently matched loss this excludes a Rust-capture-only defect for that event. It does not identify the common engine/cable culprit.
+
+### Follow-up on four-period observer failures
+
+`sixth_followup_analysis.py` accounts for both channels with exact local byte matching, then checks the entire Rust source interval at one fixed offset, no gain fit. Parent independently reran it. Trial 2 has **13 observer-only 384-frame deletions** at the following source intervals:
+
+```text
+[146208,146592)   [939648,940032)   [979968,980352)
+[1260768,1261152) [1291008,1291392) [1341408,1341792)
+[1342848,1343232) [1347168,1347552) [1348608,1348992)
+[1485408,1485792) [1882848,1883232) [1913088,1913472)
+[1914528,1914912)
+```
+
+Trial 7 has one observer-only deletion [1080384,1080768). There are no unexplained nonzero observer frames. Trial 2 has 14 exact paired segments covering 2073898 capture frames / 2061898 source frames; trial 7 has two segments covering 2078506 capture frames / 2066506 source frames. Every mapped stereo sample is bit-identical. The full 2066890-frame Rust/source interval matches at fixed lags 1728 and 2112 respectively: unfitted RMS 1.6122093906661403e-6 / 1.396214288536708e-6, maximum absolute error 3.8142316043376923e-6. All source windows agree on the lag; there are no active zeros or samples above 4e-6. Captured values lie on the 2^-18 quantization grid. Samples unavailable in the observer match quantized samples from independently observed same-channel repeated sweep segments, but those are not contemporaneous observations.
+
+Thus **no observable Rust source loss is found in these two trials**. The missing contemporaneous observer evidence is not relabeled an external Rust loss or an unconditional strict paired pass. The helper retains `accepted=false` and null strict internal/external counts. Single-global-offset residuals, rather than just favorable local fits, remain in the follow-up JSON. The audit still fails headphones wall time independently of this classification limitation.
+
+### Verification and reproducibility
+
+Parent reran the restored duplex oracle with `--op open_close_session --explicit-streams` in both interpreters, three warmups and five 20-call batches. Both exited 0; median/min were 231.531300/227.470500 ms (3.14.5), 231.935400/226.080100 ms (3.14.7t). These confirm restoration and are not substituted selectively into the final timing set above.
+
+The parent independently ran the following foreground chain after restoring the duplex comparator; all commands exited 0. Two crates: **39 passed, 5 hardware ignored**; policy: **6 passed**; service recording: **13 passed, 1 hardware ignored**; separately opted-in CABLE-A test: **1 passed**, 23.28 s, 878540 frames, 48000 Hz/stereo and two detected segments. fmt and clippy passed. Python syntax checks and Ruff passed. No golden tolerance changed. These are local gates, not a claim of CI completion; no commit or push was requested.
+
+```sh
+cargo fmt -p impulcifer-audio-io -p impulcifer-sys-win -- --check
+cargo clippy -p impulcifer-audio-io -p impulcifer-sys-win --all-targets -- --no-deps -D warnings
+cargo test -p impulcifer-audio-io -p impulcifer-sys-win
+cargo test -p impulcifer-policy
+cargo test -p impulcifer-service --test recording
+cargo test -p impulcifer-service --test recording recording_virtual_cable_end_to_end -- --ignored --exact --nocapture
+py -3.14 -m py_compile tests/migration/bench_oracle_impulcifer_audio_io.py crates/impulcifer-audio-io/tests/bench_support/sixth_paired.py crates/impulcifer-audio-io/tests/bench_support/sixth_followup_analysis.py
+ruff check tests/migration/bench_oracle_impulcifer_audio_io.py crates/impulcifer-audio-io/tests/bench_support/sixth_paired.py crates/impulcifer-audio-io/tests/bench_support/sixth_followup_analysis.py
+py -3.14 -B E:/Impulcifer/crates/impulcifer-audio-io/tests/bench_support/sixth_followup_analysis.py --output sixth-followup-parent.json
+git diff --check
+```
+
+Hardware/timing invocation pattern (Git Bash, repository root). Artifact names must be fresh. The executable path shown is the measured build, not a stable Cargo hash; rebuild first and use Cargo's resulting executable. `--period` validates the compiled setting, it does not change it.
+
+```sh
+H=E:/Impulcifer/crates/impulcifer-audio-io/tests/bench_support
+O=E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py
+cargo bench -p impulcifer-audio-io --bench perf --no-run
+# Run after each chosen compile-time setting, N=0..9, P=3 then 2 then 4:
+py -3.14 "$H/sixth_paired.py" --period "$P" --run "$N" --exe E:/Impulcifer/target/release/deps/perf-b4dd78d0010aed28.exe
+PYTHONIOENCODING=utf-8 py -3.14 "$O" --observe-rust cargo bench -p impulcifer-audio-io --bench perf
+PYTHONIOENCODING=utf-8 py -3.14 "$O" --explicit-streams
+PYTHONIOENCODING=utf-8 C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe "$O" --explicit-streams
+cargo bench -p impulcifer-sys-win --bench perf
+```
+
+Trace/checksum and artifact SHA-256 index: `sixth-validation-index.json`; per-trial originals: `sixth-p{3,2,4}-{00..09}-*`; follow-up: `sixth-followup-verified.json/.log` and independently regenerated `sixth-followup-parent.json`. Original analysis errors and intermediate revisions remain. Exact run parameters, callback metadata, raw logs and commands appear in the corresponding artifacts. The final-evidence summary predates the duplex restoration and follow-up; this section states both corrections explicitly.
+
+Retained changed files for the sixth run: `crates/impulcifer-sys-win/src/lib.rs` (private opt-in trace and buffer comment), `crates/impulcifer-audio-io/tests/bench_support/mod.rs` (fresh fixture names), new `sixth_paired.py` / `sixth_followup_analysis.py` and sixth artifacts in that directory, `tests/migration/bench_oracle_impulcifer_audio_io.py` (duplex restored), this report and `docs/rust/HARDWARE.md`. Previous dirty changes elsewhere were not reverted. Smoke hooks remain `bench_smoke_impulcifer_audio_io` and `bench_smoke_impulcifer_sys_win`. No features registry, unsafe budget, public API, Python production recorder, frontend, service implementation or release configuration was changed by this audit. No version bump, changelog or unrelated README change was made under the packet's restricted allowlist.
+
+**Remaining work:** headphones wall excess must fall to <=0.2% against both Python environments without introducing underruns, and strict contemporaneous paired verification must handle the independent observer's missing data. Three-/two-period complex unresolved classifications are also retained as incomplete diagnostic work; they are not accepted settings.
+
+## Fifth run, 2026-09-08: measured, acceptance NOT PASSED
+
+**INCOMPLETE.** Concurrent initialization passes the open/close performance target against both interpreters. Waveform integrity still fails: 8/10 captures pass before and 8/10 after concurrency. Headphones/seven-segment overhead and first 480-frame delivery remain slower than both Python environments. Four-period buffering remains; three- and two-period trials were withheld because neither integrity series passed. No registry status was changed. This section supersedes the fourth-run measurements below, which remain historical evidence.
+
+### Environment and measurement boundaries
+
+Intel Core i5-12600KF, 10 physical/16 logical cores; Windows 11 Education build 22621; Rust/Cargo 1.97.0, LLVM 22.1.6, x86_64-pc-windows-msvc. CPython 3.14.5: `C:/Users/32170336/AppData/Local/Programs/Python/Python314/python.exe`. CPython 3.14.7 free-threaded: `C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe`. Both: NumPy 2.5.3, SciPy 1.18.1, sounddevice 0.5.6, PortAudio V19.7.0-devel. NumPy OpenBLAS 0.3.34.106.0 ILP64/pocketfft; SciPy OpenBLAS 0.3.31.dev LP64/duccfft. Thread variables OMP/MKL/OPENBLAS/NUMEXPR were unset; no affinity/thread pinning or installation. Full interpreter paths and `numpy.show_config()` output are in `fifth-env314.log` and `fifth-env314t.log` under `crates/impulcifer-audio-io/tests/bench_support/` (all artifact filenames below are relative to that directory unless stated otherwise).
+
+Observed audio processes: Discord PIDs 3128, 13112, 17004, 17824, 19580, 20044; HLConvolverHost 71740; audiodg 113280. No application was terminated or asked to close. Every command and worker ran foreground. The independent observer runs a synchronous Rust subprocess while its Python input callback captures the same playback; no detached task was used.
+
+Both implementations use CABLE-A Input for output, CABLE-A Output for input, WASAPI, 48 kHz, two channels, existing float32 transport. Python selects devices within the WASAPI host API, not WDM-KS. Rust's first exclusive float32 attempt is refused on this pair and its memoized shared auto-convert fallback is measured thereafter. Rust endpoint buffers are 1920 frames (four 480-frame periods), capture packets 480 frames. Python explicit timing streams use blocksize 0 (first callback observed at 480 frames), reported latency 22 ms per direction. No measured Python callback status reported an xrun/overflow.
+
+Three warmups precede five measured batches/runs, except seven-segment timing uses three and latency/integrity uses ten. Enumeration/open-close batches contain 20 calls/pairs. Wall time includes file read, preparation, device resolution, stream open, playback/capture, stop, destruction and joins; excludes output file writes. Trace is disabled during performance measurements. CPU is process user+kernel over the same five headphones spans, using the acknowledged psutil observer for Rust. Counter granularity is 15.625 ms; even a zero minimum is retained, not clamped or interpreted as zero actual CPU consumption.
+
+Headphones playback is the bundled 295270-frame mono sweep duplicated to stereo (6.151458333333 s). Seven segments are the 2066890-frame alternating-channel stereo fixture (43.060208333333 s), not a call requesting seven channels from the stereo generator. Timed captures contain exactly these frame counts. Diagnostic captures include a 250 ms tail (2078890 frames), allowing all 2066890 reference frames/channel to overlap despite leading latency. Fixed-length timed capture does not establish full trailing-signal integrity.
+
+**The Python timing columns are explicit `sd.InputStream`/`sd.OutputStream`, NOT `core.recorder.play_and_record`.** Open/close retains the requested duplex `sd.Stream`, while Rust opens its two thread-affine sessions concurrently and includes thread creation, destruction and joins. The unchanged 2.x function needs COM initialized on its calling thread on this machine. Separately, sounddevice `play()` closes an active `rec()` convenience stream through its global callback state. These are observations about 2.x, not changes made here; fourth-run reproduction and results remain below.
+
+### Verbatim before/after timing output
+
+Raw source logs: `fifth-before-rust.log`, `fifth-before-python314.log`, `fifth-before-python314t.log`, `fifth-after-rust.log`, `fifth-after-python314.log`, `fifth-after-python314t.log`. `fifth-evidence-tables.log` consolidates the printed rows. The rows are reproduced verbatim below; separator lines are added for Markdown rendering.
+
+#### Before: Rust
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 0.025800 | 0.025800 |
+| open_close_session | 20 calls/batch | 263.047100 | 256.314600 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6206.777600 | 6205.276900 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 55.319267 | 53.818567 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43127.596700 | 43124.587500 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 67.388367 | 64.379167 |
+| first_sample_latency | input session start call to first nonempty application read return; 10 runs | 40.727300 | 30.501700 |
+| capture_loop_cpu | process user+kernel; 5 runs | 46.875000 | 0.000000 |
+
+#### Before: CPython 3.14.5
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.051300 | 2.003300 |
+| open_close_session | 20 calls/batch | 227.259000 | 222.255900 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6192.239300 | 6178.796900 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 40.780967 | 27.338567 |
+| capture_loop_cpu | process user+kernel; 5 runs | 46.875000 | 15.625000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43116.420300 | 43114.204000 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 56.211967 | 53.995667 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 22.370600 | 21.447400 |
+
+#### Before: CPython 3.14.7t
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.329000 | 2.242000 |
+| open_close_session | 20 calls/batch | 249.068600 | 239.423300 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6192.307600 | 6188.185600 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 40.849267 | 36.727267 |
+| capture_loop_cpu | process user+kernel; 5 runs | 62.500000 | 31.250000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43115.306600 | 43113.335700 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 55.098267 | 53.127367 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 22.053600 | 19.670400 |
+
+#### After: Rust
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 0.027700 | 0.027100 |
+| open_close_session | 20 calls/batch | 175.201400 | 174.527100 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6209.260900 | 6205.120600 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 57.802567 | 53.662267 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43129.164200 | 43128.047800 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 68.955867 | 67.839467 |
+| first_sample_latency | input session start call to first nonempty application read return; 10 runs | 31.345300 | 20.391800 |
+| capture_loop_cpu | process user+kernel; 5 runs | 31.250000 | 31.250000 |
+
+#### After: CPython 3.14.5
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.021500 | 2.011300 |
+| open_close_session | 20 calls/batch | 227.347500 | 222.604300 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6189.820200 | 6188.647700 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 38.361867 | 37.189367 |
+| capture_loop_cpu | process user+kernel; 5 runs | 62.500000 | 31.250000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43116.680800 | 43115.047400 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 56.472467 | 54.839067 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 22.111850 | 13.065400 |
+
+#### After: CPython 3.14.7t
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.057100 | 2.004100 |
+| open_close_session | 20 calls/batch | 230.917800 | 229.477600 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6187.896900 | 6184.659300 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 36.438567 | 33.200967 |
+| capture_loop_cpu | process user+kernel; 5 runs | 46.875000 | 46.875000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43111.996400 | 43104.440800 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 51.788067 | 44.232467 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 21.843600 | 17.227300 |
+
+Direct fresh sys-win enumeration (`fifth-sys-bench.log`):
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 267.525100 | 265.979800 |
+
+#### Ratios and latency qualification
+
+Ratio = Python median / Rust median. Cached backend enumeration is DTO cloning, not complete service JSON assembly. Direct sys-win fresh enumeration versus PortAudio's cached enumeration has unequal caching boundaries; its after ratios 0.007556 / 0.007689 are not an equal-work performance result.
+
+| Operation | Before Python/Rust | Before Python-t/Rust | After Python/Rust | After Python-t/Rust |
+|---|---:|---:|---:|---:|
+| Cached enumeration | 79.507752 | 90.271318 | 72.978339 | 74.263538 |
+| Open/close | 0.863948 | 0.946859 | 1.297635 | 1.318013 |
+| Headphones wall | 0.997658 | 0.997669 | 0.996869 | 0.996559 |
+| Headphones overhead | 0.737193 | 0.738427 | 0.663671 | 0.630397 |
+| Seven-segment wall | 0.999741 | 0.999715 | 0.999711 | 0.999602 |
+| Seven-segment overhead | 0.834149 | 0.817623 | 0.818965 | 0.751032 |
+| First delivery | 0.549278* | 0.541494* | 0.705428 | 0.696870 |
+| Process CPU | 1.000000 | 1.333333 | 2.000000 | 1.500000 |
+
+*Before compares Rust's 1024-frame application read to Python's first 480-frame callback and is not a parity result. After uses a 480-frame Rust read and the observed 480-frame Python callback, both timed from input-start invocation. This still measures application delivery, not hardware arrival or the requested common playback-start boundary. Actual playback-start latency remains unmeasured. Rust's after auxiliary 1024-frame median/min is 42.362150/40.169700 ms (`fifth-after-latency1024.log`); Python reaching at least 1024 frames is 41.866900/41.166400 ms and Python-t 42.865950/41.604300 ms.
+
+### impulcifer-sys-win: render proof and independent capture
+
+The private, opt-in trace now fingerprints the exact scratch bytes passed to safe `AudioRenderClient::write_to_device`. It records timestamps immediately before/after that call, padding/free-space snapshot, requested frames, successful submitted count, source cursor before/after and payload FNV-1a. Logs stay in memory until session destruction. On an error the actual written count is labeled unknown and the application cursor is not advanced. Trace-disabled performance runs do not compute checksums.
+
+The inspected [wasapi 0.24 API](https://docs.rs/wasapi/0.24.0/wasapi/struct.AudioRenderClient.html) and installed source validate the byte length, acquire the endpoint buffer, copy the requested bytes and release the requested count on success. The safe wrapper does not expose separate internal GetBuffer/ReleaseBuffer timestamps. These records bracket the complete safe write, not those internal calls independently. Successful release is not proof of subsequent engine/hardware consumption.
+
+Offline checking verified every submitted byte checksum against the immutable source and contiguous coverage of all 2066890 source frames: 42613 writes before concurrency, 42687 after, and 4300 for simultaneous capture. **No skipped source cursor or incorrect render payload was found.** There is no demonstrated accounting defect to fix; success-only source advancement remains.
+
+For a failing playback, a second independent Python `sd.InputStream` recorded the same cable concurrently. Python and Rust both lose source frames `[103200,103680)`. Python capture starts earlier; after a 25440-frame offset the entire 2078890-frame common interval is bit-exact, maximum difference 0. The parent independently loaded both raw files and verified this equality, not just the worker's summary. Python callback statuses were empty.
+
+The write covering that lost region (`fifth-final-evidence.log`) is:
+
+```text
+ordinal=208 buffer_size=1920 padding=1440 free=480
+before_us=2094375 after_us=2094377 requested=480 written=480
+cursor_before=103200 cursor_after=103680
+payload_fnv1a=5d567107839964bf bytes=3840
+outcome=release_ok_not_hardware_consumption
+```
+
+The checksum matches those exact source frames. The Rust splice occurs at capture frame 105744 in packet 220, range `[105600,106080)`, index 131040, with no SILENT/discontinuity flag; queue samples before/after 256/1216. Both captures have unfitted RMS `0.1871900279405533 / 1.396214288536708e-6`. Independent captures sharing the loss exclude a defect unique to Rust's capture queue for this observed run. They locate the loss in their common audio processing, but **do not distinguish Windows audio processing from VB-Cable** or establish causes for every other failed run.
+
+### impulcifer-audio-io: concurrent initialization and open/close profile
+
+`src/session.rs` opens output on its owning scoped worker while input opens on the other worker. Output still waits for the existing input-start permit before playback. `InputReady` precedes `OutputStarted`; cancellation/error/panic handling joins both workers and drops sessions on their owning threads. No COM/session object crosses threads, no initialized session pooling, no deferred destruction, no public signature change. A fake-backend handshake proves both opens enter before either can complete and checks success, input-open failure, cancellation and output-open panic cleanup. Existing ordering tests now distinguish output initialization from actual playback.
+
+Paired open/close improves from 263.047100 to 175.201400 ms per 20 pairs (13.152355 to 8.760070 ms/pair). Ratios exceed 1.0 against both Python environments. Same-thread enumerator reuse remains implemented, but separate owning threads cannot share that thread-local lease. The new benchmark includes spawn/drop/join; it does not claim an enumerator cache hit on each newly created thread.
+
+Post-change profile (`fifth-open-profile.log`, `fifth-evidence-tables.log`) covers 320 successful sessions. Per-direction stage medians cannot be added to obtain concurrent pair wall time.
+
+| Stage | Samples | median us | min us | mean us |
+|---|---:|---:|---:|---:|
+| com_init | 320 | 11.000 | 0 | 8.491 |
+| enumerator | 320 | 875.500 | 770 | 889.041 |
+| device_lookup | 320 | 88.500 | 67 | 90.756 |
+| get_iaudioclient | 320 | 239.500 | 201 | 246.353 |
+| mixformat_validation | 320 | 228.500 | 69 | 194.406 |
+| get_device_period | 320 | 383.500 | 184 | 322.228 |
+| initialize_client | 320 | 5497.000 | 3414 | 4904.600 |
+| device_release | 320 | 7.000 | 4 | 6.938 |
+| service_acquisition | 320 | 3.000 | 2 | 3.134 |
+| get_buffer_size | 320 | 0.000 | 0 | 0.006 |
+| event_creation | 320 | 34.000 | 21 | 34.375 |
+| allocation | 320 | 1.000 | 0 | 2.122 |
+| capture_service_release | 160 | 1.000 | 0 | 1.156 |
+| audio_client_release | 320 | 676.500 | 483 | 657.100 |
+| enumerator_release | 320 | 0.000 | 0 | 0.000 |
+| com_uninit | 320 | 15.000 | 1 | 17.628 |
+| render_service_release | 160 | 1.000 | 0 | 0.963 |
+
+Initialization is still the largest measured open/close stage, now overlapped across directions. Playback overhead did not improve. Four-period buffering, event delivery and stream startup/drain remain costs; this run does not quantitatively attribute the entire remaining overhead to any one of them. The previously reviewed render conversion, capture allocation/queue logic and COM enumeration did not establish the observed loss's cause. No safe MMCSS call was added; no native dependency or unsafe was introduced.
+
+### Ten-run waveform integrity before and after concurrency
+
+Every capture has 2078890 frames and 4332 packets of 480 frames; every comparison overlaps all 2066890 reference frames/channel. All twenty runs have zero post-initial discontinuities, SILENT packets, packet-index gaps, reported render underruns, and exact repeated 128-frame blocks. The latter is not an exhaustive repetition test. The analyzer estimates at most one splice per segment from clean local-offset windows; complex multiple splices could require further analysis. Global fitted and unfitted RMS remain reported, so a residual cannot be concealed by excluding splice regions.
+
+Clean fitted RMS is `1.61220319e-6 / 1.39620892e-6`; unfitted RMS is `1.61220939e-6 / 1.39621429e-6`. The before/after tables describe an initialization optimization, **not a successful loss repair**.
+
+#### Before concurrency (`fifth-baseline-analysis.log`)
+
+| Run | Lag ch0/ch1 | Fitted RMS ch0/ch1 | Unfitted RMS ch0/ch1 | Lost/repeated/zero frames | Verified writes | Result |
+|---|---|---|---|---|---:|---|
+| 0 | 960/960 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4257 | Pass |
+| 1 | 1008/1008 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4252 | Pass |
+| 2 | 1488/1488 | 0.391354538/0.326005266 | 0.428180984/0.353475204 | 480/0/0 | 4300 | Fail |
+| 3 | 960/960 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4247 | Pass |
+| 4 | 1104/1104 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4244 | Pass |
+| 5 | 1008/1008 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4231 | Pass |
+| 6 | 1152/1152 | 0.282812507/1.39620892e-6 | 0.294532263/1.39621429e-6 | 480/0/0 | 4300 | Fail |
+| 7 | 1152/1152 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4289 | Pass |
+| 8 | 1248/1248 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4250 | Pass |
+| 9 | 1056/1056 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4243 | Pass |
+
+#### After concurrency (`fifth-concurrent-analysis-final.log`)
+
+| Run | Lag ch0/ch1 | Fitted RMS ch0/ch1 | Unfitted RMS ch0/ch1 | Lost/repeated/zero frames | Verified writes | Result |
+|---|---|---|---|---|---:|---|
+| 0 | 1200/1200 | 0.0013236144/1.39620892e-6 | 0.00132363772/1.39621429e-6 | 0/0/1409 | 4256 | Fail |
+| 1 | 1008/1008 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4300 | Pass |
+| 2 | 1056/1056 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4299 | Pass |
+| 3 | 960/960 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4251 | Pass |
+| 4 | 1248/1248 | 0.426036895/0.330926965 | 0.477711154/0.360025696 | 240/0/0 | 4300 | Fail |
+| 5 | 1056/1056 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4239 | Pass |
+| 6 | 912/912 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4244 | Pass |
+| 7 | 576/576 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4250 | Pass |
+| 8 | 816/816 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4248 | Pass |
+| 9 | 864/864 | 1.61220319e-6/1.39620892e-6 | 1.61220939e-6/1.39621429e-6 | 0/0/0 | 4300 | Pass |
+
+After run 0's active zero interval is capture `[1311,2720)`, aligned source `[111,1520)`. Packets 2–5 carry it; all flags are false, queue before/after 0/960 samples. Raw zero frames in those packets are 240,480,480,320 (1520 total, including subthreshold reference samples; 1409 satisfy the active threshold). No synthetic SILENT fill occurred. Source coverage is the initial 1920-frame prefill, checksum `6990f84311618cba`, requested/written 1920, cursor 0→1920, padding 0, successful release. Full missing-region packet/write mappings are in `fifth-baseline-analysis.json` and `fifth-concurrent-analysis.json`; paired evidence is in `fifth-paired-1-analysis.json` and `fifth-paired-1-comparison.json`.
+
+### Verification, commands, and failures retained
+
+The parent reviewed concurrent startup/cleanup, trace accounting, paired-capture helper and offline analyzer, checked saved timing/integrity logs, then independently ran the following foreground chain. All commands exited 0:
+
+```sh
+cargo fmt -p impulcifer-audio-io -p impulcifer-sys-win -- --check
+cargo clippy -p impulcifer-audio-io -p impulcifer-sys-win --all-targets -- --no-deps -D warnings
+cargo test -p impulcifer-audio-io -p impulcifer-sys-win
+cargo test -p impulcifer-policy
+cargo test -p impulcifer-service --test recording
+cargo test -p impulcifer-service --test recording recording_virtual_cable_end_to_end -- --ignored --exact --nocapture
+py -3.14 -m py_compile tests/migration/bench_oracle_impulcifer_audio_io.py crates/impulcifer-audio-io/tests/bench_support/analyze_fifth.py crates/impulcifer-audio-io/tests/bench_support/fifth_paired.py
+ruff check tests/migration/bench_oracle_impulcifer_audio_io.py crates/impulcifer-audio-io/tests/bench_support/analyze_fifth.py crates/impulcifer-audio-io/tests/bench_support/fifth_paired.py
+git diff --check
+```
+
+Parent Rust output totals: audio-io 11 unit + 14 fake/smoke, sys-win 13 unit + 1 smoke, policy 6, service recording 13, explicit CABLE-A 1 = **59 passed, zero failures**. Five other hardware tests remain ignored. The service CABLE-A test recorded 878540 frames, 48000 Hz/stereo, detected two segments, and passed in 23.29 s. This integration pass does not override the detailed waveform failures. Golden tests pass unchanged; no golden tolerances or numeric algorithms were changed, and no new per-golden max-error export was calculated. Python compilation and ruff passed; diff check reported only line-ending warnings.
+
+Independent parent paired-file verification (exit 0):
+
+```sh
+py -3.14 -c "import numpy as n; from pathlib import Path; p=Path('E:/Impulcifer/crates/impulcifer-audio-io/tests/bench_support/fifth-paired-1'); a=n.fromfile(str(p)+'-python.f32',dtype='<f4').reshape(-1,2); b=n.fromfile(str(p)+'-play_record_7_speaker_set-0.f32',dtype='<f4').reshape(-1,2); a=a[25440:25440+len(b)]; print('frames',len(b),'bit_exact',n.array_equal(a.view('u4'),b.view('u4')),'max_difference',n.max(n.abs(a.astype('f8')-b))); assert n.array_equal(a.view('u4'),b.view('u4'))"
+```
+
+```text
+frames 2078890 bit_exact True max_difference 0.0
+All checks passed!
+```
+
+Measurement entrypoints (worker ran foreground before/after, retaining separate `fifth-*` output logs):
+
+```sh
+PYTHONIOENCODING=utf-8 py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --observe-rust cargo bench -p impulcifer-audio-io --bench perf
+cargo bench -p impulcifer-sys-win --bench perf
+PYTHONIOENCODING=utf-8 py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --explicit-streams
+PYTHONIOENCODING=utf-8 C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe tests/migration/bench_oracle_impulcifer_audio_io.py --explicit-streams
+IMPULCIFER_PA05_OP=profile_open cargo bench -p impulcifer-audio-io --bench perf
+py -3.14 crates/impulcifer-audio-io/tests/bench_support/fifth_paired.py 1
+py -3.14 crates/impulcifer-audio-io/tests/bench_support/analyze_fifth.py fifth-baseline
+py -3.14 crates/impulcifer-audio-io/tests/bench_support/analyze_fifth.py fifth-concurrent
+py -3.14 crates/impulcifer-audio-io/tests/bench_support/analyze_fifth.py fifth-paired-1 --count 1
+```
+
+Ten-run integrity commands set `IMPULCIFER_PA05_OP=play_record_7_speaker_set`, `IMPULCIFER_PA05_INTEGRITY=1`, `IMPULCIFER_PA05_TAIL=1`, and both `IMPULCIFER_PA05_CAPTURE_PREFIX`/`IMPULCIFER_PA05_TRACE_PREFIX` to the absolute `.../tests/bench_support/fifth-baseline` or `fifth-concurrent` prefix before running the audio-io bench. The paired helper sets a fresh `fifth-paired-1` prefix and one integrity repetition. Full before/after measurement logs, trace CSVs, raw captures, environment, final gates and six passing synthetic analyzer checks remain local evidence. No command timed out or remained running in this fifth run.
+
+Earlier failures are not counted as passes: paired attempt 0 failed COM initialization before playback; an initial new test lacked `RefUnwindSafe`; its next run exposed a test-only poisoned synchronization lock. These were corrected and rerun. The initial analyzer mistook a corrupted low-frequency window for a two-frame slip; clean-window offset selection corrected that report and all final series were reanalyzed. Earlier logs are retained. The initial parent PowerShell process query was rejected; it was not retried verbatim or delegated as a permission bypass.
+
+### Files changed and remaining work
+
+Fifth-run implementation files:
+
+- `crates/impulcifer-sys-win/src/lib.rs`: private exact render-payload tracing; no demonstrated cursor repair.
+- `crates/impulcifer-audio-io/src/session.rs`: concurrent initialization with capture-start permit preserved.
+- `crates/impulcifer-audio-io/tests/session_fake.rs`: concurrency/cleanup test and ordering assertions.
+- `crates/impulcifer-audio-io/tests/bench_support/mod.rs`: concurrent paired open/close, 480-frame latency workload and preserved artifact names.
+- `crates/impulcifer-audio-io/tests/bench_support/analyze_fifth.py`: offline payload/continuity/waveform validation.
+- `crates/impulcifer-audio-io/tests/bench_support/fifth_paired.py`: independent foreground simultaneous Python capture.
+- `docs/rust/perf/impulcifer-audio-io.md`: parent-written fifth-run report.
+
+Smoke names remain `bench_smoke_impulcifer_audio_io` and `bench_smoke_impulcifer_sys_win`. Other dirty tree files predate or belong to other workers; no features.toml, unsafe budget, production Python, service/update/apps, golden fixtures, version, README, CHANGELOG, commit or push was changed by PA05 fifth-run work. No new dependency or unsafe was introduced.
+
+**Still required before acceptance:** establish and repair/otherwise resolve active waveform loss with 10/10 passing runs, then test smaller buffers at three and two periods, improve both sweep overhead ratios and 480-frame delivery latency, and measure a common playback-start latency if that original metric is required. No claim of completed performance audit or crate acceptance is made.
+
+## Fourth run, 2026-09-08: measured, acceptance NOT PASSED
+
+**INCOMPLETE.** Open/close still loses to both interpreters. Seven of ten diagnostic captures pass; three lose exactly 480 active frames. All ten have zero internal both-channel zero-fill, zero post-first discontinuities and zero reported render underruns. These counters do not establish waveform integrity. Actual first-buffer latency on a common playback-start boundary remains unmeasured. No registry entry was changed. The third and second runs below are historical, superseded where this section records new observations.
+
+### Environment and method
+
+Intel Core i5-12600KF, 10 physical / 16 logical cores; Windows 11 Education build 22621; Rust 1.97.0 x86_64-pc-windows-msvc, LLVM 22.1.6. CPython 3.14.5 is `C:/Users/32170336/AppData/Local/Programs/Python/Python314/python.exe`; CPython 3.14.7 free-threaded (GIL disabled) is `C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe`. Both use NumPy 2.5.3, SciPy 1.18.1, sounddevice 0.5.6, PortAudio `V19.7.0-devel, revision unknown`. NumPy OpenBLAS 0.3.34.106.0 ILP64 / pocketfft; SciPy OpenBLAS 0.3.31.dev LP64 / duccfft. OMP/MKL/OPENBLAS/NUMEXPR thread variables were unset; no thread pinning or installation.
+
+Observed processes: Discord PIDs 3128, 13112, 17004, 17824, 19580, 20044; HLConvolverHost 71740; audiodg 113280. No user application was closed, killed or requested to close. All commands and workers ran foreground. One combined Python invocation exceeded the 600-second tool limit (exit 143): the first interpreter finished, the second produced no log. It was not counted as completed; subsequent per-operation foreground commands completed its measurements. No process-termination command was issued.
+
+Both implementations selected WASAPI host 2, output 35 `CABLE-A Input (VB-Audio Cable A)`, input 39 `CABLE-A Output (VB-Audio Cable A)`, 48 kHz, stereo float32 transport. CABLE-A rejects the requested exclusive float32 format; Rust used shared auto-convert after its exclusive-first refusal memo. Python uses the existing recorder WASAPI settings, shared mode. Windows display names omit the space before `(`. Python stream metadata: blocksize 0, reported latency 22 ms in each direction, first input callback 480 frames; no measured callback statuses reported xruns/overflows. Rust diagnostic buffers were 1920 frames, packets 480 frames.
+
+Three warmups precede five 20-call enumeration/open-close batches, five headphones measurements, three seven-segment timings and ten latency measurements. CPU is process user+kernel over the same five measured headphones runs, observed with psutil (Rust via the synchronous acknowledged observer). Resolution is 15.625 ms; the resulting CPU ratios are coarse observations, not precise speedups. Wall spans include file read, sample preparation, device resolution, session open, playback/capture and stop/close/destruction; no file writes. COM setup is outside Python timing. Trace is disabled for performance timings; ten separate integrity captures enable buffered trace and a 250 ms tail.
+
+Headphones: bundled 295270-frame sweep duplicated to stereo, 6.151458333333 s. Seven segments: 2066890 frames, 43.060208333333 s, alternating stereo file fixture. This is not a seven-speaker call to the stereo generator. Timed Rust captures contain exactly these frame counts; diagnostic captures contain 2078890 frames including the tail. Fixed-length production capture starts before playback and can truncate its end by the leading latency; the diagnostic tail ensures full reference overlap.
+
+### Verbatim current Rust tables
+
+From `tests/bench_support/fourth-astra-rust-timing.log` in audio-io (parent checked rows against the saved log):
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 0.026600 | 0.025900 |
+| open_close_session | 20 calls/batch | 268.094200 | 260.033600 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6207.706700 | 6204.875200 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 56.248367 | 53.416867 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43128.910500 | 43128.575800 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 68.702167 | 68.367467 |
+| first_sample_latency | input session start call to first nonempty application read return; 10 runs | 42.042050 | 39.642500 |
+| capture_loop_cpu | process user+kernel; 5 runs | 31.250000 | 15.625000 |
+
+Direct sys-win enumeration (fresh, not cached):
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 268.834600 | 263.997200 |
+
+### Python COM and production recorder
+
+The oracle now balances successful `CoInitializeEx(None, 0)` calls with `CoUninitialize`. Initializing only after importing the production stack failed with `0x80010106` on both interpreters. Initializing the calling thread before imports succeeded (outer S_OK, nested S_FALSE). The actual unchanged `core.recorder.play_and_record` then completed in both interpreters. This does not resolve its global sounddevice convenience-stream race.
+
+The minimal reproduction opens `sd.rec` then starts `sd.play` on the pinned WASAPI endpoints. Both interpreters print:
+
+```text
+before sd.play True False
+after sd.play False True capture_shape (4800, 2)
+```
+
+Installed sounddevice `start_stream()` calls global `stop()` and replaces `_last_callback`; `stop()` closes the previous stream. The oracle exposes `--reproduce-convenience-race` to reproduce this independently. Production captures had observed residual RMS as high as 0.439931 (CPython full run), 0.427824 (free-threaded headphones), 0.500673 (free-threaded seven segments). Completion/frame count is not a correctness pass. `core/recorder.py` was not modified.
+
+Verbatim production CPython 3.14.5 rows:
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.043000 | 2.001300 |
+| open_close_session | 20 calls/batch | 247.258200 | 226.579700 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6204.042600 | 6201.611100 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 52.584267 | 50.152767 |
+| capture_loop_cpu | process user+kernel; 5 runs | 125.000000 | 46.875000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43130.004800 | 43128.904100 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 69.796467 | 68.695767 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 23.254150 | 21.924400 |
+
+Verbatim production CPython 3.14.7t per-operation reruns:
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6204.519300 | 6201.166300 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 53.060967 | 49.707967 |
+| capture_loop_cpu | process user+kernel; 5 runs | 156.250000 | 109.375000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43130.439100 | 43128.902200 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 70.230767 | 68.693867 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 35.437300 | 22.420400 |
+
+### Authorized explicit-stream comparison (NOT the 2.x function)
+
+`--explicit-streams` uses independent `InputStream` / `OutputStream` callbacks, with COM on the thread that creates the streams. Input starts before output creation; no preopened-stream shortcut or convenience `sd.rec`/`sd.play`. The benchmark allocates a fixed-length capture and waits for both finished callbacks before closing both streams. The open/close operation remains the requested duplex `sd.Stream`, versus two separate Rust sessions. Results cannot establish production-recorder parity or waveform correctness merely from absent callback flags.
+
+Verbatim CPython 3.14.5:
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.015000 | 1.975600 |
+| open_close_session | 20 calls/batch | 226.566100 | 223.782300 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6190.708100 | 6183.252900 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 39.249767 | 31.794567 |
+| capture_loop_cpu | process user+kernel; 5 runs | 62.500000 | 31.250000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43113.205400 | 43111.320700 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 52.997067 | 51.112367 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 23.335050 | 18.031200 |
+
+Verbatim CPython 3.14.7t:
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.100200 | 2.031100 |
+| open_close_session | 20 calls/batch | 242.819400 | 238.016600 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6190.036100 | 6188.761000 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 38.577767 | 37.302667 |
+| capture_loop_cpu | process user+kernel; 5 runs | 62.500000 | 31.250000 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43114.770300 | 43110.213400 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 54.561967 | 50.005067 |
+| first_sample_latency | input start to nonempty callback; 10 runs | 22.693950 | 15.001400 |
+
+### Before/after and ratios
+
+Ratio = explicit Python median / current Rust median. Previous production comparisons failed before completing, so no production before/after sweep ratio exists. Enumeration is backend DTO cloning, not full service JSON assembly. sys-win fresh enumeration versus PortAudio cache is not an equal caching boundary.
+
+| Operation | Third-run Rust median ms | Fourth-run Rust median ms | Python/Rust | Python-t/Rust | Assessment |
+|---|---:|---:|---:|---:|---|
+| Cached enumeration / 20 | 0.026700 | 0.026600 | 75.751880 | 78.954887 | Backend scope only |
+| Direct sys-win enumeration / 20 | 278.228300 | 268.834600 | 0.007495 | 0.007812 | Fresh versus cached |
+| Open/close / 20 pairs | 282.279500 | 268.094200 | 0.845099 | 0.905724 | Fails |
+| Headphones wall | 6209.446500 | 6207.706700 | 0.997262 | 0.997153 | Fails |
+| Headphones overhead | 57.988167 | 56.248367 | 0.697794 | 0.685847 | Fails |
+| Seven-segment wall | 43146.423100 | 43128.910500 | 0.999636 | 0.999672 | Fails |
+| Seven-segment overhead | 86.214767 | 68.702167 | 0.771403 | 0.794181 | Fails |
+| Process CPU | 62.500000 | 31.250000 | 2.000000 | 2.000000 | Coarse counter |
+| First application read | 42.672850 | 42.042050 | N/A | N/A | Not same callback boundary |
+
+Python's first callback supplies 480 frames whereas Rust returns the first nonempty application read (1024 frames). Python reaching at least 1024 captured frames had median/min 42.766000/42.004400 ms and 42.966150/41.594300 ms; auxiliary ratios are 1.017220/1.021980. Neither is the requested common playback-start-to-first-buffer metric. No negative overhead occurred; no counter or duration was clamped.
+
+### impulcifer-sys-win: measured cause, changes and open/close profile
+
+Device lookup already used `DeviceEnumerator::get_device(id)`. Fourth-run changes cache immutable render buffer size and use a single padding snapshot instead of redundant buffer/padding queries. A thread-local enumerator lease reuses only the enumerator while same-thread session lifetimes overlap; the last lease releases it before COM uninitialization. Initialized clients are not pooled, and teardown remains inside open/close timing. Production playback/capture use separate workers, so same-thread enumeration reuse is principally relevant to the requested same-thread open/close benchmark; it is not evidence of the same saving in production.
+
+Private opt-in `IMPULCIFER_PA05_TRACE_PREFIX` collects open/drop stages, render writes/waits, and capture packet/queue/delivery records in memory and writes CSV after session resources are released. No public diagnostics API, unsafe, new native crate or precision change. Transport bit-preservation tests remain exact, with zero-bit conversion error; no golden tolerance changed. No new per-golden numeric-error table was computed. No safe MMCSS API was found in wasapi 0.24; none was added. Four-period buffering, full prefill and event-driven draining predate this run.
+
+Shared-only 20-pair measurements: Daybreak before median/min 279.151500/267.451700 ms; after 260.832300/259.439900 ms. Later Astra shared-only median/min 257.484500/252.781900 ms. These are not policy-open timings (268.094200/260.033600 ms). Memoized exclusive rejection measured 0.004500/0.004200 ms per 20 calls; it is not an actual exclusive driver probe.
+
+Current trace profile, 320 successful sessions. Trace-enabled runs are separate from performance timings. The median of a sum need not equal the sum of medians, and these rows include both input and output sessions; do not treat their sum as one exact pair's wall time.
+
+| Stage | Samples | median us | min us | mean us |
+|---|---:|---:|---:|---:|
+| com_init | 320 | 5.0 | 0 | 7.243750 |
+| enumerator | 320 | 317.5 | 0 | 344.631250 |
+| device_lookup | 320 | 72.0 | 51 | 75.168750 |
+| get_iaudioclient | 320 | 205.0 | 178 | 212.903125 |
+| mixformat_validation | 320 | 219.0 | 67 | 170.275000 |
+| get_device_period | 320 | 347.0 | 160 | 277.818750 |
+| initialize_client | 320 | 5364.5 | 3345 | 4836.953125 |
+| device_release | 320 | 7.0 | 4 | 7.346875 |
+| service_acquisition | 320 | 3.0 | 2 | 3.293750 |
+| get_buffer_size | 320 | 0.0 | 0 | 0.006250 |
+| event_creation | 320 | 37.0 | 25 | 37.946875 |
+| allocation | 320 | 4.0 | 0 | 4.525000 |
+| capture_service_release | 160 | 2.0 | 1 | 2.218750 |
+| audio_client_release | 320 | 669.5 | 553 | 685.337500 |
+| enumerator_release | 160 | 0.0 | 0 | 0.012500 |
+| com_uninit | 320 | 13.0 | 0 | 17.709375 |
+| render_service_release | 160 | 1.0 | 0 | 0.925000 |
+
+Initialization dominates, followed by release and endpoint setup. No remaining safely removable duplicate initialization was established. Profiling did not justify stream pooling, deferred destruction, removing format validation or changing other devices' buffer policy. Shared buffering and initialization contribute to sweep overhead; no speculative change was made to meet a numerical threshold.
+
+### impulcifer-audio-io: 10-run waveform evidence
+
+The bench diagnostic count is ten; an offline analyzer maps trace PID/sequence to captures and checks actual reference channel activity, local lags, full overlap, fitted and unfitted residuals, zero runs, repeats and packet positions. Quiet alternating channels and reference zeros are not counted as corruption. PID 391284; exclusive-refusal trace files are excluded because they contain no packets/writes.
+
+All captures contain 2078890 frames, all reference comparisons cover 2066890 frames/channel, every run has 4332 packets of 480 frames. All have zero post-first discontinuities, zero SILENT packets, zero active both-channel zero runs, zero packet-index gaps, zero reported render underruns and zero exact repeated 128-frame blocks. This last test is not an exhaustive repetition detector.
+
+| Run | Capture/render sequence | Lag ch0/ch1 | RMS fit ch0/ch1 | Missing active frames | Integrity |
+|---|---|---|---|---:|---|
+| 0 | 1/3 | 1056/1056 | 1.61220319e-6 / 1.39620892e-6 | 0 | Pass |
+| 1 | 4/5 | 1584/1584 | 1.61220319e-6 / 1.39620892e-6 | 0 | Pass |
+| 2 | 6/7 | 1104/1104 | 1.61220319e-6 / 1.39620892e-6 | 0 | Pass |
+| 3 | 8/9 | 1008/1008 | 1.61220319e-6 / 1.39620892e-6 | 0 | Pass |
+| 4 | 10/11 | 1056/1056 | 0.316242930 / 1.39620892e-6 | 480 | Fail |
+| 5 | 12/13 | 1200/1200 | 0.192350985 / 1.39620892e-6 | 480 | Fail |
+| 6 | 14/15 | 1248/1248 | 0.0504252552 / 1.39620892e-6 | 480 | Fail |
+| 7 | 16/17 | 1248/1248 | 1.61220319e-6 / 1.39620892e-6 | 0 | Pass |
+| 8 | 18/19 | 1440/1440 | 1.61220319e-6 / 1.39620892e-6 | 0 | Pass |
+| 9 | 20/21 | 1296/1296 | 1.61220319e-6 / 1.39620892e-6 | 0 | Pass |
+
+Clean gains are 1.000000008 in both channels. Failed ch0 gains are 0.800535883, 0.931070793, 0.995257416. Their unfitted ch0 RMS values are 0.333319036, 0.195763905, 0.050487394; gain fitting must not conceal the error.
+
+| Run | Missing reference range | Capture splice | Capture packet / range | Render write / range |
+|---|---|---:|---|---|
+| 4 | [266400,266880) | 267936 | 558 / [267840,268320) | 549 / [266400,266880) |
+| 5 | [111840,112320) | 113520 | 236 / [113280,113760) | 227 / [111840,112320) |
+| 6 | [49440,49920) | 51168 | 106 / [50880,51360) | 96 / [49440,49920) |
+
+Each cited capture packet: 480 frames, flags all false, raw_zero_frames=0, silent_fill_frames=0, queue_before=0, queue_after=960 interleaved samples. Each render write: 480 frames, buffer_size=1920, padding=1440, free=480, submitted. Local lag changes 1536->1056, 1680->1200 and 1728->1248 respectively. Coarse windows straddling the splice produce intermediate lag estimates; the subwindow check locates the 480-frame discontinuity. Aligning before/after separately produces approximately 2.13e-6 unfitted RMS, but excluding the missing frames is not an integrity pass.
+
+Render timeout counts: 162,149,174,159,193,171,177,191,147,149. Capture index/timestamp rate is 47999.396–48001.157 Hz. Render submission rate 48021.783–48032.303 frames/s includes buffering and is NOT a device-clock measurement.
+
+Before this ten-run series, Daybreak's traced three-run series had two clean captures and one with reported 960 per-channel active zeros. Per-channel zeros with a globally wrong lag can misclassify shifted waveform regions; those preliminary counts are not directly comparable to the final actual-channel/local-lag test. Historical third-run failure (737 ch0 zero samples) remains evidence of corruption, not a proven number of engine zero-fill frames. Before/after reported underruns remain zero; final ten-run failures are frame deletion, not SILENT zero-fill.
+
+A final Daybreak review checked the exact wasapi 0.24 `read_from_device` and `write_to_device` implementation. Successful writes validate byte length and copy/release the complete requested frame count. Rust submission slices are contiguous and immutable; capture queue copies retain partial packets. Splices occur 96,240,288 frames inside capture packets, not at queue packet boundaries. This argues against whole-packet queue loss and supports a loss after application render submission, but does not prove whether Windows or VB-Cable caused it. The original render traces contain ranges, not submitted-byte checksums. No source defect was established; no speculative patch or additional claim of acceptance was made. Next useful evidence is an opt-in per-write byte fingerprint on a failing run plus engine/cable observation, without changing user device settings.
+
+### Verification and exact commands
+
+The parent reviewed the production changes, oracle, saved table rows and ten-run analysis, then independently ran all these commands in the foreground after worker completion:
+
+```sh
+cargo fmt -p impulcifer-audio-io -p impulcifer-sys-win -- --check
+cargo clippy -p impulcifer-audio-io -p impulcifer-sys-win --all-targets -- --no-deps -D warnings
+cargo test -p impulcifer-audio-io -p impulcifer-sys-win
+cargo test -p impulcifer-policy
+cargo test -p impulcifer-service --test recording
+cargo test -p impulcifer-service --test recording recording_virtual_cable_end_to_end -- --ignored --exact --nocapture
+```
+
+All passed: audio-io 11 unit + 13 fake/smoke, sys-win 13 unit + 1 smoke, policy 6, service recording 13, explicit service CABLE-A test 1 = **58 tests passed, zero failures**. Five other hardware tests remain ignored in this parent run. CABLE-A output was 878540 frames, 48000 Hz/stereo, detected two sweep segments. This integration pass does not override the ten-run waveform failures. No workspace/CI/PR acceptance claim.
+
+Worker measurement commands (working directory E:/Impulcifer; each invoked foreground, sequential hardware use):
+
+```sh
+PYTHONIOENCODING=utf-8 py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --observe-rust cargo bench -p impulcifer-audio-io --bench perf
+cargo bench -p impulcifer-sys-win --bench perf
+IMPULCIFER_PA05_OP=profile_open cargo bench -p impulcifer-audio-io --bench perf
+PYTHONIOENCODING=utf-8 py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py
+PYTHONIOENCODING=utf-8 py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --explicit-streams
+PYTHONIOENCODING=utf-8 C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe tests/migration/bench_oracle_impulcifer_audio_io.py --explicit-streams
+PYTHONIOENCODING=utf-8 C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe tests/migration/bench_oracle_impulcifer_audio_io.py --op play_record_headphones_sweep
+PYTHONIOENCODING=utf-8 C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe tests/migration/bench_oracle_impulcifer_audio_io.py --op play_record_7_speaker_set
+PYTHONIOENCODING=utf-8 C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe tests/migration/bench_oracle_impulcifer_audio_io.py --op first_sample_latency
+```
+
+Integrity uses `IMPULCIFER_PA05_OP=play_record_7_speaker_set IMPULCIFER_PA05_INTEGRITY=1 IMPULCIFER_PA05_TAIL=1`, with fresh absolute `IMPULCIFER_PA05_CAPTURE_PREFIX` and `IMPULCIFER_PA05_TRACE_PREFIX` under audio-io/tests/bench_support, then `cargo bench -p impulcifer-audio-io --bench perf`. The original raw logs and exact artifact names are retained as `fourth-astra-*`; `analyze_fourth.py` writes `fourth-astra-analysis.json`. Environment and race were invoked with `--environment-only` and `--reproduce-convenience-race` on both interpreters. Do not overwrite historical capture prefixes on rerun.
+
+Workers additionally passed Python compilation, installed `ruff` CLI lint, synthetic analyzer checks and sys-win library tests. `py -3.14 -m ruff` failed because that interpreter lacks the ruff module; the installed CLI then found import/f-string issues, fixed before its passing rerun. Early new fake-packet tests had incorrect frame/channel counts, fixed and all gates rerun. Three overly specific `--exact` test calls ran zero tests and were not counted; all 13 sys-win library tests were subsequently run. These earlier failures were not hidden.
+
+### Files and remaining work
+
+Fourth-run product change: `crates/impulcifer-sys-win/src/lib.rs` (private trace, render-query reduction, overlapping-lifetime enumerator reuse, two tests). Bench change: `crates/impulcifer-audio-io/tests/bench_support/mod.rs` (ten integrity runs and truthful diagnostic labels). Oracle change: `tests/migration/bench_oracle_impulcifer_audio_io.py` (COM, explicit alternative and race reproduction). New offline analyzer: `crates/impulcifer-audio-io/tests/bench_support/analyze_fourth.py`. This report was updated by the parent; raw CSV/f32/log/JSON experiment files remain local evidence, not golden fixtures or intended commits.
+
+Smoke names remain `bench_smoke_impulcifer_audio_io` and `bench_smoke_impulcifer_sys_win`. No features.toml, unsafe budget, production Python, service/update/apps, golden/exporter, version, README, CHANGELOG, commit or push was changed for this run. Source f32 remains the existing transport, not a new DSP precision choice.
+
+Still required: eliminate the reproducible 480-frame losses in 10/10 runs, reach open/close and sweep-overhead ratios >=1 for both interpreters, obtain an equal first-buffer measurement boundary, and measure complete service enumeration if claiming its parity. The explicit-stream timing is not a repair of the 2.x recorder. Both crates remain performance-audit incomplete.
+
+## Third run, 2026-09-08: final working-tree assessment
+
+**INCOMPLETE / NOT PASSED.** The default backend now caches enumeration and exclusive-format refusals. Shared WASAPI uses event waits, reusable transport buffers and device-period-based buffering. However, the final parent measurement still loses to both Python interpreters for open/close, the unchanged Python production recorder cannot start capture on its recording thread, and the final Rust seven-segment integrity check fails in one of three captures. Passing existing integration tests does not override these failures. No feature registry entry was changed.
+
+The sections headed “Archived second run” below are historical evidence. Their statements about unchanged production code, forbidden sys-win edits and unresolved Python diagnosis describe that earlier run only; this third-run section supersedes them.
+
+### Environment and execution
+
+Same CABLE-A endpoints and 48,000 Hz / two-channel transport as the archived environment. Intel Core i5-12600KF, 10 physical / 16 logical cores; Windows 11 Education build 22621; Rust/Cargo 1.97.0, LLVM 22.1.6. Worker observations reported Discord (six processes), HLConvolverHost and audiodg running. These observations are not proof of endpoint ownership. No user process was stopped and no request to close applications was made. Commands, including worker agents and the synchronous CPU-observer child, ran in the foreground; none were detached.
+
+- CPython 3.14.5: `C:/Users/32170336/AppData/Local/Programs/Python/Python314/python.exe` (`py -3.14`).
+- CPython 3.14.7 free-threaded: `C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe`.
+- Both: NumPy 2.5.3, SciPy 1.18.1, sounddevice 0.5.6. PortAudio reports `V19.7.0-devel, revision unknown`.
+- NumPy OpenBLAS 0.3.34.106.0 ILP64 / pocketfft; SciPy OpenBLAS 0.3.31.dev LP64 / duccfft.
+- OMP_NUM_THREADS, MKL_NUM_THREADS, OPENBLAS_NUM_THREADS and NUMEXPR_NUM_THREADS unset. No thread pinning or installations.
+- WASAPI host index 2, input index 39 (`CABLE-A Output(VB-Audio Cable A)`), output index 35 (`CABLE-A Input(VB-Audio Cable A)`). Both channels are explicitly requested. No default-device substitution.
+
+### Method and remaining scope limitations
+
+Three warmups, then five 20-call batches for enumeration and open/close, five headphones runs, three seven-segment runs, five CPU observations during measured headphones sessions and ten latency runs. Rust uses release `cargo bench`. CPU observation reads the Rust process user+kernel totals through psutil with an acknowledged pipe; it is synchronous and waits for the child to exit.
+
+The final Rust wall span includes file read, sample preparation, endpoint resolution, open, playback/capture and stop/join; file writes are outside the span. Python calls the real `core.recorder.play_and_record` with file reading enabled, real blocking `sd.rec` on its recording thread, real blocking `sd.play`, and the real join; only final `write_wav` is replaced with in-memory collection. There are still language-specific bookkeeping differences, and no successful sweep ratio can be established.
+
+Headphones is the bundled 295,270-frame mono sweep duplicated to stereo (6.151458333333 s, transport FNV-1a `d0345121ff98253d`). Seven segments are an explicit stereo file accepted by service speakers file mode, 2,066,890 frames / 43.060208333333 s / hash `4aa88e1cfdf037c1`. It is not a seven-speaker request to the stereo generator. Latency uses 4,800 frames, hash `2a96093a100aaf11`.
+
+`enumerate_backend` measures the backend used by the service, not the complete `list_audio_devices` JSON assembly and filtering. Python enumeration includes `query_devices()` and the recorder host API name list. Its speed ratio is therefore supplementary, not proof of complete service-operation parity. Final `first_sample_latency` measures input-session start entry to the first nonempty 1,024-frame application read return; it is not an OS capture callback timestamp. This requested callback comparison remains incomplete.
+
+### Final parent rerun: verbatim Rust tables
+
+These rows were independently rerun after the temporary public diagnostics API was removed. They are the current code's results, not the earlier worker results.
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 0.026700 | 0.025400 |
+| open_close_session | 20 calls/batch | 282.279500 | 271.942100 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6209.446500 | 6205.708300 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 57.988167 | 54.249967 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43146.423100 | 43129.046600 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 86.214767 | 68.838267 |
+| first_sample_latency | input session start call to first nonempty application read return; 10 runs | 42.672850 | 40.901200 |
+| capture_loop_cpu | process user+kernel; 5 runs | 62.500000 | 0.000000 |
+
+Cold enumeration was 20.863100 ms; warm per-call median is 0.001335 ms. CPU observations were 78.125, 78.125, 15.625, 0.000 and 62.500 ms. The zero observation is a coarse process-counter delta, **not proof that capture consumed no CPU**. Counter granularity and observer bookkeeping prevent a fine-grained CPU speedup claim.
+
+Raw `impulcifer-sys-win` remains uncached to preserve its Copy unit-struct public API. The application cache lives in audio-io.
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 278.228300 | 275.329300 |
+
+### Final parent rerun: verbatim Python tables
+
+CPython 3.14.5:
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.080400 | 2.027400 |
+| open_close_session | 20 calls/batch | 246.917600 | 236.802200 |
+
+CPython 3.14.7 free-threaded:
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.025600 | 1.958800 |
+| open_close_session | 20 calls/batch | 251.819300 | 237.764400 |
+
+Both full oracle invocations failed during the first headphones warmup with zero input callbacks. Seven-segment and latency were also attempted separately by workers and failed. There are no Python sweep/CPU/latency measurements to compare.
+
+| Operation | Second-run Rust median ms | Final Rust median ms | Final Python/Rust | Final Python-t/Rust | Assessment |
+|---|---:|---:|---:|---:|---|
+| Warm backend enumeration, 20 | 284.886700 | 0.026700 | 77.917603 | 75.865169 | Cached backend only; complete service op unmeasured |
+| Raw sys-win enumeration, 20 | 273.753800 | 278.228300 | 0.007477 | 0.007280 | Slower; fresh versus cached enumeration |
+| Open/close, 20 pairs | 325.701600 | 282.279500 | 0.874727 | 0.892092 | Fails both comparisons |
+| Headphones wall | 6189.703100 | 6209.446500 | unavailable | unavailable | Before omitted file preparation |
+| Headphones overhead | 38.244767 | 57.988167 | unavailable | unavailable | Python capture fails |
+| Seven-segment wall | 43100.063300 | 43146.423100 | unavailable | unavailable | Before omitted file preparation |
+| Seven-segment overhead | 39.854967 | 86.214767 | unavailable | unavailable | Python capture fails |
+| Capture CPU | 93.750000 | 62.500000 | unavailable | unavailable | Different span; coarse counter |
+| First nonempty application delivery | 40.994550 | 42.672850 | unavailable | unavailable | Not requested OS callback metric |
+
+All final timed Rust headphones captured/drained 295,270 frames, seven-segment sessions 2,066,890 frames. Render underruns were zero in every measured session. Capture aggregate discontinuity remained true, silent false. These facts alone do not establish integrity.
+
+### impulcifer-audio-io changes
+
+`CachedBackend` is an additive decorator returned by `default_backend()`. It caches DTOs per instance for at most two seconds, ages from enumeration entry, clones results, and returns refresh errors rather than indefinitely serving an expired snapshot. It does not retain COM objects. Refusals are keyed by endpoint ID, host API, direction, rate and channel count. Only `UnsupportedFormat` is memoized. Explicit exclusive calls still fail as exclusive; the unchanged policy functions then report actual shared mode. Tests cover TTL boundaries, refresh failure, clone independence, instance isolation, format/direction keys, transient errors and mode metadata.
+
+No service source edits were needed: the service retains the default backend instance. CPAL transport itself was not changed. Fake-backend smoke tests still exercise every benchmark operation at small sizes; Windows hardware is not required by that smoke test.
+
+### impulcifer-sys-win changes and profiling
+
+- Shared streams use existing safe wasapi event handles with bounded 10 ms wait timeouts. Capture drains available packets before returning a full destination, with bounded backlog and explicit error instead of silent data loss.
+- Render waits after priming. Scratch bytes and capture deque capacity are reused; packet conversion no longer allocates a temporary Vec; queue draining uses slice copies.
+- Shared buffer duration follows four default device periods. The instrumented worker build measured 1,920 frames in each direction, versus 1,056 earlier. This reduces starvation at the cost of buffering; it did not eliminate all waveform failures.
+- Mix format and initialization reuse one client; the unused shared `IsFormatSupported` query was removed. Exclusive format-mask probes preserve transient HRESULTs rather than permanently memoizing them as format rejection.
+- No unsafe, SIMD, new native dependency, transport precision change or existing public signature change. A worker initially added public transport diagnostics; the parent rejected and removed that API and all its production bookkeeping before final verification and timing.
+- Consequently final public APIs do not expose actual driver buffer sizes, packet timestamps or first-packet-excluded discontinuity counts through the session trait. Earlier instrumented observations are archived below, not represented as final API measurements.
+- Safe device notifications exist but require separate registration lifetime/thread handling; the cache uses the authorized two-second TTL instead. No safe MMCSS facility was established in wasapi 0.24; none was added. Exclusive streams retain their previous polling implementation, as CABLE-A rejects exclusive float32.
+
+Profiling was code inspection and narrowed release runs, not sampled attribution. A worker obtained open medians Rust 267.835900 / Python 329.370200 / Python-t 273.628600 ms (ratios 1.229746 / 1.021628), but the final parent rerun above failed both comparisons. The favorable earlier sample is not the verdict. Client initialization, two separate Rust sessions versus Python duplex Stream, and environmental variation remain. No algebraic subtraction of medians is treated as an API cost measurement.
+
+Transport tests preserve exact f32 bit patterns, including signed zero and NaN payload, with no arithmetic reordering. Conversion error in these tests is zero bits. Goldens and tolerances were unchanged and all applicable golden tests passed; no new per-golden numerical error maximum was calculated. Hardware residuals below are a separate failure, not a golden-tolerance adjustment.
+
+### Capture integrity: before, optimized diagnostic build, final code
+
+Diagnostic captures use an extra 250 ms tail, outside the timed production workload. Cross-correlation finds an offset per channel, then least-squares gain and residuals are calculated in float64. Active-reference zero runs and exact repeated 128-frame blocks are checked. Gain fitting can conceal a uniform gain defect, so gain is also recorded. This is not an exhaustive inserted/deleted-frame detector.
+
+The follow-up worker measured three headphones captures before additional draining/buffering fixes, then three after. Full reference overlap was available; these are not tail-truncation counts.
+
+| Capture variant/run | Active zero frames | Residual RMS | Render underruns |
+|---|---:|---:|---:|
+| Before follow-up / 0 | 1623 | 0.049088397 | 1 |
+| Before follow-up / 1 | 502 | 0.435407009 | 1 |
+| Before follow-up / 2 | 384 | 0.000243222 | 1 |
+| Four-period buffer / 0 | 0 | 0.000002133 | 0 |
+| Four-period buffer / 1 | 0 | 0.000002133 | 0 |
+| Four-period buffer / 2 | 0 | 0.000002133 | 0 |
+
+In earlier polling captures, first-packet-excluded discontinuity counts were 81,15,5,2,4 and render underruns 60,9,10,2,5. After event waiting, reported discontinuities beyond the first reached zero but waveform gaps persisted. The four-period worker seven-segment captures had ch0 zero-frame counts 449,449,0, all with reported underruns and discontinuities-after-first zero. The two gaps were at aligned `[111,560)`. No masking of initial discontinuity in the production CaptureRead API was performed.
+
+The parent independently captured **three final-code seven-segment sessions after removing diagnostics**, each with 2,078,890 captured frames (including the tail). All had zero reported render underruns, aggregate capture discontinuity true, silent false. Full reference overlap was confirmed in every channel.
+
+| Final capture | Offset frames | ch0 active zero frames / runs >=16 | ch0 residual RMS | ch1 residual RMS | max residual ch0 / ch1 |
+|---|---:|---|---:|---:|---|
+| 0 | 1632 | 737 / 3 | 0.326074843 | 0.004898486 | 1.786301396 / 0.645267487 |
+| 1 | 1392 | 0 / 0 | 0.000001612 | 0.000001396 | 0.000003823 / 0.000003823 |
+| 2 | 1392 | 0 / 0 | 0.000001612 | 0.000001396 | 0.000003823 / 0.000003823 |
+
+Capture 0 ch0 gain was 0.786313251; the other fitted gains were approximately 1.000000008. Maximum zero-run length was 480 frames; no exact repeated 128-frame block was found. **Capture 0 fails integrity despite zero reported underruns.** The source of this intermittent corruption remains unresolved; no claim is made that it must be the wrapper rather than the engine/virtual endpoint.
+
+Raw diagnostic captures and fixtures remain under `crates/impulcifer-audio-io/tests/bench_support/`: worker `before-*`, `after-*`, `final-*`, `tail-*`, `followup-*`, and parent `parent-final-play_record_7_speaker_set-{0,1,2}.f32`. They are untracked experiment artifacts, not golden fixtures and not intended for committing. Existing captures were preserved, not overwritten or removed.
+
+### Python production blocker, now reproduced
+
+The oracle pins WASAPI device indices not just defaults but at `sd.rec`, `sd.play` and stream constructors, and restores patches/exception hooks. It now surfaces the real recording-thread exception instead of allowing the production function's successful return to look like a capture success. Both final parent oracle runs still ended with:
+
+```text
+core/recorder.py:200 -> sd.rec(... blocking=True)
+sounddevice.py:2671 -> self.stream.start()
+PortAudioError: Error starting stream ... [PaErrorCode -9999]
+RuntimeError: production recorder worker failed
+input device=39, output device=35, input_callbacks=0, captured_frames=None
+```
+
+The worker ran controlled 4,800-frame input-only tests with the same device. Main-thread recording succeeded. A plain Python worker thread failed twice; initializing COM MTA on that worker with `CoInitializeEx(None, 0)` made both counterpart attempts succeed. This was a diagnostic experiment only; native COM calls were not added to the oracle or repository. The WDM-KS last-host-error text already existed before recording, persisted after a successful main-thread capture, and was unchanged after failure. It is stale error context, not evidence that device 39 changed host APIs.
+
+There is also an independent convenience-API conflict: installed sounddevice.py uses global `_last_callback` (line 104), invokes `stop()` in `start_stream` (2664), and replaces `_last_callback` (2673); `stop` closes that previous stream (415–419). In three controlled tests, starting `sd.play` changed the previously active `sd.rec` stream from `(active=True, closed=False)` to `(False, True)`. In production, recorder.py starts its recording thread at 514–519, invokes blocking play at 539 and joins at 568. Fixing COM alone would not remove this shared-state conflict.
+
+`core/recorder.py` is outside this run's write allowlist, and its blocking/join contract must be retained. It was not modified, and a replacement `playrec` or hand-written input stream was not substituted to manufacture passing oracle numbers. Production Python repair requires a separately authorized change.
+
+### Final verification and reproducible commands
+
+The parent independently ran these commands after the API cleanup, all foreground:
+
+```sh
+cargo fmt -p impulcifer-audio-io -p impulcifer-sys-win -- --check
+cargo clippy -p impulcifer-audio-io -p impulcifer-sys-win --all-targets -- --no-deps -D warnings
+cargo test -p impulcifer-audio-io -p impulcifer-sys-win
+cargo test -p impulcifer-policy
+cargo test -p impulcifer-service --test recording
+cargo test -p impulcifer-service --test recording recording_virtual_cable_end_to_end -- --ignored --exact --nocapture
+cargo test -p impulcifer-audio-io --test hardware wasapi_session_virtual_cable -- --ignored --exact --nocapture
+PYTHONIOENCODING=utf-8 py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --observe-rust cargo bench -p impulcifer-audio-io --bench perf
+cargo bench -p impulcifer-sys-win --bench perf
+PYTHONIOENCODING=utf-8 py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py
+PYTHONIOENCODING=utf-8 C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe tests/migration/bench_oracle_impulcifer_audio_io.py
+IMPULCIFER_PA05_OP=play_record_7_speaker_set IMPULCIFER_PA05_INTEGRITY=1 IMPULCIFER_PA05_TAIL=1 IMPULCIFER_PA05_CAPTURE_PREFIX=E:/Impulcifer/crates/impulcifer-audio-io/tests/bench_support/parent-final cargo bench -p impulcifer-audio-io --bench perf
+```
+
+Format and clippy passed. Test output counts: audio-io 11 unit + 13 fake/smoke passed; sys-win 11 unit + 1 enumeration smoke passed; policy 6 passed; service recording 13 passed. Default test runs ignored five audio hardware tests and one service hardware test. The two CABLE-A-specific tests were then explicitly run and passed. Parent total is **57 passed**, counting those two explicit hardware runs, and **four other hardware tests remain unrun** (including CPAL and default-device tests).
+
+Parent service hardware output: 878,540 frames, 48 kHz stereo, sweep detection found two segments. Parent WASAPI test: 96,000 captured / 48,000 submitted and drained frames, left RMS `-inf`, right RMS `-26.037964063675236 dBFS`, underruns 0. A worker's earlier run of this unchanged WASAPI hardware test failed with left RMS `-51.725489620444726 dBFS` against `< -60`; its retry passed. The later passes do not erase that intermittent failure.
+
+Both final Rust benchmarks exited 0. Both Python full benchmarks exited 1. Workers also ran scoped Python compile/ruff and diff checks. No full workspace test/PR/CI claim is made.
+
+### Files and outstanding work
+
+Production additions are `crates/impulcifer-audio-io/src/cached_backend.rs`, its registration/default-backend wiring in `src/lib.rs`, and optimizations in `crates/impulcifer-sys-win/src/lib.rs`. Bench registrations, both benches, both bench-support modules, audio-io fake/smoke tests, sys-win enumeration smoke and `tests/migration/bench_oracle_impulcifer_audio_io.py` retain and extend the earlier scaffold. This report was updated by the parent. Existing workspace dev dependency `impulcifer-io` remains the WAV reader; no new external crate was installed. Other workers' service/apps/jobs/lockfile changes are not attributed to PA05.
+
+Registry test names remain `bench_smoke_impulcifer_audio_io` and `bench_smoke_impulcifer_sys_win`. No features.toml, unsafe budget, golden/exporter, frontend, production Python, README, CHANGELOG, version, commit or push change was made for PA05.
+
+Still required: fix and authorize the Python production recorder, eliminate/reliably diagnose waveform corruption, achieve open/close parity on repeat measurements, measure the complete service enumeration operation, obtain callback/buffer diagnostics without changing the forbidden public API, and rerun complete valid comparisons. Neither crate is declared performance-audited.
+
+API references checked by workers: [StreamMode](https://docs.rs/wasapi/0.24.0/wasapi/enum.StreamMode.html), [Handle](https://docs.rs/wasapi/0.24.0/wasapi/struct.Handle.html), [AudioClient](https://docs.rs/wasapi/0.24.0/wasapi/struct.AudioClient.html), [DeviceEnumerator](https://docs.rs/wasapi/0.24.0/wasapi/struct.DeviceEnumerator.html), [WasapiError](https://docs.rs/wasapi/0.24.0/wasapi/enum.WasapiError.html).
+
+## Archived second run
+
+Date: 2026-09-08, second run. **Status: audit incomplete and performance gate not passed.** Rust hardware measurements finished. The Python production recorder failed to start capture on both tested interpreters. Session open/close is slower in Rust: Python/Rust = **0.694415** on CPython 3.14.5. Missing measurements are not zero and are not passing results. No registry entry, production source, public API or golden tolerance was changed.
+
+The first run's requirement to close other audio applications was withdrawn. This run removed that obsolete prerequisite and measured with applications running. No application was closed or terminated, and no request to close one was made.
+
+## 1. Environment
+
+- CPU: Intel Core i5-12600KF, 10 physical cores / 16 logical processors.
+- OS: Windows 11 Education, build 22621.
+- Rust: rustc 1.97.0 / Cargo 1.97.0, x86_64-pc-windows-msvc, LLVM 22.1.6.
+- CPython: `C:/Users/32170336/AppData/Local/Programs/Python/Python314/python.exe`, 3.14.5.
+- Free-threaded CPython: `C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe`, 3.14.7, GIL disabled. The recorder uses a recording thread, so both interpreters were attempted.
+- Both interpreters: NumPy 2.5.3, SciPy 1.18.1, sounddevice 0.5.6.
+- NumPy BLAS: OpenBLAS 0.3.34.106.0, ILP64. SciPy BLAS: OpenBLAS 0.3.31.dev, LP64. NumPy FFT: pocketfft; installed SciPy FFT: duccfft.
+- `OMP_NUM_THREADS`, `MKL_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `NUMEXPR_NUM_THREADS`: unset. No thread pinning or artificial single-thread limit.
+- Read-only process observations during the worker's run: Discord PIDs 3128, 13112, 17004, 17824, 19580, 20044; HLConvolverHost PID 71740; audiodg PID 113280. These are process observations, not endpoint-ownership measurements.
+- Output: `CABLE-A Input (VB-Audio Cable A)`; input: `CABLE-A Output (VB-Audio Cable A)`; Windows WASAPI, 48,000 Hz, two stream channels. Windows reported names without the space before `(`. Selection allows only that whitespace difference, requires the full name and appropriate channel direction, and refuses ambiguous matches. No default-device substitution.
+- Python selected WASAPI host API index 2, input device 39 and output device 35. Input advertises two channels; output advertises eight. Both streams use two channels.
+
+No new external dependency or tool was installed. The existing workspace `impulcifer-io` crate was added as an audio-io dev dependency to read the bundled WAV.
+
+## 2. Method and workload boundaries
+
+Three warmups preceded each operation. Measured repetitions follow the hardware packet: 20-call enumeration/open-close batches repeated five times; headphones five times; seven segments three times; latency ten times. Process CPU was measured during the same five measured headphones sessions. All commands were foreground, including the synchronous Python parent observing a Rust child. The parent services an acknowledged pipe protocol and waits for the child to exit; it does not detach or leave a process running.
+
+| Workload | Frames | Duration seconds | Matching Rust/Python float32 transport FNV-1a |
+|---|---:|---:|---|
+| Headphones, bundled mono sweep duplicated to stereo | 295270 | 6.151458333333 | `d0345121ff98253d` |
+| Seven consecutive stereo segments | 2066890 | 43.060208333333 | `4aa88e1cfdf037c1` |
+| Latency fixture | 4800 | 0.100000000000 | `2a96093a100aaf11` |
+
+The source is `data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav`, mono PCM32. Transport conversion uses the existing production float32 format; no DSP precision or production format changed.
+
+**Scope qualifications**
+
+- `enumerate_backend` measures raw production backend enumeration. It does not include service `list_audio_devices` host-list construction, filtering, default-index lookup and JSON response. The requested complete service operation remains unmeasured. The enumeration ratios below are supplementary, not parity results.
+- The seven-segment fixture alternates left/right output using seven complete bundled sweeps. Both implementations use matching transport samples. It is an explicit benchmark file, not a seven-speaker request to the stereo generator. The actual generators accept at most two stereo speakers and add silence. Consequently this is not verified as the requested complete service speakers-mode workload; it must not be represented as such.
+- Rust wall timing wraps production `session::play_and_record`, excluding fixture preparation and file saving. Python timing wraps the complete `core.recorder.play_and_record`, including loading, device resolution and saving. These boundaries must be aligned before a successful future sweep comparison. No sweep ratio is claimed here.
+- Rust `first_sample_latency` is capture-session start entry to first nonempty `read_into` return. It is not the inaccessible WASAPI buffer callback timestamp. Python's intended boundary is `sd.play` entry to the first nonempty input callback. The recording thread starts before `sd.play`, so this is a different boundary and can in principle yield a negative value. No callback ratio is claimed.
+- Bench-only Rust observation takes a mutex and timestamp after each read. Python observation wraps stream callbacks. Observer overhead is included; no uninstrumented timing delta was established.
+
+## 3. Verbatim measured tables
+
+These are the worker's release/CPython benchmark rows, preserved verbatim. The parent reviewed the implementation and independently reran correctness gates and the failing Python headphones operation; it did not repeat all long Rust measurements.
+
+### impulcifer-audio-io, Rust release
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 284.886700 | 273.871300 |
+| open_close_session | 20 calls/batch | 325.701600 | 320.520500 |
+| play_record_headphones_sweep | 295270 frames; 5 runs | 6189.703100 | 6187.748800 |
+| play_record_headphones_sweep_overhead | wall minus playback duration | 38.244767 | 36.290467 |
+| play_record_7_speaker_set | 2066890 frames; 3 runs | 43100.063300 | 43093.487000 |
+| play_record_7_speaker_set_overhead | wall minus playback duration | 39.854967 | 33.278667 |
+| first_sample_latency | start to nonempty read delivery; 10 runs | 40.994550 | 40.204100 |
+| capture_loop_cpu | process user+kernel; 5 runs | 93.750000 | 78.125000 |
+
+### impulcifer-sys-win, Rust release
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| enumerate_backend | 20 calls/batch | 273.753800 | 269.345500 |
+
+Production sys-win capture/render sessions are also exercised by the audio-io table. Those sessions are not separately measured direct sys-win session operations.
+
+### Python 3.14.5
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.094200 | 2.033800 |
+| open_close_session | 20 calls/batch | 226.172200 | 221.754200 |
+
+### Python 3.14.7 free-threaded
+
+| op | size | python median ms | python min ms |
+|---|---|---:|---:|
+| enumerate_devices | 20 calls/batch | 2.118800 | 2.016200 |
+| open_close_session | 20 calls/batch | 238.331000 | 225.851200 |
+
+Python sweeps, capture CPU and first-callback results are unavailable because capture failed during warmup.
+
+### Comparison and before/after status
+
+| Comparison | Python 3.14.5 / Rust | Python 3.14.7t / Rust | Before | After |
+|---|---:|---:|---|---|
+| open_close_session | 0.694415 | 0.731746 | Measured; below 1.0 | No production optimization; no after measurement |
+| Python enumeration / audio backend enumeration | 0.007351 | 0.007437 | Supplementary, unequal scope | No production optimization; no after measurement |
+| Python enumeration / sys-win backend enumeration | 0.007650 | 0.007740 | Supplementary, unequal scope | No production optimization; no after measurement |
+| Headphones overhead | unavailable | unavailable | Python capture failed | Not measured |
+| Seven-segment overhead | unavailable | unavailable | Python capture failed; service workload not verified | Not measured |
+| Capture CPU | unavailable | unavailable | Python capture failed | Not measured |
+| First captured callback | unavailable | unavailable | Rust callback unobservable; Python capture failed | Not measured |
+
+Rust open/close follows exclusive-first policy; Python `sd.Stream` follows the 2.x shared policy with per-direction WASAPI settings. This compares existing policies rather than identical opening attempts. Rust is slower for the requested policy workload, but the ratio is not a comparison of equal numbers of low-level API calls.
+
+## 4. Raw measured samples
+
+Milliseconds, in execution order, excluding warmups.
+
+```text
+Rust audio enumeration:
+287.839600, 290.942200, 277.244800, 284.886700, 273.871300
+Rust sys-win enumeration:
+269.345500, 279.864700, 276.018900, 272.978800, 273.753800
+Rust open/close:
+323.141800, 330.625200, 329.487200, 320.520500, 325.701600
+Rust headphones wall:
+6191.277000, 6189.703100, 6189.340400, 6192.040200, 6187.748800
+Rust headphones overhead:
+39.818667, 38.244767, 37.882067, 40.581867, 36.290467
+Rust headphones CPU:
+93.750000, 109.375000, 109.375000, 78.125000, 78.125000
+Rust seven-segment wall:
+43100.063300, 43093.487000, 43104.018300
+Rust seven-segment overhead:
+39.854967, 33.278667, 43.809967
+Rust first nonempty delivery:
+41.088100, 42.437200, 40.901000, 40.306200, 41.538700,
+40.638300, 42.538800, 40.756900, 40.204100, 41.902200
+Python 3.14.5 enumeration:
+2.238000, 2.036900, 2.094200, 2.033800, 2.153300
+Python 3.14.5 open/close:
+231.653800, 226.172200, 221.754200, 225.429800, 229.328200
+Python 3.14.7t enumeration:
+2.046100, 2.118800, 2.243000, 2.016200, 2.144300
+Python 3.14.7t open/close:
+246.855400, 244.980200, 238.331000, 228.738300, 225.851200
+```
+
+## 5. impulcifer-audio-io diagnostics and smoke coverage
+
+Bench helpers wrap the unchanged production backend and recording session. They check captured/drained lengths and timestamp only actual nonempty deliveries, rather than entry to a polling call.
+
+Both input and output actually rejected exclusive float32 with `Could not find a compatible format`, then opened with `SharedAutoConvert`. This is a fresh PA05 observation, not an inference from the older HARDWARE.md run.
+
+- All measured headphones sessions captured and drained 295270 frames; all seven-segment sessions captured and drained 2066890 frames.
+- Headphones reported render underruns `1, 1, 1, 2, 1`; seven-segment sessions reported `1, 2, 1`.
+- Capture discontinuity was `true` in every measured run. Capture silent flag was `false`.
+- First delivered capture block: 1024 frames. Application reads: 289 per headphones session, 2019 per seven-segment session; no empty deliveries.
+- These are the backend's flags/counters. Exact underlying xrun timing and packet-level discontinuity counts are not exposed, so the flags do not prove audio integrity. Exact frame counts alone do not prove an undamaged capture.
+- Actual driver buffer sizes are unavailable through the existing session trait. The 1024-frame application delivery must not be relabeled as a negotiated driver buffer size.
+- CPU is psutil process user+kernel time read by a synchronous parent at acknowledged session boundaries. Compilation, fixture loading and warmups are excluded; boundary pipe bookkeeping is included. Observed CPU values have 15.625 ms granularity.
+
+`bench_smoke_impulcifer_audio_io` uses the fake backend to exercise enumeration, refusal of a fake/default endpoint as CABLE-A, policy opening, tiny one/seven-segment recordings, wall/overhead calculation, first nonempty delivery and error propagation. CPU boundary helpers run with observation disabled; CI does not test the real psutil/pipe exchange. `bench_playback_set_preserves_transport_and_segment_routing` checks sample preservation and alternating channel routing. These tests do not validate real hardware callbacks or the full service workload.
+
+## 6. impulcifer-sys-win and profiling
+
+The standalone bench measures real endpoint enumeration. `bench_smoke_impulcifer_sys_win` is Windows-only, accepts an empty endpoint list and propagates actual enumeration errors. No sys-win source, public API or unsafe budget changed.
+
+All available ratios below 1.5 were investigated through code inspection and narrower measurements. Verbatim Rust release profiling rows:
+
+| op | size | rust median ms | rust min ms |
+|---|---|---:|---:|
+| profile_shared_pair | 20 calls/batch | 331.878400 | 324.908600 |
+| profile_exclusive_rejections | 20 calls/batch | 80.551800 | 78.932500 |
+
+Python's separate 20-call medians were 1.778400 ms for `query_devices` and 0.227400 ms for `query_hostapis`.
+
+- Enumeration: sys-win performs fresh COM/device enumeration and mix-format queries. PortAudio queries its cached device information. The markedly different costs therefore include different freshness semantics; caching Rust enumeration would need an explicit invalidation policy.
+- Session opening: Rust performs exclusive rejection attempts and separately initializes capture/render clients. Python opens a shared duplex Stream. Shared-only measurements taken later were slower than the earlier exclusive-first batch, demonstrating variability; subtracting these medians would not be a valid cost decomposition.
+- Capture implementation inspection found packet-conversion allocation, VecDeque copies and 1 ms polling in sys-win, plus 5 ms coordination polling in audio-io. These are implementation observations, not sampled CPU attribution. No measured lock-contention percentage or sample-conversion speedup is claimed.
+- No source optimization was made. The identified backend operations are in read-only sys-win code. Skipping exclusive attempts or returning stale devices from audio-io would change semantics. Neither was done.
+
+There is no new numerical maximum error to report: production computations and summation order did not change. Correctness tests and policy tests pass unchanged. A passing correctness suite is not a passing performance audit.
+
+## 7. Python recorder failure
+
+Both CPython versions failed during the first headphones warmup. Separate seven-segment and latency attempts also failed. The worker reproduced the issue with uninstrumented `core.recorder.play_and_record`; it printed completion after the recording thread failed but produced no capture file. Input-only streams and `sd.rec` without simultaneous playback succeeded. The underlying simultaneous-playback/capture failure has not been conclusively diagnosed.
+
+The parent independently reran:
+
+```sh
+PYTHONIOENCODING=utf-8 py -3.14 E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py --op play_record_headphones_sweep
+```
+
+It exited 1. Relevant output:
+
+```text
+Exception in thread Thread-1 (record_target):
+  File "E:\Impulcifer\core\recorder.py", line 200, in record_target
+    recording = _sounddevice().rec(length, samplerate=fs, channels=channels, blocking=True)
+sounddevice.PortAudioError: Error starting stream: Unanticipated host error [PaErrorCode -9999]: 'WdmSyncIoctl: DeviceIoControl GLE = 0x00000490 (prop_set = {8C134960-51AD-11CF-878A-94F801C10000}, prop_id = 10)' [Windows WDM-KS error 0]
+AssertionError: ... 'input_callbacks': 0, 'output_callbacks': 617, ... 'captured_frames': None
+```
+
+Observed stream metadata in that parent run: output device 35 and input device 39, float32, two channels, 48000 Hz, requested blocksize 0 (host-selected), reported latency 0.022 seconds on each stream. No input callback arrived. The error's WDM-KS wording does not establish device substitution: observed stream device identities were WASAPI.
+
+The oracle refuses to report successful timing when the recording thread fails. No production `sd.play(blocking=True)` or `Thread.join()` behavior was changed, and no replacement recorder was substituted to produce a passing result.
+
+## 8. Commands and verification
+
+All commands were foreground. Bench entry points are:
+
+```sh
+cargo bench -p impulcifer-audio-io --bench perf
+cargo bench -p impulcifer-sys-win --bench perf
+py -3.14 E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py
+C:/Users/32170336/AppData/Local/impulcifer-bench/py314t/Scripts/python.exe E:/Impulcifer/tests/migration/bench_oracle_impulcifer_audio_io.py
+```
+
+The worker reported both Rust benches successful and both default Python oracle runs failed. Its complete shell transcript is not embedded in this report; the following commands reproduce per-operation selection and the synchronous CPU measurement used for the reported results (they are not a claim that every line below was independently rerun by the parent):
+
+```sh
+IMPULCIFER_PA05_OP=play_record_headphones_sweep py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --observe-rust cargo bench -p impulcifer-audio-io --bench perf
+IMPULCIFER_PA05_OP=play_record_7_speaker_set cargo bench -p impulcifer-audio-io --bench perf
+IMPULCIFER_PA05_OP=first_sample_latency cargo bench -p impulcifer-audio-io --bench perf
+IMPULCIFER_PA05_OP=profile_open cargo bench -p impulcifer-audio-io --bench perf
+py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --environment-only
+py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --op play_record_7_speaker_set
+py -3.14 tests/migration/bench_oracle_impulcifer_audio_io.py --op first_sample_latency
+```
+
+The parent independently ran this exact foreground validation chain after reading the helper, Python oracle and changed test code:
+
+```sh
+cargo fmt -p impulcifer-audio-io -p impulcifer-sys-win -- --check && cargo clippy -p impulcifer-audio-io -p impulcifer-sys-win --all-targets -- --no-deps -D warnings && cargo test -p impulcifer-audio-io && cargo test -p impulcifer-sys-win && cargo test -p impulcifer-policy
+```
+
+Formatting and clippy passed. Test output, in order:
+
+```text
+# audio-io unit tests
+ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+# audio-io hardware tests
+ test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+# audio-io fake sessions and benchmark properties
+ test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+# sys-win unit tests
+ test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+# sys-win enumeration smoke
+ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+# sys-win hardware tests
+ test result: ok. 0 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+# policy tests
+ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.62s
+```
+
+Total: **35 passed, 5 hardware tests ignored, 0 failed**. Doctests contained no tests. Hardware tests above were not forcibly enabled because some target default devices; the explicit CABLE-A benches performed this audit's hardware runs. The worker also reported Python AST syntax and scoped diff checks passed.
+
+## 9. Files changed
+
+PA05 files relative to repository HEAD, including the retained first-run scaffolding:
+
+- `crates/impulcifer-audio-io/Cargo.toml` (bench registration and existing workspace dev dependency)
+- `crates/impulcifer-audio-io/benches/perf.rs`
+- `crates/impulcifer-audio-io/tests/bench_support/mod.rs`
+- `crates/impulcifer-audio-io/tests/session_fake.rs`
+- `crates/impulcifer-sys-win/Cargo.toml` (bench registration)
+- `crates/impulcifer-sys-win/benches/perf.rs`
+- `crates/impulcifer-sys-win/tests/bench_support/mod.rs`
+- `crates/impulcifer-sys-win/tests/bench_smoke.rs`
+- `tests/migration/bench_oracle_impulcifer_audio_io.py`
+- `docs/rust/perf/impulcifer-audio-io.md`
+
+Concurrent changes in apps, service, jobs and Cargo.lock were preserved and are not attributed to PA05. No manual lockfile edit, commit, push, stash or revert. No frontend wiring, catalog, README, release version, CHANGELOG or feature-registry modification was made under this packet's restricted allowed-file list.
+
+## 10. Remaining work
+
+1. Diagnose the production Python simultaneous capture/playback failure without changing the required recorder semantics or stopping other applications. Successful playback-only timings are not an oracle.
+2. Measure complete `list_audio_devices` and verify the exact requested service speakers-mode workload, rather than promoting supplementary backend/fixture measurements to those operations.
+3. Align Rust/Python wall and CPU boundaries, and obtain an agreed first-buffer observation boundary. Actual Rust callback timestamps and driver-buffer diagnostics are unavailable under the present public API restriction.
+4. Investigate reported Rust underruns/discontinuities and validate capture content; frame counts alone are insufficient.
+5. Optimize the slower session operation only within an explicitly authorized source scope, then repeat same-machine comparisons and unchanged goldens. The sys-win source restriction remains in force.
+6. Record all missing Python samples and valid ratios. Neither crate is performance-audited until every required operation has a valid ratio of at least 1.0.

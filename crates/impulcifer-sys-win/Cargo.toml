@@ -15,3 +15,7 @@ thiserror.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.24"
+
+[[bench]]
+name = "perf"
+harness = false
