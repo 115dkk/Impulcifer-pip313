@@ -16,6 +16,10 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+#[path = "support/local_feed.rs"]
+mod local_feed;
+
 fn golden() -> Value {
     serde_json::from_str(include_str!(
         "../../../tests/migration/goldens/p20_updater.json"
@@ -88,6 +92,7 @@ fn options(root: &Path, kind: InstallKind) -> UpdateOptions {
         timeout: Duration::from_secs(2),
         download_root: root.join("downloads"),
         appimage: None,
+        velopack_root: None,
     }
 }
 fn service(root: &Path, options: UpdateOptions, host: Arc<Mutex<HostState>>) -> ImpulciferService {
@@ -128,6 +133,15 @@ struct Server {
 }
 impl Server {
     fn new(responses: Vec<(u16, Vec<u8>, Duration)>) -> Self {
+        Self::new_chunked(
+            responses
+                .into_iter()
+                .map(|(status, body, delay)| (status, vec![body], delay))
+                .collect(),
+        )
+    }
+
+    fn new_chunked(responses: Vec<(u16, Vec<Vec<u8>>, Duration)>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         listener.set_nonblocking(true).unwrap();
@@ -135,8 +149,9 @@ impl Server {
         let captured = requests.clone();
         let thread = std::thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(5);
-            for (status, body, delay) in responses {
-                let mut stream = loop {
+            let mut handlers = Vec::new();
+            for (status, chunks, delay) in responses {
+                let stream = loop {
                     match listener.accept() {
                         Ok((stream, _)) => break stream,
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -146,33 +161,47 @@ impl Server {
                         Err(e) => panic!("{e}"),
                     }
                 };
-                stream.set_nonblocking(false).unwrap();
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                let mut request = Vec::new();
-                let mut buffer = [0; 4096];
-                while !request.ends_with(b"\r\n\r\n") {
-                    let count = stream.read(&mut buffer).unwrap();
-                    assert!(count > 0, "client closed before request headers");
-                    request.extend_from_slice(&buffer[..count]);
-                }
-                captured
-                    .lock()
-                    .unwrap()
-                    .push(String::from_utf8(request).unwrap());
-                std::thread::sleep(delay);
-                let header = format!(
-                    "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                );
-                let mut response = header.into_bytes();
-                response.extend_from_slice(&body);
-                if stream.write_all(&response).is_ok() {
-                    // Content-Length terminates the response. Let the client
-                    // close first; do not half-close under its buffered reader.
-                    let _ = stream.read_to_end(&mut Vec::new());
-                }
+                let captured = captured.clone();
+                handlers.push(std::thread::spawn(move || {
+                    let mut stream = stream;
+                    stream.set_nonblocking(false).unwrap();
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .unwrap();
+                    let mut request = Vec::new();
+                    let mut buffer = [0; 4096];
+                    while !request.ends_with(b"\r\n\r\n") {
+                        let count = stream.read(&mut buffer).unwrap();
+                        assert!(count > 0, "client closed before request headers");
+                        request.extend_from_slice(&buffer[..count]);
+                    }
+                    captured
+                        .lock()
+                        .unwrap()
+                        .push(String::from_utf8(request).unwrap());
+                    let body_len: usize = chunks.iter().map(Vec::len).sum();
+                    let header = format!(
+                        "HTTP/1.1 {status} Test\r\nContent-Length: {body_len}\r\nConnection: close\r\n\r\n"
+                    );
+                    if stream.write_all(header.as_bytes()).is_ok() {
+                        let mut complete = true;
+                        for chunk in chunks {
+                            std::thread::sleep(delay);
+                            if stream.write_all(&chunk).is_err() {
+                                complete = false;
+                                break;
+                            }
+                        }
+                        if complete {
+                            // Content-Length terminates the response. Let the client
+                            // close first; do not half-close under its buffered reader.
+                            let _ = stream.read_to_end(&mut Vec::new());
+                        }
+                    }
+                }));
+            }
+            for handler in handlers {
+                handler.join().unwrap();
             }
         });
         Self {
@@ -194,6 +223,7 @@ impl Drop for Server {
 #[test]
 fn golden_asset_selection_and_version_compare_match_python() {
     let gold = golden();
+    let deliberate_3x_divergences = [("3.0.0-alpha.0", "v3.0.0-rc1", true)];
     assert_eq!(gold["releases"].as_array().unwrap().len(), 30);
     for case in gold["releases"].as_array().unwrap() {
         let current = case["current"].as_str().unwrap();
@@ -206,9 +236,16 @@ fn golden_asset_selection_and_version_compare_match_python() {
             update::check::normalize_version(latest),
             case["normalized_latest"]
         );
+        let expected = deliberate_3x_divergences
+            .iter()
+            .find(|(divergent_current, divergent_latest, _)| {
+                current == *divergent_current && latest == *divergent_latest
+            })
+            .map(|(_, _, expected)| *expected)
+            .unwrap_or_else(|| case["newer"].as_bool().unwrap());
         assert_eq!(
             update::check::is_newer_version(current, latest),
-            case["newer"],
+            expected,
             "{case}"
         );
         for platform in ["windows", "darwin", "linux", "freebsd"] {
@@ -217,6 +254,24 @@ fn golden_asset_selection_and_version_compare_match_python() {
                 case["selected"][platform]
             );
         }
+    }
+}
+
+#[test]
+fn prerelease_ordering_compares_equal_normalized_bases() {
+    for (current, latest, expected) in [
+        ("3.0.0-alpha.0", "v3.0.0", true),
+        ("3.0.0-alpha.0", "v3.0.0-rc1", true),
+        ("3.0.0-rc1", "3.0.0-alpha.0", false),
+        ("3.0.0", "3.0.0-rc1", false),
+        ("3.0.0-rc1", "3.0.0", true),
+        ("2.3.1", "vv2.4.0-20241129123456", true),
+    ] {
+        assert_eq!(
+            update::check::is_newer_version(current, latest),
+            expected,
+            "{current} -> {latest}"
+        );
     }
 }
 
@@ -417,6 +472,33 @@ fn legacy_executor_downloads_verifies_and_opens() {
             json!({"progress":0.9,"message":"update_opening_installer"})
         ]
     );
+}
+
+#[test]
+fn slow_installer_body_uses_download_timeout_policy() {
+    let root = tempfile::tempdir().unwrap();
+    let chunks = vec![b"inst".to_vec(), b"all".to_vec(), b"er".to_vec()];
+    let sums = format!("{:x} *Setup.exe\n", Sha256::digest(b"installer"));
+    let server = Server::new_chunked(vec![
+        (200, chunks, Duration::from_secs(1)),
+        (200, vec![sums.into_bytes()], Duration::ZERO),
+    ]);
+    let state = Arc::new(Mutex::new(HostState::default()));
+    let mut opts = options(root.path(), InstallKind::Dev);
+    opts.timeout = Duration::from_secs(1);
+    let svc = service(root.path(), opts, state.clone());
+    let result = finish(
+        &svc,
+        json!({"latest_version":"3.1.0", "download_url":format!("{}/Setup.exe",server.base)}),
+    );
+    assert_eq!(result["job"]["status"], "succeeded", "{result}");
+    let calls = &state.lock().unwrap().calls;
+    assert_eq!(calls.len(), 1);
+    assert_eq!(std::fs::read(&calls[0].1).unwrap(), b"installer");
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].starts_with("GET /Setup.exe "));
+    assert!(requests[1].starts_with("GET /SHA256SUMS.txt "));
 }
 
 #[test]
@@ -671,6 +753,139 @@ fn installer_http_failure_never_opens_or_stages() {
             .count(),
         0
     );
+    assert_eq!(
+        svc.call("apply_pending_update", vec![])["error"]["code"],
+        "INVALID_REQUEST"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn velopack_executor_downloads_from_local_feed_and_stages_apply() {
+    use local_feed::{LocalFeed, TemporaryRoot};
+    use sha1::{Digest as _, Sha1};
+    use zip::{ZipWriter, write::SimpleFileOptions};
+
+    let temp = TemporaryRoot::new();
+    let install_root = temp.0.join("Impulcifer");
+    let current = install_root.join("current");
+    let packages = install_root.join("packages");
+    std::fs::create_dir_all(&current).unwrap();
+    std::fs::create_dir(&packages).unwrap();
+    std::fs::write(
+        install_root.join("Update.exe"),
+        b"P20b inert locator marker; never execute",
+    )
+    .unwrap();
+    std::fs::write(
+        current.join("sq.version"),
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd"><metadata>
+<id>Impulcifer</id><version>2.13.3</version><title>Impulcifer</title>
+<mainExe>impulcifer-app.exe</mainExe><os>win</os><channel>win</channel>
+</metadata></package>"#,
+    )
+    .unwrap();
+
+    let version = "3.0.0-alpha.0";
+    let filename = format!("Impulcifer-{version}-full.nupkg");
+    let source = temp.0.join(&filename);
+    let mut package = Vec::new();
+    {
+        let mut archive = ZipWriter::new(std::io::Cursor::new(&mut package));
+        archive
+            .start_file("Impulcifer.nuspec", SimpleFileOptions::default())
+            .unwrap();
+        archive
+            .write_all(
+                format!(
+                    r#"<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd"><metadata>
+<id>Impulcifer</id><version>{version}</version><title>Impulcifer</title>
+<mainExe>impulcifer-app.exe</mainExe><os>win</os><channel>win</channel>
+</metadata></package>"#
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        archive
+            .start_file("lib/app/impulcifer-app.exe", SimpleFileOptions::default())
+            .unwrap();
+        archive.write_all(b"synthetic application marker").unwrap();
+        archive.finish().unwrap();
+    }
+    std::fs::write(&source, &package).unwrap();
+    let feed_path = temp.0.join("releases.win.json");
+    let feed = json!({"Assets":[{
+        "PackageId":"Impulcifer",
+        "Version":version,
+        "Type":"Full",
+        "FileName":filename,
+        "SHA1":Sha1::digest(&package).iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
+        "SHA256":format!("{:x}", Sha256::digest(&package)),
+        "Size":package.len(),
+        "NotesMarkdown":"",
+        "NotesHtml":""
+    }]});
+    std::fs::write(&feed_path, serde_json::to_vec(&feed).unwrap()).unwrap();
+    let log_path = temp.0.join("local-feed.log");
+    let mut server = LocalFeed::new(
+        vec![
+            ("releases.win.json".into(), feed_path),
+            (filename.clone(), source),
+        ],
+        &log_path,
+    );
+
+    let mut opts = options(&temp.0, InstallKind::Velopack);
+    opts.platform = "windows".into();
+    opts.current_version = "2.13.3".into();
+    opts.releases_url = format!("http://{}", server.address);
+    opts.velopack_root = Some(install_root.clone());
+    let stage_manager = update::velopack::manager(&opts).unwrap();
+    let svc = service(&temp.0, opts, Arc::default());
+    let result = finish(&svc, json!({"latest_version":version}));
+    assert_eq!(result["job"]["status"], "succeeded", "{result}");
+    assert_eq!(result["job"]["result"], update::restart_result());
+    let messages: Vec<_> = result["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["type"] == "progress")
+        .filter_map(|event| event["payload"]["message"].as_str())
+        .collect();
+    let downloading = messages
+        .iter()
+        .position(|message| *message == "update_downloading")
+        .unwrap();
+    let percent = messages
+        .iter()
+        .position(|message| message.starts_with("Downloading: ") && message.ends_with('%'))
+        .unwrap();
+    let installing = messages
+        .iter()
+        .position(|message| *message == "update_installing")
+        .unwrap();
+    assert!(
+        downloading < percent && percent < installing,
+        "{messages:?}"
+    );
+    let staged = packages.join(&filename);
+    assert_eq!(std::fs::read(&staged).unwrap(), package);
+    assert!(staged.is_file());
+    let pending = stage_manager.get_update_pending_restart().unwrap();
+    assert_eq!(pending.FileName, filename);
+    assert_eq!(pending.Version, version);
+    server.finish().unwrap();
+
+    let apply = svc.call("apply_pending_update", vec![]);
+    assert_eq!(apply["error"]["code"], "UPDATE_FAILED", "{apply}");
+    let message = apply["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("IO error") || message.contains("not a valid Win32 application"),
+        "{message}"
+    );
+    assert!(staged.is_file());
     assert_eq!(
         svc.call("apply_pending_update", vec![])["error"]["code"],
         "INVALID_REQUEST"

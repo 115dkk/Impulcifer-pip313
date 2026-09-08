@@ -37,8 +37,8 @@ pub(super) fn execute(
         .tempdir_in(&options.download_root)
         .map_err(|e| e.to_string())?;
     let path = directory.path().join(filename);
-    let agent = options.agent();
-    let mut response = agent
+    let mut response = options
+        .download_agent()
         .get(url.as_str())
         .header("User-Agent", "Impulcifer-Updater")
         .call()
@@ -81,7 +81,8 @@ pub(super) fn execute(
             .map(|v| v.0)
             .unwrap_or("")
     );
-    match agent
+    match options
+        .agent()
         .get(&sums_url)
         .header("User-Agent", "Impulcifer-Updater")
         .call()

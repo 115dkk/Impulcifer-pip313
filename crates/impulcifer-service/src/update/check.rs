@@ -23,32 +23,50 @@ pub fn normalize_version(version: &str) -> String {
 }
 
 pub fn is_newer_version(current: &str, latest: &str) -> bool {
-    let current = normalize_version(current);
-    let latest = normalize_version(latest);
-    // Python integers are unbounded. Compare numeric releases without reducing
-    // components to machine integers (PEP 440 pads trailing zeros).
-    let numeric = |value: &str| {
-        !value.is_empty()
-            && value
-                .split('.')
-                .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
-    };
-    if numeric(&current) && numeric(&latest) {
-        let current: Vec<_> = current.split('.').collect();
-        let latest: Vec<_> = latest.split('.').collect();
-        for index in 0..current.len().max(latest.len()) {
-            let a = current.get(index).unwrap_or(&"0").trim_start_matches('0');
-            let b = latest.get(index).unwrap_or(&"0").trim_start_matches('0');
-            let ordering = b.len().cmp(&a.len()).then_with(|| b.cmp(a));
-            if !ordering.is_eq() {
-                return ordering.is_gt();
+    let current_base = normalize_version(current);
+    let latest_base = normalize_version(latest);
+    let compare_bases = || {
+        // Python integers are unbounded. Compare numeric releases without reducing
+        // components to machine integers (PEP 440 pads trailing zeros).
+        let numeric = |value: &str| {
+            !value.is_empty()
+                && value
+                    .split('.')
+                    .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+        };
+        if numeric(&current_base) && numeric(&latest_base) {
+            let current: Vec<_> = current_base.split('.').collect();
+            let latest: Vec<_> = latest_base.split('.').collect();
+            for index in 0..current.len().max(latest.len()) {
+                let a = current.get(index).unwrap_or(&"0").trim_start_matches('0');
+                let b = latest.get(index).unwrap_or(&"0").trim_start_matches('0');
+                let ordering = b.len().cmp(&a.len()).then_with(|| b.cmp(a));
+                if !ordering.is_eq() {
+                    return ordering.is_gt();
+                }
             }
+            return false;
         }
-        return false;
+        let current = current_base.parse::<pep440_rs::Version>();
+        let latest = latest_base.parse::<pep440_rs::Version>();
+        matches!((current, latest), (Ok(current), Ok(latest)) if latest > current)
+    };
+
+    let base_result = compare_bases();
+    if current_base != latest_base {
+        return base_result;
     }
-    let current = current.parse::<pep440_rs::Version>();
-    let latest = latest.parse::<pep440_rs::Version>();
-    matches!((current, latest), (Ok(current), Ok(latest)) if latest > current)
+    let Ok(current) = current.parse::<pep440_rs::Version>() else {
+        return base_result;
+    };
+    let Ok(latest) = latest.parse::<pep440_rs::Version>() else {
+        return base_result;
+    };
+    match (current.pre(), latest.pre()) {
+        (Some(current), Some(latest)) => latest > current,
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
 }
 
 pub fn download_url(release: &Value, platform: &str) -> Value {

@@ -2,16 +2,27 @@
 
 use super::{Apply, UpdateOptions};
 use std::sync::mpsc;
-use velopack::{UpdateCheck, UpdateManager, sources::HttpSource};
+use velopack::{UpdateCheck, UpdateManager, locator::VelopackLocatorConfig, sources::HttpSource};
 
 pub fn manager(options: &UpdateOptions) -> Result<UpdateManager, String> {
+    let locator = options
+        .velopack_root
+        .as_ref()
+        .map(|root| VelopackLocatorConfig {
+            RootAppDir: root.clone(),
+            UpdateExePath: root.join("Update.exe"),
+            PackagesDir: root.join("packages"),
+            ManifestPath: root.join("current/sq.version"),
+            CurrentBinaryDir: root.join("current"),
+            IsPortable: false,
+        });
     UpdateManager::new(
         HttpSource::new(&options.releases_url),
         Some(velopack::UpdateOptions {
             ExplicitChannel: Some("win".into()),
             ..Default::default()
         }),
-        None,
+        locator,
     )
     .map_err(|e| e.to_string())
 }

@@ -196,6 +196,7 @@ impl Fixture {
             timeout: Duration::from_millis(50),
             download_root: root.0.join("downloads"),
             appimage: None,
+            velopack_root: None,
         });
         Self {
             service,

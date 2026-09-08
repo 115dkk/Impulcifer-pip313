@@ -30,6 +30,7 @@ pub struct UpdateOptions {
     pub timeout: Duration,
     pub download_root: PathBuf,
     pub appimage: Option<PathBuf>,
+    pub velopack_root: Option<PathBuf>,
 }
 
 impl Default for UpdateOptions {
@@ -46,6 +47,7 @@ impl Default for UpdateOptions {
             timeout: Duration::from_secs(10),
             download_root: std::env::temp_dir().join("impulcifer_updates"),
             appimage,
+            velopack_root: None,
         }
     }
 }
@@ -54,6 +56,17 @@ impl UpdateOptions {
     fn agent(&self) -> ureq::Agent {
         ureq::Agent::config_builder()
             .timeout_global(Some(self.timeout))
+            .build()
+            .new_agent()
+    }
+
+    fn download_agent(&self) -> ureq::Agent {
+        ureq::Agent::config_builder()
+            .timeout_global(None)
+            .timeout_resolve(Some(self.timeout))
+            .timeout_connect(Some(self.timeout))
+            .timeout_recv_response(Some(self.timeout))
+            .timeout_recv_body(None)
             .build()
             .new_agent()
     }

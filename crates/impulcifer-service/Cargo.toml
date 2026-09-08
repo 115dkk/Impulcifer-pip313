@@ -37,6 +37,8 @@ os_info = { version = "3", default-features = false }
 
 [dev-dependencies]
 regex.workspace = true
+sha1 = "0.11.0"
+zip = { version = "8.6.0", default-features = false }
 
 [[bench]]
 name = "perf"

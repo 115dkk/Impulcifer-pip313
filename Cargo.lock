@@ -2160,6 +2160,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "sha1",
  "sha2 0.10.9",
  "sys-locale",
  "tempfile",
@@ -2167,6 +2168,7 @@ dependencies = [
  "ureq",
  "url",
  "velopack",
+ "zip 8.6.0",
 ]
 
 [[package]]

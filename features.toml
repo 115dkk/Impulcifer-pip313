@@ -1209,8 +1209,8 @@ note = "velopack (Update.exe in the parent of the executable directory), tauri (
 id = "updater.velopack"
 kind = "updater"
 status = "implemented"
-tests = ["impulcifer-service::velopack_kind_selected_on_windows_with_update_exe"]
-note = "Windows only: velopack 1.2 Rust SDK, feed releases/latest/download with channel win and releases.win.json shared with 2.x installs; VelopackApp::build().run() first in the app; live SDK path verified by the packaging packet (ignored test velopack_check_against_live_feed)"
+tests = ["impulcifer-service::velopack_executor_downloads_from_local_feed_and_stages_apply", "impulcifer-service::velopack_kind_selected_on_windows_with_update_exe"]
+note = "P20b: behavioural test against a local feed with a simulated install root (UpdateOptions.velopack_root) covering download, staging and a failed apply; Windows only: velopack 1.2 Rust SDK, feed releases/latest/download with channel win and releases.win.json shared with 2.x installs; VelopackApp::build().run() first in the app; live SDK path verified by the packaging packet (ignored test velopack_check_against_live_feed)"
 
 [[feature]]
 id = "updater.tauri"
@@ -1223,5 +1223,5 @@ note = "macOS/Linux: tauri-plugin-updater in the app behind HostAdapter::downloa
 id = "updater.legacy"
 kind = "updater"
 status = "implemented"
-tests = ["impulcifer-service::legacy_executor_downloads_verifies_and_opens"]
+tests = ["impulcifer-service::legacy_executor_downloads_verifies_and_opens", "impulcifer-service::slow_installer_body_uses_download_timeout_policy"]
 note = "dev and unmatched bundles: download to the temp directory with progress, SHA256SUMS.txt verification, open the installer or replace the running AppImage as 2.x"
