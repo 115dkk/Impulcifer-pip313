@@ -17,8 +17,8 @@
 use std::collections::VecDeque;
 
 use impulcifer_types::audio::{
-    AudioBackend, AudioError, CancelToken, CaptureRead, Direction, Endpoint, InputSession,
-    OutputSession, PlaybackReport, ProbeResult, ShareMode, StreamSpec,
+    AudioBackend, AudioError, CancelToken, Direction, Endpoint, InputSession, OutputSession,
+    PlaybackReport, ProbeResult, ShareMode, StreamSpec,
 };
 
 const HOST_API: &str = "Windows WASAPI";
@@ -373,6 +373,7 @@ mod windows_backend {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::Instant;
 
+    use impulcifer_types::audio::CaptureRead;
     use wasapi::{
         AudioCaptureClient, AudioClient, AudioRenderClient, Device, DeviceEnumerator,
         Direction as WasapiDirection, SampleType, ShareMode as WasapiShareMode, StreamMode,
