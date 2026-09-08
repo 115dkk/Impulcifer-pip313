@@ -30,11 +30,18 @@ INPUTS = (
     "room-mic-calibration.txt", "eq.csv", "eq.txt", "eq-left.csv", "eq-left.txt",
     "eq-right.csv", "eq-right.txt",
 )
-UPDATE_ERROR = {
-    "ok": False,
-    "error": {"code": "INTERNAL_ERROR", "message": "check_for_updates not implemented",
-              "details": {}, "retryable": False},
-}
+
+
+def real_update_check(envelope):
+    """Since P20 check_for_updates is real (GitHub releases): a well-formed answer either
+    way passes, whether the runner has network (up to date / update available) or not."""
+    if not isinstance(envelope, dict):
+        return False
+    if envelope.get("ok") is True:
+        data = envelope.get("data") or {}
+        return isinstance(data.get("update_available"), bool) and isinstance(data.get("current_version"), str)
+    error = envelope.get("error") or {}
+    return envelope.get("ok") is False and isinstance(error.get("message"), str) and bool(error.get("message"))
 
 
 def write_json(path, value):
@@ -344,14 +351,19 @@ class Smoke:
         self.navigate("info")
         self.collect()
         event_start = len(self.events)
+        checking = self.page.locator("#update-check-status").text_content()
         self.page.locator("#btn-check-updates").click()
-        expected = "INTERNAL_ERROR: check_for_updates not implemented"
-        self.page.wait_for_function("expected => document.querySelector('#update-check-status').textContent === expected", arg=expected)
+        self.page.wait_for_function(
+            "checking => { const s = document.querySelector('#update-check-status');"
+            " return s.hidden || s.textContent !== checking || !document.querySelector('#update-modal').hidden; }",
+            arg=checking)
         self.collect()
         responses = [e["response"] for e in self.events[event_start:] if e["kind"] == "ipc-response"
                      and e["method"] == "check_for_updates"]
-        assert responses and all(r == UPDATE_ERROR for r in responses), responses
-        return {"ui_text": expected, "expected_envelope": responses[-1]}
+        assert len(responses) == 1 and real_update_check(responses[0]), responses
+        modal = self.page.evaluate("!document.querySelector('#update-modal').hidden")
+        text = "modal" if modal else self.page.locator("#update-check-status").text_content()
+        return {"ui_text": text, "modal": modal, "envelope": responses[0]}
 
     def recording(self):
         if not self.hardware:

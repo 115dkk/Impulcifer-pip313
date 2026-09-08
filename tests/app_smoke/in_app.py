@@ -8,7 +8,7 @@ import tempfile
 import time
 import traceback
 
-from smoke import ROOT, INPUTS, UPDATE_ERROR, Smoke, frozen_hashes, wav_info, write_json
+from smoke import ROOT, INPUTS, Smoke, frozen_hashes, real_update_check, wav_info, write_json
 from win32_capture import capture, accept_confirmation
 
 
@@ -109,7 +109,9 @@ class InAppSmoke(Smoke):
                 shutil.copy2(self.recording / "headphones.wav", self.output / "headphones.wav")
                 result["verified"] = info
             elif name == "updates":
-                assert record["details"]["expected_envelope"] == UPDATE_ERROR
+                envelope = record["details"]["envelope"]
+                assert real_update_check(envelope), envelope
+                result["verified"] = {"ok": envelope.get("ok"), "ui_text": record["details"].get("ui_text")}
         except Exception as error:
             result.update(ok=False, error=str(error), traceback=traceback.format_exc())
         if name == "recording-ready":
@@ -172,7 +174,7 @@ class InAppSmoke(Smoke):
         report.touch()
         params = {"demo": str(self.demo), "recovery": str(self.recovery),
                   "recording": str(self.recording), "hardware": self.hardware,
-                  "en": self.en, "update_error": UPDATE_ERROR,
+                  "en": self.en,
                   "labels": {code: json.loads((ROOT / f"i18n/locales/{code}.json").read_text(encoding="utf-8"))["label_select_language"] for code in ("ko", "en")}}
         param_file = self.output / "params.json"
         write_json(param_file, params)
