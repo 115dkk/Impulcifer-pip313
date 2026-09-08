@@ -2,7 +2,36 @@
 
 use super::{Apply, UpdateOptions};
 use std::sync::mpsc;
-use velopack::{UpdateCheck, UpdateManager, locator::VelopackLocatorConfig, sources::HttpSource};
+use velopack::{
+    UpdateCheck, UpdateManager,
+    locator::VelopackLocatorConfig,
+    sources::{GithubSource, HttpSource},
+};
+
+/// How the release feed is read.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SourceKind {
+    /// GitHub releases API; `prerelease` includes prereleases in the search.
+    Github { repo: String, prerelease: bool },
+    /// A plain `releases.win.json` feed (local feeds in tests, mirrors).
+    Http(String),
+}
+
+/// GitHub feed URLs go through Velopack's GithubSource so a prerelease install can
+/// discover the next prerelease (`/releases/latest` never resolves one) while a
+/// stable install keeps seeing stable releases only; any other URL is a plain feed.
+pub fn source_kind(releases_url: &str, current_version: &str) -> SourceKind {
+    if let Some(rest) = releases_url.strip_prefix("https://github.com/") {
+        let mut parts = rest.split('/').filter(|part| !part.is_empty());
+        if let (Some(owner), Some(repo)) = (parts.next(), parts.next()) {
+            return SourceKind::Github {
+                repo: format!("https://github.com/{owner}/{repo}"),
+                prerelease: super::check::is_prerelease(current_version),
+            };
+        }
+    }
+    SourceKind::Http(releases_url.to_owned())
+}
 
 pub fn manager(options: &UpdateOptions) -> Result<UpdateManager, String> {
     let locator = options
@@ -16,14 +45,18 @@ pub fn manager(options: &UpdateOptions) -> Result<UpdateManager, String> {
             CurrentBinaryDir: root.join("current"),
             IsPortable: false,
         });
-    UpdateManager::new(
-        HttpSource::new(&options.releases_url),
-        Some(velopack::UpdateOptions {
-            ExplicitChannel: Some("win".into()),
-            ..Default::default()
-        }),
-        locator,
-    )
+    let update_options = Some(velopack::UpdateOptions {
+        ExplicitChannel: Some("win".into()),
+        ..Default::default()
+    });
+    match source_kind(&options.releases_url, &options.current_version) {
+        SourceKind::Github { repo, prerelease } => UpdateManager::new(
+            GithubSource::new(&repo, None, prerelease),
+            update_options,
+            locator,
+        ),
+        SourceKind::Http(url) => UpdateManager::new(HttpSource::new(&url), update_options, locator),
+    }
     .map_err(|e| e.to_string())
 }
 

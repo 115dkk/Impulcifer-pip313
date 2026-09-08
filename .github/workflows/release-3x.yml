@@ -1,0 +1,505 @@
+name: Release 3.x
+
+# Impulcifer 3.x (Rust + Tauri) release pipeline. Separate from publish.yml
+# (the 2.x Python pipeline, whose PyPI Trusted Publisher is bound to that file
+# name). This workflow never runs on plain master pushes: it is dispatched by
+# hand or by a v3.* tag, so 2.x releases keep flowing while 3.x is in alpha.
+#
+#   version            read [workspace.package].version from Cargo.toml
+#   build-windows      cargo build + vpk pack (Velopack, pack id Impulcifer)
+#   upgrade-windows    disposable runner: install the newest 2.x Setup, apply the
+#                      3.x package with its Update.exe (normal restart path), attach
+#                      the smoke harness to the relaunched app (M5: upgrade from an
+#                      existing install)
+#   build-macos        tauri build --bundles app,dmg + signed updater archive
+#   build-linux        tauri build --bundles appimage + signature
+#   wheels             maturin wheels on three OSes + sdist (PyPI project impulcifer;
+#                      the Linux wheel is tagged linux_x86_64 because it links ALSA,
+#                      so it goes to the GitHub Release only, Linux pip uses the sdist)
+#   publish-pypi       only when dispatched with publish_pypi=true (OIDC, env PyPI)
+#   create-release     GitHub Release v<version> with latest.json, releases.win.json,
+#                      SHA256SUMS.txt; prerelease when the version has a suffix, so
+#                      /releases/latest keeps pointing at the 2.x stable release.
+#                      latest.json is also copied to the rolling updater-3x-pre
+#                      release that prerelease installs read (GitHub's /latest never
+#                      resolves a prerelease); Windows prerelease installs ask the
+#                      GitHub API through Velopack's GithubSource instead.
+#
+# Secrets: TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD) for the macOS/Linux updater
+# signatures (public key in apps/impulcifer-app/tauri.conf.json).
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: "Publish the wheels and sdist to PyPI (project impulcifer)"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "v3.*"
+
+concurrency:
+  group: release-3x
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  version:
+    name: Read the workspace version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+      prerelease: ${{ steps.read.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Read Cargo.toml
+        id: read
+        shell: python
+        run: |
+          import os, tomllib
+          with open("Cargo.toml", "rb") as f:
+              version = tomllib.load(f)["workspace"]["package"]["version"]
+          tag = f"v{version}"
+          ref = os.environ.get("GITHUB_REF", "")
+          if ref.startswith("refs/tags/") and ref != f"refs/tags/{tag}":
+              raise SystemExit(f"tag {ref} does not match Cargo.toml version {version}")
+          prerelease = "true" if "-" in version else "false"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={version}\ntag={tag}\nprerelease={prerelease}\n")
+          print(version, tag, "prerelease" if prerelease == "true" else "stable")
+
+  build-windows:
+    name: Windows (Velopack)
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install toolchain (rust-toolchain.toml)
+        run: rustup show
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release3x-windows-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: release3x-windows-
+
+      - name: Build and pack (build_scripts/pack_velopack.ps1)
+        shell: pwsh
+        run: |
+          $lines = & pwsh -NoProfile -File build_scripts/pack_velopack.ps1 2>&1
+          $lines | ForEach-Object { "$_" }
+          if ($LASTEXITCODE -ne 0) { throw "pack_velopack.ps1 failed: $LASTEXITCODE" }
+          $result = ($lines | Where-Object { "$_" -like 'P21_RESULT=*' } | Select-Object -Last 1) -replace '^P21_RESULT=', ''
+          if (-not $result) { throw 'P21_RESULT line missing' }
+          $json = $result | ConvertFrom-Json
+          "VELOPACK_OUT=$($json.output)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Get-ChildItem -LiteralPath $json.output | Format-Table Name, Length
+
+      - name: Upload Velopack artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-velopack
+          path: ${{ env.VELOPACK_OUT }}/*
+          if-no-files-found: error
+
+  upgrade-windows:
+    name: Upgrade check (2.x install to 3.x)
+    needs: [version, build-windows]
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.14 (smoke harness)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Download the 3.x Velopack artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-velopack
+          path: velopack
+
+      - name: Install the newest 2.x release, apply the 3.x package, start the 3.x app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:LOCALAPPDATA 'Impulcifer'
+          if (Test-Path $root) { throw "unexpected existing install at $root" }
+          $releases = gh release list --limit 100 --json tagName,isPrerelease | ConvertFrom-Json
+          $baseline = $releases | Where-Object { $_.tagName -like 'v2.*' -and -not $_.isPrerelease } | Select-Object -First 1
+          if (-not $baseline) { throw 'no 2.x release found' }
+          "Baseline 2.x release: $($baseline.tagName)"
+          New-Item -ItemType Directory -Force baseline | Out-Null
+          gh release download $baseline.tagName --pattern 'Impulcifer-win-Setup.exe' --dir baseline
+          $setup = Join-Path (Resolve-Path baseline) 'Impulcifer-win-Setup.exe'
+          $p = Start-Process -FilePath $setup -ArgumentList '--silent' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "2.x setup exited with $($p.ExitCode)" }
+          Start-Sleep -Seconds 5
+          $sq = Join-Path $root 'current\sq.version'
+          if (-not (Test-Path $sq)) { throw "sq.version missing after install: $sq" }
+          [xml]$manifest = Get-Content -LiteralPath $sq
+          $before = $manifest.package.metadata.version
+          "Installed 2.x version: $before"
+          if ($before -notlike '2.*') { throw "unexpected baseline version $before" }
+          Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { "stopping $($_.ProcessName) ($($_.Id))"; Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+          Start-Sleep -Seconds 2
+          $nupkg = Get-ChildItem velopack -Filter '*-full.nupkg' | Select-Object -First 1
+          if (-not $nupkg) { throw 'full nupkg artifact missing' }
+          $packages = Join-Path $root 'packages'
+          New-Item -ItemType Directory -Force $packages | Out-Null
+          Copy-Item $nupkg.FullName -Destination $packages
+          $copied = Join-Path $packages $nupkg.Name
+          if ((Get-FileHash $copied).Hash -ne (Get-FileHash $nupkg.FullName).Hash) { throw 'nupkg hash mismatch after copy' }
+          $update = Join-Path $root 'Update.exe'
+          $exe = Join-Path $root 'current\impulcifer-app.exe'
+          # The harness runs Update.exe apply itself (no --norestart): the updater
+          # relaunches the app with the harness environment, the harness attaches to
+          # that process by executable path and drives it like any smoke run.
+          "Applying $($nupkg.Name) with $update through the smoke harness (restart path)"
+          & py -3.14 tests/app_smoke/smoke.py --exe $exe --launch-command $update apply --package $copied
+          if ($LASTEXITCODE -ne 0) { throw "smoke harness failed: $LASTEXITCODE" }
+          $summary = Get-Content (Join-Path 'target' 'app-smoke' 'summary.json') -Raw | ConvertFrom-Json
+          if (-not $summary.ok) { throw 'smoke summary reports failure' }
+          $launch = $summary.steps | Where-Object { $_.name -eq 'launch' } | Select-Object -First 1
+          if (-not $launch.details.relaunched_by_updater) { throw 'the app was not relaunched by Update.exe' }
+          "Update.exe apply exit code: $($launch.details.launcher_exit_code); relaunched pid $($launch.details.pid)"
+          [xml]$after = Get-Content -LiteralPath $sq
+          $afterVersion = $after.package.metadata.version
+          "Version after apply: $afterVersion"
+          if ($afterVersion -ne '${{ needs.version.outputs.version }}') { throw "expected ${{ needs.version.outputs.version }}, found $afterVersion" }
+          if (-not (Test-Path $exe)) { throw "3.x executable missing: $exe" }
+          if (-not (Test-Path (Join-Path $root 'current\data'))) { throw 'bundled data directory missing after apply' }
+          "UPGRADE_OK $before -> $afterVersion"
+
+      - name: Uninstall the disposable install
+        if: always()
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:LOCALAPPDATA 'Impulcifer'
+          $update = Join-Path $root 'Update.exe'
+          if (Test-Path $update) {
+            Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+            $u = Start-Process -FilePath $update -ArgumentList @('--silent', 'uninstall') -Wait -PassThru
+            "uninstall exit code: $($u.ExitCode)"
+          }
+          if (Test-Path $root) { "install directory still present: $root"; Get-ChildItem $root -ErrorAction SilentlyContinue | Select-Object Name }
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: upgrade-windows-evidence
+          path: target/app-smoke/**
+          if-no-files-found: ignore
+
+  build-macos:
+    name: macOS (Tauri app + dmg)
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install toolchain (rust-toolchain.toml)
+        run: rustup show
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release3x-macos-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: release3x-macos-
+
+      - name: Install the Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      - name: Build the app bundle and the dmg
+        working-directory: apps/impulcifer-app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: tauri build --bundles app,dmg
+
+      - name: Collect artifacts with the 2.x asset names
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          dmg=$(ls target/release/bundle/dmg/*.dmg | head -n 1)
+          cp "$dmg" "dist/Impulcifer-${VERSION}-macOS.dmg"
+          arch=$(uname -m)
+          case "$arch" in arm64) arch=aarch64 ;; esac
+          cp target/release/bundle/macos/Impulcifer.app.tar.gz "dist/Impulcifer-${VERSION}-${arch}.app.tar.gz"
+          cp target/release/bundle/macos/Impulcifer.app.tar.gz.sig "dist/Impulcifer-${VERSION}-${arch}.app.tar.gz.sig"
+          ls -la dist
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-bundle
+          path: dist/*
+          if-no-files-found: error
+
+  build-linux:
+    name: Linux (Tauri AppImage)
+    needs: version
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Tauri, audio and AppImage system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libasound2-dev patchelf libfuse2 file
+
+      - name: Install toolchain (rust-toolchain.toml)
+        run: rustup show
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: release3x-linux-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: release3x-linux-
+
+      - name: Install the Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      - name: Build the AppImage
+        working-directory: apps/impulcifer-app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: tauri build --bundles appimage
+
+      - name: Collect artifacts with the 2.x asset names
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          appimage=$(ls target/release/bundle/appimage/*.AppImage | head -n 1)
+          cp "$appimage" "dist/Impulcifer-${VERSION}-x86_64.AppImage"
+          cp "${appimage}.sig" "dist/Impulcifer-${VERSION}-x86_64.AppImage.sig"
+          chmod +x "dist/Impulcifer-${VERSION}-x86_64.AppImage"
+          ls -la dist
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-appimage
+          path: dist/*
+          if-no-files-found: error
+
+  wheels:
+    name: Python wheels (${{ matrix.os }})
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install audio system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libasound2-dev
+
+      - name: Install toolchain (rust-toolchain.toml)
+        run: rustup show
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install maturin
+        run: python -m pip install "maturin>=1.7,<2"
+
+      - name: Stage package data
+        run: python crates/impulcifer-python/sync_data.py
+
+      - name: Build the abi3 wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra=""
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            # The extension links libasound2 (ALSA) through cpal, which manylinux
+            # does not guarantee, so the wheel is tagged linux_x86_64 honestly. It
+            # ships on the GitHub Release only; publish-pypi drops it and Linux pip
+            # installs build from the sdist.
+            extra="--compatibility linux"
+          fi
+          python -m maturin build --release --features python -m crates/impulcifer-python/Cargo.toml $extra
+
+      - name: Build the sdist (Linux only)
+        if: runner.os == 'Linux'
+        run: python -m maturin sdist -m crates/impulcifer-python/Cargo.toml
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v6
+        with:
+          name: wheels-${{ matrix.os }}
+          path: target/wheels/*
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI (project impulcifer)
+    needs: [version, wheels]
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_pypi
+    runs-on: ubuntu-latest
+    environment:
+      name: PyPI
+      url: https://pypi.org/p/impulcifer
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download wheels and sdist
+        uses: actions/download-artifact@v7
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+
+      - name: Drop the Linux wheel (linux_x86_64 is not a PyPI tag; Linux installs use the sdist)
+        run: |
+          set -euo pipefail
+          rm -fv dist/*linux_x86_64*.whl
+          ls -la dist
+          ls dist/*.tar.gz >/dev/null
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          attestations: false
+          skip-existing: true
+          verbose: true
+
+  create-release:
+    name: Create the GitHub Release
+    needs: [version, build-windows, upgrade-windows, build-macos, build-linux, wheels]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Assemble the asset set, latest.json and SHA256SUMS.txt
+        shell: python
+        run: |
+          import hashlib, json, os, pathlib, shutil, datetime
+          version = os.environ["VERSION"]; tag = os.environ["TAG"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          out = pathlib.Path("release"); out.mkdir()
+          for name in ["windows-velopack", "macos-bundle", "linux-appimage", "wheels-ubuntu-latest", "wheels-windows-latest", "wheels-macos-latest"]:
+              d = pathlib.Path("artifacts") / name
+              for f in sorted(d.glob("*")):
+                  if f.is_file():
+                      shutil.copy2(f, out / f.name)
+          platforms = {}
+          base = f"https://github.com/{repo}/releases/download/{tag}/"
+          for f in sorted(out.glob("*.sig")):
+              payload = f.with_suffix("")
+              if not payload.exists():
+                  raise SystemExit(f"signature without payload: {f.name}")
+              signature = f.read_text().strip()
+              n = payload.name
+              if n.endswith(".app.tar.gz"):
+                  arch = n[:-len(".app.tar.gz")].rsplit("-", 1)[-1]
+                  key = f"darwin-{arch}"
+              elif n.endswith(".AppImage"):
+                  key = "linux-x86_64"
+              else:
+                  raise SystemExit(f"unknown updater payload {n}")
+              platforms[key] = {"url": base + n, "signature": signature}
+          latest = {
+              "version": version,
+              "notes": f"Impulcifer {version}. See CHANGELOG.md.",
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+              "platforms": platforms,
+          }
+          (out / "latest.json").write_text(json.dumps(latest, indent=2) + "\n")
+          sums = []
+          for f in sorted(out.glob("*")):
+              if f.is_file() and f.name != "SHA256SUMS.txt":
+                  sums.append(f"{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}")
+          (out / "SHA256SUMS.txt").write_text("\n".join(sums) + "\n")
+          for line in sums:
+              print(line)
+          print(json.dumps(latest, indent=2))
+
+      - name: Create or update the release
+        run: |
+          set -euo pipefail
+          notes="Impulcifer ${VERSION} (Rust + Tauri 3.x). Windows installs update through Velopack (releases.win.json), macOS and Linux bundles through the Tauri updater (latest.json). Details in CHANGELOG.md."
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            # A missing tag is created at the checked-out commit, never at the
+            # default branch head (manual dispatch from another branch).
+            gh release create "$TAG" release/* --target "$GITHUB_SHA" --title "Impulcifer ${VERSION}" --notes "$notes" "${flags[@]}"
+          fi
+          gh release view "$TAG" --json assets -q '.assets[].name'
+          # Prerelease installs (macOS/Linux Tauri updater) cannot see GitHub
+          # prereleases through /releases/latest; they read latest.json from the
+          # rolling updater-3x-pre release, refreshed on every 3.x release (stable
+          # ones too, so an alpha install is offered the following stable).
+          feed=updater-3x-pre
+          if ! gh release view "$feed" >/dev/null 2>&1; then
+            gh release create "$feed" --target "$GITHUB_SHA" --prerelease --title "Impulcifer 3.x prerelease updater feed" --notes "Rolling feed for prerelease installs: latest.json of the newest 3.x release (stable or prerelease). Not a release to install; use the versioned releases."
+          fi
+          gh release upload "$feed" release/latest.json --clobber
+          gh release view "$feed" --json assets -q '.assets[].name'

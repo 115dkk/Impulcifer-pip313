@@ -22,6 +22,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-updater = { version = "2.11.0", default-features = false, features = ["rustls-tls", "zip"] }
 serde.workspace = true
 serde_json.workspace = true
+dark-light = "2"
 
 [target.'cfg(windows)'.dependencies]
 velopack = "1.2.0"

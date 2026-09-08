@@ -12,7 +12,58 @@ from smoke import ROOT, INPUTS, UPDATE_ERROR, Smoke, frozen_hashes, wav_info, wr
 from win32_capture import capture, accept_confirmation
 
 
+class ExternalProcess:
+    """A process the harness did not start (the updater relaunched it): the same
+    poll/pid/returncode surface the drive loop and cleanup use for Popen."""
+    STILL_ACTIVE = 259
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+    def __init__(self, pid):
+        import ctypes
+        self.pid = pid
+        self.returncode = None
+        self._kernel32 = ctypes.windll.kernel32
+        self._handle = self._kernel32.OpenProcess(self.PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        assert self._handle, f"OpenProcess failed for pid {pid}"
+
+    def poll(self):
+        import ctypes
+        code = ctypes.c_ulong()
+        assert self._kernel32.GetExitCodeProcess(self._handle, ctypes.byref(code))
+        if code.value == self.STILL_ACTIVE:
+            return None
+        self.returncode = code.value
+        return self.returncode
+
+    def wait(self, timeout=None):
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while self.poll() is None:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(f"pid {self.pid}", timeout)
+            time.sleep(0.05)
+        return self.returncode
+
+
+def processes_running(exe):
+    """(pid, executable path) of every running process whose image is `exe`."""
+    script = ("Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath } | "
+              "Select-Object ProcessId, ExecutablePath | ConvertTo-Json -Compress")
+    result = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script],
+                            capture_output=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    listed = json.loads(result.stdout.decode("utf-8-sig") or "[]")
+    if isinstance(listed, dict):
+        listed = [listed]
+    wanted = os.path.normcase(str(exe))
+    return [(int(p["ProcessId"]), p["ExecutablePath"]) for p in listed
+            if os.path.normcase(p["ExecutablePath"]) == wanted]
+
+
 class InAppSmoke(Smoke):
+    def __init__(self, exe, hardware, launch_command=None):
+        super().__init__(exe, hardware)
+        self.launch_command = launch_command
+
     def checkpoint(self, record):
         name = record["step"]
         # Driver reports its entire observation buffer at every checkpoint, so a
@@ -72,9 +123,39 @@ class InAppSmoke(Smoke):
         write_json(self.output / "summary.json", self.summary)
         print(json.dumps({"checkpoint": name, **result}, ensure_ascii=False), flush=True)
 
+    def start_app(self, env):
+        """Start the app directly, or run the launch command (the updater's apply with
+        its normal restart) and attach to the app it relaunches."""
+        if not self.launch_command:
+            self.process = subprocess.Popen([str(self.exe)], cwd=ROOT, env=env,
+                                            stdout=self.app_log, stderr=subprocess.STDOUT)
+            return {"pid": self.process.pid, "home": str(self.home), "mode": "in-app"}
+        assert not processes_running(self.exe), f"{self.exe} is already running"
+        launcher = subprocess.Popen(self.launch_command, cwd=ROOT, env=env,
+                                    stdout=self.app_log, stderr=subprocess.STDOUT)
+        try:
+            launcher_exit = launcher.wait(timeout=300)
+        except subprocess.TimeoutExpired:
+            launcher.kill()
+            raise TimeoutError("launch command did not finish within 300 seconds")
+        deadline = time.monotonic() + 120
+        while True:
+            running = processes_running(self.exe)
+            if running:
+                break
+            assert time.monotonic() < deadline, (
+                f"launch command exited with {launcher_exit} but {self.exe} did not start within 120 seconds")
+            time.sleep(0.5)
+        assert len(running) == 1, f"expected one relaunched app, found {running}"
+        pid, path = running[0]
+        self.process = ExternalProcess(pid)
+        return {"pid": pid, "home": str(self.home), "mode": "in-app",
+                "relaunched_by_updater": True, "launcher": self.launch_command,
+                "launcher_exit_code": launcher_exit, "executable": path}
+
     def drive(self):
         assert os.name == "nt", "in-app smoke requires Windows"
-        assert self.exe.is_file(), f"missing executable {self.exe}"
+        assert self.launch_command or self.exe.is_file(), f"missing executable {self.exe}"
         self.demo.mkdir()
         copied = []
         for name in INPUTS:
@@ -104,10 +185,11 @@ class InAppSmoke(Smoke):
                    IMPULCIFER_APP_SMOKE="1", IMPULCIFER_APP_SMOKE_REPORT=str(report),
                    IMPULCIFER_APP_SMOKE_PARAMS=str(param_file),
                    IMPULCIFER_APP_SMOKE_DRIVER=str(ROOT / "tests/app_smoke/driver.js"))
-        self.process = subprocess.Popen([str(self.exe)], cwd=ROOT, env=env,
-                                        stdout=self.app_log, stderr=subprocess.STDOUT)
-        self.steps.append({"name": "launch", "status": "ok", "duration_seconds": 0,
-                           "details": {"pid": self.process.pid, "home": str(self.home), "mode": "in-app"}})
+        launch_started = time.monotonic()
+        details = self.start_app(env)
+        self.steps.append({"name": "launch", "status": "ok",
+                           "duration_seconds": round(time.monotonic() - launch_started, 3),
+                           "details": details})
         deadline = time.monotonic() + 300
         pending = ""
         with report.open(encoding="utf-8") as stream:

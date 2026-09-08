@@ -1209,15 +1209,15 @@ note = "velopack (Update.exe in the parent of the executable directory), tauri (
 id = "updater.velopack"
 kind = "updater"
 status = "implemented"
-tests = ["impulcifer-service::velopack_executor_downloads_from_local_feed_and_stages_apply", "impulcifer-service::velopack_kind_selected_on_windows_with_update_exe"]
-note = "P20b: behavioural test against a local feed with a simulated install root (UpdateOptions.velopack_root) covering download, staging and a failed apply; Windows only: velopack 1.2 Rust SDK, feed releases/latest/download with channel win and releases.win.json shared with 2.x installs; VelopackApp::build().run() first in the app; live SDK path verified by the packaging packet (ignored test velopack_check_against_live_feed)"
+tests = ["impulcifer-service::velopack_executor_downloads_from_local_feed_and_stages_apply", "impulcifer-service::velopack_kind_selected_on_windows_with_update_exe", "impulcifer-service::velopack_source_follows_the_feed_url_and_the_release_channel"]
+note = "P22 (Codex #197): GitHub feed URLs use GithubSource with prereleases included for prerelease installs (source_kind), plain feeds stay HttpSource; P20b: behavioural test against a local feed with a simulated install root (UpdateOptions.velopack_root) covering download, staging and a failed apply; Windows only: velopack 1.2 Rust SDK, feed releases/latest/download with channel win and releases.win.json shared with 2.x installs; VelopackApp::build().run() first in the app; live SDK path verified by the packaging packet (ignored test velopack_check_against_live_feed)"
 
 [[feature]]
 id = "updater.tauri"
 kind = "updater"
 status = "implemented"
-tests = ["impulcifer-service::tauri_kind_delegates_to_host", "impulcifer-app::updater_plugin_registered_with_public_key"]
-note = "macOS/Linux: tauri-plugin-updater in the app behind HostAdapter::download_update / apply_staged_update; endpoint latest.json of the GitHub release, public key in tauri.conf.json, private key kept outside the repository (CI secret TAURI_SIGNING_PRIVATE_KEY)"
+tests = ["impulcifer-service::tauri_kind_delegates_to_host", "impulcifer-app::updater_plugin_registered_with_public_key", "impulcifer-app::prerelease_installs_read_the_rolling_feed_first"]
+note = "P22 (Codex #197): prerelease installs read the rolling updater-3x-pre latest.json first, stable installs the stable feed only (updater_endpoints); macOS/Linux: tauri-plugin-updater in the app behind HostAdapter::download_update / apply_staged_update; endpoint latest.json of the GitHub release, public key in tauri.conf.json, private key kept outside the repository (CI secret TAURI_SIGNING_PRIVATE_KEY)"
 
 [[feature]]
 id = "updater.legacy"

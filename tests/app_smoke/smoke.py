@@ -446,11 +446,16 @@ def main():
     parser.add_argument("--exe", type=Path, required=True)
     parser.add_argument("--hardware", action="store_true")
     parser.add_argument("--cdp", action="store_true", help="optional legacy Playwright CDP attach")
+    parser.add_argument("--launch-command", nargs=argparse.REMAINDER,
+                        help="run this command (e.g. Update.exe apply --package X) with the harness "
+                             "environment instead of starting --exe directly, then attach to the "
+                             "--exe process it starts (the updater restart path)")
     args = parser.parse_args()
     if args.cdp:
+        assert not args.launch_command, "--launch-command needs the in-app harness"
         return Smoke(args.exe.resolve(), args.hardware).run()
     from in_app import InAppSmoke
-    return InAppSmoke(args.exe.resolve(), args.hardware).run()
+    return InAppSmoke(args.exe.resolve(), args.hardware, launch_command=args.launch_command or None).run()
 
 
 if __name__ == "__main__":
