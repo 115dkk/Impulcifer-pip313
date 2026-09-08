@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.14.2 - 2026-09-08
+### 🔧 자동 릴리스 (CI auto-bump)
+
+#### 🔧 빌드 / 설정 변경
+- **CI 자동 PATCH bump**: 수동 버전 bump 없이 머지된 출하 변경에 대해 릴리스 파이프라인이 PATCH를 자동 증가시켰다. 포함된 커밋:
+- Merge pull request #195 from 115dkk/claude/rust-p21
+- feat(rust): 패키징, Tauri 번들 설정·Velopack 패키징 스크립트·격리된 2.x→3.x 업그레이드 검증 (P21)
+
 ## 2.14.1 - 2026-09-07
 ### Windows 녹음 경로를 WASAPI 우선으로 전환
 
