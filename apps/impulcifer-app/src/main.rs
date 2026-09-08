@@ -7,6 +7,7 @@
 //! plugins and the core window API.
 
 mod dialog;
+mod paths;
 mod smoke;
 mod updater;
 
@@ -156,8 +157,19 @@ fn main() {
                 app: app.handle().clone(),
                 update: updater::StagedUpdate::default(),
             };
+            let data_dir = paths::bundled_data_dir(
+                app.path().resource_dir().ok(),
+                std::env::var_os("IMPULCIFER_DATA_DIR").is_some(),
+            )
+            .unwrap_or_else(impulcifer_service::default_data_dir);
             app.manage(AppState {
-                service: Arc::new(ImpulciferService::new(Box::new(host))),
+                service: Arc::new(ImpulciferService::with_dependencies(
+                    Box::new(host),
+                    impulcifer_service::settings::default_path(),
+                    impulcifer_audio_io::default_backend(),
+                    impulcifer_jobs::registry::JobRegistry::new(),
+                    data_dir,
+                )),
                 smoke: smoke.clone(),
             });
             let mut builder =
