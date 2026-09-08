@@ -186,7 +186,18 @@ impl Fixture {
             Box::new(backend),
             jobs.clone(),
             root.0.clone(),
-        );
+        )
+        .with_update_options(impulcifer_service::update::UpdateOptions {
+            install_kind: impulcifer_service::update::install_kind::InstallKind::Dev,
+            platform: "windows".into(),
+            current_version: env!("CARGO_PKG_VERSION").into(),
+            latest_endpoint: "http://127.0.0.1:0/latest".into(),
+            releases_url: "http://127.0.0.1:0/feed".into(),
+            timeout: Duration::from_millis(50),
+            download_root: root.0.join("downloads"),
+            appimage: None,
+            velopack_root: None,
+        });
         Self {
             service,
             root,
@@ -291,6 +302,7 @@ fn ipc_bootstrap_shape() {
             "active_job",
             "ui",
             "webview_backend",
+            "install_kind",
         ],
     );
     assert_eq!(boot["version"], env!("CARGO_PKG_VERSION"));
@@ -958,12 +970,25 @@ fn backend_errors_panics_and_empty_enumeration() {
     );
 }
 #[test]
-fn deferred_methods_keep_not_implemented_envelopes() {
+fn ipc_updater_error_and_job_shapes() {
     let f = Fixture::new();
-    for method in ["check_for_updates", "start_update", "apply_pending_update"] {
-        assert_eq!(
-            failure(f.call(method, vec![]), "INTERNAL_ERROR")["message"],
-            format!("{method} not implemented")
-        );
+    assert_eq!(
+        failure(f.call("check_for_updates", vec![]), "UPDATE_CHECK_FAILED")["retryable"],
+        true
+    );
+    assert_eq!(
+        failure(f.call("apply_pending_update", vec![]), "INVALID_REQUEST")["message"],
+        "No staged update to apply."
+    );
+    failure(f.call("start_update", vec![]), "INVALID_REQUEST");
+    failure(f.call("start_update", vec![json!({})]), "INVALID_REQUEST");
+    let job = data(f.call("start_update", vec![json!({"latest_version":"3.1.0"})]));
+    keys(&job, &["job"]);
+    snapshot(&job["job"]);
+    assert_eq!(job["job"]["kind"], "update");
+    assert_eq!(job["job"]["cancellable"], false);
+    finish(&f, job["job"]["job_id"].as_str().unwrap());
+    for method in ["check_for_updates", "apply_pending_update"] {
+        failure(f.call(method, vec![Value::Null]), "INVALID_REQUEST");
     }
 }

@@ -1,0 +1,1228 @@
+{
+  "releases": [
+    {
+      "current": "2.3.1",
+      "release": {
+        "tag_name": "v2.3.2",
+        "assets": [
+          {
+            "name": "notes.txt",
+            "browser_download_url": "https://example.invalid/0/notes.txt"
+          },
+          {
+            "name": "Impulcifer-Setup.EXE",
+            "browser_download_url": "https://example.invalid/0/Impulcifer-Setup.EXE"
+          },
+          {
+            "name": "Impulcifer.dmg",
+            "browser_download_url": "https://example.invalid/0/Impulcifer.dmg"
+          },
+          {
+            "name": "impulcifer.deb",
+            "browser_download_url": "https://example.invalid/0/impulcifer.deb"
+          },
+          {
+            "name": "impulcifer.AppImage",
+            "browser_download_url": "https://example.invalid/0/impulcifer.AppImage"
+          }
+        ],
+        "body": "Release notes 0",
+        "html_url": "https://example.invalid/releases/0"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "2.3.2",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/0/Impulcifer-Setup.EXE",
+        "darwin": "https://example.invalid/0/Impulcifer.dmg",
+        "linux": "https://example.invalid/0/impulcifer.AppImage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "v2.3.1",
+      "release": {
+        "tag_name": "v2.3.1-beta",
+        "assets": [
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/1/portable.exe"
+          },
+          {
+            "name": "first.pkg",
+            "browser_download_url": "https://example.invalid/1/first.pkg"
+          },
+          {
+            "name": "second.dmg",
+            "browser_download_url": "https://example.invalid/1/second.dmg"
+          },
+          {
+            "name": "impulcifer.rpm",
+            "browser_download_url": "https://example.invalid/1/impulcifer.rpm"
+          }
+        ],
+        "body": "Release notes 1",
+        "html_url": "https://example.invalid/releases/1"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "2.3.1",
+      "newer": false,
+      "selected": {
+        "windows": null,
+        "darwin": "https://example.invalid/1/first.pkg",
+        "linux": "https://example.invalid/1/impulcifer.rpm",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.3.1",
+      "release": {
+        "tag_name": "v2.3.1.1",
+        "assets": [
+          {
+            "name": "releases.win.json",
+            "browser_download_url": "https://example.invalid/2/releases.win.json"
+          },
+          {
+            "name": "full.nupkg",
+            "browser_download_url": "https://example.invalid/2/full.nupkg"
+          },
+          {
+            "name": "latest.json",
+            "browser_download_url": "https://example.invalid/2/latest.json"
+          }
+        ],
+        "body": "Release notes 2",
+        "html_url": "https://example.invalid/releases/2"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "2.3.1.1",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.3.1.0",
+      "release": {
+        "tag_name": "2.3.1",
+        "assets": [
+          {
+            "name": "x.rpm",
+            "browser_download_url": "https://example.invalid/3/x.rpm"
+          },
+          {
+            "name": "x.deb",
+            "browser_download_url": "https://example.invalid/3/x.deb"
+          },
+          {
+            "name": "x.appimage",
+            "browser_download_url": "https://example.invalid/3/x.appimage"
+          },
+          {
+            "name": "OtherSetup.exe",
+            "browser_download_url": "https://example.invalid/3/OtherSetup.exe"
+          },
+          {
+            "name": "SecondSetup.exe",
+            "browser_download_url": "https://example.invalid/3/SecondSetup.exe"
+          }
+        ],
+        "body": "Release notes 3",
+        "html_url": "https://example.invalid/releases/3"
+      },
+      "normalized_current": "2.3.1.0",
+      "normalized_latest": "2.3.1",
+      "newer": false,
+      "selected": {
+        "windows": "https://example.invalid/3/OtherSetup.exe",
+        "darwin": null,
+        "linux": "https://example.invalid/3/x.appimage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.3.1",
+      "release": {
+        "tag_name": "vv2.4.0-20241129123456",
+        "assets": [],
+        "body": "Release notes 4",
+        "html_url": "https://example.invalid/releases/4"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "2.4.0",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.3.1",
+      "release": {
+        "tag_name": "2.3.1.post1",
+        "assets": [
+          {
+            "name": "SETUP.EXE",
+            "browser_download_url": "https://example.invalid/5/SETUP.EXE"
+          },
+          {
+            "name": "archive.zip",
+            "browser_download_url": "https://example.invalid/5/archive.zip"
+          },
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/5/portable.exe"
+          },
+          {
+            "name": "app.PKG",
+            "browser_download_url": "https://example.invalid/5/app.PKG"
+          }
+        ],
+        "body": "Release notes 5",
+        "html_url": "https://example.invalid/releases/5"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "2.3.1",
+      "newer": false,
+      "selected": {
+        "windows": "https://example.invalid/5/SETUP.EXE",
+        "darwin": "https://example.invalid/5/app.PKG",
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "3.0.0-alpha.0",
+      "release": {
+        "tag_name": "v3.0.0-rc1",
+        "assets": [
+          {
+            "name": "notes.txt",
+            "browser_download_url": "https://example.invalid/6/notes.txt"
+          },
+          {
+            "name": "Impulcifer-Setup.EXE",
+            "browser_download_url": "https://example.invalid/6/Impulcifer-Setup.EXE"
+          },
+          {
+            "name": "Impulcifer.dmg",
+            "browser_download_url": "https://example.invalid/6/Impulcifer.dmg"
+          },
+          {
+            "name": "impulcifer.deb",
+            "browser_download_url": "https://example.invalid/6/impulcifer.deb"
+          },
+          {
+            "name": "impulcifer.AppImage",
+            "browser_download_url": "https://example.invalid/6/impulcifer.AppImage"
+          }
+        ],
+        "body": "Release notes 6",
+        "html_url": "https://example.invalid/releases/6"
+      },
+      "normalized_current": "3.0.0",
+      "normalized_latest": "3.0.0",
+      "newer": false,
+      "selected": {
+        "windows": "https://example.invalid/6/Impulcifer-Setup.EXE",
+        "darwin": "https://example.invalid/6/Impulcifer.dmg",
+        "linux": "https://example.invalid/6/impulcifer.AppImage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.3.1",
+      "release": {
+        "tag_name": "v2.3.0",
+        "assets": [
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/7/portable.exe"
+          },
+          {
+            "name": "first.pkg",
+            "browser_download_url": "https://example.invalid/7/first.pkg"
+          },
+          {
+            "name": "second.dmg",
+            "browser_download_url": "https://example.invalid/7/second.dmg"
+          },
+          {
+            "name": "impulcifer.rpm",
+            "browser_download_url": "https://example.invalid/7/impulcifer.rpm"
+          }
+        ],
+        "body": "Release notes 7",
+        "html_url": "https://example.invalid/releases/7"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "2.3.0",
+      "newer": false,
+      "selected": {
+        "windows": null,
+        "darwin": "https://example.invalid/7/first.pkg",
+        "linux": "https://example.invalid/7/impulcifer.rpm",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.3.1",
+      "release": {
+        "tag_name": "",
+        "assets": [
+          {
+            "name": "releases.win.json",
+            "browser_download_url": "https://example.invalid/8/releases.win.json"
+          },
+          {
+            "name": "full.nupkg",
+            "browser_download_url": "https://example.invalid/8/full.nupkg"
+          },
+          {
+            "name": "latest.json",
+            "browser_download_url": "https://example.invalid/8/latest.json"
+          }
+        ],
+        "body": "Release notes 8",
+        "html_url": "https://example.invalid/releases/8"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "",
+      "newer": false,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.3.1",
+      "release": {
+        "tag_name": "not-a-version",
+        "assets": [
+          {
+            "name": "x.rpm",
+            "browser_download_url": "https://example.invalid/9/x.rpm"
+          },
+          {
+            "name": "x.deb",
+            "browser_download_url": "https://example.invalid/9/x.deb"
+          },
+          {
+            "name": "x.appimage",
+            "browser_download_url": "https://example.invalid/9/x.appimage"
+          },
+          {
+            "name": "OtherSetup.exe",
+            "browser_download_url": "https://example.invalid/9/OtherSetup.exe"
+          },
+          {
+            "name": "SecondSetup.exe",
+            "browser_download_url": "https://example.invalid/9/SecondSetup.exe"
+          }
+        ],
+        "body": "Release notes 9",
+        "html_url": "https://example.invalid/releases/9"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "not-a-version",
+      "newer": false,
+      "selected": {
+        "windows": "https://example.invalid/9/OtherSetup.exe",
+        "darwin": null,
+        "linux": "https://example.invalid/9/x.appimage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "garbage",
+      "release": {
+        "tag_name": "4.0.0",
+        "assets": [],
+        "body": "Release notes 10",
+        "html_url": "https://example.invalid/releases/10"
+      },
+      "normalized_current": "garbage",
+      "normalized_latest": "4.0.0",
+      "newer": false,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.3.1",
+      "release": {
+        "tag_name": "V2.4.0",
+        "assets": [
+          {
+            "name": "SETUP.EXE",
+            "browser_download_url": "https://example.invalid/11/SETUP.EXE"
+          },
+          {
+            "name": "archive.zip",
+            "browser_download_url": "https://example.invalid/11/archive.zip"
+          },
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/11/portable.exe"
+          },
+          {
+            "name": "app.PKG",
+            "browser_download_url": "https://example.invalid/11/app.PKG"
+          }
+        ],
+        "body": "Release notes 11",
+        "html_url": "https://example.invalid/releases/11"
+      },
+      "normalized_current": "2.3.1",
+      "normalized_latest": "V2.4.0",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/11/SETUP.EXE",
+        "darwin": "https://example.invalid/11/app.PKG",
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "1",
+      "release": {
+        "tag_name": "2",
+        "assets": [
+          {
+            "name": "notes.txt",
+            "browser_download_url": "https://example.invalid/12/notes.txt"
+          },
+          {
+            "name": "Impulcifer-Setup.EXE",
+            "browser_download_url": "https://example.invalid/12/Impulcifer-Setup.EXE"
+          },
+          {
+            "name": "Impulcifer.dmg",
+            "browser_download_url": "https://example.invalid/12/Impulcifer.dmg"
+          },
+          {
+            "name": "impulcifer.deb",
+            "browser_download_url": "https://example.invalid/12/impulcifer.deb"
+          },
+          {
+            "name": "impulcifer.AppImage",
+            "browser_download_url": "https://example.invalid/12/impulcifer.AppImage"
+          }
+        ],
+        "body": "Release notes 12",
+        "html_url": "https://example.invalid/releases/12"
+      },
+      "normalized_current": "1",
+      "normalized_latest": "2",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/12/Impulcifer-Setup.EXE",
+        "darwin": "https://example.invalid/12/Impulcifer.dmg",
+        "linux": "https://example.invalid/12/impulcifer.AppImage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "1.0",
+      "release": {
+        "tag_name": "1.0.0",
+        "assets": [
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/13/portable.exe"
+          },
+          {
+            "name": "first.pkg",
+            "browser_download_url": "https://example.invalid/13/first.pkg"
+          },
+          {
+            "name": "second.dmg",
+            "browser_download_url": "https://example.invalid/13/second.dmg"
+          },
+          {
+            "name": "impulcifer.rpm",
+            "browser_download_url": "https://example.invalid/13/impulcifer.rpm"
+          }
+        ],
+        "body": "Release notes 13",
+        "html_url": "https://example.invalid/releases/13"
+      },
+      "normalized_current": "1.0",
+      "normalized_latest": "1.0.0",
+      "newer": false,
+      "selected": {
+        "windows": null,
+        "darwin": "https://example.invalid/13/first.pkg",
+        "linux": "https://example.invalid/13/impulcifer.rpm",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "1.0001",
+      "release": {
+        "tag_name": "1.2",
+        "assets": [
+          {
+            "name": "releases.win.json",
+            "browser_download_url": "https://example.invalid/14/releases.win.json"
+          },
+          {
+            "name": "full.nupkg",
+            "browser_download_url": "https://example.invalid/14/full.nupkg"
+          },
+          {
+            "name": "latest.json",
+            "browser_download_url": "https://example.invalid/14/latest.json"
+          }
+        ],
+        "body": "Release notes 14",
+        "html_url": "https://example.invalid/releases/14"
+      },
+      "normalized_current": "1.0001",
+      "normalized_latest": "1.2",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "2.0.0.1",
+        "assets": [
+          {
+            "name": "x.rpm",
+            "browser_download_url": "https://example.invalid/15/x.rpm"
+          },
+          {
+            "name": "x.deb",
+            "browser_download_url": "https://example.invalid/15/x.deb"
+          },
+          {
+            "name": "x.appimage",
+            "browser_download_url": "https://example.invalid/15/x.appimage"
+          },
+          {
+            "name": "OtherSetup.exe",
+            "browser_download_url": "https://example.invalid/15/OtherSetup.exe"
+          },
+          {
+            "name": "SecondSetup.exe",
+            "browser_download_url": "https://example.invalid/15/SecondSetup.exe"
+          }
+        ],
+        "body": "Release notes 15",
+        "html_url": "https://example.invalid/releases/15"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "2.0.0.1",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/15/OtherSetup.exe",
+        "darwin": null,
+        "linux": "https://example.invalid/15/x.appimage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "3.0.dev0",
+        "assets": [],
+        "body": "Release notes 16",
+        "html_url": "https://example.invalid/releases/16"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "3.0",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "3.0+local",
+        "assets": [
+          {
+            "name": "SETUP.EXE",
+            "browser_download_url": "https://example.invalid/17/SETUP.EXE"
+          },
+          {
+            "name": "archive.zip",
+            "browser_download_url": "https://example.invalid/17/archive.zip"
+          },
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/17/portable.exe"
+          },
+          {
+            "name": "app.PKG",
+            "browser_download_url": "https://example.invalid/17/app.PKG"
+          }
+        ],
+        "body": "Release notes 17",
+        "html_url": "https://example.invalid/releases/17"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "3.0",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/17/SETUP.EXE",
+        "darwin": "https://example.invalid/17/app.PKG",
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "3.0.",
+        "assets": [
+          {
+            "name": "notes.txt",
+            "browser_download_url": "https://example.invalid/18/notes.txt"
+          },
+          {
+            "name": "Impulcifer-Setup.EXE",
+            "browser_download_url": "https://example.invalid/18/Impulcifer-Setup.EXE"
+          },
+          {
+            "name": "Impulcifer.dmg",
+            "browser_download_url": "https://example.invalid/18/Impulcifer.dmg"
+          },
+          {
+            "name": "impulcifer.deb",
+            "browser_download_url": "https://example.invalid/18/impulcifer.deb"
+          },
+          {
+            "name": "impulcifer.AppImage",
+            "browser_download_url": "https://example.invalid/18/impulcifer.AppImage"
+          }
+        ],
+        "body": "Release notes 18",
+        "html_url": "https://example.invalid/releases/18"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "3.0",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/18/Impulcifer-Setup.EXE",
+        "darwin": "https://example.invalid/18/Impulcifer.dmg",
+        "linux": "https://example.invalid/18/impulcifer.AppImage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "3..1",
+        "assets": [
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/19/portable.exe"
+          },
+          {
+            "name": "first.pkg",
+            "browser_download_url": "https://example.invalid/19/first.pkg"
+          },
+          {
+            "name": "second.dmg",
+            "browser_download_url": "https://example.invalid/19/second.dmg"
+          },
+          {
+            "name": "impulcifer.rpm",
+            "browser_download_url": "https://example.invalid/19/impulcifer.rpm"
+          }
+        ],
+        "body": "Release notes 19",
+        "html_url": "https://example.invalid/releases/19"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "3",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": "https://example.invalid/19/first.pkg",
+        "linux": "https://example.invalid/19/impulcifer.rpm",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "v",
+        "assets": [
+          {
+            "name": "releases.win.json",
+            "browser_download_url": "https://example.invalid/20/releases.win.json"
+          },
+          {
+            "name": "full.nupkg",
+            "browser_download_url": "https://example.invalid/20/full.nupkg"
+          },
+          {
+            "name": "latest.json",
+            "browser_download_url": "https://example.invalid/20/latest.json"
+          }
+        ],
+        "body": "Release notes 20",
+        "html_url": "https://example.invalid/releases/20"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "",
+      "newer": false,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": " 3.0 ",
+        "assets": [
+          {
+            "name": "x.rpm",
+            "browser_download_url": "https://example.invalid/21/x.rpm"
+          },
+          {
+            "name": "x.deb",
+            "browser_download_url": "https://example.invalid/21/x.deb"
+          },
+          {
+            "name": "x.appimage",
+            "browser_download_url": "https://example.invalid/21/x.appimage"
+          },
+          {
+            "name": "OtherSetup.exe",
+            "browser_download_url": "https://example.invalid/21/OtherSetup.exe"
+          },
+          {
+            "name": "SecondSetup.exe",
+            "browser_download_url": "https://example.invalid/21/SecondSetup.exe"
+          }
+        ],
+        "body": "Release notes 21",
+        "html_url": "https://example.invalid/releases/21"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": " 3.0 ",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/21/OtherSetup.exe",
+        "darwin": null,
+        "linux": "https://example.invalid/21/x.appimage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "2!1.0",
+        "assets": [],
+        "body": "Release notes 22",
+        "html_url": "https://example.invalid/releases/22"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "2",
+      "newer": false,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "v3.0-rc2",
+        "assets": [
+          {
+            "name": "SETUP.EXE",
+            "browser_download_url": "https://example.invalid/23/SETUP.EXE"
+          },
+          {
+            "name": "archive.zip",
+            "browser_download_url": "https://example.invalid/23/archive.zip"
+          },
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/23/portable.exe"
+          },
+          {
+            "name": "app.PKG",
+            "browser_download_url": "https://example.invalid/23/app.PKG"
+          }
+        ],
+        "body": "Release notes 23",
+        "html_url": "https://example.invalid/releases/23"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "3.0",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/23/SETUP.EXE",
+        "darwin": "https://example.invalid/23/app.PKG",
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "v3.0a1",
+        "assets": [
+          {
+            "name": "notes.txt",
+            "browser_download_url": "https://example.invalid/24/notes.txt"
+          },
+          {
+            "name": "Impulcifer-Setup.EXE",
+            "browser_download_url": "https://example.invalid/24/Impulcifer-Setup.EXE"
+          },
+          {
+            "name": "Impulcifer.dmg",
+            "browser_download_url": "https://example.invalid/24/Impulcifer.dmg"
+          },
+          {
+            "name": "impulcifer.deb",
+            "browser_download_url": "https://example.invalid/24/impulcifer.deb"
+          },
+          {
+            "name": "impulcifer.AppImage",
+            "browser_download_url": "https://example.invalid/24/impulcifer.AppImage"
+          }
+        ],
+        "body": "Release notes 24",
+        "html_url": "https://example.invalid/releases/24"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "3.0",
+      "newer": true,
+      "selected": {
+        "windows": "https://example.invalid/24/Impulcifer-Setup.EXE",
+        "darwin": "https://example.invalid/24/Impulcifer.dmg",
+        "linux": "https://example.invalid/24/impulcifer.AppImage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "v3.0.0.0.1",
+        "assets": [
+          {
+            "name": "portable.exe",
+            "browser_download_url": "https://example.invalid/25/portable.exe"
+          },
+          {
+            "name": "first.pkg",
+            "browser_download_url": "https://example.invalid/25/first.pkg"
+          },
+          {
+            "name": "second.dmg",
+            "browser_download_url": "https://example.invalid/25/second.dmg"
+          },
+          {
+            "name": "impulcifer.rpm",
+            "browser_download_url": "https://example.invalid/25/impulcifer.rpm"
+          }
+        ],
+        "body": "Release notes 25",
+        "html_url": "https://example.invalid/releases/25"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "3.0.0.0.1",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": "https://example.invalid/25/first.pkg",
+        "linux": "https://example.invalid/25/impulcifer.rpm",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "v99999999999999999999.0",
+        "assets": [
+          {
+            "name": "releases.win.json",
+            "browser_download_url": "https://example.invalid/26/releases.win.json"
+          },
+          {
+            "name": "full.nupkg",
+            "browser_download_url": "https://example.invalid/26/full.nupkg"
+          },
+          {
+            "name": "latest.json",
+            "browser_download_url": "https://example.invalid/26/latest.json"
+          }
+        ],
+        "body": "Release notes 26",
+        "html_url": "https://example.invalid/releases/26"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "99999999999999999999.0",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "v0.1",
+        "assets": [
+          {
+            "name": "x.rpm",
+            "browser_download_url": "https://example.invalid/27/x.rpm"
+          },
+          {
+            "name": "x.deb",
+            "browser_download_url": "https://example.invalid/27/x.deb"
+          },
+          {
+            "name": "x.appimage",
+            "browser_download_url": "https://example.invalid/27/x.appimage"
+          },
+          {
+            "name": "OtherSetup.exe",
+            "browser_download_url": "https://example.invalid/27/OtherSetup.exe"
+          },
+          {
+            "name": "SecondSetup.exe",
+            "browser_download_url": "https://example.invalid/27/SecondSetup.exe"
+          }
+        ],
+        "body": "Release notes 27",
+        "html_url": "https://example.invalid/releases/27"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "0.1",
+      "newer": false,
+      "selected": {
+        "windows": "https://example.invalid/27/OtherSetup.exe",
+        "darwin": null,
+        "linux": "https://example.invalid/27/x.appimage",
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "v02.001",
+        "assets": [],
+        "body": "Release notes 28",
+        "html_url": "https://example.invalid/releases/28"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "02.001",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    },
+    {
+      "current": "2.0",
+      "release": {
+        "tag_name": "v3.0",
+        "assets": [
+          {
+            "name": "Setup.exe"
+          },
+          {
+            "name": "second-setup.exe",
+            "browser_download_url": "https://example.invalid/second"
+          },
+          {}
+        ],
+        "body": "Release notes 29",
+        "html_url": "https://example.invalid/releases/29"
+      },
+      "normalized_current": "2.0",
+      "normalized_latest": "3.0",
+      "newer": true,
+      "selected": {
+        "windows": null,
+        "darwin": null,
+        "linux": null,
+        "freebsd": null
+      }
+    }
+  ],
+  "layouts": [
+    {
+      "update_exe": false,
+      "expected": "dev"
+    },
+    {
+      "update_exe": true,
+      "expected": "velopack"
+    }
+  ],
+  "validations": [
+    {
+      "request": null,
+      "envelope": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Request must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      },
+      "normalized": {}
+    },
+    {
+      "request": [],
+      "envelope": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Request must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      },
+      "normalized": {}
+    },
+    {
+      "request": "bad",
+      "envelope": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Request must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      },
+      "normalized": {}
+    },
+    {
+      "request": 5,
+      "envelope": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Request must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      },
+      "normalized": {}
+    },
+    {
+      "request": false,
+      "envelope": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "Request must be an object.",
+          "details": {},
+          "retryable": false
+        }
+      },
+      "normalized": {}
+    },
+    {
+      "request": {},
+      "envelope": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "latest_version is required.",
+          "details": {},
+          "retryable": false
+        }
+      },
+      "normalized": {}
+    },
+    {
+      "request": {
+        "latest_version": null
+      },
+      "envelope": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "latest_version is required.",
+          "details": {},
+          "retryable": false
+        }
+      },
+      "normalized": {}
+    },
+    {
+      "request": {
+        "latest_version": "  "
+      },
+      "envelope": {
+        "ok": false,
+        "error": {
+          "code": "INVALID_REQUEST",
+          "message": "latest_version is required.",
+          "details": {},
+          "retryable": false
+        }
+      },
+      "normalized": {}
+    },
+    {
+      "request": {
+        "latest_version": " 3.1.0 "
+      },
+      "envelope": {
+        "ok": true,
+        "data": {
+          "kind": "update",
+          "cancellable": false
+        }
+      },
+      "normalized": {
+        "download_url": "",
+        "latest_version": "3.1.0"
+      }
+    },
+    {
+      "request": {
+        "latest_version": 42,
+        "download_url": false
+      },
+      "envelope": {
+        "ok": true,
+        "data": {
+          "kind": "update",
+          "cancellable": false
+        }
+      },
+      "normalized": {
+        "download_url": "False",
+        "latest_version": "42"
+      }
+    },
+    {
+      "request": {
+        "latest_version": true,
+        "download_url": 17
+      },
+      "envelope": {
+        "ok": true,
+        "data": {
+          "kind": "update",
+          "cancellable": false
+        }
+      },
+      "normalized": {
+        "download_url": "17",
+        "latest_version": "True"
+      }
+    },
+    {
+      "request": {
+        "latest_version": [],
+        "download_url": {}
+      },
+      "envelope": {
+        "ok": true,
+        "data": {
+          "kind": "update",
+          "cancellable": false
+        }
+      },
+      "normalized": {
+        "download_url": "{}",
+        "latest_version": "[]"
+      }
+    },
+    {
+      "request": {
+        "latest_version": "3.1.0",
+        "download_url": "  https://example.invalid/Setup.exe  ",
+        "extra": 1
+      },
+      "envelope": {
+        "ok": true,
+        "data": {
+          "kind": "update",
+          "cancellable": false
+        }
+      },
+      "normalized": {
+        "download_url": "https://example.invalid/Setup.exe",
+        "latest_version": "3.1.0"
+      }
+    }
+  ],
+  "results": {
+    "legacy": {
+      "status_key": "update_opening_installer",
+      "status_default": "Opening installer...",
+      "title_key": "update_manual_title",
+      "title_default": "Installer Opened",
+      "message_key": "update_manual_complete",
+      "message_default": "Please follow the installer prompts to complete the update.",
+      "progress": 1.0,
+      "requires_restart": false
+    },
+    "legacy_progress": [
+      {
+        "progress": 0.1,
+        "message": "update_downloading"
+      },
+      {
+        "progress": 0.9,
+        "message": "update_opening_installer"
+      }
+    ],
+    "restart": {
+      "status_key": "update_installing",
+      "status_default": "Applying update...",
+      "title_key": "update_ready_title",
+      "title_default": "Update Ready",
+      "message_key": "update_restart_message",
+      "message_default": "The application will close to apply the update.\nIt will restart automatically in a few seconds.",
+      "progress": 0.9,
+      "requires_restart": true
+    },
+    "restart_progress": [
+      {
+        "progress": 0.1,
+        "message": "update_downloading"
+      },
+      {
+        "progress": 0.8,
+        "message": "update_installing"
+      }
+    ]
+  }
+}

@@ -22,14 +22,23 @@ serde_json.workspace = true
 thiserror.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 sys-locale = "0.3.2"
+ureq = { version = "3.4.1", default-features = false, features = ["rustls"] }
+pep440_rs = "0.7.3"
+sha2 = "0.10.9"
+tempfile = "3.27.0"
+url = "2.5.8"
+percent-encoding = "2.3.2"
 
 [target.'cfg(windows)'.dependencies]
+velopack = "1.2.0"
 # Registry/RtlGetVersion based on Windows; Unix reads procfs / SystemVersion.plist
 # directly (os_info spawns uname/sw_vers there, and 3.15 compiles Objective-C).
 os_info = { version = "3", default-features = false }
 
 [dev-dependencies]
 regex.workspace = true
+sha1 = "0.11.0"
+zip = { version = "8.6.0", default-features = false }
 
 [[bench]]
 name = "perf"
