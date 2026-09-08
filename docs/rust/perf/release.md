@@ -1,5 +1,7 @@
 # PA06b: 출시 전 성능 감사 2차
 
+> **2026-09-09 소유자 승인: M5 통과.** 아래 보고서의 "미통과" 판정은 오디오 headphones wall time 예외(PortAudio보다 15~17 ms, 0.25~0.33% 느림, 40 ms shared 버퍼의 대가)를 소유자가 명시적으로 승인하면서 해소됐다. 등록부의 `perf.release`·`perf.impulcifer-audio-io`·`perf.impulcifer-sys-win`이 구현으로 바뀌었다. 나머지 수치(파이프라인 11.6~12.0배/5.0~5.1배, 크레이트별 1.0 이상, 워크스페이스 테스트 379 통과)는 그대로다.
+
 2026-09-08. 부모 세션과 측정 워커가 시작한 HEAD는 `e62c3cd5d884ca522cb0b7d4a2a5bc68ebd9cec8`입니다. 측정은 16:26~17:43(KST)에 끝났으며, 이 문서는 이미 남아 있는 `E:/Impulcifer/target/pa06b/*.log`와 `aggregates.json`을 대조해 작성했습니다. 문서를 작성하면서 명령·벤치·테스트·프로세스를 새로 실행하지 않았습니다.
 
 **최종 판정은 M5 미통과입니다.** 플롯을 포함한 default/vbass 파이프라인은 일반·FT Python보다 빠릅니다. IO·DSP·service의 집계 비율도 모두 1.0 이상이고, CRLF 체크아웃의 workspace 테스트는 379 passed / 0 failed / 10 ignored입니다. 하지만 명시적 오디오의 wall·overhead·첫 샘플 전달은 여전히 1.0 미만입니다. production 녹음도 모든 항목을 통과하지 못했습니다. PA05b의 독립 녹음 무결성 미달은 그대로 남아 있습니다.

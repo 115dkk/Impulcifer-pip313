@@ -952,16 +952,16 @@ note = "PA02 (docs/rust/perf/impulcifer-dsp.md): 22 primitive ops, python/rust 1
 [[feature]]
 id = "perf.impulcifer-audio-io"
 kind = "perf"
-status = "planned"
+status = "implemented"
 tests = ["impulcifer-audio-io::bench_smoke_impulcifer_audio_io"]
-note = "PA05/PA05b/PA06b: not complete. Every CPU-bound operation is faster (enumeration 76x, duplex open/close 1.28x, CPU 2x) but the headphone sweep wall time stays 0.25 to 0.33 percent (15 to 17 ms) behind PortAudio because the shared-mode buffer stays at 4 engine periods; MMCSS promotion (PA05b) did not make 2 or 3 periods underrun-free on CABLE-A. Stays planned until the wall time is at least Python or the owner accepts the exception; reports in docs/rust/perf/impulcifer-audio-io.md and release.md; PA05 (docs/rust/perf/impulcifer-audio-io.md, six runs on CABLE-A): device enumeration 76x (2 s cache), duplex open/close 1.28x (render and capture clients initialised concurrently), process CPU 2x, 7-speaker play/record wall time within 0.04 percent of PortAudio; documented exception: the headphone sweep wall time is 0.27 percent (17 ms) longer because the shared-mode buffer stays at 4 engine periods (40 ms), 3 and 2 periods underrun in 10 of 10 runs; loopback integrity 10 of 10 without internal loss, the two external 480-frame losses were captured identically by an independent Python stream (Windows engine or VB-Cable)"
+note = "Owner-approved exception (2026-09-09, M5): the headphone sweep wall time is 0.25 to 0.33 percent (15 to 17 ms) behind PortAudio because the shared-mode buffer stays at 4 engine periods (40 ms); MMCSS promotion (PA05b) did not make 2 or 3 periods underrun-free on CABLE-A. Every CPU-bound operation is faster: enumeration 76x (2 s cache), duplex open/close 1.28x (clients initialised concurrently), process CPU 2x; seven-speaker wall within 0.05 percent; loopback integrity without internal loss, external 480-frame losses reproduced by an independent Python stream (docs/rust/HARDWARE.md). Reports: docs/rust/perf/impulcifer-audio-io.md (runs 1 to 7), release.md"
 
 [[feature]]
 id = "perf.impulcifer-sys-win"
 kind = "perf"
-status = "planned"
+status = "implemented"
 tests = ["impulcifer-sys-win::bench_smoke_impulcifer_sys_win"]
-note = "PA05/PA06b: not complete. The only sys-win oracle comparison (fresh COM enumeration versus PortAudio cached lookup) is not equivalent work, so no ratio is claimed; the audio-io entry carries the session measurements. Stays planned with the audio-io entry; PA05: event-driven shared capture with packet drain, exclusive-refusal memo per device, enumerator reuse, per-packet diagnostics kept in memory; open/close profile initialize_client 5.4 ms per direction (WASAPI itself); no unsafe, no public API change"
+note = "Owner-approved with the audio-io entry (2026-09-09, M5): the session measurements live in perf.impulcifer-audio-io; the only sys-win oracle comparison (fresh COM enumeration versus PortAudio cached lookup, 0.0075) is not equivalent work and no ratio is claimed. Event-driven shared capture with packet drain, exclusive-refusal memo per device, enumerator reuse, MMCSS Audio promotion for the session thread (PA05b), initialize_client 5.4 ms per direction is WASAPI itself; no unsafe, no public API change"
 
 [[feature]]
 id = "perf.impulcifer-service"
@@ -980,9 +980,9 @@ note = "M2 perf gate (docs/rust/perf/pipeline-demo.md, with plots): whole-proces
 [[feature]]
 id = "perf.release"
 kind = "perf"
-status = "planned"
-tests = []
-note = "M5: final audit of every crate before 3.0"
+status = "implemented"
+tests = ["impulcifer-service::bench_smoke_pipeline_demo", "impulcifer-io::bench_smoke_impulcifer_io", "impulcifer-dsp::bench_smoke_impulcifer_dsp", "impulcifer-service::bench_smoke_impulcifer_service", "impulcifer-audio-io::bench_smoke_impulcifer_audio_io", "impulcifer-sys-win::bench_smoke_impulcifer_sys_win"]
+note = "M5 approved by the owner on 2026-09-09 (docs/rust/perf/release.md, PA06b second run): pipeline with plots 11.6 to 12.0x CPython 3.14.5 and 5.0 to 5.1x 3.14.7t, process tree RSS 224 to 234 MiB versus 915 to 946 and 525 MiB, every io/dsp/service operation at or above 1.0 (the first-run dips were measurement noise, no source regression), workspace tests 379 passed; the audio exception below is accepted explicitly"
 
 [[feature]]
 id = "objects.constants"
