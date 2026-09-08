@@ -3,6 +3,7 @@ pub mod discovery;
 pub mod estimator;
 pub mod inputs;
 pub mod outputs;
+pub mod plots;
 pub mod run;
 pub mod sweep_grid;
 pub(crate) mod validation;
@@ -98,5 +99,10 @@ pub trait BrirEvents {
     /// warning). The default returns the key itself.
     fn translate(&self, key: &str) -> String {
         key.to_owned()
+    }
+    /// The job's cancel token, so long rayon batches (plots) can consult the job
+    /// at every task boundary; headless callers have none.
+    fn cancel_token(&self) -> Option<impulcifer_types::audio::CancelToken> {
+        None
     }
 }

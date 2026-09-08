@@ -49,6 +49,9 @@ impl BrirEvents for Events<'_> {
     fn translate(&self, key: &str) -> String {
         self.catalog.translate(key, &json!({}))
     }
+    fn cancel_token(&self) -> Option<impulcifer_types::audio::CancelToken> {
+        Some(self.ctx.cancel.clone())
+    }
 }
 fn stage_key(key: StageKey) -> Option<&'static str> {
     use StageKey::*;
@@ -80,8 +83,20 @@ struct Observer<'a, 'b> {
     decay_channels: usize,
     sample_rate: u32,
     previous: Option<StageKey>,
+    directory: &'a Path,
+    estimator: &'a impulcifer_dsp::estimator::SweepEstimator,
 }
 impl StageObserver for Observer<'_, '_> {
+    fn on_plot(
+        &mut self,
+        key: StageKey,
+        hrir: &impulcifer_dsp::hrir::Hrir,
+    ) -> Result<(), DspError> {
+        self.check_cancelled()?;
+        let token = self.events.cancel_token();
+        let cancelled = move || token.as_ref().is_some_and(|t| t.is_cancelled());
+        super::plots::render_stage(self.directory, key, hrir, self.estimator, &cancelled)
+    }
     fn on_stage(&mut self, progress: StageProgress) {
         let key = progress.key;
         if self.previous == Some(StageKey::VirtualBass) {
@@ -102,14 +117,9 @@ impl StageObserver for Observer<'_, '_> {
                 },
             );
         }
-        if matches!(
-            key,
-            StageKey::PlotPre
-                | StageKey::PlotPost
-                | StageKey::PlotResults
-                | StageKey::PlotAdditional
-                | StageKey::InteractivePlots
-        ) {
+        if key == StageKey::InteractivePlots
+            || (key == StageKey::MicDeviation && self.config.mic_deviation_debug_plots)
+        {
             self.events
                 .log("warning", "cli_plots_not_available_yet", json!({}));
         }
@@ -224,6 +234,8 @@ pub(crate) fn run_with_data(
                 decay_channels,
                 sample_rate: estimator.fs,
                 previous: None,
+                directory: &dir.dir,
+                estimator: &estimator,
             },
         )?;
         events.check_cancelled()?;

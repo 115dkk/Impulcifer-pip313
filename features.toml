@@ -409,9 +409,9 @@ tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-d
 [[feature]]
 id = "stage.plot_pre"
 kind = "stage"
-status = "planned"
-tests = []
-note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
+status = "implemented"
+tests = ["impulcifer-service::plot_files_match_python_plot_run"]
+note = "plots/pre/{speaker}-{side}.png (2x3 panels, two-pass axis synchronization, 2D heat-map waterfall)"
 
 [[feature]]
 id = "stage.crop_and_align"
@@ -479,23 +479,23 @@ note = "ReadmeData numbers only; markdown + i18n rendering is output.readme_txt 
 [[feature]]
 id = "stage.plot_post"
 kind = "stage"
-status = "planned"
-tests = []
-note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
+status = "implemented"
+tests = ["impulcifer-service::plot_files_match_python_plot_run", "impulcifer-service::plots_do_not_change_wavs"]
+note = "plots/post/{speaker}-{side}.png; WAV and README bytes identical with and without --plot"
 
 [[feature]]
 id = "stage.plot_results"
 kind = "stage"
-status = "planned"
-tests = []
-note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
+status = "implemented"
+tests = ["impulcifer-service::golden_results_series_match_python", "impulcifer-service::plot_files_match_python_default_run", "impulcifer-service::plot_observer_sees_pre_resample_state_and_propagates_failure"]
+note = "results.png from the pre-resample HRIR through StageObserver::on_plot: raw/smoothed/difference series within 0.05 dB of the Python pipeline (measured 1.7e-2 / 7.5e-3 dB), matplotlib canvas size 1200x900"
 
 [[feature]]
 id = "stage.plot_additional"
 kind = "stage"
-status = "planned"
-tests = []
-note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
+status = "implemented"
+tests = ["impulcifer-service::plot_files_match_python_plot_run"]
+note = "interaural overlays {speaker}_interaural_overlay.png"
 
 [[feature]]
 id = "stage.interactive_plots"
@@ -597,14 +597,14 @@ tests = ["impulcifer-sys-win::silent_packet_is_zero_filled"]
 id = "output.hrir_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
 note = "PCM_32, hexadecagonal order, trailing silent pairs trimmed; ICHL map when remove_silent_channels"
 
 [[feature]]
 id = "output.hesuvi_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.responses_wav"
@@ -623,9 +623,9 @@ note = "markdown + i18n rendering; text exact, numbers within the decay-noise bu
 [[feature]]
 id = "output.plots_png"
 kind = "output"
-status = "planned"
-tests = []
-note = "not ported; the service logs cli_plots_not_available_yet and still emits the progress steps so totals match 2.x"
+status = "implemented"
+tests = ["impulcifer-service::plot_files_match_python_default_run", "impulcifer-service::plot_files_match_python_plot_run", "impulcifer-service::golden_headphones_series_match_python", "impulcifer-service::golden_eq_series_match_python", "impulcifer-plots::png_outputs_have_matplotlib_sizes", "impulcifer-plots::png_is_not_blank"]
+note = "the same relative PNG set as 2.x (2 by default, 51 with --plot) rendered by impulcifer-plots (plotters + embedded DejaVu Sans); headphones/eq/room plots included; tight-bbox cropping, palette quantization, bokeh and mic-deviation debug plots not reproduced"
 
 [[feature]]
 id = "output.interactive_html"
@@ -638,19 +638,19 @@ note = "not ported; the service logs cli_plots_not_available_yet and still emits
 id = "output.hangloose_wavs"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
+tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.jamesdsp_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
+tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.truehd_layout_wavs"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-service::optional_dsp_stages_and_plot_placeholders_complete"]
+tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.recovery"
@@ -970,9 +970,9 @@ note = "IPC call and job event overhead vs the 2.x pywebview bridge; after M3"
 [[feature]]
 id = "perf.pipeline-demo"
 kind = "perf"
-status = "planned"
+status = "implemented"
 tests = ["impulcifer-service::bench_smoke_pipeline_demo"]
-note = "M2: whole demo BRIR run (time and peak RSS) vs python impulcifer.py on py -3.14 and 3.14t"
+note = "M2 perf gate (docs/rust/perf/pipeline-demo.md, with plots): whole-process median Rust 1.12 s vs CPython 3.14.5 13.4 s (11.9x) and 3.14.7t 5.8-6.1 s (5.2-5.5x), in-process 9.1x / 3.6x; peak tree RSS 233 MiB vs 913-946 MiB vs 526 MiB; same PNG set as Python"
 
 [[feature]]
 id = "perf.release"

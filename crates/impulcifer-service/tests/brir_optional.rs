@@ -6,11 +6,11 @@ use impulcifer_types::job::JobStatus;
 use serde_json::json;
 
 #[test]
-fn optional_dsp_stages_and_plot_placeholders_complete() {
+fn optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings() {
     let temp = Temp::demo();
     let jobs = JobRegistry::new();
     let service = service(&temp, jobs.clone());
-    let result=service.call("start_brir",vec![json!({"dir_path":temp.0,"do_headphone_compensation":false,"microphone_deviation_correction":true,"decay":{"FL":0.3,"FR":0.3},"channel_balance":1.0,"fs":44100,"plot":true,"interactive_plots":true,"jamesdsp":true,"hangloose":true,"output_truehd_layouts":true,"remove_silent_channels":true})]);
+    let result=service.call("start_brir",vec![json!({"dir_path":temp.0,"do_headphone_compensation":false,"microphone_deviation_correction":true,"decay":{"FL":0.3,"FR":0.3},"channel_balance":1.0,"fs":44100,"plot":true,"mic_deviation_debug_plots":true,"interactive_plots":true,"jamesdsp":true,"hangloose":true,"output_truehd_layouts":true,"remove_silent_channels":true})]);
     assert_eq!(result["ok"], true, "{result}");
     let p = wait(&jobs, result["data"]["job"]["job_id"].as_str().unwrap());
     assert_eq!(p.job.status, JobStatus::Succeeded, "{:?}", p.job.error);
@@ -30,9 +30,29 @@ fn optional_dsp_stages_and_plot_placeholders_complete() {
             .iter()
             .filter(|e| e.payload["key"] == "cli_plots_not_available_yet")
             .count(),
-        5
+        2
     );
-    assert!(!temp.0.join("plots").exists());
+    assert!(temp.0.join("plots/results.png").is_file());
+    for speaker in ["FL", "FR", "FC", "BL", "BR", "SL", "SR"] {
+        for side in ["left", "right"] {
+            for stage in ["pre", "post", "room"] {
+                assert!(
+                    temp.0
+                        .join(format!("plots/{stage}/{speaker}-{side}.png"))
+                        .is_file()
+                );
+            }
+        }
+        assert!(
+            temp.0
+                .join(format!(
+                    "plots/interaural_overlay/{speaker}_interaural_overlay.png"
+                ))
+                .is_file()
+        );
+    }
+    assert!(!temp.0.join("plots/headphones.png").exists());
+    assert!(!temp.0.join("interactive_plots").exists());
     let wav = impulcifer_io::read_wav(&temp.0.join("hesuvi.wav")).unwrap();
     assert_eq!(wav.sample_rate, 44100);
     assert_eq!(wav.tracks.len(), 14);
