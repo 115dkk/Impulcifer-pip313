@@ -74,8 +74,7 @@ const PRERELEASE_FEED: &str =
 /// prerelease feed first (GitHub's `/releases/latest` never resolves a
 /// prerelease, so alpha-to-alpha updates would be invisible), a stable install
 /// reads the stable feed only.
-#[cfg_attr(windows, allow(dead_code))]
-fn updater_endpoints(version: &str) -> Vec<&'static str> {
+pub(crate) fn updater_endpoints(version: &str) -> Vec<&'static str> {
     if impulcifer_service::update::check::is_prerelease(version) {
         vec![PRERELEASE_FEED, STABLE_FEED]
     } else {
@@ -194,18 +193,9 @@ fn main() {
         .map(Arc::new);
     let builder = tauri::Builder::default();
     // Windows installs use only Velopack, never the Tauri updater.
+    // The endpoints are chosen per build in updater.rs (UpdaterBuilder::endpoints).
     #[cfg(not(windows))]
-    let builder = builder.plugin(
-        tauri_plugin_updater::Builder::new()
-            .endpoints(
-                updater_endpoints(env!("CARGO_PKG_VERSION"))
-                    .iter()
-                    .map(|endpoint| endpoint.parse().expect("updater endpoint URL"))
-                    .collect(),
-            )
-            .expect("updater endpoints")
-            .build(),
-    );
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
         .plugin(dialog::NativeDialogs::new())
         .plugin(tauri_plugin_opener::init())

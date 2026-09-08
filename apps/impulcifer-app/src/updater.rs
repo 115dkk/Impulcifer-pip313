@@ -20,7 +20,20 @@ impl StagedUpdate {
             return Err("not supported".into());
         }
         let (update, bytes) = tauri::async_runtime::block_on(async {
-            let updater = app.updater().map_err(|e| e.to_string())?;
+            let endpoints = crate::updater_endpoints(env!("CARGO_PKG_VERSION"))
+                .iter()
+                .map(|endpoint| {
+                    endpoint
+                        .parse::<tauri::Url>()
+                        .map_err(|error| format!("updater endpoint {endpoint}: {error}"))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            let updater = app
+                .updater_builder()
+                .endpoints(endpoints)
+                .map_err(|e| e.to_string())?
+                .build()
+                .map_err(|e| e.to_string())?;
             let update = updater
                 .check()
                 .await

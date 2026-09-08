@@ -87,9 +87,12 @@ fn updater_plugin_registered_with_public_key() {
         ])
     );
     let source = include_str!("../src/main.rs").replace("\r\n", "\n");
-    assert!(source.contains("#[cfg(not(windows))]\n    let builder = builder.plugin("));
-    assert!(source.contains("tauri_plugin_updater::Builder::new()"));
-    assert!(source.contains(".endpoints("));
+    assert!(source.contains(
+        "#[cfg(not(windows))]\n    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build())"
+    ));
+    let updater_source = include_str!("../src/updater.rs").replace("\r\n", "\n");
+    assert!(updater_source.contains(".updater_builder()"));
+    assert!(updater_source.contains(".endpoints(endpoints)"));
     assert!(source.contains("#[cfg(windows)]\n    velopack::VelopackApp::build().run()"));
     let permissions: serde_json::Value =
         serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
