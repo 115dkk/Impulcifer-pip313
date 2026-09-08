@@ -1,5 +1,15 @@
 # P11 service migration fixtures and acceptance tests
 
+## P18 native platform queries (2026-09-08)
+
+README timestamps now use `chrono::Local::now()` with Python's `%Y-%m-%d %H:%M:%S` format; per-job `Catalog.readme_date` injection and README parity tests are unchanged. Platform locale lookup uses `sys_locale::get_locale()`, preserving `LC_ALL`, `LC_CTYPE`, `LANG`, `LANGUAGE` precedence and `language_selected` semantics. First-run detection retains Python's case-sensitive, ordered prefix matching (all `zh` variants select `zh_CN`). Explicit saved-language normalization accepts `ko-KR`, `zh-Hans-CN`, `zh-Hant-TW`, and `zh-TW`; traditional Chinese remains `zh_TW`, while unsupported `pt-BR` selects `en`. This intentionally goes beyond Python's normalizer, which only changes separators and two-part casing.
+
+System information is `<platform> <version> <arch>`: on Windows `os_info::get()` (registry/RtlGetVersion, no subprocess), on Linux the kernel release from `/proc/sys/kernel/osrelease` (what Python's `platform.release()` reports), on macOS the product version from `/System/Library/CoreServices/SystemVersion.plist` (Python reports the Darwin kernel release there, so that string differs), and `std::env::consts::ARCH` for the architecture. IPC response keys are unchanged. Existing FFmpeg absolute-path/batch-file restrictions and Windows `CREATE_NO_WINDOW` flag remain untouched.
+
+This removes every process spawn from the service: `os_info` is a Windows-only dependency (it spawns `uname`, `lsb_release` and `sw_vers` on Unix, and 3.15 compiles an Objective-C helper on macOS), so Unix reads the files above directly. The new APIs require no C build on Windows/Linux/macOS. Chrono's optional Haiku target dependency does compile C++ (Haiku is not a supported application target).
+
+New tests are `impulcifer-service::local_date_has_python_format_and_current_clock`, `impulcifer-service::platform_locale_maps_to_a_supported_language`, `impulcifer-service::os_description_names_the_platform`, and `impulcifer-policy::no_shell_subprocesses`. The policy scans raw and comment/string-stripped first-party source, with only the exact FFmpeg module exempt. A temporary service comment proved rejection and was removed. `Command::new(` counts only in files that reach `std::process`, so clap's `Command::new("impulcifer")` in the CLI is not a violation.
+
 P11 is not complete: the strict English and Korean README byte gates fail. WAV checks pass on the measured Windows host. Do not mark the feature registry implemented on the strength of the WAV checks alone.
 
 ## Regenerating the oracle

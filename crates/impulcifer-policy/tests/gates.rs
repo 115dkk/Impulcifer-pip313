@@ -8,6 +8,7 @@
 //! 2. no `unsafe` token appears in first-party Rust outside the budget in unsafe-budget.toml
 //! 3. features.toml registers every canonical IPC method, config field and pipeline stage
 //! 4. every feature marked `implemented` names at least one test that really exists
+//! 5. only the exact FFmpeg module may construct first-party subprocess commands
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -222,6 +223,128 @@ fn no_unsafe_outside_budget() {
         "unsafe outside the approved budget:\n{}",
         violations.join("\n")
     );
+}
+
+fn contains_command_constructor(src: &str) -> bool {
+    src.match_indices("Command").any(|(index, _)| {
+        let boundary = src[..index]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
+        let rest = src[index + "Command".len()..].trim_start();
+        boundary
+            && rest.strip_prefix("::").is_some_and(|rest| {
+                rest.trim_start()
+                    .strip_prefix("new")
+                    .is_some_and(|rest| rest.trim_start().starts_with('('))
+            })
+    })
+}
+
+/// A file spawns processes when it names the type `process::Command` at all
+/// (directly, through `use ... as Alias`, or through a `type` alias), imports
+/// `std::process::*`, or reaches `std::process` and constructs an identifier
+/// literally called `Command`. clap's `Command::new("impulcifer")` in the CLI is
+/// a parser and never reaches `std::process`, so it stays allowed.
+fn forbidden_subprocess(relative: &Path, src: &str) -> bool {
+    if relative == Path::new("crates/impulcifer-io/src/ffmpeg.rs") {
+        return false;
+    }
+    let code = strip_comments_and_strings(src);
+    if names_process_command(&code) || code.contains("std::process::*") {
+        return true;
+    }
+    code.contains("std::process")
+        && (contains_command_constructor(&code) || contains_command_constructor(src))
+}
+
+/// `process::Command`, `process::{Command as X, ..}`, `process::{self, Command}`:
+/// every way a path names the `Command` type of the `process` module.
+fn names_process_command(code: &str) -> bool {
+    code.match_indices("process::").any(|(index, _)| {
+        let rest = code[index + "process::".len()..].trim_start();
+        if let Some(group) = rest.strip_prefix('{') {
+            let inner = group.split('}').next().unwrap_or("");
+            inner.split(',').any(|item| is_command_ident(item.trim()))
+        } else {
+            is_command_ident(rest)
+        }
+    })
+}
+
+fn is_command_ident(text: &str) -> bool {
+    text.strip_prefix("Command")
+        .is_some_and(|after| !after.starts_with(|c: char| c.is_alphanumeric() || c == '_'))
+}
+
+#[test]
+fn no_shell_subprocesses() {
+    let root = repo_root();
+    let mut violations = Vec::new();
+    for dir in first_party_crate_dirs() {
+        for file in rust_files(&dir.join("src")) {
+            let relative = file.strip_prefix(&root).expect("first-party source");
+            let src = fs::read_to_string(&file).unwrap();
+            if forbidden_subprocess(relative, &src) {
+                violations.push(relative.display().to_string());
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "subprocess constructors outside crates/impulcifer-io/src/ffmpeg.rs:\n{}",
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn subprocess_scanner_checks_code_raw_text_and_exact_allowlist() {
+    let service = Path::new("crates/impulcifer-service/src/lib.rs");
+    for src in [
+        "std::process::Command::new(\"cmd.exe\")",
+        "use std::process::Command;\nCommand \n :: new \t (\"date\")",
+        "use std::process;\nprocess::Command/* split */::new(\"date\")",
+        "use std::process::Command;\n// Command::new(\"cmd.exe\")",
+        "use std::process::Command;\nlet example = r#\"Command::new(\"cmd.exe\")\"#;",
+    ] {
+        assert!(forbidden_subprocess(service, src), "{src}");
+        assert!(!forbidden_subprocess(
+            Path::new("crates/impulcifer-io/src/ffmpeg.rs"),
+            src
+        ));
+        for impostor in [
+            "crates/impulcifer-service/src/ffmpeg.rs",
+            "apps/impulcifer-io/src/ffmpeg.rs",
+            "crates/impulcifer-io/src/nested/ffmpeg.rs",
+        ] {
+            assert!(forbidden_subprocess(Path::new(impostor), src));
+        }
+    }
+    // Codex on PR #191: aliases must not slip through.
+    for src in [
+        "use std::process::Command as Shell;\nShell::new(\"cmd.exe\")",
+        "type Launcher = std::process::Command;\nLauncher::new(\"cmd.exe\")",
+        "use std::process::{Command as Sh, Stdio};\nSh::new(\"sh\")",
+        "use std::process::*;\nCommand::new(\"date\")",
+        "use std::process as p;\np::Command::new(\"uname\")",
+    ] {
+        assert!(forbidden_subprocess(service, src), "{src}");
+    }
+    // Naming the type is the violation, whatever is called on it.
+    for src in [
+        "use std::process::Command;\nCommand::newer()",
+        "use std::process::Command;\nOtherCommand::new()",
+    ] {
+        assert!(forbidden_subprocess(service, src), "{src}");
+    }
+    for src in [
+        "std::process::exit(1)",
+        "use std::process::Stdio;\ncommand()",
+        // clap's parser builder, as in crates/impulcifer-cli/src/options.rs
+        "use clap::{Arg, Command};\nlet c = Command::new(\"impulcifer\");",
+    ] {
+        assert!(!forbidden_subprocess(service, src), "{src}");
+    }
 }
 
 const CANONICAL_IPC: [&str; 23] = [

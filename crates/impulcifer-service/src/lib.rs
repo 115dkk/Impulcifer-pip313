@@ -403,21 +403,83 @@ fn platform() -> &'static str {
         std::env::consts::OS
     }
 }
+/// `platform.system() platform.release()` of 2.x plus the architecture, without
+/// spawning anything: os_info reads the registry on Windows; on Linux the kernel
+/// release comes from procfs (what Python's `platform.release()` reports) and on
+/// macOS the product version from SystemVersion.plist (Python reports the Darwin
+/// kernel release there, so that string differs).
 fn os_description() -> String {
-    #[cfg(windows)]
-    let output = std::process::Command::new("cmd.exe")
-        .args(["/D", "/C", "ver"])
-        .output();
-    #[cfg(not(windows))]
-    let output = std::process::Command::new("uname")
-        .args(["-s", "-r"])
-        .output();
-    output
-        .ok()
-        .filter(|out| out.status.success())
-        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| platform().to_owned())
+    let version = os_version();
+    let version = if version.is_empty() {
+        "unknown".to_owned()
+    } else {
+        version
+    };
+    format!(
+        "{} {version} {}",
+        os_platform_name(),
+        std::env::consts::ARCH
+    )
+}
+
+#[cfg(windows)]
+fn os_version() -> String {
+    os_info::get().version().to_string()
+}
+#[cfg(target_os = "linux")]
+fn os_version() -> String {
+    std::fs::read_to_string("/proc/sys/kernel/osrelease")
+        .map(|s| s.trim().to_owned())
+        .unwrap_or_default()
+}
+#[cfg(target_os = "macos")]
+fn os_version() -> String {
+    let plist = std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist")
+        .unwrap_or_default();
+    plist
+        .split("<key>ProductVersion</key>")
+        .nth(1)
+        .and_then(|rest| rest.split("<string>").nth(1))
+        .and_then(|rest| rest.split("</string>").next())
+        .map(|s| s.trim().to_owned())
+        .unwrap_or_default()
+}
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+fn os_version() -> String {
+    String::new()
+}
+
+fn os_platform_name() -> &'static str {
+    match std::env::consts::OS {
+        "windows" => "Windows",
+        "linux" => "Linux",
+        "macos" => "macOS",
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod os_description_tests {
+    #[test]
+    fn os_description_names_the_platform() {
+        let description = super::os_description();
+        let platform = match std::env::consts::OS {
+            "windows" => "Windows",
+            "linux" => "Linux",
+            "macos" => "macOS",
+            other => other,
+        };
+        assert!(description.contains(platform), "{description}");
+        assert!(
+            description.chars().any(|c| c.is_ascii_digit()),
+            "{description}"
+        );
+        assert!(
+            description.ends_with(std::env::consts::ARCH),
+            "{description}"
+        );
+        assert!(!description.contains("unknown"), "{description}");
+    }
 }
 pub fn default_data_dir() -> PathBuf {
     // Candidates in priority order: an explicit override, executable-adjacent

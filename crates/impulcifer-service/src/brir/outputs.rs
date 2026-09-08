@@ -83,25 +83,10 @@ fn pipe_table(headers: &[String], rows: &[Vec<String>]) -> String {
     lines.extend(rows.iter().map(|r| row(r)));
     lines.join("\n")
 }
-fn local_date() -> Result<String, BrirError> {
-    #[cfg(windows)]
-    let result = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'",
-        ])
-        .output()?;
-    #[cfg(not(windows))]
-    let result = std::process::Command::new("date")
-        .arg("+%Y-%m-%d %H:%M:%S")
-        .output()?;
-    if !result.status.success() {
-        return Err(BrirError::Unsupported("local date command failed".into()));
-    }
-    Ok(String::from_utf8_lossy(&result.stdout).trim().to_owned())
+fn local_date() -> String {
+    chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
+
 pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String {
     let t = |key: &str| catalog.translate(key, &json!({}));
     let mut out = format!(
@@ -193,11 +178,7 @@ pub(crate) fn write_outputs_checked(
     let responses = dir.join("responses.wav");
     write_wav(&responses, estimator.fs, &outputs.responses_tracks, 32)?;
     files.push(responses);
-    let date = i18n
-        .readme_date
-        .clone()
-        .map(Ok)
-        .unwrap_or_else(local_date)?;
+    let date = i18n.readme_date.clone().unwrap_or_else(local_date);
     let readme = dir.join("README.md");
     // Python open(..., "w") uses the host's native text-mode newline.
     let content = render_readme(&outputs.readme, i18n, &date);
@@ -290,4 +271,31 @@ pub(crate) fn write_outputs_checked(
         hesuvi: dir.join("hesuvi.wav"),
         files,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::local_date;
+    use chrono::{Local, NaiveDateTime, TimeZone};
+
+    #[test]
+    fn local_date_has_python_format_and_current_clock() {
+        let date = local_date();
+        assert!(
+            regex::Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$")
+                .unwrap()
+                .is_match(&date)
+        );
+        let parsed = NaiveDateTime::parse_from_str(&date, "%Y-%m-%d %H:%M:%S").unwrap();
+        let now = Local::now();
+        let resolved = Local.from_local_datetime(&parsed);
+        // Either offset is valid during the repeated hour at the end of DST.
+        assert!(
+            [resolved.earliest(), resolved.latest()]
+                .into_iter()
+                .flatten()
+                .any(|date| (now - date).num_milliseconds().abs() <= 5000),
+            "local date {date} is not within five seconds of {now}"
+        );
+    }
 }

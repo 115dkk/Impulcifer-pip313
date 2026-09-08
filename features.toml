@@ -18,6 +18,13 @@ status = "implemented"
 tests = ["impulcifer-policy::canonical_features_registered", "impulcifer-policy::implemented_features_have_existing_tests"]
 
 [[feature]]
+id = "policy.no_shell_subprocesses"
+kind = "policy"
+status = "implemented"
+tests = ["impulcifer-policy::no_shell_subprocesses", "impulcifer-policy::subprocess_scanner_checks_code_raw_text_and_exact_allowlist"]
+note = "Command::new( in a file that reaches std::process is allowed only in crates/impulcifer-io/src/ffmpeg.rs; the service uses chrono, sys-locale and (Windows only) os_info instead of powershell/cmd/date/uname/locale"
+
+[[feature]]
 id = "ipc.bootstrap"
 kind = "ipc"
 status = "implemented"
@@ -73,7 +80,7 @@ tests = ["impulcifer-service::ipc_get_ui_settings_shape"]
 id = "ipc.set_language"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::ipc_set_language_shape"]
+tests = ["impulcifer-service::ipc_set_language_shape", "impulcifer-service::platform_locale_maps_to_a_supported_language"]
 
 [[feature]]
 id = "ipc.set_theme"
@@ -97,7 +104,7 @@ tests = ["impulcifer-service::ipc_set_frontend_shape"]
 id = "ipc.get_system_info"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::ipc_get_system_info_shape"]
+tests = ["impulcifer-service::ipc_get_system_info_shape", "impulcifer-service::os_description_names_the_platform"]
 
 [[feature]]
 id = "ipc.resolve_recording_paths"
@@ -610,7 +617,7 @@ note = "written after the in-memory pipeline finishes (2.x writes it mid-run); s
 id = "output.readme_txt"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::demo_readme_korean_bytes_match_python"]
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::demo_readme_korean_bytes_match_python", "impulcifer-service::local_date_has_python_format_and_current_clock"]
 note = "markdown + i18n rendering; text exact, numbers within the decay-noise budgets (README-service.md)"
 
 [[feature]]

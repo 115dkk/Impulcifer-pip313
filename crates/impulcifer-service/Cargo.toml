@@ -18,6 +18,16 @@ impulcifer-audio-io = { path = "../impulcifer-audio-io" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+sys-locale = "0.3.2"
+
+[target.'cfg(windows)'.dependencies]
+# Registry/RtlGetVersion based on Windows; Unix reads procfs / SystemVersion.plist
+# directly (os_info spawns uname/sw_vers there, and 3.15 compiles Objective-C).
+os_info = { version = "3", default-features = false }
+
+[dev-dependencies]
+regex.workspace = true
 
 [[bench]]
 name = "perf"
