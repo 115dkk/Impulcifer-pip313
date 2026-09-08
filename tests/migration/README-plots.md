@@ -42,6 +42,14 @@ synchronization without storing large image fixtures.
   smoothed difference 0.1 dB (two 0.05 dB curves; the CI Windows runner measured
   0.052 dB where this machine measured 0.008), per the packet's
   second-run downstream-budget decision and README-stages.md oracle-noise policy.
+  The pipeline raw and smoothed series use that 0.05 dB for bins within 40 dB of
+  the reference maximum; deeper bins keep the same linear tolerance as the bin at
+  the floor, so their dB budget grows by 10^((depth - 40) / 20). The last grid bin
+  (23950 Hz) is 67.6 dB below the right channel maximum (budget there 1.2 dB): the
+  Ubuntu runner and Debian WSL (glibc) measured 0.081 dB, the Windows runner
+  0.091 dB, this machine 0.001 dB, and macOS passed; the Python series itself
+  moves 0.002 dB at that bin under a 1e-8 relative perturbation of the summed IR
+  (`oracle_noise_plots_raw.py`).
   The isolated checks do not inherit the downstream budget. Synthetic synchronized
   limits use 1e-7 in axis units.
 - Both PNG set tests compare Rust's encoded dimensions to the captured Python

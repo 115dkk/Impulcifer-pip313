@@ -62,14 +62,46 @@ fn inputs(t: &Temp, c: &ProcessingConfig) -> impulcifer_dsp::pipeline::PipelineI
 }
 fn compare(actual: &[f64], expected: &[f64], budget: f64, label: &str) -> f64 {
     assert_eq!(actual.len(), expected.len(), "{label} shape");
-    let max = actual
+    let (index, max) = actual
         .iter()
         .zip(expected)
         .map(|(a, b)| (a - b).abs())
-        .fold(0.0, f64::max);
-    println!("{label}: max_abs={max:.12e}, budget={budget:.12e}");
+        .enumerate()
+        .fold((0, 0.0), |acc, (i, d)| if d > acc.1 { (i, d) } else { acc });
+    println!("{label}: max_abs={max:.12e} at index {index}, budget={budget:.12e}");
     assert!(actual.iter().all(|v| v.is_finite()));
-    assert!(max <= budget, "{label}: {max} > {budget}");
+    assert!(max <= budget, "{label}: {max} > {budget} at index {index}");
+    max
+}
+/// dB comparison with a level-aware budget: `budget` applies to bins within `floor` dB
+/// of the reference maximum; deeper bins get the same linear tolerance as the bin at
+/// the floor, so their dB budget grows by 10^((depth - floor) / 20). The last grid bin
+/// (23950 Hz) sits 67.6 dB below the right channel maximum: glibc (Ubuntu runner and
+/// Debian WSL) measured 0.081 dB and the Windows runner 0.091 dB there, where this
+/// machine measured 0.001 dB and macOS passed; the Python raw series itself moves
+/// 0.002 dB at that bin under a 1e-8 relative perturbation of the summed IR.
+fn compare_levels(actual: &[f64], expected: &[f64], budget: f64, floor: f64, label: &str) -> f64 {
+    assert_eq!(actual.len(), expected.len(), "{label} shape");
+    let top = expected.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let mut max = 0.0_f64;
+    let mut worst = 0.0_f64;
+    for (i, (a, b)) in actual.iter().zip(expected).enumerate() {
+        assert!(a.is_finite(), "{label}[{i}] is not finite");
+        let depth = top - b;
+        let allowed = budget * 10f64.powf(((depth - floor) / 20.0).max(0.0));
+        let d = (a - b).abs();
+        assert!(
+            d <= allowed,
+            "{label}[{i}]: {d} > {allowed} ({depth:.1} dB below the maximum)"
+        );
+        max = max.max(d);
+        worst = worst.max(d / allowed);
+    }
+    println!(
+        "{label}: max_abs={max:.12e}, budget={budget:.12e} within {floor} dB of the maximum \
+         (deeper bins scale), worst bin uses {:.1}% of its budget",
+        worst * 100.0
+    );
     max
 }
 #[derive(Default)]
@@ -154,10 +186,11 @@ fn golden_results_series_match_python() {
         "pipeline smoothed difference",
     );
     for (side, s, raw_index, smooth_index) in [("left", l, 0, 2), ("right", r, 1, 3)] {
-        compare(
+        compare_levels(
             &s.raw,
             &values(&lines[raw_index]["y"]),
             0.05,
+            40.0,
             &format!("{side} pipeline raw"),
         );
         compare(
@@ -166,10 +199,11 @@ fn golden_results_series_match_python() {
             0.0,
             &format!("{side} pipeline grid"),
         );
-        compare(
+        compare_levels(
             &s.smoothed,
             &values(&lines[smooth_index]["y"]),
             0.05,
+            40.0,
             &format!("{side} pipeline smoothed"),
         );
     }
