@@ -1243,6 +1243,6 @@ note = "build_scripts/pack_velopack.ps1: release build, staged exe + data, vpk p
 [[feature]]
 id = "package.upgrade_from_2x"
 kind = "package"
-status = "planned"
+status = "implemented"
 tests = ["impulcifer-app::velopack_upgrade_from_2x_windows"]
-note = "the ignored local test proves check + download + apply plan for a simulated 2.13.3 locator against the packed 3.x feed without touching the live install; the real Update.exe apply and relaunch run on a fresh CI Windows runner in the 3.x release workflow (pending)"
+note = "Verified on the release runner on 2026-09-09 (release-3x.yml run 34288342432, upgrade-windows job): a fresh Windows runner installed 2.x v2.14.1 silently, Update.exe applied the 3.0.0-alpha.0 full package with its normal restart, the smoke harness attached to the relaunched app by executable path and drove first-run, bootstrap, BRIR, recovery, settings (ko/en) and the real update check; sq.version named 3.0.0-alpha.0 afterwards and the install was uninstalled. The local SDK simulation stays as the ignored test; the ignored local test proves check + download + apply plan for a simulated 2.13.3 locator against the packed 3.x feed without touching the live install; the real Update.exe apply and relaunch run on a fresh CI Windows runner in the 3.x release workflow (pending)"
