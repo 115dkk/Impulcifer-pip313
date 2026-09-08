@@ -181,7 +181,7 @@ The `/releases/latest/` endpoint resolves the newest stable release only, never 
 
 ## Python wheel and sdist
 
-The 3.x PyPI project is **`impulcifer`**, not the 2.x **`impulcifer-py313`**. The Linux wheel links ALSA (`libasound.so.2`, through cpal) and manylinux does not guarantee that library, so the workflow tags it `linux_x86_64`, attaches it to the GitHub Release only and never uploads it to PyPI; Linux `pip install impulcifer` builds from the sdist (Rust toolchain and `libasound2-dev` required). A manylinux wheel needs an ALSA-free or dlopen build of the audio backend first. Run these from `crates/impulcifer-python` so maturin uses its pyproject, not the root 2.x Hatch project:
+The 3.x wheel publishes to the **same PyPI project as 2.x, `impulcifer-py313`** (owner decision 2026-09-09: existing installs, updater feeds and PyPI dependents stay bound to one project, so users are not asked to migrate to a new package; `pip install --upgrade impulcifer-py313` carries them to 3.x once a stable 3.x is released, and `--pre` reaches the alphas). The project's Trusted Publisher list therefore needs a second entry for `release-3x.yml` (environment `PyPI`) next to the 2.x `publish.yml` one. The Linux wheel links ALSA (`libasound.so.2`, through cpal) and manylinux does not guarantee that library, so the workflow tags it `linux_x86_64`, attaches it to the GitHub Release only and never uploads it to PyPI; Linux `pip install impulcifer` builds from the sdist (Rust toolchain and `libasound2-dev` required). A manylinux wheel needs an ALSA-free or dlopen build of the audio backend first. Run these from `crates/impulcifer-python` so maturin uses its pyproject, not the root 2.x Hatch project:
 
 ```sh
 cd crates/impulcifer-python

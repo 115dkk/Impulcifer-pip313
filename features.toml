@@ -1161,7 +1161,7 @@ id = "python.wheel_main"
 kind = "python"
 status = "implemented"
 tests = ["pytest:crates/impulcifer-python/tests/test_native.py::test_main_runs_demo_and_writes_hesuvi", "pytest:crates/impulcifer-python/tests/test_native.py::test_progress_and_log_callbacks_receive_cli_keys", "pytest:crates/impulcifer-python/tests/test_native.py::test_error_raises_runtime_error_with_code", "pytest:crates/impulcifer-python/tests/test_native.py::test_concurrent_runs_release_interpreter", "pytest:crates/impulcifer-python/tests/test_native.py::test_generate_sweep_set_and_recovery", "pytest:crates/impulcifer-python/tests/test_native.py::test_package_data_override_is_preserved"]
-note = "maturin wheel (abi3-py39; separate cp314t wheel because PyO3 0.27 ignores abi3 on free-threaded builds): impulcifer.main(**kwargs) runs the service BRIR job with the GIL released, callbacks per event, RuntimeError with the service code; detect_sweep, generate_sweep_set, recover_brir_outputs; package data staged by sync_data.py and found through IMPULCIFER_DATA_DIR; run by the wheel job of rust.yml on Ubuntu and Windows"
+note = "published to the same PyPI project as 2.x, impulcifer-py313 (owner decision 2026-09-09: no migration cost for users; alphas need pip --pre); maturin wheel (abi3-py39; separate cp314t wheel because PyO3 0.27 ignores abi3 on free-threaded builds): impulcifer.main(**kwargs) runs the service BRIR job with the GIL released, callbacks per event, RuntimeError with the service code; detect_sweep, generate_sweep_set, recover_brir_outputs; package data staged by sync_data.py and found through IMPULCIFER_DATA_DIR; run by the wheel job of rust.yml on Ubuntu and Windows"
 
 [[feature]]
 id = "python.cli_entry"
