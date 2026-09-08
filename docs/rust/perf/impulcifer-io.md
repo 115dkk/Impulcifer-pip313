@@ -1,4 +1,5 @@
 # PA01: impulcifer-io performance audit
+2026-09-08 재측정과 M5 판정은 [PA06 출시 전 성능 감사](release.md)를 참고한다.
 
 Date: 2026-09-07. Baseline revision: `30ef27e` plus the pre-existing working tree. Only the allowed impulcifer-io files were modified by this audit. Two sequential ASTRA workers implemented and measured the optimizations; the parent reviewed the diff and independently reran all final commands in the foreground.
 

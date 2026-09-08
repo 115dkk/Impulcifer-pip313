@@ -1,4 +1,5 @@
 # PA05: audio-io and sys-win measurement-session overhead
+2026-09-08 재측정과 M5 판정은 [PA06 출시 전 성능 감사](release.md)를 참고한다.
 
 ## Sixth run, 2026-09-08: audit NOT PASSED
 
