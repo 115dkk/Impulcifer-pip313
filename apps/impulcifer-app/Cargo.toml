@@ -14,7 +14,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 impulcifer-types = { path = "../../crates/impulcifer-types" }
 impulcifer-service = { path = "../../crates/impulcifer-service" }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["devtools"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 serde.workspace = true
