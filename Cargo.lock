@@ -2198,6 +2198,7 @@ name = "impulcifer-audio-io"
 version = "3.0.0-alpha.0"
 dependencies = [
  "cpal",
+ "impulcifer-io",
  "impulcifer-sys-win",
  "impulcifer-types",
  "thiserror 2.0.20",

@@ -15,3 +15,10 @@ thiserror.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.24"
+
+[[bench]]
+name = "perf"
+harness = false
+# The bench needs WASAPI and the CABLE-A virtual cable; `cargo test` must not run it
+# (it exits 2 without them). The bench code is covered by the bench_smoke test.
+test = false

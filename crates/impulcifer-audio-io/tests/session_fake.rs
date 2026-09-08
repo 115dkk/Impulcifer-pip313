@@ -10,6 +10,79 @@ use impulcifer_audio_io::policy::{open_input_with_policy, open_output_with_polic
 use impulcifer_audio_io::session::{PlaybackBuffer, SessionEvent, SessionRequest, play_and_record};
 use impulcifer_types::audio::*;
 
+mod bench_support;
+
+#[test]
+fn bench_smoke_impulcifer_audio_io() {
+    let backend = Fake::default();
+    assert_eq!(bench_support::enumerate_devices(&backend).unwrap().len(), 1);
+    // A fake/default device must never be mistaken for the required CABLE-A pair.
+    assert!(bench_support::pair(&backend).is_err());
+    let modes = bench_support::open_close_session(&backend, &endpoint(), &endpoint()).unwrap();
+    assert_eq!(modes, (ShareMode::Exclusive, ShareMode::Exclusive));
+    let mono = PlaybackBuffer {
+        sample_rate: 1000,
+        channels: 1,
+        interleaved: vec![0.25; 2],
+    };
+    for segments in [1, 7] {
+        let playback = bench_support::playback_set(&mono, segments);
+        assert_eq!(playback.interleaved.len(), 4 * segments);
+        let measured = bench_support::record(
+            &backend,
+            SessionRequest::new(endpoint(), endpoint(), playback, 2),
+        )
+        .unwrap();
+        assert_eq!(measured.recording.capture.frames, 2 * segments);
+        assert_eq!(
+            measured.recording.playback.frames_drained,
+            (2 * segments) as u64
+        );
+        assert!(bench_support::latency_ms(&measured.delivery).unwrap() >= 1.0);
+        assert!(measured.delivery.first_frames > 0);
+        assert!(measured.wall_ms >= measured.overhead_ms);
+        bench_support::cpu_boundary(false, "BEGIN").unwrap();
+        bench_support::cpu_boundary(false, "END").unwrap();
+    }
+    bench_support::measure("tiny_enumeration", 1, || {
+        bench_support::enumerate_devices(&backend).map(|_| ())
+    })
+    .unwrap();
+    let empty = bench_support::Delivery::default();
+    assert!(bench_support::latency_ms(&empty).is_err());
+    let failing = Fake {
+        fault: Fault::Read,
+        ..Fake::default()
+    };
+    assert!(bench_support::record(&failing, request()).is_err());
+}
+
+#[test]
+fn bench_playback_set_preserves_transport_and_segment_routing() {
+    let mono = PlaybackBuffer {
+        sample_rate: 48000,
+        channels: 1,
+        interleaved: vec![0.25, -0.5],
+    };
+    assert_eq!(
+        bench_support::playback_set(&mono, 1).interleaved,
+        [0.25, 0.25, -0.5, -0.5]
+    );
+    let set = bench_support::playback_set(&mono, 7);
+    assert_eq!(set.sample_rate, 48000);
+    assert_eq!(set.channels, 2);
+    for (index, segment) in set.interleaved.chunks_exact(4).enumerate() {
+        assert_eq!(
+            segment,
+            if index % 2 == 0 {
+                &[0.25, 0.0, -0.5, 0.0]
+            } else {
+                &[0.0, 0.25, 0.0, -0.5]
+            }
+        );
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 enum Fault {
     #[default]
@@ -42,6 +115,7 @@ struct Fake {
     state: Arc<Mutex<State>>,
     fault: Fault,
     duration: Duration,
+    open_hook: Option<Arc<dyn Fn(Direction) + Send + Sync + std::panic::RefUnwindSafe>>,
 }
 
 struct Affinity {
@@ -68,6 +142,9 @@ impl Drop for Affinity {
 impl Fake {
     fn attempt(&self, direction: Direction, mode: ShareMode) -> Result<(), AudioError> {
         self.state.lock().unwrap().attempts.push((direction, mode));
+        if let Some(hook) = &self.open_hook {
+            hook(direction);
+        }
         if self.fault == Fault::Unsupported && mode == ShareMode::Exclusive {
             return Err(AudioError::UnsupportedFormat("exclusive".into()));
         }
@@ -308,7 +385,7 @@ fn session_starts_input_before_output() {
     play_and_record(&fake, request, &CancelToken::new(), &mut |_| {}).unwrap();
     let state = fake.state.lock().unwrap();
     let position = |s| state.history.iter().position(|x| *x == s).unwrap();
-    assert!(position("input start") < position("output open"));
+    assert!(position("input start") < position("output play"));
     assert!(position("output drained") < position("input stop"));
     assert_eq!(state.submitted, expected);
     assert_eq!(state.owners.len(), 2);
@@ -399,7 +476,11 @@ fn session_propagates_input_open_error() {
     };
     let result = play_and_record(&fake, request(), &CancelToken::new(), &mut |_| {});
     assert!(matches!(result, Err(AudioError::Backend(s)) if s == "Input open"));
-    assert!(!fake.state.lock().unwrap().history.contains(&"output open"));
+    let state = fake.state.lock().unwrap();
+    assert!(!state.history.contains(&"output play"));
+    if state.history.contains(&"output open") {
+        assert!(state.history.contains(&"output drop"));
+    }
 }
 
 #[test]
@@ -485,8 +566,13 @@ fn session_errors_and_panics_stop_input_and_join_workers() {
             "{fault:?}: {result:?}"
         );
         let state = fake.state.lock().unwrap();
-        assert!(state.history.contains(&"input stop"), "{fault:?}");
-        assert!(state.history.contains(&"input drop"), "{fault:?}");
+        // Output initialization can fail before input starts opening. Every
+        // input that did open must still stop and drop on its owning worker.
+        if state.history.contains(&"input drop") {
+            assert!(state.history.contains(&"input stop"), "{fault:?}");
+        } else {
+            assert_eq!(fault, Fault::OutputOpen);
+        }
         if fault == Fault::Read {
             assert!(matches!(result, Err(AudioError::Backend(s)) if s == "read"));
         }
@@ -563,6 +649,74 @@ fn session_event_panic_cancels_and_joins() {
     let state = fake.state.lock().unwrap();
     assert!(state.history.contains(&"input stop"));
     assert!(state.history.contains(&"input drop") && state.history.contains(&"output drop"));
+}
+
+#[test]
+fn concurrent_initialization_handshake_and_cleanup() {
+    use std::sync::{Condvar, mpsc};
+    for scenario in 0..4 {
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let token = CancelToken::new();
+        let fake = Fake {
+            open_hook: Some(Arc::new({
+                let gate = gate.clone();
+                move |direction| {
+                    entered_tx.send(direction).unwrap();
+                    let (lock, cv) = &*gate;
+                    let mut released = lock.lock().unwrap();
+                    while !*released {
+                        released = cv.wait(released).unwrap();
+                    }
+                    drop(released);
+                    if scenario == 3 && direction == Direction::Output {
+                        panic!("controlled output initialization panic");
+                    }
+                }
+            })),
+            fault: if scenario == 1 {
+                Fault::InputOpen
+            } else {
+                Fault::None
+            },
+            ..Fake::default()
+        };
+        thread::scope(|scope| {
+            let worker = scope.spawn(|| play_and_record(&fake, request(), &token, &mut |_| {}));
+            // Both must enter open before either is permitted to finish it.
+            // Timeout is only a deadlock watchdog, not a performance threshold;
+            // always release the gate before asserting, even on regression.
+            let first = entered_rx.recv_timeout(Duration::from_secs(5));
+            let second = entered_rx.recv_timeout(Duration::from_secs(5));
+            if scenario == 2 {
+                token.cancel();
+            }
+            let (lock, cv) = &*gate;
+            *lock.lock().unwrap() = true;
+            cv.notify_all();
+            let result = worker.join().unwrap();
+            assert!(first.is_ok() && second.is_ok(), "opens did not overlap");
+            assert_ne!(first.unwrap(), second.unwrap());
+            assert_eq!(result.is_ok(), scenario == 0);
+            if scenario == 2 {
+                assert!(matches!(result, Err(AudioError::Cancelled)));
+            }
+        });
+        let state = fake.state.lock().unwrap();
+        if scenario != 3 {
+            assert!(
+                state.history.contains(&"output drop"),
+                "scenario {scenario}"
+            );
+        }
+        if scenario != 1 {
+            assert!(state.history.contains(&"input stop"));
+            assert!(state.history.contains(&"input drop"));
+        }
+        if scenario == 1 || scenario == 3 {
+            assert!(!state.history.contains(&"output play"));
+        }
+    }
 }
 
 #[test]

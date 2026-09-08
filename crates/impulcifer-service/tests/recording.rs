@@ -453,7 +453,11 @@ fn recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32() {
     assert_eq!(wav.tracks.len(), 4);
     assert_eq!(wav.tracks[0].len(), played.len() / usize::from(*channels));
     assert_eq!(wav.sample_rate, 8000);
-    assert_eq!(state.opens[0].0, Direction::Input);
+    // PA05 opens the capture and render clients on two threads at once, so the
+    // recorded open order is a race; the input-before-output guarantee is about
+    // `start` and is covered by session_starts_input_before_output.
+    assert!(state.opens.iter().any(|x| x.0 == Direction::Input));
+    assert!(state.opens.iter().any(|x| x.0 == Direction::Output));
     assert!(
         state
             .opens
