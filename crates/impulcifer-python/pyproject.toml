@@ -3,7 +3,7 @@ requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
 
 [project]
-name = "impulcifer"
+name = "impulcifer-py313"
 requires-python = ">=3.9"
 dynamic = ["version"]
 description = "Impulcifer Rust BRIR processing and command-line interface"

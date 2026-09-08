@@ -13,7 +13,8 @@ name: Release 3.x
 #                      existing install)
 #   build-macos        tauri build --bundles app,dmg + signed updater archive
 #   build-linux        tauri build --bundles appimage + signature
-#   wheels             maturin wheels on three OSes + sdist (PyPI project impulcifer;
+#   wheels             maturin wheels on three OSes + sdist (PyPI project impulcifer-py313,
+#                      the same project as 2.x so pip upgrades carry users over;
 #                      the Linux wheel is tagged linux_x86_64 because it links ALSA,
 #                      so it goes to the GitHub Release only, Linux pip uses the sdist)
 #   publish-pypi       only when dispatched with publish_pypi=true (OIDC, env PyPI)
@@ -32,7 +33,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_pypi:
-        description: "Publish the wheels and sdist to PyPI (project impulcifer)"
+        description: "Publish the wheels and sdist to PyPI (project impulcifer-py313, the 2.x project)"
         type: boolean
         default: false
   push:
@@ -381,13 +382,13 @@ jobs:
           if-no-files-found: error
 
   publish-pypi:
-    name: Publish to PyPI (project impulcifer)
+    name: Publish to PyPI (project impulcifer-py313)
     needs: [version, wheels]
     if: github.event_name == 'workflow_dispatch' && inputs.publish_pypi
     runs-on: ubuntu-latest
     environment:
       name: PyPI
-      url: https://pypi.org/p/impulcifer
+      url: https://pypi.org/p/impulcifer-py313
     permissions:
       id-token: write
       contents: read

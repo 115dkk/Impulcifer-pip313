@@ -53,7 +53,7 @@ def samples(path):
 
 def test_version(package):
     assert package.impulcifer_native.version() == package.__version__ == "3.0.0-alpha.0"
-    assert distribution("impulcifer").version == "3.0.0a0"
+    assert distribution("impulcifer-py313").version == "3.0.0a0"
     # Resolve both sides: the package sets the variable from a resolved path,
     # while __file__ may be the 8.3 short form of a temp directory on Windows.
     assert Path(os.environ["IMPULCIFER_DATA_DIR"]).resolve() == (
@@ -117,7 +117,7 @@ def test_cli_main_help_exits_zero(package):
 
 
 def test_cli_entry_point(package, monkeypatch, capsys):
-    entry = next(e for e in distribution("impulcifer").entry_points if e.name == "impulcifer")
+    entry = next(e for e in distribution("impulcifer-py313").entry_points if e.name == "impulcifer")
     assert entry.value == "impulcifer:cli"
     monkeypatch.setattr(sys, "argv", ["impulcifer", "--help"])
     with pytest.raises(SystemExit) as result:
