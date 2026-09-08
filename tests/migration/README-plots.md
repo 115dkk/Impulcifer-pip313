@@ -101,6 +101,10 @@ Default and plot PNG sets contain 2 and 51 files respectively. The JSON is
 1,669,150 bytes; the two 268,792-byte IR snapshots bring all P19 fixtures to
 2,206,734 bytes, below both fixture budgets.
 
+## Rendering (P23)
+
+The numerical series contract and golden budgets above are unchanged; P23 designs the pictures rather than reproducing Python canvases. Singles are 1600×1000, six-panel sheets 2400×1350 (2×3), and overlays 1600×900, with 64 px margins, 48 px gaps and embedded DejaVu Sans (34 px titles, 22 px subtitles/axes, 18 px ticks, 20 px legends/annotations). Tokens are canvas `#fbfbfc`, panel `#ffffff`, ink `#1b1f24`, muted `#6b7280`, grids `#e5e7eb`/`#f1f3f5`, zero/target `#9ca3af`, left/right `#2563eb`/`#dc2626`, sum `#111827`, correction `#7c3aed`, guide `#fef3c7`, and signed fills `#dbeafe`/`#fee2e2`; magma uses −80..0 dB. Raw curves use 35% alpha at 1 px and smoothed curves 3 px. Dashes supplement the fixed palette, whose blue/purple pair fails the categorical color-separation check. Missing optional data is explicitly unavailable, not synthesized. P23b uses 6/12/24 dB ticks for spans through 48/96/over 96 dB, limits numerical extrema to 40 Hz–16 kHz, and replaces band decay with a direct-relative 0–25 ms IR envelope and up to three prominent echoes. Annotations use a measured 16 px inset and collision avoidance. P23c uses 1/2/5-times-power-of-ten linear tick steps with outward bounds and measures each axis's widest actual tick label before placing its title, including the inset and spectrogram. Peak labels use opposite sides and collision stacking; reflection labels occupy a right-side column with leaders. The color-bar title sits below the bar with the theme panel gap. Headphones show only faint raw, thick smoothed and dashed target; both deviation footers are computed from target-relative samples, and no inverse error is passed as correction. Headphone display smoothing uses a clone and preserves the raw golden. The complete visual contract and source-data caveats are in `docs/rust/PLOTS.md`.
+
 ## Rendering choices
 
 The renderer has no system font lookup. DejaVu Sans 2.37 is embedded with the

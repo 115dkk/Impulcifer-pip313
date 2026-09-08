@@ -74,10 +74,24 @@ pub fn headphones(
     left: &FrequencyResponse,
     right: &FrequencyResponse,
 ) -> Result<(), DspError> {
+    let display = |fr: &FrequencyResponse| -> Result<FrCurve, DspError> {
+        let mut smoothed = fr.clone();
+        // HRIRPlotter.plot_result uses these display windows. There is no
+        // plot_headphones method in 2.x; pipeline_stages plots raw headphones.
+        smoothed.smoothen(1.0 / 3.0, 1.0 / 5.0, 20000.0, 23999.0)?;
+        Ok(FrCurve {
+            name: fr.name.clone(),
+            frequency: fr.frequency.clone(),
+            raw: fr.raw.clone(),
+            smoothed: smoothed.smoothed,
+            target: fr.target.clone(),
+            ..Default::default()
+        })
+    };
     impulcifer_plots::plot_headphones(
         path,
-        &curve(left),
-        &curve(right),
+        &display(left)?,
+        &display(right)?,
         left.center_value((100.0, 10000.0)),
         right.center_value((100.0, 10000.0)),
     )
@@ -146,6 +160,13 @@ pub fn prepare_panels(
     title: String,
     recording: Option<Vec<f64>>,
 ) -> Result<IrPanels, DspError> {
+    prepare_panels_with_floor(ir, title, recording).map(|(panels, _)| panels)
+}
+fn prepare_panels_with_floor(
+    ir: &ImpulseResponse,
+    title: String,
+    recording: Option<Vec<f64>>,
+) -> Result<(IrPanels, f64), DspError> {
     let fs = f64::from(ir.fs);
     let fr = series(&ir.data, ir.fs, false)?;
     let params = ir.decay_params();
@@ -244,21 +265,24 @@ pub fn prepare_panels(
         ),
         y: (20.0_f64.log10(), 20000.0_f64.log10()),
     });
-    Ok(IrPanels {
-        title,
-        recording,
-        spectrogram,
-        ir: ir.data.clone(),
-        fs: ir.fs,
-        fr,
-        room_fr: None,
-        decay,
-        decay_start: start,
-        decay_average: average,
-        decay_window: window,
-        waterfall: Some(waterfall),
-        limits,
-    })
+    Ok((
+        IrPanels {
+            title,
+            recording,
+            spectrogram,
+            ir: ir.data.clone(),
+            fs: ir.fs,
+            fr,
+            room_fr: None,
+            decay,
+            decay_start: start,
+            decay_average: average,
+            decay_window: window,
+            waterfall: Some(waterfall),
+            limits,
+        },
+        params.noise_floor_db,
+    ))
 }
 pub fn room(
     dir: &Path,
@@ -279,8 +303,11 @@ pub fn room(
                 } else {
                     "right"
                 };
-                let mut p =
-                    prepare_panels(ir, format!("{}-{label}", s.speaker), ir.recording.clone())?;
+                let (mut p, floor) = prepare_panels_with_floor(
+                    ir,
+                    format!("{}-{label}", s.speaker),
+                    ir.recording.clone(),
+                )?;
                 if let Some((_, _, fr)) = room
                     .frs
                     .0
@@ -307,19 +334,20 @@ pub fn room(
                     });
                     p.room_fr = Some(curve(&fr));
                 }
-                panels.push(p);
+                panels.push((p, floor));
             }
         }
     }
-    let limits = PanelLimits::synchronize(panels.iter().map(|p| &p.limits));
-    for p in &mut panels {
+    let limits = PanelLimits::synchronize(panels.iter().map(|(p, _)| &p.limits));
+    for (p, _) in &mut panels {
         p.limits = limits.clone();
     }
-    panels.par_iter().try_for_each(|p| {
+    panels.par_iter().try_for_each(|(p, floor)| {
         check(cancelled)?;
-        impulcifer_plots::plot_ir_panels(
+        impulcifer_plots::plot_ir_panels_with_noise_floor(
             &dir.join("plots/room").join(format!("{}.png", p.title)),
             p,
+            *floor,
         )
         .map_err(error)
     })
@@ -420,19 +448,20 @@ pub fn render_stage(
                     } else {
                         ir.recording.clone()
                     };
-                    prepare_panels(ir, name.clone(), recording)
+                    prepare_panels_with_floor(ir, name.clone(), recording)
                 })
                 .collect::<Result<_, _>>()?;
-            let sync = PanelLimits::synchronize(panels.iter().map(|p| &p.limits));
+            let sync = PanelLimits::synchronize(panels.iter().map(|(p, _)| &p.limits));
             // Pass two applies the union to every corresponding enabled axis.
-            for p in &mut panels {
+            for (p, _) in &mut panels {
                 p.limits = sync.clone();
             }
-            panels.par_iter().try_for_each(|p| {
+            panels.par_iter().try_for_each(|(p, floor)| {
                 check(cancelled)?;
-                impulcifer_plots::plot_ir_panels(
+                impulcifer_plots::plot_ir_panels_with_noise_floor(
                     &plots.join(stage).join(format!("{}.png", p.title)),
                     p,
+                    *floor,
                 )
                 .map_err(error)
             })?;

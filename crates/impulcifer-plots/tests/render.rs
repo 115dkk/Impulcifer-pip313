@@ -41,7 +41,7 @@ fn decode(p: &std::path::Path) -> (u32, u32, Vec<u8>) {
     (info.width, info.height, data)
 }
 #[test]
-fn png_outputs_have_matplotlib_sizes() {
+fn png_outputs_have_p23_sizes() {
     let d = directory();
     let (s, c) = curves();
     let mut r = s.clone();
@@ -90,12 +90,12 @@ fn png_outputs_have_matplotlib_sizes() {
     };
     plot_ir_panels(&d.join("panels.png"), &panels).unwrap();
     for (name, size) in [
-        ("results.png", (1200, 900)),
-        ("headphones.png", (2200, 1000)),
-        ("eq-one.png", (1200, 900)),
-        ("eq-two.png", (2200, 900)),
-        ("panels.png", (2200, 1000)),
-        ("overlay.png", (1200, 700)),
+        ("results.png", (1600, 1000)),
+        ("headphones.png", (1600, 1000)),
+        ("eq-one.png", (1600, 1000)),
+        ("eq-two.png", (1600, 1000)),
+        ("panels.png", (2400, 1350)),
+        ("overlay.png", (1600, 900)),
     ] {
         let (w, h, _) = decode(&d.join(name));
         assert_eq!((w, h), size);
@@ -123,11 +123,11 @@ fn png_is_not_blank() {
     assert!(colors.len() >= 3);
     assert!(variance > 100.0, "variance={variance}");
     for rgb in [
-        [125, 180, 219],
-        [221, 128, 129],
-        [31, 119, 180],
-        [214, 39, 40],
-        [104, 15, 185],
+        [251, 251, 252],
+        [27, 31, 36],
+        [37, 99, 235],
+        [220, 38, 38],
+        [17, 24, 39],
     ] {
         assert!(colors.contains(&rgb), "missing fixed series color {rgb:?}");
     }
@@ -200,4 +200,323 @@ fn invalid_grids_and_output_errors_are_reported() {
     std::fs::write(d.join("blocked"), b"file").unwrap();
     assert!(plot_results(&d.join("blocked/results.png"), &s, &s).is_err());
     assert!(!d.join("bad.png").exists());
+}
+
+fn fixture() -> (FrSeries, FrCurve, IrPanels) {
+    let (mut series, mut curve) = curves();
+    series.smoothed = series
+        .frequency
+        .iter()
+        .map(|f| 4.0 * (f.log10() * 3.0).sin())
+        .collect();
+    curve.smoothed = series.smoothed.clone();
+    curve.target = vec![0.0; curve.frequency.len()];
+    curve.error_smoothed = curve.smoothed.clone();
+    curve.equalization = curve.smoothed.iter().map(|v| -v).collect();
+    let fs = 48000;
+    let ir: Vec<_> = (0..14400)
+        .map(|i| {
+            let t = i as f64 / 48.0;
+            (-t / 30.0).exp() * (t * 3.0).sin()
+        })
+        .collect();
+    let recording: Vec<_> = (0..24000)
+        .map(|i| (i as f64 * 0.001 + (i as f64 * 0.0002).powi(2)).sin() * 0.5)
+        .collect();
+    let spec = Spectrogram {
+        frequency: (0..60)
+            .map(|i| 20.0 * 1000_f64.powf(i as f64 / 59.0))
+            .collect(),
+        time: (0..60).map(|i| i as f64 * 0.005).collect(),
+        db: (0..60)
+            .map(|i| {
+                (0..60)
+                    .map(|t| (-t as f64 * (0.5 + i as f64 / 60.0)).max(-80.0))
+                    .collect()
+            })
+            .collect(),
+    };
+    let panels = IrPanels {
+        title: "FL · left ear · synthetic".into(),
+        fs,
+        ir,
+        recording: Some(recording),
+        spectrogram: Some(spec),
+        fr: series.clone(),
+        decay: (0..14400).map(|i| -i as f64 / 160.0).collect(),
+        decay_average: (0..14000).map(|i| -i as f64 / 180.0).collect(),
+        decay_window: 400,
+        limits: PanelLimits([
+            Some(AxisLimits {
+                x: (0.0, 0.5),
+                y: (-0.6, 0.6),
+            }),
+            Some(AxisLimits {
+                x: (0.0, 300.0),
+                y: (-1.1, 1.1),
+            }),
+            Some(AxisLimits {
+                x: (0.0, 300.0),
+                y: (-96.0, 0.0),
+            }),
+            Some(AxisLimits {
+                x: (0.0, 0.3),
+                y: (20.0, 20000.0),
+            }),
+            Some(AxisLimits {
+                x: (20.0, 20000.0),
+                y: (-12.0, 12.0),
+            }),
+            None,
+        ]),
+        ..Default::default()
+    };
+    (series, curve, panels)
+}
+fn check_picture(path: &std::path::Path, size: (u32, u32)) {
+    assert!(path.is_file());
+    let (w, h, pixels) = decode(path);
+    assert_eq!((w, h), size);
+    assert!(pixels.chunks_exact(3).any(|p| p == [251, 251, 252]));
+    assert!(pixels.chunks_exact(3).any(|p| p == [27, 31, 36]));
+    // The top title region must contain ink, not only an axis or legend.
+    assert!(
+        (64..160).any(|y| (64..w as usize - 64).any(|x| pixels
+            [(y * w as usize + x) * 3..(y * w as usize + x) * 3 + 3]
+            == [27, 31, 36]))
+    );
+}
+#[test]
+fn results_chart_renders_without_optional_raw() {
+    let d = directory();
+    let (mut s, _, _) = fixture();
+    s.raw.clear();
+    plot_results(&d.join("results.png"), &s, &s).unwrap();
+    check_picture(&d.join("results.png"), (1600, 1000));
+}
+#[test]
+fn headphones_chart_renders_without_optional_correction() {
+    let d = directory();
+    let (_, mut c, _) = fixture();
+    c.equalization.clear();
+    c.smoothed.clear();
+    c.target.clear();
+    plot_headphones(&d.join("headphones.png"), &c, &c, 0.0, 0.0).unwrap();
+    check_picture(&d.join("headphones.png"), (1600, 1000));
+}
+#[test]
+fn eq_chart_renders_missing_ears() {
+    let d = directory();
+    let (_, c, _) = fixture();
+    plot_eq(&d.join("absent.png"), None, None).unwrap();
+    assert!(!d.join("absent.png").exists());
+    for (name, l, r) in [("left", Some(&c), None), ("right", None, Some(&c))] {
+        let path = d.join(format!("eq-{name}.png"));
+        plot_eq(&path, l, r).unwrap();
+        check_picture(&path, (1600, 1000));
+    }
+}
+#[test]
+fn room_chart_renders_without_optional_measurements() {
+    let d = directory();
+    let (_, mut c, _) = fixture();
+    c.target.clear();
+    c.error_smoothed.clear();
+    plot_generic_room(&d.join("room.png"), &c, &[]).unwrap();
+    check_picture(&d.join("room.png"), (1600, 1000));
+}
+#[test]
+fn ir_sheet_renders_present_and_absent_optional_panels() {
+    let d = directory();
+    let (_, _, p) = fixture();
+    plot_ir_panels_with_noise_floor(&d.join("panels.png"), &p, -60.0).unwrap();
+    check_picture(&d.join("panels.png"), (2400, 1350));
+    plot_ir_panels(
+        &d.join("empty.png"),
+        &IrPanels {
+            fs: 48000,
+            title: "Unavailable measurements".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    check_picture(&d.join("empty.png"), (2400, 1350));
+}
+#[test]
+fn overlay_chart_preserves_supplied_peak_delay() {
+    let d = directory();
+    let mut left = vec![0.0; 480];
+    let mut right = left.clone();
+    left[48] = 0.8;
+    left[60] = -1.0;
+    right[63] = 0.7;
+    plot_interaural_overlay(
+        &d.join("overlay.png"),
+        &InterauralOverlay {
+            speaker: "FL",
+            left_ir: &left,
+            right_ir: &right,
+            left_peak: 48,
+            right_peak: 63,
+            fs: 48000,
+            time_range_ms: (-5.0, 30.0),
+        },
+    )
+    .unwrap();
+    check_picture(&d.join("overlay.png"), (1600, 900));
+}
+#[test]
+fn invalid_optional_matrices_and_peaks_are_errors() {
+    let d = directory();
+    let (_, _, mut p) = fixture();
+    p.spectrogram.as_mut().unwrap().db[0].pop();
+    assert!(plot_ir_panels(&d.join("bad.png"), &p).is_err());
+    assert!(
+        plot_interaural_overlay(
+            &d.join("bad.png"),
+            &InterauralOverlay {
+                speaker: "FL",
+                left_ir: &[0.0],
+                right_ir: &[0.0],
+                left_peak: 1,
+                right_peak: 0,
+                fs: 48000,
+                time_range_ms: (-1.0, 5.0)
+            }
+        )
+        .is_err()
+    );
+}
+#[test]
+fn chart_kinds_use_their_actual_tokens() {
+    let d = directory();
+    let (s, c, p) = fixture();
+    let mut right = s.clone();
+    right.smoothed.iter_mut().for_each(|v| *v += 2.);
+    let mut rc = c.clone();
+    rc.smoothed.iter_mut().for_each(|v| *v += 2.);
+    rc.equalization.iter_mut().for_each(|v| *v -= 2.);
+    plot_results(&d.join("results.png"), &s, &right).unwrap();
+    plot_headphones(&d.join("headphones.png"), &c, &rc, 0., 0.).unwrap();
+    plot_eq(&d.join("eq.png"), Some(&c), Some(&c)).unwrap();
+    plot_generic_room(&d.join("room.png"), &c, &[]).unwrap();
+    plot_ir_panels_with_noise_floor(&d.join("panels.png"), &p, -60.).unwrap();
+    let mut left = vec![0.; 480];
+    left[48] = 1.;
+    let mut right_ir = vec![0.; 480];
+    right_ir[60] = 0.8;
+    plot_interaural_overlay(
+        &d.join("overlay.png"),
+        &InterauralOverlay {
+            speaker: "FL",
+            left_ir: &left,
+            right_ir: &right_ir,
+            left_peak: 48,
+            right_peak: 60,
+            fs: 48000,
+            time_range_ms: (-1., 5.),
+        },
+    )
+    .unwrap();
+    let blue = [37, 99, 235];
+    let red = [220, 38, 38];
+    let purple = [124, 58, 237];
+    let target = [156, 163, 175];
+    let both = [17, 24, 39];
+    for (name, expected) in [
+        ("results", vec![blue, red, both]),
+        ("headphones", vec![blue, red, target]),
+        ("eq", vec![both, purple, target]),
+        ("room", vec![blue, both, target]),
+        ("panels", vec![blue, target]),
+        ("overlay", vec![blue, red]),
+    ] {
+        let (_, _, pixels) = decode(&d.join(format!("{name}.png")));
+        let colors: HashSet<_> = pixels.chunks_exact(3).map(|p| [p[0], p[1], p[2]]).collect();
+        for token in expected.into_iter().chain([[251, 251, 252], [27, 31, 36]]) {
+            assert!(colors.contains(&token), "{name}: missing token {token:?}");
+        }
+        if name == "headphones" {
+            assert!(
+                !colors.contains(&purple),
+                "headphones must never show an inverse correction"
+            );
+        }
+        if name == "panels" {
+            assert!(
+                !colors.contains(&purple),
+                "IR reflections must not retain the discarded band series"
+            );
+        }
+    }
+}
+#[test]
+#[ignore = "writes visual review artifacts"]
+fn gallery() {
+    let base =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/plots-gallery/synthetic");
+    // Inspect before writing and preserve every previous run.
+    let d = if base.exists() && std::fs::read_dir(&base).unwrap().next().is_some() {
+        base.join(format!(
+            "run-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+    } else {
+        base
+    };
+    std::fs::create_dir_all(&d).unwrap();
+    let (s, c, p) = fixture();
+    let mut right = s.clone();
+    for (i, v) in right.smoothed.iter_mut().enumerate() {
+        *v -= 2.0 * (i as f64 / 60.0).sin();
+    }
+    let mut rc = c.clone();
+    rc.name = "Right ear".into();
+    for v in &mut rc.smoothed {
+        *v += 2.0;
+    }
+    for v in &mut rc.equalization {
+        *v -= 1.0;
+    }
+    plot_results(&d.join("results.png"), &s, &right).unwrap();
+    plot_headphones(&d.join("headphones.png"), &c, &rc, 0.0, 2.0).unwrap();
+    plot_eq(&d.join("eq-single.png"), Some(&c), Some(&c)).unwrap();
+    plot_eq(&d.join("eq-split.png"), Some(&c), Some(&rc)).unwrap();
+    plot_eq(&d.join("eq-missing-ear.png"), Some(&c), None).unwrap();
+    plot_generic_room(&d.join("room.png"), &c, &[rc]).unwrap();
+    plot_ir_panels_with_noise_floor(&d.join("panels.png"), &p, -60.0).unwrap();
+    let mut room = p.clone();
+    room.room_fr = Some(c);
+    plot_ir_panels_with_noise_floor(&d.join("room-panels.png"), &room, -60.0).unwrap();
+    plot_ir_panels(
+        &d.join("panels-empty.png"),
+        &IrPanels {
+            fs: 48000,
+            title: "Missing optional panels".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let mut left = vec![0.0; 4800];
+    let mut right = left.clone();
+    left[48] = 0.8;
+    left[60] = -1.0;
+    right[63] = 0.7;
+    plot_interaural_overlay(
+        &d.join("overlay.png"),
+        &InterauralOverlay {
+            speaker: "FL",
+            left_ir: &left,
+            right_ir: &right,
+            left_peak: 48,
+            right_peak: 63,
+            fs: 48000,
+            time_range_ms: (-5.0, 30.0),
+        },
+    )
+    .unwrap();
+    println!("P23_SYNTHETIC_GALLERY {}", d.display());
 }
