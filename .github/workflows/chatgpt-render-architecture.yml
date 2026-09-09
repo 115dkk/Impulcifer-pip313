@@ -1,0 +1,62 @@
+name: Render verified Impulcifer audio architecture
+on:
+  push:
+    branches: [chatgpt/artifact-bridge]
+permissions:
+  contents: write
+jobs:
+  render:
+    if: "${{ startsWith(github.event.head_commit.message, 'chatgpt-render-architecture: ') }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: 5b936f283e7364ea7febf6ae3a0754c89ff370ef
+          persist-credentials: false
+          sparse-checkout: chatgpt-diagrams
+      - name: Install SVG renderer and Korean font for rasterization only
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends librsvg2-bin fonts-noto-cjk
+      - name: Render hand-authored diagram without executing project code
+        run: |
+          set -euo pipefail
+          rsvg-convert --output "$RUNNER_TEMP/impulcifer3-architecture-57bc151.png" chatgpt-diagrams/impulcifer3-architecture-57bc151.svg
+      - name: Publish only the generated PNG on the isolated bridge branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, pathlib, struct, urllib.request, urllib.error
+          name = 'impulcifer3-architecture-57bc151.png'
+          data = (pathlib.Path(os.environ['RUNNER_TEMP']) / name).read_bytes()
+          assert data[:8] == b'\x89PNG\r\n\x1a\n'
+          assert struct.unpack('>II', data[16:24]) == (1800, 1810)
+          source = pathlib.Path('chatgpt-diagrams/impulcifer3-architecture-57bc151.svg').read_text()
+          assert 'Audio DSP Architecture' in source and 'UAC' not in source
+          assert os.environ['GITHUB_REPOSITORY'] == '115dkk/Impulcifer-pip313'
+          url = 'https://api.github.com/repos/115dkk/Impulcifer-pip313/contents/chatgpt-diagrams/' + name
+          headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28'}
+          payload = {'message':'docs(bridge): publish rendered Impulcifer 3 audio diagram', 'branch':'chatgpt/artifact-bridge', 'content':base64.b64encode(data).decode('ascii')}
+          try:
+              with urllib.request.urlopen(urllib.request.Request(url+'?ref=chatgpt%2Fartifact-bridge',headers=headers),timeout=30) as response:
+                  payload['sha'] = json.load(response)['sha']
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+          request = urllib.request.Request(url,data=json.dumps(payload).encode(),headers={**headers,'Content-Type':'application/json'},method='PUT')
+          with urllib.request.urlopen(request,timeout=60) as response:
+              result = json.load(response)
+          print('PNG_DIMENSIONS=1800x1810')
+          print('PNG_BYTES='+str(len(data)))
+          print('DIAGRAM_COMMIT='+result['commit']['sha'])
+          print('DIAGRAM_FILE='+result['content']['html_url'])
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: impulcifer3-verified-architecture-57bc151
+          path: |
+            chatgpt-diagrams/impulcifer3-architecture-57bc151.svg
+            ${{ runner.temp }}/impulcifer3-architecture-57bc151.png
+          retention-days: 1
