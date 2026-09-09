@@ -1,0 +1,176 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1810" viewBox="0 0 1800 1810" role="img" aria-labelledby="title desc">
+<title id="title">Impulcifer 3 — Audio DSP Architecture</title>
+<desc id="desc">Actual audio application architecture at master 57bc151, version 3.0.0-alpha.0. Existing desktop web UI connects through a pywebview compatibility bridge and Tauri to shared Rust services. Native CLI calls shared BRIR execution directly. Python calls shared services through PyO3. Rust owns jobs, f64 DSP, WASAPI or CPAL audio, WAV and FFmpeg I/O, analysis and Plotters PNG rendering. Packaging and Python 2.x golden tests are separate from the processing path.</desc>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#40566e"/></marker>
+  <marker id="softArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7c8999"/></marker>
+  <style>
+  text { font-family: 'Noto Sans CJK KR','Malgun Gothic','Apple SD Gothic Neo',sans-serif; fill:#1b2b3b; }
+  .title {font-size:52px;font-weight:800;letter-spacing:-1px}
+  .sub {font-size:26px;fill:#526274}
+  .h {font-size:29px;font-weight:750}
+  .body {font-size:24px}
+  .small {font-size:21px;fill:#526274}
+  .code {font-family:'DejaVu Sans Mono','Cascadia Code',monospace;font-size:22px}
+  .node {fill:white;stroke:#bac6d1;stroke-width:2}
+  .group {fill:#edf3f7;stroke:#aebdcb;stroke-width:2}
+  .rust {fill:#fff8f0;stroke:#cc9865;stroke-width:2}
+  .io {fill:#f0faf7;stroke:#78a99c;stroke-width:2}
+  .wire {fill:none;stroke:#40566e;stroke-width:3;marker-end:url(#arrow);stroke-linejoin:round}
+  .ref {fill:none;stroke:#7c8999;stroke-width:2;stroke-dasharray:7 6;marker-end:url(#softArrow)}
+  </style>
+</defs>
+<rect width="1800" height="1810" fill="#f7f9fb"/>
+<rect x="0" y="0" width="1800" height="12" fill="#177a78"/>
+<text x="60" y="82" class="title">Impulcifer 3</text>
+<text x="60" y="126" class="sub">오디오 측정·BRIR 처리 · 실제 코드 기준 실행 흐름</text>
+<text x="1740" y="67" text-anchor="end" class="code">3.0.0-alpha.0</text>
+<text x="1740" y="103" text-anchor="end" class="code">master @ 57bc151</text>
+<text x="1740" y="139" text-anchor="end" class="small">2026-09-09 · 115dkk/Impulcifer-pip313</text>
+
+<!-- Three application entry points -->
+<rect x="60" y="185" width="820" height="230" rx="16" class="group"/>
+<text x="90" y="227" class="h">데스크톱 앱</text>
+<text x="90" y="259" class="small">기존 화면 유지 · 앱 내부 계산에 Python 불필요</text>
+<rect x="88" y="280" width="220" height="103" rx="9" class="node"/>
+<text x="198" y="319" text-anchor="middle" class="body" font-weight="700">기존 Web UI</text>
+<text x="198" y="351" text-anchor="middle" class="small">HTML / CSS / JS</text>
+<path d="M310 330 H335" class="wire"/>
+<rect x="337" y="280" width="237" height="103" rx="9" class="node"/>
+<text x="455" y="319" text-anchor="middle" class="code">bridge.js</text>
+<text x="455" y="351" text-anchor="middle" class="small">pywebview 호환 Proxy</text>
+<path d="M576 330 H598" class="wire"/>
+<rect x="600" y="280" width="250" height="103" rx="9" class="node"/>
+<text x="725" y="319" text-anchor="middle" class="body" font-weight="700">Tauri 2 셸</text>
+<text x="725" y="351" text-anchor="middle" class="small">창 · 대화상자 · 테마</text>
+
+<rect x="930" y="185" width="350" height="230" rx="16" class="group"/>
+<text x="957" y="229" class="h">독립 Rust CLI</text>
+<text x="957" y="275" class="body">기존 명령행 옵션 유지</text>
+<text x="957" y="314" class="code">clap / config</text>
+<text x="957" y="350" class="code">JobRegistry + run_brir</text>
+<text x="957" y="384" class="small">웹 IPC 없이 직접 호출</text>
+
+<rect x="1330" y="185" width="410" height="230" rx="16" class="group"/>
+<text x="1358" y="229" class="h">Python / PyPI</text>
+<text x="1358" y="275" class="code">impulcifer-py313</text>
+<text x="1358" y="314" class="body">PyO3 → Rust 서비스</text>
+<text x="1358" y="350" class="small">설정은 소유 데이터로 변환</text>
+<text x="1358" y="384" class="small">Python CLI도 Rust CLI 재사용</text>
+
+<path d="M725 385 V440 H645 V503" class="wire"/>
+<text x="90" y="457" class="code">pywebview_api(method, args)</text>
+<path d="M1105 417 V463 H915 V503" class="wire"/>
+<text x="950" y="450" class="small">공통 실행 함수</text>
+<path d="M1535 417 V452 H1155 V503" class="wire"/>
+<text x="1290" y="445" class="small">start / poll</text>
+
+<!-- Native shared execution -->
+<rect x="60" y="505" width="230" height="232" rx="13" class="group"/>
+<text x="82" y="548" class="h">공통 타입</text>
+<text x="82" y="588" class="code">types</text>
+<text x="82" y="627" class="body">설정 · IPC · 잡</text>
+<text x="82" y="665" class="body">오디오 계약</text>
+<text x="82" y="704" class="small">기본값의 정본</text>
+<path d="M292 618 H347" class="ref"/>
+
+<rect x="350" y="505" width="870" height="232" rx="16" class="rust"/>
+<text x="385" y="552" class="h">공통 Rust 실행부 · impulcifer-service</text>
+<text x="385" y="598" class="body">23개 IPC 메서드 · 인자 검증 · 설정 · 실행 조정</text>
+<text x="385" y="641" class="code">BRIR / recording / recovery / update</text>
+<text x="385" y="682" class="body">각 입구가 같은 실행 코드를 사용합니다.</text>
+<text x="385" y="715" class="small">상주 데몬·HTTP 서버가 아니라 앱 내부 라이브러리입니다.</text>
+
+<rect x="1270" y="505" width="470" height="232" rx="16" class="rust"/>
+<text x="1300" y="552" class="h">작업 관리 · jobs</text>
+<text x="1300" y="598" class="body">등록부당 활성 작업 1개</text>
+<text x="1300" y="640" class="body">진행률 · 로그 · 순번 저널</text>
+<text x="1300" y="682" class="body">작업 스레드 · 협조적 취소</text>
+<text x="1300" y="715" class="small">화면은 job_id와 after_seq로 조회</text>
+<path d="M1222 620 H1267" class="wire" marker-start="url(#arrow)"/>
+
+<!-- Service calls module branches; this is a runtime-flow schematic -->
+<path d="M785 739 V801" fill="none" stroke="#40566e" stroke-width="3"/>
+<path d="M258 801 H1522" fill="none" stroke="#40566e" stroke-width="3"/>
+<path d="M258 801 V863" class="wire"/>
+<path d="M680 801 V863" class="wire"/>
+<path d="M1082 801 V863" class="wire"/>
+<path d="M1522 801 V863" class="wire"/>
+<text x="60" y="775" class="small">공통 실행부가 계산·장치·파일·표시를 연결합니다.</text>
+
+<rect x="60" y="865" width="395" height="225" rx="14" class="rust"/>
+<text x="88" y="907" class="h">DSP · f64</text>
+<text x="88" y="948" class="code">impulcifer-dsp</text>
+<text x="88" y="986" class="body">FFT · 필터 · 보정 · 감쇠</text>
+<text x="88" y="1023" class="body">스피커별 Rayon 병렬 처리</text>
+<text x="88" y="1063" class="small">Tauri·Python·PNG 의존 없음</text>
+<rect x="60" y="1115" width="395" height="128" rx="12" class="node"/>
+<text x="86" y="1155" class="body">스윕 → 임펄스 응답</text>
+<text x="86" y="1191" class="body">정렬 → 보정 → 정규화</text>
+<text x="86" y="1224" class="small">단계별 데이터는 서비스가 출력</text>
+
+<rect x="480" y="865" width="400" height="225" rx="14" class="io"/>
+<text x="508" y="907" class="h">오디오 장치 · audio-io</text>
+<text x="508" y="951" class="body">장치 캐시 · 측정 세션</text>
+<text x="508" y="989" class="body">입력 준비 → 스윕 재생</text>
+<text x="508" y="1027" class="body">입력·출력 전용 스레드</text>
+<text x="508" y="1063" class="small">장치 버퍼 f32 · 수명 직접 관리</text>
+<path d="M680 1092 V1102 H578 V1113" class="wire"/>
+<path d="M680 1102 H781 V1113" class="wire"/>
+<rect x="480" y="1115" width="194" height="128" rx="10" class="node"/>
+<text x="577" y="1151" text-anchor="middle" class="body" font-weight="700">Windows</text>
+<text x="577" y="1188" text-anchor="middle" class="body">WASAPI</text>
+<text x="577" y="1222" text-anchor="middle" class="small">sys-win / wasapi</text>
+<rect x="687" y="1115" width="193" height="128" rx="10" class="node"/>
+<text x="783" y="1151" text-anchor="middle" class="small" font-weight="700">macOS / Linux</text>
+<text x="783" y="1188" text-anchor="middle" class="body">CPAL</text>
+<text x="783" y="1222" text-anchor="middle" class="small">플랫폼 기본 장치</text>
+
+<rect x="905" y="865" width="355" height="225" rx="14" class="io"/>
+<text x="933" y="907" class="h">파일 I/O</text>
+<text x="933" y="948" class="code">impulcifer-io</text>
+<text x="933" y="988" class="body">WAV 읽기·쓰기</text>
+<text x="933" y="1026" class="body">스윕·측정 파일 입출력</text>
+<text x="933" y="1063" class="small">결과 WAV는 32비트 정수 PCM</text>
+<path d="M1082 1092 V1113" class="wire"/>
+<rect x="905" y="1115" width="355" height="128" rx="10" class="node"/>
+<text x="1082" y="1155" text-anchor="middle" class="body" font-weight="700">FFmpeg / ffprobe</text>
+<text x="1082" y="1191" text-anchor="middle" class="small">필요한 형식에만 외부 도구 사용</text>
+<text x="1082" y="1224" text-anchor="middle" class="small">TrueHD / MLP 판정·디코드</text>
+
+<rect x="1305" y="865" width="435" height="112" rx="14" class="io"/>
+<text x="1333" y="907" class="h">분석 데이터 · analysis</text>
+<text x="1333" y="948" class="body">주파수·임펄스·양 귀 차이 배열</text>
+<path d="M1522 979 V1038" class="wire"/>
+<text x="1544" y="1015" class="small">서비스가 배열 전달</text>
+<rect x="1305" y="1040" width="435" height="203" rx="14" class="io"/>
+<text x="1333" y="1082" class="h">PNG 렌더러 · plots</text>
+<text x="1333" y="1125" class="body">Plotters · PNG · 번들 글꼴</text>
+<text x="1333" y="1164" class="body">계산 결과를 빌려서 표시</text>
+<text x="1333" y="1205" class="small">화면·matplotlib 없이 PNG 생성</text>
+
+<!-- Final artifacts -->
+<path d="M1259 990 H1280 V1270 H1082 V1303" class="wire"/>
+<path d="M1522 1245 V1303" class="wire"/>
+<rect x="60" y="1305" width="1680" height="165" rx="16" fill="#e8f4f1" stroke="#78a99c" stroke-width="2"/>
+<text x="94" y="1349" class="h">사용자가 받는 결과</text>
+<text x="94" y="1394" class="body">hrir.wav · hesuvi.wav · Hangloose / JamesDSP용 출력 · 채널 복원 파일 · README</text>
+<text x="94" y="1439" class="small">BRIR 완료 판정 시 hesuvi.wav 존재 확인 · 출력 규칙과 채널 순서 보존</text>
+<text x="1705" y="1439" text-anchor="end" class="body" font-weight="700">분석 PNG</text>
+
+<!-- Separate distribution and engineering functions -->
+<rect x="60" y="1530" width="805" height="187" rx="14" class="group"/>
+<text x="90" y="1574" class="h">배포·업데이트</text>
+<text x="90" y="1616" class="body">Windows: Velopack · 기존 설치 ID 유지</text>
+<text x="90" y="1656" class="body">macOS / Linux: Tauri 번들·업데이터</text>
+<text x="90" y="1695" class="body">PyPI: maturin · 기존 impulcifer-py313 유지</text>
+
+<rect x="905" y="1530" width="835" height="187" rx="14" fill="#f1f3f6" stroke="#7c8999" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="935" y="1574" class="h">개발·검증 — 제품 실행 경로 밖</text>
+<text x="935" y="1616" class="body">Python 2.x 오라클 → 단계별 골든 비교</text>
+<text x="935" y="1656" class="body">policy · 기능 등록부 · CI · 실제 업그레이드 시험</text>
+<text x="935" y="1695" class="body">직접 작성하는 unsafe 허용량: 0</text>
+
+<text x="60" y="1762" class="small">실선: 주요 호출·데이터 전달 / 점선: 공통 계약·검증 구분 · Cargo 의존성 전체를 나열한 그림은 아닙니다.</text>
+<text x="1740" y="1791" text-anchor="end" class="small">대화형 HTML은 현재 미지원이므로 완성된 출력 경로에 포함하지 않았습니다.</text>
+</svg>
