@@ -1,0 +1,115 @@
+name: ChatGPT bundle restore inspection
+
+on:
+  push:
+    branches: [chatgpt/artifact-bridge]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: "${{ startsWith(github.event.head_commit.message, 'chatgpt-inspect: ') }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Restore exact target with git bundle and git clone
+        id: target
+        shell: bash
+        env:
+          REQUEST_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          first_line="${REQUEST_MESSAGE%%$'\n'*}"
+          target="${first_line#chatgpt-inspect: }"
+          if [[ ! "$target" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::Expected a 40-hex commit SHA"
+            exit 1
+          fi
+          target="${target,,}"
+          git cat-file -e "${target}^{commit}"
+          git branch -f chatgpt-export "$target"
+          git bundle create "$RUNNER_TEMP/repository.bundle" chatgpt-export
+          git bundle verify "$RUNNER_TEMP/repository.bundle"
+          git -c core.hooksPath=/dev/null clone -b chatgpt-export "$RUNNER_TEMP/repository.bundle" "$RUNNER_TEMP/impulcifer-review"
+          actual="$(git -C "$RUNNER_TEMP/impulcifer-review" rev-parse HEAD)"
+          test "$actual" = "$target"
+          test -z "$(git -C "$RUNNER_TEMP/impulcifer-review" status --porcelain)"
+          mkdir -p "$RUNNER_TEMP/impulcifer-inspection"
+          {
+            echo "repository=$GITHUB_REPOSITORY"
+            echo "target=$target"
+            echo "trigger=$GITHUB_SHA"
+            echo "run=$GITHUB_RUN_ID"
+            echo "checkout=$RUNNER_TEMP/impulcifer-review"
+            echo "restored_head=$actual"
+            echo "working_tree=clean"
+            echo "target_code_executed=no"
+          } | tee "$RUNNER_TEMP/impulcifer-inspection/bridge-manifest.txt"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+      - name: Read-only architecture inventory
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import collections, json, os, pathlib, subprocess, tomllib, zipfile
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'impulcifer-review'
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'impulcifer-inspection'
+          files = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z']).decode().split('\0')
+          files = [name for name in files if name]
+          manifests = sorted(name for name in files if name.endswith('/Cargo.toml') and name.startswith(('crates/', 'apps/')))
+          packages = []
+          for name in manifests:
+              doc = tomllib.loads((root / name).read_text())
+              if 'package' not in doc:
+                  continue
+              deps = {}
+              def collect(section, kind):
+                  for dep, spec in section.items():
+                      if isinstance(spec, dict) and 'path' in spec:
+                          deps[dep] = {'path': spec['path'], 'kind': kind}
+              collect(doc.get('dependencies', {}), 'normal')
+              for cfg, table in doc.get('target', {}).items():
+                  collect(table.get('dependencies', {}), cfg)
+              packages.append({'package': doc['package']['name'], 'manifest': name, 'local_dependencies': deps})
+          rust_files = [name for name in files if name.endswith('.rs') and name.startswith(('crates/', 'apps/'))]
+          line_count = sum(len((root/name).read_text().splitlines()) for name in rust_files)
+          registry = tomllib.loads((root/'features.toml').read_text())
+          statuses = collections.Counter()
+          pending = []
+          def walk(value):
+              if isinstance(value, dict):
+                  if 'id' in value and 'status' in value:
+                      statuses[value['status']] += 1
+                      if value['status'] != 'implemented':
+                          pending.append({'id': value['id'], 'status': value['status']})
+                  for child in value.values(): walk(child)
+              elif isinstance(value, list):
+                  for child in value: walk(child)
+          walk(registry)
+          report = {'packages': packages, 'rust_file_count':len(rust_files), 'rust_lines_including_tests':line_count, 'feature_statuses':dict(statuses), 'nonimplemented_features':pending}
+          text = json.dumps(report, ensure_ascii=False, indent=2)
+          print('BEGIN_ARCHITECTURE_INVENTORY')
+          print(text)
+          print('END_ARCHITECTURE_INVENTORY')
+          (out/'architecture-inventory.json').write_text(text+'\n')
+          # Source-only inspection aid, not a substitute for the verified clone above.
+          # Never execute target scripts; never copy Git config, credentials or fonts.
+          allowed_suffixes = {'.rs','.toml','.md','.js','.css','.html','.py','.yml','.yaml'}
+          with zipfile.ZipFile(out/'source-text.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              for name in files:
+                  p = root/name
+                  if p.is_symlink() or p.suffix not in allowed_suffixes:
+                      continue
+                  if name.startswith(('crates/','apps/','docs/rust/','docs/adr/','webview_ui/','build_scripts/','.github/workflows/')) or name in {'Cargo.toml','features.toml','unsafe-budget.toml','README.md','CHANGELOG.md','pyproject.toml'}:
+                      archive.write(p,name)
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chatgpt-inspection-${{ steps.target.outputs.target }}
+          path: ${{ runner.temp }}/impulcifer-inspection/
+          retention-days: 1
+          if-no-files-found: error
