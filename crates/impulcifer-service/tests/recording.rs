@@ -706,8 +706,11 @@ fn recording_sha256_known_answers() {
 #[test]
 fn recording_ipc_shares_backend_rejects_busy_and_cancellation() {
     let temp = Temp::new();
+    // Progress ticks every 250 ms while recording; 650 ms left the "at least three
+    // ticks" check at the mercy of a slow runner (CI Windows saw two). 1.5 s gives
+    // about six.
     let backend = FakeBackend {
-        delay: Duration::from_millis(650),
+        delay: Duration::from_millis(1500),
         ..Default::default()
     };
     let shared = backend.shared.clone();
