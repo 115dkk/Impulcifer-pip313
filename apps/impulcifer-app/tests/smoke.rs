@@ -73,6 +73,25 @@ fn smoke_report_contract() {
 }
 
 #[test]
+fn release_builds_hide_the_console_window() {
+    // Without the GUI subsystem attribute a Windows release build opens a
+    // console window next to the app; closing that window kills the app.
+    let source = include_str!("../src/main.rs").replace("\r\n", "\n");
+    let attribute = "#![cfg_attr(not(debug_assertions), windows_subsystem = \"windows\")]";
+    let position = source
+        .find(attribute)
+        .expect("main.rs declares the GUI subsystem");
+    let first_item = source.find("mod ").expect("main.rs has modules");
+    assert!(
+        position < first_item,
+        "the subsystem attribute must be a crate-level inner attribute"
+    );
+    let config: serde_json::Value =
+        serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+    assert_eq!(config["build"]["frontendDist"], "ui");
+}
+
+#[test]
 fn updater_plugin_registered_with_public_key() {
     let config: serde_json::Value =
         serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();

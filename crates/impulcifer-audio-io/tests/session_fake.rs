@@ -6,7 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
-use impulcifer_audio_io::policy::{open_input_with_policy, open_output_with_policy};
+use impulcifer_audio_io::policy::{
+    open_input_with_policy, open_output_with_policy, open_output_with_preference,
+};
 use impulcifer_audio_io::session::{PlaybackBuffer, SessionEvent, SessionRequest, play_and_record};
 use impulcifer_types::audio::*;
 
@@ -375,6 +377,75 @@ fn request() -> SessionRequest {
         },
         2,
     )
+}
+
+#[test]
+fn fixed_share_preference_never_falls_back() {
+    let fake = Fake {
+        fault: Fault::Unsupported,
+        ..Fake::default()
+    };
+    let spec = StreamSpec {
+        sample_rate: 1000,
+        channels: 2,
+    };
+
+    let (_, mode) = open_output_with_preference(&fake, &endpoint(), spec, SharePreference::Auto)
+        .expect("auto falls back to shared");
+    assert_eq!(mode, ShareMode::SharedAutoConvert);
+    assert_eq!(
+        fake.state.lock().unwrap().attempts,
+        [
+            (Direction::Output, ShareMode::Exclusive),
+            (Direction::Output, ShareMode::SharedAutoConvert),
+        ]
+    );
+
+    fake.state.lock().unwrap().attempts.clear();
+    assert!(matches!(
+        open_output_with_preference(&fake, &endpoint(), spec, SharePreference::Exclusive),
+        Err(AudioError::UnsupportedFormat(reason)) if reason == "exclusive"
+    ));
+    assert_eq!(
+        fake.state.lock().unwrap().attempts,
+        [(Direction::Output, ShareMode::Exclusive)]
+    );
+
+    fake.state.lock().unwrap().attempts.clear();
+    let (_, mode) = open_output_with_preference(&fake, &endpoint(), spec, SharePreference::Shared)
+        .expect("fixed shared opens once");
+    assert_eq!(mode, ShareMode::SharedAutoConvert);
+    assert_eq!(
+        fake.state.lock().unwrap().attempts,
+        [(Direction::Output, ShareMode::SharedAutoConvert)]
+    );
+}
+
+#[test]
+fn session_request_carries_the_share_preference() {
+    for (preference, expected) in [
+        (SharePreference::Auto, ShareMode::Exclusive),
+        (SharePreference::Exclusive, ShareMode::Exclusive),
+        (SharePreference::Shared, ShareMode::SharedAutoConvert),
+    ] {
+        let fake = Fake::default();
+        let mut req = request();
+        req.share = preference;
+        let recording = play_and_record(&fake, req, &CancelToken::new(), &mut |_| {}).unwrap();
+        assert_eq!(recording.output_mode, expected);
+        assert_eq!(recording.input_mode, expected);
+    }
+
+    let fake = Fake {
+        fault: Fault::Unsupported,
+        ..Fake::default()
+    };
+    let mut req = request();
+    req.share = SharePreference::Exclusive;
+    assert!(matches!(
+        play_and_record(&fake, req, &CancelToken::new(), &mut |_| {}),
+        Err(AudioError::UnsupportedFormat(reason)) if reason == "exclusive"
+    ));
 }
 
 #[test]

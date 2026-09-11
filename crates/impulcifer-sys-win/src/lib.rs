@@ -1100,6 +1100,10 @@ mod windows_backend {
             "wasapi"
         }
 
+        fn selectable_share_modes(&self) -> &'static [ShareMode] {
+            &[ShareMode::Exclusive, ShareMode::SharedAutoConvert]
+        }
+
         fn enumerate(&self) -> Result<Vec<Endpoint>, AudioError> {
             let _com = ComGuard::initialize(None)?;
             let enumerator = DeviceEnumerator::new()
@@ -1772,6 +1776,10 @@ impl AudioBackend for WasapiBackend {
         "wasapi"
     }
 
+    fn selectable_share_modes(&self) -> &'static [ShareMode] {
+        &[ShareMode::Exclusive, ShareMode::SharedAutoConvert]
+    }
+
     fn enumerate(&self) -> Result<Vec<Endpoint>, AudioError> {
         Err(AudioError::Backend(
             "WASAPI is available only on Windows".into(),
@@ -1816,6 +1824,15 @@ impl AudioBackend for WasapiBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn wasapi_offers_both_share_modes() {
+        assert_eq!(
+            WasapiBackend::new().selectable_share_modes(),
+            &[ShareMode::Exclusive, ShareMode::SharedAutoConvert]
+        );
+    }
 
     #[test]
     fn endpoint_from_mix_format_fields() {

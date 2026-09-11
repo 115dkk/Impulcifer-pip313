@@ -12,10 +12,10 @@ use std::time::{Duration, Instant};
 
 use impulcifer_types::audio::{
     AudioBackend, AudioError, CancelToken, CaptureRead, Endpoint, PlaybackReport, ShareMode,
-    StreamSpec,
+    SharePreference, StreamSpec,
 };
 
-use crate::policy::{open_input_with_policy, open_output_with_policy};
+use crate::policy::{open_input_with_preference, open_output_with_preference};
 
 const POLL: Duration = Duration::from_millis(5);
 
@@ -33,6 +33,7 @@ pub struct SessionRequest {
     pub playback: PlaybackBuffer,
     pub input_channels: u16,
     pub tail_seconds: f64,
+    pub share: SharePreference,
 }
 
 impl SessionRequest {
@@ -48,6 +49,7 @@ impl SessionRequest {
             playback,
             input_channels,
             tail_seconds: 0.0,
+            share: SharePreference::Auto,
         }
     }
 
@@ -185,13 +187,14 @@ pub fn play_and_record(
         let input = scope.spawn(move || {
             let result = guarded(|| {
                 check(peer_ref)?;
-                let (mut session, mode) = open_input_with_policy(
+                let (mut session, mode) = open_input_with_preference(
                     backend,
                     &request.input,
                     StreamSpec {
                         sample_rate,
                         channels: input_channels,
                     },
+                    request.share,
                 )?;
                 // Catch read/start panics while the session still exists so stop
                 // runs on this same worker on every exit, including failures.
@@ -261,13 +264,14 @@ pub fn play_and_record(
                 check(peer_ref)?;
                 // Initialize concurrently, but retain the capture-start permit.
                 // The thread-affine session is created and destroyed here.
-                let (mut session, mode) = open_output_with_policy(
+                let (mut session, mode) = open_output_with_preference(
                     backend,
                     &request.output,
                     StreamSpec {
                         sample_rate,
                         channels: request.playback.channels,
                     },
+                    request.share,
                 )?;
                 loop {
                     check(peer_ref)?;

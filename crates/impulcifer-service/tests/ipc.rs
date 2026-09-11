@@ -90,10 +90,18 @@ struct FakeBackend {
     fail: bool,
     panic: bool,
     empty: bool,
+    selectable: bool,
 }
 impl AudioBackend for FakeBackend {
     fn name(&self) -> &'static str {
         "fake"
+    }
+    fn selectable_share_modes(&self) -> &'static [ShareMode] {
+        if self.selectable {
+            &[ShareMode::Exclusive, ShareMode::SharedAutoConvert]
+        } else {
+            &[]
+        }
     }
     fn enumerate(&self) -> Result<Vec<Endpoint>, AudioError> {
         assert!(!self.panic, "backend panic");
@@ -174,6 +182,7 @@ impl Fixture {
             fail: false,
             panic: false,
             empty: false,
+            selectable: false,
         })
     }
     fn backend(backend: FakeBackend) -> Self {
@@ -309,7 +318,7 @@ fn ipc_bootstrap_shape() {
     assert!(boot["active_job"].is_null());
     assert_eq!(
         boot["capabilities"],
-        json!({"recording":true,"brir":true,"output_recovery":true,"recording_cancel":false,"brir_cancel":true,"output_recovery_cancel":false})
+        json!({"recording":true,"brir":true,"output_recovery":true,"recording_cancel":false,"brir_cancel":true,"output_recovery_cancel":false,"share_modes":["auto"]})
     );
     let mut defaults =
         serde_json::to_value(impulcifer_types::config::ProcessingConfig::default()).unwrap();
@@ -327,6 +336,65 @@ fn ipc_bootstrap_shape() {
     send.send(()).unwrap();
     finish(&f, &id);
 }
+#[test]
+fn bootstrap_lists_selectable_share_modes() {
+    let plain = Fixture::new();
+    assert_eq!(
+        data(plain.call("bootstrap", vec![]))["capabilities"]["share_modes"],
+        json!(["auto"])
+    );
+    let selectable = Fixture::backend(FakeBackend {
+        fail: false,
+        panic: false,
+        empty: false,
+        selectable: true,
+    });
+    assert_eq!(
+        data(selectable.call("bootstrap", vec![]))["capabilities"]["share_modes"],
+        json!(["auto", "exclusive", "shared"])
+    );
+}
+
+#[test]
+fn share_mode_unavailable_on_backends_without_selection() {
+    let plain = Fixture::new();
+    for mode in ["exclusive", "shared"] {
+        let error = failure(
+            plain.call(
+                "start_recording",
+                vec![json!({"record_dir":plain.root.0,"sweep":{},"share_mode":mode})],
+            ),
+            "INVALID_REQUEST",
+        );
+        assert_eq!(
+            error["message"],
+            "This audio backend cannot fix the device access mode; use auto."
+        );
+        assert_eq!(error["details"]["kind"], "share_mode_unavailable");
+        assert_eq!(error["details"]["share_mode"], mode);
+        assert!(plain.jobs.active().is_none());
+    }
+    let selectable = Fixture::backend(FakeBackend {
+        fail: false,
+        panic: false,
+        empty: false,
+        selectable: true,
+    });
+    for mode in ["exclusive", "shared"] {
+        let response = selectable.call(
+            "start_recording",
+            vec![json!({"record_dir":selectable.root.0,"sweep":{},"share_mode":mode})],
+        );
+        assert_ne!(
+            response["error"]["details"]["kind"],
+            "share_mode_unavailable"
+        );
+        if let Some(id) = response["data"]["job"]["job_id"].as_str() {
+            finish(&selectable, id);
+        }
+    }
+}
+
 #[test]
 fn ipc_get_ui_settings_shape() {
     let f = Fixture::new();
@@ -359,17 +427,24 @@ fn ipc_set_language_shape() {
         .unwrap();
         let mut expected = english.as_object().unwrap().clone();
         expected.extend(translated.as_object().unwrap().clone());
-        // The catalogue equals en + <language>, plus the 3.x-only overlay keys
-        // the service adds itself (settings.rs EXTRA_STRINGS).
+        // The catalogue equals en + <language>, plus the 3.x overlay
+        // (crates/impulcifer-service/locales) which wins where it overlaps.
+        let overlay: serde_json::Map<String, Value> =
+            serde_json::from_str(impulcifer_service::settings::overlay_3x(code)).unwrap();
         let strings = out["strings"].as_object().unwrap();
         for (key, value) in &expected {
+            if !overlay.contains_key(key) {
+                assert_eq!(strings.get(key), Some(value), "{key}");
+            }
+        }
+        for (key, value) in &overlay {
             assert_eq!(strings.get(key), Some(value), "{key}");
         }
         let extra: Vec<&String> = strings
             .keys()
-            .filter(|key| !expected.contains_key(*key))
+            .filter(|key| !expected.contains_key(*key) && !overlay.contains_key(*key))
             .collect();
-        assert_eq!(extra, vec!["cli_plots_not_available_yet"]);
+        assert!(extra.is_empty(), "{extra:?}");
     }
     assert_eq!(f.saved()["language_selected"], true);
     let error = failure(
@@ -433,24 +508,38 @@ fn ipc_get_system_info_shape() {
         &[
             "version",
             "install_kind",
-            "python_version",
             "os",
             "cpu_count",
-            "gil_enabled",
-            "optimal_workers",
+            "runtime",
+            "paths",
+            "update_channel",
         ],
     );
     assert_eq!(info["version"], env!("CARGO_PKG_VERSION"));
     assert_eq!(info["install_kind"], "dev");
+    keys(
+        &info["runtime"],
+        &["language", "toolchain", "audio_backend"],
+    );
+    assert_eq!(info["runtime"]["language"], "Rust");
+    assert_eq!(info["runtime"]["audio_backend"], "fake");
     assert!(
-        info["python_version"]
+        info["runtime"]["toolchain"]
             .as_str()
             .unwrap()
             .starts_with("rustc ")
     );
-    assert!(info["gil_enabled"].is_null());
+    keys(&info["paths"], &["data_dir", "settings_path"]);
+    assert_eq!(
+        info["paths"]["data_dir"],
+        f.root.0.to_string_lossy().as_ref()
+    );
+    assert_eq!(
+        info["paths"]["settings_path"],
+        f.root.0.join("settings.json").to_string_lossy().as_ref()
+    );
     assert!(!info["os"].as_str().unwrap().is_empty());
-    assert_eq!(info["cpu_count"], info["optimal_workers"]);
+    assert_eq!(info["update_channel"], "prerelease");
 }
 #[test]
 fn ipc_list_audio_devices_shape() {
@@ -861,6 +950,7 @@ fn settings_persist_preserve_other_keys_and_reload_python_preferences() {
             fail: false,
             panic: false,
             empty: true,
+            selectable: false,
         }),
         JobRegistry::new(),
         f.root.0.clone(),
@@ -899,6 +989,7 @@ fn missing_or_invalid_settings_and_write_failures_keep_python_first_run_semantic
             fail: false,
             panic: false,
             empty: true,
+            selectable: false,
         }),
         JobRegistry::new(),
         f.root.0.clone(),
@@ -947,6 +1038,7 @@ fn backend_errors_panics_and_empty_enumeration() {
         fail: true,
         panic: false,
         empty: false,
+        selectable: false,
     });
     let error = failure(f.call("list_audio_devices", vec![]), "DEVICE_ERROR");
     assert_eq!(error["retryable"], true);
@@ -954,6 +1046,7 @@ fn backend_errors_panics_and_empty_enumeration() {
         fail: false,
         panic: true,
         empty: false,
+        selectable: false,
     });
     assert_eq!(
         failure(f.call("list_audio_devices", vec![]), "INTERNAL_ERROR")["message"],
@@ -963,6 +1056,7 @@ fn backend_errors_panics_and_empty_enumeration() {
         fail: false,
         panic: false,
         empty: true,
+        selectable: false,
     });
     assert_eq!(
         data(f.call("list_audio_devices", vec![])),

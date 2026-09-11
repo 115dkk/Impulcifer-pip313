@@ -31,8 +31,9 @@ crates/
   impulcifer-policy/            게이트 테스트만 있는 크레이트 (unsafe 스캔, forbid 검사, features.toml 검증)
 apps/
   impulcifer-app/               Tauri 2 앱. 커맨드 1개 + 폴리필 초기화 스크립트 + 다이얼로그/테마/업데이터
-webview_ui/                     2.x 프론트엔드 그대로 (frontendDist)
-i18n/locales/                   2.x 카탈로그 그대로
+apps/impulcifer-app/ui/         3.x 프론트엔드 (frontendDist; ADR 0003에서 webview_ui/를 분기)
+crates/impulcifer-service/locales/  3.x 문자열 오버레이 (2.x i18n/locales 위에 겹침, 아홉 언어 한 키 집합)
+webview_ui/, i18n/locales/      2.x 소유. 3.x 작업에서 수정하지 않음
 ```
 
 의존 방향은 아래로만 흐릅니다. `sys-win`은 `types`와 `wasapi`에만 의존하고 `audio-io`·`service`·`app`을 모릅니다. `dsp`와 `python`은 `sys-win`을 모릅니다. `cli`는 Tauri를 링크하지 않습니다.
@@ -87,7 +88,7 @@ policy ──> (없음; 파일 시스템만 읽음)
 - 성공: `{"ok": true, "data": <object>}`
 - 실패: `{"ok": false, "error": {"code": <ErrorCode>, "message": <string>, "details": <object>, "retryable": <bool>}}`
 - `ErrorCode`는 2.x 정본 11개입니다. INVALID_REQUEST, FILE_NOT_FOUND, INTERNAL_ERROR, UPDATE_FAILED, OUTPUT_MISSING, JOB_NOT_FOUND, DEVICE_ERROR, CONFIRMATION_REQUIRED, UPDATE_CHECK_FAILED, JOB_NOT_CANCELLABLE, JOB_BUSY.
-- `IpcMethod`는 23개입니다. bootstrap, list_audio_devices, start_recording, start_brir, start_output_recovery, poll_job, cancel_job, get_ui_settings, set_language, set_theme, set_skin, set_frontend, get_system_info, resolve_recording_paths, detect_sweep, generate_sweep_set, open_path, check_for_updates, start_update, apply_pending_update, select_file, select_directory, open_url.
+- `IpcMethod`는 24개입니다. bootstrap, list_audio_devices, start_recording, start_brir, start_output_recovery, plan_output_recovery, poll_job, cancel_job, get_ui_settings, set_language, set_theme, set_skin, set_frontend, get_system_info, resolve_recording_paths, detect_sweep, generate_sweep_set, open_path, check_for_updates, start_update, apply_pending_update, select_file, select_directory, open_url.
 - 인자는 pywebview와 같은 위치 인자 배열로 옵니다. `poll_job(job_id, after_seq=0)`처럼 기본값이 있는 인자는 생략 가능해야 합니다.
 - 서비스 메서드는 예외를 던지지 않고 항상 봉투를 반환합니다. Tauri 커맨드도 `Result`가 아니라 `serde_json::Value`를 반환합니다.
 
@@ -130,7 +131,7 @@ pub trait InputSession {    // !Send
 
 측정 세션 계약은 2.x `core/recorder.py::play_and_record`와 같습니다. 입력 스트림을 먼저 열고 준비 확인 → 출력 재생을 끝까지 하고 드레인 → 입력 정지 → 두 스레드 조인. 세션 객체는 스레드 간에 넘기지 않고, 스레드 사이에는 엔드포인트 ID·설정·소유 버퍼·결과만 오갑니다. Windows에서는 각 오디오 스레드가 자기 MTA를 초기화하고 자기 COM 객체를 그 스레드에서 해제합니다.
 
-Windows 정책은 exclusive를 먼저 시도하고 실패하면 shared + auto-convert입니다. 채널 수는 엔드포인트 mix format과 같게 열고 트랙 배치는 우리가 합니다. wasapi-rs의 `WaveFormat::parse`와 `Device::from_raw`는 쓰지 않습니다. SILENT 패킷은 0으로 채웁니다.
+Windows에서 `share_mode=auto`는 exclusive를 먼저 시도하고 `UnsupportedFormat`이면 shared + auto-convert로 다시 시도하지만, 고정 `share_mode`는 실패해도 다른 모드로 다시 시도하지 않습니다. 채널 수는 엔드포인트 mix format과 같게 열고 트랙 배치는 우리가 합니다. wasapi-rs의 `WaveFormat::parse`와 `Device::from_raw`는 쓰지 않습니다. SILENT 패킷은 0으로 채웁니다.
 
 ## 4. 스레딩
 
@@ -186,7 +187,7 @@ Tauri 앱은 커맨드 하나만 노출합니다.
 fn pywebview_api(state: State<AppState>, method: String, args: Vec<Value>) -> Value
 ```
 
-초기화 스크립트(`apps/impulcifer-app/src/bridge.js`)가 `window.pywebview = { api: Proxy }`를 만들어 각 메서드 호출을 `invoke("pywebview_api", { method, args })`로 넘기고, DOMContentLoaded 뒤에 `pywebviewready`를 발생시킵니다. `withGlobalTauri: true`, `frontendDist: ../../webview_ui`. 다이얼로그·open_path·open_url·타이틀바 테마는 앱 크레이트의 `TauriHost`가 구현합니다. 업데이터는 Windows에서 Velopack Rust SDK, 그 밖은 Tauri 업데이터이며 한 설치에 둘을 함께 두지 않습니다.
+초기화 스크립트(`apps/impulcifer-app/src/bridge.js`)가 `window.pywebview = { api: Proxy }`를 만들어 각 메서드 호출을 `invoke("pywebview_api", { method, args })`로 넘기고, DOMContentLoaded 뒤에 `pywebviewready`를 발생시킵니다. `withGlobalTauri: true`, `frontendDist: ui`(`apps/impulcifer-app/ui`). 페이지 스크립트는 `// @ts-check`와 `ui/ipc.d.ts`의 IPC 선언으로 `tsc --checkJs`를 통과해야 합니다(`rust.yml`의 `js` 잡). 다이얼로그·open_path·open_url·타이틀바 테마는 앱 크레이트의 `TauriHost`가 구현합니다. `get_system_info`는 버전, 설치 종류, 운영체제, CPU 수, Rust 런타임, 설정·데이터 경로, 업데이트 채널을 반환하며 Tauri 호스트에서는 셸과 WebView 버전도 포함합니다. 업데이터는 Windows에서 Velopack Rust SDK, 그 밖은 Tauri 업데이터이며 한 설치에 둘을 함께 두지 않습니다.
 
 ## 8. CLI와 Python
 

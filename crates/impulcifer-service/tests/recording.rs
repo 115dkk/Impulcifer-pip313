@@ -80,7 +80,11 @@ fn golden_recording_validation_matches_python() {
     let g = golden();
     for case in g["validation"].as_array().unwrap() {
         let actual = match request::validate(&map_strings(&case["request"], &expand)) {
-            Ok(v) => json!({"ok":true,"data":v}),
+            Ok(v) => {
+                let mut data = serde_json::to_value(v).unwrap();
+                data.as_object_mut().unwrap().remove("share");
+                json!({"ok":true,"data":data})
+            }
             Err(e) => e,
         };
         assert_eq!(
@@ -124,6 +128,46 @@ fn golden_recording_validation_matches_python() {
         assert_eq!(actual, case["response"]);
     }
 }
+#[test]
+fn share_mode_request_validation() {
+    let missing_dir = |share: Value| request::validate(&json!({"share_mode":share})).unwrap_err();
+    assert_eq!(
+        request::validate(&json!({"record_dir":"missing","sweep":{}}))
+            .unwrap()
+            .share,
+        SharePreference::Auto
+    );
+    assert_eq!(
+        request::validate(&json!({"record_dir":"missing","sweep":{},"share_mode":null}))
+            .unwrap()
+            .share,
+        SharePreference::Auto
+    );
+    for (name, expected) in [
+        ("auto", SharePreference::Auto),
+        ("exclusive", SharePreference::Exclusive),
+        ("shared", SharePreference::Shared),
+    ] {
+        assert_eq!(
+            request::validate(&json!({"record_dir":"missing","sweep":{},"share_mode":name}))
+                .unwrap()
+                .share,
+            expected
+        );
+    }
+    for invalid_share in [json!("EXCLUSIVE"), json!("both"), json!(1), json!(true)] {
+        let error = missing_dir(invalid_share.clone());
+        assert_eq!(
+            error["error"]["message"],
+            "share_mode must be auto, exclusive or shared."
+        );
+        assert_eq!(
+            error["error"]["details"],
+            json!({"share_mode":invalid_share})
+        );
+    }
+}
+
 #[test]
 fn golden_sweep_playback_matches_python() {
     for case in golden()["playback"].as_array().unwrap() {
@@ -238,11 +282,16 @@ struct FakeBackend {
     shared: Arc<Mutex<Shared>>,
     fail: bool,
     fallback: bool,
+    /// Capture fails once playback has started (both streams already open).
+    fail_read: bool,
     delay: Duration,
 }
 impl AudioBackend for FakeBackend {
     fn name(&self) -> &'static str {
         "fake"
+    }
+    fn selectable_share_modes(&self) -> &'static [ShareMode] {
+        &[ShareMode::Exclusive, ShareMode::SharedAutoConvert]
     }
     fn enumerate(&self) -> Result<Vec<Endpoint>, AudioError> {
         Ok(vec![
@@ -307,6 +356,7 @@ impl AudioBackend for FakeBackend {
             shared: self.shared.clone(),
             channels: spec.channels,
             cursor: 0,
+            fail_read: self.fail_read,
         }))
     }
 }
@@ -338,6 +388,7 @@ struct FakeInput {
     shared: Arc<Mutex<Shared>>,
     channels: u16,
     cursor: usize,
+    fail_read: bool,
 }
 impl InputSession for FakeInput {
     fn start(&mut self) -> Result<(), AudioError> {
@@ -362,6 +413,9 @@ impl InputSession for FakeInput {
                 silent: false,
             });
         };
+        if self.fail_read {
+            return Err(AudioError::Backend("injected capture failure".into()));
+        }
         let frames = dst.len() / usize::from(self.channels);
         for (i, frame) in dst.chunks_exact_mut(usize::from(self.channels)).enumerate() {
             for (ch, sample) in frame.iter_mut().enumerate() {
@@ -421,7 +475,7 @@ fn recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32() {
     assert!(
         p.events
             .iter()
-            .all(|e| matches!(json!(e.kind).as_str(), Some("status" | "progress")))
+            .all(|e| matches!(json!(e.kind).as_str(), Some("status" | "progress" | "log")))
     );
     let events: Vec<_> = p
         .events
@@ -439,7 +493,7 @@ fn recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32() {
         assert_eq!(e.payload.as_object().unwrap().len(), 10);
     }
     let result = p.job.result.unwrap();
-    assert_eq!(result.as_object().unwrap().len(), 5);
+    assert_eq!(result.as_object().unwrap().len(), 6);
     assert_eq!(result["mode"], "speakers");
     assert!(
         result["sidecar_path"]
@@ -496,6 +550,90 @@ fn recording_append_pads_and_stacks_like_python() {
         assert_eq!(wav.tracks, vec![a, b.clone(), b]);
     }
 }
+#[test]
+fn fixed_share_mode_refusal_reports_the_mode() {
+    let temp = Temp::new();
+    let spec = json!({"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR"});
+    let exclusive =
+        request::validate(&json!({"record_dir":temp.0,"sweep":spec,"share_mode":"exclusive"}))
+            .unwrap();
+    let failed = start(
+        exclusive,
+        FakeBackend {
+            fallback: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(json!(failed.job.status), "failed");
+    let error = failed.job.error.unwrap();
+    assert_eq!(error["code"], "DEVICE_ERROR");
+    assert_eq!(error["details"]["kind"], "share_mode_refused");
+    assert_eq!(error["details"]["share_mode"], "exclusive");
+    assert!(failed.events.iter().any(|event| {
+        event.payload["phase"] == "error"
+            && event.payload["message"].as_str().is_some_and(|message| {
+                message.starts_with("The device did not open in exclusive mode")
+            })
+    }));
+
+    let automatic = request::validate(
+        &json!({"record_dir":temp.0.join("auto"),"sweep":spec,"share_mode":"auto"}),
+    )
+    .unwrap();
+    let succeeded = start(
+        automatic,
+        FakeBackend {
+            fallback: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(json!(succeeded.job.status), "succeeded");
+    assert_eq!(
+        succeeded.job.result.as_ref().unwrap()["share"]["output"],
+        "shared_auto_convert"
+    );
+    let log_index = succeeded
+        .events
+        .iter()
+        .position(|event| event.payload["key"] == "recording_share_mode_opened")
+        .unwrap();
+    let saving_index = succeeded
+        .events
+        .iter()
+        .position(|event| event.payload["phase"] == "saving")
+        .unwrap();
+    assert!(log_index < saving_index);
+}
+
+#[test]
+fn fixed_share_mode_keeps_post_open_failures_as_device_errors() {
+    // Codex #206: a failure after both streams opened (here a capture read that
+    // fails once playback is running) is an ordinary device error, not a
+    // share-mode refusal, even when the mode is fixed.
+    let temp = Temp::new();
+    let spec = json!({"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR"});
+    let exclusive =
+        request::validate(&json!({"record_dir":temp.0,"sweep":spec,"share_mode":"exclusive"}))
+            .unwrap();
+    let failed = start(
+        exclusive,
+        FakeBackend {
+            fail_read: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(json!(failed.job.status), "failed");
+    let error = failed.job.error.unwrap();
+    assert_eq!(error["code"], "DEVICE_ERROR");
+    assert!(error["details"].get("kind").is_none(), "{error}");
+    let message = error["message"].as_str().unwrap();
+    assert!(!message.starts_with("The device did not open"), "{message}");
+    assert!(message.contains("injected capture failure"), "{message}");
+    assert!(failed.events.iter().any(|event| {
+        event.payload["phase"] == "error" && event.payload["message"] == json!(message)
+    }));
+}
+
 #[test]
 fn recording_device_error_is_retryable_device_error() {
     let temp = Temp::new();

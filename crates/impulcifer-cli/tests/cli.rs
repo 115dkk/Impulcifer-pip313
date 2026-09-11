@@ -192,6 +192,7 @@ fn cli_info_does_not_require_dir_path() {
         "CPU cores: ",
         "Rust toolchain: rustc ",
         "Audio backend: ",
+        "Update channel: ",
         "Data dir: ",
     ] {
         assert!(out.contains(label), "{out}");

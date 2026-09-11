@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/*", "apps/impulcifer-app"]
 
 [workspace.package]
-version = "3.0.0-alpha.0"
+version = "3.0.0-alpha.1"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT"

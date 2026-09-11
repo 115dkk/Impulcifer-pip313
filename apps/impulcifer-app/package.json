@@ -1,0 +1,12 @@
+{
+  "name": "impulcifer-app-ui",
+  "private": true,
+  "description": "Type checking and contract tests for the 3.x app UI (vanilla JS with JSDoc, checked by tsc).",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test:contracts": "node tests/bridge-contract.cjs src/bridge.js && node tests/observer-contract.cjs src/smoke-observer.js && node tests/driver-contract.cjs ../../tests/app_smoke/driver.js"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

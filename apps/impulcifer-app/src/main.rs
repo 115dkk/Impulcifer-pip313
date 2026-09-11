@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 #![deny(unsafe_op_in_unsafe_fn)]
+// Release builds are GUI-subsystem executables on Windows: no console window
+// is attached, so closing a stray terminal cannot take the app down with it.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 //! Tauri 2 shell. One command (`pywebview_api`) forwards positional calls
 //! from the injected bridge to `ImpulciferService`; dialogs, open path/url and
@@ -52,7 +55,7 @@ fn system_mode() -> dark_light::Mode {
 }
 
 /// Resolves the saved theme name to the theme the page will actually show:
-/// "system" follows the OS preference, exactly as webview_ui/app.js resolves
+/// "system" follows the OS preference, exactly as ui/app.js resolves
 /// `prefers-color-scheme` (an unspecified OS answer is light, the browser default).
 fn effective_theme(setting: &str, system: dark_light::Mode) -> &'static str {
     match setting {
@@ -82,7 +85,7 @@ pub(crate) fn updater_endpoints(version: &str) -> Vec<&'static str> {
     }
 }
 
-/// The Pulse `--bg-0` tokens of webview_ui/styles.css, painted as the window's
+/// The Pulse `--bg-0` tokens of ui/styles.css, painted as the window's
 /// own background so the pre-load flash matches the page (2.x
 /// `_WINDOW_BACKGROUNDS`). `theme` is the resolved theme (see `effective_theme`).
 fn window_background(theme: &str) -> Color {
@@ -99,6 +102,22 @@ struct TauriHost {
 }
 
 impl HostAdapter for TauriHost {
+    fn shell_info(&self) -> serde_json::Map<String, Value> {
+        let mut info = serde_json::Map::from_iter([(
+            "shell".into(),
+            json!(format!("Tauri {}", tauri::VERSION)),
+        )]);
+        if let Ok(version) = tauri::webview_version() {
+            let engine = match std::env::consts::OS {
+                "windows" => "WebView2",
+                "macos" => "WKWebView",
+                _ => "WebKitGTK",
+            };
+            info.insert("webview".into(), json!(format!("{engine} {version}")));
+        }
+        info
+    }
+
     fn download_update(
         &self,
         latest_version: &str,
@@ -237,21 +256,6 @@ fn main() {
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                     .theme(theme_from_name(&setting))
                     .background_color(window_background(theme))
-                    // The frozen HTML references sibling logo/ assets outside frontendDist.
-                    // Serve the original embedded bytes at those existing URLs.
-                    .on_web_resource_request(|request, response| {
-                        let logo: Option<&'static [u8]> = match request.uri().path() {
-                            "/logo/pulse-32.png" => Some(include_bytes!("../../../logo/pulse-32.png")),
-                            "/logo/pulse-128.png" => Some(include_bytes!("../../../logo/pulse-128.png")),
-                            _ => None,
-                        };
-                        if let Some(bytes) = logo {
-                            *response.status_mut() = tauri::http::StatusCode::OK;
-                            *response.body_mut() = std::borrow::Cow::Borrowed(bytes);
-                            response.headers_mut().insert(tauri::http::header::CONTENT_TYPE, tauri::http::HeaderValue::from_static("image/png"));
-                            response.headers_mut().remove(tauri::http::header::CONTENT_LENGTH);
-                        }
-                    })
                     .title("Impulcifer")
                     .inner_size(1180.0, 820.0)
                     .devtools(cfg!(debug_assertions) || smoke.is_some());

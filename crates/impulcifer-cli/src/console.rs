@@ -115,17 +115,27 @@ pub(crate) fn info(out: &mut dyn Write) -> io::Result<()> {
     writeln!(
         out,
         "Rust toolchain: {}",
-        info["python_version"].as_str().unwrap_or("unknown")
+        info["runtime"]["toolchain"].as_str().unwrap_or("unknown")
     )?;
     writeln!(
         out,
         "Audio backend: {}",
-        if cfg!(windows) { "WASAPI" } else { "cpal" }
+        info["runtime"]["audio_backend"]
+            .as_str()
+            .unwrap_or(if cfg!(windows) { "WASAPI" } else { "cpal" })
+    )?;
+    writeln!(
+        out,
+        "Update channel: {}",
+        info["update_channel"].as_str().unwrap_or("unknown")
     )?;
     writeln!(
         out,
         "Data dir: {}",
-        impulcifer_service::default_data_dir().display()
+        info["paths"]["data_dir"]
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| impulcifer_service::default_data_dir().display().to_string())
     )
 }
 

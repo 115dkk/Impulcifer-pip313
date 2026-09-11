@@ -8,7 +8,10 @@ use super::{
 use impulcifer_audio_io::session::{PlaybackBuffer, SessionEvent, SessionRequest, play_and_record};
 use impulcifer_io::{Wav, ffmpeg, read_wav, write_wav};
 use impulcifer_jobs::registry::{JobContext, JobFailure};
-use impulcifer_types::{audio::AudioBackend, ipc::ErrorCode};
+use impulcifer_types::{
+    audio::{AudioBackend, ShareMode},
+    ipc::ErrorCode,
+};
 use serde_json::{Value, json};
 use std::{
     path::{Path, PathBuf},
@@ -246,7 +249,7 @@ fn run(
     let interleaved = (0..frames)
         .flat_map(|i| tracks.iter().map(move |t| t[i] as f32))
         .collect();
-    let request = SessionRequest::new(
+    let mut request = SessionRequest::new(
         output,
         input,
         PlaybackBuffer {
@@ -256,13 +259,21 @@ fn run(
         },
         v.channels,
     );
+    request.share = v.share;
     drop(tracks);
-    let result = std::thread::scope(|scope| {
+    let (result, streams_open) = std::thread::scope(|scope| {
         let (tx, rx) = mpsc::channel();
         let timer = scope.spawn(|| monitor(rx, ctx, duration, &segments));
+        // OutputStarted follows the input ready acknowledgement and the output
+        // open, so once it arrives both streams are open and a later failure is
+        // an ordinary device error, never a share-mode refusal.
+        let mut streams_open = false;
         let result = play_and_record(backend, request, &ctx.cancel, &mut |event| {
             let message = match event {
-                SessionEvent::OutputStarted { .. } => Some(Clock::Start),
+                SessionEvent::OutputStarted { .. } => {
+                    streams_open = true;
+                    Some(Clock::Start)
+                }
                 SessionEvent::Progress { frames_played, .. } => {
                     Some(Clock::Position(frames_played as f64 / fs as f64))
                 }
@@ -274,20 +285,49 @@ fn run(
         });
         let _ = tx.send(Clock::Stop);
         timer.join().expect("recording progress timer");
-        result
+        (result, streams_open)
     });
     let captured = result.map_err(|e| {
+        let reason = e.to_string();
+        let error = if v.share.fixed_mode().is_some() && !streams_open {
+            RecordingError {
+                code: ErrorCode::DeviceError,
+                message: format!(
+                    "The device did not open in {} mode: {reason}",
+                    v.share.as_str()
+                ),
+                details: json!({"kind":"share_mode_refused","share_mode":v.share.as_str(),"reason":reason}),
+                retryable: true,
+            }
+        } else {
+            RecordingError::device(reason)
+        };
         emit(
             ctx,
             RecorderProgressEvent {
                 phase: "error".into(),
                 duration,
-                message: e.to_string(),
+                message: error.message.clone(),
                 ..Default::default()
             },
         );
-        RecordingError::device(e.to_string())
+        error
     })?;
+    let share = json!({
+        "requested": v.share.as_str(),
+        "output": captured.output_mode,
+        "input": captured.input_mode,
+    });
+    let display = |mode| match mode {
+        ShareMode::Exclusive => "exclusive",
+        ShareMode::SharedAutoConvert => "shared (auto-convert)",
+    };
+    ctx.log(json!({
+        "level":"info",
+        "key":"recording_share_mode_opened",
+        "message":format!("Output: {} · Input: {}", display(captured.output_mode), display(captured.input_mode)),
+        "share":share,
+    }));
     emit(
         ctx,
         RecorderProgressEvent {
@@ -331,7 +371,7 @@ fn run(
     } else {
         None
     };
-    let mut result = json!({"mode":v.mode,"record_path":v.record_path,"summary":analyze_recording(record),"sweep":generated.as_ref().map(|p|&p.display_name),"sidecar_path":sidecar});
+    let mut result = json!({"mode":v.mode,"record_path":v.record_path,"summary":analyze_recording(record),"sweep":generated.as_ref().map(|p|&p.display_name),"sidecar_path":sidecar,"share":share});
     if !warnings.is_empty() {
         result["warnings"] = json!(warnings);
     }

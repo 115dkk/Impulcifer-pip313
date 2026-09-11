@@ -1,48 +1,60 @@
-// Enabled only by the local smoke harness, before the bridge and page scripts.
-// Observe real calls and errors; never replace an envelope or consume a rejection.
+// @ts-check
+// Enabled only by the local smoke harness. Never replace service envelopes.
 (function () {
-  const events = [];
-  window.__impulciferSmoke = { events, startedAt: Date.now() };
-  const record = (kind, detail) => events.push({ kind, time: Date.now(),
-    step: window.__impulciferSmoke.currentStep || "launch", ...detail });
-  for (const level of ["debug", "log", "info", "warn", "error", "trace", "assert",
+  /** @type {SmokeObserver} */
+  const observer = { events: [], startedAt: Date.now() };
+  window.__impulciferSmoke = observer;
+  /** @param {SmokeEvent["kind"]} kind @param {Record<string, unknown>} detail */
+  const record = (kind, detail) => {
+    // This observer is the transport boundary. The method determines the wire
+    // response variant; consumers narrow it by kind and method, never by casts.
+    observer.events.push(/** @type {SmokeEvent} */ ({ kind, time: Date.now(),
+      step: observer.currentStep || "launch", ...detail }));
+  };
+  /** @type {(keyof Console)[]} */
+  const levels = ["debug", "log", "info", "warn", "error", "trace", "assert",
     "dir", "dirxml", "table", "count", "countReset", "time", "timeLog", "timeEnd",
-    "group", "groupCollapsed", "groupEnd", "clear"]) {
+    "group", "groupCollapsed", "groupEnd", "clear"];
+  for (const level of levels) {
     if (typeof console[level] !== "function") continue;
-    const original = console[level].bind(console);
-    console[level] = (...args) => {
+    const original = /** @type {(...args: unknown[]) => void} */ (console[level].bind(console));
+    console[level] = (/** @type {unknown[]} */ ...args) => {
       record("console", { level, text: args.map(String).join(" "),
         failed: level === "assert" ? !args[0] : level === "error" });
       return original(...args);
     };
   }
   window.addEventListener("error", (event) => {
-    record("pageerror", { text: event.message, stack: event.error?.stack || "",
+    record("pageerror", { text: event.message, stack: event.error instanceof Error ? event.error.stack : "",
       filename: event.filename, line: event.lineno });
   });
   window.addEventListener("error", (event) => {
-    if (event.target !== window) {
-      record("resource-error", { text: event.target.src || event.target.href || event.target.tagName });
+    const target = event.target;
+    if (target instanceof Element) {
+      record("resource-error", { text: target.getAttribute("src") || target.getAttribute("href") || target.tagName });
     }
   }, true);
   window.addEventListener("unhandledrejection", (event) => {
-    record("pageerror", { text: String(event.reason), stack: event.reason?.stack || "" });
+    record("pageerror", { text: String(event.reason), stack: event.reason instanceof Error ? event.reason.stack : "" });
   });
-  const core = window.__TAURI__?.core;
-  if (!core?.invoke) {
+  const tauri = window.__TAURI__;
+  const core = tauri?.core;
+  if (!tauri || !core?.invoke) {
     record("pageerror", { text: "smoke observer: Tauri invoke is unavailable" });
     return;
   }
   const invoke = core.invoke;
-  // Tauri freezes the core export namespace; replace its parent property
-  // with a shallow copy, retaining every API and the original invoke function.
-  window.__TAURI__.core = { ...core, invoke: function (command, payload, ...rest) {
-    const result = invoke.call(this, command, payload, ...rest);
-    if (command !== "pywebview_api" || payload.method === "smoke_report") return result;
-    record("ipc-request", { method: payload.method, args: payload.args });
-    return result.then((response) => {
-      record("ipc-response", { method: payload.method, response });
-      return response;
-    });
-  } };
+  // Tauri freezes core; replace its parent with a shallow copy.
+  tauri.core = { ...core, invoke:
+    /** @template T @param {string} command @param {Record<string, unknown>} [payload] @param {unknown} [options] @returns {Promise<T>} */
+    function (command, payload, options) {
+      const result = invoke.call(this, command, payload, options);
+      if (command !== "pywebview_api" || payload?.method === "smoke_report") return /** @type {Promise<T>} */ (result);
+      record("ipc-request", { method: payload?.method, args: payload?.args });
+      return /** @type {Promise<T>} */ (result.then((response) => {
+        record("ipc-response", { method: payload?.method, response });
+        return response;
+      }));
+    }
+  };
 })();

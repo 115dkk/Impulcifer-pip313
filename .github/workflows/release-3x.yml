@@ -115,6 +115,20 @@ jobs:
           "VELOPACK_OUT=$($json.output)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Get-ChildItem -LiteralPath $json.output | Format-Table Name, Length
 
+      - name: The app is a GUI-subsystem executable (no console window)
+        shell: python
+        run: |
+          import struct
+          from pathlib import Path
+          exe = Path("target/release/impulcifer-app.exe").read_bytes()
+          pe = struct.unpack_from("<I", exe, 0x3C)[0]
+          assert exe[pe:pe + 4] == b"PE\0\0", "not a PE image"
+          magic = struct.unpack_from("<H", exe, pe + 24)[0]
+          assert magic in (0x10B, 0x20B), f"unexpected optional header magic {magic:#x}"
+          subsystem = struct.unpack_from("<H", exe, pe + 24 + 68)[0]
+          assert subsystem == 2, f"subsystem {subsystem} (expected 2 = IMAGE_SUBSYSTEM_WINDOWS_GUI)"
+          print("impulcifer-app.exe subsystem: WINDOWS_GUI")
+
       - name: Upload Velopack artifacts
         uses: actions/upload-artifact@v6
         with:
