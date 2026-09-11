@@ -3,20 +3,33 @@
 (function () {
   const params = window.__impulciferSmokeParams;
   const observer = window.__impulciferSmoke;
+  if (!params || !observer) throw new Error("Smoke initialization missing");
   let ready = false;
   window.addEventListener("pywebviewready", () => { ready = true; }, { once: true });
+  /** @param {number} ms */
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const assert = (value, message) => { if (!value) throw new Error(message); };
-  const node = selector => { const value = document.querySelector(selector); assert(value, `missing ${selector}`); return value; };
+  /** @param {unknown} value @param {string | null} message @returns {asserts value} */
+  function assert(value, message) { if (!value) throw new Error(message || "assertion failed"); }
+  /** @param {string} selector @returns {HTMLElement} */
+  const node = selector => { const value = document.querySelector(selector); assert(value instanceof HTMLElement, `missing ${selector}`); return value; };
+  /** @param {string} selector */
+  const select = selector => { const value = node(selector); assert(value instanceof HTMLSelectElement, `not a select ${selector}`); return value; };
+  /** @param {string} selector */
+  const enabled = selector => { const value = node(selector); return !("disabled" in value) || !value.disabled; };
+  /** @param {() => unknown} test @param {string} message @param {number} timeout */
   const wait = async (test, message, timeout = 15000) => {
     const end = Date.now() + timeout;
     while (!test()) { assert(Date.now() < end, `timeout: ${message}`); await delay(50); }
   };
+  /** @param {Record<string, unknown>} record */
   const report = async record => {
-    const response = await window.__TAURI__.core.invoke("pywebview_api", { method: "smoke_report", args: [record] });
+    const tauri = window.__TAURI__;
+    assert(tauri, "Tauri missing");
+    const response = await /** @type {Promise<Envelope<null>>} */ (tauri.core.invoke("pywebview_api", { method: "smoke_report", args: [record] }));
     assert(response.ok, `report sink: ${JSON.stringify(response)}`);
   };
   let sequence = 0;
+  /** @param {string} step @param {Record<string, unknown>} detail */
   const checkpoint = async (step, detail = {}) => {
     // The smoke sink waits on the harness's atomic acknowledgment file only
     // after appending this record. Python verifies disk state and PrintWindow
@@ -25,21 +38,29 @@
     await delay(150);
     await report({ step, checkpoint: id, ...detail, events: observer.events.slice() });
   };
+  /** @param {string} selector @param {string} value */
   const input = (selector, value) => {
     const element = node(selector);
+    assert(element instanceof HTMLInputElement || element instanceof HTMLSelectElement, `not a field ${selector}`);
     assert(!element.disabled, `disabled ${selector}`);
     element.value = value;
     assert(element.value === value, `unavailable value ${value}`);
     element.dispatchEvent(new Event("input", { bubbles: true }));
     element.dispatchEvent(new Event("change", { bubbles: true }));
   };
-  const click = selector => { const element = node(selector); assert(!element.disabled, `disabled ${selector}`); element.click(); };
+  /** @param {string} selector */
+  const click = selector => { const element = node(selector); assert(enabled(selector), `disabled ${selector}`); element.click(); };
+  /** @param {string} view */
   const navigate = async view => {
     click(`#nav [data-view="${view}"]`);
     await wait(() => node(`#view-${view}`).classList.contains("active"), `view ${view}`);
     node("#content").scrollTop = 0;
   };
-  const responses = (method, start = 0) => observer.events.slice(start).filter(e => e.kind === "ipc-response" && e.method === method);
+  /** @template {IpcMethod} M @param {M} method @param {number} start */
+  const responses = (method, start = 0) => observer.events.slice(start).filter(
+    /** @returns {e is Extract<SmokeIpcResponse, {method: M}>} */
+    e => e.kind === "ipc-response" && e.method === method);
+  /** @param {string} view @param {string} label @param {IpcMethod} method @param {number} start */
   const job = async (view, label, method, start) => {
     const prefix = params.en[label] + " · ";
     await wait(() => {
@@ -51,16 +72,19 @@
     assert(status === prefix + params.en.webview_status_succeeded, `${status}: ${node('[data-log]').textContent}`);
     return status;
   };
+  /** @type {SmokeStep[]} */
   const steps = [];
+  /** @param {string} name @param {() => Promise<Record<string, unknown>>} action */
   const step = async (name, action) => {
     const start = Date.now();
     observer.currentStep = name;
+    /** @type {SmokeStep} */
     const record = { step: name, status: "ok", details: {} };
     try { record.details = await action() || {}; }
-    catch (error) { record.status = "fail"; record.error = String(error); record.stack = error.stack; }
+    catch (error) { record.status = "fail"; record.error = String(error); record.stack = error instanceof Error ? error.stack : undefined; }
     record.duration_seconds = (Date.now() - start) / 1000;
     record.ui_log = document.querySelector('[data-log]')?.textContent || "";
-    try { await checkpoint(name, record); }
+    try { await checkpoint(name, { ...record }); }
     catch (error) { record.status = "fail"; record.evidence_error = String(error); }
     steps.push(record);
     await report({ ...record, result: true });
@@ -75,12 +99,13 @@
         await wait(() => !node("#language-modal").hidden, "first-run language modal");
         await checkpoint("first-run");
         const english = [...document.querySelectorAll("#language-modal-list button")].find(b => b.textContent === "English");
-        assert(english, "English first-run choice absent"); english.click();
+        assert(english instanceof HTMLElement, "English first-run choice absent"); english.click();
         await wait(() => node("#language-modal").hidden && document.documentElement.lang === "en", "English selected");
         await navigate("settings"); input("#sf-skin", "studio");
         await wait(() => document.documentElement.dataset.skin === "studio", "Studio skin");
         await navigate("processing");
-        await wait(() => !node("#btn-generate-brir").disabled, "enabled generate");
+        await wait(() => enabled("#btn-generate-brir"), "enabled generate");
+        assert([...select("#rf-share-mode").options].some(o => o.value === "auto"), "Auto device access missing");
         return { runtime: node("#runtime-status").textContent, bootstrap_observed: true, reloads: 0 };
       });
       if (booted) {
@@ -95,11 +120,14 @@
         await step("recovery", async () => {
           assert(brir, "BRIR failed; no substitute recovery input");
           await navigate("recovery"); input("#recovery-dir-path", params.recovery);
+          await wait(() => enabled("#btn-start-recovery"), "recovery plan ready");
           click("#btn-start-recovery");
-          await wait(() => ["succeeded", "failed", "cancelled"].includes(node(".recovery-result").dataset.status), "recovery terminal", 120000);
+          await wait(() => ["succeeded", "failed", "cancelled"].includes(node(".recovery-result").dataset.status || ""), "recovery terminal", 120000);
           assert(node(".recovery-result").dataset.status === "succeeded", node("#recovery-status-detail").textContent);
           assert(node("#recovery-status-title").textContent === params.en.webview_status_succeeded, "recovery title");
-          return { title: node("#recovery-status-title").textContent };
+          const created = node('#recovery-ledger [data-file="hrir.wav"]').dataset.status;
+          assert(created === "created", "hrir.wav ledger must be created");
+          return { title: node("#recovery-status-title").textContent, ledger_hrir: created };
         });
         await step("settings", async () => {
           await navigate("settings");
@@ -129,14 +157,16 @@
           await wait(() => status.hidden || status.textContent !== checking
             || !node("#update-modal").hidden, "update status settled");
           const modal = !node("#update-modal").hidden;
-          assert(!okShape || actual.data.update_available === modal,
-            `update modal ${modal} does not match update_available ${actual.data && actual.data.update_available}`);
+          assert(!actual?.ok || actual.data.update_available === modal,
+            `update modal ${modal} does not match envelope ${JSON.stringify(actual)}`);
           return { ui_text: modal ? "modal" : status.textContent, modal, envelope: actual };
         });
         if (params.hardware) await step("recording", async () => {
-          await navigate("recorder"); const devices = {};
+          await navigate("recorder");
+          /** @type {Record<string, string>} */
+          const devices = {};
           for (const [id, prefix] of [["rf-output-device", "CABLE-A Input"], ["rf-input-device", "CABLE-A Output"]]) {
-            const matches = [...node(`#${id}`).options].filter(o => o.value.startsWith(prefix) && o.value.includes("VB-Audio Cable A"));
+            const matches = [...select(`#${id}`).options].filter(o => o.value.startsWith(prefix) && o.value.includes("VB-Audio Cable A"));
             assert(matches.length === 1, `documented CABLE-A missing/ambiguous: ${id}`);
             input(`#${id}`, matches[0].value); devices[id] = matches[0].value;
           }
@@ -151,7 +181,7 @@
         else { steps.push({ step: "recording", status: "skipped", duration_seconds: 0, details: { reason: "requires --hardware" } }); await report({ ...steps.at(-1), result: true }); }
       }
     } catch (error) {
-      steps.push({ step: "driver", status: "fail", error: String(error), stack: error.stack });
+      steps.push({ step: "driver", status: "fail", error: String(error), stack: error instanceof Error ? error.stack : undefined });
     } finally {
       await report({ step: "done", steps, events: observer.events.slice(), url: location.href });
     }

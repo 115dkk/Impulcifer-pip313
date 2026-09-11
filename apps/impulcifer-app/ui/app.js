@@ -2,11 +2,12 @@
 "use strict";
 
 /* Impulcifer WebView frontend — Pulse Studio shell.
-   Talks to application/impulcifer_service.py through the pywebview bridge.
+   Talks to the Rust application service through the pywebview-compatible IPC.
    BRIR payload assembly mirrors gui/brir_args.build_brir_args: gated
    option groups are omitted entirely while their disclosure is closed so
    ProcessingConfig defaults stay authoritative. */
 
+/** @type {AppState} */
 const state = {
   booted: false,
   version: "",
@@ -22,7 +23,7 @@ const state = {
   lastRecoveryJob: null,
   startPending: false,
   nextSeq: 0,
-  pollTimer: null,
+  pollTimer: undefined,
   resolvedRecordPath: "",
   lastOutputDir: null,
   lastRecoveryOutputDir: null,
@@ -32,6 +33,10 @@ const state = {
   modalDismissed: false,
   recPhase: null,
   recDoneSpeakers: new Set(),
+  shareModes: ["auto"], systemInfo: null,
+  recoveryPlan: null, recoveryPlanError: null, recoveryState: "empty",
+  recoveryTimer: undefined, recoveryRevision: 0, recoveryCreated: new Set(), recoveryRunRevision: -1,
+  recoveryRequestKey: "",
 };
 
 /* Full speaker layout — must mirror core/constants.py SPEAKER_NAMES
@@ -55,11 +60,26 @@ const BRIR_STAGES = [
   "cli_writing_brirs",
 ];
 
-const $ = (id) => document.getElementById(id);
-const api = () => window.pywebview.api;
+/** @param {string} id @returns {HTMLElement} */
+function $(id) {
+  const node = document.getElementById(id);
+  if (!node) throw new Error(`Missing element #${id}`);
+  return node;
+}
+/** @template {HTMLElement} T @param {string} id @param {{new(): T}} type @returns {T} */
+function el(id, type) {
+  const node = $(id);
+  if (!(node instanceof type)) throw new Error(`Unexpected element #${id}`);
+  return node;
+}
+function api() {
+  if (!window.pywebview) throw new Error("Service unavailable");
+  return window.pywebview.api;
+}
 
 /* ------------------------------------------------------------------ i18n */
 
+/** @param {string} key */
 function t(key) {
   return state.strings[key] || key;
 }
@@ -68,23 +88,28 @@ function t(key) {
    itself dies (e.g. a packaging regression on the Python side), t() would
    render raw keys — 2.10.0 shipped exactly that. Language comes from the
    OS/browser locale since the persisted choice is unreachable then. */
+/** @type {Record<string, Record<string, string>>} */
 const PREBOOT_STRINGS = {
   en: {
-    webview_bridge_failed: "Python bridge unavailable.",
-    webview_bridge_connecting: "Connecting to Python…",
+    webview_bridge_failed: "Service unavailable.",
+    webview_bridge_connecting: "Connecting to service…",
+    webview_bridge_connected: "Service connected.",
   },
   ko: {
-    webview_bridge_failed: "Python 브리지를 사용할 수 없습니다.",
-    webview_bridge_connecting: "Python 브리지에 연결하는 중…",
+    webview_bridge_failed: "서비스를 사용할 수 없습니다.",
+    webview_bridge_connecting: "서비스에 연결하는 중…",
+    webview_bridge_connected: "서비스에 연결했습니다.",
   },
 };
 
+/** @param {string} key */
 function tPreboot(key) {
   if (state.strings[key]) return state.strings[key];
   const lang = String(navigator.language || "en").toLowerCase().startsWith("ko") ? "ko" : "en";
   return PREBOOT_STRINGS[lang][key] || PREBOOT_STRINGS.en[key] || key;
 }
 
+/** @param {string} text @param {Record<string, unknown>} vars */
 function fmt(text, vars) {
   return text.replace(/\{(\w+)\}/g, (match, name) =>
     Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match,
@@ -93,8 +118,8 @@ function fmt(text, vars) {
 
 function applyStrings() {
   document.documentElement.lang = state.language;
-  document.querySelectorAll("[data-i18n]").forEach((node) => {
-    node.textContent = t(node.dataset.i18n);
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-i18n]")).forEach((node) => {
+    node.textContent = t(node.dataset.i18n || "");
   });
   updateChannelGuidance();
   refreshResolvedPath();
@@ -102,10 +127,15 @@ function applyStrings() {
   renderJobState(state.lastJob);
   renderRecoveryJob(state.lastRecoveryJob);
   applySkin(state.skin);
+  populateShareModes();
+  renderSystemInfo();
+  renderRecoveryInventory();
+  if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
 }
 
 /* ----------------------------------------------------------------- theme */
 
+/** @param {string} code */
 function applyTheme(code) {
   state.theme = code;
   if (state.systemThemeQuery) {
@@ -121,11 +151,14 @@ function applyTheme(code) {
   document.documentElement.dataset.theme = resolved === "dark" ? "dark" : "light";
 }
 
+/** @param {MediaQueryListEvent} event */
 function onSystemThemeChange(event) {
   document.documentElement.dataset.theme = event.matches ? "dark" : "light";
 }
 
+/** @param {string} code */
 function applySkin(code) {
+  const previous = state.skin;
   state.skin = code === "stable" ? "stable" : "studio";
   document.documentElement.dataset.skin = state.skin;
   const desc = $("sf-skin-desc");
@@ -133,18 +166,24 @@ function applySkin(code) {
   // Re-evaluate the job dialog: switching skins mid-job moves the running
   // display between the inline activity card and the Stable modal.
   renderJobState(state.lastJob);
+  if (previous !== state.skin) scheduleRecoveryPlan();
 }
 
 /* ------------------------------------------------------------ primitives */
 
+/** @param {string} id */
 function val(id) {
-  return $(id).value.trim();
+  const node = $(id);
+  if (!(node instanceof HTMLInputElement || node instanceof HTMLSelectElement)) throw new Error(`Not a field: ${id}`);
+  return node.value.trim();
 }
 
+/** @param {string} id */
 function checked(id) {
-  return $(id).checked;
+  return el(id, HTMLInputElement).checked;
 }
 
+/** @param {string} id */
 function numOrNull(id) {
   const raw = val(id);
   if (!raw) return null;
@@ -152,6 +191,7 @@ function numOrNull(id) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** @param {string} id @param {number} fallback */
 function numOr(id, fallback) {
   const parsed = numOrNull(id);
   return parsed === null ? fallback : parsed;
@@ -159,24 +199,30 @@ function numOr(id, fallback) {
 
 /* Canonical pipeline default shipped by bootstrap(); the literal fallback
    only applies when bootstrap itself failed to load ProcessingConfig. */
+/** @param {keyof ProcessingRequest} name @param {number} fallback */
 function brirDefault(name, fallback) {
   const value = state.brirDefaults[name];
   return typeof value === "number" ? value : fallback;
 }
 
+/** @param {string} id */
 function isOpen(id) {
   return $(id).classList.contains("open");
 }
 
+/** @param {Envelope<unknown>} response */
 function errorText(response) {
   if (!response || response.ok) return "Unknown error";
+  const shareError = shareModeError(response.error);
+  if (shareError) return shareError;
   const detail = response.error.details || {};
   const extra = Object.keys(detail).length ? ` ${JSON.stringify(detail)}` : "";
   return `${response.error.code}: ${response.error.message}${extra}`;
 }
 
+/** @param {string} message */
 function appendLog(message) {
-  document.querySelectorAll("[data-log]").forEach((log) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-log]")).forEach((log) => {
     const lines = log.textContent ? log.textContent.split("\n") : [];
     lines.push(message);
     log.textContent = lines.slice(-500).join("\n");
@@ -184,19 +230,21 @@ function appendLog(message) {
   });
 }
 
+/** @param {number} value */
 function setProgress(value) {
-  document.querySelectorAll("[data-progress]").forEach((bar) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-progress]")).forEach((bar) => {
     bar.style.width = `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
   });
 }
 
+/** @param {Job | null} job */
 function renderJobState(job) {
   state.lastJob = job;
   updateStartControls(job);
   const label = job
     ? `${jobKindLabel(job.kind)} · ${t(`webview_status_${job.status}`)}`
     : t("webview_job_idle");
-  document.querySelectorAll("[data-job-state]").forEach((node) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-job-state]")).forEach((node) => {
     node.textContent = label;
   });
   if (job?.kind === "output_recovery") renderRecoveryJob(job);
@@ -204,17 +252,21 @@ function renderJobState(job) {
   updateJobModal(job, active);
 }
 
+/** @param {Job | null} job */
 function updateStartControls(job) {
   const active = Boolean(job && !["succeeded", "failed", "cancelled"].includes(job.status));
   const busy = state.startPending || active;
-  document.querySelectorAll("[data-start]").forEach((button) => {
+  /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("[data-start]")).forEach((button) => {
     button.disabled = busy;
   });
-  $("btn-cancel-brir").disabled = !active || !job.cancellable;
+  el("btn-cancel-brir", HTMLButtonElement).disabled = !active || !job?.cancellable;
+  el("btn-start-recovery", HTMLButtonElement).disabled = busy || (state.skin === "studio" && state.recoveryState !== "ready");
 }
 
+/** @param {JobKind} kind */
 function jobKindLabel(kind) {
   const key = {
+    update: "update_available_title",
     recording: "sidebar_recorder",
     brir: "sidebar_processing",
     output_recovery: "sidebar_output_recovery",
@@ -224,6 +276,7 @@ function jobKindLabel(kind) {
 
 /* Stable skin shows running jobs in a separate dialog, mirroring the CTk
    RecordingProgressDialog / ProcessingDialog convention. */
+/** @param {Job | null} job @param {boolean} busy */
 function updateJobModal(job, busy) {
   const modal = $("job-modal");
   if (state.skin !== "stable" || !job || state.modalDismissed) {
@@ -234,15 +287,16 @@ function updateJobModal(job, busy) {
     ? "dialog_recording_title"
     : job.kind === "output_recovery" ? "dialog_recovery_title" : "dialog_processing_title";
   $("job-modal-title").textContent = t(titleKey);
-  const cancel = $("job-modal-cancel");
+  const cancel = el("job-modal-cancel", HTMLButtonElement);
   cancel.hidden = !busy || !job.cancellable;
   cancel.disabled = !job.cancellable;
-  $("job-modal-close").hidden = busy;
+  el("job-modal-close", HTMLButtonElement).hidden = busy;
   modal.hidden = false;
 }
 
 /* --------------------------------------------------- pipeline checklist */
 
+/** @param {boolean} visible */
 function resetSteps(visible) {
   state.stageIndex = -1;
   state.stageAbort = null;
@@ -284,6 +338,7 @@ function renderSteps() {
   });
 }
 
+/** @param {string | undefined} message @param {string | undefined} key */
 function updateSteps(message, key) {
   if (state.jobKind !== "brir") return;
   if (key) {
@@ -319,6 +374,7 @@ function completeSteps() {
 /* Failure/cancel semantics: the stage that was in flight gets ✕ (err) or
    – (warn); finished stages keep their checkmarks; unreached stages stay
    as dimmed circles so it reads "never got there", not "skipped okay". */
+/** @param {string} kind */
 function abortSteps(kind) {
   if (state.stageIndex < 0) state.stageIndex = 0;
   if (state.stageIndex >= BRIR_STAGES.length) state.stageIndex = BRIR_STAGES.length - 1;
@@ -331,8 +387,9 @@ function abortSteps(kind) {
    (Studio segment-chip visual), a bold phase status line, and an
    elapsed/duration detail line, driven by RecorderProgressEvent payloads. */
 
+/** @param {number | undefined} seconds */
 function fmtDuration(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "--:--";
+  if (seconds === undefined || !Number.isFinite(seconds) || seconds < 0) return "--:--";
   const total = Math.round(seconds);
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -344,24 +401,26 @@ function fmtDuration(seconds) {
 function resetRecorderStatus() {
   state.recPhase = null;
   state.recDoneSpeakers = new Set();
-  document.querySelectorAll("[data-rec-chips]").forEach((node) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-rec-chips]")).forEach((node) => {
     node.hidden = true;
     node.replaceChildren();
   });
   setRecorderStatus("", "");
 }
 
+/** @param {string} statusText @param {string} detailText */
 function setRecorderStatus(statusText, detailText) {
-  document.querySelectorAll("[data-rec-status]").forEach((node) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-rec-status]")).forEach((node) => {
     node.hidden = !statusText;
     node.textContent = statusText;
   });
-  document.querySelectorAll("[data-rec-detail]").forEach((node) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-rec-detail]")).forEach((node) => {
     node.hidden = !detailText;
     node.textContent = detailText || "";
   });
 }
 
+/** @param {string[] | undefined} speakers @param {string | null | undefined} activeSpeaker */
 function renderRecorderChips(speakers, activeSpeaker) {
   if (!Array.isArray(speakers) || !speakers.length) return;
   if (activeSpeaker) {
@@ -370,7 +429,7 @@ function renderRecorderChips(speakers, activeSpeaker) {
       state.recDoneSpeakers.add(speaker);
     }
   }
-  document.querySelectorAll("[data-rec-chips]").forEach((node) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-rec-chips]")).forEach((node) => {
     node.hidden = false;
     node.replaceChildren(...speakers.map((speaker) => {
       const chip = document.createElement("span");
@@ -383,12 +442,13 @@ function renderRecorderChips(speakers, activeSpeaker) {
 }
 
 function finishRecorderChips() {
-  document.querySelectorAll("[data-rec-chips] .chip").forEach((chip) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-rec-chips] .chip")).forEach((chip) => {
     chip.classList.remove("active");
     chip.classList.add("done");
   });
 }
 
+/** @param {ProgressPayload} payload */
 function updateRecorderStatus(payload) {
   renderRecorderChips(payload.speakers, payload.phase === "recording" ? payload.speaker : null);
   const phase = payload.phase;
@@ -426,17 +486,18 @@ function updateRecorderStatus(payload) {
   }
   setRecorderStatus(status, detail);
   if (phase !== state.recPhase) {
-    state.recPhase = phase;
+    state.recPhase = phase || null;
     appendLog(status);
   }
 }
 
+/** @param {JobOf<"recording">} job */
 function finishRecorderStatus(job) {
   if (job.status === "succeeded" && job.result) {
     finishRecorderChips();
     const file = String(job.result.record_path || "").split(/[\\/]/).pop();
     const summary = job.result.summary;
-    const detail = summary
+    let detail = summary
       ? fmt(t("recording_status_summary"), {
           file,
           channels: summary.channels,
@@ -446,24 +507,29 @@ function finishRecorderStatus(job) {
           total: summary.channels,
         })
       : fmt(t("recording_status_summary_unavailable"), { file });
+    if (job.result.share) detail += ` · ${shareDescription(job.result.share)}`;
     setRecorderStatus(t("recording_status_complete"), detail);
     appendLog(detail);
   } else if (job.status === "failed") {
-    setRecorderStatus(t("recording_status_error"), job.error ? job.error.message : "");
+    const message = job.error ? shareModeError(job.error) || job.error.message : "";
+    setRecorderStatus(t("recording_status_error"), message);
+    if (state.skin === "stable" && job.error && shareModeError(job.error)) window.alert(message);
   }
 }
 
 /* ------------------------------------------------------ output recovery */
 
+/** @param {string[]} paths @param {string} outputDir */
 function recoveryFileNames(paths, outputDir) {
   if (!Array.isArray(paths)) return [];
   const root = String(outputDir || "").replace(/\\/g, "/").replace(/\/$/, "");
   return paths.map((rawPath) => {
     const path = String(rawPath).replace(/\\/g, "/");
-    return root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path.split("/").pop();
+    return root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path.split("/").pop() || "";
   });
 }
 
+/** @param {RecoverySource} kind */
 function recoverySourceLabel(kind) {
   return {
     hangloose: "Hangloose",
@@ -473,6 +539,7 @@ function recoverySourceLabel(kind) {
   }[kind] || kind || "—";
 }
 
+/** @param {string[] | null} created @param {string[] | null} existing */
 function setRecoveryFiles(created, existing) {
   const createdRow = $("recovery-created-row");
   const existingRow = $("recovery-existing-row");
@@ -484,13 +551,14 @@ function setRecoveryFiles(created, existing) {
     ? existing.join(", ") : t("recovery_none");
 }
 
+/** @param {JobOf<"output_recovery"> | null} job */
 function renderRecoveryJob(job) {
   state.lastRecoveryJob = job;
-  const resultCard = document.querySelector(".recovery-result");
+  const resultCard = /** @type {HTMLElement} */ (document.querySelector(".recovery-result"));
   const meta = $("recovery-status-meta");
   const title = $("recovery-status-title");
   const detail = $("recovery-status-detail");
-  const openButton = $("btn-open-recovery-output");
+  const openButton = el("btn-open-recovery-output", HTMLButtonElement);
 
   if (!job) {
     resultCard.dataset.status = "idle";
@@ -527,6 +595,12 @@ function renderRecoveryJob(job) {
     });
     setRecoveryFiles(created, existing);
     openButton.hidden = false;
+    if (state.recoveryRunRevision === state.recoveryRevision) {
+      state.recoveryCreated = new Set(result.created_files);
+      state.recoveryState = "nothing";
+      renderRecoveryInventory();
+      updateStartControls(state.lastJob);
+    }
     return;
   }
 
@@ -538,17 +612,145 @@ function renderRecoveryJob(job) {
   });
 }
 
+/** @returns {RecoveryRequest} */
+function recoveryRequest() {
+  return { dir_path: val("recovery-dir-path"), include_hangloose: checked("recovery-include-hangloose"),
+    remove_silent_channels: checked("recovery-remove-silent-channels") };
+}
+
+function scheduleRecoveryPlan() {
+  const key = JSON.stringify([state.skin, recoveryRequest()]);
+  // input and change may report the same value (including blur on Restore).
+  // Do not disable the button in the middle of that pointer click.
+  if (key === state.recoveryRequestKey) return;
+  state.recoveryRequestKey = key;
+  window.clearTimeout(state.recoveryTimer);
+  const revision = ++state.recoveryRevision;
+  state.recoveryPlanError = null;
+  state.recoveryCreated.clear();
+  state.recoveryState = "empty";
+  if (state.skin !== "studio" || !state.version || !val("recovery-dir-path")) {
+    state.recoveryPlan = null;
+    renderRecoveryInventory();
+    updateStartControls(state.lastJob);
+    return;
+  }
+  state.recoveryState = "planning";
+  renderRecoveryInventory();
+  updateStartControls(state.lastJob);
+  const request = recoveryRequest();
+  state.recoveryTimer = window.setTimeout(async () => {
+    /** @type {Envelope<RecoveryPlan>} */
+    let response;
+    try { response = await api().plan_output_recovery(request); }
+    catch (error) { response = { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } }; }
+    if (revision !== state.recoveryRevision || state.skin !== "studio") return;
+    if (response.ok) {
+      state.recoveryPlan = response.data;
+      state.recoveryState = response.data.planned_files.length ? "ready" : "nothing";
+    } else {
+      state.recoveryPlanError = response.error;
+      state.recoveryState = "error";
+    }
+    renderRecoveryInventory();
+    updateStartControls(state.lastJob);
+  }, 300);
+}
+
+function renderRecoveryInventory() {
+  const panel = $("recovery-inventory");
+  panel.dataset.state = state.recoveryState;
+  panel.setAttribute("aria-busy", String(state.recoveryState === "planning"));
+  const plan = state.recoveryPlan;
+  // Keep the previous inventory's height during re-planning: a path's blur
+  // emits change between pointer-down and pointer-up on the next checkbox.
+  const visible = !!plan && ["planning", "ready", "nothing"].includes(state.recoveryState);
+  $("recovery-inventory-source").hidden = !visible;
+  $("recovery-speakers").hidden = !visible;
+  $("recovery-ledger").hidden = !visible;
+  const message = $("recovery-inventory-message");
+  message.textContent = state.recoveryPlanError
+    ? fmt(t("recovery_failed_summary"), { ...state.recoveryPlanError })
+    : t(`recovery_inventory_${state.recoveryState}`);
+  if (!visible || !plan) return;
+  $("recovery-source-badge").textContent = fmt(t("recovery_inventory_source"), { source: recoverySourceLabel(plan.source_kind) });
+  $("recovery-source-audio").textContent = fmt(t("recovery_inventory_audio"), {
+    rate: plan.sample_rate, duration: Math.round(plan.sample_count / plan.sample_rate * 1000),
+  });
+  $("recovery-speakers").replaceChildren(...plan.speakers.map(speaker => {
+    const chip = document.createElement("span");
+    chip.className = "chip mono"; chip.textContent = speaker;
+    return chip;
+  }));
+  const ledger = $("recovery-ledger");
+  ledger.replaceChildren();
+  const paths = [...new Set([...plan.existing_files, ...plan.planned_files.map(file => file.path)])];
+  for (const path of paths) {
+    const status = state.recoveryCreated.has(path) ? "created" : plan.existing_files.includes(path) ? "present" : "planned";
+    const name = recoveryFileNames([path], plan.output_dir)[0];
+    const row = document.createElement("div");
+    row.className = "recovery-ledger-row"; row.setAttribute("role", "listitem");
+    row.dataset.file = name; row.dataset.status = status;
+    const file = document.createElement("span"); file.className = "mono"; file.textContent = name;
+    const pill = document.createElement("span"); pill.className = "chip recovery-pill";
+    pill.dataset.status = status; pill.textContent = t(`recovery_ledger_${status}`);
+    row.append(file, pill); ledger.append(row);
+  }
+}
+
+/** @param {string} path */
+function parentFolder(path) {
+  const normalized = path.replace(/\\/g, "/");
+  const end = normalized.lastIndexOf("/");
+  return end === 0 ? "/" : /^[A-Za-z]:$/.test(normalized.slice(0, end))
+    ? normalized.slice(0, end + 1) : normalized.slice(0, end);
+}
+
+/** @param {SharePreference} mode */
+function sharePreferenceLabel(mode) { return t(`option_share_${mode}`); }
+/** @param {ShareMode} mode */
+function shareModeLabel(mode) { return t(mode === "exclusive" ? "option_share_exclusive" : "option_share_auto_convert"); }
+/** @param {RecordingShare} share */
+function shareDescription(share) {
+  return fmt(t("recording_share_mode_opened"), { output: shareModeLabel(share.output), input: shareModeLabel(share.input) });
+}
+/** @returns {SharePreference} */
+function selectedShareMode() {
+  const value = val("rf-share-mode");
+  return value === "exclusive" || value === "shared" ? value : "auto";
+}
+function populateShareModes() {
+  const select = el("rf-share-mode", HTMLSelectElement);
+  const previous = selectedShareMode();
+  select.replaceChildren(...state.shareModes.map(mode => new Option(sharePreferenceLabel(mode), mode)));
+  select.value = state.shareModes.includes(previous) ? previous : "auto";
+  select.disabled = state.shareModes.length <= 1;
+  $("rf-share-mode-hint").hidden = !select.disabled;
+}
+/** @param {IpcError} error */
+function shareModeError(error) {
+  if (error.details.kind === "share_mode_unavailable") return t("error_share_mode_unavailable");
+  if (error.details.kind !== "share_mode_refused") return "";
+  return fmt(t("error_share_mode_refused"), {
+    mode: sharePreferenceLabel(error.details.share_mode === "exclusive" ? "exclusive" : "shared"),
+    reason: error.details.reason || error.message,
+  });
+}
+
 /* ------------------------------------------------------------------ jobs */
 
+/** @template {{confirm_warnings?: boolean}} P @param {(payload: P) => Promise<Envelope<{job: Job}>>} start @param {P} payload @param {JobKind | null} kindHint */
 async function begin(start, payload, kindHint = null) {
   if (state.startPending || state.jobId) return;
   state.startPending = true;
+  if (kindHint === "output_recovery") state.recoveryRunRevision = state.recoveryRevision;
   updateStartControls(state.lastJob);
 
+  /** @type {Envelope<{job: Job}>} */
   let response;
   try {
     response = await start(payload);
-    if (response?.error?.code === "CONFIRMATION_REQUIRED") {
+    if (response && !response.ok && response.error.code === "CONFIRMATION_REQUIRED") {
       if (!window.confirm(confirmationText(response))) {
         state.startPending = false;
         updateStartControls(state.lastJob);
@@ -560,7 +762,7 @@ async function begin(start, payload, kindHint = null) {
   } catch (error) {
     response = {
       ok: false,
-      error: { code: "BRIDGE_ERROR", message: String(error), details: {} },
+      error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false },
     };
   }
   state.startPending = false;
@@ -570,8 +772,10 @@ async function begin(start, payload, kindHint = null) {
   }
   if (!response.ok) {
     appendLog(errorText(response));
+    if (kindHint === "recording") setRecorderStatus(t("recording_status_error"), errorText(response));
     if (kindHint === "output_recovery") {
       renderRecoveryJob({
+        job_id: "", cancellable: false,
         kind: "output_recovery",
         status: "failed",
         result: null,
@@ -597,12 +801,13 @@ async function begin(start, payload, kindHint = null) {
   state.modalDismissed = false;
   resetSteps(job.kind === "brir");
   resetRecorderStatus();
-  $("btn-open-output").hidden = true;
+  el("btn-open-output", HTMLButtonElement).hidden = true;
   setProgress(0);
   renderJobState(job);
   schedulePoll(0);
 }
 
+/** @param {{ok: false, error: IpcError}} response */
 function confirmationText(response) {
   const details = response.error.details || {};
   if (details.warning === "headphones_mono") return t("message_headphones_mono_warning");
@@ -638,8 +843,8 @@ async function pollJob() {
   const { job, events, next_seq: nextSeq } = response.data;
   state.nextSeq = nextSeq;
   for (const event of events) {
-    const payload = event.payload || {};
     if (event.type === "progress") {
+      const payload = event.payload;
       if (typeof payload.progress === "number") setProgress(payload.progress);
       if (payload.phase) {
         updateRecorderStatus(payload);
@@ -649,19 +854,22 @@ async function pollJob() {
       }
     }
     if (event.type === "log") {
-      appendLog(`[${payload.level}] ${payload.message}`);
+      const payload = event.payload;
+      const message = payload.key === "recording_share_mode_opened" && state.strings[payload.key] && payload.share
+        ? shareDescription(payload.share) : payload.message;
+      appendLog(`[${payload.level}] ${message}`);
       updateSteps(payload.message, payload.key);
     }
-    if (event.type === "status") appendLog(`· ${t(`webview_status_${payload.status}`)}`);
+    if (event.type === "status") appendLog(`· ${t(`webview_status_${event.payload.status}`)}`);
   }
   renderJobState(job);
   if (["succeeded", "failed", "cancelled"].includes(job.status)) {
     if (job.status === "succeeded") setProgress(1);
-    if (job.error) appendLog(`${job.error.code}: ${job.error.message}`);
+    if (job.error) appendLog(shareModeError(job.error) || `${job.error.code}: ${job.error.message}`);
     if (job.kind === "brir") {
       if (job.status === "succeeded") {
         completeSteps();
-        if (state.lastOutputDir) $("btn-open-output").hidden = false;
+        if (state.lastOutputDir) el("btn-open-output", HTMLButtonElement).hidden = false;
       } else {
         abortSteps(job.status);
       }
@@ -680,21 +888,25 @@ async function pollJob() {
    UpdateDialog (notes + Update Now / Remind / Skip) → UpdateExecutor with
    progress → completion message → optional apply-and-restart (Velopack). */
 
+/** @type {{info: UpdateInfo | null, jobId: string | null, nextSeq: number, pollTimer: number | undefined}} */
 const updateState = {
   info: null,
   jobId: null,
   nextSeq: 0,
-  pollTimer: null,
+  pollTimer: undefined,
 };
 
+/** @param {string | undefined} key @param {string | undefined} fallback */
 function tOr(key, fallback) {
   return (key && state.strings[key]) || fallback || key || "";
 }
 
+/** @param {number} value */
 function setUpdateProgress(value) {
   $("update-progress").style.width = `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 }
 
+/** @param {UpdateInfo} info */
 function showUpdateModal(info) {
   updateState.info = info;
   $("update-version-line").textContent = fmt(t("update_version_info"), {
@@ -706,12 +918,12 @@ function showUpdateModal(info) {
   setUpdateProgress(0);
   $("update-status").textContent = "";
   $("update-result").hidden = true;
-  $("update-now").hidden = false;
-  $("update-now").disabled = false;
-  $("update-remind").hidden = false;
-  $("update-skip").hidden = false;
-  $("update-restart").hidden = true;
-  $("update-close").hidden = true;
+  el("update-now", HTMLButtonElement).hidden = false;
+  el("update-now", HTMLButtonElement).disabled = false;
+  el("update-remind", HTMLButtonElement).hidden = false;
+  el("update-skip", HTMLButtonElement).hidden = false;
+  el("update-restart", HTMLButtonElement).hidden = true;
+  el("update-close", HTMLButtonElement).hidden = true;
   $("update-modal").hidden = false;
 }
 
@@ -723,11 +935,11 @@ function showUpdateProgressOnly() {
   $("update-notes").textContent = "";
   $("update-progress-row").hidden = false;
   $("update-result").hidden = true;
-  $("update-now").hidden = true;
-  $("update-remind").hidden = true;
-  $("update-skip").hidden = true;
-  $("update-restart").hidden = true;
-  $("update-close").hidden = true;
+  el("update-now", HTMLButtonElement).hidden = true;
+  el("update-remind", HTMLButtonElement).hidden = true;
+  el("update-skip", HTMLButtonElement).hidden = true;
+  el("update-restart", HTMLButtonElement).hidden = true;
+  el("update-close", HTMLButtonElement).hidden = true;
   $("update-modal").hidden = false;
 }
 
@@ -736,6 +948,7 @@ function hideUpdateModal() {
   $("update-modal").hidden = true;
 }
 
+/** @param {boolean} manual */
 async function checkForUpdates(manual) {
   const statusLine = $("update-check-status");
   if (manual) {
@@ -767,9 +980,9 @@ async function checkForUpdates(manual) {
 async function beginUpdate() {
   const info = updateState.info;
   if (!info) return;
-  $("update-now").disabled = true;
-  $("update-remind").hidden = true;
-  $("update-skip").hidden = true;
+  el("update-now", HTMLButtonElement).disabled = true;
+  el("update-remind", HTMLButtonElement).hidden = true;
+  el("update-skip", HTMLButtonElement).hidden = true;
   $("update-progress-row").hidden = false;
   $("update-status").textContent = t("update_downloading");
   const response = await api().start_update({
@@ -795,8 +1008,8 @@ async function pollUpdateJob() {
   const { job, events, next_seq: nextSeq } = response.data;
   updateState.nextSeq = nextSeq;
   for (const event of events) {
-    const payload = event.payload || {};
     if (event.type === "progress") {
+      const payload = event.payload;
       if (typeof payload.progress === "number") setUpdateProgress(payload.progress);
       // The executor sends either an i18n key ("update_downloading") or
       // preformatted text ("Downloading: 42%").
@@ -805,8 +1018,8 @@ async function pollUpdateJob() {
   }
   if (["succeeded", "failed", "cancelled"].includes(job.status)) {
     updateState.jobId = null;
-    if (job.status === "succeeded") {
-      const result = job.result || {};
+    if (job.status === "succeeded" && job.kind === "update" && job.result) {
+      const result = job.result;
       setUpdateProgress(typeof result.progress === "number" ? result.progress : 1);
       $("update-status").textContent = tOr(result.status_key, result.status_default);
       finishUpdate(
@@ -822,23 +1035,24 @@ async function pollUpdateJob() {
   updateState.pollTimer = window.setTimeout(pollUpdateJob, 250);
 }
 
+/** @param {string} message @param {boolean} success @param {boolean} requiresRestart */
 function finishUpdate(message, success, requiresRestart = false) {
   $("update-result").hidden = false;
   $("update-result").textContent = message;
-  $("update-now").hidden = true;
-  $("update-remind").hidden = true;
-  $("update-skip").hidden = true;
+  el("update-now", HTMLButtonElement).hidden = true;
+  el("update-remind", HTMLButtonElement).hidden = true;
+  el("update-skip", HTMLButtonElement).hidden = true;
   // Velopack stages an apply-and-restart: confirming OK hands over to
   // Update.exe and the window closes. pip/legacy end with a plain Close.
-  $("update-restart").hidden = !(success && requiresRestart);
-  $("update-close").hidden = success && requiresRestart;
+  el("update-restart", HTMLButtonElement).hidden = !(success && requiresRestart);
+  el("update-close", HTMLButtonElement).hidden = success && requiresRestart;
 }
 
 async function applyStagedUpdate() {
-  $("update-restart").disabled = true;
+  el("update-restart", HTMLButtonElement).disabled = true;
   const response = await api().apply_pending_update();
   if (!response.ok) {
-    $("update-restart").disabled = false;
+    el("update-restart", HTMLButtonElement).disabled = false;
     finishUpdate(errorText(response), false);
     return;
   }
@@ -854,21 +1068,23 @@ async function loadDevices(hostApi = "") {
     appendLog(errorText(response));
     return;
   }
-  const hostSelect = $("rf-host-api");
+  const hostSelect = el("rf-host-api", HTMLSelectElement);
   const previousHost = hostSelect.value;
-  hostSelect.replaceChildren(new Option("Auto", ""));
+  hostSelect.replaceChildren(new Option(t("option_device_auto"), ""));
+  $("rf-host-api-row").hidden = response.data.host_apis.length <= 1;
   response.data.host_apis.forEach((name) => hostSelect.add(new Option(name, name)));
   if ([...hostSelect.options].some((option) => option.value === previousHost)) {
     hostSelect.value = previousHost;
   }
   const devices = response.data.devices;
-  fillDevices($("rf-input-device"), devices.filter((item) => item.max_input_channels > 0));
-  fillDevices($("rf-output-device"), devices.filter((item) => item.max_output_channels > 0));
+  fillDevices(el("rf-input-device", HTMLSelectElement), devices.filter((item) => item.max_input_channels > 0));
+  fillDevices(el("rf-output-device", HTMLSelectElement), devices.filter((item) => item.max_output_channels > 0));
 }
 
+/** @param {HTMLSelectElement} select @param {AudioDevice[]} devices */
 function fillDevices(select, devices) {
   const previous = select.value;
-  select.replaceChildren(new Option("Default", ""));
+  select.replaceChildren(new Option(t("option_device_default"), ""));
   devices.forEach((device) => select.add(new Option(device.name, device.name)));
   if ([...select.options].some((option) => option.value === previous)) {
     select.value = previous;
@@ -887,6 +1103,7 @@ function gatherSweepPayload() {
      custom mode). */
   const mode = sweepSourceMode();
   if (mode === "file") return null;
+  /** @type {SweepRequest} */
   const sweep = {
     mode,
     speakers: val("rf-sweep-speakers"),
@@ -900,6 +1117,7 @@ function gatherSweepPayload() {
   return sweep;
 }
 
+/** @param {SweepRequest | null} sweep */
 function sweepDisplayName(sweep) {
   if (!sweep) return val("rf-play");
   const defaults = state.sweepDefaults || {};
@@ -918,8 +1136,9 @@ function updateSweepSourceVisibility() {
   $("rf-play-row").hidden = mode !== "file";
 }
 
+/** @param {string[]} layouts */
 function populateSweepLayouts(layouts) {
-  const select = $("rf-sweep-layout");
+  const select = el("rf-sweep-layout", HTMLSelectElement);
   const previous = select.value;
   select.replaceChildren();
   layouts.forEach((layout) => select.add(new Option(layout, layout)));
@@ -946,7 +1165,7 @@ async function refreshResolvedPath() {
 
 function updateChannelGuidance() {
   const node = $("rf-channel-guidance");
-  $("rf-channels").disabled = !checked("rf-force-channels");
+  el("rf-channels", HTMLInputElement).disabled = !checked("rf-force-channels");
   if (!checked("rf-force-channels")) {
     node.textContent = t("message_using_default_recording");
     return;
@@ -973,14 +1192,17 @@ function updateChannelGuidance() {
   }
 }
 
+/** @param {"speakers" | "headphones"} mode */
 function gatherRecordingPayload(mode) {
   const sweep = gatherSweepPayload();
+  /** @type {RecordingRequest} */
   const payload = {
     mode,
     record_dir: val("rf-record-dir"),
     input_device: val("rf-input-device") || null,
     output_device: val("rf-output-device") || null,
     host_api: val("rf-host-api") || null,
+    share_mode: selectedShareMode(),
   };
   if (sweep) {
     payload.sweep = sweep;
@@ -996,31 +1218,37 @@ function gatherRecordingPayload(mode) {
   return payload;
 }
 
+/** @param {RecordingRequest} payload */
+async function recordingConfirmationValues(payload) {
+  const response = await api().resolve_recording_paths(payload.record_dir, payload.play_path || null, payload.mode, payload.sweep || null);
+  return {
+    play_file: sweepDisplayName(payload.sweep || null),
+    record_file: response.ok ? response.data.record_path : payload.record_dir,
+    input_device: payload.input_device || t("option_device_default"),
+    output_device: payload.output_device || t("option_device_default"),
+    channels: payload.channels || 2,
+    share_mode: sharePreferenceLabel(payload.share_mode || "auto"),
+  };
+}
+
 async function startSpeakersRecording() {
   const payload = gatherRecordingPayload("speakers");
-  await refreshResolvedPath();
-  const setup = fmt(t("message_recording_setup_info"), {
-    play_file: sweepDisplayName(payload.sweep || null),
-    record_file: state.resolvedRecordPath || "—",
-    input_device: payload.input_device || "Default",
-    output_device: payload.output_device || "Default",
-    channels: payload.channels,
-    host_api: payload.host_api || "Auto",
-  });
+  const setup = fmt(t("message_recording_setup_info"), await recordingConfirmationValues(payload));
   if (!window.confirm(setup)) return;
-  await begin((request) => api().start_recording(request), payload);
+  await begin((request) => api().start_recording(request), payload, "recording");
 }
 
 async function startHeadphonesRecording() {
-  if (!window.confirm(t("message_record_headphones_confirm"))) return;
-  await begin((request) => api().start_recording(request), gatherRecordingPayload("headphones"));
+  const payload = gatherRecordingPayload("headphones");
+  if (!window.confirm(fmt(t("message_record_headphones_confirm"), await recordingConfirmationValues(payload)))) return;
+  await begin((request) => api().start_recording(request), payload, "recording");
 }
 
 async function generateSweepSet() {
   const dirResponse = await api().select_directory();
   const folder = dirResponse.ok ? dirResponse.data.path : null;
   if (!folder) return;
-  const button = $("btn-sweep-set");
+  const button = el("btn-sweep-set", HTMLButtonElement);
   button.disabled = true;
   try {
     const response = await api().generate_sweep_set(folder);
@@ -1030,7 +1258,7 @@ async function generateSweepSet() {
       return;
     }
     if (response.data.play_path) {
-      $("rf-play").value = response.data.play_path;
+      el("rf-play", HTMLInputElement).value = response.data.play_path;
       refreshResolvedPath();
     }
     window.alert(fmt(t("message_sweep_set_complete"), {
@@ -1064,7 +1292,7 @@ function updateTestSignalVisibility() {
 
 async function detectSweep() {
   const node = $("bf-detect-result");
-  const button = $("btn-detect-sweep");
+  const button = el("btn-detect-sweep", HTMLButtonElement);
   button.disabled = true;
   node.hidden = false;
   node.textContent = "…";
@@ -1093,14 +1321,15 @@ async function detectSweep() {
     });
     /* Pre-fill the manual fields so the user can switch to manual mode
        and tweak from the detected values. */
-    $("bf-ts-duration").value = data.duration_seconds.toFixed(2);
-    $("bf-ts-fs").value = data.fs;
+    el("bf-ts-duration", HTMLInputElement).value = data.duration_seconds.toFixed(2);
+    el("bf-ts-fs", HTMLInputElement).value = String(data.fs);
   } finally {
     button.disabled = false;
   }
 }
 
 function gatherBrirPayload() {
+  /** @type {ProcessingRequest} */
   const args = {
     dir_path: val("bf-dir-path"),
     test_signal: resolveTestSignalValue(),
@@ -1121,6 +1350,7 @@ function gatherBrirPayload() {
     if (headphoneFile) args.headphone_compensation_file = headphoneFile;
   }
   if (isOpen("dis-eq")) {
+    /** @type {[string, "eq_file" | "eq_left_file" | "eq_right_file"][]} */
     const eqFields = [["bf-eq-file", "eq_file"], ["bf-eq-left", "eq_left_file"], ["bf-eq-right", "eq_right_file"]];
     for (const [id, name] of eqFields) {
       const value = val(id);
@@ -1145,6 +1375,7 @@ function gatherBrirPayload() {
     if (tilt) args.tilt = tilt;
 
     if (checked("bf-decay-per-channel")) {
+      /** @type {Record<string, number>} */
       const decay = {};
       for (const channel of DECAY_CHANNELS) {
         const value = numOrNull(`bf-decay-${channel}`);
@@ -1177,13 +1408,15 @@ function gatherBrirPayload() {
 
 /* -------------------------------------------------------------- settings */
 
+/** @param {Language[]} languages */
 function populateLanguages(languages) {
-  const select = $("sf-language");
+  const select = el("sf-language", HTMLSelectElement);
   select.replaceChildren();
   languages.forEach(({ code, name }) => select.add(new Option(name, code)));
   select.value = state.language;
 }
 
+/** @param {string} code */
 async function changeLanguage(code) {
   const response = await api().set_language(code);
   if (!response.ok) {
@@ -1195,6 +1428,7 @@ async function changeLanguage(code) {
   applyStrings();
 }
 
+/** @param {string} code */
 async function changeTheme(code) {
   const response = await api().set_theme(code);
   if (!response.ok) {
@@ -1204,6 +1438,7 @@ async function changeTheme(code) {
   applyTheme(code);
 }
 
+/** @param {string} code */
 async function changeSkin(code) {
   const response = await api().set_skin(code);
   if (!response.ok) {
@@ -1219,23 +1454,40 @@ async function loadSystemInfo() {
   const response = await api().get_system_info();
   if (!response.ok) return;
   const info = response.data;
-  const gilKey = info.gil_enabled === true
-    ? "info_gil_enabled"
-    : info.gil_enabled === false ? "info_gil_disabled" : "info_gil_unknown";
-  const installKey = { velopack: "info_install_velopack", pip: "info_install_pip" }[info.install_kind]
-    || "info_install_dev";
-  $("info-version-pill").textContent =
-    `VERSION ${info.version} · PYTHON ${info.python_version} · ${t(installKey)}`;
+  state.systemInfo = info;
+  renderSystemInfo();
+}
+
+function renderSystemInfo() {
+  const info = state.systemInfo;
+  if (!info) return;
+  const installKey = info.install_kind === "velopack" ? "info_install_velopack"
+    : info.install_kind === "pip" ? "info_install_pip" : "info_install_dev";
+  $("info-version-pill").textContent = fmt(t("info_version_rust"), {
+    version: info.version, toolchain: info.runtime.toolchain,
+    install: info.install_kind === "dev" || info.install_kind === "pip" || info.install_kind === "velopack"
+      ? t(installKey) : info.install_kind,
+  });
+  /** @type {[string, string | number | null | undefined][]} */
   const rows = [
-    ["label_python", info.python_version],
+    ["label_runtime", info.runtime.toolchain],
+    ["label_shell", info.runtime.shell],
+    ["label_web_engine", info.runtime.webview],
+    ["label_audio_backend", info.runtime.audio_backend],
     ["label_os", info.os],
     ["label_cpu_cores", info.cpu_count],
-    ["label_gil_status", t(gilKey)],
-    ["label_optimal_workers", info.optimal_workers],
+    ["label_update_channel", info.update_channel ? t(`option_update_${info.update_channel}`) : null],
+    ["label_data_directory", info.paths.data_dir],
+    ["label_settings_file", info.paths.settings_path],
   ];
+  $("sf-data-path").textContent = info.paths.data_dir;
+  $("sf-settings-path").textContent = info.paths.settings_path;
+  $("sf-data-row").hidden = !info.paths.data_dir;
+  $("sf-settings-row").hidden = !info.paths.settings_path;
   const grid = $("info-system");
   grid.replaceChildren();
   for (const [key, value] of rows) {
+    if (value === null || value === undefined || value === "") continue;
     const keyNode = document.createElement("span");
     keyNode.className = "kv-key";
     keyNode.textContent = t(key);
@@ -1264,124 +1516,123 @@ function buildDecayGrid() {
 }
 
 function wireEvents() {
-  document.querySelectorAll(".nav-item").forEach((item) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".nav-item")).forEach((item) => {
     item.addEventListener("click", () => {
-      document.querySelectorAll(".nav-item").forEach((node) => node.classList.remove("active"));
-      document.querySelectorAll(".view").forEach((node) => node.classList.remove("active"));
+      /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".nav-item")).forEach((node) => node.classList.remove("active"));
+      /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".view")).forEach((node) => node.classList.remove("active"));
       item.classList.add("active");
       $(`view-${item.dataset.view}`).classList.add("active");
     });
   });
 
-  document.querySelectorAll("[data-disclosure]").forEach((head) => {
-    const toggle = () => head.parentElement.classList.toggle("open");
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-disclosure]")).forEach((head) => {
+    const toggle = () => head.parentElement?.classList.toggle("open");
     head.addEventListener("click", toggle);
-    head.querySelector(".switch").addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
+    head.querySelector(".switch")?.addEventListener("keydown", (event) => {
+      if (event instanceof KeyboardEvent && (event.key === "Enter" || event.key === " ")) {
         event.preventDefault();
         toggle();
       }
     });
   });
 
-  document.querySelectorAll("[data-browse]").forEach((button) => {
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-browse]")).forEach((button) => {
     button.addEventListener("click", async () => {
       const kind = button.dataset.browse;
       const response = kind === "dir"
         ? await api().select_directory()
         : await api().select_file(kind);
       if (response.ok && response.data.path) {
-        const target = $(button.dataset.target);
+        const target = el(button.dataset.target || "", HTMLInputElement);
         target.value = response.data.path;
         target.dispatchEvent(new Event("input"));
       }
     });
   });
 
-  document.querySelectorAll("[data-open-url]").forEach((button) => {
-    button.addEventListener("click", () => api().open_url(button.dataset.openUrl));
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-open-url]")).forEach((button) => {
+    button.addEventListener("click", () => api().open_url(button.dataset.openUrl || ""));
   });
 
-  $("btn-refresh-devices").addEventListener("click", () => loadDevices(val("rf-host-api")));
-  $("rf-host-api").addEventListener("change", (event) => loadDevices(event.target.value));
+  el("btn-refresh-devices", HTMLButtonElement).addEventListener("click", () => loadDevices(val("rf-host-api")));
+  el("rf-host-api", HTMLSelectElement).addEventListener("change", () => loadDevices(val("rf-host-api")));
 
-  $("rf-play").addEventListener("input", refreshResolvedPath);
-  $("rf-record-dir").addEventListener("input", refreshResolvedPath);
-  $("rf-sweep-source").addEventListener("change", () => {
+  el("rf-play", HTMLInputElement).addEventListener("input", refreshResolvedPath);
+  el("rf-record-dir", HTMLInputElement).addEventListener("input", refreshResolvedPath);
+  el("rf-sweep-source", HTMLSelectElement).addEventListener("change", () => {
     updateSweepSourceVisibility();
     refreshResolvedPath();
   });
-  $("rf-sweep-speakers").addEventListener("input", refreshResolvedPath);
-  $("rf-sweep-layout").addEventListener("change", refreshResolvedPath);
-  $("bf-test-signal-source").addEventListener("change", updateTestSignalVisibility);
-  $("btn-detect-sweep").addEventListener("click", detectSweep);
-  $("rf-force-channels").addEventListener("change", updateChannelGuidance);
-  $("rf-channels").addEventListener("input", updateChannelGuidance);
+  el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", refreshResolvedPath);
+  el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", refreshResolvedPath);
+  el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", updateTestSignalVisibility);
+  el("btn-detect-sweep", HTMLButtonElement).addEventListener("click", detectSweep);
+  el("rf-force-channels", HTMLInputElement).addEventListener("change", updateChannelGuidance);
+  el("rf-channels", HTMLInputElement).addEventListener("input", updateChannelGuidance);
 
-  $("btn-start-recording").addEventListener("click", startSpeakersRecording);
-  $("btn-record-headphones").addEventListener("click", startHeadphonesRecording);
-  $("btn-sweep-set").addEventListener("click", generateSweepSet);
+  el("btn-start-recording", HTMLButtonElement).addEventListener("click", startSpeakersRecording);
+  el("btn-record-headphones", HTMLButtonElement).addEventListener("click", startHeadphonesRecording);
+  el("btn-sweep-set", HTMLButtonElement).addEventListener("click", generateSweepSet);
 
-  $("bf-resample").addEventListener("change", () => {
-    $("bf-fs").disabled = !checked("bf-resample");
+  el("bf-resample", HTMLInputElement).addEventListener("change", () => {
+    el("bf-fs", HTMLSelectElement).disabled = !checked("bf-resample");
   });
-  $("bf-balance").addEventListener("change", () => {
-    $("bf-balance-db").disabled = val("bf-balance") !== "number";
+  el("bf-balance", HTMLSelectElement).addEventListener("change", () => {
+    el("bf-balance-db", HTMLInputElement).disabled = val("bf-balance") !== "number";
   });
-  $("bf-decay-per-channel").addEventListener("change", () => {
+  el("bf-decay-per-channel", HTMLInputElement).addEventListener("change", () => {
     const perChannel = checked("bf-decay-per-channel");
-    $("bf-decay").disabled = perChannel;
+    el("bf-decay", HTMLInputElement).disabled = perChannel;
     $("bf-decay-channels").hidden = !perChannel;
   });
-  $("bf-mic-deviation").addEventListener("change", () => {
+  el("bf-mic-deviation", HTMLInputElement).addEventListener("change", () => {
     const enabled = checked("bf-mic-deviation");
-    $("bf-mic-strength").disabled = !enabled;
-    $("bf-mic-debug").disabled = !enabled;
+    el("bf-mic-strength", HTMLInputElement).disabled = !enabled;
+    el("bf-mic-debug", HTMLInputElement).disabled = !enabled;
   });
 
-  $("btn-generate-brir").addEventListener("click", () =>
+  el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () =>
     begin((request) => api().start_brir(request), gatherBrirPayload()),
   );
-  $("btn-start-recovery").addEventListener("click", () =>
+  el("btn-start-recovery", HTMLButtonElement).addEventListener("click", () =>
     begin(
       (request) => api().start_output_recovery(request),
-      {
-        dir_path: val("recovery-dir-path"),
-        include_hangloose: checked("recovery-include-hangloose"),
-        remove_silent_channels: checked("recovery-remove-silent-channels"),
-      },
+      recoveryRequest(),
       "output_recovery",
     ),
   );
-  $("btn-cancel-brir").addEventListener("click", cancelActiveJob);
-  $("job-modal-cancel").addEventListener("click", cancelActiveJob);
-  $("job-modal-close").addEventListener("click", () => {
+  el("btn-cancel-brir", HTMLButtonElement).addEventListener("click", cancelActiveJob);
+  el("job-modal-cancel", HTMLButtonElement).addEventListener("click", cancelActiveJob);
+  el("job-modal-close", HTMLButtonElement).addEventListener("click", () => {
     state.modalDismissed = true;
     $("job-modal").hidden = true;
   });
-  $("btn-open-output").addEventListener("click", () => {
+  el("btn-open-output", HTMLButtonElement).addEventListener("click", () => {
     if (state.lastOutputDir) api().open_path(state.lastOutputDir);
   });
-  $("btn-open-recovery-output").addEventListener("click", () => {
+  el("btn-open-recovery-output", HTMLButtonElement).addEventListener("click", () => {
     if (state.lastRecoveryOutputDir) api().open_path(state.lastRecoveryOutputDir);
   });
 
-  $("btn-open-data").addEventListener("click", () => api().open_path());
-  $("sf-skin").addEventListener("change", (event) => changeSkin(event.target.value));
-  $("sf-theme").addEventListener("change", (event) => changeTheme(event.target.value));
-  $("sf-language").addEventListener("change", (event) => changeLanguage(event.target.value));
-  $("sf-frontend").addEventListener("change", async (event) => {
-    // Persisted for the next launch; the current session keeps running.
-    const response = await api().set_frontend(event.target.value);
-    if (!response.ok) appendLog(errorText(response));
+  el("btn-open-data", HTMLButtonElement).addEventListener("click", () => api().open_path(state.systemInfo?.paths.data_dir));
+  el("btn-open-settings", HTMLButtonElement).addEventListener("click", () => {
+    const path = state.systemInfo?.paths.settings_path;
+    if (path) api().open_path(parentFolder(path));
   });
+  for (const id of ["recovery-dir-path", "recovery-include-hangloose", "recovery-remove-silent-channels"]) {
+    $(id).addEventListener("input", scheduleRecoveryPlan);
+    $(id).addEventListener("change", scheduleRecoveryPlan);
+  }
+  el("sf-skin", HTMLSelectElement).addEventListener("change", () => changeSkin(val("sf-skin")));
+  el("sf-theme", HTMLSelectElement).addEventListener("change", () => changeTheme(val("sf-theme")));
+  el("sf-language", HTMLSelectElement).addEventListener("change", () => changeLanguage(val("sf-language")));
 
-  $("btn-check-updates").addEventListener("click", () => checkForUpdates(true));
-  $("update-now").addEventListener("click", beginUpdate);
-  $("update-remind").addEventListener("click", hideUpdateModal);
-  $("update-skip").addEventListener("click", hideUpdateModal);
-  $("update-close").addEventListener("click", hideUpdateModal);
-  $("update-restart").addEventListener("click", applyStagedUpdate);
+  el("btn-check-updates", HTMLButtonElement).addEventListener("click", () => checkForUpdates(true));
+  el("update-now", HTMLButtonElement).addEventListener("click", beginUpdate);
+  el("update-remind", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-skip", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-close", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-restart", HTMLButtonElement).addEventListener("click", applyStagedUpdate);
 }
 
 /* ------------------------------------------------------------------ boot */
@@ -1406,6 +1657,7 @@ async function boot() {
   const data = response.data;
   state.version = data.version;
   state.platform = data.platform;
+  state.shareModes = data.capabilities.share_modes;
   state.brirDefaults = data.brir_defaults || {};
   state.sweepDefaults = data.sweep || {};
   populateSweepLayouts(
@@ -1417,13 +1669,13 @@ async function boot() {
     state.strings = data.ui.strings || {};
     state.language = data.ui.language || "en";
     populateLanguages(data.ui.languages || []);
-    $("sf-theme").value = data.ui.theme || "dark";
+    el("sf-theme", HTMLSelectElement).value = data.ui.theme || "dark";
     applyTheme(data.ui.theme || "dark");
-    $("sf-skin").value = data.ui.skin === "stable" ? "stable" : "studio";
+    el("sf-skin", HTMLSelectElement).value = data.ui.skin === "stable" ? "stable" : "studio";
     applySkin(data.ui.skin);
-    $("sf-frontend").value = data.ui.frontend === "ctk" ? "ctk" : "webview";
   }
   applyStrings();
+  /** @type {Record<string, string>} */
   const backendLabels = { edgechromium: "WebView2", cocoa: "WKWebView", gtk: "WebKitGTK" };
   const backendLabel = backendLabels[data.webview_backend] || "WebView";
   $("brand-version").textContent = `v${data.version}`;
@@ -1452,6 +1704,7 @@ async function boot() {
 
   await Promise.all([loadDevices(), loadSystemInfo()]);
   refreshResolvedPath();
+  scheduleRecoveryPlan();
 
   // First run: ask for the language before anything else (CTk parity).
   if (data.ui && data.ui.first_run) {
@@ -1463,6 +1716,7 @@ async function boot() {
   window.setTimeout(() => checkForUpdates(false), 2000);
 }
 
+/** @param {Language[]} languages */
 function showFirstRunLanguageModal(languages) {
   const list = $("language-modal-list");
   list.replaceChildren();
@@ -1474,7 +1728,7 @@ function showFirstRunLanguageModal(languages) {
     button.addEventListener("click", async () => {
       // set_language persists the choice and marks language_selected.
       await changeLanguage(code);
-      $("sf-language").value = code;
+      el("sf-language", HTMLSelectElement).value = code;
       $("language-modal").hidden = true;
     });
     list.appendChild(button);

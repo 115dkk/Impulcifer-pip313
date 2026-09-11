@@ -35,7 +35,7 @@
           </button>
         </nav>
         <div class="sidebar-footer">
-          <span class="runtime mono" id="runtime-status" data-i18n="webview_bridge_connecting">Connecting to Python…</span>
+          <span class="runtime mono" id="runtime-status" data-i18n="webview_bridge_connecting">Connecting to service…</span>
         </div>
       </aside>
 
@@ -58,10 +58,15 @@
               <button class="btn-link" id="btn-refresh-devices" data-i18n="button_refresh_devices">Refresh devices</button>
             </div>
             <div class="card-body">
-              <div class="field-row">
+              <div class="field-row" id="rf-host-api-row">
                 <label for="rf-host-api" data-i18n="label_host_api">Host API:</label>
                 <select id="rf-host-api"><option value="">Auto</option></select>
               </div>
+              <div class="field-row">
+                <label for="rf-share-mode" data-i18n="label_share_mode">Device access:</label>
+                <select id="rf-share-mode" aria-describedby="rf-share-mode-hint" disabled><option value="auto" data-i18n="option_share_auto">Auto: exclusive, shared if refused</option></select>
+              </div>
+              <p class="hint" id="rf-share-mode-hint" data-i18n="tooltip_share_mode_fixed" hidden>Fixed modes are available only with WASAPI on Windows.</p>
               <div class="field-row">
                 <label for="rf-output-device" data-i18n="label_playback_device">Playback Device:</label>
                 <select id="rf-output-device"><option value="">Default</option></select>
@@ -483,7 +488,7 @@
               <h1 data-i18n="studio_recovery_title">Output Recovery</h1>
               <p class="subtitle" data-i18n="studio_recovery_subtitle">Rebuild missing output files using only the results you already have.</p>
             </div>
-            <button class="btn btn-primary" id="btn-start-recovery" data-start data-i18n="recovery_action">Restore outputs</button>
+            <button class="btn btn-primary" id="btn-start-recovery" data-start data-i18n="recovery_action" disabled>Restore outputs</button>
           </header>
 
           <div class="card">
@@ -494,8 +499,17 @@
             <div class="card-body">
               <div class="field-row">
                 <label for="recovery-dir-path" data-i18n="recovery_source_label">Output folder:</label>
-                <input id="recovery-dir-path" class="mono" value="data/my_hrir" spellcheck="false">
+                <input id="recovery-dir-path" class="mono" value="" spellcheck="false">
                 <button class="btn-link" data-browse="dir" data-target="recovery-dir-path" data-i18n="button_browse">Browse</button>
+              </div>
+              <div id="recovery-inventory" data-state="empty" aria-live="polite">
+                <p class="hint" id="recovery-inventory-message" data-i18n="recovery_inventory_empty"></p>
+                <div class="inline-group" id="recovery-inventory-source" hidden>
+                  <span class="chip" id="recovery-source-badge"></span>
+                  <span class="hint mono" id="recovery-source-audio"></span>
+                </div>
+                <div class="chips" id="recovery-speakers" hidden></div>
+                <div id="recovery-ledger" role="list" hidden></div>
               </div>
               <p class="hint" data-i18n="recovery_source_hint">Select the output folder, its Hangloose folder, or a folder containing split speaker WAVs.</p>
             </div>
@@ -557,7 +571,7 @@
           <div class="card">
             <div class="card-head">
               <span class="card-num mono">UI</span>
-              <span class="card-title" data-i18n="studio_card_appearance">Appearance</span>
+              <span class="card-title" data-i18n="section_ui_appearance">UI Appearance</span>
             </div>
             <div class="card-body">
               <div class="field-row">
@@ -580,26 +594,25 @@
                 <label for="sf-language" data-i18n="label_select_language">Select Language:</label>
                 <select id="sf-language"></select>
               </div>
-              <div class="field-row">
-                <label for="sf-frontend" data-i18n="label_frontend">Default Interface:</label>
-                <select id="sf-frontend">
-                  <option value="webview" data-i18n="option_frontend_webview">WebView (recommended)</option>
-                  <option value="ctk" data-i18n="option_frontend_ctk">CustomTkinter (legacy)</option>
-                </select>
-              </div>
-              <p class="hint" data-i18n="tooltip_frontend">Which interface opens when the app starts. Takes effect on the next launch.</p>
             </div>
           </div>
 
           <div class="card">
             <div class="card-head">
               <span class="card-num mono">dir</span>
-              <span class="card-title" data-i18n="section_data_access">Data Access</span>
+              <span class="card-title" data-i18n="section_folders">Folders</span>
             </div>
             <div class="card-body">
               <p class="hint" data-i18n="label_data_folder_description">Access reference files, test signals, and recordings</p>
-              <div class="actions-row">
+              <div class="field-row" id="sf-data-row" hidden>
+                <span data-i18n="label_data_directory">Data folder</span>
+                <span class="mono folder-path" id="sf-data-path"></span>
                 <button class="btn btn-secondary" id="btn-open-data" data-i18n="button_open_data_folder">Open Data Folder</button>
+              </div>
+              <div class="field-row" id="sf-settings-row" hidden>
+                <span data-i18n="label_settings_file">Settings file</span>
+                <span class="mono folder-path" id="sf-settings-path"></span>
+                <button class="btn btn-secondary" id="btn-open-settings" data-i18n="button_open_settings_folder">Open settings folder</button>
               </div>
             </div>
           </div>
@@ -623,7 +636,7 @@
               <img class="about-logo" src="logo/pulse-128.png" alt="" onerror="this.style.display='none'">
               <div>
                 <h2 class="about-title">Impulcifer</h2>
-                <p class="version-pill mono" id="info-version-pill">VERSION — · PYTHON —</p>
+                <p class="version-pill mono" id="info-version-pill">VERSION — · RUST —</p>
                 <p class="hint" data-i18n="app_subtitle"></p>
               </div>
               <div class="actions-row">
@@ -653,7 +666,7 @@
             <div class="card-body">
               <div class="kv-grid">
                 <span class="kv-key">Jaakko Pasanen</span><span class="kv-val" data-i18n="contributor_role_original">Original author</span>
-                <span class="kv-key">115dkk</span><span class="kv-val" data-i18n="contributor_role_py313">Python 3.13+ fork</span>
+                <span class="kv-key">115dkk</span><span class="kv-val" data-i18n="contributor_role_py313">2.x Python port and 3.x Rust rewrite</span>
                 <span class="kv-key">LionLion123</span><span class="kv-val" data-i18n="contributor_role_contributor">Contributor</span>
                 <span class="kv-key">SDC (DCinside)</span><span class="kv-val" data-i18n="contributor_role_contributor">Contributor</span>
               </div>
@@ -668,7 +681,7 @@
             <div class="card-body">
               <div class="actions-row">
                 <button class="btn btn-secondary" data-open-url="original_repo" data-i18n="button_original_repo">Original Repository</button>
-                <button class="btn btn-secondary" data-open-url="fork_repo" data-i18n="button_fork_repo">Python 3.13+ Fork</button>
+                <button class="btn btn-secondary" data-open-url="fork_repo" data-i18n="button_fork_repo">This fork</button>
               </div>
             </div>
           </div>

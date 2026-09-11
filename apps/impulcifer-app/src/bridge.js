@@ -12,14 +12,15 @@
     console.error("impulcifer bridge: Tauri invoke is unavailable (withGlobalTauri must be true)");
     return;
   }
-  const api = new Proxy({}, {
+  // The proxy implements every named IPC method with the same transport.
+  const api = /** @type {IpcApi} */ (new Proxy({}, {
     get(_target, name) {
       if (typeof name !== "string") {
         return undefined;
       }
-      return (...args) => invoke("pywebview_api", { method: name, args });
+      return (/** @type {unknown[]} */ ...args) => invoke("pywebview_api", { method: name, args });
     },
-  });
+  }));
   window.pywebview = { api };
   const fire = () => window.dispatchEvent(new Event("pywebviewready"));
   if (document.readyState === "loading") {

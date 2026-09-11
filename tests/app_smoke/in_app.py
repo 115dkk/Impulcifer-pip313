@@ -8,7 +8,7 @@ import tempfile
 import time
 import traceback
 
-from smoke import ROOT, INPUTS, Smoke, frozen_hashes, real_update_check, wav_info, write_json
+from smoke import ROOT, INPUTS, Smoke, frozen_hashes, load_catalog, real_update_check, wav_info, write_json
 from win32_capture import capture, accept_confirmation
 
 
@@ -90,6 +90,7 @@ class InAppSmoke(Smoke):
                 assert [p.name for p in self.recovery.iterdir()] == ["hesuvi.wav"]
                 result["verified"] = outputs
             elif name == "recovery":
+                assert record["details"]["ledger_hrir"] == "created"
                 info = wav_info(self.recovery / "hrir.wav")
                 assert info["channels"] == 16, info
                 assert (self.demo / "hesuvi.wav").read_bytes() == (self.recovery / "hesuvi.wav").read_bytes()
@@ -98,7 +99,7 @@ class InAppSmoke(Smoke):
             elif name in ("settings-ko", "settings-en"):
                 code = name.removeprefix("settings-")
                 persisted = json.loads((self.home / ".impulcifer/settings.json").read_text(encoding="utf-8"))
-                expected = json.loads((ROOT / f"i18n/locales/{code}.json").read_text(encoding="utf-8"))["label_select_language"]
+                expected = load_catalog(code)["label_select_language"]
                 assert persisted["language"] == code and record["label"] == expected, (persisted, record)
                 write_json(self.output / f"settings-{code}.json", persisted)
                 result["verified"] = {"persisted": code, "label": expected}
@@ -175,7 +176,7 @@ class InAppSmoke(Smoke):
         params = {"demo": str(self.demo), "recovery": str(self.recovery),
                   "recording": str(self.recording), "hardware": self.hardware,
                   "en": self.en,
-                  "labels": {code: json.loads((ROOT / f"i18n/locales/{code}.json").read_text(encoding="utf-8"))["label_select_language"] for code in ("ko", "en")}}
+                  "labels": {code: load_catalog(code)["label_select_language"] for code in ("ko", "en")}}
         param_file = self.output / "params.json"
         write_json(param_file, params)
         env = os.environ.copy()
@@ -234,7 +235,7 @@ class InAppSmoke(Smoke):
         self.demo = self.home / "demo"
         self.recovery = self.home / "recovery"
         self.recording = self.home / "recording"
-        self.en = json.loads((ROOT / "i18n/locales/en.json").read_text(encoding="utf-8"))
+        self.en = load_catalog("en")
         self.summary.update(mode="in-app", checkpoints=[], native_confirmations=[])
         write_json(self.output / "frozen-before.json", self.before)
         try:

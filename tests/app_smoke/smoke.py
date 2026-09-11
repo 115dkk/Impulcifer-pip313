@@ -48,9 +48,17 @@ def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def load_catalog(code):
+    merged = {}
+    for directory in ("i18n/locales", "crates/impulcifer-service/locales"):
+        for language in ("en", code):
+            merged.update(json.loads((ROOT / directory / f"{language}.json").read_text(encoding="utf-8")))
+    return merged
+
+
 def frozen_hashes():
     return {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for name in ("webview_ui", "i18n")
+            for name in ("apps/impulcifer-app/ui", "i18n", "crates/impulcifer-service/locales")
             for p in sorted((ROOT / name).rglob("*")) if p.is_file()}
 
 
@@ -253,6 +261,7 @@ class Smoke:
         self.collect()
         boots = [e for e in self.events if e["kind"] == "ipc-response" and e["method"] == "bootstrap"]
         assert len(boots) == 1 and boots[0]["response"]["ok"], "bootstrap must succeed once"
+        assert "auto" in self.page.locator("#rf-share-mode option").evaluate_all("nodes => nodes.map(n => n.value)")
         self.ready = True
         return {"runtime": self.page.locator("#runtime-status").inner_text(),
                 "bootstrap_observed": True, "reloads": 0}
@@ -317,11 +326,13 @@ class Smoke:
         assert [p.name for p in target.iterdir()] == ["hesuvi.wav"]
         self.navigate("recovery")
         self.page.locator("#recovery-dir-path").fill(str(target))
+        self.page.wait_for_function("!document.querySelector('#btn-start-recovery').disabled")
         self.page.locator("#btn-start-recovery").click()
         self.page.wait_for_function("""() => ['succeeded','failed','cancelled'].includes(
             document.querySelector('.recovery-result').dataset.status)""", timeout=120000)
         title = self.page.locator("#recovery-status-title").inner_text()
         assert title == self.en["webview_status_succeeded"], self.page.locator("#recovery-status-detail").inner_text()
+        assert self.page.locator('#recovery-ledger [data-file="hrir.wav"]').get_attribute("data-status") == "created"
         assert (target / "hrir.wav").is_file(), "recovery did not write hrir.wav"
         assert source.read_bytes() == (target / "hesuvi.wav").read_bytes(), "recovery modified source"
         info = wav_info(target / "hrir.wav")
@@ -330,7 +341,7 @@ class Smoke:
 
     def language(self, code):
         self.page.locator("#sf-language").select_option(code)
-        expected = json.loads((ROOT / "i18n" / "locales" / f"{code}.json").read_text(encoding="utf-8"))["label_select_language"]
+        expected = load_catalog(code)["label_select_language"]
         self.page.wait_for_function("""expected => document.querySelector(
             'label[for="sf-language"]').textContent === expected""", arg=expected)
         settings = json.loads((self.home / ".impulcifer" / "settings.json").read_text(encoding="utf-8"))
@@ -416,7 +427,7 @@ class Smoke:
         self.temp = tempfile.TemporaryDirectory(prefix="impulcifer-p15-")
         self.home = Path(self.temp.name)
         self.demo = self.home / "demo"
-        self.en = json.loads((ROOT / "i18n/locales/en.json").read_text(encoding="utf-8"))
+        self.en = load_catalog("en")
         write_json(self.output / "frozen-before.json", self.before)
         try:
             with (self.output / "app.log").open("wb") as self.app_log:
