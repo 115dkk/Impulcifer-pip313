@@ -1,3 +1,4 @@
+// @ts-check
 // Enabled only by the local smoke harness, before the bridge and page scripts.
 // Observe real calls and errors; never replace an envelope or consume a rejection.
 (function () {

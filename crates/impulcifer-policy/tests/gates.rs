@@ -555,3 +555,104 @@ fn implemented_features_have_existing_tests() {
         failures.join("\n")
     );
 }
+
+/// The scripts of the 3.x app (page, initialization scripts, smoke driver).
+/// Vanilla JS stays vanilla, but every file opts into `tsc --checkJs` and the
+/// app's `tsconfig.json` covers it, so the `js` job of rust.yml type-checks all
+/// of it (JSDoc annotations, typed IPC surface in `ui/ipc.d.ts`).
+fn app_scripts() -> Vec<PathBuf> {
+    let root = repo_root();
+    let mut files = Vec::new();
+    for dir in ["apps/impulcifer-app/ui", "apps/impulcifer-app/src"] {
+        for entry in fs::read_dir(root.join(dir)).unwrap().flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "js") {
+                files.push(path);
+            }
+        }
+    }
+    files.push(root.join("tests/app_smoke/driver.js"));
+    files.sort();
+    files
+}
+
+#[test]
+fn app_scripts_opt_into_type_checking() {
+    let root = repo_root();
+    let app = root.join("apps/impulcifer-app");
+    let config: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(app.join("tsconfig.json")).unwrap()).unwrap();
+    assert_eq!(config["compilerOptions"]["checkJs"], true);
+    assert_eq!(config["compilerOptions"]["allowJs"], true);
+    assert_eq!(config["compilerOptions"]["noEmit"], true);
+    assert_eq!(config["compilerOptions"]["strict"], true);
+    let includes: Vec<String> = config["include"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap().to_owned())
+        .collect();
+    let package: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(app.join("package.json")).unwrap()).unwrap();
+    assert!(
+        package["devDependencies"]["typescript"].is_string(),
+        "package.json pins typescript"
+    );
+    assert!(
+        package["scripts"]["typecheck"]
+            .as_str()
+            .unwrap()
+            .contains("tsc"),
+        "package.json has a typecheck script"
+    );
+    assert!(
+        app.join("package-lock.json").is_file(),
+        "package-lock.json must be committed so npm ci is reproducible"
+    );
+    let mut failures = Vec::new();
+    let scripts = app_scripts();
+    assert!(
+        scripts.len() >= 4,
+        "expected the page, two init scripts and the driver"
+    );
+    for path in &scripts {
+        let src = fs::read_to_string(path).unwrap();
+        let relative = path
+            .strip_prefix(&root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
+        if !src
+            .lines()
+            .take(3)
+            .any(|line| line.trim() == "// @ts-check")
+        {
+            failures.push(format!(
+                "{relative}: missing // @ts-check in the first three lines"
+            ));
+        }
+        // Include patterns are `<dir>/*.js` relative to apps/impulcifer-app, or the
+        // explicit driver path; match on the directory and extension.
+        let from_app = path
+            .strip_prefix(&app)
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| "../../tests/app_smoke/driver.js".to_owned());
+        let covered = includes.iter().any(|pattern| {
+            if let Some(dir) = pattern.strip_suffix("/*.js") {
+                from_app.strip_prefix(dir).is_some_and(|rest| {
+                    rest.starts_with('/') && rest.ends_with(".js") && !rest[1..].contains('/')
+                })
+            } else {
+                pattern == &from_app
+            }
+        });
+        if !covered {
+            failures.push(format!("{relative}: not covered by tsconfig.json include"));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "type-check policy violations:\n{}",
+        failures.join("\n")
+    );
+}

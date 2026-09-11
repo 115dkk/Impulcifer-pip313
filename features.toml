@@ -25,6 +25,27 @@ tests = ["impulcifer-policy::no_shell_subprocesses", "impulcifer-policy::subproc
 note = "Command::new( in a file that reaches std::process is allowed only in crates/impulcifer-io/src/ffmpeg.rs; the service uses chrono, sys-locale and (Windows only) os_info instead of powershell/cmd/date/uname/locale"
 
 [[feature]]
+id = "policy.js_type_check"
+kind = "policy"
+status = "implemented"
+tests = ["impulcifer-policy::app_scripts_opt_into_type_checking"]
+note = "every 3.x script (apps/impulcifer-app/ui, src, tests/app_smoke/driver.js) carries // @ts-check and is covered by apps/impulcifer-app/tsconfig.json; the js job of rust.yml runs tsc --checkJs with the pinned TypeScript and the node contract tests (ADR 0003)"
+
+[[feature]]
+id = "app.no_console_window"
+kind = "app"
+status = "implemented"
+tests = ["impulcifer-app::release_builds_hide_the_console_window"]
+note = "release builds declare windows_subsystem = \"windows\"; release-3x.yml asserts the PE subsystem of the packed exe is WINDOWS_GUI, so no terminal accompanies the app and closing one cannot kill it"
+
+[[feature]]
+id = "i18n.overlay_catalogue"
+kind = "i18n"
+status = "implemented"
+tests = ["impulcifer-service::overlay_catalogues_share_one_key_set_and_placeholders", "impulcifer-service::overlay_keys_win_over_the_2x_catalogue", "impulcifer-service::ui_keys_resolve_in_every_language", "impulcifer-service::ui_scripts_and_markup_are_present_in_the_app_crate"]
+note = "3.x strings live in crates/impulcifer-service/locales/<lang>.json, merged over the untouched 2.x i18n/locales; nine files share one key set and placeholder sets, and every key the 3.x page asks for resolves in every language (ADR 0003)"
+
+[[feature]]
 id = "ipc.bootstrap"
 kind = "ipc"
 status = "implemented"

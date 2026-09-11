@@ -1,3 +1,4 @@
+// @ts-check
 // Opt-in initialization script. Drive the frozen DOM, never replace service calls.
 (function () {
   const params = window.__impulciferSmokeParams;

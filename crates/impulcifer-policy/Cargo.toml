@@ -14,3 +14,4 @@ workspace = true
 [dev-dependencies]
 toml.workspace = true
 serde = { workspace = true }
+serde_json.workspace = true

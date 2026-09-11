@@ -4,7 +4,7 @@
   "identifier": "dev.impulcifer.app",
   "version": "3.0.0-alpha.0",
   "build": {
-    "frontendDist": "../../webview_ui"
+    "frontendDist": "ui"
   },
   "app": {
     "withGlobalTauri": true,

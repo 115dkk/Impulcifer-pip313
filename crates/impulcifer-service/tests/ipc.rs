@@ -359,17 +359,24 @@ fn ipc_set_language_shape() {
         .unwrap();
         let mut expected = english.as_object().unwrap().clone();
         expected.extend(translated.as_object().unwrap().clone());
-        // The catalogue equals en + <language>, plus the 3.x-only overlay keys
-        // the service adds itself (settings.rs EXTRA_STRINGS).
+        // The catalogue equals en + <language>, plus the 3.x overlay
+        // (crates/impulcifer-service/locales) which wins where it overlaps.
+        let overlay: serde_json::Map<String, Value> =
+            serde_json::from_str(impulcifer_service::settings::overlay_3x(code)).unwrap();
         let strings = out["strings"].as_object().unwrap();
         for (key, value) in &expected {
+            if !overlay.contains_key(key) {
+                assert_eq!(strings.get(key), Some(value), "{key}");
+            }
+        }
+        for (key, value) in &overlay {
             assert_eq!(strings.get(key), Some(value), "{key}");
         }
         let extra: Vec<&String> = strings
             .keys()
-            .filter(|key| !expected.contains_key(*key))
+            .filter(|key| !expected.contains_key(*key) && !overlay.contains_key(*key))
             .collect();
-        assert_eq!(extra, vec!["cli_plots_not_available_yet"]);
+        assert!(extra.is_empty(), "{extra:?}");
     }
     assert_eq!(f.saved()["language_selected"], true);
     let error = failure(

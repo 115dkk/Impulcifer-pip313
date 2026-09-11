@@ -2277,6 +2277,7 @@ name = "impulcifer-policy"
 version = "3.0.0-alpha.0"
 dependencies = [
  "serde",
+ "serde_json",
  "toml 0.8.2",
 ]
 

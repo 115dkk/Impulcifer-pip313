@@ -193,8 +193,9 @@ pub fn saved_language(path: &Path) -> String {
         .unwrap_or_else(|| "en".into())
 }
 
-/// The merged catalogue for a language: the English base, the locale overlay,
-/// then the 3.x-only keys of `EXTRA_STRINGS`. Read-only.
+/// The merged catalogue for a language: the 2.x English base, the 2.x locale,
+/// then the 3.x overlay (`locales/en.json`, then `locales/<language>.json`).
+/// Read-only.
 pub fn catalog(language: &str) -> crate::brir::Catalog {
     crate::brir::Catalog::from_strings(strings(language))
 }
@@ -214,8 +215,21 @@ fn strings(language: &str) -> Map<String, Value> {
 }
 
 fn parse_strings(language: &str) -> Map<String, Value> {
-    let english = include_str!("../../../i18n/locales/en.json");
-    let selected = match language {
+    let mut merged: Map<String, Value> =
+        serde_json::from_str(catalogue_2x("en")).unwrap_or_default();
+    merged.extend(
+        serde_json::from_str::<Map<String, Value>>(catalogue_2x(language)).unwrap_or_default(),
+    );
+    merged.extend(serde_json::from_str::<Map<String, Value>>(overlay_3x("en")).unwrap_or_default());
+    merged.extend(
+        serde_json::from_str::<Map<String, Value>>(overlay_3x(language)).unwrap_or_default(),
+    );
+    merged
+}
+
+/// The shared 2.x catalogue (`i18n/locales`). Never edited for 3.x work.
+fn catalogue_2x(language: &str) -> &'static str {
+    match language {
         "ko" => include_str!("../../../i18n/locales/ko.json"),
         "fr" => include_str!("../../../i18n/locales/fr.json"),
         "de" => include_str!("../../../i18n/locales/de.json"),
@@ -224,30 +238,88 @@ fn parse_strings(language: &str) -> Map<String, Value> {
         "zh_CN" => include_str!("../../../i18n/locales/zh_CN.json"),
         "zh_TW" => include_str!("../../../i18n/locales/zh_TW.json"),
         "ru" => include_str!("../../../i18n/locales/ru.json"),
-        _ => english,
-    };
-    let mut merged: Map<String, Value> = serde_json::from_str(english).unwrap_or_default();
-    merged.extend(serde_json::from_str::<Map<String, Value>>(selected).unwrap_or_default());
-    for (key, en, ko) in EXTRA_STRINGS {
-        merged
-            .entry((*key).to_owned())
-            .or_insert_with(|| Value::String((if language == "ko" { ko } else { en }).to_string()));
+        _ => include_str!("../../../i18n/locales/en.json"),
     }
-    merged
 }
 
-/// Keys that only the 3.x service emits. They live here instead of
-/// `i18n/locales/*.json` so the shared 2.x catalogue (and its release gate)
-/// stay untouched; a catalogue entry with the same key wins if one appears.
-const EXTRA_STRINGS: &[(&str, &str, &str)] = &[(
-    "cli_plots_not_available_yet",
-    "Plots are not available in this version yet; the plot stages were skipped.",
-    "이 버전에서는 아직 플롯을 만들지 않습니다. 플롯 단계를 건너뛰었습니다.",
-)];
+/// The 3.x overlay (`crates/impulcifer-service/locales`): keys that only the
+/// 3.x service and app emit, and 3.x rewordings of 2.x keys. A key present here
+/// wins over the 2.x catalogue; every overlay file carries the same key set
+/// (`overlay_catalogues_share_one_key_set_and_placeholders`).
+pub fn overlay_3x(language: &str) -> &'static str {
+    match language {
+        "ko" => include_str!("../locales/ko.json"),
+        "fr" => include_str!("../locales/fr.json"),
+        "de" => include_str!("../locales/de.json"),
+        "es" => include_str!("../locales/es.json"),
+        "ja" => include_str!("../locales/ja.json"),
+        "zh_CN" => include_str!("../locales/zh_CN.json"),
+        "zh_TW" => include_str!("../locales/zh_TW.json"),
+        "ru" => include_str!("../locales/ru.json"),
+        _ => include_str!("../locales/en.json"),
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn placeholders(text: &str) -> std::collections::BTreeSet<String> {
+        let mut out = std::collections::BTreeSet::new();
+        let mut rest = text;
+        while let Some(start) = rest.find('{') {
+            let Some(len) = rest[start + 1..].find('}') else {
+                break;
+            };
+            let name = &rest[start + 1..start + 1 + len];
+            if !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+                out.insert(name.to_owned());
+            }
+            rest = &rest[start + 1 + len + 1..];
+        }
+        out
+    }
+
+    #[test]
+    fn overlay_catalogues_share_one_key_set_and_placeholders() {
+        let english: Map<String, Value> = serde_json::from_str(overlay_3x("en")).unwrap();
+        assert!(!english.is_empty(), "the 3.x overlay must not be empty");
+        for (language, _) in LANGUAGES {
+            let overlay: Map<String, Value> = serde_json::from_str(overlay_3x(language))
+                .unwrap_or_else(|e| panic!("locales/{language}.json: {e}"));
+            let mut expected: Vec<_> = english.keys().collect();
+            let mut actual: Vec<_> = overlay.keys().collect();
+            expected.sort();
+            actual.sort();
+            assert_eq!(actual, expected, "locales/{language}.json key set");
+            for (key, value) in &overlay {
+                let text = value
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{language}:{key} is not a string"));
+                assert!(!text.trim().is_empty(), "{language}:{key} is empty");
+                assert_eq!(
+                    placeholders(text),
+                    placeholders(english[key].as_str().unwrap()),
+                    "{language}:{key} placeholders"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn overlay_keys_win_over_the_2x_catalogue() {
+        let base: Map<String, Value> = serde_json::from_str(catalogue_2x("ko")).unwrap();
+        let overlay: Map<String, Value> = serde_json::from_str(overlay_3x("ko")).unwrap();
+        let merged = strings("ko");
+        for (key, value) in &overlay {
+            assert_eq!(merged.get(key), Some(value), "{key}");
+        }
+        for (key, value) in &base {
+            if !overlay.contains_key(key) {
+                assert_eq!(merged.get(key), Some(value), "{key}");
+            }
+        }
+    }
 
     #[test]
     fn cached_catalogues_match_parsing_and_are_independent() {

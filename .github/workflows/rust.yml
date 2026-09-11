@@ -1,6 +1,7 @@
 name: Rust
 
-# 3.x Rust workspace gates (ADR 0002). Runs only when Rust-side files change.
+# 3.x Rust workspace gates (ADR 0002, ADR 0003). Runs only when 3.x files change
+# (the app UI lives in apps/impulcifer-app/ui since ADR 0003).
 # The policy tests in crates/impulcifer-policy enforce #![forbid(unsafe_code)]
 # on every crate root, the unsafe budget, and the features.toml registry.
 
@@ -15,7 +16,6 @@ on:
       - "unsafe-budget.toml"
       - "crates/**"
       - "apps/**"
-      - "webview_ui/**"
       - ".github/workflows/rust.yml"
   pull_request:
     branches: [ master ]
@@ -27,7 +27,6 @@ on:
       - "unsafe-budget.toml"
       - "crates/**"
       - "apps/**"
-      - "webview_ui/**"
       - ".github/workflows/rust.yml"
   workflow_dispatch:
 
@@ -74,6 +73,31 @@ jobs:
 
       - name: Policy gates (forbid unsafe, unsafe budget, feature registry)
         run: cargo test -p impulcifer-policy -- --nocapture
+
+  js:
+    name: JS type check + contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/impulcifer-app/package-lock.json
+
+      - name: Install the pinned TypeScript
+        working-directory: apps/impulcifer-app
+        run: npm ci --no-audit --no-fund
+
+      - name: tsc --checkJs (apps/impulcifer-app/tsconfig.json)
+        working-directory: apps/impulcifer-app
+        run: npm run typecheck
+
+      - name: Bridge, observer and driver contracts
+        working-directory: apps/impulcifer-app
+        run: npm run test:contracts
 
   test:
     name: cargo test (${{ matrix.os }})

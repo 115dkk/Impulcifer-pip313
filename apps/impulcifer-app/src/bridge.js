@@ -1,4 +1,5 @@
-// Injected as a Tauri initialization script before webview_ui/app.js runs.
+// @ts-check
+// Injected as a Tauri initialization script before ui/app.js runs.
 // It recreates the pywebview contract so the 2.x frontend stays untouched:
 //   window.pywebview.api.<method>(...positionalArgs) -> Promise<envelope>
 //   window.dispatchEvent(new Event("pywebviewready")) once the DOM is ready.
