@@ -261,12 +261,19 @@ fn run(
     );
     request.share = v.share;
     drop(tracks);
-    let result = std::thread::scope(|scope| {
+    let (result, streams_open) = std::thread::scope(|scope| {
         let (tx, rx) = mpsc::channel();
         let timer = scope.spawn(|| monitor(rx, ctx, duration, &segments));
+        // OutputStarted follows the input ready acknowledgement and the output
+        // open, so once it arrives both streams are open and a later failure is
+        // an ordinary device error, never a share-mode refusal.
+        let mut streams_open = false;
         let result = play_and_record(backend, request, &ctx.cancel, &mut |event| {
             let message = match event {
-                SessionEvent::OutputStarted { .. } => Some(Clock::Start),
+                SessionEvent::OutputStarted { .. } => {
+                    streams_open = true;
+                    Some(Clock::Start)
+                }
                 SessionEvent::Progress { frames_played, .. } => {
                     Some(Clock::Position(frames_played as f64 / fs as f64))
                 }
@@ -278,11 +285,11 @@ fn run(
         });
         let _ = tx.send(Clock::Stop);
         timer.join().expect("recording progress timer");
-        result
+        (result, streams_open)
     });
     let captured = result.map_err(|e| {
         let reason = e.to_string();
-        let error = if v.share.fixed_mode().is_some() {
+        let error = if v.share.fixed_mode().is_some() && !streams_open {
             RecordingError {
                 code: ErrorCode::DeviceError,
                 message: format!(

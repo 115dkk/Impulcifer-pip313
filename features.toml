@@ -1161,8 +1161,8 @@ tests = ["impulcifer-service::recording_generated_headphones_have_no_sidecar_and
 id = "recording.share_mode"
 kind = "recording"
 status = "implemented"
-tests = ["impulcifer-audio-io::fixed_share_preference_never_falls_back", "impulcifer-audio-io::session_request_carries_the_share_preference", "impulcifer-service::share_mode_request_validation", "impulcifer-service::share_mode_unavailable_on_backends_without_selection", "impulcifer-service::fixed_share_mode_refusal_reports_the_mode", "impulcifer-service::bootstrap_lists_selectable_share_modes", "impulcifer-sys-win::wasapi_offers_both_share_modes"]
-note = "auto keeps the exclusive-then-shared policy; exclusive/shared never fall back and a refusal is reported as share_mode_refused; backends without selectable modes (cpal) reject a fixed choice as share_mode_unavailable"
+tests = ["impulcifer-audio-io::fixed_share_preference_never_falls_back", "impulcifer-audio-io::session_request_carries_the_share_preference", "impulcifer-service::share_mode_request_validation", "impulcifer-service::share_mode_unavailable_on_backends_without_selection", "impulcifer-service::fixed_share_mode_refusal_reports_the_mode", "impulcifer-service::fixed_share_mode_keeps_post_open_failures_as_device_errors", "impulcifer-service::bootstrap_lists_selectable_share_modes", "impulcifer-sys-win::wasapi_offers_both_share_modes"]
+note = "auto keeps the exclusive-then-shared policy; exclusive/shared never fall back and an open-time refusal is reported as share_mode_refused (failures after both streams opened stay ordinary device errors); backends without selectable modes (cpal) reject a fixed choice as share_mode_unavailable"
 
 [[feature]]
 id = "recording.hardware"

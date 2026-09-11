@@ -282,6 +282,8 @@ struct FakeBackend {
     shared: Arc<Mutex<Shared>>,
     fail: bool,
     fallback: bool,
+    /// Capture fails once playback has started (both streams already open).
+    fail_read: bool,
     delay: Duration,
 }
 impl AudioBackend for FakeBackend {
@@ -354,6 +356,7 @@ impl AudioBackend for FakeBackend {
             shared: self.shared.clone(),
             channels: spec.channels,
             cursor: 0,
+            fail_read: self.fail_read,
         }))
     }
 }
@@ -385,6 +388,7 @@ struct FakeInput {
     shared: Arc<Mutex<Shared>>,
     channels: u16,
     cursor: usize,
+    fail_read: bool,
 }
 impl InputSession for FakeInput {
     fn start(&mut self) -> Result<(), AudioError> {
@@ -409,6 +413,9 @@ impl InputSession for FakeInput {
                 silent: false,
             });
         };
+        if self.fail_read {
+            return Err(AudioError::Backend("injected capture failure".into()));
+        }
         let frames = dst.len() / usize::from(self.channels);
         for (i, frame) in dst.chunks_exact_mut(usize::from(self.channels)).enumerate() {
             for (ch, sample) in frame.iter_mut().enumerate() {
@@ -596,6 +603,35 @@ fn fixed_share_mode_refusal_reports_the_mode() {
         .position(|event| event.payload["phase"] == "saving")
         .unwrap();
     assert!(log_index < saving_index);
+}
+
+#[test]
+fn fixed_share_mode_keeps_post_open_failures_as_device_errors() {
+    // Codex #206: a failure after both streams opened (here a capture read that
+    // fails once playback is running) is an ordinary device error, not a
+    // share-mode refusal, even when the mode is fixed.
+    let temp = Temp::new();
+    let spec = json!({"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR"});
+    let exclusive =
+        request::validate(&json!({"record_dir":temp.0,"sweep":spec,"share_mode":"exclusive"}))
+            .unwrap();
+    let failed = start(
+        exclusive,
+        FakeBackend {
+            fail_read: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(json!(failed.job.status), "failed");
+    let error = failed.job.error.unwrap();
+    assert_eq!(error["code"], "DEVICE_ERROR");
+    assert!(error["details"].get("kind").is_none(), "{error}");
+    let message = error["message"].as_str().unwrap();
+    assert!(!message.starts_with("The device did not open"), "{message}");
+    assert!(message.contains("injected capture failure"), "{message}");
+    assert!(failed.events.iter().any(|event| {
+        event.payload["phase"] == "error" && event.payload["message"] == json!(message)
+    }));
 }
 
 #[test]
