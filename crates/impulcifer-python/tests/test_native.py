@@ -13,6 +13,7 @@ import sys
 import sysconfig
 import threading
 import time
+import tomllib
 
 import pytest
 
@@ -51,9 +52,26 @@ def samples(path):
     raise AssertionError("WAV data chunk missing")
 
 
+def workspace_version():
+    """The version every crate inherits (`[workspace.package] version`)."""
+    with open(ROOT / "Cargo.toml", "rb") as handle:
+        return tomllib.load(handle)["workspace"]["package"]["version"]
+
+
+def pep440(version):
+    """Cargo pre-release spelling (3.0.0-alpha.1) as the installed metadata reports it (3.0.0a1)."""
+    base, _, pre = version.partition("-")
+    if not pre:
+        return base
+    label, _, number = pre.partition(".")
+    return base + {"alpha": "a", "beta": "b", "rc": "rc"}[label] + (number or "0")
+
+
 def test_version(package):
-    assert package.impulcifer_native.version() == package.__version__ == "3.0.0-alpha.0"
-    assert distribution("impulcifer-py313").version == "3.0.0a0"
+    version = workspace_version()
+    assert package.impulcifer_native.version() == package.__version__ == version
+    assert distribution("impulcifer-py313").version == pep440(version)
+    assert pep440("3.0.0-alpha.0") == "3.0.0a0" and pep440("3.0.0-rc.2") == "3.0.0rc2" and pep440("3.0.0") == "3.0.0"
     # Resolve both sides: the package sets the variable from a resolved path,
     # while __file__ may be the 8.3 short form of a temp directory on Windows.
     assert Path(os.environ["IMPULCIFER_DATA_DIR"]).resolve() == (
