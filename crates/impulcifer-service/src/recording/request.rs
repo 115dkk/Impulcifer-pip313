@@ -4,7 +4,10 @@ use super::{
     sweep::{SweepSpec, validate_sweep_spec},
 };
 use crate::args::invalid;
-use impulcifer_types::ipc::{self, ErrorCode};
+use impulcifer_types::{
+    audio::SharePreference,
+    ipc::{self, ErrorCode},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -36,6 +39,7 @@ pub struct RecordingRequest {
 #[derive(Clone, Debug, Serialize)]
 pub struct ValidatedRecording {
     pub mode: Mode,
+    pub share: SharePreference,
     pub play_path: Option<String>,
     pub sweep_spec: Option<SweepSpec>,
     pub record_path: String,
@@ -204,6 +208,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
         o,
         &[
             "mode",
+            "share_mode",
             "play_path",
             "record_dir",
             "input_device",
@@ -222,6 +227,22 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
         Some("speakers") => Mode::Speakers,
         Some("headphones") => Mode::Headphones,
         _ => return Err(invalid("mode must be speakers or headphones.")),
+    };
+    let raw_share = o.get("share_mode").unwrap_or(&Value::Null);
+    let share = if raw_share.is_null() {
+        SharePreference::Auto
+    } else {
+        raw_share
+            .as_str()
+            .and_then(SharePreference::parse)
+            .ok_or_else(|| {
+                ipc::error(
+                    ErrorCode::InvalidRequest,
+                    "share_mode must be auto, exclusive or shared.",
+                    json!({"share_mode":raw_share}),
+                    false,
+                )
+            })?
     };
     let dir = python_string(o.get("record_dir").unwrap_or(&json!("")))
         .trim()
@@ -312,6 +333,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
     let debug_plots = boolean(o, "debug_plots")?;
     Ok(ValidatedRecording {
         mode,
+        share,
         play_path,
         sweep_spec,
         record_path,

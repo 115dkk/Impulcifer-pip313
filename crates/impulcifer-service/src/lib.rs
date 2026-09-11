@@ -14,7 +14,7 @@ pub mod update;
 
 use args::Args;
 use impulcifer_jobs::registry::{JobRegistry, panic_message};
-use impulcifer_types::audio::AudioBackend;
+use impulcifer_types::audio::{AudioBackend, ShareMode};
 use impulcifer_types::config::ProcessingConfig;
 use impulcifer_types::constants::{SPEAKER_NAMES, SWEEP_TRACK_LAYOUTS};
 use impulcifer_types::ipc::{self, ErrorCode, IpcMethod};
@@ -30,6 +30,9 @@ pub trait HostAdapter: Send + Sync {
     fn open_path(&self, path: &str) -> Result<(), String>;
     fn open_url(&self, url: &str) -> Result<(), String>;
     fn apply_title_theme(&self, theme: &str);
+    fn shell_info(&self) -> serde_json::Map<String, Value> {
+        serde_json::Map::new()
+    }
     fn download_update(
         &self,
         _latest_version: &str,
@@ -137,6 +140,14 @@ impl ImpulciferService {
         match method {
             IpcMethod::Bootstrap => {
                 args.count(0, 0)?;
+                let mut share_modes = vec!["auto"];
+                let selectable = self.backend.selectable_share_modes();
+                if selectable.contains(&ShareMode::Exclusive) {
+                    share_modes.push("exclusive");
+                }
+                if selectable.contains(&ShareMode::SharedAutoConvert) {
+                    share_modes.push("shared");
+                }
                 let mut defaults = serde_json::to_value(ProcessingConfig::default())
                     .map_err(|error| internal(error.to_string()))?;
                 defaults
@@ -150,7 +161,8 @@ impl ImpulciferService {
                     "sweep": {"layouts": SWEEP_TRACK_LAYOUTS, "default_fs": paths::DEFAULT_SWEEP_FS,
                         "default_duration": paths::DEFAULT_SWEEP_DURATION, "speaker_names": SPEAKER_NAMES},
                     "capabilities": {"recording":true,"brir":true,"output_recovery":true,
-                        "recording_cancel":false,"brir_cancel":true,"output_recovery_cancel":false},
+                        "recording_cancel":false,"brir_cancel":true,"output_recovery_cancel":false,
+                        "share_modes":share_modes},
                     "active_job": self.jobs.active().as_ref().map(snapshot),
                     "ui": self.settings().payload(),
                     "webview_backend": match platform() { "windows" => "edgechromium", "darwin" => "cocoa", _ => "gtk" },
@@ -212,13 +224,22 @@ impl ImpulciferService {
             IpcMethod::GetSystemInfo => {
                 args.count(0, 0)?;
                 let cpus = std::thread::available_parallelism().map(usize::from).ok();
-                // Frozen JS still prints PYTHON and GIL labels. Preserve its keys
-                // with an honest Rust value and null GIL; no translated labels invented.
-                Ok(
-                    json!({"version":env!("CARGO_PKG_VERSION"), "install_kind":self.update_options.install_kind.as_str(),
-                    "python_version":env!("IMPULCIFER_RUSTC_VERSION"), "os":os_description(),
-                    "cpu_count":cpus,"gil_enabled":null,"optimal_workers":cpus}),
-                )
+                let mut runtime = serde_json::Map::from_iter([
+                    ("language".into(), json!("Rust")),
+                    ("toolchain".into(), json!(env!("IMPULCIFER_RUSTC_VERSION"))),
+                    ("audio_backend".into(), json!(self.backend.name())),
+                ]);
+                runtime.extend(self.host.shell_info());
+                let settings_path = path_text(self.settings().path());
+                Ok(json!({
+                    "version":env!("CARGO_PKG_VERSION"),
+                    "install_kind":self.update_options.install_kind.as_str(),
+                    "os":os_description(),
+                    "cpu_count":cpus,
+                    "runtime":runtime,
+                    "paths":{"data_dir":path_text(&self.data_dir),"settings_path":settings_path},
+                    "update_channel":if update::check::is_prerelease(env!("CARGO_PKG_VERSION")) { "prerelease" } else { "stable" },
+                }))
             }
             IpcMethod::ListAudioDevices => {
                 args.count(0, 1)?;
@@ -228,6 +249,16 @@ impl ImpulciferService {
             IpcMethod::StartRecording => {
                 args.count(1, 1)?;
                 let request = recording::request::validate(args.get(0))?;
+                if let Some(mode) = request.share.fixed_mode()
+                    && !self.backend.selectable_share_modes().contains(&mode)
+                {
+                    return Err(ipc::error(
+                        ErrorCode::InvalidRequest,
+                        "This audio backend cannot fix the device access mode; use auto.",
+                        json!({"kind":"share_mode_unavailable","share_mode":request.share.as_str(),"backend":self.backend.name()}),
+                        false,
+                    ));
+                }
                 let backend = Arc::clone(&self.backend);
                 let job = self
                     .jobs
@@ -313,6 +344,13 @@ impl ImpulciferService {
                         )
                     })?;
                 Ok(json!({"job":snapshot(&job)}))
+            }
+            IpcMethod::PlanOutputRecovery => {
+                args.count(1, 1)?;
+                let (directory, options) = recovery::validate_request(args.get(0))?;
+                let plan =
+                    recovery::plan_brir_outputs(&directory, &options).map_err(recovery_error)?;
+                serde_json::to_value(plan).map_err(|error| internal(error.to_string()))
             }
             IpcMethod::StartOutputRecovery => {
                 args.count(1, 1)?;
@@ -470,6 +508,12 @@ fn snapshot(job: &JobSnapshot) -> Value {
 }
 fn internal(message: impl Into<String>) -> Value {
     ipc::error(ErrorCode::InternalError, message, json!({}), false)
+}
+fn recovery_error(error: recovery::RecoveryError) -> Value {
+    json!({"ok":false,"error":{"code":error.code,"message":error.message,"details":error.details,"retryable":false}})
+}
+fn path_text(path: &std::path::Path) -> String {
+    path.to_string_lossy().into_owned()
 }
 fn platform() -> &'static str {
     if cfg!(target_os = "macos") {

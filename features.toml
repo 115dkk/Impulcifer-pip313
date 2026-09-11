@@ -49,7 +49,7 @@ note = "3.x strings live in crates/impulcifer-service/locales/<lang>.json, merge
 id = "ipc.bootstrap"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::ipc_bootstrap_shape"]
+tests = ["impulcifer-service::ipc_bootstrap_shape", "impulcifer-service::bootstrap_lists_selectable_share_modes"]
 
 [[feature]]
 id = "ipc.list_audio_devices"
@@ -78,6 +78,13 @@ kind = "ipc"
 status = "implemented"
 tests = ["impulcifer-service::recovery_ipc_start_and_poll_round_trip", "impulcifer-service::recovery_request_validation_matches_all_python_cases"]
 note = "2.x request validation (25 golden cases), non-cancellable output_recovery job, result and error payloads through poll"
+
+[[feature]]
+id = "ipc.plan_output_recovery"
+kind = "ipc"
+status = "implemented"
+tests = ["impulcifer-service::recovery_plan_matches_the_written_result", "impulcifer-service::ipc_plan_output_recovery_shape"]
+note = "read-only dry run of output recovery for the Studio recovery screen; same validation and error codes as start_output_recovery"
 
 [[feature]]
 id = "ipc.poll_job"
@@ -126,6 +133,7 @@ id = "ipc.get_system_info"
 kind = "ipc"
 status = "implemented"
 tests = ["impulcifer-service::ipc_get_system_info_shape", "impulcifer-service::os_description_names_the_platform"]
+note = "Rust-edition shape: runtime (language, toolchain, audio backend, shell, webview), paths, update channel; the 2.x python/GIL keys are gone"
 
 [[feature]]
 id = "ipc.resolve_recording_paths"
@@ -1150,10 +1158,17 @@ status = "implemented"
 tests = ["impulcifer-service::recording_generated_headphones_have_no_sidecar_and_speaker_mono_stays_mono"]
 
 [[feature]]
+id = "recording.share_mode"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-audio-io::fixed_share_preference_never_falls_back", "impulcifer-audio-io::session_request_carries_the_share_preference", "impulcifer-service::share_mode_request_validation", "impulcifer-service::share_mode_unavailable_on_backends_without_selection", "impulcifer-service::fixed_share_mode_refusal_reports_the_mode", "impulcifer-service::bootstrap_lists_selectable_share_modes", "impulcifer-sys-win::wasapi_offers_both_share_modes"]
+note = "auto keeps the exclusive-then-shared policy; exclusive/shared never fall back and a refusal is reported as share_mode_refused; backends without selectable modes (cpal) reject a fixed choice as share_mode_unavailable"
+
+[[feature]]
 id = "recording.hardware"
 kind = "recording"
 status = "implemented"
-tests = ["impulcifer-service::recording_virtual_cable_end_to_end"]
+tests = ["impulcifer-service::recording_virtual_cable_end_to_end", "impulcifer-audio-io::virtual_cable_honours_fixed_share_preferences"]
 note = "ignored test; run on the CABLE-A pair of docs/rust/HARDWARE.md"
 
 [[feature]]

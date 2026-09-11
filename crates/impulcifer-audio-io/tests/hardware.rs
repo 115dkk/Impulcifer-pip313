@@ -177,3 +177,84 @@ fn wasapi_session_virtual_cable() {
     let _lock = CABLE.lock().unwrap_or_else(|e| e.into_inner());
     measure(impulcifer_audio_io::default_backend().as_ref());
 }
+
+#[cfg(windows)]
+#[test]
+#[ignore = "requires CABLE-A virtual cable; emits a short -20 dBFS peak tone only into CABLE-A"]
+fn virtual_cable_honours_fixed_share_preferences() {
+    let _lock = CABLE.lock().unwrap_or_else(|e| e.into_inner());
+    let backend = impulcifer_audio_io::default_backend();
+    let endpoints = backend.enumerate().expect("enumerate CABLE-A endpoints");
+    let output = endpoints
+        .iter()
+        .find(|e| e.name.contains("CABLE-A Input") && e.max_output_channels >= 2)
+        .expect("explicit hardware test requires CABLE-A Input")
+        .clone();
+    let input = endpoints
+        .iter()
+        .find(|e| e.name.contains("CABLE-A Output") && e.max_input_channels >= 2)
+        .expect("explicit hardware test requires CABLE-A Output")
+        .clone();
+    let channels = output.max_output_channels;
+
+    for preference in [
+        SharePreference::Auto,
+        SharePreference::Exclusive,
+        SharePreference::Shared,
+    ] {
+        let frames = 4_800usize;
+        let mut data = vec![0.0; frames * usize::from(channels)];
+        for frame in 0..frames {
+            data[frame * usize::from(channels) + 1] =
+                (0.1 * (std::f64::consts::TAU * 1000.0 * frame as f64 / 48_000.0).sin()) as f32;
+        }
+        let mut request = SessionRequest::new(
+            output.clone(),
+            input.clone(),
+            PlaybackBuffer {
+                sample_rate: 48_000,
+                channels,
+                interleaved: data,
+            },
+            2,
+        );
+        request.share = preference;
+        let result = play_and_record(backend.as_ref(), request, &CancelToken::new(), &mut |_| {});
+        match (preference, result) {
+            (SharePreference::Auto, Ok(recording)) => {
+                assert!(matches!(
+                    recording.output_mode,
+                    ShareMode::Exclusive | ShareMode::SharedAutoConvert
+                ));
+                assert!(matches!(
+                    recording.input_mode,
+                    ShareMode::Exclusive | ShareMode::SharedAutoConvert
+                ));
+                println!(
+                    "auto: success output={:?} input={:?}",
+                    recording.output_mode, recording.input_mode
+                );
+            }
+            (SharePreference::Shared, Ok(recording)) => {
+                assert_eq!(recording.output_mode, ShareMode::SharedAutoConvert);
+                assert_eq!(recording.input_mode, ShareMode::SharedAutoConvert);
+                println!(
+                    "shared: success output={:?} input={:?}",
+                    recording.output_mode, recording.input_mode
+                );
+            }
+            (SharePreference::Exclusive, Ok(recording)) => {
+                assert_eq!(recording.output_mode, ShareMode::Exclusive);
+                assert_eq!(recording.input_mode, ShareMode::Exclusive);
+                println!(
+                    "exclusive: success output={:?} input={:?}",
+                    recording.output_mode, recording.input_mode
+                );
+            }
+            (SharePreference::Exclusive, Err(error)) => {
+                println!("exclusive: error {error}");
+            }
+            (preference, Err(error)) => panic!("{preference:?}: {error}"),
+        }
+    }
+}

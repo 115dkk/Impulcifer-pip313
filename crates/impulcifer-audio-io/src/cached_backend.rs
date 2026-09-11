@@ -89,6 +89,9 @@ impl AudioBackend for CachedBackend {
     fn name(&self) -> &'static str {
         self.inner.name()
     }
+    fn selectable_share_modes(&self) -> &'static [ShareMode] {
+        self.inner.selectable_share_modes()
+    }
     fn enumerate(&self) -> Result<Vec<Endpoint>, AudioError> {
         let mut cache = self
             .snapshot

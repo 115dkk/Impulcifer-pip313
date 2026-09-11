@@ -347,12 +347,13 @@ fn subprocess_scanner_checks_code_raw_text_and_exact_allowlist() {
     }
 }
 
-const CANONICAL_IPC: [&str; 23] = [
+const CANONICAL_IPC: [&str; 24] = [
     "bootstrap",
     "list_audio_devices",
     "start_recording",
     "start_brir",
     "start_output_recovery",
+    "plan_output_recovery",
     "poll_job",
     "cancel_job",
     "get_ui_settings",

@@ -4,7 +4,7 @@ use impulcifer_io::{read_wav, write_wav};
 use impulcifer_jobs::registry::JobRegistry;
 use impulcifer_service::{
     ImpulciferService, NoopHost,
-    recovery::{RecoveryOptions, recover_brir_outputs},
+    recovery::{RecoveryOptions, plan_brir_outputs, recover_brir_outputs},
 };
 use impulcifer_types::constants::{HEXADECAGONAL_TRACK_ORDER, SPEAKER_NAMES};
 use serde_json::{Value, json};
@@ -282,6 +282,69 @@ fn golden_recovery_scenarios_match_python() {
     }
     assert!(count >= 35, "only {count} success scenarios");
 }
+fn tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
+    fn visit(root: &Path, dir: &Path, files: &mut Vec<(PathBuf, Vec<u8>)>) {
+        let mut entries: Vec<_> = fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                visit(root, &path, files);
+            } else {
+                files.push((
+                    path.strip_prefix(root).unwrap().to_owned(),
+                    fs::read(path).unwrap(),
+                ));
+            }
+        }
+    }
+    let mut files = Vec::new();
+    visit(root, root, &mut files);
+    files
+}
+
+#[test]
+fn recovery_plan_matches_the_written_result() {
+    let g = golden();
+    for case in g["scenarios"].as_array().unwrap() {
+        let temp = Temp::new();
+        setup(&temp.0, case);
+        let selected = temp.0.join(case["selected"].as_str().unwrap());
+        let options: RecoveryOptions = serde_json::from_value(case["options"].clone()).unwrap();
+        let before = tree(&temp.0);
+        let planned = plan_brir_outputs(&selected, &options);
+        assert_eq!(
+            tree(&temp.0),
+            before,
+            "{} changed during plan",
+            case["name"]
+        );
+        let recovered = recover_brir_outputs(&selected, &options);
+        match (planned, recovered) {
+            (Ok(plan), Ok(result)) => {
+                assert_eq!(
+                    plan.planned_files
+                        .iter()
+                        .map(|file| &file.path)
+                        .collect::<Vec<_>>(),
+                    result.created_files.iter().collect::<Vec<_>>(),
+                    "{}",
+                    case["name"]
+                );
+                assert_eq!(plan.existing_files, result.existing_files);
+                assert_eq!(plan.sample_rate, result.sample_rate);
+                assert_eq!(plan.sample_count, result.sample_count);
+                assert_eq!(plan.speakers, result.speakers);
+                assert_eq!(plan.source_kind, result.source_kind);
+            }
+            (Err(plan), Err(recovery)) => assert_eq!(plan.code, recovery.code, "{}", case["name"]),
+            pair => panic!("{} plan/recovery mismatch: {pair:?}", case["name"]),
+        }
+    }
+}
+
 #[test]
 fn golden_recovery_errors_match_python() {
     let g = golden();
@@ -407,6 +470,91 @@ fn recovery_ipc_start_and_poll_round_trip() {
         no_temps(&temp.0);
     }
 }
+#[test]
+fn ipc_plan_output_recovery_shape() {
+    let g = golden();
+    let case = g["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "hrir_only")
+        .unwrap();
+    let temp = Temp::new();
+    setup(&temp.0, case);
+    let svc = service(&temp);
+    let mut request = case["options"].clone();
+    request["dir_path"] = json!(temp.0);
+    let plan = svc.call("plan_output_recovery", vec![request.clone()]);
+    assert_eq!(plan["ok"], true, "{plan}");
+    let mut keys: Vec<_> = plan["data"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort();
+    assert_eq!(
+        keys,
+        [
+            "existing_files",
+            "hangloose_dir",
+            "output_dir",
+            "planned_files",
+            "sample_count",
+            "sample_rate",
+            "source_kind",
+            "source_path",
+            "speakers"
+        ]
+    );
+    let mut file_keys: Vec<_> = plan["data"]["planned_files"][0]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    file_keys.sort();
+    assert_eq!(file_keys, ["channels", "kind", "path", "speaker"]);
+
+    let empty = Temp::new();
+    let empty_service = service(&empty);
+    assert_eq!(
+        empty_service.call("plan_output_recovery", vec![json!({"dir_path":empty.0})])["error"]["code"],
+        "NO_RECOVERY_SOURCE"
+    );
+    assert_eq!(
+        empty_service.call(
+            "plan_output_recovery",
+            vec![json!({"dir_path":empty.0.join("absent")})]
+        )["error"]["code"],
+        "FILE_NOT_FOUND"
+    );
+
+    let jobs = JobRegistry::new();
+    let busy_service = ImpulciferService::with_dependencies(
+        Box::new(NoopHost),
+        temp.0.join("settings-busy.json"),
+        impulcifer_audio_io::default_backend(),
+        jobs.clone(),
+        temp.0.clone(),
+    );
+    let (send, receive) = std::sync::mpsc::channel();
+    jobs.start(
+        impulcifer_types::job::JobKind::Recording,
+        false,
+        move |_| {
+            receive.recv_timeout(Duration::from_secs(10)).unwrap();
+            Ok(json!({}))
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        busy_service.call("plan_output_recovery", vec![request])["ok"],
+        true
+    );
+    send.send(()).unwrap();
+}
+
 #[test]
 fn recovery_never_overwrites_existing_outputs() {
     let g = golden();

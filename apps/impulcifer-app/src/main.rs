@@ -102,6 +102,22 @@ struct TauriHost {
 }
 
 impl HostAdapter for TauriHost {
+    fn shell_info(&self) -> serde_json::Map<String, Value> {
+        let mut info = serde_json::Map::from_iter([(
+            "shell".into(),
+            json!(format!("Tauri {}", tauri::VERSION)),
+        )]);
+        if let Ok(version) = tauri::webview_version() {
+            let engine = match std::env::consts::OS {
+                "windows" => "WebView2",
+                "macos" => "WKWebView",
+                _ => "WebKitGTK",
+            };
+            info.insert("webview".into(), json!(format!("{engine} {version}")));
+        }
+        info
+    }
+
     fn download_update(
         &self,
         latest_version: &str,

@@ -23,6 +23,44 @@ pub enum ShareMode {
     SharedAutoConvert,
 }
 
+/// The user's device-access request for a measurement session.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SharePreference {
+    /// Exclusive first, shared auto-convert when the exclusive format is refused.
+    #[default]
+    Auto,
+    Exclusive,
+    Shared,
+}
+
+impl SharePreference {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Exclusive => "exclusive",
+            Self::Shared => "shared",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "auto" => Some(Self::Auto),
+            "exclusive" => Some(Self::Exclusive),
+            "shared" => Some(Self::Shared),
+            _ => None,
+        }
+    }
+
+    pub fn fixed_mode(self) -> Option<ShareMode> {
+        match self {
+            Self::Auto => None,
+            Self::Exclusive => Some(ShareMode::Exclusive),
+            Self::Shared => Some(ShareMode::SharedAutoConvert),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Endpoint {
     /// Stable backend identifier (WASAPI endpoint id string, cpal device name on other platforms).
@@ -98,6 +136,9 @@ impl CancelToken {
 
 pub trait AudioBackend: Send + Sync {
     fn name(&self) -> &'static str;
+    fn selectable_share_modes(&self) -> &'static [ShareMode] {
+        &[]
+    }
     fn enumerate(&self) -> Result<Vec<Endpoint>, AudioError>;
     fn probe(
         &self,

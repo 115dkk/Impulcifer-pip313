@@ -83,6 +83,25 @@ pub struct RecoveryResult {
     pub created_files: Vec<String>,
     pub existing_files: Vec<String>,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlannedFile {
+    pub path: String,
+    pub kind: String,
+    pub channels: usize,
+    pub speaker: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryPlan {
+    pub source_kind: String,
+    pub source_path: String,
+    pub output_dir: String,
+    pub sample_rate: u32,
+    pub sample_count: usize,
+    pub speakers: Vec<String>,
+    pub existing_files: Vec<String>,
+    pub planned_files: Vec<PlannedFile>,
+    pub hangloose_dir: Option<String>,
+}
 
 pub(crate) fn validate_request(raw: &Value) -> Result<(PathBuf, RecoveryOptions), Value> {
     let invalid = |message| ipc::error(ErrorCode::InvalidRequest, message, json!({}), false);
@@ -612,6 +631,8 @@ struct PlannedOutput {
     target: PathBuf,
     tracks: Vec<Vec<f64>>,
     names: Vec<String>,
+    kind: &'static str,
+    speaker: Option<String>,
 }
 fn combined_output(
     dir: &Path,
@@ -653,13 +674,17 @@ fn combined_output(
         target: dir.join(name),
         tracks,
         names,
+        kind: if name == "hrir.wav" { "hrir" } else { "hesuvi" },
+        speaker: None,
     })
 }
 
-pub fn recover_brir_outputs(
-    dir: &Path,
-    options: &RecoveryOptions,
-) -> Result<RecoveryResult, RecoveryError> {
+struct PreparedRecovery {
+    plan: RecoveryPlan,
+    outputs: Vec<PlannedOutput>,
+}
+
+fn prepare(dir: &Path, options: &RecoveryOptions) -> Result<PreparedRecovery, RecoveryError> {
     let selected = resolve_directory(dir)?;
     let (output, split) = locate(&selected)?;
     let hp = find_named(&output, "hrir.wav", false)?;
@@ -702,9 +727,9 @@ pub fn recover_brir_outputs(
             (set, "hangloose", dir.clone())
         }
     };
-    let mut plan = Vec::new();
+    let mut outputs = Vec::new();
     if hp.is_none() {
-        plan.push(combined_output(
+        outputs.push(combined_output(
             &output,
             "hrir.wav",
             &set,
@@ -713,7 +738,7 @@ pub fn recover_brir_outputs(
         )?);
     }
     if vp.is_none() {
-        plan.push(combined_output(
+        outputs.push(combined_output(
             &output,
             "hesuvi.wav",
             &set,
@@ -721,8 +746,17 @@ pub fn recover_brir_outputs(
             options.remove_silent_channels,
         )?);
     }
+    let hangloose_dir = if options.include_hangloose {
+        Some(split.clone().unwrap_or_else(|| output.join("Hangloose")))
+    } else if kind == "hangloose" {
+        split.clone()
+    } else {
+        None
+    };
     if options.include_hangloose && kind != "hangloose" {
-        let dir = split.unwrap_or_else(|| output.join("Hangloose"));
+        let dir = hangloose_dir
+            .clone()
+            .expect("requested Hangloose directory");
         let files = find_split(&dir)?;
         if !files.is_empty() {
             let (split, paths) = read_split(&dir)?;
@@ -733,17 +767,18 @@ pub fn recover_brir_outputs(
             if files.iter().any(|(s, _)| s == speaker) {
                 continue;
             }
-            plan.push(PlannedOutput {
+            outputs.push(PlannedOutput {
                 target: dir.join(format!("{speaker}.wav")),
                 tracks: ["left", "right"]
                     .into_iter()
                     .map(|side| set.tracks[&track_name(speaker, side)].clone())
                     .collect(),
                 names: Vec::new(),
+                kind: "hangloose",
+                speaker: Some(speaker.clone()),
             });
         }
     }
-    let created = write_all(&plan, set.rate, |_, _, _| Ok(()))?;
     let mut seen = HashSet::new();
     existing.retain(|p| {
         let resolved = fs::canonicalize(p).unwrap_or_else(|_| p.clone());
@@ -754,15 +789,55 @@ pub fn recover_brir_outputs(
             key
         })
     });
+    let planned_files = outputs
+        .iter()
+        .map(|item| PlannedFile {
+            path: path_text(&item.target),
+            kind: item.kind.into(),
+            channels: item.tracks.len(),
+            speaker: item.speaker.clone(),
+        })
+        .collect();
+    Ok(PreparedRecovery {
+        plan: RecoveryPlan {
+            source_kind: kind.into(),
+            source_path: path_text(&source),
+            output_dir: path_text(&output),
+            sample_rate: set.rate,
+            sample_count: set.count,
+            speakers: set.speakers,
+            existing_files: existing.iter().map(|p| path_text(p)).collect(),
+            planned_files,
+            hangloose_dir: hangloose_dir.as_deref().map(path_text),
+        },
+        outputs,
+    })
+}
+
+pub fn plan_brir_outputs(
+    dir: &Path,
+    options: &RecoveryOptions,
+) -> Result<RecoveryPlan, RecoveryError> {
+    Ok(prepare(dir, options)?.plan)
+}
+
+pub fn recover_brir_outputs(
+    dir: &Path,
+    options: &RecoveryOptions,
+) -> Result<RecoveryResult, RecoveryError> {
+    let prepared = prepare(dir, options)?;
+    let created = write_all(&prepared.outputs, prepared.plan.sample_rate, |_, _, _| {
+        Ok(())
+    })?;
     Ok(RecoveryResult {
-        source_kind: kind.into(),
-        source_path: path_text(&source),
-        output_dir: path_text(&output),
-        sample_rate: set.rate,
-        sample_count: set.count,
-        speakers: set.speakers,
+        source_kind: prepared.plan.source_kind,
+        source_path: prepared.plan.source_path,
+        output_dir: prepared.plan.output_dir,
+        sample_rate: prepared.plan.sample_rate,
+        sample_count: prepared.plan.sample_count,
+        speakers: prepared.plan.speakers,
         created_files: created.iter().map(|p| path_text(p)).collect(),
-        existing_files: existing.iter().map(|p| path_text(p)).collect(),
+        existing_files: prepared.plan.existing_files,
     })
 }
 
@@ -1297,6 +1372,8 @@ mod tests {
                 } else {
                     Vec::new()
                 },
+                kind: if name == "hrir.wav" { "hrir" } else { "hesuvi" },
+                speaker: None,
             })
             .collect()
     }

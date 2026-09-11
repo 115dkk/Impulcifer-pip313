@@ -41,6 +41,10 @@ impl Settings {
         }
     }
 
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     pub fn load(&mut self) {
         if self.initialized {
             return;
