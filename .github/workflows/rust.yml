@@ -182,7 +182,9 @@ jobs:
         with:
           maturin-version: v1.15.0
           manylinux: 2_28
-          args: --release --features python -m crates/impulcifer-python/Cargo.toml --compatibility manylinux_2_28 --auditwheel check
+          # The action's `manylinux` input already passes the platform tag; a second
+          # --compatibility makes maturin fail with "Expected only one platform tag".
+          args: --release --features python -m crates/impulcifer-python/Cargo.toml --auditwheel check
 
       - name: Build the abi3 wheel
         if: runner.os != 'Linux'
