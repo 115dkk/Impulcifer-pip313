@@ -81,6 +81,44 @@ pub fn is_prerelease(version: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// The version a release is shown and requested as: a prerelease keeps its
+/// PEP 440 pre segment (`3.0.0-alpha.1`), anything else is the numeric base
+/// exactly as 2.x reported it.
+pub fn display_version(tag: &str) -> String {
+    let trimmed = tag.trim_start_matches(['v', 'V']);
+    if is_prerelease(trimmed) {
+        trimmed.to_owned()
+    } else {
+        normalize_version(tag)
+    }
+}
+
+/// The newest non-draft release whose tag is a PEP 440 version. GitHub orders
+/// the list by creation date and rolling feeds such as `updater-3x-pre` carry
+/// no version, so the choice rests on version comparison alone.
+pub fn select_release(releases: &[Value]) -> Option<&Value> {
+    let mut best: Option<(&Value, &str)> = None;
+    for release in releases {
+        if release["draft"].as_bool() == Some(true) {
+            continue;
+        }
+        let Some(tag) = release["tag_name"].as_str() else {
+            continue;
+        };
+        if tag
+            .trim_start_matches(['v', 'V'])
+            .parse::<pep440_rs::Version>()
+            .is_err()
+        {
+            continue;
+        }
+        if best.is_none_or(|(_, current)| is_newer_version(current, tag)) {
+            best = Some((release, tag));
+        }
+    }
+    best.map(|(release, _)| release)
+}
+
 pub fn download_url(release: &Value, platform: &str) -> Value {
     let Some(assets) = release["assets"].as_array() else {
         return Value::Null;
@@ -113,7 +151,7 @@ pub fn download_url(release: &Value, platform: &str) -> Value {
 
 pub fn release_payload(release: &Value, current: &str, platform: &str) -> Value {
     let raw = release["tag_name"].as_str().unwrap_or("");
-    let latest = normalize_version(raw);
+    let latest = display_version(raw);
     let url = if is_newer_version(current, raw) {
         download_url(release, platform)
     } else {
@@ -130,10 +168,10 @@ pub fn release_payload(release: &Value, current: &str, platform: &str) -> Value 
     })
 }
 
-pub fn check(options: &UpdateOptions) -> Result<Value, String> {
+fn fetch(options: &UpdateOptions, endpoint: &str) -> Result<Value, String> {
     let mut response = options
         .agent()
-        .get(&options.latest_endpoint)
+        .get(endpoint)
         .header(
             "User-Agent",
             &format!("Impulcifer/{}", options.current_version),
@@ -144,10 +182,29 @@ pub fn check(options: &UpdateOptions) -> Result<Value, String> {
         .body_mut()
         .read_to_string()
         .map_err(|error| error.to_string())?;
-    let release: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
-    if !release.is_object() {
-        return Err("Release response must be an object.".into());
-    }
+    serde_json::from_str(&text).map_err(|error| error.to_string())
+}
+
+/// A stable install asks `/releases/latest`, which GitHub resolves to the newest
+/// stable release and never to a prerelease. A prerelease install reads the
+/// release list instead and takes the newest versioned release, so an alpha is
+/// offered the next alpha and the following stable alike.
+pub fn check(options: &UpdateOptions) -> Result<Value, String> {
+    let release = if is_prerelease(&options.current_version) {
+        let body = fetch(options, &options.releases_endpoint)?;
+        let releases = body
+            .as_array()
+            .ok_or("Release list response must be an array.")?;
+        select_release(releases)
+            .ok_or("Release list holds no versioned release.")?
+            .clone()
+    } else {
+        let release = fetch(options, &options.latest_endpoint)?;
+        if !release.is_object() {
+            return Err("Release response must be an object.".into());
+        }
+        release
+    };
     Ok(release_payload(
         &release,
         &options.current_version,

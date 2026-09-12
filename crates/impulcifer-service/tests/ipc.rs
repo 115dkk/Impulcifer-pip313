@@ -201,6 +201,7 @@ impl Fixture {
             platform: "windows".into(),
             current_version: env!("CARGO_PKG_VERSION").into(),
             latest_endpoint: "http://127.0.0.1:0/latest".into(),
+            releases_endpoint: "http://127.0.0.1:0/releases".into(),
             releases_url: "http://127.0.0.1:0/feed".into(),
             timeout: Duration::from_millis(50),
             download_root: root.0.join("downloads"),

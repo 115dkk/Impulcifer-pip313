@@ -165,8 +165,8 @@ tests = ["impulcifer-service::ipc_open_path_shape"]
 id = "ipc.check_for_updates"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::check_for_updates_reads_github_latest_from_mock_server", "impulcifer-service::golden_asset_selection_and_version_compare_match_python"]
-note = "GitHub releases/latest through ureq (rustls, 10 s), 2.x response fields, asset rules per platform and version compare checked against 30 golden payloads; UPDATE_CHECK_FAILED retryable"
+tests = ["impulcifer-service::check_for_updates_reads_github_latest_from_mock_server", "impulcifer-service::prerelease_install_reads_the_release_list_and_takes_the_newest_version", "impulcifer-service::prerelease_install_is_offered_the_following_stable", "impulcifer-service::prerelease_install_on_the_newest_release_is_up_to_date", "impulcifer-service::release_list_failures_are_retryable", "impulcifer-service::golden_asset_selection_and_version_compare_match_python"]
+note = "stable install: GitHub releases/latest; prerelease install (alpha.2): the release list (releases?per_page=30), drafts and unversioned tags such as updater-3x-pre skipped, newest PEP 440 version wins so an alpha sees the next alpha and the following stable, latest_version keeps the pre segment; ureq (rustls, 10 s), 2.x response fields, asset rules per platform and version compare checked against 30 golden payloads; UPDATE_CHECK_FAILED retryable"
 
 [[feature]]
 id = "ipc.start_update"
