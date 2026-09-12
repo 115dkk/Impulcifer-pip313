@@ -305,6 +305,90 @@ fn headphones_chart_renders_without_optional_correction() {
     check_picture(&d.join("headphones.png"), (1600, 1000));
 }
 #[test]
+fn headphones_chart_draws_the_applied_correction_when_supplied() {
+    let d = directory();
+    let (_, mut left, _) = fixture();
+    left.equalization.clear();
+    let mut right = left.clone();
+    right.smoothed.iter_mut().for_each(|v| *v += 2.);
+    let measured_path = d.join("headphones-measured.png");
+    plot_headphones(&measured_path, &left, &right, 0., 0.).unwrap();
+    let (_, _, measured_pixels) = decode(&measured_path);
+    assert!(!measured_pixels.chunks_exact(3).any(|p| p == [124, 58, 237]));
+
+    left.equalization = left
+        .frequency
+        .iter()
+        .map(|f| -12. * (f.log10() * 2.).sin())
+        .collect();
+    right.equalization = right
+        .frequency
+        .iter()
+        .map(|f| 18. * (f.log10() * 3.).cos())
+        .collect();
+    let applied_path = d.join("headphones-applied.png");
+    plot_headphones(&applied_path, &left, &right, 0., 0.).unwrap();
+    for path in [&measured_path, &applied_path] {
+        check_picture(path, (1600, 1000));
+        let (_, _, pixels) = decode(path);
+        let colors: HashSet<_> = pixels.chunks_exact(3).map(|p| [p[0], p[1], p[2]]).collect();
+        for token in [[37, 99, 235], [220, 38, 38], [156, 163, 175]] {
+            assert!(colors.contains(&token), "missing token {token:?}");
+        }
+        if path == &applied_path {
+            assert!(colors.contains(&[124, 58, 237]));
+        }
+        let mean = pixels.iter().map(|v| f64::from(*v)).sum::<f64>() / pixels.len() as f64;
+        let variance = pixels
+            .iter()
+            .map(|v| (f64::from(*v) - mean).powi(2))
+            .sum::<f64>()
+            / pixels.len() as f64;
+        assert!(colors.len() >= 3);
+        assert!(variance > 100., "variance={variance}");
+    }
+    let mut missing = left.clone();
+    missing.equalization.clear();
+    for (l, r) in [(&missing, &right), (&left, &missing)] {
+        assert!(matches!(
+            plot_headphones(&d.join("bad.png"), l, r, 0., 0.),
+            Err(PlotError::Invalid(_))
+        ));
+    }
+    let mut wrong = left.clone();
+    wrong.equalization.pop();
+    for (l, r) in [(&wrong, &right), (&left, &wrong)] {
+        assert!(matches!(
+            plot_headphones(&d.join("bad.png"), l, r, 0., 0.),
+            Err(PlotError::Invalid(_))
+        ));
+    }
+    for value in [f64::NAN, f64::INFINITY] {
+        let mut invalid = left.clone();
+        invalid.equalization[0] = value;
+        assert!(matches!(
+            plot_headphones(&d.join("bad.png"), &invalid, &right, 0., 0.),
+            Err(PlotError::Invalid(_))
+        ));
+    }
+    assert!(!d.join("bad.png").exists());
+    if let Some(out) = std::env::var_os("IMPULCIFER_A02_OUT") {
+        let out = PathBuf::from(out);
+        std::fs::create_dir_all(&out).unwrap();
+        for source in [&measured_path, &applied_path] {
+            let destination = out.join(source.file_name().unwrap());
+            // Never replace a previous visual review artifact.
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&destination)
+                .unwrap();
+            std::io::copy(&mut std::fs::File::open(source).unwrap(), &mut file).unwrap();
+            println!("A02_PNG {}", destination.display());
+        }
+    }
+}
+#[test]
 fn eq_chart_renders_missing_ears() {
     let d = directory();
     let (_, c, _) = fixture();
@@ -397,7 +481,18 @@ fn chart_kinds_use_their_actual_tokens() {
     rc.smoothed.iter_mut().for_each(|v| *v += 2.);
     rc.equalization.iter_mut().for_each(|v| *v -= 2.);
     plot_results(&d.join("results.png"), &s, &right).unwrap();
-    plot_headphones(&d.join("headphones.png"), &c, &rc, 0., 0.).unwrap();
+    let mut headphones_left = c.clone();
+    let mut headphones_right = rc.clone();
+    headphones_left.equalization.clear();
+    headphones_right.equalization.clear();
+    plot_headphones(
+        &d.join("headphones.png"),
+        &headphones_left,
+        &headphones_right,
+        0.,
+        0.,
+    )
+    .unwrap();
     plot_eq(&d.join("eq.png"), Some(&c), Some(&c)).unwrap();
     plot_generic_room(&d.join("room.png"), &c, &[]).unwrap();
     plot_ir_panels_with_noise_floor(&d.join("panels.png"), &p, -60.).unwrap();

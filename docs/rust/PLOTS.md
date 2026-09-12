@@ -68,19 +68,36 @@ that the palette itself passes the color-separation gate.
   with a ±3 dB guide. The footer uses the arithmetic mean of supplied frequency
   samples from 200 Hz through 8 kHz, inclusive, and the largest absolute signed
   difference from 40 Hz through 16 kHz (inclusive). The latter is directly annotated.
-- **Headphones** is titled `Your headphones as measured`, with subtitle
-  `Impulcifer flattens this in the final equalization; the flatter the bold line, the less it has to do.`
-  It shows only raw faint, smoothed thick, and target dashed gray. The service
-  smooths a clone with 1/3 and 1/5 octave windows, transitioning at 20,000–23,999 Hz.
-  It passes no error or inverse correction. Raw samples and target are unchanged,
+- **Headphones** without supplied correction is unchanged: title
+  `Your headphones as measured`, subtitle
+  `Impulcifer flattens this in the final equalization; the flatter the bold line, the less it has to do.`,
+  raw faint, smoothed thick, target dashed gray, two footer lines, and no purple.
+  With correction for both ears, the title is
+  `Your headphones and the correction applied` and the subtitle is
+  `Bold lines show the measurement, grey dashes the target, and purple dashes the equalization Impulcifer applied to the front speakers.`
+  Purple long dashes are `Correction applied · left`; purple dots are
+  `Correction applied · right`. These are the front pair's limited, applied FIR
+  correction curves (front-left speaker's left ear and front-right speaker's right
+  ear), handed over by the service in `FrCurve.equalization` after the equalize
+  stage, on the measurement frequency grid. They are not an unlimited inverse
+  manufactured by the renderer. Both must be present with matching finite arrays;
+  one missing ear or a wrong length returns `PlotError::Invalid`.
+  The correction view unions the unchanged `headphones_limits` result with the
+  padded correction range across both ears, rounding outward to multiples of 6 dB.
+  The service smooths a measurement clone with 1/3 and 1/5 octave windows,
+  transitioning at 20,000–23,999 Hz. Raw samples and target remain unchanged,
   preserving the headphone raw golden. The first footer computes each ear's signed
   arithmetic mean of smoothed minus target samples from 100 Hz through 10 kHz,
   inclusive. The second selects the greatest absolute deviation across both ears
   from 40 Hz through 16 kHz, inclusive, retaining its sign and frequency. Raw is
-  used only when smoothing is absent; missing targets yield `unavailable`. Legacy
-  gain arguments remain accepted for API compatibility but do not supply summaries.
-  The applied correction curve can be added once the pipeline passes it to the
-  plot stage; the unlimited inverse of headphone error is not an applied filter.
+  used only when smoothing is absent; missing targets yield `unavailable`. With
+  correction, a third footer reports the supplied samples' signed minimum, maximum,
+  and largest absolute value across both ears in 40 Hz–16 kHz, inclusive:
+  `Correction applied 40 Hz–16 kHz: −6.2 … +4.8 dB, largest −6.2 dB at 3.4 kHz`.
+  No samples in that band yields
+  `Correction applied 40 Hz–16 kHz: unavailable (no samples in band)`.
+  Legacy gain arguments remain accepted for API compatibility but do not supply
+  summaries. Size, margins, band strip, fonts, and tokens are unchanged.
 - **Equalization** uses the same grammar, with a single common panel or left/right
   panels on a shared dB scale. A missing ear has an empty-state explanation. Both
   inputs absent still means no EQ file, preserving the service PNG-set contract.

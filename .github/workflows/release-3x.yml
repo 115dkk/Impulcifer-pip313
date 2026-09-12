@@ -15,8 +15,9 @@ name: Release 3.x
 #   build-linux        tauri build --bundles appimage + signature
 #   wheels             maturin wheels on three OSes + sdist (PyPI project impulcifer-py313,
 #                      the same project as 2.x so pip upgrades carry users over;
-#                      the Linux wheel is tagged linux_x86_64 because it links ALSA,
-#                      so it goes to the GitHub Release only, Linux pip uses the sdist)
+#                      the wheels carry no audio backend, so the Linux wheel is a
+#                      manylinux_2_28 wheel built in the manylinux container and
+#                      goes to PyPI like the others)
 #   publish-pypi       only when dispatched with publish_pypi=true (OIDC, env PyPI)
 #   create-release     GitHub Release v<version> with latest.json, releases.win.json,
 #                      SHA256SUMS.txt; prerelease when the version has a suffix, so
@@ -350,12 +351,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install audio system libraries (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libasound2-dev
-
+      # The wheels carry no audio backend (crates/impulcifer-python builds the
+      # service and CLI without native-audio): no ALSA headers, and the Linux
+      # wheel is built inside the manylinux_2_28 container so its tag is real.
       - name: Install toolchain (rust-toolchain.toml)
         run: rustup show
 
@@ -370,19 +368,26 @@ jobs:
       - name: Stage package data
         run: python crates/impulcifer-python/sync_data.py
 
+      - name: Build the abi3 wheel (manylinux_2_28 container)
+        if: runner.os == 'Linux'
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.15.0
+          manylinux: 2_28
+          # The action's `manylinux` input already passes the platform tag; a second
+          # --compatibility makes maturin fail with "Expected only one platform tag".
+          args: --release --features python -m crates/impulcifer-python/Cargo.toml --auditwheel check
+
       - name: Build the abi3 wheel
-        shell: bash
+        if: runner.os != 'Linux'
+        run: python -m maturin build --release --features python -m crates/impulcifer-python/Cargo.toml
+
+      - name: The Linux wheel must carry the manylinux_2_28 tag
+        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-          extra=""
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            # The extension links libasound2 (ALSA) through cpal, which manylinux
-            # does not guarantee, so the wheel is tagged linux_x86_64 honestly. It
-            # ships on the GitHub Release only; publish-pypi drops it and Linux pip
-            # installs build from the sdist.
-            extra="--compatibility linux"
-          fi
-          python -m maturin build --release --features python -m crates/impulcifer-python/Cargo.toml $extra
+          ls -la target/wheels
+          ls target/wheels/impulcifer_py313-*-manylinux_2_28_x86_64.whl
 
       - name: Build the sdist (Linux only)
         if: runner.os == 'Linux'
@@ -414,12 +419,16 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: Drop the Linux wheel (linux_x86_64 is not a PyPI tag; Linux installs use the sdist)
+      - name: Every wheel must carry a PyPI platform tag (the Linux one manylinux_2_28)
         run: |
           set -euo pipefail
-          rm -fv dist/*linux_x86_64*.whl
           ls -la dist
           ls dist/*.tar.gz >/dev/null
+          ls dist/impulcifer_py313-*-manylinux_2_28_x86_64.whl >/dev/null
+          if ls dist/*linux_x86_64.whl 2>/dev/null | grep -v manylinux; then
+            echo "a plain linux_x86_64 wheel cannot be uploaded to PyPI" >&2
+            exit 1
+          fi
 
       - name: Publish
         uses: pypa/gh-action-pypi-publish@release/v1

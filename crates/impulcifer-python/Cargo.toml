@@ -14,8 +14,9 @@ workspace = true
 
 [dependencies]
 impulcifer-types = { path = "../impulcifer-types" }
-impulcifer-service = { path = "../impulcifer-service" }
-impulcifer-cli = { path = "../impulcifer-cli" }
+# The Python surface has no recording entry point, and manylinux forbids libasound.
+impulcifer-service = { path = "../impulcifer-service", default-features = false }
+impulcifer-cli = { path = "../impulcifer-cli", default-features = false }
 serde_json.workspace = true
 pyo3 = { version = "0.27", features = ["extension-module", "abi3-py39"], optional = true }
 

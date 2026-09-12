@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+#![cfg(feature = "native")]
 
 #[path = "../tests/bench_support/mod.rs"]
 mod bench_support;

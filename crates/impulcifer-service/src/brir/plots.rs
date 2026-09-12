@@ -7,6 +7,7 @@ use impulcifer_dsp::{
     interp::Spline,
     ir::ImpulseResponse,
     spectrogram,
+    stages::equalize::AppliedEqualization,
 };
 use impulcifer_plots::{
     AxisLimits, FrCurve, FrSeries, IrPanels, PanelLimits, Spectrogram, Waterfall, padded_range,
@@ -73,29 +74,62 @@ pub fn headphones(
     path: &Path,
     left: &FrequencyResponse,
     right: &FrequencyResponse,
+    applied: Option<(&FrequencyResponse, &FrequencyResponse)>,
 ) -> Result<(), DspError> {
-    let display = |fr: &FrequencyResponse| -> Result<FrCurve, DspError> {
+    let display = |fr: &FrequencyResponse,
+                   applied: Option<&FrequencyResponse>|
+     -> Result<FrCurve, DspError> {
         let mut smoothed = fr.clone();
         // HRIRPlotter.plot_result uses these display windows. There is no
         // plot_headphones method in 2.x; pipeline_stages plots raw headphones.
         smoothed.smoothen(1.0 / 3.0, 1.0 / 5.0, 20000.0, 23999.0)?;
+        if applied.is_some_and(|applied| applied.frequency != fr.frequency) {
+            return Err(DspError::InvalidArgument(
+                "headphone and equalization grids differ".into(),
+            ));
+        }
         Ok(FrCurve {
             name: fr.name.clone(),
             frequency: fr.frequency.clone(),
             raw: fr.raw.clone(),
             smoothed: smoothed.smoothed,
+            equalization: applied
+                .map(|applied| applied.equalization.clone())
+                .unwrap_or_default(),
             target: fr.target.clone(),
             ..Default::default()
         })
     };
+    let (applied_left, applied_right) = applied
+        .map(|(left, right)| (Some(left), Some(right)))
+        .unwrap_or((None, None));
     impulcifer_plots::plot_headphones(
         path,
-        &display(left)?,
-        &display(right)?,
+        &display(left, applied_left)?,
+        &display(right, applied_right)?,
         left.center_value((100.0, 10000.0)),
         right.center_value((100.0, 10000.0)),
     )
     .map_err(error)
+}
+/// The applied curves the headphones chart shows: the front-left speaker's left
+/// ear and the front-right speaker's right ear (the measurements the headphone
+/// compensation came from). When a front speaker is absent, the first speaker
+/// that has that ear. `None` when no curve for that ear exists.
+pub fn headphone_applied_curves(
+    applied: &[AppliedEqualization],
+) -> Option<(FrequencyResponse, FrequencyResponse)> {
+    let select = |speaker: &str, side| {
+        applied
+            .iter()
+            .find(|item| item.speaker == speaker && item.side == side)
+            .or_else(|| applied.iter().find(|item| item.side == side))
+            .map(|item| item.curve.clone())
+    };
+    Some((
+        select("FL", impulcifer_types::constants::Side::Left)?,
+        select("FR", impulcifer_types::constants::Side::Right)?,
+    ))
 }
 pub fn eq(
     path: &Path,

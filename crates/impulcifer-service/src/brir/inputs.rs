@@ -276,6 +276,7 @@ pub fn load_inputs(
                     &dir.dir.join("plots/headphones.png"),
                     &hp.left,
                     &hp.right,
+                    None,
                 )?;
             }
         } else {

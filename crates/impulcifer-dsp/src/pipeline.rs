@@ -8,7 +8,7 @@ use crate::{
     hrir::{Hrir, compact_tracks},
     mic_deviation::{MicDeviationOptions, apply_mic_deviation_correction},
     stages::{
-        equalize::{EqInputs, equalize_hrir},
+        equalize::{AppliedEqualization, EqInputs, equalize_hrir},
         headphone::HeadphoneCompensation,
         readme::{ReadmeData, readme_data},
         room::RoomCorrection,
@@ -41,6 +41,11 @@ pub struct StageProgress {
 pub trait StageObserver {
     /// Read-only plot snapshot before any later resampling; no progress step added.
     fn on_plot(&mut self, _key: StageKey, _hrir: &Hrir) -> Result<(), DspError> {
+        Ok(())
+    }
+    /// The corrections the equalize stage applied, one per speaker and ear, in
+    /// task order. Not called when the stage does not run.
+    fn on_equalized(&mut self, _applied: &[AppliedEqualization]) -> Result<(), DspError> {
         Ok(())
     }
     /// Python logger.step, core/pipeline.py:516-972; p10_stage_table.
@@ -226,22 +231,25 @@ pub fn run_pipeline(
             StageKey::WriteResponses => {
                 responses_tracks = hrir.stack_tracks(&HEXADECAGONAL_TRACK_ORDER, false)?
             }
-            StageKey::Equalize => equalize_hrir(
-                &mut hrir,
-                &EqInputs {
-                    room_frs: room
-                        .as_ref()
-                        .filter(|_| config.do_room_correction)
-                        .map(|r| &r.frs),
-                    hp: headphone
-                        .as_ref()
-                        .filter(|_| config.do_headphone_compensation),
-                    eq_left: eq_left.as_ref().filter(|_| config.do_equalization),
-                    eq_right: eq_right.as_ref().filter(|_| config.do_equalization),
-                    target: target.as_ref().unwrap(),
-                    fs: estimator.fs,
-                },
-            )?,
+            StageKey::Equalize => {
+                let applied = equalize_hrir(
+                    &mut hrir,
+                    &EqInputs {
+                        room_frs: room
+                            .as_ref()
+                            .filter(|_| config.do_room_correction)
+                            .map(|r| &r.frs),
+                        hp: headphone
+                            .as_ref()
+                            .filter(|_| config.do_headphone_compensation),
+                        eq_left: eq_left.as_ref().filter(|_| config.do_equalization),
+                        eq_right: eq_right.as_ref().filter(|_| config.do_equalization),
+                        target: target.as_ref().unwrap(),
+                        fs: estimator.fs,
+                    },
+                )?;
+                observer.on_equalized(&applied)?;
+            }
             StageKey::Decay => {
                 let targets: Vec<(String, f64)> = match config.decay.as_ref().unwrap() {
                     DecaySpec::Uniform(v) => {

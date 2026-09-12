@@ -148,12 +148,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install audio system libraries (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libasound2-dev
-
+      # The wheel carries no audio backend (crates/impulcifer-python builds the
+      # service and CLI without native-audio), so no ALSA headers are needed and
+      # the Linux wheel is a real manylinux wheel built inside the manylinux_2_28
+      # container below.
       - name: Install toolchain (rust-toolchain.toml)
         run: rustup show
 
@@ -178,8 +176,26 @@ jobs:
       - name: Stage package data (copies of data/ into the wheel)
         run: python crates/impulcifer-python/sync_data.py
 
+      - name: Build the abi3 wheel (manylinux_2_28 container)
+        if: runner.os == 'Linux'
+        uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.15.0
+          manylinux: 2_28
+          # The action's `manylinux` input already passes the platform tag; a second
+          # --compatibility makes maturin fail with "Expected only one platform tag".
+          args: --release --features python -m crates/impulcifer-python/Cargo.toml --auditwheel check
+
       - name: Build the abi3 wheel
+        if: runner.os != 'Linux'
         run: python -m maturin build --release --features python -m crates/impulcifer-python/Cargo.toml
+
+      - name: The Linux wheel must carry the manylinux_2_28 tag
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          ls -la target/wheels
+          ls target/wheels/impulcifer_py313-*-manylinux_2_28_x86_64.whl
 
       - name: Test the installed wheel (crates/impulcifer-python/tests)
         run: python -m pytest crates/impulcifer-python/tests -q

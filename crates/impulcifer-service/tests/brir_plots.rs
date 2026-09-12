@@ -9,6 +9,7 @@ use impulcifer_dsp::{
     fr::FrequencyResponse,
     hrir::Hrir,
     pipeline::{StageObserver, StageProgress, run_pipeline},
+    stages::equalize::AppliedEqualization,
 };
 use impulcifer_jobs::registry::JobRegistry;
 use impulcifer_service::brir::{
@@ -126,9 +127,14 @@ fn compare_levels(actual: &[f64], expected: &[f64], budget: f64, floor: f64, lab
 struct Capture {
     results: Option<(impulcifer_plots::FrSeries, impulcifer_plots::FrSeries)>,
     rates: Vec<(StageKey, u32)>,
+    applied: Option<Vec<AppliedEqualization>>,
 }
 impl StageObserver for Capture {
     fn on_stage(&mut self, _: StageProgress) {}
+    fn on_equalized(&mut self, applied: &[AppliedEqualization]) -> Result<(), DspError> {
+        self.applied = Some(applied.to_vec());
+        Ok(())
+    }
     fn check_cancelled(&self) -> Result<(), DspError> {
         Ok(())
     }
@@ -332,6 +338,67 @@ fn golden_eq_series_match_python() {
         }
         assert_eq!(png_dimensions(&t.0.join("plots/eq.png")), (1600, 1000));
     }
+}
+fn applied(
+    speaker: &str,
+    side: impulcifer_types::constants::Side,
+    value: f64,
+) -> AppliedEqualization {
+    let mut curve = FrequencyResponse::constant(speaker, Some(vec![10.0, 20.0]), 0.0, 0.0).unwrap();
+    curve.equalization = vec![value, value];
+    AppliedEqualization {
+        speaker: speaker.into(),
+        side,
+        curve,
+    }
+}
+#[test]
+fn headphone_applied_curves_prefer_the_front_pair() {
+    use impulcifer_types::constants::Side;
+    let curves = vec![
+        applied("FC", Side::Left, 1.0),
+        applied("BR", Side::Right, 2.0),
+        applied("FL", Side::Left, 3.0),
+        applied("FR", Side::Right, 4.0),
+    ];
+    let (left, right) = plot_data::headphone_applied_curves(&curves).unwrap();
+    assert_eq!(left.equalization, vec![3.0, 3.0]);
+    assert_eq!(right.equalization, vec![4.0, 4.0]);
+    let fallback = vec![
+        applied("FC", Side::Left, 1.0),
+        applied("BR", Side::Right, 2.0),
+    ];
+    let (left, right) = plot_data::headphone_applied_curves(&fallback).unwrap();
+    assert_eq!(left.equalization, vec![1.0, 1.0]);
+    assert_eq!(right.equalization, vec![2.0, 2.0]);
+    assert!(plot_data::headphone_applied_curves(&[applied("FL", Side::Left, 1.0)]).is_none());
+}
+#[test]
+fn headphones_chart_receives_the_applied_correction() {
+    let t = Temp::demo();
+    let c = config(&t, false);
+    let d = discover(&t.0, &c).unwrap();
+    let e = open_estimator(&d, c.test_signal.as_deref()).unwrap();
+    let input = load_inputs(&d, &e, &c, &mut Quiet).unwrap();
+    let before = std::fs::read(t.0.join("plots/headphones.png")).unwrap();
+    let mut observer = Capture::default();
+    run_pipeline(&c, input, &mut observer).unwrap();
+    let applied = observer.applied.unwrap();
+    let (left, right) = plot_data::headphone_applied_curves(&applied).unwrap();
+    let hp = inputs(&t, &c).headphone.unwrap();
+    plot_data::headphones(
+        &t.0.join("plots/headphones.png"),
+        &hp.left,
+        &hp.right,
+        Some((&left, &right)),
+    )
+    .unwrap();
+    assert!(!left.equalization.is_empty());
+    assert!(!right.equalization.is_empty());
+    assert_ne!(
+        std::fs::read(t.0.join("plots/headphones.png")).unwrap(),
+        before
+    );
 }
 fn png_dimensions(path: &Path) -> (u32, u32) {
     let b = std::fs::read(path).unwrap();

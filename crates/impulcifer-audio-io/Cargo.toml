@@ -11,10 +11,14 @@ workspace = true
 [dependencies]
 impulcifer-types = { path = "../impulcifer-types" }
 thiserror.workspace = true
-cpal = "0.18"
+cpal = { version = "0.18", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-impulcifer-sys-win = { path = "../impulcifer-sys-win" }
+impulcifer-sys-win = { path = "../impulcifer-sys-win", optional = true }
+
+[features]
+default = ["native"]
+native = ["dep:cpal", "dep:impulcifer-sys-win"]
 
 [dev-dependencies]
 impulcifer-io = { path = "../impulcifer-io" }
