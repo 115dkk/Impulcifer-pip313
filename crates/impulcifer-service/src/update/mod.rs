@@ -19,6 +19,11 @@ pub const RELEASES_URL: &str =
     "https://github.com/115dkk/Impulcifer-pip313/releases/latest/download";
 pub const LATEST_ENDPOINT: &str =
     "https://api.github.com/repos/115dkk/Impulcifer-pip313/releases/latest";
+/// The release list a prerelease install reads (`/releases/latest` never
+/// resolves a prerelease); thirty entries cover every 3.x release so far
+/// plus the 2.x releases published after it.
+pub const RELEASES_ENDPOINT: &str =
+    "https://api.github.com/repos/115dkk/Impulcifer-pip313/releases?per_page=30";
 
 #[derive(Clone)]
 pub struct UpdateOptions {
@@ -26,6 +31,7 @@ pub struct UpdateOptions {
     pub platform: String,
     pub current_version: String,
     pub latest_endpoint: String,
+    pub releases_endpoint: String,
     pub releases_url: String,
     pub timeout: Duration,
     pub download_root: PathBuf,
@@ -43,6 +49,7 @@ impl Default for UpdateOptions {
             platform,
             current_version: env!("CARGO_PKG_VERSION").into(),
             latest_endpoint: LATEST_ENDPOINT.into(),
+            releases_endpoint: RELEASES_ENDPOINT.into(),
             releases_url: RELEASES_URL.into(),
             timeout: Duration::from_secs(10),
             download_root: std::env::temp_dir().join("impulcifer_updates"),

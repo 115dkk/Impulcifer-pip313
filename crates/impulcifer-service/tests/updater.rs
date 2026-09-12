@@ -88,6 +88,7 @@ fn options(root: &Path, kind: InstallKind) -> UpdateOptions {
         platform: "windows".into(),
         current_version: "2.0.0".into(),
         latest_endpoint: "http://127.0.0.1:0/latest".into(),
+        releases_endpoint: "http://127.0.0.1:0/releases".into(),
         releases_url: "http://127.0.0.1:0/feed".into(),
         timeout: Duration::from_secs(2),
         download_root: root.join("downloads"),
@@ -388,6 +389,133 @@ fn check_for_updates_reads_github_latest_from_mock_server() {
             .to_lowercase()
             .contains("user-agent: impulcifer/2.0.0")
     );
+}
+
+fn release_list() -> Vec<Value> {
+    let setup = |n: u32| json!([{"name":format!("Impulcifer-{n}-Setup.exe"),"browser_download_url":format!("https://example.invalid/{n}/Setup.exe")}]);
+    vec![
+        // A draft is invisible to installs even when it is the newest version.
+        json!({"tag_name":"v3.0.0-alpha.9","draft":true,"assets":setup(9)}),
+        // The rolling updater feed carries no version and must never be chosen.
+        json!({"tag_name":"updater-3x-pre","assets":[{"name":"latest.json","browser_download_url":"https://example.invalid/latest.json"}]}),
+        json!({"tag_name":"v3.0.0-alpha.1","body":"alpha one","html_url":"https://example.invalid/alpha1","assets":setup(1)}),
+        json!({"tag_name":"v3.0.0-alpha.0","body":"alpha zero","assets":setup(0)}),
+        // A 2.x stable published after the alphas is older by version.
+        json!({"tag_name":"v2.14.1","body":"two","assets":setup(2)}),
+    ]
+}
+
+fn prerelease_check(current: &str, releases: Value) -> (Value, Server) {
+    let root = tempfile::tempdir().unwrap();
+    let server = Server::new(vec![(
+        200,
+        serde_json::to_vec(&releases).unwrap(),
+        Duration::ZERO,
+    )]);
+    let mut opts = options(root.path(), InstallKind::Dev);
+    opts.current_version = current.into();
+    opts.releases_endpoint = format!("{}/releases?per_page=30", server.base);
+    let response = service(root.path(), opts, Arc::default()).call("check_for_updates", vec![]);
+    (response, server)
+}
+
+#[test]
+fn prerelease_install_reads_the_release_list_and_takes_the_newest_version() {
+    let (response, server) = prerelease_check("3.0.0-alpha.0", json!(release_list()));
+    assert_eq!(response["ok"], true, "{response}");
+    let data = &response["data"];
+    assert_eq!(data["update_available"], true);
+    assert_eq!(data["latest_version"], "3.0.0-alpha.1");
+    assert_eq!(data["download_url"], "https://example.invalid/1/Setup.exe");
+    assert_eq!(data["release_notes"], "alpha one");
+    assert_eq!(data["release_url"], "https://example.invalid/alpha1");
+    let requests = server.requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0].starts_with("GET /releases?per_page=30 "),
+        "{}",
+        requests[0]
+    );
+    assert!(
+        requests[0]
+            .to_lowercase()
+            .contains("user-agent: impulcifer/3.0.0-alpha.0")
+    );
+}
+
+#[test]
+fn prerelease_install_is_offered_the_following_stable() {
+    let mut releases = release_list();
+    releases.push(json!({"tag_name":"v3.0.0","body":"stable","assets":[{"name":"Impulcifer-Setup.exe","browser_download_url":"https://example.invalid/3/Setup.exe"}]}));
+    let (response, _server) = prerelease_check("3.0.0-alpha.1", json!(releases));
+    assert_eq!(response["data"]["update_available"], true, "{response}");
+    assert_eq!(response["data"]["latest_version"], "3.0.0");
+    assert_eq!(
+        response["data"]["download_url"],
+        "https://example.invalid/3/Setup.exe"
+    );
+}
+
+#[test]
+fn prerelease_install_on_the_newest_release_is_up_to_date() {
+    let (response, _server) = prerelease_check("3.0.0-alpha.1", json!(release_list()));
+    assert_eq!(response["data"]["update_available"], false, "{response}");
+    assert_eq!(response["data"]["latest_version"], "3.0.0-alpha.1");
+    assert!(response["data"]["download_url"].is_null());
+    assert!(response["data"]["release_notes"].is_null());
+}
+
+#[test]
+fn release_list_failures_are_retryable() {
+    for releases in [
+        json!({"message":"not a list"}),
+        json!([]),
+        json!([{"tag_name":"updater-3x-pre","assets":[]}]),
+    ] {
+        let (response, _server) = prerelease_check("3.0.0-alpha.1", releases);
+        assert_eq!(
+            response["error"]["code"], "UPDATE_CHECK_FAILED",
+            "{response}"
+        );
+        assert_eq!(response["error"]["retryable"], true);
+    }
+    assert_eq!(
+        update::check::display_version("v3.0.0-alpha.1"),
+        "3.0.0-alpha.1"
+    );
+    assert_eq!(update::check::display_version("v3.0.0"), "3.0.0");
+    assert_eq!(update::check::display_version("v2.3.1.post1"), "2.3.1");
+    assert!(update::check::select_release(&[]).is_none());
+}
+
+#[test]
+fn same_release_compares_the_full_prerelease() {
+    use update::check::same_release;
+    // The Tauri feed lags behind the GitHub release for a moment after a
+    // release is created; alpha.1 in the feed must not be staged as alpha.2.
+    assert!(!same_release("3.0.0-alpha.1", "3.0.0-alpha.2"));
+    assert!(same_release("3.0.0-alpha.2", "3.0.0-alpha.2"));
+    assert!(same_release("v3.0.0-alpha.2", "3.0.0-alpha.2"));
+    assert!(!same_release("3.0.0-alpha.2", "3.0.0"));
+    assert!(same_release("v3.0.0", "3.0.0"));
+    assert!(same_release("3.0.0.post1", "3.0.0"));
+    assert!(!same_release("3.0.1", "3.0.0"));
+}
+
+/// Evidence against the live GitHub API: an alpha.0 install must be offered the
+/// newest published 3.x prerelease, which `/releases/latest` (2.x stable) never
+/// names. Needs the network; run with `--ignored`.
+#[test]
+#[ignore = "reads the live GitHub releases API"]
+fn live_prerelease_check_sees_the_published_3x_prerelease() {
+    let opts = UpdateOptions {
+        current_version: "3.0.0-alpha.0".into(),
+        ..UpdateOptions::default()
+    };
+    let payload = update::check::check(&opts).unwrap();
+    let latest = payload["latest_version"].as_str().unwrap();
+    assert!(latest.starts_with("3."), "{payload}");
+    assert_eq!(payload["update_available"], true, "{payload}");
 }
 
 #[test]
