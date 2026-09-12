@@ -40,10 +40,10 @@ impl StagedUpdate {
                 .map_err(|e| e.to_string())?
                 .ok_or("No update available in the Tauri release feed.")?;
             // Do not stage a different release if the static feed lags behind
-            // the GitHub release that the user just confirmed.
-            if impulcifer_service::update::check::normalize_version(&update.version)
-                != impulcifer_service::update::check::normalize_version(latest_version)
-            {
+            // the GitHub release that the user just confirmed. The full
+            // prerelease is compared (alpha.1 is not alpha.2), since the rolling
+            // feed is refreshed after the versioned release is created.
+            if !impulcifer_service::update::check::same_release(&update.version, latest_version) {
                 return Err(
                     "Tauri release feed version does not match the selected update.".into(),
                 );

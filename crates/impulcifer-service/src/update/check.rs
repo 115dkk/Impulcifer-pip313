@@ -93,6 +93,13 @@ pub fn display_version(tag: &str) -> String {
     }
 }
 
+/// Whether a feed entry names the release the user confirmed: the full
+/// prerelease is compared (alpha.1 is not alpha.2), stable versions by their
+/// numeric base, tags with or without `v`.
+pub fn same_release(feed_version: &str, requested_version: &str) -> bool {
+    display_version(feed_version) == display_version(requested_version)
+}
+
 /// The newest non-draft release whose tag is a PEP 440 version. GitHub orders
 /// the list by creation date and rolling feeds such as `updater-3x-pre` carry
 /// no version, so the choice rests on version comparison alone.

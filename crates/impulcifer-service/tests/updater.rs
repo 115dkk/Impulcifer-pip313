@@ -488,6 +488,20 @@ fn release_list_failures_are_retryable() {
     assert!(update::check::select_release(&[]).is_none());
 }
 
+#[test]
+fn same_release_compares_the_full_prerelease() {
+    use update::check::same_release;
+    // The Tauri feed lags behind the GitHub release for a moment after a
+    // release is created; alpha.1 in the feed must not be staged as alpha.2.
+    assert!(!same_release("3.0.0-alpha.1", "3.0.0-alpha.2"));
+    assert!(same_release("3.0.0-alpha.2", "3.0.0-alpha.2"));
+    assert!(same_release("v3.0.0-alpha.2", "3.0.0-alpha.2"));
+    assert!(!same_release("3.0.0-alpha.2", "3.0.0"));
+    assert!(same_release("v3.0.0", "3.0.0"));
+    assert!(same_release("3.0.0.post1", "3.0.0"));
+    assert!(!same_release("3.0.1", "3.0.0"));
+}
+
 /// Evidence against the live GitHub API: an alpha.0 install must be offered the
 /// newest published 3.x prerelease, which `/releases/latest` (2.x stable) never
 /// names. Needs the network; run with `--ignored`.
