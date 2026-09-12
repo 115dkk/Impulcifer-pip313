@@ -15,12 +15,20 @@ pub struct EqInputs<'a> {
     pub target: &'a FrequencyResponse,
     pub fs: u32,
 }
-/// Python process_equalization_worker, core/parallel_workers.py:69-131; p10_eq_firs.
-pub fn equalization_fir(
+/// One ear's applied correction: the response after `equalize` (fields `error`,
+/// `error_smoothed`, `equalization` on the eq grid) that produced its FIR.
+#[derive(Clone, Debug)]
+pub struct AppliedEqualization {
+    pub speaker: String,
+    pub side: Side,
+    pub curve: FrequencyResponse,
+}
+/// Everything `equalization_fir` did up to and including `fr.equalize(..)`.
+pub fn equalization_curve(
     inputs: &EqInputs<'_>,
     speaker: &str,
     side: Side,
-) -> Result<Vec<f64>, DspError> {
+) -> Result<FrequencyResponse, DspError> {
     if side == Side::Center {
         return Err(DspError::InvalidArgument(
             "ear must be left or right".into(),
@@ -74,10 +82,21 @@ pub fn equalization_fir(
         treble_f_upper: inputs.fs as f64 / 2.0,
         ..Default::default()
     })?;
-    fr.minimum_phase_impulse_response(inputs.fs, 5.0, false)
+    Ok(fr)
+}
+/// Python process_equalization_worker, core/parallel_workers.py:69-131; p10_eq_firs.
+pub fn equalization_fir(
+    inputs: &EqInputs<'_>,
+    speaker: &str,
+    side: Side,
+) -> Result<Vec<f64>, DspError> {
+    equalization_curve(inputs, speaker, side)?.minimum_phase_impulse_response(inputs.fs, 5.0, false)
 }
 /// Python _stage_equalize, core/pipeline.py:655-700; p10_default_equalize.
-pub fn equalize_hrir(hrir: &mut Hrir, inputs: &EqInputs<'_>) -> Result<(), DspError> {
+pub fn equalize_hrir(
+    hrir: &mut Hrir,
+    inputs: &EqInputs<'_>,
+) -> Result<Vec<AppliedEqualization>, DspError> {
     let tasks: Vec<_> = hrir
         .speakers
         .iter()
@@ -88,18 +107,28 @@ pub fn equalize_hrir(hrir: &mut Hrir, inputs: &EqInputs<'_>) -> Result<(), DspEr
                 .map(|(e, _)| (s.speaker.clone(), e))
         })
         .collect();
-    let firs: Result<Vec<_>, _> = tasks
+    let results: Result<Vec<_>, _> = tasks
         .par_iter()
-        .map(|(s, e)| equalization_fir(inputs, s, *e))
+        .map(|(speaker, side)| {
+            let curve = equalization_curve(inputs, speaker, *side)?;
+            let fir = curve.minimum_phase_impulse_response(inputs.fs, 5.0, false)?;
+            Ok((curve, fir))
+        })
         .collect();
-    for ((s, e), fir) in tasks.into_iter().zip(firs?) {
-        let pair = hrir.get_mut(&s).unwrap();
-        let ir = if e == Side::Left {
+    let mut applied = Vec::with_capacity(tasks.len());
+    for ((speaker, side), (curve, fir)) in tasks.into_iter().zip(results?) {
+        let pair = hrir.get_mut(&speaker).unwrap();
+        let ir = if side == Side::Left {
             &mut pair.left
         } else {
             &mut pair.right
         };
         ir.as_mut().unwrap().equalize(&fir);
+        applied.push(AppliedEqualization {
+            speaker,
+            side,
+            curve,
+        });
     }
-    Ok(())
+    Ok(applied)
 }

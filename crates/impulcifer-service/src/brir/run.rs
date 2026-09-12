@@ -4,7 +4,9 @@ use super::{
 };
 use impulcifer_dsp::{
     DspError,
+    fr::FrequencyResponse,
     pipeline::{StageObserver, StageProgress, run_pipeline, total_steps},
+    stages::equalize::AppliedEqualization,
 };
 use impulcifer_jobs::registry::{JobContext, JobFailure};
 use impulcifer_types::{
@@ -85,8 +87,24 @@ struct Observer<'a, 'b> {
     previous: Option<StageKey>,
     directory: &'a Path,
     estimator: &'a impulcifer_dsp::estimator::SweepEstimator,
+    headphone: Option<(FrequencyResponse, FrequencyResponse)>,
 }
 impl StageObserver for Observer<'_, '_> {
+    fn on_equalized(&mut self, applied: &[AppliedEqualization]) -> Result<(), DspError> {
+        self.check_cancelled()?;
+        if let (Some((headphone_left, headphone_right)), Some((applied_left, applied_right))) = (
+            self.headphone.as_ref(),
+            super::plots::headphone_applied_curves(applied),
+        ) {
+            super::plots::headphones(
+                &self.directory.join("plots/headphones.png"),
+                headphone_left,
+                headphone_right,
+                Some((&applied_left, &applied_right)),
+            )?;
+        }
+        Ok(())
+    }
     fn on_plot(
         &mut self,
         key: StageKey,
@@ -205,6 +223,10 @@ pub(crate) fn run_with_data(
         events.same_fs = config.fs == Some(estimator.fs);
         events.check_cancelled()?;
         let inputs = load_inputs(&dir, &estimator, config, &mut events)?;
+        let headphone = inputs
+            .headphone
+            .as_ref()
+            .map(|hp| (hp.left.clone(), hp.right.clone()));
         let channels = inputs
             .hrir
             .speakers
@@ -236,6 +258,7 @@ pub(crate) fn run_with_data(
                 previous: None,
                 directory: &dir.dir,
                 estimator: &estimator,
+                headphone,
             },
         )?;
         events.check_cancelled()?;

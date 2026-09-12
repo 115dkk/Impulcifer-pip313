@@ -1,9 +1,13 @@
 #![forbid(unsafe_code)]
+#![cfg(feature = "native")]
 
 //! Explicit opt-in only: never select a default device or a physical speaker.
-use std::sync::{Arc, Mutex};
+#[cfg(not(windows))]
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+#[cfg(not(windows))]
 use impulcifer_audio_io::cpal_backend::{CpalBackend, CpalOutputSession, DrainDiagnostics};
 use impulcifer_audio_io::session::{PlaybackBuffer, SessionRequest, play_and_record};
 use impulcifer_types::audio::*;
@@ -11,13 +15,16 @@ use impulcifer_types::audio::*;
 // Both tests live in this binary and hold the same lock through teardown.
 static CABLE: Mutex<()> = Mutex::new(());
 
+#[cfg(not(windows))]
 struct MeasuredCpal {
     diagnostics: Arc<Mutex<Option<DrainDiagnostics>>>,
 }
+#[cfg(not(windows))]
 struct MeasuredOutput {
     inner: CpalOutputSession,
     diagnostics: Arc<Mutex<Option<DrainDiagnostics>>>,
 }
+#[cfg(not(windows))]
 impl OutputSession for MeasuredOutput {
     fn play_to_completion(
         &mut self,
@@ -29,6 +36,7 @@ impl OutputSession for MeasuredOutput {
         Ok(report)
     }
 }
+#[cfg(not(windows))]
 impl AudioBackend for MeasuredCpal {
     fn name(&self) -> &'static str {
         "cpal measured"
@@ -153,6 +161,7 @@ fn measure(backend: &dyn AudioBackend) {
     assert!(rms(0) < -60.0, "unexpected left signal {} dBFS", rms(0));
 }
 
+#[cfg(not(windows))]
 #[test]
 #[ignore = "requires CABLE-A virtual cable; emits a -20 dBFS peak tone only into CABLE-A"]
 fn cpal_play_and_capture_virtual_cable() {

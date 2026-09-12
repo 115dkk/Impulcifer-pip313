@@ -16,7 +16,7 @@ impulcifer-plots = { path = "../impulcifer-plots" }
 rayon.workspace = true
 impulcifer-io = { path = "../impulcifer-io" }
 impulcifer-analysis = { path = "../impulcifer-analysis" }
-impulcifer-audio-io = { path = "../impulcifer-audio-io" }
+impulcifer-audio-io = { path = "../impulcifer-audio-io", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -28,6 +28,10 @@ sha2 = "0.10.9"
 tempfile = "3.27.0"
 url = "2.5.8"
 percent-encoding = "2.3.2"
+
+[features]
+default = ["native-audio"]
+native-audio = ["impulcifer-audio-io/native"]
 
 [target.'cfg(windows)'.dependencies]
 velopack = "1.2.0"

@@ -23,6 +23,14 @@ fn repo_root() -> PathBuf {
         .expect("repo root")
 }
 
+fn manifest(path: &str) -> toml::Value {
+    toml::from_str(
+        &fs::read_to_string(repo_root().join(path))
+            .unwrap_or_else(|error| panic!("{path}: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("{path}: {error}"))
+}
+
 fn first_party_crate_dirs() -> Vec<PathBuf> {
     let root = repo_root();
     let mut dirs = Vec::new();
@@ -39,6 +47,29 @@ fn first_party_crate_dirs() -> Vec<PathBuf> {
     dirs.sort();
     assert!(!dirs.is_empty(), "no crates found under crates/ or apps/");
     dirs
+}
+
+#[test]
+fn python_wheel_builds_without_a_native_audio_backend() {
+    let python = manifest("crates/impulcifer-python/Cargo.toml");
+    let dependencies = python["dependencies"].as_table().unwrap();
+    for name in ["impulcifer-service", "impulcifer-cli"] {
+        assert_eq!(
+            dependencies[name]["default-features"].as_bool(),
+            Some(false),
+            "{name} must disable default features in the Python wheel"
+        );
+    }
+    let features = python["features"].as_table().unwrap();
+    assert!(
+        features
+            .values()
+            .flat_map(|value| value.as_array().into_iter().flatten())
+            .all(|value| value
+                .as_str()
+                .is_none_or(|name| !name.contains("native-audio"))),
+        "the Python crate must not expose native-audio through any feature"
+    );
 }
 
 fn crate_name(dir: &Path) -> String {

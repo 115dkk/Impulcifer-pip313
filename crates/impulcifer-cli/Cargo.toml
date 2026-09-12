@@ -15,7 +15,11 @@ workspace = true
 [dependencies]
 impulcifer-types = { path = "../impulcifer-types" }
 impulcifer-dsp = { path = "../impulcifer-dsp" }
-impulcifer-service = { path = "../impulcifer-service" }
+impulcifer-service = { path = "../impulcifer-service", default-features = false }
 impulcifer-jobs = { path = "../impulcifer-jobs" }
 clap.workspace = true
 serde_json.workspace = true
+
+[features]
+default = ["native-audio"]
+native-audio = ["impulcifer-service/native-audio"]

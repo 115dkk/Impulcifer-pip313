@@ -1034,6 +1034,45 @@ fn host_failures_and_panics_do_not_escape_boundary() {
     assert_eq!(data(f.call("get_ui_settings", vec![]))["theme"], "dark");
 }
 #[test]
+fn audio_free_service_answers_devices_and_recording_honestly() {
+    let root = TempRoot::new();
+    let jobs = JobRegistry::new();
+    let service = ImpulciferService::with_dependencies(
+        Box::new(impulcifer_service::NoopHost),
+        root.0.join("settings.json"),
+        Box::new(impulcifer_audio_io::null_backend::NullBackend),
+        jobs.clone(),
+        root.0.clone(),
+    );
+    assert_eq!(
+        data(service.call("list_audio_devices", vec![])),
+        json!({"host_apis":[],"devices":[],"default_input_index":-1,"default_output_index":-1})
+    );
+    // No fixed choice, only the automatic policy: the same shape the cpal
+    // backend reports, so the recorder screen keeps its disabled select.
+    assert_eq!(
+        data(service.call("bootstrap", vec![]))["capabilities"]["share_modes"],
+        json!(["auto"])
+    );
+    assert_eq!(
+        data(service.call("get_system_info", vec![]))["runtime"]["audio_backend"],
+        "none"
+    );
+    let started = data(service.call(
+        "start_recording",
+        vec![json!({"record_dir":root.0,"sweep":{}})],
+    ));
+    let id = started["job"]["job_id"].as_str().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !jobs.poll(id, 0).unwrap().job.status.is_terminal() {
+        assert!(Instant::now() < deadline);
+        std::thread::yield_now();
+    }
+    let poll = data(service.call("poll_job", vec![json!(id)]));
+    assert_eq!(poll["job"]["status"], "failed");
+    assert_eq!(poll["job"]["error"]["code"], "DEVICE_ERROR");
+}
+#[test]
 fn backend_errors_panics_and_empty_enumeration() {
     let f = Fixture::backend(FakeBackend {
         fail: true,

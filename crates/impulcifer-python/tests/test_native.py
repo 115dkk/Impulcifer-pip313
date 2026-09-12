@@ -67,6 +67,13 @@ def pep440(version):
     return base + {"alpha": "a", "beta": "b", "rc": "rc"}[label] + (number or "0")
 
 
+def test_extension_module_links_no_audio_library(package):
+    if not sys.platform.startswith("linux"):
+        pytest.skip("/proc/self/maps and libasound apply only to Linux wheels")
+    maps = Path("/proc/self/maps").read_text(encoding="utf-8")
+    assert "libasound" not in maps.lower()
+
+
 def test_version(package):
     version = workspace_version()
     assert package.impulcifer_native.version() == package.__version__ == version

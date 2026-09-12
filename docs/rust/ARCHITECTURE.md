@@ -137,6 +137,7 @@ Windows에서 `share_mode=auto`는 exclusive를 먼저 시도하고 `Unsupported
 
 - Tauri 메인 스레드는 셸만 담당합니다. 커맨드는 검증 후 잡 레지스트리에 넘기고 즉시 반환합니다.
 - 잡은 전용 OS 스레드에서 돌고, 스피커별 병렬은 rayon 풀을 씁니다. 결과는 스피커 순서대로 모으고 전역 축약은 직렬로 합니다(부동소수점 결정성).
+- equalize가 끝나면 `StageObserver::on_equalized`가 실제 FIR을 만든 적용 보정 곡선을 작업 순서대로 받습니다.
 - 오디오 스트림은 방향마다 전용 OS 스레드입니다.
 - 취소는 `CancelToken`(AtomicBool)을 스테이지 경계, 스피커 경계, 긴 반복 안에서 확인하는 협조적 취소입니다. `cancel_requested`는 워커가 실제로 멈춘 뒤에야 `cancelled`가 됩니다.
 
@@ -193,6 +194,7 @@ fn pywebview_api(state: State<AppState>, method: String, args: Vec<Value>) -> Va
 
 - `impulcifer-cli`는 2.x `impulcifer --help`의 옵션 이름과 기본값을 그대로 제공합니다(clap). 옵션 목록은 ProcessingConfig 필드에서 파생되며 `features.toml`의 `config.*` 항목과 1:1입니다.
 - `impulcifer-python`은 `impulcifer_native` 모듈로 `run(config: dict) -> dict`와 프리미티브 일부를 노출합니다. 입력은 소유 복사(`PyReadonlyArray` → `to_vec`), 긴 계산은 `Python::detach`, 출력은 `from_vec`. free-threaded 지원은 별도 계약 뒤에 선언합니다.
+- `impulcifer-audio-io`의 `native`와 service/CLI의 `native-audio` 기능은 기본으로 켜지만, 녹음 진입점이 없는 Python wheel은 이를 꺼 manylinux에서 네이티브 오디오 라이브러리를 링크하지 않습니다.
 
 ## 9. 게이트
 

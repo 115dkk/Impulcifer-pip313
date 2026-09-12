@@ -7,7 +7,9 @@
 //! join both threads. Windows uses `impulcifer-sys-win`, other platforms cpal.
 
 pub mod cached_backend;
+#[cfg(all(feature = "native", not(windows)))]
 pub mod cpal_backend;
+pub mod null_backend;
 pub mod policy;
 pub mod session;
 
@@ -15,16 +17,20 @@ use impulcifer_types::audio::AudioBackend;
 
 /// The platform default backend.
 pub fn default_backend() -> Box<dyn AudioBackend> {
-    #[cfg(windows)]
+    #[cfg(all(feature = "native", windows))]
     {
         Box::new(cached_backend::CachedBackend::new(Box::new(
             impulcifer_sys_win::WasapiBackend::new(),
         )))
     }
-    #[cfg(not(windows))]
+    #[cfg(all(feature = "native", not(windows)))]
     {
         Box::new(cached_backend::CachedBackend::new(Box::new(
             cpal_backend::CpalBackend::new(),
         )))
+    }
+    #[cfg(not(feature = "native"))]
+    {
+        Box::new(null_backend::NullBackend)
     }
 }

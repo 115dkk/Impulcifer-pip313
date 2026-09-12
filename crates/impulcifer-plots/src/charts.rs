@@ -237,6 +237,56 @@ pub fn plot_results(path: &Path, left: &FrSeries, right: &FrSeries) -> Result<()
 }
 const HEADPHONES_TITLE: &str = "Your headphones as measured";
 const HEADPHONES_SUBTITLE: &str = "Impulcifer flattens this in the final equalization; the flatter the bold line, the less it has to do.";
+const HEADPHONES_CORRECTION_TITLE: &str = "Your headphones and the correction applied";
+const HEADPHONES_CORRECTION_SUBTITLE: &str = "Bold lines show the measurement, grey dashes the target, and purple dashes the equalization Impulcifer applied to the front speakers.";
+fn headphones_correction_footer(left: &FrCurve, right: &FrCurve) -> String {
+    let points: Vec<_> = [left, right]
+        .into_iter()
+        .flat_map(|c| c.frequency.iter().zip(&c.equalization))
+        .filter(|(f, _)| (40.0..=16000.0).contains(*f))
+        .collect();
+    let largest = points.iter().max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()));
+    largest.map_or_else(
+        || "Correction applied 40 Hz–16 kHz: unavailable (no samples in band)".into(),
+        |(f, v)| {
+            let lo = points
+                .iter()
+                .map(|(_, v)| **v)
+                .fold(f64::INFINITY, f64::min);
+            let hi = points
+                .iter()
+                .map(|(_, v)| **v)
+                .fold(f64::NEG_INFINITY, f64::max);
+            format!(
+                "Correction applied 40 Hz–16 kHz: {lo:+.1} … {hi:+.1} dB, largest {v:+.1} dB at {}",
+                frequency(**f)
+            )
+            .replace('-', "−")
+        },
+    )
+}
+fn headphones_correction_range(
+    measured: (f64, f64),
+    left: &FrCurve,
+    right: &FrCurve,
+) -> (f64, f64) {
+    let correction = db_range(left.equalization.iter().chain(&right.equalization).copied());
+    // The legacy limits can be infinite when their open frequency band is empty.
+    let lo = if measured.0.is_finite() {
+        measured.0.min(correction.0)
+    } else {
+        correction.0
+    };
+    let hi = if measured.1.is_finite() {
+        measured.1.max(correction.1)
+    } else {
+        correction.1
+    };
+    (
+        (lo / DB_STEP).floor() * DB_STEP,
+        (hi / DB_STEP).ceil() * DB_STEP,
+    )
+}
 fn headphones_deviation(c: &FrCurve) -> Vec<(f64, f64)> {
     let measured = if c.smoothed.is_empty() {
         &c.raw
@@ -295,9 +345,15 @@ pub fn plot_headphones(
     gain_left_db: f64,
     gain_right_db: f64,
 ) -> Result<(), PlotError> {
-    headphones_limits(left, right)?;
+    let measured_range = headphones_limits(left, right)?;
     validate_curve(left)?;
     validate_curve(right)?;
+    if left.equalization.is_empty() != right.equalization.is_empty() {
+        return Err(PlotError::Invalid(
+            "headphone correction requires both ears".into(),
+        ));
+    }
+    let has_correction = !left.equalization.is_empty();
     if !gain_left_db.is_finite() || !gain_right_db.is_finite() {
         return Err(PlotError::Invalid("finite headphone gains required".into()));
     }
@@ -319,15 +375,40 @@ pub fn plot_headphones(
             Dash::Dots,
         ));
     }
+    let mut footer_lines = headphones_footer(left, right);
+    let (title, subtitle, range) = if has_correction {
+        lines.push(line(
+            &left.frequency,
+            &left.equalization,
+            "Correction applied · left",
+            CORRECTION,
+            Dash::Long,
+        ));
+        lines.push(line(
+            &right.frequency,
+            &right.equalization,
+            "Correction applied · right",
+            CORRECTION,
+            Dash::Dots,
+        ));
+        footer_lines.push(headphones_correction_footer(left, right));
+        (
+            HEADPHONES_CORRECTION_TITLE,
+            HEADPHONES_CORRECTION_SUBTITLE,
+            Some(headphones_correction_range(measured_range, left, right)),
+        )
+    } else {
+        (HEADPHONES_TITLE, HEADPHONES_SUBTITLE, None)
+    };
     png_file(path, SINGLE, |root| {
         let area = content(root);
-        footer(&area, &headphones_footer(left, right))?;
+        footer(&area, &footer_lines)?;
         fr_panel(
-            &area.margin(0, ROW * 2 + PAD * 2, 0, 0),
-            HEADPHONES_TITLE,
-            HEADPHONES_SUBTITLE,
+            &area.margin(0, ROW * footer_lines.len() as i32 + PAD * 2, 0, 0),
+            title,
+            subtitle,
             &lines,
-            None,
+            range,
             None,
             false,
         )?;
@@ -1364,6 +1445,66 @@ mod tests {
         assert_eq!(
             reflection_summary(None),
             "No echo above −30 dB within 25 ms"
+        );
+    }
+    #[test]
+    fn headphones_correction_footer_reports_range_and_largest_value() {
+        let mut left = FrCurve {
+            frequency: vec![40., 3400., 16000.],
+            equalization: vec![1., -6.2, 2.],
+            ..Default::default()
+        };
+        let mut right = FrCurve {
+            frequency: left.frequency.clone(),
+            equalization: vec![4.8, -2., 3.],
+            ..Default::default()
+        };
+        assert_eq!(
+            headphones_correction_footer(&left, &right),
+            "Correction applied 40 Hz–16 kHz: −6.2 … +4.8 dB, largest −6.2 dB at 3.4 kHz"
+        );
+        left.frequency = vec![39., 40., 16000., 16001.];
+        left.equalization = vec![-99., -2., 1., 99.];
+        right.frequency = left.frequency.clone();
+        right.equalization = vec![-100., -1., 4.8, 100.];
+        assert_eq!(
+            headphones_correction_footer(&left, &right),
+            "Correction applied 40 Hz–16 kHz: −2.0 … +4.8 dB, largest +4.8 dB at 16.0 kHz"
+        );
+        left.frequency = vec![20., 20000.];
+        left.equalization = vec![-99., 99.];
+        right = left.clone();
+        assert_eq!(
+            headphones_correction_footer(&left, &right),
+            "Correction applied 40 Hz–16 kHz: unavailable (no samples in band)"
+        );
+    }
+    #[test]
+    fn headphones_correction_range_unions_legacy_limits_and_padded_correction() {
+        let left = FrCurve {
+            frequency: vec![40., 3400., 16000.],
+            raw: vec![-8., 2., 4.],
+            equalization: vec![-30., 0., 1.],
+            ..Default::default()
+        };
+        let right = FrCurve {
+            raw: vec![4., -2., -8.],
+            equalization: vec![-1., 0., 40.],
+            ..left.clone()
+        };
+        let measured = headphones_limits(&left, &right).unwrap();
+        assert_eq!(measured, (-13.200000000000001, 13.200000000000001));
+        assert_eq!(
+            headphones_correction_range(measured, &left, &right),
+            (-36., 48.)
+        );
+        assert_eq!(
+            headphones_correction_range((-61., 61.), &left, &right),
+            (-66., 66.)
+        );
+        assert_eq!(
+            headphones_correction_range((f64::INFINITY, f64::NEG_INFINITY), &left, &right),
+            (-36., 48.)
         );
     }
     #[test]

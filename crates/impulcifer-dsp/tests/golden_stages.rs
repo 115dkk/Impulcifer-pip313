@@ -18,7 +18,7 @@ use impulcifer_dsp::{
     },
     virtual_bass::{VirtualBassOptions, apply_virtual_bass},
 };
-use impulcifer_types::{config::ProcessingConfig, constants::*};
+use impulcifer_types::{config::ProcessingConfig, constants::*, stages::StageKey};
 use serde_json::{Value, json};
 use std::{fs, path::PathBuf, sync::OnceLock};
 thread_local! { static FAILURES: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
@@ -353,16 +353,56 @@ fn eq_inputs<'a>(target: &'a FrequencyResponse) -> EqInputs<'a> {
 fn equalized() -> Hrir {
     let mut h = cropped();
     let t = create_target(48000, 0.0, 105.0, 0.76, 0.0);
-    equalize_hrir(&mut h, &eq_inputs(&t)).unwrap();
+    let _ = equalize_hrir(&mut h, &eq_inputs(&t)).unwrap();
     h
+}
+#[test]
+fn equalize_curve_and_fir_agree_and_one_curve_per_ear() {
+    let target = create_target(48000, 0.0, 105.0, 0.76, 0.0);
+    let inputs = eq_inputs(&target);
+    let curve = equalization_curve(&inputs, "FL", Side::Left).unwrap();
+    let from_curve = curve
+        .minimum_phase_impulse_response(inputs.fs, 5.0, false)
+        .unwrap();
+    assert_eq!(
+        equalization_fir(&inputs, "FL", Side::Left).unwrap(),
+        from_curve
+    );
+
+    let mut hrir = cropped();
+    let expected: Vec<_> = hrir
+        .speakers
+        .iter()
+        .flat_map(|speaker| {
+            [(Side::Left, &speaker.left), (Side::Right, &speaker.right)]
+                .into_iter()
+                .filter(|(_, ir)| ir.is_some())
+                .map(|(side, _)| (speaker.speaker.clone(), side))
+        })
+        .collect();
+    let applied = equalize_hrir(&mut hrir, &inputs).unwrap();
+    assert_eq!(applied.len(), expected.len());
+    for (got, (speaker, side)) in applied.iter().zip(expected) {
+        assert_eq!(got.speaker, speaker);
+        assert_eq!(got.side, side);
+        assert_eq!(got.curve.equalization.len(), got.curve.frequency.len());
+        assert!(got.curve.equalization.iter().all(|value| value.is_finite()));
+    }
 }
 /// Python stage observer; core/pipeline.py:487-509; p10_stage_table.
 #[derive(Default)]
-struct Observer(Vec<StageProgress>);
+struct Observer {
+    progress: Vec<StageProgress>,
+    equalized: Vec<(usize, usize)>,
+}
 impl StageObserver for Observer {
     /// Python logger.step; core/pipeline.py:516-972; p10_stage_table.
     fn on_stage(&mut self, p: StageProgress) {
-        self.0.push(p);
+        self.progress.push(p);
+    }
+    fn on_equalized(&mut self, applied: &[AppliedEqualization]) -> Result<(), DspError> {
+        self.equalized.push((self.progress.len(), applied.len()));
+        Ok(())
     }
     /// Python check_cancelled; core/pipeline.py:505-509; p10_stage_table.
     fn check_cancelled(&self) -> Result<(), DspError> {
@@ -391,9 +431,22 @@ fn pipeline_observer_reports_order_steps_and_totals() {
             .into_iter()
             .filter(|(_, enabled, _)| *enabled)
             .collect();
-        assert_eq!(observer.0.len(), expected.len());
+        assert_eq!(observer.progress.len(), expected.len());
+        let equalize_index = expected
+            .iter()
+            .position(|(key, _, _)| *key == StageKey::Equalize)
+            .unwrap();
+        let ear_count = inputs()
+            .hrir
+            .speakers
+            .iter()
+            .map(|speaker| {
+                usize::from(speaker.left.is_some()) + usize::from(speaker.right.is_some())
+            })
+            .sum();
+        assert_eq!(observer.equalized, vec![(equalize_index + 1, ear_count)]);
         let mut step = 0;
-        for (got, (key, _, increment)) in observer.0.iter().zip(expected) {
+        for (got, (key, _, increment)) in observer.progress.iter().zip(expected) {
             step += increment;
             assert_eq!(got.key, key);
             assert_eq!(got.step, step);
