@@ -14,7 +14,13 @@
 #      Settings > Secrets에 CLAUDE_CODE_OAUTH_TOKEN 등록
 #   2. Settings > Actions > Workflow permissions를
 #      "Read and write permissions"로 설정
-#   3. 두 스킬은 이 repo의 .claude/skills에서 CI가 설치합니다
+#   3. 세 스킬은 이 repo의 .claude/skills에서 CI가 설치합니다.
+#      improve-codebase-architecture는 더 이상 자체 용어집을 들고 있지
+#      않습니다. 상류가 깊은 모듈 어휘(module, interface, depth, seam,
+#      adapter, leverage, locality)와 삭제 시험을 codebase-design이라는
+#      별도 스킬로 옮겼고, 아키텍처 스킬은 그것을 Skill 도구로 부릅니다.
+#      codebase-design이 설치되어 있지 않으면 Part 1은 돌긴 하지만
+#      모든 제안을 담아야 할 용어를 잃습니다.
 #
 # 주의:
 #   ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN이 있으면 Claude Code는
@@ -139,9 +145,32 @@ jobs:
           install -d "$HOME/.claude/skills"
           cp -R .claude/skills/improve-codebase-architecture "$HOME/.claude/skills/"
           cp -R .claude/skills/tech-debt-audit "$HOME/.claude/skills/"
+          # improve-codebase-architecture가 아키텍처 용어를 얻으려고
+          # Skill 도구로 부르는 스킬이라 함께 설치해야 합니다.
+          cp -R .claude/skills/codebase-design "$HOME/.claude/skills/"
 
           test -f "$HOME/.claude/skills/improve-codebase-architecture/SKILL.md"
           test -f "$HOME/.claude/skills/tech-debt-audit/SKILL.md"
+          test -f "$HOME/.claude/skills/codebase-design/SKILL.md"
+
+          # 상류의 improve-codebase-architecture는 disable-model-invocation을
+          # 달고 옵니다. 이 실행의 프롬프트는 "Run /improve-codebase-architecture"
+          # 라고 지시하는데, 모델은 Skill 도구로만 그렇게 할 수 있고 그 잠금이
+          # 바로 그 도구를 막습니다. 설치본만 풀고 repo의 사본은 잠긴 채 둡니다.
+          # codebase-design은 목록에 없습니다. 아키텍처 스킬이 불러야 하므로
+          # 잠금이 있으면 안 됩니다.
+          for locked in tech-debt-audit improve-codebase-architecture; do
+            sed -i '/^disable-model-invocation:/d' "$HOME/.claude/skills/$locked/SKILL.md"
+            if grep -q "disable-model-invocation" "$HOME/.claude/skills/$locked/SKILL.md"; then
+              echo "::error::$locked SKILL.md still carries disable-model-invocation after the unlock"
+              exit 1
+            fi
+          done
+
+          if grep -q "^disable-model-invocation:" "$HOME/.claude/skills/codebase-design/SKILL.md"; then
+            echo "::error::codebase-design must stay invocable; improve-codebase-architecture calls it."
+            exit 1
+          fi
 
           echo "Installed Claude audit skills:"
           find "$HOME/.claude/skills" -maxdepth 2 -name SKILL.md -print
@@ -204,10 +233,21 @@ jobs:
 
           ── PART 1: Architecture Analysis ──
           Run /improve-codebase-architecture.
+          That skill holds no glossary of its own any more. It will tell
+          you to call the codebase-design skill for the architecture
+          vocabulary (module, interface, depth, seam, adapter, leverage,
+          locality) and for the deletion test. Do call it, and phrase
+          every candidate in those exact terms rather than drifting into
+          component, service, API, or boundary.
           Identify specific consolidation and deepening opportunities.
           Because this is CI, write the complete architecture analysis to
           ARCHITECTURE_AUDIT.md in the repository root. Do not leave the
           detailed report only in a temp file or browser-opened HTML file.
+          Stop there. The skill's step 3 is a grilling loop that asks the
+          user which candidate to pursue, and this session has no user, so
+          do not ask, do not call the grilling or domain-modeling skills,
+          and do not let that step's side effects happen: leave CONTEXT.md
+          and docs/adr/ untouched.
           When done, print a Markdown horizontal rule (---) as a
           separator, then proceed immediately to Part 2.
 

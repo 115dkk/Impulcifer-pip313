@@ -4,6 +4,14 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.14.2 - 2026-09-15
+### 🔧 월간 감사가 새 아키텍처 스킬 구성을 따라갑니다
+
+#### 🔧 빌드 / 설정 변경
+- **codebase-design 스킬을 함께 설치합니다**: 상류가 `improve-codebase-architecture`에서 깊은 모듈 어휘(module, interface, depth, seam, adapter, leverage, locality)와 삭제 시험을 떼어내 `codebase-design`이라는 별도 스킬로 옮겼고, 아키텍처 스킬은 그것을 Skill 도구로 부릅니다. 세 스킬을 모두 설치하도록 고쳤습니다. 그대로 두면 Part 1이 돌긴 하지만 모든 제안을 담아야 할 용어를 잃습니다.
+- **두 감사 스킬의 잠금을 모두 풉니다**: 새 `improve-codebase-architecture`는 `disable-model-invocation`을 달고 옵니다. 프롬프트는 그 스킬을 실행하라고 지시하는데 모델은 Skill 도구로만 실행할 수 있고 그 잠금이 바로 그 도구를 막습니다. 설치본에서만 풀고 저장소의 사본은 잠긴 채 둡니다. `codebase-design`에 잠금이 들어오면 실패하도록 검사도 넣었습니다.
+- **감사 세션이 대화형 단계로 넘어가지 않습니다**: 새 스킬의 3단계는 사용자에게 어느 후보를 파고들지 묻는 문답 절차이고, 그 과정에서 `CONTEXT.md`와 `docs/adr/`에 파일을 씁니다. 예약 실행에는 답할 사람이 없으므로 보고서를 쓴 뒤 멈추라고 못박았습니다.
+
 ## 2.14.2 - 2026-09-08
 ### 🔧 자동 릴리스 (CI auto-bump)
 
