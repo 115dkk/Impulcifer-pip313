@@ -211,200 +211,233 @@ tests = ["impulcifer-service::ipc_open_url_shape"]
 [[feature]]
 id = "config.dir_path"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::start_brir_rejects_missing_dir", "impulcifer-cli::cli_missing_dir_path_exits_2_like_argparse", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "the measurement folder of every run; a missing folder is FILE_NOT_FOUND over IPC and exit 2 on the CLI like argparse"
 
 [[feature]]
 id = "config.test_signal"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::estimator_alias_generate_sidecar_and_auto_match", "impulcifer-dsp::golden_sweep_sequence_matches_python", "impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "auto (test.wav, then detection, then the bundled sweep), generate:<length>s@<fs>, the default alias and a file path; the generated sweep equals 2.x, the demo parity run resolves auto to the sweep 2.x was given explicitly; .pkl is rejected like 2.11+"
 
 [[feature]]
 id = "config.room_target"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_room_target_and_calibration_files_match_python", "impulcifer-service::config_missing_room_target_is_flat_like_python", "impulcifer-service::room_and_eq_inputs_use_real_measurements_and_write_responses", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "P25 (tests/migration/README-config.md): a file outside the folder wins over the folder's room-target.csv; a path that is not a file is a flat target like 2.x _open_room_target (3.0.0 stopped with FILE_NOT_FOUND, fixed in 3.0.1)"
 
 [[feature]]
 id = "config.room_mic_calibration"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_room_target_and_calibration_files_match_python", "impulcifer-service::room_and_eq_inputs_use_real_measurements_and_write_responses", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "P25: a file outside the folder wins over room-mic-calibration.csv|txt"
 
 [[feature]]
 id = "config.headphone_compensation_file"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_headphone_file_outside_the_folder_matches_python", "impulcifer-dsp::golden_headphone_resolution_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "the 2.x resolution truth table (file, relative path, folder search, fallback) and a P25 run whose only headphone recording is the requested file outside the folder"
 
 [[feature]]
 id = "config.fs"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_resample_matches_python", "impulcifer-dsp::golden_stage_table_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "44.1 kHz output through run_pipeline, second normalization discarded like 2.x"
 
 [[feature]]
 id = "config.plot"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::plot_files_match_python_plot_run", "impulcifer-service::plots_do_not_change_wavs", "impulcifer-dsp::golden_stage_table_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "the same PNG set as 2.x --plot; WAV and README bytes identical with and without it"
 
 [[feature]]
 id = "config.interactive_plots"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::interactive_report_leaves_wavs_and_pngs_unchanged", "impulcifer-service::plot_observer_sees_pre_resample_state_and_propagates_failure", "impulcifer-dsp::golden_stage_table_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "P24 report at the 2.x stage position; numbers are output.interactive_html"
 
 [[feature]]
 id = "config.channel_balance"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_channel_balance_matches_python", "impulcifer-dsp::golden_channel_balance_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "all seven methods (trend, left, right, avg, min, mids, a number) at the stage, trend end to end (P25)"
 
 [[feature]]
 id = "config.decay"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_decay_matches_python", "impulcifer-dsp::golden_decay_matches_python", "impulcifer-service::brir_validation_preserves_seconds_and_rejects_cli_strings", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "per-channel seconds end to end (P25, FL 0.3 / FR 0.25); CLI milliseconds and the uniform form expand like create_cli; IPC takes seconds and rejects CLI strings"
 
 [[feature]]
 id = "config.target_level"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_option_variants_match_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "-12 dB mid-band average normalization through run_pipeline (p10 option variant)"
 
 [[feature]]
 id = "config.fr_combination_method"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_generic_room_conservative_matches_python", "impulcifer-dsp::golden_generic_room_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "conservative against average on a generic room.wav, at the stage and end to end (P25); the demo has no room.wav, so its p10 option variant is a no-op"
 
 [[feature]]
 id = "config.specific_limit"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_specific_room_unlimited_matches_python", "impulcifer-dsp::golden_option_variants_match_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "0 (no limit) on the demo's specific room measurements, through the stage and end to end (P25)"
 
 [[feature]]
 id = "config.generic_limit"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_generic_room_unlimited_matches_python", "impulcifer-dsp::golden_generic_room_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "0 (no limit) on a generic room.wav, at the stage and end to end (P25)"
 
 [[feature]]
 id = "config.bass_boost_gain"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_option_variants_match_python", "impulcifer-service::config_bass_boost_shelf_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "4 dB through run_pipeline (p10) and the full 6 dB / 150 Hz / 0.69 shelf end to end (P25)"
 
 [[feature]]
 id = "config.bass_boost_fc"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_bass_boost_shelf_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "150 Hz shelf end to end (P25)"
 
 [[feature]]
 id = "config.bass_boost_q"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_bass_boost_shelf_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "Q 0.69 shelf end to end (P25)"
 
 [[feature]]
 id = "config.tilt"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_option_variants_match_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "-1 dB/octave through run_pipeline (p10 option variant)"
 
 [[feature]]
 id = "config.do_room_correction"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_without_room_correction_matches_python", "impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-dsp::golden_stage_table_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "off on the demo end to end (P25) and with all three corrections off on synthetic speakers (p10)"
 
 [[feature]]
 id = "config.do_headphone_compensation"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_without_headphone_compensation_matches_python", "impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-dsp::golden_stage_table_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "off on the demo end to end (P25) with the 5e-4 ratio budget: without headphone compensation the room-only EQ FIR is inside the minimum-phase oracle noise, where 2.x moves up to 2.2e-4 against itself and 3.x lands at 2.7e-4 (README-config.md)"
 
 [[feature]]
 id = "config.do_equalization"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_without_equalization_matches_python", "impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-dsp::golden_stage_table_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "off on the demo end to end (P25) and with all three corrections off on synthetic speakers (p10)"
 
 [[feature]]
 id = "config.remove_silent_channels"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "compact hrir/hesuvi/TrueHD/JamesDSP matrices and ICHL track names like 2.x"
 
 [[feature]]
 id = "config.head_ms"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_head_ms_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "2.5 ms head crop end to end (P25); CLI --c"
 
 [[feature]]
 id = "config.jamesdsp"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "jamesdsp.wav matrix and file like 2.x"
 
 [[feature]]
 id = "config.hangloose"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "Hangloose/<speaker>.wav matrices and files like 2.x"
 
 [[feature]]
 id = "config.microphone_deviation_correction"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_mic_deviation_matches_python", "impulcifer-dsp::golden_mic_deviation_matches_python", "impulcifer-service::mic_deviation_is_skipped_with_headphone_compensation", "impulcifer-dsp::golden_stage_table_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "the stage against 2.x, skipped with a warning when headphone compensation is on like 2.x, and end to end without it (P25, 5e-4 ratio budget: 2.x moves up to 5.4e-4 against itself, 3.x 2.7e-4)"
 
 [[feature]]
 id = "config.mic_deviation_strength"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_mic_deviation_strength_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "0.3 end to end (P25, 5e-4 ratio budget: 2.x moves up to 5.6e-4 against itself, 3.x 2.6e-4); the 0.3 and 0.7 outputs differ by 0.28 of the peak"
 
 [[feature]]
 id = "config.mic_deviation_debug_plots"
 kind = "config"
 status = "planned"
 tests = []
+note = "accepted on every surface (CLI golden, IPC, wheel) but 3.x writes no plots and logs cli_plots_not_available_yet; 2.x saves the mic-deviation analysis plots under plots/ (core/pipeline.py _stage_mic_deviation)"
 
 [[feature]]
 id = "config.output_truehd_layouts"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "11ch/13ch layout matrices and files like 2.x"
 
 [[feature]]
 id = "config.vbass"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-dsp::golden_vbass_matches_python", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-dsp::golden_stage_table_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "defaults (250 Hz, 15 Hz high-pass, auto polarity) at the stage and end to end"
 
 [[feature]]
 id = "config.vbass_freq"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_vbass_crossover_and_highpass_match_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "200 Hz crossover end to end (P25)"
 
 [[feature]]
 id = "config.vbass_hp"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_vbass_crossover_and_highpass_match_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "20 Hz high-pass end to end (P25)"
 
 [[feature]]
 id = "config.vbass_polarity"
 kind = "config"
-status = "planned"
-tests = []
+status = "implemented"
+tests = ["impulcifer-service::config_vbass_normal_polarity_matches_python", "impulcifer-service::config_vbass_inverted_polarity_matches_python", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "normal and invert end to end (P25), auto in the p11 vbass run; the two forced outputs differ by 0.32 of the peak"
 
 [[feature]]
 id = "stage.estimator"
