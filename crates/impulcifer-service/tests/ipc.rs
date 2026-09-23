@@ -540,7 +540,13 @@ fn ipc_get_system_info_shape() {
         f.root.0.join("settings.json").to_string_lossy().as_ref()
     );
     assert!(!info["os"].as_str().unwrap().is_empty());
-    assert_eq!(info["update_channel"], "prerelease");
+    // A PEP 440 pre segment in the version reads the release list instead.
+    let channel = if env!("CARGO_PKG_VERSION").contains('-') {
+        "prerelease"
+    } else {
+        "stable"
+    };
+    assert_eq!(info["update_channel"], channel);
 }
 #[test]
 fn ipc_list_audio_devices_shape() {
