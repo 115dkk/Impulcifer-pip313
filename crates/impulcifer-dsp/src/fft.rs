@@ -162,6 +162,45 @@ pub fn next_fast_len(n: usize) -> usize {
     next_fast_len_legacy(n)
 }
 
+/// scipy.fft.next_fast_len(n) with its default `real=False`: pocketfft's
+/// `good_size_cmplx`, the smallest 2,3,5,7,11-smooth length >= n. This is the
+/// length `core/plotting/analysis.py::_band_cross_spectra` pads to (it calls
+/// `next_fast_len` without `real=True`). Verified on SciPy 1.18.1: 13 -> 14,
+/// 1001 -> 1008, 12345 -> 12348, 295270 -> 295680. 0 returns 0; lengths up
+/// to 12 are already smooth. Panics if no such length is representable.
+pub fn next_fast_len_complex(n: usize) -> usize {
+    if n <= 12 {
+        return n;
+    }
+    let bound = n.checked_mul(2).expect("next fast length overflows usize");
+    let mut best = bound;
+    let mut f11 = 1_usize;
+    while f11 < best {
+        let mut f7 = f11;
+        while f7 < best {
+            let mut f5 = f7;
+            while f5 < best {
+                let mut f3 = f5;
+                while f3 < best {
+                    let mut x = f3;
+                    while x < n {
+                        x *= 2;
+                    }
+                    if x == n {
+                        return n;
+                    }
+                    best = best.min(x);
+                    f3 = f3.saturating_mul(3);
+                }
+                f5 = f5.saturating_mul(5);
+            }
+            f7 = f7.saturating_mul(7);
+        }
+        f11 = f11.saturating_mul(11);
+    }
+    best
+}
+
 /// core.audio_io.magnitude_response: first ceil(N/2) bins, no epsilon;
 /// exact zero magnitudes return -infinity. Panics on empty input.
 pub fn magnitude_response(x: &[f64]) -> Vec<f64> {

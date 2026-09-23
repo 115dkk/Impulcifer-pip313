@@ -188,7 +188,8 @@ pub fn run_pipeline(
             StageKey::PlotPre
             | StageKey::PlotPost
             | StageKey::PlotResults
-            | StageKey::PlotAdditional => {
+            | StageKey::PlotAdditional
+            | StageKey::InteractivePlots => {
                 observer.on_plot(key, &hrir)?;
             }
             StageKey::Target => {

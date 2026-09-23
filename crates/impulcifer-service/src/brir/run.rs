@@ -113,7 +113,29 @@ impl StageObserver for Observer<'_, '_> {
         self.check_cancelled()?;
         let token = self.events.cancel_token();
         let cancelled = move || token.as_ref().is_some_and(|t| t.is_cancelled());
-        super::plots::render_stage(self.directory, key, hrir, self.estimator, &cancelled)
+        let outcome =
+            super::plots::render_stage(self.directory, key, hrir, self.estimator, &cancelled)?;
+        // 2.x _stage_interactive_plots: per-panel warnings, then success or "none".
+        if let Some(outcome) = outcome {
+            for (title, error) in &outcome.errors {
+                self.events.log(
+                    "warning",
+                    "cli_warning_interactive_plot_error",
+                    json!({"title": title, "error": error}),
+                );
+            }
+            match &outcome.path {
+                Some(path) => self.events.log(
+                    "success",
+                    "cli_success_interactive_saved",
+                    json!({"path": path.display().to_string()}),
+                ),
+                None => self
+                    .events
+                    .log("warning", "cli_warning_no_interactive", json!({})),
+            }
+        }
+        Ok(())
     }
     fn on_stage(&mut self, progress: StageProgress) {
         let key = progress.key;
@@ -135,9 +157,7 @@ impl StageObserver for Observer<'_, '_> {
                 },
             );
         }
-        if key == StageKey::InteractivePlots
-            || (key == StageKey::MicDeviation && self.config.mic_deviation_debug_plots)
-        {
+        if key == StageKey::MicDeviation && self.config.mic_deviation_debug_plots {
             self.events
                 .log("warning", "cli_plots_not_available_yet", json!({}));
         }

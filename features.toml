@@ -541,9 +541,9 @@ note = "interaural overlays {speaker}_interaural_overlay.png"
 [[feature]]
 id = "stage.interactive_plots"
 kind = "stage"
-status = "planned"
-tests = []
-note = "progress step and gate only (stage table test); plots are not ported, P11 logs a placeholder"
+status = "implemented"
+tests = ["impulcifer-service::plot_observer_sees_pre_resample_state_and_propagates_failure", "impulcifer-service::interactive_report_leaves_wavs_and_pngs_unchanged", "impulcifer-service::interactive_summary_respects_cancellation_and_empty_input"]
+note = "P24: the pipeline hands the HRIR to StageObserver::on_plot at the 2.x position (after plot_additional, before resample, so a --fs run still reports the measured rate); the service writes interactive_plots/interactive_summary.html and logs cli_success_interactive_saved, cli_warning_no_interactive or cli_warning_interactive_plot_error like 2.x _stage_interactive_plots; the job is consulted before computing and before writing; WAVs and README are byte-identical with and without the stage"
 
 [[feature]]
 id = "stage.resample"
@@ -665,15 +665,15 @@ note = "markdown + i18n rendering; text exact, numbers within the decay-noise bu
 id = "output.plots_png"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::plot_files_match_python_default_run", "impulcifer-service::plot_files_match_python_plot_run", "impulcifer-service::golden_headphones_series_match_python", "impulcifer-service::golden_eq_series_match_python", "impulcifer-service::headphone_applied_curves_prefer_the_front_pair", "impulcifer-service::headphones_chart_receives_the_applied_correction", "impulcifer-dsp::equalize_curve_and_fir_agree_and_one_curve_per_ear", "impulcifer-plots::png_outputs_have_p23_sizes", "impulcifer-plots::chart_kinds_use_their_actual_tokens", "impulcifer-plots::headphones_chart_draws_the_applied_correction_when_supplied", "impulcifer-plots::ir_sheet_renders_present_and_absent_optional_panels", "impulcifer-plots::overlay_chart_preserves_supplied_peak_delay", "impulcifer-plots::png_is_not_blank"]
-note = "P23: the pictures are designed for readers, not copies of matplotlib (paper style, plain titles, key numbers on the chart, band strip, first-reflections panel instead of the waterfall; docs/rust/PLOTS.md); the series behind them and the file set are unchanged; the same relative PNG set as 2.x (2 by default, 51 with --plot) rendered by impulcifer-plots (plotters + embedded DejaVu Sans); headphones/eq/room plots included; alpha.2: the headphones chart is re-rendered after the equalize stage with the correction actually applied to the front pair (StageObserver::on_equalized hands the per-ear equalize curves to the service; FIR bytes unchanged, goldens intact; purple dashes, third footer line); tight-bbox cropping, palette quantization, bokeh and mic-deviation debug plots not reproduced"
+tests = ["impulcifer-service::plot_files_match_python_default_run", "impulcifer-service::plot_files_match_python_plot_run", "impulcifer-service::golden_headphones_series_match_python", "impulcifer-service::golden_eq_series_match_python", "impulcifer-service::headphone_applied_curves_prefer_the_front_pair", "impulcifer-service::headphones_chart_receives_the_applied_correction", "impulcifer-dsp::equalize_curve_and_fir_agree_and_one_curve_per_ear", "impulcifer-plots::png_outputs_have_p23_sizes", "impulcifer-plots::chart_kinds_use_their_actual_tokens", "impulcifer-plots::headphones_chart_draws_the_applied_correction_when_supplied", "impulcifer-plots::ir_sheet_renders_present_and_absent_optional_panels", "impulcifer-plots::overlay_chart_preserves_supplied_peak_delay", "impulcifer-plots::png_is_not_blank", "impulcifer-service::interactive_report_leaves_wavs_and_pngs_unchanged"]
+note = "P23: the pictures are designed for readers, not copies of matplotlib (paper style, plain titles, key numbers on the chart, band strip, first-reflections panel instead of the waterfall; docs/rust/PLOTS.md); the series behind them and the file set are unchanged; the same relative PNG set as 2.x (2 by default, 51 with --plot) rendered by impulcifer-plots (plotters + embedded DejaVu Sans); headphones/eq/room plots included; alpha.2: the headphones chart is re-rendered after the equalize stage with the correction actually applied to the front pair (StageObserver::on_equalized hands the per-ear equalize curves to the service; FIR bytes unchanged, goldens intact; purple dashes, third footer line); P24: with --plot the 2.x Bokeh analysis pages plots/{ild,ipd,iacc,etc}/<name>_analysis.html are reproduced as offline HTML by impulcifer-analysis (output.interactive_html); tight-bbox cropping, palette quantization and mic-deviation debug plots not reproduced"
 
 [[feature]]
 id = "output.interactive_html"
 kind = "output"
-status = "planned"
-tests = []
-note = "not ported; the service logs cli_plots_not_available_yet and still emits the progress steps so totals match 2.x"
+status = "implemented"
+tests = ["impulcifer-analysis::golden_octave_bands_match_python", "impulcifer-analysis::golden_band_ild_and_ipd_match_python", "impulcifer-analysis::golden_iacc_matches_python", "impulcifer-analysis::golden_energy_decay_curves_match_python", "impulcifer-analysis::golden_result_overview_matches_python", "impulcifer-analysis::golden_report_assembly_matches_bokeh_generators", "impulcifer-analysis::golden_report_text_matches_bokeh_labels", "impulcifer-analysis::degenerate_reports_follow_the_2x_generators", "impulcifer-analysis::interactive_summary_is_offline_and_complete", "impulcifer-analysis::analysis_pages_hold_one_panel_each", "impulcifer-analysis::reports_without_data_produce_no_document", "impulcifer-service::interactive_report_leaves_wavs_and_pngs_unchanged"]
+note = "P24: the six 2.x Bokeh panels (interaural overlay, ILD, IPD, IACC, EDC, result overview) in one offline document, no CDN or network reference; numbers are core/plotting/analysis.py and the Bokeh generators ported to impulcifer-analysis::model (p24_interactive goldens from tests/migration/export_goldens_interactive.py; SciPy's default complex next_fast_len for the band spectra); rendered by an inline vanilla-JS canvas renderer (base64 Float32 payload per tab decoded on first open, per-pixel-column M4 decimation, one requestAnimationFrame per redraw, off-screen charts skipped, light/dark by prefers-color-scheme; docs/rust/PLOTS.md 'Interactive report'); charts follow the canonical speaker order; demo summary 5.1 MB against 2.x's 11.3 MB plus 1.27 MB of BokehJS from the CDN"
 
 [[feature]]
 id = "output.hangloose_wavs"
@@ -717,6 +717,13 @@ id = "dsp.next_fast_len"
 kind = "dsp"
 status = "implemented"
 tests = ["impulcifer-dsp::golden_fast_lengths_match_scipy"]
+
+[[feature]]
+id = "dsp.next_fast_len_complex"
+kind = "dsp"
+status = "implemented"
+tests = ["impulcifer-dsp::complex_fast_lengths_are_minimal_11_smooth", "impulcifer-analysis::golden_band_ild_and_ipd_match_python"]
+note = "P24: scipy.fft.next_fast_len(n) with its default real=False (2,3,5,7,11-smooth, pocketfft good_size_cmplx), the padding of core/plotting/analysis.py::_band_cross_spectra; each p24 pair case also pins its FFT length"
 
 [[feature]]
 id = "dsp.convolve"
