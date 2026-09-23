@@ -173,3 +173,141 @@ tree to `target/plots-gallery/demo`. Never run the output-producing CLI on sourc
 
 The policy registry still names `png_outputs_have_matplotlib_sizes`; P23 uses
 `png_outputs_have_p23_sizes`. Updating `features.toml` remains outside scope.
+
+# Interactive report (P24)
+
+`--interactive_plots` writes `interactive_plots/interactive_summary.html`, the 3.x
+counterpart of the 2.x Bokeh summary (`core/pipeline.py::_stage_interactive_plots`).
+With `--plot`, the ILD, IPD, IACC and EDC panels are also written one per file as
+`plots/{ild,ipd,iacc,etc}/<name>_analysis.html`, the 2.x
+`_save_bokeh_analysis_plots` names. Both are side outputs: the WAVs and README are
+byte-identical with and without them (`interactive_report_leaves_wavs_and_pngs_unchanged`).
+The pipeline hands the HRIR to `StageObserver::on_plot` at the 2.x position, after
+`plot_additional` and before `resample`, so a `--fs` run still shows the measured rate.
+
+## Numbers
+
+`impulcifer-analysis::model` ports `core/plotting/analysis.py` (`octave_bands`,
+`band_interaural_level_difference`, `band_interaural_phase_difference`,
+`energy_decay_curve_db`, `interaural_cross_correlation`) and the data half of the
+Bokeh generators (`build_report`, `result_overview`). It borrows the HRIR and does
+no I/O. Details that matter:
+
+- The band spectra pad to `scipy.fft.next_fast_len(n)` with SciPy's default
+  `real=False`, the 2,3,5,7,11-smooth size (`fft::next_fast_len_complex`), not the
+  `real=True` size the rest of the port uses. ILD and IPD share one transform pair.
+- IACF is SciPy's `correlate(left, right, "full")` evaluated directly at the lags
+  inside `round(1 ms * fs)` (a later right ear peaks at a negative lag).
+- The result overview smooths with `1/3, 1/5, 20000, max(20001, int(fs/2 - 1))`,
+  unlike the PNG results chart's fixed 23999 (identical at 48 kHz).
+- As in 2.x: overlay, ILD, IPD and IACC need both ears; EDC takes either ear; NaN
+  bands are dropped from the bars; silent pairs get no IACC chart; unequal response
+  lengths lose only the result overview (`cli_warning_interactive_plot_error`); no
+  panel at all writes nothing (`cli_warning_no_interactive`).
+- Charts follow the canonical speaker order (FL, FR, FC, BL, BR, SL, SR, then
+  others), like README.md; 2.x used file-read order.
+
+`tests/migration/export_goldens_interactive.py` calls the unmodified 2.x functions
+and generators on deterministic signals (impulses, pure delays, level differences,
+polarity inversion, silence, sub-1e-12 energy, unequal and prime lengths, 20-sample
+and 1-sample responses, 8/44.1/48 kHz; noise from `default_rng(1234)`) and writes
+five `p24_interactive_*.json` files under 200 kB. Measured against them: ILD
+2.6e-14 dB, IPD 6.3e-13° (compared on the circle, because a cross spectrum on the
+negative real axis may land on either side of ±180°), IACF 2.4e-15, EDC 7.1e-15 dB,
+overview 1.7e-12 dB; band edges bit-exact, lags, FFT lengths, labels and chart order
+exact. The gates are 1e-9 (dB, degrees), 1e-12 (IACF) and the P09
+`1e-9 + 1e-11·|ref|` dB for the overview.
+
+## Document
+
+`impulcifer-analysis::html` writes one self-contained file: inline CSS
+(`assets/report.css`), an inline vanilla-JS renderer (`assets/report.js`, passes
+`tsc --checkJs --strict`), a small JSON manifest (tabs, chart specs, bar values;
+`<`, `>` and `&` escaped) and one `<script type="application/octet-stream">` per tab
+holding base64 little-endian `f32` samples. Series address the blob by
+`[offset, length]`; evenly sampled series carry `x = (i + start) * step` instead of
+an x array, and the overview's five curves share one frequency grid. The model
+stays `f64`; the page rounds to `f32` once (7 significant digits). There is no
+`http(s)://`, `src=`, `<link>`, `@import`, `url(` or `fetch` in the document
+(`interactive_summary_is_offline_and_complete`), and the fonts are the system UI
+stack. The page `<title>` is `Interactive Plot Summary`; single-panel pages use the
+registry title (`ILD`, `IPD`, `IACC`, `EDC`). Report text is English, like 2.x.
+
+| Tab | Charts | Default view |
+|---|---|---|
+| Interaural Overlay | per speaker, left solid / right dashed, peak markers, right-minus-left peak delay | −5…30 ms, level fitted to that window |
+| ILD | per speaker, octave bars labelled by centre, 2.x band string on hover | 0 dB included |
+| IPD | per speaker, octave bars | −180…180°, 45° ticks |
+| IACC | per speaker, IACF with the 2.x `Max: x.xx at y.yyms` legend and a peak marker | ±1.1 ms |
+| EDC | per speaker, left solid / right dashed | 0…200 ms, −80…0 dB |
+| Result Overview | raw (35 %) and smoothed ears; the smoothed L−R difference below with signed fill and ±3 dB guides; x linked | 20 Hz…20 kHz, log |
+
+Colours are the P23 tokens (left `#2563eb`, right `#dc2626`, difference `#111827`,
+positive/negative fills `#dbeafe`/`#fee2e2`, grid `#e5e7eb`, muted `#6b7280`) with a
+`prefers-color-scheme: dark` set (left `#60a5fa`, right `#f87171`, ink `#e6e8eb` on
+`#161a21` panels). Two columns from 900 px, one below; the tab bar scrolls on its
+own and the page never scrolls sideways.
+
+## Performance design
+
+2.x embeds every array as JSON-described float64 columns (time and value for each
+line), lays everything out with `sizing_mode="scale_both"`, and redraws every glyph
+of a plot on each pan or zoom step. The 3.x page instead:
+
+1. **Decodes lazily.** Only the opened tab's blob is decoded (`Uint8Array.fromBase64`
+   where available, `atob` otherwise) and its DOM built; the source text is then
+   removed. Opening the report touches the overlay payload only.
+2. **Decimates per pixel column.** Each redraw walks the visible index range once and
+   keeps first, minimum, maximum and last per device-pixel column (M4), so a path
+   has at most four vertices per column however long the response. Evenly sampled
+   series on a linear axis map index to pixel with one multiply-add.
+3. **Coalesces frames.** Wheel, drag and keyboard input only update the view; one
+   `requestAnimationFrame` redraws every dirty chart. The hover crosshair, dots and
+   readout live on a second canvas, so moving the pointer never redraws data.
+4. **Skips what is not seen.** `IntersectionObserver` (200 px margin) keeps
+   off-screen charts from drawing until they scroll in (and `beforeprint` draws them
+   all); `ResizeObserver` and `devicePixelRatio` (capped at 3) size the canvases.
+5. **Bounds navigation.** Zoom-out and panning stop 5 % beyond the data (x); linked
+   overview charts share their x range.
+
+Interaction: drag pans, wheel zooms time or frequency around the pointer,
+Shift/Ctrl + wheel zooms the level axis, double-click resets, legend entries toggle
+curves, focused charts take arrows, `+`/`−` and `0`, tabs take arrows/Home/End and
+remember themselves in the URL hash. There is no Bokeh toolbar (box zoom, save).
+
+## Measurements (demo, 2026-09-23)
+
+Same Linux container, headless Chromium 141 (Playwright 1.56, 1440×900, DPR 1).
+The 2.x page is the `--interactive_plots --plot` output of 2.14.2 (this tree, Python 3.13) on a copy of `data/demo`;
+its CDN script was served from the installed `bokeh` 3.9.2 package so neither page
+touched the network. Interaction: the first overlay chart zoomed out to the whole
+700 ms response (both ears, 33 599 samples each), then 60 wheel steps and a 60-step
+drag, each followed by two animation frames.
+
+| | 2.x Bokeh | 3.x report |
+|---|---:|---:|
+| `interactive_summary.html` | 11.33 MB + 1.27 MB BokehJS (CDN) | 5.12 MB, self-contained |
+| `plots/etc/etc_analysis.html` | 5.06 MB | 2.56 MB |
+| `plots/{ild,ipd,iacc}` pages | 39–43 kB (+ CDN) | 53–58 kB |
+| First charts on screen | 4.41 s | 0.26–0.40 s |
+| Wheel zoom: input to second frame, median / p95 | 199 / 358 ms | 66.7 / 68.9 ms |
+| Wheel zoom: longest frame; long tasks | 817 ms; 128 (10.8 s) | 16.8 ms; 0 |
+| Drag pan: median frame interval; long tasks | 41.7 ms; 316 (22.2 s) | 16.7 ms; 0 |
+| JS heap after interaction | 115 MB | 6.4 MB |
+
+The 3.x input-to-second-frame time is two 16.7 ms frames plus the harness's
+round trips; no frame was dropped. One full-length overlay redraw took 1.54 ms of
+script on average; decoding the overlay tab's 1.9 MB of samples took 6.7 ms. On
+the Rust side the stage adds about 50 ms to a 1.75 s release demo run
+(`build_report` 36 ms, `summary_html` 15 ms, one thread). Phone width (390 px)
+gives one column and no horizontal scroll. The renderer passes
+`tsc --checkJs --strict` (TypeScript 5.9.3).
+
+## Changing the report
+
+Numbers belong in `model.rs` with a 2.x oracle (`export_goldens_interactive.py`);
+`html.rs` only arranges them. A chart is a manifest entry (`kind` line or bar,
+axis labels, units, default view, series `[offset, length]` into the tab blob)
+and needs no JavaScript unless it introduces a new mark. Keep the page offline
+(`interactive_summary_is_offline_and_complete` rejects network references), keep
+series in the blob rather than in JSON, and check both themes and a narrow window.

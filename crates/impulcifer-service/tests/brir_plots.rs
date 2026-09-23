@@ -424,10 +424,46 @@ fn png_set(dir: &Path, root: &Path, out: &mut BTreeMap<String, (u32, u32)>) {
         }
     }
 }
+/// Relative path -> file size of every HTML file under `dir`.
+fn html_set(dir: &Path, root: &Path, out: &mut BTreeMap<String, u64>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            html_set(&path, root, out);
+        } else if path.extension().is_some_and(|e| e == "html") {
+            out.insert(
+                path.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+                std::fs::metadata(&path).unwrap().len(),
+            );
+        }
+    }
+}
+/// SHA-1 of every WAV the run wrote (the top-level outputs, inputs included).
+fn wav_digests(dir: &Path) -> BTreeMap<String, Vec<u8>> {
+    use sha1::Digest;
+    std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|e| e == "wav"))
+        .map(|p| {
+            (
+                p.file_name().unwrap().to_string_lossy().into_owned(),
+                sha1::Sha1::digest(std::fs::read(&p).unwrap()).to_vec(),
+            )
+        })
+        .collect()
+}
 struct Product {
     pngs: BTreeMap<String, (u32, u32)>,
+    html: BTreeMap<String, u64>,
     wav: Vec<u8>,
+    wavs: BTreeMap<String, Vec<u8>>,
     readme: String,
+    events: Vec<Value>,
+    directory: std::path::PathBuf,
 }
 fn product(plot: bool) -> &'static Product {
     static DEFAULT: OnceLock<Product> = OnceLock::new();
@@ -435,28 +471,47 @@ fn product(plot: bool) -> &'static Product {
     (if plot { &PLOT } else { &DEFAULT }).get_or_init(|| {
         let t = Temp::demo();
         let c = config(&t, plot);
-        let jobs = JobRegistry::new();
-        let mut catalog = Catalog::english();
-        catalog.readme_date = Some("2026-09-08 12:00:00".into());
-        let job = jobs
-            .start(JobKind::Brir, true, move |ctx| {
-                run_brir(&c, &catalog, ctx).map(|r| json!({"output_path":r.output_path}))
-            })
-            .unwrap();
-        let p = wait(&jobs, &job.job_id);
-        assert_eq!(p.job.status, JobStatus::Succeeded, "{:?}", p.job.error);
-        let mut pngs = BTreeMap::new();
-        png_set(&t.0, &t.0, &mut pngs);
-        let out = Product {
-            pngs,
-            wav: std::fs::read(t.0.join("hesuvi.wav")).unwrap(),
-            readme: std::fs::read_to_string(t.0.join("README.md")).unwrap(),
-        };
-        println!("P19_SERVICE_DIRECTORY {}", t.0.display());
-        // Preserve temp-only evidence for visual inspection, never data/ outputs.
-        std::mem::forget(t);
-        out
+        run_product(t, c)
     })
+}
+/// `--plot --interactive_plots` on the same demo inputs.
+fn interactive_product() -> &'static Product {
+    static INTERACTIVE: OnceLock<Product> = OnceLock::new();
+    INTERACTIVE.get_or_init(|| {
+        let t = Temp::demo();
+        let mut c = config(&t, true);
+        c.interactive_plots = true;
+        run_product(t, c)
+    })
+}
+fn run_product(t: Temp, c: ProcessingConfig) -> Product {
+    let jobs = JobRegistry::new();
+    let mut catalog = Catalog::english();
+    catalog.readme_date = Some("2026-09-08 12:00:00".into());
+    let job = jobs
+        .start(JobKind::Brir, true, move |ctx| {
+            run_brir(&c, &catalog, ctx).map(|r| json!({"output_path":r.output_path}))
+        })
+        .unwrap();
+    let p = wait(&jobs, &job.job_id);
+    assert_eq!(p.job.status, JobStatus::Succeeded, "{:?}", p.job.error);
+    let mut pngs = BTreeMap::new();
+    png_set(&t.0, &t.0, &mut pngs);
+    let mut html = BTreeMap::new();
+    html_set(&t.0, &t.0, &mut html);
+    let out = Product {
+        pngs,
+        html,
+        wav: std::fs::read(t.0.join("hesuvi.wav")).unwrap(),
+        wavs: wav_digests(&t.0),
+        readme: std::fs::read_to_string(t.0.join("README.md")).unwrap(),
+        events: p.events.iter().map(|e| e.payload.clone()).collect(),
+        directory: t.0.clone(),
+    };
+    println!("P19_SERVICE_DIRECTORY {}", t.0.display());
+    // Preserve temp-only evidence for visual inspection, never data/ outputs.
+    std::mem::forget(t);
+    out
 }
 fn compare_files(plot: bool) {
     let p = product(plot);
@@ -539,22 +594,153 @@ fn plots_do_not_change_wavs() {
     assert_eq!(product(false).wav, product(true).wav);
     assert_eq!(product(false).readme, product(true).readme);
 }
+/// `--interactive_plots` is a side output: every WAV (hesuvi, hrir, responses and
+/// the rest) and README.md are byte-identical to runs without it, the PNG set is
+/// unchanged, and only the HTML files are added.
+#[test]
+fn interactive_report_leaves_wavs_and_pngs_unchanged() {
+    let plain = product(false);
+    let plot = product(true);
+    let interactive = interactive_product();
+    assert_eq!(interactive.wavs, plain.wavs);
+    assert_eq!(interactive.wavs, plot.wavs);
+    assert_eq!(interactive.wav, plain.wav);
+    assert_eq!(interactive.readme, plain.readme);
+    assert_eq!(interactive.pngs, plot.pngs);
+
+    let pages = [
+        "plots/etc/etc_analysis.html",
+        "plots/iacc/iacc_analysis.html",
+        "plots/ild/ild_analysis.html",
+        "plots/ipd/ipd_analysis.html",
+    ];
+    assert!(plain.html.is_empty(), "{:?}", plain.html);
+    assert_eq!(plot.html.keys().collect::<Vec<_>>(), pages);
+    let mut expected = vec!["interactive_plots/interactive_summary.html"];
+    expected.extend(pages);
+    assert_eq!(interactive.html.keys().collect::<Vec<_>>(), expected);
+    for (name, size) in &interactive.html {
+        println!("{name}: {size} bytes");
+    }
+
+    let summary = std::fs::read_to_string(
+        interactive
+            .directory
+            .join("interactive_plots/interactive_summary.html"),
+    )
+    .unwrap();
+    assert!(summary.contains("<title>Interactive Plot Summary</title>"));
+    assert!(!summary.contains("http://") && !summary.contains("https://"));
+    for id in [
+        "interaural_overlay",
+        "ild",
+        "ipd",
+        "iacc",
+        "etc",
+        "result_overview",
+    ] {
+        assert!(summary.contains(&format!("\"id\":\"{id}\"")), "{id} tab");
+    }
+    for speaker in ["FL", "FR", "FC", "BL", "BR", "SL", "SR"] {
+        assert!(summary.contains(&format!("Interaural Impulse Response - {speaker}")));
+    }
+
+    let saved: Vec<_> = interactive
+        .events
+        .iter()
+        .filter(|e| e["key"] == "cli_success_interactive_saved")
+        .collect();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0]["level"], "SUCCESS");
+    assert!(
+        saved[0]["message"]
+            .as_str()
+            .unwrap()
+            .ends_with("interactive_summary.html")
+    );
+    assert!(
+        interactive
+            .events
+            .iter()
+            .any(|e| e["key"] == "cli_generating_interactive")
+    );
+    for quiet in [
+        "cli_plots_not_available_yet",
+        "cli_warning_no_interactive",
+        "cli_warning_interactive_plot_error",
+    ] {
+        assert!(
+            !interactive.events.iter().any(|e| e["key"] == quiet),
+            "{quiet}"
+        );
+    }
+}
+/// The stage consults the job before computing and before writing, writes
+/// nothing when cancelled, and writes nothing (reporting `None`) without data.
+#[test]
+fn interactive_summary_respects_cancellation_and_empty_input() {
+    use impulcifer_dsp::{hrir::SpeakerIrs, ir::ImpulseResponse};
+    use impulcifer_service::brir::plots::interactive_summary;
+    let fs = 48000;
+    let ir = |onset: usize| {
+        let mut data = vec![0.0; 960];
+        data[onset] = 1.0;
+        data[onset + 30] = -0.25;
+        Some(ImpulseResponse {
+            data,
+            fs,
+            recording: None,
+        })
+    };
+    let hrir = Hrir {
+        fs,
+        speakers: vec![SpeakerIrs {
+            speaker: "FL".into(),
+            left: ir(10),
+            right: ir(22),
+        }],
+    };
+    let t = Temp::new();
+    let path = t.0.join("interactive_plots/interactive_summary.html");
+    assert!(interactive_summary(&t.0, &hrir, &|| true).is_err());
+    assert!(!t.0.join("interactive_plots").exists());
+    let outcome = interactive_summary(&t.0, &hrir, &|| false).unwrap();
+    assert_eq!(outcome.path.as_deref(), Some(path.as_path()));
+    assert!(outcome.errors.is_empty());
+    assert!(path.is_file());
+
+    let empty = Temp::new();
+    let outcome = interactive_summary(
+        &empty.0,
+        &Hrir {
+            fs,
+            speakers: Vec::new(),
+        },
+        &|| false,
+    )
+    .unwrap();
+    assert!(outcome.path.is_none() && outcome.errors.is_empty());
+    assert!(!empty.0.join("interactive_plots").exists());
+}
 #[test]
 fn plot_observer_sees_pre_resample_state_and_propagates_failure() {
     let t = Temp::demo();
     let mut c = config(&t, true);
     c.fs = Some(44100);
+    c.interactive_plots = true;
     let mut capture = Capture::default();
     let input = inputs(&t, &c);
     let output = run_pipeline(&c, input.clone(), &mut capture).unwrap();
     assert_eq!(output.hrir.fs, 44100);
+    // The interactive report, like 2.x, is drawn before the resample stage.
     assert_eq!(
         capture.rates,
         vec![
             (StageKey::PlotPre, 48000),
             (StageKey::PlotPost, 48000),
             (StageKey::PlotResults, 48000),
-            (StageKey::PlotAdditional, 48000)
+            (StageKey::PlotAdditional, 48000),
+            (StageKey::InteractivePlots, 48000)
         ]
     );
     struct Fail;

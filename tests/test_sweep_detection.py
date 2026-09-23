@@ -101,6 +101,54 @@ def test_trimmed_recording_recovers_via_envelope_onsets(tmp_path):
     assert result.confidence == "high"
 
 
+def _padded_sequence(fs=8000):
+    """A default-layout FL,FR capture with 3 s of extra tail, so the file-length
+    estimate misses the grid and detection has to read the envelope."""
+    playback = build_sweep_playback(SweepSpec(fs=fs, duration=1.0, speakers=("FL", "FR")))
+    mix = np.sum(playback.data, axis=0)
+    return playback.fs, np.concatenate([mix, np.zeros(3 * playback.fs)])
+
+
+def test_noisy_capture_splits_sweeps_at_the_noise_floor(tmp_path):
+    # A floor 30 dB under the sweeps sits above the old peak - 40 dB threshold
+    # and read as one sweep spanning the file (real captures did this).
+    fs, mix = _padded_sequence()
+    rng = np.random.default_rng(1234)
+    noise = rng.normal(0.0, 0.03 * np.max(np.abs(mix)), size=(2, len(mix)))
+    write_wav(str(tmp_path / "FL,FR.wav"), fs, np.vstack([mix, mix]) + noise, bit_depth=32)
+    result = detect_sweep_parameters(str(tmp_path))
+    assert result is not None
+    assert (result.m, result.n_segments, result.confidence) == (1, 2, "high")
+
+
+def test_short_noise_burst_before_the_sweeps_is_not_an_onset(tmp_path):
+    # A 0.6 s burst in the lead silence used to count as the first onset.
+    fs, mix = _padded_sequence()
+    rng = np.random.default_rng(1234)
+    burst = slice(int(0.3 * fs), int(0.9 * fs))
+    mix = mix.copy()
+    mix[burst] = rng.normal(0.0, 0.3 * np.max(np.abs(mix)), size=burst.stop - burst.start)
+    write_wav(str(tmp_path / "FL,FR.wav"), fs, np.vstack([mix, mix]), bit_depth=32)
+    result = detect_sweep_parameters(str(tmp_path))
+    assert result is not None
+    assert (result.m, result.n_segments, result.confidence) == (1, 2, "high")
+
+
+def test_skip_placeholder_recordings_are_listed_and_counted(tmp_path):
+    # FC,X.wav: the centre sweep plus a skipped one (original Impulcifer naming).
+    _write_loopback(tmp_path, SweepSpec(fs=8000, duration=1.0, speakers=("FL", "FR")))
+    playback = build_sweep_playback(SweepSpec(fs=8000, duration=1.0, speakers=("FL", "FR")))
+    mix = np.sum(playback.data, axis=0)
+    write_wav(str(tmp_path / "FC,X.wav"), playback.fs, np.vstack([mix, mix]), bit_depth=32)
+    for ignored in ("X.wav", "X,X.wav", "C.wav"):
+        write_wav(str(tmp_path / ignored), playback.fs, np.vstack([mix, mix]), bit_depth=32)
+    result = detect_sweep_parameters(str(tmp_path))
+    assert result is not None
+    assert result.source_files == ("FC,X.wav", "FL,FR.wav")
+    assert result.speakers == ("FC", "X", "FL", "FR")
+    assert (result.m, result.confidence) == (1, "high")
+
+
 def test_off_grid_signal_reports_low_confidence(tmp_path):
     fs = 8000
     t = np.arange(int(3.0 * fs)) / fs

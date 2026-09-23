@@ -290,21 +290,16 @@
                   </div>
                   <span class="caret" aria-hidden="true"></span>
                 </div>
-                <div class="disclosure-body">
-                  <div class="field-row">
-                    <label for="bf-eq-file" class="mono">eq.csv</label>
-                    <input id="bf-eq-file" class="mono" value="eq.csv" spellcheck="false">
-                    <button class="btn-link" data-browse="text" data-target="bf-eq-file" data-i18n="button_browse">Browse</button>
-                  </div>
-                  <div class="field-row">
-                    <label for="bf-eq-left" class="mono">eq-left.csv</label>
-                    <input id="bf-eq-left" class="mono" value="eq-left.csv" spellcheck="false">
-                    <button class="btn-link" data-browse="text" data-target="bf-eq-left" data-i18n="button_browse">Browse</button>
-                  </div>
-                  <div class="field-row">
-                    <label for="bf-eq-right" class="mono">eq-right.csv</label>
-                    <input id="bf-eq-right" class="mono" value="eq-right.csv" spellcheck="false">
-                    <button class="btn-link" data-browse="text" data-target="bf-eq-right" data-i18n="button_browse">Browse</button>
+                <div class="disclosure-body eq-body">
+                  <p class="hint" data-i18n="eq_formats_hint">Files named eq, eq-left and eq-right in the recording folder are used automatically (.csv first, then .txt). A file chosen from elsewhere is read where it is, never copied.</p>
+                  <div class="eq-slots" id="bf-eq-slots" role="list"></div>
+                  <div class="eq-result" id="bf-eq-result">
+                    <div class="eq-result-head">
+                      <span class="eq-result-title" data-i18n="eq_preview_title">Resulting EQ</span>
+                      <div class="eq-ears" id="bf-eq-ears"></div>
+                    </div>
+                    <svg class="eq-preview" id="bf-eq-preview" viewBox="0 0 640 180" preserveAspectRatio="none" role="img" aria-labelledby="bf-eq-preview-label"></svg>
+                    <p class="hint" id="bf-eq-preview-label"></p>
                   </div>
                 </div>
               </div>

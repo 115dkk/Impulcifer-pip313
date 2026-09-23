@@ -1,1 +1,1 @@
-//! Static PNG rendering of the analysis model.
+//! Reserved. Static PNG charts are rendered by `impulcifer-plots` (docs/rust/PLOTS.md).

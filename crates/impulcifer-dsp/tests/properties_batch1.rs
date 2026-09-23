@@ -106,6 +106,35 @@ fn fast_lengths_are_minimal_and_handle_overflow() {
     assert!(std::panic::catch_unwind(|| fft::next_fast_len(usize::MAX)).is_err());
 }
 #[test]
+fn complex_fast_lengths_are_minimal_11_smooth() {
+    let smooth = |mut n: usize| {
+        for p in [2, 3, 5, 7, 11] {
+            while n > 1 && n.is_multiple_of(p) {
+                n /= p;
+            }
+        }
+        n <= 1
+    };
+    for n in 0..4096 {
+        let m = fft::next_fast_len_complex(n);
+        assert!(m >= n && smooth(m), "{n} -> {m}");
+        assert!((n..m).all(|x| !smooth(x)), "{n} -> {m}");
+    }
+    // scipy.fft.next_fast_len(n) (real=False) on SciPy 1.18.1.
+    for (n, expected) in [
+        (7, 7),
+        (11, 11),
+        (13, 14),
+        (1001, 1008),
+        (12345, 12348),
+        (33599, 33600),
+        (295270, 295680),
+    ] {
+        assert_eq!(fft::next_fast_len_complex(n), expected, "{n}");
+    }
+    assert!(std::panic::catch_unwind(|| fft::next_fast_len_complex(usize::MAX)).is_err());
+}
+#[test]
 fn statistics_edges_and_nonfinite_policy() {
     assert_eq!(stats::running_mean(&[1.0, 2.0, 3.0], 2), vec![1.5, 2.5]);
     assert!(stats::running_mean(&[1.0], 2).is_empty());

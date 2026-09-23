@@ -393,3 +393,34 @@ class TestHeadphoneCompensation:
 
         assert isinstance(left, FrequencyResponse)
         assert isinstance(right, FrequencyResponse)
+
+
+def test_skip_placeholder_recording_keeps_its_real_channel(tmp_path):
+    """FC,X.wav (centre sweep, then a skipped one) must yield FC exactly as
+    FC.wav does; 2.14.2 and earlier matched no file and dropped the channel."""
+    import os
+    import shutil
+
+    from core.audio_io import read_wav
+    from core.pipeline_stages import open_binaural_measurements
+
+    root = os.path.join(os.path.dirname(__file__), "..", "data")
+    estimator = ImpulseResponseEstimator.from_wav(
+        os.path.join(root, "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
+    )
+    fs, recording = read_wav(os.path.join(root, "demo", "FC.wav"), expand=True)
+    skipped = np.zeros((recording.shape[0], 2 * fs + len(estimator)))
+    placeholder = tmp_path / "placeholder"
+    reference = tmp_path / "reference"
+    placeholder.mkdir()
+    reference.mkdir()
+    write_wav(str(placeholder / "FC,X.wav"), fs, np.hstack([recording, skipped]), bit_depth=32)
+    shutil.copy(os.path.join(root, "demo", "FC.wav"), reference / "FC.wav")
+
+    opened = open_binaural_measurements(estimator, str(placeholder))
+    expected = open_binaural_measurements(estimator, str(reference))
+    assert list(opened.irs) == ["FC"]
+    for side in ("left", "right"):
+        np.testing.assert_allclose(
+            opened.irs["FC"][side].data, expected.irs["FC"][side].data, rtol=0, atol=1e-6
+        )

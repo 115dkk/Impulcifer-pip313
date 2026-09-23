@@ -25,13 +25,35 @@ fn optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warning
     ] {
         assert!(p.events.iter().any(|e| e.payload["key"] == key), "{key}");
     }
+    // Only the mic-deviation debug plots remain unported; the interactive
+    // report is rendered (before the 44.1 kHz resample, at 48 kHz like 2.x).
     assert_eq!(
         p.events
             .iter()
             .filter(|e| e.payload["key"] == "cli_plots_not_available_yet")
             .count(),
-        2
+        1
     );
+    assert!(p.events.iter().any(|e| {
+        e.payload["key"] == "cli_success_interactive_saved"
+            && e.payload["level"] == "SUCCESS"
+            && e.payload["message"]
+                .as_str()
+                .unwrap()
+                .contains("interactive_summary.html")
+    }));
+    assert!(
+        temp.0
+            .join("interactive_plots/interactive_summary.html")
+            .is_file()
+    );
+    for name in ["ild", "ipd", "iacc", "etc"] {
+        assert!(
+            temp.0
+                .join(format!("plots/{name}/{name}_analysis.html"))
+                .is_file()
+        );
+    }
     assert!(temp.0.join("plots/results.png").is_file());
     for speaker in ["FL", "FR", "FC", "BL", "BR", "SL", "SR"] {
         for side in ["left", "right"] {
@@ -52,7 +74,6 @@ fn optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warning
         );
     }
     assert!(!temp.0.join("plots/headphones.png").exists());
-    assert!(!temp.0.join("interactive_plots").exists());
     let wav = impulcifer_io::read_wav(&temp.0.join("hesuvi.wav")).unwrap();
     assert_eq!(wav.sample_rate, 44100);
     assert_eq!(wav.tracks.len(), 14);

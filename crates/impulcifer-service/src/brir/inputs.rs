@@ -44,7 +44,7 @@ fn csv(path: &Path) -> Result<FrequencyResponse, BrirError> {
     )?)
 }
 /// Python's text decoding for eq files: utf-8-sig first, then cp1252.
-fn decode_text(bytes: &[u8]) -> String {
+pub(crate) fn decode_text(bytes: &[u8]) -> String {
     match std::str::from_utf8(bytes) {
         Ok(s) => s.trim_start_matches('\u{feff}').to_owned(),
         Err(_) => bytes.iter().map(|b| cp1252(*b)).collect(),
@@ -54,8 +54,8 @@ fn decode_text(bytes: &[u8]) -> String {
 }
 /// File access for `Include:` and `Convolution:` lines of an EqualizerAPO
 /// config (the dsp parser is file-free; core/eqapo.py:593-600, 860-874).
-struct FileLoader;
-impl EqApoLoader for FileLoader {
+pub(crate) struct EqFileLoader;
+impl EqApoLoader for EqFileLoader {
     fn read_text(&mut self, path: &Path) -> Result<String, String> {
         std::fs::read(path)
             .map(|bytes| decode_text(&bytes))
@@ -97,8 +97,14 @@ fn eq(
         }
     }
     let frequency = impulcifer_dsp::fr::generate_frequencies(10.0, f64::from(fs) / 2.0, 1.01);
-    let (left, right, report) =
-        read_eq_settings(name, &text, fs, &frequency, path.parent(), &mut FileLoader)?;
+    let (left, right, report) = read_eq_settings(
+        name,
+        &text,
+        fs,
+        &frequency,
+        path.parent(),
+        &mut EqFileLoader,
+    )?;
     if let Some(report) = report {
         events.log(
             "info",

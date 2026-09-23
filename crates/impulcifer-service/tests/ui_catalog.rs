@@ -103,3 +103,38 @@ fn ui_scripts_and_markup_are_present_in_the_app_crate() {
         "the 3.x page must not reach outside frontendDist"
     );
 }
+
+/// Keys the BRIR job logs or reports as progress (`events.log(level, "key", …)`,
+/// `events.step("key", …)` and the stage-key table) must resolve in every
+/// language too; the job log renders them through the same catalogue.
+#[test]
+fn brir_job_log_keys_resolve_in_every_language() {
+    let pattern = regex::Regex::new(
+        r#"(?:\.log\(\s*"[a-z]+",\s*|\.step\(\s*|=>\s*)"((?:cli|vbass)_[a-z0-9_]+)""#,
+    )
+    .unwrap();
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/brir");
+    let mut keys = BTreeSet::new();
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "rs") {
+            let source = std::fs::read_to_string(&path).unwrap();
+            keys.extend(pattern.captures_iter(&source).map(|c| c[1].to_owned()));
+        }
+    }
+    assert!(
+        keys.contains("cli_info_parallel_threads") && keys.len() > 20,
+        "log key extraction found only {keys:?}"
+    );
+    for (language, _) in impulcifer_service::settings::LANGUAGES {
+        let catalog = impulcifer_service::settings::catalog(language);
+        let missing: Vec<_> = keys
+            .iter()
+            .filter(|key| !catalog.strings.contains_key(key.as_str()))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "{language}: BRIR log keys missing from the merged catalogue: {missing:?}"
+        );
+    }
+}

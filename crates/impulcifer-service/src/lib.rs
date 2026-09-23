@@ -100,7 +100,7 @@ impl ImpulciferService {
             settings: Mutex::new(settings::Settings::new(settings_path)),
             backend: Arc::from(backend),
             jobs,
-            data_dir,
+            data_dir: plain_path(&data_dir),
         }
     }
 
@@ -325,14 +325,13 @@ impl ImpulciferService {
                     .jobs
                     .start(impulcifer_types::job::JobKind::Brir, true, move |ctx| {
                         ctx.check_cancelled()?;
-                        if request.config.do_equalization {
-                            for (source, target) in request.sidecars {
-                                ctx.check_cancelled()?;
-                                std::fs::copy(source, target)
-                                    .map_err(|e| brir::BrirError::Fs(e).failure())?;
-                            }
-                        }
-                        let run = brir::run::run_with_data(&request.config, &catalog, ctx, &data)?;
+                        let run = brir::run::run_with_choices(
+                            &request.config,
+                            &request.eq,
+                            &catalog,
+                            ctx,
+                            &data,
+                        )?;
                         Ok(json!({"output_path":run.output_path}))
                     })
                     .map_err(|code| {
@@ -344,6 +343,10 @@ impl ImpulciferService {
                         )
                     })?;
                 Ok(json!({"job":snapshot(&job)}))
+            }
+            IpcMethod::InspectEq => {
+                args.count(1, 1)?;
+                brir::eq_select::inspect(args.get(0))
             }
             IpcMethod::PlanOutputRecovery => {
                 args.count(1, 1)?;
@@ -513,7 +516,56 @@ fn recovery_error(error: recovery::RecoveryError) -> Value {
     json!({"ok":false,"error":{"code":error.code,"message":error.message,"details":error.details,"retryable":false}})
 }
 fn path_text(path: &std::path::Path) -> String {
-    path.to_string_lossy().into_owned()
+    plain_path(path).to_string_lossy().into_owned()
+}
+/// Windows' verbatim form (`\\?\C:\…`, `\\?\UNC\server\share\…`) is what
+/// `canonicalize` and Tauri's resource directory hand back. The file APIs accept
+/// it, but it is not a path anyone reads or pastes, so the service stores and
+/// reports the ordinary form whenever that addresses the same file.
+pub fn plain_path(path: &std::path::Path) -> PathBuf {
+    if cfg!(windows)
+        && let Some(plain) = path.to_str().and_then(strip_verbatim)
+    {
+        return PathBuf::from(plain);
+    }
+    path.to_path_buf()
+}
+/// `\\?\C:\x` becomes `C:\x` and `\\?\UNC\srv\share\x` becomes `\\srv\share\x`.
+/// `None` for non-verbatim paths and for those only the verbatim form can
+/// address: MAX_PATH or longer, `.`/`..` components, names ending in a dot or
+/// space, or DOS device names, all of which the ordinary form would reinterpret.
+fn strip_verbatim(text: &str) -> Option<String> {
+    let rest = text.strip_prefix(r"\\?\")?;
+    let (plain, components) = if let Some(unc) = rest.strip_prefix(r"UNC\") {
+        (format!(r"\\{unc}"), unc)
+    } else {
+        let bytes = rest.as_bytes();
+        let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+        // `D:` alone is drive-relative, not the root the verbatim form names.
+        if !drive || bytes.get(2) != Some(&b'\\') {
+            return None;
+        }
+        (rest.to_owned(), rest.get(3..).unwrap_or(""))
+    };
+    const DEVICES: [&str; 22] = [
+        "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+        "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    ];
+    let reinterpreted = components.split('\\').filter(|c| !c.is_empty()).any(|c| {
+        let stem = c
+            .split('.')
+            .next()
+            .unwrap_or(c)
+            .trim_end()
+            .to_ascii_uppercase();
+        c == "."
+            || c == ".."
+            || c.ends_with('.')
+            || c.ends_with(' ')
+            || c.contains('/')
+            || DEVICES.contains(&stem.as_str())
+    });
+    (plain.len() < 260 && !reinterpreted).then_some(plain)
 }
 fn platform() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -630,6 +682,38 @@ pub fn default_data_dir() -> PathBuf {
 /// First candidate that is an existing directory.
 fn pick_data_dir(candidates: &[PathBuf]) -> Option<PathBuf> {
     candidates.iter().find(|path| path.is_dir()).cloned()
+}
+
+#[cfg(test)]
+mod plain_path_tests {
+    use super::strip_verbatim;
+
+    #[test]
+    fn verbatim_prefixes_are_removed_when_the_plain_form_is_equivalent() {
+        assert_eq!(
+            strip_verbatim(r"\\?\C:\Users\me\AppData\Local\Impulcifer\current\data").as_deref(),
+            Some(r"C:\Users\me\AppData\Local\Impulcifer\current\data")
+        );
+        assert_eq!(strip_verbatim(r"\\?\D:\").as_deref(), Some(r"D:\"));
+        assert_eq!(
+            strip_verbatim(r"\\?\UNC\server\share\data").as_deref(),
+            Some(r"\\server\share\data")
+        );
+    }
+
+    #[test]
+    fn paths_only_the_verbatim_form_can_address_are_kept() {
+        assert_eq!(strip_verbatim(r"C:\Users\me"), None);
+        assert_eq!(strip_verbatim("/home/me/data"), None);
+        assert_eq!(strip_verbatim(r"\\?\GLOBALROOT\Device\x"), None);
+        assert_eq!(strip_verbatim(r"\\?\D:"), None);
+        assert_eq!(strip_verbatim(r"\\?\C:\a\..\b"), None);
+        assert_eq!(strip_verbatim(r"\\?\C:\dir.\x"), None);
+        assert_eq!(strip_verbatim(r"\\?\C:\dir \x"), None);
+        assert_eq!(strip_verbatim(r"\\?\C:\data\nul.txt"), None);
+        let long = format!(r"\\?\C:\{}", "a".repeat(300));
+        assert_eq!(strip_verbatim(&long), None);
+    }
 }
 
 #[cfg(test)]

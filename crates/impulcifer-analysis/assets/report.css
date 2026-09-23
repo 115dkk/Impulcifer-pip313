@@ -1,0 +1,176 @@
+/* Impulcifer interactive report. Tokens follow docs/rust/PLOTS.md. */
+:root {
+  color-scheme: light dark;
+  --bg: #fbfbfc;
+  --panel: #ffffff;
+  --border: #e5e7eb;
+  --ink: #1b1f24;
+  --muted: #6b7280;
+  --grid: #e5e7eb;
+  --grid-minor: #f1f3f5;
+  --zero: #9ca3af;
+  --left: #2563eb;
+  --right: #dc2626;
+  --diff: #111827;
+  --pos-fill: #dbeafe;
+  --neg-fill: #fee2e2;
+  --accent: #2563eb;
+  --tip-bg: #ffffff;
+  --tip-shadow: 0 6px 20px rgba(17, 24, 39, 0.12), 0 1px 3px rgba(17, 24, 39, 0.08);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1116;
+    --panel: #161a21;
+    --border: #262c36;
+    --ink: #e6e8eb;
+    --muted: #9aa3ae;
+    --grid: #2a303a;
+    --grid-minor: #1f242c;
+    --zero: #5d6573;
+    --left: #60a5fa;
+    --right: #f87171;
+    --diff: #f3f4f6;
+    --pos-fill: rgba(96, 165, 250, 0.24);
+    --neg-fill: rgba(248, 113, 113, 0.24);
+    --accent: #60a5fa;
+    --tip-bg: #1d222b;
+    --tip-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.page { max-width: 1480px; margin: 0 auto; padding: 20px 24px 32px; }
+
+header.top h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+header.top p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+
+nav.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  margin: 16px -24px 0;
+  padding: 8px 24px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+nav.tabs button {
+  flex: none;
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: 600 13px/1 var(--font);
+  padding: 10px 12px 11px;
+  cursor: pointer;
+}
+nav.tabs button:hover { color: var(--ink); }
+nav.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+nav.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+
+.note { margin: 14px 0 12px; color: var(--muted); font-size: 13px; max-width: 90ch; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 900px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card.wide { grid-column: 1 / -1; }
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px 10px;
+  min-width: 0;
+}
+
+.card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.card h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.card .sub { margin: 1px 0 0; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 2px 4px; }
+.legend button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: 12px/1 var(--font);
+  padding: 4px 6px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.legend button:hover { border-color: var(--border); }
+.legend button:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.legend button[aria-pressed="false"] { color: var(--muted); text-decoration: line-through; }
+.legend button[aria-pressed="false"] .swatch { opacity: 0.3; }
+.swatch { width: 18px; height: 0; border-top: 2px solid currentColor; }
+.swatch.dashed { border-top-style: dashed; }
+.swatch.faint { opacity: 0.45; }
+
+.plot { position: relative; height: 250px; margin-top: 6px; user-select: none; -webkit-user-select: none; }
+.plot.pannable { touch-action: pan-y; }
+.plot.tall { height: 360px; }
+.plot.short { height: 210px; }
+.plot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.plot canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.plot.pannable { cursor: crosshair; }
+.plot.dragging { cursor: grabbing; }
+
+.tip {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  min-width: 120px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--tip-bg);
+  box-shadow: var(--tip-shadow);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tip[hidden] { display: none; }
+.tip .head { color: var(--muted); }
+.tip .row { display: flex; align-items: center; gap: 6px; }
+.tip .row .swatch { width: 12px; }
+.tip .row b { font-weight: 600; margin-left: auto; padding-left: 10px; }
+
+footer { margin-top: 20px; color: var(--muted); font-size: 12px; }
+footer kbd {
+  font: 11px/1 var(--font);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+@media (max-width: 599px) {
+  .page { padding: 14px 16px 24px; }
+  nav.tabs { margin: 12px -16px 0; padding: 6px 16px 0; }
+  .plot { height: 220px; }
+  .plot.tall { height: 300px; }
+}

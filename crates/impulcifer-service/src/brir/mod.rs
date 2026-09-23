@@ -1,5 +1,6 @@
 //! Filesystem adapters for the file-free P08/P09/P10 BRIR pipeline.
 pub mod discovery;
+pub mod eq_select;
 pub mod estimator;
 pub mod inputs;
 pub mod outputs;

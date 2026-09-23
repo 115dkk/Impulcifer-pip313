@@ -4,6 +4,21 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 2.14.3 - 2026-09-23
+### 실측 데이터 3자 비교에서 찾은 결함 긴급 수정과 3.x 정식 출시 전 정리
+
+#### 🐛 버그 수정 (2.x와 3.x 공통)
+- **`FC,X.wav`처럼 `X`가 들어간 녹음을 통째로 버리던 문제**: 원본 Impulcifer와 LionLion123/Impulcifer는 파일 이름의 `X`를 '건너뛸 스윕' 자리로 읽어 센터 스피커를 스테레오 분절 sweep으로 녹음한 `FC,X.wav`에서 FC를 살립니다. 2.x는 스피커 이름 패턴을 두세 글자 대문자로 좁히면서 `X`를 빠뜨려 이런 파일을 아예 녹음으로 보지 않았고, 그 결과 7.1 측정에서 센터 채널이 소리 없이 빠졌습니다(3.x도 그대로 옮겨 왔습니다). 이제 `SPEAKER_LIST_PATTERN`이 `X`를 받고(실제 스피커 이름이 하나 이상 있어야 함) 녹음 탐색·룸 측정 탐색·스윕 감지·녹음기 채널 검증이 모두 같은 규칙을 씁니다. 3.x는 `recording_speakers`, `parse_room_measurement_name`, 녹음기 `filename_speakers`를 같은 규칙으로 맞췄고 18개 파일 이름에서 Python 정규식과 결과가 같음을 테스트로 고정했습니다.
+- **스윕 자동 감지(`--test_signal` 미지정·`auto`)가 잡음 많은 녹음과 첫머리 잡음을 스윕으로 오인하던 문제**: 엔벨로프 기준선이 피크 대비 −40 dB 하나뿐이라, 잡음 바닥이 그보다 높은 녹음은 파일 전체가 스윕 하나로 잡혀 21.5초·18.5초짜리 스윕으로 '높은 신뢰도' 판정을 받았고, 녹음 첫머리의 1.2초짜리 잡음 덩어리는 첫 스윕으로 세어져 3.08초 스윕으로 판정됐습니다. 두 경우 모두 기본값으로 처리하면 엉뚱한 BRIR이 나옵니다. 이제 기준선을 잡음 바닥(엔벨로프 10번째 백분위) + 10 dB 이상으로 올리고(피크 −20 dB 상한), 가장 긴 구간의 절반보다 짧은 구간은 스윕 간격 계산에서 뺍니다. 실측 64개 룸 폴더 전부가 올바른 스윕(또는 비표준 간격이면 '낮은 신뢰도' 후 내장 기본 스윕)으로 판정됩니다. 3.x `sweep_grid.rs`도 같은 수정을 받았습니다.
+
+#### ⭐ 3.0.0 정식 출시 (2.x 출하물과 무관)
+- **3.0.0**: 워크스페이스 버전을 `3.0.0-alpha.2`에서 `3.0.0`으로 올렸습니다. `release-3x.yml`을 이 버전으로 돌리면 사전 출시가 아닌 GitHub Release `v3.0.0`이 만들어져 `/releases/latest`가 3.x를 가리키므로, 2.x Velopack 설치본은 앱 안의 업데이트 확인으로 3.x로 넘어가고(`package.upgrade_from_2x`), PyPI `impulcifer-py313`도 `--pre` 없이 3.0.0을 받습니다. 정식 설치본의 업데이트 확인은 `/releases/latest`만 읽고, alpha 설치본은 롤링 피드에서 3.0.0을 봅니다.
+- **실측 데이터 3자 비교**: 19명의 실측 데이터(룸 녹음 64세트 × 같은 측정자의 헤드폰 녹음 92개, 244개 조합)를 3.0.0-alpha.2, 2.14.2, LionLion123/Impulcifer로 기본·virtual bass 두 시나리오에서 모두 돌려 3.x 마이그레이션 인증 기준(`demo_parity.rs`와 같은 트랙별 판정)으로 비교했습니다. 결과와 방법은 `tests/migration/README-realdata.md`, 하네스는 `tests/migration/realdata_parity.py`입니다(측정 데이터는 비공개라 CI 아티팩트로 올리지 않습니다).
+- **Custom EQ 화면 재설계**: 세 칸(양쪽 귀·왼쪽 귀·오른쪽 귀)마다 녹음 폴더 파일 따라가기, 다른 파일 고르기, 끄기를 두고, 각 칸이 실제로 쓸 파일 이름과 형식(AutoEQ CSV / Equalizer APO, 좌우 분리 여부, 프리앰프, 건너뛴 줄 수), `eq.csv`에 가려 쓰이지 않는 `eq.txt`, 읽을 수 없는 파일을 보여 줍니다. 아래에는 어느 파일(과 채널)이 어느 귀에 가는지와 귀별 결과 곡선(1/12옥타브, 20 Hz–20 kHz)을 그립니다. 새 IPC `inspect_eq`가 이 정보를 돌려주고, `start_brir`의 `eq_file`/`eq_left_file`/`eq_right_file`은 null(폴더), false(끄기), 경로(그 자리에서 읽기)를 받습니다. 다른 곳에서 고른 파일을 측정 폴더의 `eq.csv`로 복사해 덮어쓰던 동작은 없앴습니다.
+- **인터랙티브 플롯(`--interactive_plots`)을 3.x에 이식하고 가볍게 다시 만들었습니다**: 지금까지 3.x는 이 옵션에서 "아직 지원하지 않음" 경고만 남겼습니다. 이제 2.x와 같은 `interactive_plots/interactive_summary.html`(Interaural Overlay, ILD, IPD, IACC, EDC, Result Overview 여섯 탭)과, `--plot`을 함께 켜면 `plots/{ild,ipd,iacc,etc}/*_analysis.html`을 씁니다. 수치는 2.x `core/plotting/analysis.py`와 Bokeh 생성기를 그대로 옮겨 골든으로 고정했습니다(ILD 2.6e-14 dB, IACF 1.1e-15 등). Bokeh 대신 CDN이 필요 없는 단일 HTML과 캔버스 렌더러를 씁니다. 데이터는 Float32 base64로 넣어 보이는 탭만 풀고, 그릴 때는 화면 폭의 픽셀 열마다 최소·최대만 남겨 점 수가 데이터 길이와 무관하며, 다시 그리기는 `requestAnimationFrame`으로 묶고 화면 밖 차트는 건너뜁니다. 데모 기준으로 2.x 대비 파일 11.3 MB(+ BokehJS 1.3 MB) → 5.1 MB, 첫 차트 표시 4.4 s → 0.3 s, 휠 줌 중 가장 긴 프레임 817 ms → 16.8 ms(긴 작업 128개 → 0개), 드래그 중 프레임 간격 41.7 ms → 16.7 ms, JS 힙 115 MB → 6.4 MB입니다. BRIR WAV와 README는 보고서 유무와 무관하게 바이트 단위로 같습니다.
+- **시스템 정보 정리**: Windows에서 데이터 폴더가 `\\?\C:\…`로 보이던 verbatim 접두사를 떼고(서비스가 데이터 폴더를 저장할 때부터 일반 경로로 바꿉니다), 라벨 끝의 콜론을 통일했으며(2.x 카탈로그에서 온 `OS:`·`CPU 코어:`만 콜론이 붙어 있었습니다), 오디오 백엔드와 업데이트 채널 행을 뺐습니다(CLI `--info` 진단 출력에는 남깁니다).
+- **작업 로그의 `Python rustc …` 문구**: 이퀄라이징 단계 로그가 2.x 문구 `(Python {version}, GIL {status})`에 Rust 정보를 끼워 넣고 있었습니다. 3.x 전용 키 `cli_info_parallel_threads`("{threads}개 스레드로 병렬 처리합니다")로 바꾸고, BRIR 작업이 로그에 쓰는 모든 키가 아홉 언어에서 풀리는지 검사하는 테스트를 더했습니다.
+
 ## 2.14.2 - 2026-09-08
 ### 🔧 자동 릴리스 (CI auto-bump)
 

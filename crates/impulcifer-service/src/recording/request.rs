@@ -170,31 +170,49 @@ fn boolean(o: &serde_json::Map<String, Value>, name: &str) -> Result<bool, Value
             .ok_or_else(|| invalid(format!("{name} must be a boolean.")))
     })
 }
-// Python re.search(r'([A-Z]{2,3}(,[A-Z]{2,3})*)', basename), not a known-speaker lookup.
+// Python re.search(SPEAKER_LIST_PATTERN, basename), not a known-speaker lookup:
+// names of two or three capitals or a lone X (skipped sweep), with at least one
+// real name ahead (core/constants.py, 2.14.3).
 fn filename_speakers(path: &str) -> Option<Vec<String>> {
     let name = path.rsplit(std::path::is_separator).next().unwrap_or("");
     let b = name.as_bytes();
-    for start in 0..b.len().saturating_sub(1) {
-        if !b[start].is_ascii_uppercase() || !b[start + 1].is_ascii_uppercase() {
+    // `[A-Z]{2,3}|X` at `pos`: the end of the name, greedy like the regex.
+    let element = |pos: usize| -> Option<usize> {
+        let mut end = pos;
+        while end < b.len() && end - pos < 3 && b[end].is_ascii_uppercase() {
+            end += 1;
+        }
+        if end - pos >= 2 {
+            Some(end)
+        } else if b.get(pos) == Some(&b'X') {
+            Some(pos + 1)
+        } else {
+            None
+        }
+    };
+    // `(?=[A-Z,]*[A-Z]{2})`: two adjacent capitals before the run of capitals
+    // and commas starting at `pos` ends.
+    let real_name_ahead = |pos: usize| {
+        let run = b[pos..]
+            .iter()
+            .take_while(|c| c.is_ascii_uppercase() || **c == b',')
+            .count();
+        b[pos..pos + run]
+            .windows(2)
+            .any(|w| w[0].is_ascii_uppercase() && w[1].is_ascii_uppercase())
+    };
+    for start in 0..b.len() {
+        if !real_name_ahead(start) {
             continue;
         }
-        let mut pos = start;
-        let mut names = Vec::new();
-        loop {
-            let begin = pos;
-            while pos < b.len() && pos - begin < 3 && b[pos].is_ascii_uppercase() {
-                pos += 1;
-            }
-            names.push(name[begin..pos].to_owned());
-            if pos + 2 < b.len()
-                && b[pos] == b','
-                && b[pos + 1].is_ascii_uppercase()
-                && b[pos + 2].is_ascii_uppercase()
-            {
-                pos += 1;
-            } else {
-                break;
-            }
+        let Some(mut pos) = element(start) else {
+            continue;
+        };
+        let mut names = vec![name[start..pos].to_owned()];
+        while b.get(pos) == Some(&b',') {
+            let Some(end) = element(pos + 1) else { break };
+            names.push(name[pos + 1..end].to_owned());
+            pos = end;
         }
         return Some(names);
     }
@@ -344,4 +362,45 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
         append,
         debug_plots,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::filename_speakers;
+
+    /// Expected values are `re.search(SPEAKER_LIST_PATTERN, name).group(1)` of
+    /// the 2.14.3 pattern in core/constants.py.
+    #[test]
+    fn filename_speakers_follow_the_python_pattern_with_the_skip_placeholder() {
+        let cases: [(&str, Option<&[&str]>); 18] = [
+            ("FL,FR.wav", Some(&["FL", "FR"])),
+            ("FC,X.wav", Some(&["FC", "X"])),
+            ("X,FC.wav", Some(&["X", "FC"])),
+            ("X.wav", None),
+            ("X,X.wav", None),
+            ("C.wav", None),
+            ("headphones.wav", None),
+            (
+                "FL,FR,FC,SL,SR,BL,BR.wav",
+                Some(&["FL", "FR", "FC", "SL", "SR", "BL", "BR"]),
+            ),
+            ("TFL,TFR.wav", Some(&["TFL", "TFR"])),
+            ("FLFR.wav", Some(&["FLF"])),
+            ("aX,FL.wav", Some(&["X", "FL"])),
+            ("FC,x.wav", Some(&["FC"])),
+            ("FL,X,FR.wav", Some(&["FL", "X", "FR"])),
+            ("FL,.wav", Some(&["FL"])),
+            ("my FC,X take 2.wav", Some(&["FC", "X"])),
+            ("room-FC,X-left.wav", Some(&["FC", "X"])),
+            ("FC,XY.wav", Some(&["FC", "XY"])),
+            ("X,Xa,FL.wav", Some(&["FL"])),
+        ];
+        for (name, expected) in cases {
+            assert_eq!(
+                filename_speakers(name),
+                expected.map(|v| v.iter().map(|s| s.to_string()).collect::<Vec<_>>()),
+                "{name}"
+            );
+        }
+    }
 }

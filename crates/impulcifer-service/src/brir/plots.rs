@@ -14,7 +14,7 @@ use impulcifer_plots::{
 };
 use impulcifer_types::stages::StageKey;
 use rayon::prelude::*;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 fn error(e: impl std::fmt::Display) -> DspError {
     DspError::InvalidArgument(format!("plot: {e}"))
@@ -443,15 +443,91 @@ fn check(cancelled: &(dyn Fn() -> bool + Sync)) -> Result<(), DspError> {
         Ok(())
     }
 }
+/// What the interactive stage produced, for the job log (2.x
+/// `_stage_interactive_plots`): the summary path, or `None` when no panel had
+/// data (`cli_warning_no_interactive`), and the panels that failed as
+/// `(title, error)` (`cli_warning_interactive_plot_error`).
+#[derive(Debug, Default)]
+pub struct InteractiveOutcome {
+    pub path: Option<PathBuf>,
+    pub errors: Vec<(String, String)>,
+}
+
+fn write_html(path: &Path, html: &str) -> Result<(), DspError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(error)?;
+    }
+    std::fs::write(path, html).map_err(error)
+}
+
+/// 2.x `_stage_interactive_plots`: every Bokeh panel in one offline document,
+/// `interactive_plots/interactive_summary.html`. A panel that cannot be
+/// computed is reported and skipped; with no panel nothing is written.
+pub fn interactive_summary(
+    dir: &Path,
+    hrir: &Hrir,
+    cancelled: &(dyn Fn() -> bool + Sync),
+) -> Result<InteractiveOutcome, DspError> {
+    check(cancelled)?;
+    let report = impulcifer_analysis::model::build_report(hrir);
+    let errors = report
+        .errors
+        .iter()
+        .map(|e| (e.panel.title().to_owned(), e.message.clone()))
+        .collect();
+    check(cancelled)?;
+    let Some(html) = impulcifer_analysis::html::summary_html(&report) else {
+        return Ok(InteractiveOutcome { path: None, errors });
+    };
+    let path = dir
+        .join("interactive_plots")
+        .join("interactive_summary.html");
+    write_html(&path, &html)?;
+    Ok(InteractiveOutcome {
+        path: Some(path),
+        errors,
+    })
+}
+
+/// 2.x `_save_bokeh_analysis_plots` (`--plot`): the ILD, IPD, IACC and EDC
+/// panels each as `plots/<name>/<name>_analysis.html`; empty panels are skipped.
+pub fn analysis_pages(
+    dir: &Path,
+    hrir: &Hrir,
+    cancelled: &(dyn Fn() -> bool + Sync),
+) -> Result<(), DspError> {
+    use impulcifer_analysis::{html, model::Panel};
+    check(cancelled)?;
+    let report = impulcifer_analysis::model::build_report(hrir);
+    for panel in Panel::ALL.into_iter().filter(|p| p.save_individually()) {
+        check(cancelled)?;
+        if let Some(page) = html::panel_html(&report, panel) {
+            let name = panel.name();
+            write_html(
+                &dir.join("plots")
+                    .join(name)
+                    .join(format!("{name}_analysis.html")),
+                &page,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Render the plot outputs of one plot stage from a borrowed snapshot. Returns
+/// the interactive outcome for `StageKey::InteractivePlots`, `None` otherwise.
 pub fn render_stage(
     dir: &Path,
     key: StageKey,
     hrir: &Hrir,
     estimator: &SweepEstimator,
     cancelled: &(dyn Fn() -> bool + Sync),
-) -> Result<(), DspError> {
+) -> Result<Option<InteractiveOutcome>, DspError> {
     let plots = dir.join("plots");
     match key {
+        StageKey::InteractivePlots => {
+            return interactive_summary(dir, hrir, cancelled).map(Some);
+        }
         StageKey::PlotResults => {
             let (l, r) = results_series(hrir)?;
             impulcifer_plots::plot_results(&plots.join("results.png"), &l, &r).map_err(error)?;
@@ -528,8 +604,9 @@ pub fn render_stage(
                     }
                     Ok(())
                 })?;
+            analysis_pages(dir, hrir, cancelled)?;
         }
         _ => (),
     }
-    Ok(())
+    Ok(None)
 }

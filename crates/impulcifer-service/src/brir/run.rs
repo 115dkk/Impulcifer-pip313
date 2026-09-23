@@ -1,6 +1,6 @@
 use super::{
-    BrirError, BrirEvents, Catalog, discovery::discover, estimator::open_with_events,
-    inputs::load_inputs, outputs::write_outputs_checked,
+    BrirError, BrirEvents, Catalog, discovery::discover, eq_select::EqChoices,
+    estimator::open_with_events, inputs::load_inputs, outputs::write_outputs_checked,
 };
 use impulcifer_dsp::{
     DspError,
@@ -113,7 +113,29 @@ impl StageObserver for Observer<'_, '_> {
         self.check_cancelled()?;
         let token = self.events.cancel_token();
         let cancelled = move || token.as_ref().is_some_and(|t| t.is_cancelled());
-        super::plots::render_stage(self.directory, key, hrir, self.estimator, &cancelled)
+        let outcome =
+            super::plots::render_stage(self.directory, key, hrir, self.estimator, &cancelled)?;
+        // 2.x _stage_interactive_plots: per-panel warnings, then success or "none".
+        if let Some(outcome) = outcome {
+            for (title, error) in &outcome.errors {
+                self.events.log(
+                    "warning",
+                    "cli_warning_interactive_plot_error",
+                    json!({"title": title, "error": error}),
+                );
+            }
+            match &outcome.path {
+                Some(path) => self.events.log(
+                    "success",
+                    "cli_success_interactive_saved",
+                    json!({"path": path.display().to_string()}),
+                ),
+                None => self
+                    .events
+                    .log("warning", "cli_warning_no_interactive", json!({})),
+            }
+        }
+        Ok(())
     }
     fn on_stage(&mut self, progress: StageProgress) {
         let key = progress.key;
@@ -135,9 +157,7 @@ impl StageObserver for Observer<'_, '_> {
                 },
             );
         }
-        if key == StageKey::InteractivePlots
-            || (key == StageKey::MicDeviation && self.config.mic_deviation_debug_plots)
-        {
+        if key == StageKey::MicDeviation && self.config.mic_deviation_debug_plots {
             self.events
                 .log("warning", "cli_plots_not_available_yet", json!({}));
         }
@@ -166,8 +186,13 @@ impl StageObserver for Observer<'_, '_> {
             );
         }
         if key == StageKey::Equalize {
-            // Same catalogue contract, honest runtime identity rather than invented Python metadata.
-            self.events.log("info","cli_info_parallel_executor",json!({"executor":"Rust","version":env!("IMPULCIFER_RUSTC_VERSION"),"status":"not applicable"}));
+            // The 2.x line reads "(Python {version}, GIL {status})"; the Rust
+            // pipeline has its own wording with the worker thread count.
+            self.events.log(
+                "info",
+                "cli_info_parallel_threads",
+                json!({"threads":rayon::current_num_threads()}),
+            );
             self.events.log(
                 "info",
                 "cli_info_parallel_eq",
@@ -198,6 +223,17 @@ pub(crate) fn run_with_data(
     ctx: &JobContext,
     data_dir: &Path,
 ) -> Result<BrirRun, JobFailure> {
+    run_with_choices(config, &EqChoices::default(), i18n, ctx, data_dir)
+}
+/// `run_with_data` with the custom EQ slots of an IPC request applied over
+/// the folder discovery.
+pub(crate) fn run_with_choices(
+    config: &ProcessingConfig,
+    eq: &EqChoices,
+    i18n: &Catalog,
+    ctx: &JobContext,
+    data_dir: &Path,
+) -> Result<BrirRun, JobFailure> {
     let result = (|| -> Result<BrirRun, BrirError> {
         let mut events = Events {
             ctx,
@@ -212,7 +248,8 @@ pub(crate) fn run_with_data(
             json!({"total_steps":events.total}),
         );
         events.check_cancelled()?;
-        let dir = discover(Path::new(config.dir_path.as_deref().unwrap_or("")), config)?;
+        let mut dir = discover(Path::new(config.dir_path.as_deref().unwrap_or("")), config)?;
+        eq.apply(&mut dir.eq);
         events.step("cli_creating_estimator", json!({}))?;
         let estimator = open_with_events(
             &dir,

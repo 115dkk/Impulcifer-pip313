@@ -17,7 +17,8 @@ THEMES = ("dark", "light")
 LANGUAGES = ("en", "ko")
 VIEWS = ("settings", "info", "recorder")
 RECOVERY_STATES = ("empty", "planning", "ready", "nothing", "error", "succeeded")
-EXPECTED_SHOTS = 2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2
+EQ_SCENARIOS = ("eq-folder", "eq-mixed")
+EXPECTED_SHOTS = 2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2
 
 
 def catalog(language):
@@ -111,9 +112,38 @@ def mock_script(skin, theme, language, scenario):
       download_url: null, release_notes: null, release_url: null}),
     start_update: () => {kind = "update"; return ok({job: job("running")});},
     apply_pending_update: () => ok({restarting: true}),
-    select_directory: () => ok({path: directory}), select_file: () => ok({path: null}),
+    select_directory: () => ok({path: directory}),
+    select_file: kind => ok({path: kind === "text" ? "D:/EQ presets/HD800S left.csv" : null}),
     open_path: path => ok({path}), open_url: url => ok({url}),
     generate_sweep_set: () => ok({files: [], play_path: null}), detect_sweep: () => ok({found: false, sidecar: false}),
+    inspect_eq: request => {
+      const grid = Array.from({length: 121}, (_, i) => 20 * 2 ** (i / 12)).filter(f => f <= 20000.02);
+      const bell = (gain, center, width) => grid.map(f => gain * Math.exp(-(Math.log2(f / center) ** 2) / width));
+      const round = values => values.map(v => Math.round(v * 100) / 100);
+      const slot = (name, extra) => ({slot: name, source: "folder", path: null, name: null,
+        folder_default: name === "both" ? "eq.csv" : `eq-${name}.csv`, ignored: [], format: null, channels: null, error: null, ...extra});
+      const both = request.eq_file === false ? slot("both", {source: "off"})
+        : slot("both", {path: "C:/Impulcifer/my_hrir/eq.txt", name: "eq.txt", format: "eqapo", channels: "split",
+          eqapo: {preamp_db: [-6, -6], applied: 3, bypassed: 1, skipped: 0}});
+      let left = slot("left");
+      if (typeof request.eq_left_file === "string") {
+        const name = request.eq_left_file.split("/").pop();
+        left = scenario === "eq-mixed"
+          ? slot("left", {source: "file", path: request.eq_left_file, name, error: "missing CSV value"})
+          : slot("left", {source: "file", path: request.eq_left_file, name, format: "csv", channels: "both"});
+      }
+      const right = request.eq_right_file === false ? slot("right", {source: "off"}) : slot("right");
+      const on = both.source !== "off";
+      const leftCurve = left.source === "file" && !left.error ? round(bell(-3, 3000, 0.8))
+        : on ? round(bell(6, 1000, 0.6).map(v => v - 6)) : null;
+      const rightCurve = on ? round(bell(-4, 1000, 0.6).map(v => v - 6)) : null;
+      const blocked = Boolean(left.error);
+      return ok({slots: [both, left, right], blocked,
+        ears: blocked ? {left: null, right: null} : {
+          left: left.source === "file" ? {slot: "left", channel: "both"} : on ? {slot: "both", channel: "left"} : null,
+          right: on ? {slot: "both", channel: "right"} : null},
+        curves: {frequency: grid, left: blocked ? null : leftCurve, right: blocked ? null : rightCurve}});
+    },
   };
   window.pywebview = {api: new Proxy(methods, {get(target, method) {
     if (!(method in target)) throw new Error(`Unexpected IPC method: ${String(method)}`);
@@ -220,7 +250,35 @@ def behavior_checks(browser):
             page.wait_for_function("document.querySelector('[data-rec-detail]').textContent.includes('고정할 수 없습니다')")
         assert not errors, errors
         context.close()
-    print("Gallery behavior checks: debounce, stale responses, option replan, Stable no-plan, folder parent, language refresh, confirmation, share success/error OK", flush=True)
+    context, page, errors = open_page(browser, "studio", "dark", "en", "eq-folder")
+    navigate(page, "processing")
+    open_eq(page)
+    page.locator('#bf-eq-slots .eq-slot[data-state="found"] .eq-file-name', has_text="eq.txt").wait_for()
+    assert page.locator("#bf-eq-preview polyline").count() == 2
+    assert "left channel" in page.locator('#bf-eq-ears [data-ear="left"]').inner_text()
+    left_slot = page.locator("#bf-eq-slots .eq-slot").nth(1)
+    left_slot.get_by_role("button", name="Choose file…").click()
+    page.wait_for_function("galleryCalls.filter(c => c.method === 'inspect_eq').at(-1).args[0].eq_left_file === 'D:/EQ presets/HD800S left.csv'")
+    left_slot.locator(".eq-file-name", has_text="HD800S left.csv").wait_for()
+    page.locator("#bf-eq-slots .eq-slot").nth(2).get_by_role("button", name="Turn off").click()
+    page.wait_for_function("galleryCalls.filter(c => c.method === 'inspect_eq').at(-1).args[0].eq_right_file === false")
+    page.locator("#btn-generate-brir").click()
+    page.wait_for_function("galleryCalls.some(c => c.method === 'start_brir')")
+    request = page.evaluate("galleryCalls.find(c => c.method === 'start_brir').args[0]")
+    assert request["eq_left_file"] == "D:/EQ presets/HD800S left.csv" and request["eq_right_file"] is False, request
+    assert "eq_file" not in request, request
+    page.locator("#bf-eq-slots .eq-slot").nth(1).get_by_role("button", name="Use folder").click()
+    page.wait_for_function("!('eq_left_file' in galleryCalls.filter(c => c.method === 'inspect_eq').at(-1).args[0])")
+    assert not errors, errors
+    context.close()
+    print("Gallery behavior checks: debounce, stale responses, option replan, Stable no-plan, folder parent, language refresh, confirmation, share success/error, EQ slots OK", flush=True)
+
+
+def open_eq(page):
+    head = page.locator("#dis-eq > .disclosure-head")
+    if "open" not in (page.locator("#dis-eq").get_attribute("class") or ""):
+        head.click()
+    page.locator("#bf-eq-slots .eq-slot").first.wait_for()
 
 
 def render_gallery(output):
@@ -267,6 +325,23 @@ def render_gallery(output):
                 if skin == "stable":
                     assert page.evaluate("galleryDialogs.length") == 2
             shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-{scenario}", errors))
+            context.close()
+        for skin, theme, language, scenario in itertools.product(SKINS, THEMES, LANGUAGES, EQ_SCENARIOS):
+            context, page, errors = open_page(browser, skin, theme, language, scenario)
+            navigate(page, "processing")
+            open_eq(page)
+            page.wait_for_function("galleryCalls.some(c => c.method === 'inspect_eq')")
+            if scenario == "eq-mixed":
+                page.locator("#bf-eq-slots .eq-slot").nth(1).locator(".btn-link").first.click()
+                page.locator('#bf-eq-slots .eq-slot[data-state="error"]').wait_for()
+                page.locator("#bf-eq-slots .eq-slot").nth(2).locator(".btn-link").last.click()
+                page.wait_for_function("galleryCalls.filter(c => c.method === 'inspect_eq').at(-1).args[0].eq_right_file === false")
+                page.locator("#bf-eq-preview-label.eq-error").wait_for()
+                assert page.locator("#bf-eq-preview").get_attribute("hidden") is not None
+            else:
+                page.locator("#bf-eq-preview polyline").first.wait_for()
+            page.wait_for_timeout(50)
+            shots.append(shoot(page, output, f"processing-eq-{skin}-{language}-{theme}-{scenario}", errors))
             context.close()
         browser.close()
     assert len(shots) == EXPECTED_SHOTS, f"expected {EXPECTED_SHOTS}, got {len(shots)}"

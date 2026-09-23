@@ -38,6 +38,8 @@
   --err: #dc2626;
   --field-bg: #ffffff;
   --field-border: #cdd0d3;
+  --eq-left: #2563eb;
+  --eq-right: #dc2626;
   color-scheme: light;
 }
 
@@ -64,6 +66,8 @@
      high-contrast hole; saturated blue read as synthetic. */
   --field-bg: #17191d;
   --field-border: #33373d;
+  --eq-left: #60a5fa;
+  --eq-right: #f87171;
   color-scheme: dark;
 }
 
@@ -452,6 +456,66 @@ input[type="checkbox"] {
 
 .disclosure-body .field-row { grid-template-columns: 150px minmax(0, 1fr) auto; }
 
+/* ------------------------------------------------------------ custom EQ
+   One row per slot: which file it resolves to and in what form, with the
+   slot's actions on the right; below, which file feeds each ear and the
+   resulting curves. Left/right use the plot palette (blue solid, red
+   dashed) so the pair stays distinguishable without color. */
+
+.eq-slots { display: grid; gap: 6px; }
+
+.eq-slot {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--field-bg);
+}
+
+.eq-slot[data-state="error"] { border-color: var(--err); }
+.eq-slot-label { color: var(--fg-1); font-weight: 700; }
+.eq-slot-file { display: grid; gap: 3px; min-width: 0; }
+.eq-file-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.eq-file-name { font-size: 12px; overflow-wrap: anywhere; }
+.eq-slot[data-state="missing"] .eq-file-name,
+.eq-slot[data-state="off"] .eq-file-name { color: var(--fg-3); font-family: inherit; }
+.eq-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.eq-tag { height: 20px; padding: 0 7px; font-size: 11px; }
+.chip.eq-format-eqapo { background: var(--accent-soft); color: var(--accent-strong); }
+:root[data-theme="dark"] .chip.eq-format-eqapo { color: #9ec3ff; }
+.eq-error { color: var(--err); font-size: 12px; }
+.eq-slot-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
+
+.eq-result {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+}
+
+.eq-result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; }
+.eq-result-title { font-weight: 700; }
+.eq-ears { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--fg-2); font-size: 12px; }
+.eq-ear { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.eq-ear b { color: var(--fg-1); }
+.eq-swatch { flex: none; width: 16px; height: 0; border-top: 2px solid var(--eq-left); }
+.eq-ear[data-ear="right"] .eq-swatch { border-top-style: dashed; border-top-color: var(--eq-right); }
+.eq-ears[data-shared="true"] .eq-swatch { border-top-style: solid; border-top-color: var(--fg-0); }
+.eq-ear[data-empty] .eq-swatch { border-top-color: var(--bg-4); }
+
+.eq-preview { display: block; width: 100%; height: 180px; }
+.eq-grid { stroke: var(--line); stroke-width: 1; }
+.eq-zero { stroke: var(--fg-3); stroke-width: 1; }
+.eq-axis { fill: var(--fg-2); font: 10px "JetBrains Mono", "Cascadia Mono", Consolas, monospace; }
+.eq-curve { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.eq-curve-left { stroke: var(--eq-left); }
+.eq-curve-right { stroke: var(--eq-right); stroke-dasharray: 7 4; }
+.eq-curve-both { stroke: var(--fg-0); }
+
 /* ------------------------------------------------------------- activity */
 
 .progress {
@@ -765,4 +829,6 @@ input[type="checkbox"] {
   [data-skin="stable"] .sidebar { flex-wrap: wrap; padding: 10px 16px; }
   .field-row { grid-template-columns: 1fr; }
   .field-row > label { margin-bottom: -6px; }
+  .eq-slot { grid-template-columns: 1fr; gap: 6px; }
+  .eq-slot-actions { justify-content: flex-start; }
 }

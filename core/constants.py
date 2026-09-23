@@ -5,7 +5,10 @@
 SPEAKER_NAMES = ['FL', 'FR', 'FC', 'BL', 'BR', 'SL', 'SR', 'WL', 'WR', 'TFL', 'TFR', 'TSL', 'TSR', 'TBL', 'TBR']
 
 SPEAKER_PATTERN = f'({"|".join(SPEAKER_NAMES + ["X"])})'
-SPEAKER_LIST_PATTERN = r'([A-Z]{2,3}(,[A-Z]{2,3})*)'
+# Speaker names are two or three capitals; a lone X marks a sweep to skip (the
+# other sweep of a centre recording, FC,X.wav), as in the original Impulcifer.
+# The lookahead requires at least one real name. Group 1 is the whole list.
+SPEAKER_LIST_PATTERN = r'(?=[A-Z,]*[A-Z]{2})((?:[A-Z]{2,3}|X)(?:,(?:[A-Z]{2,3}|X))*)'
 
 # Left/right/center partition of the speaker layout. Includes LFE (present in
 # HEXADECAGONAL_TRACK_ORDER but not SPEAKER_NAMES). Single source of truth for

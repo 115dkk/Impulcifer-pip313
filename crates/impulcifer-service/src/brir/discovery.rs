@@ -29,11 +29,15 @@ pub struct MeasurementDir {
     pub eq: EqDiscovery,
     pub test_signal: Option<PathBuf>,
 }
+/// Speaker list of a recording file name such as `FL,FR.wav`: names of two or
+/// three capitals, where a lone `X` marks a sweep to skip (the other sweep of a
+/// centre recording, `FC,X.wav`). The original Impulcifer and LionLion123
+/// accept `X`; 2.x narrowed the pattern to two or three capitals and so drops
+/// such a file together with its real channel. At least one name must be real.
 pub fn recording_speakers(name: &str) -> Option<Vec<String>> {
     let names: Vec<_> = name.strip_suffix(".wav")?.split(',').collect();
-    names
-        .iter()
-        .all(|n| (2..=3).contains(&n.len()) && n.bytes().all(|c| c.is_ascii_uppercase()))
+    let named = |n: &&str| (2..=3).contains(&n.len()) && n.bytes().all(|c| c.is_ascii_uppercase());
+    (names.iter().all(|n| *n == "X" || named(n)) && names.iter().any(named))
         .then(|| names.into_iter().map(str::to_owned).collect())
 }
 pub fn listing(dir: &Path) -> Result<Vec<String>, BrirError> {
@@ -117,4 +121,29 @@ pub fn discover(dir: &Path, config: &ProcessingConfig) -> Result<MeasurementDir,
         test_signal: existing(&dir, &["test.wav"]),
         dir,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::recording_speakers;
+
+    #[test]
+    fn recording_names_accept_the_skip_placeholder() {
+        let names = |n: &str| recording_speakers(n).map(|v| v.join(","));
+        assert_eq!(names("FL,FR.wav").as_deref(), Some("FL,FR"));
+        assert_eq!(names("TFL,TFR.wav").as_deref(), Some("TFL,TFR"));
+        assert_eq!(names("FC,X.wav").as_deref(), Some("FC,X"));
+        assert_eq!(names("X,FC.wav").as_deref(), Some("X,FC"));
+        for rejected in [
+            "X.wav",
+            "X,X.wav",
+            "C.wav",
+            "FC,x.wav",
+            "FL,FR.WAV",
+            "responses.wav",
+            "FC,XY1.wav",
+        ] {
+            assert_eq!(names(rejected), None, "{rejected}");
+        }
+    }
 }

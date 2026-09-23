@@ -12,4 +12,5 @@ workspace = true
 impulcifer-types = { path = "../impulcifer-types" }
 impulcifer-dsp = { path = "../impulcifer-dsp" }
 thiserror.workspace = true
+serde_json.workspace = true
 

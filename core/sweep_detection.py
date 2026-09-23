@@ -140,7 +140,12 @@ def _estimate_from_envelope(file_path: str, fs: int) -> tuple:
     peak = float(np.max(envelope))
     if peak <= 0:
         return None, 0
-    active = envelope > peak * 0.01  # -40 dB
+    # 40 dB under the peak, raised to 10 dB over the noise floor (10th
+    # percentile) for noisy captures, whose floor otherwise reads as one sweep
+    # spanning the whole file; never above 20 dB under the peak.
+    floor = float(np.percentile(envelope, 10))
+    threshold = max(peak * 0.01, min(floor * 10 ** 0.5, peak * 0.1))
+    active = envelope > threshold
 
     # Merge sub-300 ms gaps so a single sweep never splits in two.
     edges = np.flatnonzero(np.diff(active.astype(np.int8)))
@@ -160,10 +165,14 @@ def _estimate_from_envelope(file_path: str, fs: int) -> tuple:
             merged[-1] = (merged[-1][0], run[1])
         else:
             merged.append(run)
-    # Ignore blips shorter than half a second.
+    # Ignore blips shorter than half a second, and anything shorter than half
+    # the longest region: every sweep of a sequence has the same length, so a
+    # shorter region is a noise burst whose onset would skew the spacing.
     segments = [run for run in merged if run[1] - run[0] >= 0.5 * fs]
     if not segments:
         return None, 0
+    longest = max(run[1] - run[0] for run in segments)
+    segments = [run for run in segments if run[1] - run[0] >= 0.5 * longest]
 
     if len(segments) >= 2:
         # Consecutive onsets are exactly (sweep + 2 s) apart — immune to

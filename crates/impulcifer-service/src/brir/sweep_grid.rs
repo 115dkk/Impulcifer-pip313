@@ -217,6 +217,19 @@ impl SweepDetection {
             "n_segments":self.n_segments,"speakers":self.speakers,"confidence":self.confidence,"is_default":self.is_default(),"generate_spec":self.generate_spec(),"source_files":self.source_files})
     }
 }
+/// `numpy.percentile(values, 100 * q)` with its default linear interpolation.
+fn percentile(values: &[f64], q: f64) -> f64 {
+    let mut sorted = values.to_vec();
+    let position = q * (sorted.len() - 1) as f64;
+    let low = position.floor() as usize;
+    let (_, &mut below, above) = sorted.select_nth_unstable_by(low, f64::total_cmp);
+    let next = above.iter().copied().fold(f64::INFINITY, f64::min);
+    if above.is_empty() {
+        below
+    } else {
+        below + (next - below) * (position - low as f64)
+    }
+}
 fn envelope_estimate(tracks: &[Vec<f64>], fs: u32) -> Option<(f64, usize)> {
     let n = tracks.first()?.len();
     if n == 0 {
@@ -242,6 +255,11 @@ fn envelope_estimate(tracks: &[Vec<f64>], fs: u32) -> Option<(f64, usize)> {
     if peak <= 0.0 {
         return None;
     }
+    // 40 dB under the peak, raised to 10 dB over the noise floor (NumPy's
+    // linear 10th percentile) for noisy captures, whose floor otherwise reads
+    // as one sweep spanning the whole file; never above 20 dB under the peak.
+    let floor = percentile(&smoothed, 0.1);
+    let threshold = (peak * 0.01).max((floor * 10f64.sqrt()).min(peak * 0.1));
     let mut runs: Vec<(usize, usize)> = Vec::new();
     let mut start = None;
     for (i, sample) in smoothed
@@ -250,7 +268,7 @@ fn envelope_estimate(tracks: &[Vec<f64>], fs: u32) -> Option<(f64, usize)> {
         .chain(std::iter::once(0.0))
         .enumerate()
     {
-        let active = i < n && sample > peak * 0.01;
+        let active = i < n && sample > threshold;
         if active && start.is_none() {
             start = Some(i);
         }
@@ -265,6 +283,10 @@ fn envelope_estimate(tracks: &[Vec<f64>], fs: u32) -> Option<(f64, usize)> {
         }
     }
     runs.retain(|(s, e)| (e - s) as f64 >= 0.5 * fs as f64);
+    // Every sweep of a sequence has the same length, so a region shorter than
+    // half the longest is a noise burst whose onset would skew the spacing.
+    let longest = runs.iter().map(|(s, e)| e - s).max().unwrap_or(0);
+    runs.retain(|(s, e)| 2 * (e - s) >= longest);
     if runs.len() >= 2 {
         let mut intervals: Vec<_> = runs.windows(2).map(|w| (w[1].0 - w[0].0) as f64).collect();
         intervals.sort_by(f64::total_cmp);
@@ -397,6 +419,36 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn envelope_splits_sweeps_above_a_noise_floor_and_skips_short_bursts() {
+        // Two 3 s "sweeps" 5 s apart at 1 kHz: the estimate is 5 s - 2 s.
+        let sweeps = |tracks: &mut Vec<Vec<f64>>, starts: [usize; 2]| {
+            for start in starts {
+                for track in tracks.iter_mut() {
+                    track[start..start + 3000].fill(0.5);
+                }
+            }
+        };
+        // A floor 28 dB under the sweeps sat above the old peak - 40 dB
+        // threshold and read as one region spanning the file.
+        let mut noisy: Vec<Vec<f64>> = (0..2)
+            .map(|_| {
+                (0..12500)
+                    .map(|i| if i % 2 == 0 { 0.02 } else { -0.02 })
+                    .collect()
+            })
+            .collect();
+        sweeps(&mut noisy, [1000, 6000]);
+        assert_eq!(envelope_estimate(&noisy, 1000), Some((3000.0, 2)));
+        // A 0.6 s burst in the lead silence used to count as the first onset.
+        let mut burst = vec![vec![0.0; 12500]; 2];
+        burst[0][0..600].fill(0.8);
+        sweeps(&mut burst, [2000, 7000]);
+        assert_eq!(envelope_estimate(&burst, 1000), Some((3000.0, 2)));
+        assert_eq!(percentile(&[4.0, 1.0, 3.0, 2.0], 0.1), 1.3);
+        assert_eq!(percentile(&[7.0], 0.1), 7.0);
     }
 
     #[test]
