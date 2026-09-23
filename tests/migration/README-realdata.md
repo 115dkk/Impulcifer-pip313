@@ -71,9 +71,28 @@ Worst values are over the passing cases. The cases outside the budget:
   Fixed in 2.14.3 and in 3.x (see the CHANGELOG); the fixed builds are compared
   below.
 
-### vbass
+### vbass (244 cases)
 
-Pending: filled in when the run finishes.
+| pair | within budget | worst max\|a-b\|/max\|ref\| | worst max-abs ratio dev | worst RMS ratio dev | peak index mismatches |
+|---|---|---|---|---|---|
+| rust~v2 | 234/244 | 6.98e-05 | 6.13e-05 | 1.84e-05 | 0 |
+| lion~v2 | 233/244 | 9.69e-06 | 8.31e-06 | 8.33e-06 | 0 |
+| rust~lion | 233/244 | 7.19e-05 | 6.53e-05 | 1.86e-05 | 0 |
+
+The same cases as in `default` fall outside (ten for 3.x vs 2.x, eleven for
+the LionLion pairs), for the same reasons.
+
+Median wall time per case with one worker thread each (three cases in
+parallel on a 4-core container): 3.x 0.92 s / 1.46 s, 2.x 5.30 s / 8.53 s,
+LionLion 4.18 s / 6.52 s (default / vbass).
+
+### The `FC,X.wav` case with the fixed builds
+
+The M04 7.1 case rerun with this branch's 3.x build, 2.14.3 (this branch's
+Python tree, same NumPy 2.5.3 / SciPy 1.18.1) and LionLion: all three now
+produce 14 tracks and every pair is within budget in both scenarios (3.x vs
+2.14.3 worst relative error 3.1e-05 default, 2.8e-05 vbass; LionLion vs
+2.14.3 1.1e-06 / 1.6e-06).
 
 ## Found along the way: sweep auto-detection
 
