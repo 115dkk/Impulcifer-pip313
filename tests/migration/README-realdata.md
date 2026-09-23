@@ -7,7 +7,7 @@ implementations on identical inputs:
 
 | Label | Implementation | Environment |
 |---|---|---|
-| `rust` | 3.0.0-alpha.2 CLI (`target/release/impulcifer`, master `3929392`) | Rust 1.97.0, `RAYON_NUM_THREADS=1` |
+| `rust` | 3.0.0-alpha.2 CLI (`target/release/impulcifer`, master `3929392`); 3.0.0 checked against it below | Rust 1.97.0, `RAYON_NUM_THREADS=1` |
 | `v2` | impulcifer-py313 2.14.2 from PyPI | CPython 3.13.12, NumPy 2.5.3, SciPy 1.18.1 |
 | `lion` | LionLion123/Impulcifer (GitHub HEAD) | CPython 3.8.20, NumPy 1.19.5, SciPy 1.5.4, matplotlib 3.3.4, autoeq-pkg 1.2.5 (its pinned requirements) |
 
@@ -93,6 +93,18 @@ Python tree, same NumPy 2.5.3 / SciPy 1.18.1) and LionLion: all three now
 produce 14 tracks and every pair is within budget in both scenarios (3.x vs
 2.14.3 worst relative error 3.1e-05 default, 2.8e-05 vbass; LionLion vs
 2.14.3 1.1e-06 / 1.6e-06).
+
+### 3.0.0 against 3.0.0-alpha.2
+
+The release build of this change (3.0.0, with the EQ, discovery, detection
+and interactive-report work) was run against the 3.0.0-alpha.2 binary on all
+488 case × scenario runs with `--identity-rust`. `hrir.wav` and `hesuvi.wav`
+are byte-identical (SHA-256) in 243 of 244 cases in each scenario, including
+the ten M14 `reverb impulse` cases, which both builds reject with the same
+error. The one difference in each scenario is the M04 `FC,X.wav` case, where
+3.0.0 now keeps the centre channel; its 3.0.0 output is the one compared with
+2.14.3 and LionLion above. Every alpha.2 result in the tables therefore holds
+for 3.0.0 unchanged.
 
 ## Found along the way: sweep auto-detection
 
