@@ -161,7 +161,15 @@ pub fn load_inputs(
     let mut room_result = None;
     if config.do_room_correction {
         events.step("cli_running_room_correction", json!({}))?;
-        let target_csv = dir.room.target.as_deref().map(csv).transpose()?;
+        // Python _open_room_target: a target path that is not a file, even one
+        // asked for with --room_target, is a flat target rather than an error.
+        let target_csv = dir
+            .room
+            .target
+            .as_deref()
+            .filter(|p| p.is_file())
+            .map(csv)
+            .transpose()?;
         let target = room::prepare_room_target(target_csv.as_ref(), fs)?;
         let calibration = dir
             .room

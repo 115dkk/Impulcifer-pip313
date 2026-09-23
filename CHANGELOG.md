@@ -19,6 +19,10 @@ been fixed and old features improved.
 - **시스템 정보 정리**: Windows에서 데이터 폴더가 `\\?\C:\…`로 보이던 verbatim 접두사를 떼고(서비스가 데이터 폴더를 저장할 때부터 일반 경로로 바꿉니다), 라벨 끝의 콜론을 통일했으며(2.x 카탈로그에서 온 `OS:`·`CPU 코어:`만 콜론이 붙어 있었습니다), 오디오 백엔드와 업데이트 채널 행을 뺐습니다(CLI `--info` 진단 출력에는 남깁니다).
 - **작업 로그의 `Python rustc …` 문구**: 이퀄라이징 단계 로그가 2.x 문구 `(Python {version}, GIL {status})`에 Rust 정보를 끼워 넣고 있었습니다. 3.x 전용 키 `cli_info_parallel_threads`("{threads}개 스레드로 병렬 처리합니다")로 바꾸고, BRIR 작업이 로그에 쓰는 모든 키가 아홉 언어에서 풀리는지 검사하는 테스트를 더했습니다.
 
+#### 🐛 3.0.1 (미출시, 2.x 출하물과 무관)
+- **존재하지 않는 룸 타깃 경로**: `--room_target`(IPC `room_target`)에 파일이 아닌 경로를 주면 2.x는 평탄한 타깃으로 룸 보정을 계속하는데(`_open_room_target`), 3.0.0은 그 경로를 무조건 읽다가 FILE_NOT_FOUND로 작업을 멈췄습니다. 이제 경로가 파일일 때만 읽습니다. 워크스페이스 버전을 3.0.1로 올렸고 아직 릴리스하지 않았습니다.
+- **설정 항목 33개를 2.x와 하나씩 대조(P25)**: `features.toml`의 `config.*` 항목은 이름·기본값·CLI 파싱만 2.x 골든으로 검증돼 있어 전부 `planned`였습니다. 기본값이 아닌 값을 주는 18개 시나리오(헤드 길이, 베이스 셸프 전체, virtual bass 크로스오버·하이패스·극성, 마이크 편차 보정과 강도, `do_*` 세 개, 채널별 decay, 채널 밸런스, 폴더 밖 룸 타깃·마이크 보정·헤드폰 파일, 없는 룸 타깃, specific/generic 룸 한계, conservative 조합)를 2.x 파이프라인으로 돌려 골든(`p25_config_*`, `tests/migration/export_goldens_config.py`)을 만들고, 3.x 서비스가 같은 결과를 내는지 `crates/impulcifer-service/tests/config_parity.rs`로 고정했습니다. 32개를 구체적인 검증 테스트와 함께 `implemented`로 바꿨고, 마이크 편차 디버그 플롯(`mic_deviation_debug_plots`)은 3.x가 아직 그리지 않으므로 `planned`로 남겼습니다. 헤드폰 보상을 끈 세 시나리오는 룸 보정만 담은 EQ FIR의 최소위상 변환 잡음 안에 있어 비율 허용치를 5e-4로 두었습니다(2.x가 같은 1e-12 섭동에 스스로 최대 5.6e-4까지 움직이고, 3.x는 2.7e-4). 이 과정에서 2.x가 측정 파일을 `os.listdir` 순서대로 읽어 Linux에서는 Windows보다 데모 출력이 0.8 %(0.07 dB) 크게 나온다는 것도 확인했습니다(2.14.2 PyPI판과 현재 트리 모두). 자세한 내용은 `tests/migration/README-config.md`에 있습니다.
+
 ## 2.14.2 - 2026-09-08
 ### 🔧 자동 릴리스 (CI auto-bump)
 
