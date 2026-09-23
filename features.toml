@@ -62,7 +62,7 @@ note = "real backend enumeration (WASAPI on Windows, cpal elsewhere) in the 2.x 
 id = "ipc.start_recording"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::recording_ipc_shares_backend_rejects_busy_and_cancellation", "impulcifer-service::recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32", "impulcifer-service::golden_recording_validation_matches_python"]
+tests = ["impulcifer-service::recording_ipc_shares_backend_rejects_busy_and_cancellation", "impulcifer-service::recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32", "impulcifer-service::golden_recording_validation_matches_python", "impulcifer-service::filename_speakers_follow_the_python_pattern_with_the_skip_placeholder"]
 note = "2.x request validation (136 golden cases), status/progress events with the ten-key RecorderProgressEvent, PCM_32 capture of exactly the playback length, sidecar rule; not cancellable like 2.x; CABLE-A hardware run recorded 878540 frames and detect_sweep found the default sweep"
 
 [[feature]]
@@ -85,6 +85,13 @@ kind = "ipc"
 status = "implemented"
 tests = ["impulcifer-service::recovery_plan_matches_the_written_result", "impulcifer-service::ipc_plan_output_recovery_shape"]
 note = "read-only dry run of output recovery for the Studio recovery screen; same validation and error codes as start_output_recovery"
+
+[[feature]]
+id = "ipc.inspect_eq"
+kind = "ipc"
+status = "implemented"
+tests = ["impulcifer-service::inspect_eq_reports_a_channel_split_equalizer_apo_config_from_the_folder", "impulcifer-service::inspect_eq_prefers_the_csv_and_names_the_ignored_txt", "impulcifer-service::inspect_eq_applies_chosen_files_and_switched_off_slots", "impulcifer-service::inspect_eq_reports_unreadable_files_per_slot_and_rejects_bad_requests", "impulcifer-service::start_brir_reads_a_chosen_eq_file_in_place_without_copying_it"]
+note = "3.x only: read-only preview of the custom EQ slots (both ears, left, right) for the Processing screen: the file each slot resolves to (folder eq*.csv before eq*.txt, a chosen file, or off), its format (AutoEQ CSV or EqualizerAPO config with preamp and bypassed lines), which slot and channel feeds each ear, and 1/12-octave preview curves; start_brir takes the same eq_file/eq_left_file/eq_right_file values (null follows the folder, false turns a slot off, a path is read in place and never copied into the measurement folder)"
 
 [[feature]]
 id = "ipc.poll_job"
@@ -146,7 +153,8 @@ note = "sweep variants included"
 id = "ipc.detect_sweep"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::detect_sweep_reports_demo_parameters", "impulcifer-service::snap_sweep_samples_matches_python"]
+tests = ["impulcifer-service::detect_sweep_reports_demo_parameters", "impulcifer-service::snap_sweep_samples_matches_python", "impulcifer-service::envelope_splits_sweeps_above_a_noise_floor_and_skips_short_bursts"]
+note = "2.14.3/3.x: the envelope threshold also sits 10 dB over the noise floor and regions shorter than half the longest are dropped (noisy captures and lead-in bursts were detected as 21.5 s and 3.08 s sweeps in the real-measurement run)"
 
 [[feature]]
 id = "ipc.generate_sweep_set"
@@ -409,7 +417,7 @@ note = "in-memory: SweepEstimator from samples; file resolution in P11"
 id = "stage.room_correction"
 kind = "stage"
 status = "implemented"
-tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-dsp::golden_generic_room_matches_python"]
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-dsp::golden_generic_room_matches_python", "impulcifer-dsp::room_measurement_names_accept_the_skip_placeholder"]
 note = "specific + generic room corrections, limit masks; room-responses matrix returned for P11 to write"
 
 [[feature]]
@@ -436,7 +444,8 @@ tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-d
 id = "stage.open_measurements"
 kind = "stage"
 status = "implemented"
-tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals"]
+tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-service::recording_names_accept_the_skip_placeholder"]
+note = "recording file names follow the original Impulcifer: two or three capitals per speaker plus the X skip placeholder (FC,X.wav); 2.x dropped X and with it the whole file, found by the real-measurement parity run (tests/migration/README-realdata.md)"
 
 [[feature]]
 id = "stage.plot_pre"

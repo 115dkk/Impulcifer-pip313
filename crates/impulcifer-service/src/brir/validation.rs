@@ -1,4 +1,5 @@
 //! IPC seconds-based validation, application/impulcifer_service.py:1199-1329.
+use super::eq_select::{EqChoices, SLOTS};
 use crate::args::invalid;
 use impulcifer_types::{
     config::{FIELD_NAMES, ProcessingConfig},
@@ -6,24 +7,19 @@ use impulcifer_types::{
     ipc::{self, ErrorCode},
 };
 use serde_json::{Value, json};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub(crate) struct Request {
     pub config: ProcessingConfig,
-    pub sidecars: Vec<(PathBuf, PathBuf)>,
+    pub eq: EqChoices,
 }
 pub(crate) fn validate(value: &Value) -> Result<Request, Value> {
     let object = value
         .as_object()
         .ok_or_else(|| invalid("BRIR request must be an object."))?;
-    let sidecars = [
-        ("eq_file", "eq.csv"),
-        ("eq_left_file", "eq-left.csv"),
-        ("eq_right_file", "eq-right.csv"),
-    ];
     let unknown: Vec<_> = object
         .keys()
-        .filter(|k| !FIELD_NAMES.contains(&k.as_str()) && !sidecars.iter().any(|(f, _)| f == k))
+        .filter(|k| !FIELD_NAMES.contains(&k.as_str()) && !SLOTS.iter().any(|(f, _, _)| f == k))
         .collect();
     if !unknown.is_empty() {
         return Err(ipc::error(
@@ -131,37 +127,10 @@ pub(crate) fn validate(value: &Value) -> Result<Request, Value> {
             ));
         }
     }
-    let mut copies = Vec::new();
-    for (field, target) in sidecars {
-        let raw = params.remove(field).unwrap_or(Value::Null);
-        if raw.is_null() {
-            continue;
-        }
-        let text = raw
-            .as_str()
-            .ok_or_else(|| invalid(format!("{field} must be a string path.")))?
-            .trim();
-        if text.is_empty() || text == target {
-            continue;
-        }
-        let source = Path::new(dir).join(text);
-        let destination = Path::new(dir).join(target);
-        if std::path::absolute(&source).ok() == std::path::absolute(&destination).ok() {
-            continue;
-        }
-        if !source.is_file() {
-            return Err(ipc::error(
-                ErrorCode::FileNotFound,
-                "Custom EQ file does not exist.",
-                json!({"field":field,"path":text}),
-                false,
-            ));
-        }
-        copies.push((source, destination));
+    let eq = EqChoices::from_request(&params, Path::new(dir))?;
+    for (field, _, _) in SLOTS {
+        params.remove(field);
     }
     let config = ProcessingConfig::from_kwargs(&params).map_err(|e| invalid(e.to_string()))?;
-    Ok(Request {
-        config,
-        sidecars: copies,
-    })
+    Ok(Request { config, eq })
 }

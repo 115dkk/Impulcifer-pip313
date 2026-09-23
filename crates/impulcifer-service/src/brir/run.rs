@@ -1,6 +1,6 @@
 use super::{
-    BrirError, BrirEvents, Catalog, discovery::discover, estimator::open_with_events,
-    inputs::load_inputs, outputs::write_outputs_checked,
+    BrirError, BrirEvents, Catalog, discovery::discover, eq_select::EqChoices,
+    estimator::open_with_events, inputs::load_inputs, outputs::write_outputs_checked,
 };
 use impulcifer_dsp::{
     DspError,
@@ -166,8 +166,13 @@ impl StageObserver for Observer<'_, '_> {
             );
         }
         if key == StageKey::Equalize {
-            // Same catalogue contract, honest runtime identity rather than invented Python metadata.
-            self.events.log("info","cli_info_parallel_executor",json!({"executor":"Rust","version":env!("IMPULCIFER_RUSTC_VERSION"),"status":"not applicable"}));
+            // The 2.x line reads "(Python {version}, GIL {status})"; the Rust
+            // pipeline has its own wording with the worker thread count.
+            self.events.log(
+                "info",
+                "cli_info_parallel_threads",
+                json!({"threads":rayon::current_num_threads()}),
+            );
             self.events.log(
                 "info",
                 "cli_info_parallel_eq",
@@ -198,6 +203,17 @@ pub(crate) fn run_with_data(
     ctx: &JobContext,
     data_dir: &Path,
 ) -> Result<BrirRun, JobFailure> {
+    run_with_choices(config, &EqChoices::default(), i18n, ctx, data_dir)
+}
+/// `run_with_data` with the custom EQ slots of an IPC request applied over
+/// the folder discovery.
+pub(crate) fn run_with_choices(
+    config: &ProcessingConfig,
+    eq: &EqChoices,
+    i18n: &Catalog,
+    ctx: &JobContext,
+    data_dir: &Path,
+) -> Result<BrirRun, JobFailure> {
     let result = (|| -> Result<BrirRun, BrirError> {
         let mut events = Events {
             ctx,
@@ -212,7 +228,8 @@ pub(crate) fn run_with_data(
             json!({"total_steps":events.total}),
         );
         events.check_cancelled()?;
-        let dir = discover(Path::new(config.dir_path.as_deref().unwrap_or("")), config)?;
+        let mut dir = discover(Path::new(config.dir_path.as_deref().unwrap_or("")), config)?;
+        eq.apply(&mut dir.eq);
         events.step("cli_creating_estimator", json!({}))?;
         let estimator = open_with_events(
             &dir,

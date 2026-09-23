@@ -47,10 +47,10 @@ pub fn parse_room_measurement_name(file_name: &str) -> Option<RoomMeasurementNam
         (stem, None)
     };
     let speakers: Vec<_> = names.split(',').collect();
-    if speakers
-        .iter()
-        .any(|s| !(2..=3).contains(&s.len()) || !s.bytes().all(|b| b.is_ascii_uppercase()))
-    {
+    // Two or three capitals, or a lone X for a skipped sweep; at least one
+    // real name (core/constants.py SPEAKER_LIST_PATTERN, 2.14.3).
+    let named = |s: &&str| (2..=3).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_uppercase());
+    if !speakers.iter().all(|s| *s == "X" || named(s)) || !speakers.iter().any(named) {
         return None;
     }
     Some(RoomMeasurementName {
@@ -314,4 +314,19 @@ pub fn room_correction(
         frs,
         responses_tracks,
     }))
+}
+
+#[cfg(test)]
+mod skip_placeholder_tests {
+    use super::parse_room_measurement_name;
+
+    #[test]
+    fn room_measurement_names_accept_the_skip_placeholder() {
+        let speakers = |n: &str| parse_room_measurement_name(n).map(|m| m.speakers.join(","));
+        assert_eq!(speakers("room-FC,X.wav").as_deref(), Some("FC,X"));
+        assert_eq!(speakers("room-FC,X-right.wav").as_deref(), Some("FC,X"));
+        assert_eq!(speakers("room-FL,FR-left.wav").as_deref(), Some("FL,FR"));
+        assert_eq!(speakers("room-X.wav"), None);
+        assert_eq!(speakers("room-X,X-right.wav"), None);
+    }
 }

@@ -40,7 +40,8 @@ interface RecordingResult {
 interface ProcessingRequest {
   dir_path?: string | null; test_signal?: string | null; fs?: number | null;
   room_target?: string | null; room_mic_calibration?: string | null; headphone_compensation_file?: string | null;
-  eq_file?: string; eq_left_file?: string; eq_right_file?: string;
+  /* Custom EQ slots: omitted/null follows the folder, false is off, a path is read in place. */
+  eq_file?: string | false | null; eq_left_file?: string | false | null; eq_right_file?: string | false | null;
   plot?: boolean; interactive_plots?: boolean; channel_balance?: string | number | null;
   decay?: number | Record<string, number> | null; target_level?: number | null;
   fr_combination_method?: string; specific_limit?: number; generic_limit?: number;
@@ -50,6 +51,19 @@ interface ProcessingRequest {
   microphone_deviation_correction?: boolean; mic_deviation_strength?: number; mic_deviation_debug_plots?: boolean;
   output_truehd_layouts?: boolean; vbass?: boolean; vbass_freq?: number; vbass_hp?: number; vbass_polarity?: string;
   confirm_warnings?: boolean;
+}
+type EqSlotName = "both" | "left" | "right";
+type EqChoice = { mode: "folder" } | { mode: "off" } | { mode: "file"; path: string };
+interface EqRequest extends Pick<ProcessingRequest, "eq_file" | "eq_left_file" | "eq_right_file"> { dir_path: string }
+interface EqSlotInfo {
+  slot: EqSlotName; source: "folder" | "file" | "off"; path: string | null; name: string | null;
+  folder_default: string; ignored: string[]; format: "csv" | "eqapo" | null; channels: "both" | "split" | null;
+  error: string | null; eqapo?: { preamp_db: [number, number]; applied: number; bypassed: number; skipped: number };
+}
+interface EqEarSource { slot: EqSlotName; channel: "left" | "right" | "both" }
+interface EqInspection {
+  slots: EqSlotInfo[]; blocked: boolean; ears: { left: EqEarSource | null; right: EqEarSource | null };
+  curves: { frequency: number[]; left: number[] | null; right: number[] | null };
 }
 interface RecoveryRequest { dir_path: string; include_hangloose?: boolean; remove_silent_channels?: boolean; confirm_warnings?: boolean }
 type RecoverySource = "hrir" | "hesuvi" | "hrir+hesuvi" | "hangloose";
@@ -95,6 +109,7 @@ interface IpcApi {
   start_brir(request: ProcessingRequest): Promise<Envelope<{ job: JobOf<"brir"> }>>;
   start_output_recovery(request: RecoveryRequest): Promise<Envelope<{ job: JobOf<"output_recovery"> }>>;
   plan_output_recovery(request: RecoveryRequest): Promise<Envelope<RecoveryPlan>>;
+  inspect_eq(request: EqRequest): Promise<Envelope<EqInspection>>;
   poll_job(job_id: string, after_seq?: number): Promise<Envelope<JobPoll>>;
   cancel_job(job_id: string): Promise<Envelope<{ job: Job }>>;
   get_ui_settings(): Promise<Envelope<UiSettings>>;
@@ -128,6 +143,8 @@ interface AppState {
   recoveryState: "empty" | "planning" | "ready" | "nothing" | "error";
   recoveryTimer: number | undefined; recoveryRevision: number; recoveryCreated: Set<string>;
   recoveryRunRevision: number; recoveryRequestKey: string;
+  eqChoices: Record<EqSlotName, EqChoice>; eqInspection: EqInspection | null; eqError: IpcError | null;
+  eqRevision: number; eqTimer: number | undefined;
 }
 interface Window {
   pywebview?: { api: IpcApi };
