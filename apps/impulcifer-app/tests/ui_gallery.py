@@ -18,7 +18,13 @@ LANGUAGES = ("en", "ko")
 VIEWS = ("settings", "info", "recorder")
 RECOVERY_STATES = ("empty", "planning", "ready", "nothing", "error", "succeeded")
 EQ_SCENARIOS = ("eq-folder", "eq-mixed")
-EXPECTED_SHOTS = 2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2
+ADV_TABS = ("tone", "time", "output", "correction")
+ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
+EXPECTED_SHOTS = 2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * len(ADV_TABS)
+ADVANCED_KEYS = {"fs", "target_level", "channel_balance", "bass_boost_gain", "bass_boost_fc", "bass_boost_q", "tilt",
+                 "decay", "head_ms", "jamesdsp", "hangloose", "remove_silent_channels", "interactive_plots",
+                 "microphone_deviation_correction", "mic_deviation_strength", "mic_deviation_debug_plots",
+                 "output_truehd_layouts"}
 
 
 def catalog(language):
@@ -291,6 +297,150 @@ def behavior_checks(browser):
     print("Gallery behavior checks: debounce, stale responses, option replan, Stable no-plan, folder parent, language refresh, confirmation, share success/error, EQ slots OK", flush=True)
 
 
+def brir_request(page):
+    """Press Generate and return the start_brir request it sent."""
+    before = page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length")
+    page.locator("#btn-generate-brir").click()
+    page.wait_for_function(f"galleryCalls.filter(c => c.method === 'start_brir').length > {before}")
+    request = page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').at(-1).args[0]")
+    page.evaluate("document.querySelector('#btn-cancel-brir').click()")
+    return request
+
+
+def disabled(page, selector):
+    """:disabled as the browser computes it, fieldsets and their contents included."""
+    return page.locator(selector).evaluate("n => n.matches(':disabled')")
+
+
+def adv_switch(page, tab, on):
+    page.locator(f"#adv-tab-{tab}").click()
+    switch = page.locator(f"#adv-on-{tab}")
+    if (switch.get_attribute("aria-checked") == "true") != on:
+        switch.click()
+    assert disabled(page, f"#adv-fields-{tab}") != on
+
+
+def disclosure(page, name, open_):
+    if ("open" in (page.locator(f"#dis-{name}").get_attribute("class") or "")) != open_:
+        page.locator(f"#dis-{name} > .disclosure-head").click()
+
+
+def advanced_checks(browser):
+    """Studio's Advanced Options: tabs send only when their switch is on, and
+    what cannot apply is locked rather than explained."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "processing")
+    assert not page.locator("#dis-advanced").is_visible() and page.locator("#adv-studio").is_visible()
+    assert page.locator("#adv-studio .seg-btn.is-off").count() == 4
+    request = brir_request(page)
+    assert not ADVANCED_KEYS & request.keys(), request
+
+    # No equalization stage: bass boost and tilt are locked, level still works.
+    adv_switch(page, "tone", True)
+    assert disabled(page, "#ba-tone-eq") and disabled(page, "#ba-bass-gain")
+    assert page.locator("#ba-tone-eq").get_attribute("title")
+    assert not disabled(page, "#ba-target-level") and not disabled(page, "#ba-balance")
+    page.locator("#ba-target-level").fill("-12")
+    request = brir_request(page)
+    assert request["target_level"] == -12 and "bass_boost_gain" not in request and "tilt" not in request, request
+
+    disclosure(page, "headphone", True)
+    assert not disabled(page, "#ba-bass-gain") and disabled(page, "#ba-bass-fc")
+    page.locator("#ba-bass-gain").fill("4")
+    assert not disabled(page, "#ba-bass-fc") and not disabled(page, "#ba-bass-q")
+    page.locator("#ba-balance").select_option("number")
+    page.locator("#ba-balance-db").fill("2")
+    request = brir_request(page)
+    assert request["bass_boost_gain"] == 4 and request["bass_boost_fc"] == 105 and request["channel_balance"] == 2, request
+    assert "fs" not in request and "jamesdsp" not in request and "head_ms" not in request, request
+
+    # Headphone compensation on: mic deviation correction is locked and unchecked.
+    adv_switch(page, "correction", True)
+    assert disabled(page, "#ba-mic-deviation") and not page.locator("#ba-mic-deviation").is_checked()
+    assert page.locator("#ba-mic-row").get_attribute("title")
+    page.locator("#ba-interactive-plots").check()
+    disclosure(page, "headphone", False)
+    page.locator("#ba-mic-deviation").check()
+    assert not disabled(page, "#ba-mic-strength")
+    disclosure(page, "headphone", True)
+    assert disabled(page, "#ba-mic-deviation") and not page.locator("#ba-mic-deviation").is_checked()
+    request = brir_request(page)
+    assert request["interactive_plots"] is True and request["microphone_deviation_correction"] is False, request
+    disclosure(page, "headphone", False)
+    assert page.locator("#ba-mic-deviation").is_checked(), "the choice returns when the lock lifts"
+    disclosure(page, "headphone", True)
+
+    adv_switch(page, "time", True)
+    page.locator("#ba-decay-per-channel").check()
+    assert disabled(page, "#ba-decay") and page.locator("#ba-decay-channels").is_visible()
+    page.locator("#ba-decay-FL").fill("300")
+    adv_switch(page, "output", True)
+    page.locator("#adv-panel-output .file-opt", has_text="jamesdsp.wav").click()
+    request = brir_request(page)
+    assert request["decay"] == {"FL": 0.3} and request["head_ms"] == 1.0 and request["jamesdsp"] is True, request
+    assert request["fs"] is None and request["output_truehd_layouts"] is False, request
+
+    # A tab switched off keeps its values but sends none of them.
+    adv_switch(page, "tone", False)
+    assert page.locator("#adv-tab-tone").get_attribute("class").count("is-off") == 1
+    assert page.locator("#ba-bass-gain").input_value() == "4"
+    request = brir_request(page)
+    assert not {"bass_boost_gain", "target_level", "channel_balance"} & request.keys(), request
+    adv_switch(page, "tone", True)
+    page.locator("#adv-reset-tone").click()
+    assert page.locator("#ba-bass-gain").input_value() == "0" and page.locator("#ba-target-level").input_value() == ""
+    assert page.locator("#ba-balance").input_value() == "none" and disabled(page, "#ba-bass-fc")
+    page.locator("#ba-bass-gain").fill("3")
+    adv_switch(page, "tone", False)
+
+    # Arrow keys move between tabs.
+    page.locator("#adv-tab-tone").focus()
+    page.keyboard.press("ArrowRight")
+    assert page.locator("#adv-tab-time").get_attribute("aria-selected") == "true"
+    assert page.evaluate("document.activeElement.id") == "adv-tab-time"
+    page.keyboard.press("End")
+    assert page.locator("#adv-panel-correction").is_visible() and not page.locator("#adv-panel-time").is_visible()
+
+    # Switching skins carries the values: tabs that are off hand Stable their defaults.
+    navigate(page, "settings")
+    page.locator("#sf-skin").select_option("stable")
+    page.wait_for_function("document.documentElement.dataset.skin === 'stable'")
+    if page.locator("#job-modal").is_visible():  # Stable shows the finished job in its dialog
+        page.locator("#job-modal-close").click()
+    navigate(page, "processing")
+    assert "open" in page.locator("#dis-advanced").get_attribute("class")
+    assert page.locator("#bf-jamesdsp").is_checked() and page.locator("#bf-bass-gain").input_value() == "0"
+    assert page.locator("#bf-decay-per-channel").is_checked() and page.locator("#bf-decay-FL").input_value() == "300"
+    page.locator("#bf-tilt").fill("1.5")
+    navigate(page, "settings")
+    page.locator("#sf-skin").select_option("studio")
+    page.wait_for_function("document.documentElement.dataset.skin === 'studio'")
+    navigate(page, "processing")
+    assert page.locator("#adv-studio .seg-btn.is-off").count() == 0
+    assert page.locator("#ba-tilt").input_value() == "1.5" and page.locator("#ba-jamesdsp").is_checked()
+    assert not errors, errors
+    context.close()
+
+    # Every language fits: no tab strip or panel wider than the card.
+    for language in ALL_LANGUAGES:
+        context, page, errors = open_page(browser, "studio", "light", language, "idle")
+        navigate(page, "processing")
+        for tab in ADV_TABS:
+            adv_switch(page, tab, True)
+            if tab == "time":
+                page.locator("#ba-decay-per-channel").check()
+            overflow = page.evaluate("""() => [...document.querySelectorAll('#adv-studio, #adv-studio .adv-panel:not([hidden]) *')]
+                .filter(n => !n.closest('.sr-only'))
+                .filter(n => n.offsetParent && n.scrollWidth > n.clientWidth + 1 && getComputedStyle(n).overflowX !== 'visible'
+                  || n.getBoundingClientRect && n.offsetParent && n.getBoundingClientRect().right > document.querySelector('#adv-studio').getBoundingClientRect().right + 1)
+                .map(n => n.id || n.className || n.tagName)""")
+            assert not overflow, (language, tab, overflow)
+        assert page.locator("#adv-studio .seg").bounding_box()["height"] <= 42, language
+        assert not errors, errors
+        context.close()
+    print("Gallery advanced checks: per-tab requests, locks, reset, keyboard, skin carry-over, 9-language layout OK", flush=True)
+
+
 def open_eq(page):
     head = page.locator("#dis-eq > .disclosure-head")
     if "open" not in (page.locator("#dis-eq").get_attribute("class") or ""):
@@ -306,6 +456,7 @@ def render_gallery(output):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         behavior_checks(browser)
+        advanced_checks(browser)
         for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
             context, page, errors = open_page(browser, skin, theme, language, "idle")
             for view in VIEWS:
@@ -359,6 +510,25 @@ def render_gallery(output):
                 page.locator("#bf-eq-preview polyline").first.wait_for()
             page.wait_for_timeout(50)
             shots.append(shoot(page, output, f"processing-eq-{skin}-{language}-{theme}-{scenario}", errors))
+            context.close()
+        for theme, language in itertools.product(THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, "studio", theme, language, "idle")
+            navigate(page, "processing")
+            disclosure(page, "headphone", True)
+            adv_switch(page, "tone", True)
+            page.locator("#ba-bass-gain").fill("4")
+            page.locator("#ba-balance").select_option("mids")
+            adv_switch(page, "time", True)
+            page.locator("#ba-decay-per-channel").check()
+            for channel, value in (("FL", "300"), ("FR", "300"), ("FC", "250")):
+                page.locator(f"#ba-decay-{channel}").fill(value)
+            adv_switch(page, "output", True)
+            page.locator("#ba-jamesdsp").check()
+            page.locator("#ba-resample").check()
+            for tab in ADV_TABS:
+                page.locator(f"#adv-tab-{tab}").click()
+                page.locator("#adv-studio").scroll_into_view_if_needed()
+                shots.append(shoot(page, output, f"processing-advanced-studio-{language}-{theme}-{tab}", errors))
             context.close()
         for theme, language in itertools.product(THEMES, LANGUAGES):
             context, page, errors = open_page(browser, "studio", theme, language, "update")

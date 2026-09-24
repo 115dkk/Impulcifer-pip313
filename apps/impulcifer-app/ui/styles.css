@@ -480,6 +480,175 @@ input[type="checkbox"] {
 
 .disclosure-body .field-row { grid-template-columns: 150px minmax(0, 1fr) auto; }
 
+/* ------------------------------------------------ Studio advanced options
+   Four tabs, each with its own switch. A tab that is off keeps its values but
+   sends none of them, and its fields stay visible but locked (a disabled
+   fieldset). Controls that cannot apply in the current setup are locked the
+   same way instead of being explained. Stable keeps the single
+   #dis-advanced list from the CTk layout. */
+
+[data-skin="studio"] #dis-advanced,
+[data-skin="stable"] #adv-studio { display: none; }
+
+.adv-tabs { display: grid; gap: 12px; }
+
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-self: start;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--bg-3);
+}
+
+.seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.seg-btn:hover { color: var(--fg-0); }
+.seg-btn[aria-selected="true"] { background: var(--bg-1); color: var(--fg-0); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* On is a filled dot, off an empty ring: the state reads without colour.
+   Light theme uses accent-strong so the dot keeps 3:1 on the strip. */
+.tab-mark { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-strong); }
+:root[data-theme="dark"] .tab-mark { background: var(--accent); }
+.seg-btn.is-off .tab-mark { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fg-2); }
+.seg-btn.is-off .adv-state-on,
+.seg-btn:not(.is-off) .adv-state-off { display: none; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.adv-panel {
+  display: grid;
+  gap: 14px;
+  padding: 12px 18px 18px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--bg-1);
+}
+
+:root[data-theme="dark"] .adv-panel {
+  --field-bg: #2c3036;
+  --field-border: #454a52;
+}
+
+.adv-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.adv-panel-head .btn-link { margin-left: auto; }
+.adv-panel-head .switch { border: 0; padding: 0; cursor: pointer; }
+.adv-panel-head .switch[aria-checked="true"] { background: var(--accent); }
+.adv-panel-head .switch[aria-checked="true"]::after { left: 14px; }
+
+.adv-fields, .adv-sub {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.adv-fields:disabled, .adv-sub:disabled { opacity: 0.55; }
+.adv-fields:disabled .adv-sub:disabled { opacity: 1; }
+.adv-fields:disabled :is(input, select):disabled,
+.adv-sub:disabled :is(input, select):disabled { opacity: 1; }
+
+.adv-panel .field-row { grid-template-columns: 150px minmax(0, 1fr); }
+.adv-panel .field-row.top { align-items: start; }
+.adv-sub-head { margin: 0; font-size: 14px; font-weight: 700; color: var(--fg-0); }
+.adv-sep { height: 1px; background: var(--line-soft); }
+.adv-stack { display: grid; gap: 4px; min-width: 0; }
+.adv-nested { display: grid; gap: 10px; margin-left: 24px; }
+.adv-panel .adv-nested .field-row { grid-template-columns: 126px minmax(0, 1fr); }
+.adv-panel .check-row:has(> input:disabled) > label { color: var(--fg-3); }
+
+/* A number field that carries its caption and unit inside the box. */
+.unit-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.unit-field {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  border: 1px solid var(--field-border);
+  border-radius: 4px;
+  background: var(--field-bg);
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.unit-field > input[type="number"] {
+  width: 76px;
+  height: 34px;
+  padding: 0 4px 0 11px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  font-size: 14px;
+}
+
+.unit-field > input[type="number"]:last-child { padding-right: 11px; }
+.unit-field > .pre { padding-left: 11px; white-space: nowrap; }
+.unit-field > .pre + input[type="number"] { padding-left: 6px; }
+.unit-field > .unit { padding-right: 11px; font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; white-space: nowrap; }
+.unit-field:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.unit-field > input:focus-visible { outline: none; }
+.unit-field:has(input:disabled) { opacity: 0.6; }
+.unit-field > input:disabled { opacity: 1; }
+:is(.adv-fields, .adv-sub):disabled .unit-field { opacity: 1; }
+
+.file-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+
+.file-opt {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: var(--field-bg);
+  cursor: pointer;
+}
+
+.file-opt:has(input:checked) { border-color: var(--accent); }
+.file-opt > .file-name { font-weight: 700; color: var(--fg-0); }
+.file-opt > .file-path { grid-column: 2; font-size: 12px; color: var(--fg-2); overflow-wrap: anywhere; }
+
+.ch-grid { display: grid; grid-template-columns: repeat(5, max-content); gap: 8px 16px; }
+.ch-cell { display: inline-flex; align-items: center; gap: 6px; }
+.ch-code { width: 34px; font-weight: 700; color: var(--fg-1); }
+.ch-cell .unit-field > input[type="number"] { width: 64px; }
+
 /* ------------------------------------------------------------ custom EQ
    One row per slot: which file it resolves to and in what form, with the
    slot's actions on the right; below, which file feeds each ear and the
@@ -887,4 +1056,7 @@ input[type="checkbox"] {
   .field-row > label { margin-bottom: -6px; }
   .eq-slot { grid-template-columns: 1fr; gap: 6px; }
   .eq-slot-actions { justify-content: flex-start; }
+  .adv-panel .field-row, .adv-panel .adv-nested .field-row { grid-template-columns: 1fr; }
+  .file-grid { grid-template-columns: 1fr; }
+  .ch-grid { grid-template-columns: repeat(3, max-content); }
 }
