@@ -4,8 +4,24 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.0.1 - 2026-09-24
+### 3.x 화면 다듬기와 설정 항목 대조, 3.x 자동 릴리스
+
+#### ⭐ 3.0.1 화면 개선 (2.x 출하물과 무관)
+- **서비스 오류를 사용자 언어의 문장으로**: 처리 화면의 EQ 미리보기, 스윕 감지 결과, 작업 로그, 녹음 상태, 출력 복원 요약이 서비스 오류를 `FILE_NOT_FOUND: Measurement directory does not exist. {"path":"data/my_hrir"}`처럼 코드와 영어 메시지, JSON 그대로 보여 줬습니다. 이제 `app.js`의 `errorSentence()`가 고정 문구로 오는 오류(없는 녹음 폴더·폴더·EQ 파일·재생 파일·복원 폴더, 스피커 녹음이 없는 폴더, 이미 실행 중인 작업)를 아홉 언어의 문장으로 바꿉니다(예: '녹음 폴더를 찾을 수 없습니다: data/my_hrir'). 그 밖의 파일 없음 오류는 '파일을 찾을 수 없습니다: 경로'로, 나머지는 서비스 메시지만 보여 주며, 오류 코드와 JSON은 화면에 나오지 않습니다. 출력 복원 요약 끝의 `(코드)`도 뺐습니다. 화면이 대조하는 영어 메시지를 서비스가 바꾸면 `ui_catalog.rs`의 `translated_error_messages_are_still_sent_by_the_service`가 실패합니다.
+- **선택 상자 화살표와 글자 위치**: 기본 모양의 select는 화살표를 오른쪽 테두리에서 4px 남짓한 자리에 그리고, 글자를 입력칸보다 4px 안쪽에서 시작했습니다(pywebview 시절 2.x 화면부터 이어진 모양입니다). 이제 화살표를 테마 색으로 직접 그려 테두리에서 12px 안쪽에 두고, select 글자가 입력칸 글자와 같은 자리(테두리에서 13px)에서 시작합니다. 녹음 화면의 '스피커(재생 순서)'와 '트랙 레이아웃' 두 줄이 간격 없이 붙어 있던 것도 다른 줄처럼 12px 띄웠습니다.
+- **글자 크기**: 본문을 13px에서 15px로, 제목(페이지·카드·대화상자·정보 화면 제목, 앱 이름, 복원 상태)을 2px씩, 12px 이하의 작은 글씨(힌트, 칩, 링크 버튼, 작업 로그, 단계 목록, EQ 태그와 축 등)를 1px씩 키웠습니다. 등폭 글꼴 입력칸은 전처럼 본문보다 1px 작은 14px입니다. 사이드바 아래의 버전·플랫폼·웹 엔진 줄은 그대로 두었습니다. 아홉 언어 × 두 스킨 × 다섯 화면을 실제 창 크기(1180×820)로 띄워 넘치거나 줄이 바뀐 컨트롤이 없음을 확인했습니다.
+- **EQ 안내 문구**: 당연한 내용인 '다른 곳에서 고른 파일은 그 자리에서 읽고 폴더로 복사하지 않습니다' 문장을 아홉 언어에서 뺐습니다.
+
+#### 🐛 3.0.1 버그 수정 (2.x 출하물과 무관)
+- **존재하지 않는 룸 타깃 경로**: `--room_target`(IPC `room_target`)에 파일이 아닌 경로를 주면 2.x는 평탄한 타깃으로 룸 보정을 계속하는데(`_open_room_target`), 3.0.0은 그 경로를 무조건 읽다가 FILE_NOT_FOUND로 작업을 멈췄습니다. 이제 경로가 파일일 때만 읽습니다.
+- **설정 항목 33개를 2.x와 하나씩 대조(P25)**: `features.toml`의 `config.*` 항목은 이름·기본값·CLI 파싱만 2.x 골든으로 검증돼 있어 전부 `planned`였습니다. 기본값이 아닌 값을 주는 18개 시나리오(헤드 길이, 베이스 셸프 전체, virtual bass 크로스오버·하이패스·극성, 마이크 편차 보정과 강도, `do_*` 세 개, 채널별 decay, 채널 밸런스, 폴더 밖 룸 타깃·마이크 보정·헤드폰 파일, 없는 룸 타깃, specific/generic 룸 한계, conservative 조합)를 2.x 파이프라인으로 돌려 골든(`p25_config_*`, `tests/migration/export_goldens_config.py`)을 만들고, 3.x 서비스가 같은 결과를 내는지 `crates/impulcifer-service/tests/config_parity.rs`로 고정했습니다. 32개를 구체적인 검증 테스트와 함께 `implemented`로 바꿨고, 마이크 편차 디버그 플롯(`mic_deviation_debug_plots`)은 3.x가 아직 그리지 않으므로 `planned`로 남겼습니다. 헤드폰 보상을 끈 세 시나리오는 룸 보정만 담은 EQ FIR의 최소위상 변환 잡음 안에 있어 비율 허용치를 5e-4로 두었습니다(2.x가 같은 1e-12 섭동에 스스로 최대 5.6e-4까지 움직이고, 3.x는 2.7e-4). 이 과정에서 2.x가 측정 파일을 `os.listdir` 순서대로 읽어 Linux에서는 Windows보다 데모 출력이 0.8 %(0.07 dB) 크게 나온다는 것도 확인했습니다(2.14.2 PyPI판과 현재 트리 모두). 자세한 내용은 `tests/migration/README-config.md`에 있습니다.
+
+#### 🔧 빌드 / 설정 변경 (출하물과 무관)
+- **3.x는 master 머지 때 자동 릴리스, 2.x는 수동 릴리스**: 3.x가 정식이 된 만큼 두 파이프라인의 역할을 바꿨습니다. `release-3x.yml`은 이제 master push마다 게이트(`release_gate.py --product 3x`)를 돌려, 워크스페이스 버전의 태그 `v<버전>`이 없으면 그 버전을, 태그가 있고 그 뒤로 3.x 출하 파일(`crates/`, `apps/`, `Cargo.toml`·`Cargo.lock`, 3.x가 컴파일해 넣는 `i18n/locales/`, 번들하는 스윕·Harman 타깃, `pack_velopack.ps1`)이 바뀌었으면 PATCH를 자동으로 올려(`Cargo.toml`·`Cargo.lock`·`tauri.conf.json`·CHANGELOG, `[skip ci]` 커밋) 세 OS 앱, PyPI 휠, GitHub Release까지 냅니다. 테스트·문서·CI만 바뀌었으면 아무것도 하지 않습니다. 2.x의 `publish.yml`은 master push에 더는 반응하지 않고 Actions에서 실행할 때만 같은 규칙(`--product 2x`, 마지막 2.x 태그 이후의 2.x 출하 파일 기준)으로 릴리스합니다. 2.x GitHub Release는 `make_latest: false`로 만들어, 3.x 설치본과 2.x 설치본의 업그레이드 경로가 함께 읽는 `/releases/latest`를 3.x에 남겨 둡니다. 사전 출시 버전은 자동으로 올리지 않고, 자동 bump는 master에서만 합니다. 게이트는 이제 푸시 이벤트의 이전 커밋이 아니라 마지막 릴리스 태그와 비교하므로, 대기 중에 취소된 실행이나 중간에 실패한 릴리스의 변경도 다음 실행이 놓치지 않습니다.
+
 ## 2.14.3 - 2026-09-23
-### 실측 데이터 3자 비교에서 찾은 결함 긴급 수정, 3.0.0 정식 출시와 3.0.1
+### 실측 데이터 3자 비교에서 찾은 결함 긴급 수정, 3.0.0 정식 출시
 
 #### 🐛 버그 수정 (2.x와 3.x 공통)
 - **`FC,X.wav`처럼 `X`가 들어간 녹음을 통째로 버리던 문제**: 원본 Impulcifer와 LionLion123/Impulcifer는 파일 이름의 `X`를 '건너뛸 스윕' 자리로 읽어 센터 스피커를 스테레오 분절 sweep으로 녹음한 `FC,X.wav`에서 FC를 살립니다. 2.x는 스피커 이름 패턴을 두세 글자 대문자로 좁히면서 `X`를 빠뜨려 이런 파일을 아예 녹음으로 보지 않았고, 그 결과 7.1 측정에서 센터 채널이 소리 없이 빠졌습니다(3.x도 그대로 옮겨 왔습니다). 이제 `SPEAKER_LIST_PATTERN`이 `X`를 받고(실제 스피커 이름이 하나 이상 있어야 함) 녹음 탐색·룸 측정 탐색·스윕 감지·녹음기 채널 검증이 모두 같은 규칙을 씁니다. 3.x는 `recording_speakers`, `parse_room_measurement_name`, 녹음기 `filename_speakers`를 같은 규칙으로 맞췄고 18개 파일 이름에서 Python 정규식과 결과가 같음을 테스트로 고정했습니다.
@@ -18,16 +34,6 @@ been fixed and old features improved.
 - **인터랙티브 플롯(`--interactive_plots`)을 3.x에 이식하고 가볍게 다시 만들었습니다**: 지금까지 3.x는 이 옵션에서 "아직 지원하지 않음" 경고만 남겼습니다. 이제 2.x와 같은 `interactive_plots/interactive_summary.html`(Interaural Overlay, ILD, IPD, IACC, EDC, Result Overview 여섯 탭)과, `--plot`을 함께 켜면 `plots/{ild,ipd,iacc,etc}/*_analysis.html`을 씁니다. 수치는 2.x `core/plotting/analysis.py`와 Bokeh 생성기를 그대로 옮겨 골든으로 고정했습니다(ILD 2.6e-14 dB, IACF 1.1e-15 등). Bokeh 대신 CDN이 필요 없는 단일 HTML과 캔버스 렌더러를 씁니다. 데이터는 Float32 base64로 넣어 보이는 탭만 풀고, 그릴 때는 화면 폭의 픽셀 열마다 최소·최대만 남겨 점 수가 데이터 길이와 무관하며, 다시 그리기는 `requestAnimationFrame`으로 묶고 화면 밖 차트는 건너뜁니다. 데모 기준으로 2.x 대비 파일 11.3 MB(+ BokehJS 1.3 MB) → 5.1 MB, 첫 차트 표시 4.4 s → 0.3 s, 휠 줌 중 가장 긴 프레임 817 ms → 16.8 ms(긴 작업 128개 → 0개), 드래그 중 프레임 간격 41.7 ms → 16.7 ms, JS 힙 115 MB → 6.4 MB입니다. BRIR WAV와 README는 보고서 유무와 무관하게 바이트 단위로 같습니다.
 - **시스템 정보 정리**: Windows에서 데이터 폴더가 `\\?\C:\…`로 보이던 verbatim 접두사를 떼고(서비스가 데이터 폴더를 저장할 때부터 일반 경로로 바꿉니다), 라벨 끝의 콜론을 통일했으며(2.x 카탈로그에서 온 `OS:`·`CPU 코어:`만 콜론이 붙어 있었습니다), 오디오 백엔드와 업데이트 채널 행을 뺐습니다(CLI `--info` 진단 출력에는 남깁니다).
 - **작업 로그의 `Python rustc …` 문구**: 이퀄라이징 단계 로그가 2.x 문구 `(Python {version}, GIL {status})`에 Rust 정보를 끼워 넣고 있었습니다. 3.x 전용 키 `cli_info_parallel_threads`("{threads}개 스레드로 병렬 처리합니다")로 바꾸고, BRIR 작업이 로그에 쓰는 모든 키가 아홉 언어에서 풀리는지 검사하는 테스트를 더했습니다.
-
-#### ⭐ 3.0.1 화면 개선 (2026-09-24, 2.x 출하물과 무관)
-- **서비스 오류를 사용자 언어의 문장으로**: 처리 화면의 EQ 미리보기, 스윕 감지 결과, 작업 로그, 녹음 상태, 출력 복원 요약이 서비스 오류를 `FILE_NOT_FOUND: Measurement directory does not exist. {"path":"data/my_hrir"}`처럼 코드와 영어 메시지, JSON 그대로 보여 줬습니다. 이제 `app.js`의 `errorSentence()`가 고정 문구로 오는 오류(없는 녹음 폴더·폴더·EQ 파일·재생 파일·복원 폴더, 스피커 녹음이 없는 폴더, 이미 실행 중인 작업)를 아홉 언어의 문장으로 바꿉니다(예: '녹음 폴더를 찾을 수 없습니다: data/my_hrir'). 그 밖의 파일 없음 오류는 '파일을 찾을 수 없습니다: 경로'로, 나머지는 서비스 메시지만 보여 주며, 오류 코드와 JSON은 화면에 나오지 않습니다. 출력 복원 요약 끝의 `(코드)`도 뺐습니다. 화면이 대조하는 영어 메시지를 서비스가 바꾸면 `ui_catalog.rs`의 `translated_error_messages_are_still_sent_by_the_service`가 실패합니다.
-- **선택 상자 화살표와 글자 위치**: 기본 모양의 select는 화살표를 오른쪽 테두리에서 4px 남짓한 자리에 그리고, 글자를 입력칸보다 4px 안쪽에서 시작했습니다(pywebview 시절 2.x 화면부터 이어진 모양입니다). 이제 화살표를 테마 색으로 직접 그려 테두리에서 12px 안쪽에 두고, select 글자가 입력칸 글자와 같은 자리(테두리에서 13px)에서 시작합니다. 녹음 화면의 '스피커(재생 순서)'와 '트랙 레이아웃' 두 줄이 간격 없이 붙어 있던 것도 다른 줄처럼 12px 띄웠습니다.
-- **글자 크기**: 본문을 13px에서 15px로, 제목(페이지·카드·대화상자·정보 화면 제목, 앱 이름, 복원 상태)을 2px씩, 12px 이하의 작은 글씨(힌트, 칩, 링크 버튼, 작업 로그, 단계 목록, EQ 태그와 축 등)를 1px씩 키웠습니다. 등폭 글꼴 입력칸은 전처럼 본문보다 1px 작은 14px입니다. 사이드바 아래의 버전·플랫폼·웹 엔진 줄은 그대로 두었습니다. 아홉 언어 × 두 스킨 × 다섯 화면을 실제 창 크기(1180×820)로 띄워 넘치거나 줄이 바뀐 컨트롤이 없음을 확인했습니다.
-- **EQ 안내 문구**: 당연한 내용인 '다른 곳에서 고른 파일은 그 자리에서 읽고 폴더로 복사하지 않습니다' 문장을 아홉 언어에서 뺐습니다.
-
-#### 🐛 3.0.1 버그 수정 (2026-09-24, 2.x 출하물과 무관)
-- **존재하지 않는 룸 타깃 경로**: `--room_target`(IPC `room_target`)에 파일이 아닌 경로를 주면 2.x는 평탄한 타깃으로 룸 보정을 계속하는데(`_open_room_target`), 3.0.0은 그 경로를 무조건 읽다가 FILE_NOT_FOUND로 작업을 멈췄습니다. 이제 경로가 파일일 때만 읽습니다.
-- **설정 항목 33개를 2.x와 하나씩 대조(P25)**: `features.toml`의 `config.*` 항목은 이름·기본값·CLI 파싱만 2.x 골든으로 검증돼 있어 전부 `planned`였습니다. 기본값이 아닌 값을 주는 18개 시나리오(헤드 길이, 베이스 셸프 전체, virtual bass 크로스오버·하이패스·극성, 마이크 편차 보정과 강도, `do_*` 세 개, 채널별 decay, 채널 밸런스, 폴더 밖 룸 타깃·마이크 보정·헤드폰 파일, 없는 룸 타깃, specific/generic 룸 한계, conservative 조합)를 2.x 파이프라인으로 돌려 골든(`p25_config_*`, `tests/migration/export_goldens_config.py`)을 만들고, 3.x 서비스가 같은 결과를 내는지 `crates/impulcifer-service/tests/config_parity.rs`로 고정했습니다. 32개를 구체적인 검증 테스트와 함께 `implemented`로 바꿨고, 마이크 편차 디버그 플롯(`mic_deviation_debug_plots`)은 3.x가 아직 그리지 않으므로 `planned`로 남겼습니다. 헤드폰 보상을 끈 세 시나리오는 룸 보정만 담은 EQ FIR의 최소위상 변환 잡음 안에 있어 비율 허용치를 5e-4로 두었습니다(2.x가 같은 1e-12 섭동에 스스로 최대 5.6e-4까지 움직이고, 3.x는 2.7e-4). 이 과정에서 2.x가 측정 파일을 `os.listdir` 순서대로 읽어 Linux에서는 Windows보다 데모 출력이 0.8 %(0.07 dB) 크게 나온다는 것도 확인했습니다(2.14.2 PyPI판과 현재 트리 모두). 자세한 내용은 `tests/migration/README-config.md`에 있습니다.
 
 ## 2.14.2 - 2026-09-08
 ### 🔧 자동 릴리스 (CI auto-bump)

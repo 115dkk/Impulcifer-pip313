@@ -1,11 +1,15 @@
 name: Release 3.x
 
-# Impulcifer 3.x (Rust + Tauri) release pipeline. Separate from publish.yml
-# (the 2.x Python pipeline, whose PyPI Trusted Publisher is bound to that file
-# name). This workflow never runs on plain master pushes: it is dispatched by
-# hand or by a v3.* tag, so 2.x releases keep flowing while 3.x is in alpha.
+# Impulcifer 3.x (Rust + Tauri) release pipeline, the stable line. Every push to
+# master runs the gate; publish.yml (the 2.x Python pipeline) runs only when
+# dispatched by hand.
 #
-#   version            read [workspace.package].version from Cargo.toml
+#   gate               .github/scripts/release_gate.py --product 3x: release the
+#                      Cargo workspace version when its tag v<version> is missing;
+#                      when it is tagged and 3.x build inputs changed since, bump
+#                      PATCH (Cargo.toml, Cargo.lock, tauri.conf.json, CHANGELOG)
+#                      on master with [skip ci] and release that; otherwise stop.
+#                      Every later job checks out release_sha.
 #   build-windows      cargo build + vpk pack (Velopack, pack id Impulcifer)
 #   upgrade-windows    disposable runner: install the newest 2.x Setup, apply the
 #                      3.x package with its Update.exe (normal restart path), attach
@@ -18,10 +22,13 @@ name: Release 3.x
 #                      the wheels carry no audio backend, so the Linux wheel is a
 #                      manylinux_2_28 wheel built in the manylinux container and
 #                      goes to PyPI like the others)
-#   publish-pypi       only when dispatched with publish_pypi=true (OIDC, env PyPI)
+#   publish-pypi       on master pushes, and on dispatch unless publish_pypi=false
+#                      (OIDC, env PyPI)
 #   create-release     GitHub Release v<version> with latest.json, releases.win.json,
-#                      SHA256SUMS.txt; prerelease when the version has a suffix, so
-#                      /releases/latest keeps pointing at the 2.x stable release.
+#                      SHA256SUMS.txt; prerelease when the version has a suffix.
+#                      A stable 3.x release is /releases/latest, which 3.x stable
+#                      installs and 2.x installs (the upgrade path) both read; 2.x
+#                      releases never take that spot (make_latest: false).
 #                      latest.json is also copied to the rolling updater-3x-pre
 #                      release that prerelease installs read (GitHub's /latest never
 #                      resolves a prerelease); Windows prerelease installs ask the
@@ -31,15 +38,15 @@ name: Release 3.x
 # signatures (public key in apps/impulcifer-app/tauri.conf.json).
 
 on:
+  push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       publish_pypi:
-        description: "Publish the wheels and sdist to PyPI (project impulcifer-py313, the 2.x project)"
+        description: "Publish the wheels and sdist to PyPI (project impulcifer-py313)"
         type: boolean
-        default: false
-  push:
-    tags:
-      - "v3.*"
+        default: true
 
 concurrency:
   group: release-3x
@@ -53,43 +60,40 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  version:
-    name: Read the workspace version
+  gate:
+    name: Release gate (auto-bump + decision)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
-      version: ${{ steps.read.outputs.version }}
-      tag: ${{ steps.read.outputs.tag }}
-      prerelease: ${{ steps.read.outputs.prerelease }}
+      should_release: ${{ steps.gate.outputs.should_release }}
+      version: ${{ steps.gate.outputs.version }}
+      tag: ${{ steps.gate.outputs.tag }}
+      prerelease: ${{ steps.gate.outputs.prerelease }}
+      release_sha: ${{ steps.gate.outputs.release_sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
-      - name: Read Cargo.toml
-        id: read
-        shell: python
-        run: |
-          import os, tomllib
-          with open("Cargo.toml", "rb") as f:
-              version = tomllib.load(f)["workspace"]["package"]["version"]
-          tag = f"v{version}"
-          ref = os.environ.get("GITHUB_REF", "")
-          if ref.startswith("refs/tags/") and ref != f"refs/tags/{tag}":
-              raise SystemExit(f"tag {ref} does not match Cargo.toml version {version}")
-          prerelease = "true" if "-" in version else "false"
-          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
-              out.write(f"version={version}\ntag={tag}\nprerelease={prerelease}\n")
-          print(version, tag, "prerelease" if prerelease == "true" else "stable")
+      - name: Decide release and auto-bump
+        id: gate
+        run: python .github/scripts/release_gate.py --product 3x
 
   build-windows:
     name: Windows (Velopack)
-    needs: version
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
 
       - name: Install toolchain (rust-toolchain.toml)
         run: rustup show
@@ -139,12 +143,15 @@ jobs:
 
   upgrade-windows:
     name: Upgrade check (2.x install to 3.x)
-    needs: [version, build-windows]
+    needs: [gate, build-windows]
+    if: needs.gate.outputs.should_release == 'true'
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
 
       - name: Set up Python 3.14 (smoke harness)
         uses: actions/setup-python@v6
@@ -207,7 +214,7 @@ jobs:
           [xml]$after = Get-Content -LiteralPath $sq
           $afterVersion = $after.package.metadata.version
           "Version after apply: $afterVersion"
-          if ($afterVersion -ne '${{ needs.version.outputs.version }}') { throw "expected ${{ needs.version.outputs.version }}, found $afterVersion" }
+          if ($afterVersion -ne '${{ needs.gate.outputs.version }}') { throw "expected ${{ needs.gate.outputs.version }}, found $afterVersion" }
           if (-not (Test-Path $exe)) { throw "3.x executable missing: $exe" }
           if (-not (Test-Path (Join-Path $root 'current\data'))) { throw 'bundled data directory missing after apply' }
           "UPGRADE_OK $before -> $afterVersion"
@@ -235,10 +242,13 @@ jobs:
 
   build-macos:
     name: macOS (Tauri app + dmg)
-    needs: version
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
 
       - name: Install toolchain (rust-toolchain.toml)
         run: rustup show
@@ -265,7 +275,7 @@ jobs:
 
       - name: Collect artifacts with the 2.x asset names
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.gate.outputs.version }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -286,10 +296,13 @@ jobs:
 
   build-linux:
     name: Linux (Tauri AppImage)
-    needs: version
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
 
       - name: Install Tauri, audio and AppImage system libraries
         run: |
@@ -323,7 +336,7 @@ jobs:
 
       - name: Collect artifacts with the 2.x asset names
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.gate.outputs.version }}
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -342,7 +355,8 @@ jobs:
 
   wheels:
     name: Python wheels (${{ matrix.os }})
-    needs: version
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -350,6 +364,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
 
       # The wheels carry no audio backend (crates/impulcifer-python builds the
       # service and CLI without native-audio): no ALSA headers, and the Linux
@@ -402,8 +418,9 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI (project impulcifer-py313)
-    needs: [version, wheels]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_pypi
+    needs: [gate, wheels]
+    # Master pushes always publish; a dispatch publishes unless publish_pypi=false.
+    if: needs.gate.outputs.should_release == 'true' && (github.event_name == 'push' || inputs.publish_pypi)
     runs-on: ubuntu-latest
     environment:
       name: PyPI
@@ -440,17 +457,21 @@ jobs:
 
   create-release:
     name: Create the GitHub Release
-    needs: [version, build-windows, upgrade-windows, build-macos, build-linux, wheels]
+    needs: [gate, build-windows, upgrade-windows, build-macos, build-linux, wheels]
+    if: needs.gate.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      VERSION: ${{ needs.version.outputs.version }}
-      TAG: ${{ needs.version.outputs.tag }}
-      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+      VERSION: ${{ needs.gate.outputs.version }}
+      TAG: ${{ needs.gate.outputs.tag }}
+      PRERELEASE: ${{ needs.gate.outputs.prerelease }}
+      RELEASE_SHA: ${{ needs.gate.outputs.release_sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -515,9 +536,9 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber
           else
-            # A missing tag is created at the checked-out commit, never at the
-            # default branch head (manual dispatch from another branch).
-            gh release create "$TAG" release/* --target "$GITHUB_SHA" --title "Impulcifer ${VERSION}" --notes "$notes" "${flags[@]}"
+            # A missing tag is created at the released commit (the gate's
+            # auto-bump commit when it bumped), never at the default branch head.
+            gh release create "$TAG" release/* --target "$RELEASE_SHA" --title "Impulcifer ${VERSION}" --notes "$notes" "${flags[@]}"
           fi
           gh release view "$TAG" --json assets -q '.assets[].name'
           # Prerelease installs (macOS/Linux Tauri updater) cannot see GitHub
@@ -526,7 +547,7 @@ jobs:
           # ones too, so an alpha install is offered the following stable).
           feed=updater-3x-pre
           if ! gh release view "$feed" >/dev/null 2>&1; then
-            gh release create "$feed" --target "$GITHUB_SHA" --prerelease --title "Impulcifer 3.x prerelease updater feed" --notes "Rolling feed for prerelease installs: latest.json of the newest 3.x release (stable or prerelease). Not a release to install; use the versioned releases."
+            gh release create "$feed" --target "$RELEASE_SHA" --prerelease --title "Impulcifer 3.x prerelease updater feed" --notes "Rolling feed for prerelease installs: latest.json of the newest 3.x release (stable or prerelease). Not a release to install; use the versioned releases."
           fi
           gh release upload "$feed" release/latest.json --clobber
           gh release view "$feed" --json assets -q '.assets[].name'

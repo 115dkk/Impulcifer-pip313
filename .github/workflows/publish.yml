@@ -1,21 +1,24 @@
 name: Release Pipeline
 
-# Consolidated release pipeline (gated):
-#   master push -> gate (auto-bump decision) -> publish to PyPI
-#               -> (only on PyPI success) cross-platform Nuitka build
-#               -> GitHub Release.
-# Pushes that do not change the shipped product (docs / CI / tests only) and
-# that the gate does not bump produce NO publish and NO build — GitHub runners
-# are only spent on real releases.
+# 2.x (Python) release pipeline, dispatched by hand only. 3.x is the stable
+# line and releases on every master push through release-3x.yml; 2.x is in
+# maintenance and ships when someone runs this workflow:
+#   dispatch -> gate (release_gate.py --product 2x: release the pyproject
+#               version when its tag v<version> is missing; when it is tagged
+#               and 2.x-shippable files changed since, auto-bump PATCH on master)
+#            -> publish to PyPI
+#            -> (only on PyPI success) cross-platform Nuitka build
+#            -> GitHub Release, never marked latest (/releases/latest stays on
+#               3.x, which both 3.x installs and the 2.x upgrade path read)
+#            -> AUR package.
+# A dispatch with nothing shippable since the last 2.x tag publishes and builds
+# nothing.
 #
 # The file is intentionally named publish.yml: the PyPI Trusted Publisher binds
 # OIDC to the workflow filename + environment (`PyPI`). Reusing this filename
 # keeps publishing working without touching the pypi.org configuration.
 
 on:
-  push:
-    branches:
-      - master
   workflow_dispatch:
 
 concurrency:
@@ -24,8 +27,8 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 1. Gate: decide whether to release, auto-bump PATCH if a shippable change
-  #    was merged without a manual bump.
+  # 1. Gate: decide whether to release, auto-bump PATCH when 2.x-shippable
+  #    files changed since the last 2.x tag without a manual bump.
   # ---------------------------------------------------------------------------
   gate:
     name: Release gate (auto-bump + decision)
@@ -49,15 +52,12 @@ jobs:
 
       - name: Decide release and auto-bump
         id: gate
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_SHA: ${{ github.sha }}
-          EVENT_BEFORE: ${{ github.event.before }}
-        run: python .github/scripts/release_gate.py
+        run: python .github/scripts/release_gate.py --product 2x
 
   # ---------------------------------------------------------------------------
   # 2. Publish to PyPI (Trusted Publisher / OIDC). Builds run only after this
-  #    succeeds, so non-release pushes never reach the expensive Nuitka jobs.
+  #    succeeds, so a dispatch with nothing to release never reaches the
+  #    expensive Nuitka jobs.
   # ---------------------------------------------------------------------------
   publish-pypi:
     name: Publish to PyPI
@@ -98,8 +98,8 @@ jobs:
           # should not block package publication.
           attestations: false
           # Idempotent re-runs: a version already on PyPI is a no-op rather
-          # than a failure. The gate already refuses to release a published
-          # version, so this only guards manual re-dispatch.
+          # than a failure. The gate re-releases an untagged version (a run
+          # that failed after this step), so a retry must not fail here.
           skip-existing: true
           verbose: true
 
@@ -765,6 +765,9 @@ jobs:
             release-sums/SHA256SUMS.txt
           draft: false
           prerelease: false
+          # 3.x owns /releases/latest: 3.x installs update from it and 2.x
+          # installs are offered 3.x from it. A 2.x release must not take it.
+          make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
