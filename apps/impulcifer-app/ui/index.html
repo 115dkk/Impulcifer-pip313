@@ -314,7 +314,7 @@
           <div class="card">
             <div class="card-head">
               <span class="card-num mono">03</span>
-              <span class="card-title" data-i18n="section_advanced_options">Advanced Options</span>
+              <span class="card-title" id="adv-card-title" data-i18n="section_advanced_options">Advanced Options</span>
             </div>
             <div class="card-body">
               <div class="disclosure" id="dis-advanced">
@@ -418,6 +418,140 @@
                     <label for="bf-mic-debug" data-i18n="checkbox_mic_deviation_debug_plots">Mic deviation debug plots</label>
                   </div>
                 </div>
+              </div>
+              <div class="adv-tabs" id="adv-studio">
+              <div class="seg" role="tablist" aria-labelledby="adv-card-title">
+                <button type="button" class="seg-btn is-off" role="tab" id="adv-tab-tone" aria-controls="adv-panel-tone" aria-selected="true" tabindex="0">
+                  <span class="tab-mark" aria-hidden="true"></span><span data-i18n="studio_adv_tab_tone">Tone &amp; Level</span>
+                  <span class="sr-only"><span class="adv-state-on" data-i18n="studio_adv_state_on">on</span><span class="adv-state-off" data-i18n="studio_adv_state_off">off</span></span>
+                </button>
+                <button type="button" class="seg-btn is-off" role="tab" id="adv-tab-time" aria-controls="adv-panel-time" aria-selected="false" tabindex="-1">
+                  <span class="tab-mark" aria-hidden="true"></span><span data-i18n="studio_adv_tab_time">Timing</span>
+                  <span class="sr-only"><span class="adv-state-on" data-i18n="studio_adv_state_on">on</span><span class="adv-state-off" data-i18n="studio_adv_state_off">off</span></span>
+                </button>
+                <button type="button" class="seg-btn is-off" role="tab" id="adv-tab-output" aria-controls="adv-panel-output" aria-selected="false" tabindex="-1">
+                  <span class="tab-mark" aria-hidden="true"></span><span data-i18n="studio_adv_tab_output">Output Files</span>
+                  <span class="sr-only"><span class="adv-state-on" data-i18n="studio_adv_state_on">on</span><span class="adv-state-off" data-i18n="studio_adv_state_off">off</span></span>
+                </button>
+                <button type="button" class="seg-btn is-off" role="tab" id="adv-tab-correction" aria-controls="adv-panel-correction" aria-selected="false" tabindex="-1">
+                  <span class="tab-mark" aria-hidden="true"></span><span data-i18n="studio_adv_tab_correction">Correction &amp; Graphs</span>
+                  <span class="sr-only"><span class="adv-state-on" data-i18n="studio_adv_state_on">on</span><span class="adv-state-off" data-i18n="studio_adv_state_off">off</span></span>
+                </button>
+              </div>
+              <section class="adv-panel" role="tabpanel" id="adv-panel-tone" aria-labelledby="adv-tab-tone">
+                <div class="adv-panel-head">
+                  <button type="button" class="switch" role="switch" aria-checked="false" id="adv-on-tone" aria-labelledby="adv-on-tone-label"></button>
+                  <span class="disclosure-title" id="adv-on-tone-label" data-i18n="studio_adv_apply_tone">Apply tone &amp; level</span>
+                  <button type="button" class="btn-link" id="adv-reset-tone" data-i18n="studio_adv_reset">Reset to defaults</button>
+                </div>
+                <fieldset class="adv-fields" id="adv-fields-tone" disabled>
+                  <fieldset class="adv-sub" id="ba-tone-eq" aria-labelledby="ba-tone-eq-title">
+                    <h4 class="adv-sub-head" id="ba-tone-eq-title" data-i18n="studio_adv_group_tone">Tone</h4>
+                    <div class="field-row">
+                      <span data-i18n="label_bass_boost">Bass Boost:</span>
+                      <div class="unit-row">
+                        <label class="unit-field"><span class="pre" data-i18n="studio_adv_gain">Gain</span><input type="number" id="ba-bass-gain" value="0" step="0.1"><span class="unit" data-i18n="studio_adv_unit_db">dB</span></label>
+                        <label class="unit-field"><span class="pre">Fc</span><input type="number" id="ba-bass-fc" value="105" min="1" disabled><span class="unit" data-i18n="studio_adv_unit_hz">Hz</span></label>
+                        <label class="unit-field"><span class="pre">Q</span><input type="number" id="ba-bass-q" value="0.76" step="0.01" min="0.1" disabled></label>
+                      </div>
+                    </div>
+                    <div class="field-row">
+                      <label for="ba-tilt" data-i18n="studio_adv_label_tilt">Tilt:</label>
+                      <div><span class="unit-field"><input type="number" id="ba-tilt" value="0" step="0.1"><span class="unit" data-i18n="studio_adv_unit_db_per_octave">dB/oct</span></span></div>
+                    </div>
+                  </fieldset>
+                  <div class="adv-sep"></div>
+                  <h4 class="adv-sub-head" data-i18n="studio_adv_group_level">Level</h4>
+                  <div class="field-row">
+                    <label for="ba-target-level" data-i18n="studio_adv_label_target_level">Target level:</label>
+                    <div><span class="unit-field"><input type="number" id="ba-target-level" step="0.1" placeholder="—"><span class="unit" data-i18n="studio_adv_unit_db">dB</span></span></div>
+                  </div>
+                  <div class="field-row">
+                    <label for="ba-balance" data-i18n="label_balance">Channel Balance:</label>
+                    <div class="inline-group">
+                      <select id="ba-balance"><option value="none" selected data-i18n="option_balance_none">No correction</option><option value="trend" data-i18n="option_balance_trend">Trend</option><option value="mids" data-i18n="option_balance_mids">Mid level</option><option value="avg" data-i18n="option_balance_avg">Average</option><option value="min" data-i18n="option_balance_min">Lower side</option><option value="left" data-i18n="option_balance_left">Match left</option><option value="right" data-i18n="option_balance_right">Match right</option><option value="number" data-i18n="option_balance_number">Manual</option></select>
+                      <label class="unit-field"><span class="sr-only" data-i18n="label_balance">Channel Balance:</span><input type="number" id="ba-balance-db" value="0" step="1" disabled><span class="unit" data-i18n="studio_adv_unit_db">dB</span></label>
+                    </div>
+                  </div>
+                </fieldset>
+              </section>
+              <section class="adv-panel" role="tabpanel" id="adv-panel-time" aria-labelledby="adv-tab-time" hidden>
+                <div class="adv-panel-head">
+                  <button type="button" class="switch" role="switch" aria-checked="false" id="adv-on-time" aria-labelledby="adv-on-time-label"></button>
+                  <span class="disclosure-title" id="adv-on-time-label" data-i18n="studio_adv_apply_time">Apply timing</span>
+                  <button type="button" class="btn-link" id="adv-reset-time" data-i18n="studio_adv_reset">Reset to defaults</button>
+                </div>
+                <fieldset class="adv-fields" id="adv-fields-time" disabled>
+                  <div class="field-row">
+                    <label for="ba-head-ms" data-i18n="studio_adv_label_pre_response">Pre-response:</label>
+                    <div><span class="unit-field"><input type="number" id="ba-head-ms" value="1.0" step="0.1" min="0"><span class="unit" data-i18n="studio_adv_unit_ms">ms</span></span></div>
+                  </div>
+                  <div class="field-row">
+                    <label for="ba-decay" data-i18n="studio_adv_label_decay">Decay:</label>
+                    <div class="inline-group">
+                      <span class="unit-field"><input type="number" id="ba-decay" min="0" placeholder="—"><span class="unit" data-i18n="studio_adv_unit_ms">ms</span></span>
+                      <span class="check-row"><input type="checkbox" id="ba-decay-per-channel"><label for="ba-decay-per-channel" data-i18n="checkbox_per_channel">Per-channel</label></span>
+                    </div>
+                  </div>
+                  <div class="field-row top" id="ba-decay-channels" hidden>
+                    <span data-i18n="studio_adv_label_decay_channels">Decay per channel:</span>
+                    <div class="ch-grid" id="ba-decay-grid"></div>
+                  </div>
+                </fieldset>
+              </section>
+              <section class="adv-panel" role="tabpanel" id="adv-panel-output" aria-labelledby="adv-tab-output" hidden>
+                <div class="adv-panel-head">
+                  <button type="button" class="switch" role="switch" aria-checked="false" id="adv-on-output" aria-labelledby="adv-on-output-label"></button>
+                  <span class="disclosure-title" id="adv-on-output-label" data-i18n="studio_adv_apply_output">Apply output files</span>
+                  <button type="button" class="btn-link" id="adv-reset-output" data-i18n="studio_adv_reset">Reset to defaults</button>
+                </div>
+                <fieldset class="adv-fields" id="adv-fields-output" disabled>
+                  <div class="field-row top">
+                    <span data-i18n="studio_adv_label_extra_files">Extra files:</span>
+                    <div class="file-grid">
+                      <label class="file-opt"><input type="checkbox" id="ba-jamesdsp"><span class="file-name">JamesDSP</span><span class="file-path mono">jamesdsp.wav</span></label>
+                      <label class="file-opt"><input type="checkbox" id="ba-hangloose"><span class="file-name">Hangloose</span><span class="file-path mono">Hangloose/</span></label>
+                      <label class="file-opt"><input type="checkbox" id="ba-truehd"><span class="file-name" data-i18n="studio_adv_truehd">TrueHD layouts</span><span class="file-path mono">truehd_11ch · truehd_13ch</span></label>
+                    </div>
+                  </div>
+                  <div class="field-row">
+                    <label for="ba-resample" id="ba-resample-label" data-i18n="studio_adv_label_resample">Resample:</label>
+                    <div class="inline-group">
+                      <input type="checkbox" id="ba-resample">
+                      <select id="ba-fs" class="num" aria-labelledby="ba-resample-label ba-fs-unit" disabled><option>44100</option><option selected>48000</option><option>88200</option><option>96000</option><option>176400</option><option>192000</option><option>352000</option><option>384000</option></select>
+                      <span class="mini-label" id="ba-fs-unit" data-i18n="studio_adv_unit_hz">Hz</span>
+                    </div>
+                  </div>
+                  <div class="field-row top">
+                    <span data-i18n="studio_adv_label_channel_layout">Channel layout:</span>
+                    <div class="adv-stack">
+                      <div class="check-row"><input type="checkbox" id="ba-remove-silent-channels"><label for="ba-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label></div>
+                      <p class="hint" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
+                    </div>
+                  </div>
+                </fieldset>
+              </section>
+              <section class="adv-panel" role="tabpanel" id="adv-panel-correction" aria-labelledby="adv-tab-correction" hidden>
+                <div class="adv-panel-head">
+                  <button type="button" class="switch" role="switch" aria-checked="false" id="adv-on-correction" aria-labelledby="adv-on-correction-label"></button>
+                  <span class="disclosure-title" id="adv-on-correction-label" data-i18n="studio_adv_apply_correction">Apply correction &amp; graphs</span>
+                  <button type="button" class="btn-link" id="adv-reset-correction" data-i18n="studio_adv_reset">Reset to defaults</button>
+                </div>
+                <fieldset class="adv-fields" id="adv-fields-correction" disabled>
+                  <h4 class="adv-sub-head" data-i18n="studio_adv_group_correction">Correction</h4>
+                  <div class="check-row" id="ba-mic-row"><input type="checkbox" id="ba-mic-deviation"><label for="ba-mic-deviation" data-i18n="checkbox_enable_mic_deviation">Microphone deviation correction</label></div>
+                  <div class="adv-nested">
+                    <div class="field-row">
+                      <label for="ba-mic-strength" data-i18n="label_strength">Strength:</label>
+                      <div><span class="unit-field"><input type="number" id="ba-mic-strength" value="0.7" step="0.05" min="0" max="1" disabled></span></div>
+                    </div>
+                    <div class="check-row"><input type="checkbox" id="ba-mic-debug" disabled><label for="ba-mic-debug" data-i18n="checkbox_mic_deviation_debug_plots">Mic deviation debug plots</label></div>
+                  </div>
+                  <div class="adv-sep"></div>
+                  <h4 class="adv-sub-head" data-i18n="studio_adv_group_graphs">Graphs</h4>
+                  <div class="check-row"><input type="checkbox" id="ba-interactive-plots"><label for="ba-interactive-plots" data-i18n="checkbox_interactive_plots">Interactive plots</label></div>
+                </fieldset>
+              </section>
               </div>
             </div>
           </div>

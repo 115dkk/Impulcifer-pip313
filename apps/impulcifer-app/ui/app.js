@@ -133,6 +133,7 @@ function applyStrings() {
   renderSystemInfo();
   renderRecoveryInventory();
   renderEq();
+  refreshStudioAdvanced();
   if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
 }
 
@@ -169,7 +170,10 @@ function applySkin(code) {
   // Re-evaluate the job dialog: switching skins mid-job moves the running
   // display between the inline activity card and the Stable modal.
   renderJobState(state.lastJob);
-  if (previous !== state.skin) scheduleRecoveryPlan();
+  if (previous !== state.skin) {
+    scheduleRecoveryPlan();
+    syncAdvancedForms(state.skin);
+  }
 }
 
 /* ------------------------------------------------------------ primitives */
@@ -1462,45 +1466,12 @@ function gatherBrirPayload() {
     if (headphoneFile) args.headphone_compensation_file = headphoneFile;
   }
   if (isOpen("dis-eq")) Object.assign(args, eqRequestFields());
-  if (isOpen("dis-advanced")) {
-    args.fs = checked("bf-resample") ? Math.trunc(numOr("bf-fs", 48000)) : null;
-    args.target_level = numOrNull("bf-target-level");
-
-    const balance = val("bf-balance");
-    if (balance === "number") args.channel_balance = Math.trunc(numOr("bf-balance-db", 0));
-    else if (balance !== "none") args.channel_balance = balance;
-
-    const bassGain = numOr("bf-bass-gain", 0);
-    if (bassGain) {
-      args.bass_boost_gain = bassGain;
-      args.bass_boost_fc = numOr("bf-bass-fc", brirDefault("bass_boost_fc", 105));
-      args.bass_boost_q = numOr("bf-bass-q", brirDefault("bass_boost_q", 0.76));
-    }
-    const tilt = numOr("bf-tilt", 0);
-    if (tilt) args.tilt = tilt;
-
-    if (checked("bf-decay-per-channel")) {
-      /** @type {Record<string, number>} */
-      const decay = {};
-      for (const channel of DECAY_CHANNELS) {
-        const value = numOrNull(`bf-decay-${channel}`);
-        if (value !== null && value > 0) decay[channel] = value / 1000;
-      }
-      if (Object.keys(decay).length) args.decay = decay;
-    } else {
-      const decayMs = numOrNull("bf-decay");
-      if (decayMs !== null && decayMs > 0) args.decay = decayMs / 1000;
-    }
-
-    args.head_ms = numOr("bf-head-ms", brirDefault("head_ms", 1.0));
-    args.jamesdsp = checked("bf-jamesdsp");
-    args.hangloose = checked("bf-hangloose");
-    args.remove_silent_channels = checked("bf-remove-silent-channels");
-    args.interactive_plots = checked("bf-interactive-plots");
-    args.microphone_deviation_correction = checked("bf-mic-deviation");
-    args.mic_deviation_strength = numOr("bf-mic-strength", brirDefault("mic_deviation_strength", 0.7));
-    args.mic_deviation_debug_plots = checked("bf-mic-debug");
-    args.output_truehd_layouts = checked("bf-truehd");
+  if (state.skin === "studio") addStudioAdvancedArgs(args);
+  else if (isOpen("dis-advanced")) {
+    addToneArgs(args, "bf", true);
+    addTimeArgs(args, "bf");
+    addOutputArgs(args, "bf");
+    addCorrectionArgs(args, "bf");
   }
   if (isOpen("dis-vbass")) {
     args.vbass = true;
@@ -1509,6 +1480,216 @@ function gatherBrirPayload() {
     args.vbass_polarity = val("bf-vbass-polarity");
   }
   return args;
+}
+
+/* Advanced options are read from one of two forms with the same field
+   suffixes: Stable's single list ("bf-") and Studio's four tabs ("ba-"). */
+
+/** @param {ProcessingRequest} args @param {string} p @param {boolean} equalizing */
+function addToneArgs(args, p, equalizing) {
+  // Bass boost and tilt shape the equalization target, so they only apply
+  // when an equalization stage runs; Studio locks them otherwise.
+  if (equalizing) {
+    const bassGain = numOr(`${p}-bass-gain`, 0);
+    if (bassGain) {
+      args.bass_boost_gain = bassGain;
+      args.bass_boost_fc = numOr(`${p}-bass-fc`, brirDefault("bass_boost_fc", 105));
+      args.bass_boost_q = numOr(`${p}-bass-q`, brirDefault("bass_boost_q", 0.76));
+    }
+    const tilt = numOr(`${p}-tilt`, 0);
+    if (tilt) args.tilt = tilt;
+  }
+  args.target_level = numOrNull(`${p}-target-level`);
+  const balance = val(`${p}-balance`);
+  if (balance === "number") args.channel_balance = Math.trunc(numOr(`${p}-balance-db`, 0));
+  else if (balance !== "none") args.channel_balance = balance;
+}
+
+/** @param {ProcessingRequest} args @param {string} p */
+function addTimeArgs(args, p) {
+  if (checked(`${p}-decay-per-channel`)) {
+    /** @type {Record<string, number>} */
+    const decay = {};
+    for (const channel of DECAY_CHANNELS) {
+      const value = numOrNull(`${p}-decay-${channel}`);
+      if (value !== null && value > 0) decay[channel] = value / 1000;
+    }
+    if (Object.keys(decay).length) args.decay = decay;
+  } else {
+    const decayMs = numOrNull(`${p}-decay`);
+    if (decayMs !== null && decayMs > 0) args.decay = decayMs / 1000;
+  }
+  args.head_ms = numOr(`${p}-head-ms`, brirDefault("head_ms", 1.0));
+}
+
+/** @param {ProcessingRequest} args @param {string} p */
+function addOutputArgs(args, p) {
+  args.fs = checked(`${p}-resample`) ? Math.trunc(numOr(`${p}-fs`, 48000)) : null;
+  args.jamesdsp = checked(`${p}-jamesdsp`);
+  args.hangloose = checked(`${p}-hangloose`);
+  args.remove_silent_channels = checked(`${p}-remove-silent-channels`);
+  args.output_truehd_layouts = checked(`${p}-truehd`);
+}
+
+/** @param {ProcessingRequest} args @param {string} p */
+function addCorrectionArgs(args, p) {
+  args.interactive_plots = checked(`${p}-interactive-plots`);
+  args.microphone_deviation_correction = checked(`${p}-mic-deviation`);
+  args.mic_deviation_strength = numOr(`${p}-mic-strength`, brirDefault("mic_deviation_strength", 0.7));
+  args.mic_deviation_debug_plots = checked(`${p}-mic-debug`);
+}
+
+/** @param {ProcessingRequest} args */
+function addStudioAdvancedArgs(args) {
+  if (advOn("tone")) addToneArgs(args, "ba", equalizationStageOn());
+  if (advOn("time")) addTimeArgs(args, "ba");
+  if (advOn("output")) addOutputArgs(args, "ba");
+  if (advOn("correction")) addCorrectionArgs(args, "ba");
+}
+
+/* --------------------------------------------------- Studio advanced tabs */
+
+const ADV_TABS = ["tone", "time", "output", "correction"];
+
+/* Which fields each tab owns, by suffix after "bf-"/"ba-". The per-channel
+   decay inputs belong to "time" as well. */
+/** @type {Record<string, string[]>} */
+const ADV_FIELDS = {
+  tone: ["bass-gain", "bass-fc", "bass-q", "tilt", "target-level", "balance", "balance-db"],
+  time: ["head-ms", "decay", "decay-per-channel", ...DECAY_CHANNELS.map((channel) => `decay-${channel}`)],
+  output: ["resample", "fs", "jamesdsp", "hangloose", "truehd", "remove-silent-channels"],
+  correction: ["mic-deviation", "mic-strength", "mic-debug", "interactive-plots"],
+};
+
+/** @param {string} tab */
+function advOn(tab) {
+  return $(`adv-on-${tab}`).getAttribute("aria-checked") === "true";
+}
+
+/** @param {string} tab @param {boolean} on */
+function setAdvOn(tab, on) {
+  $(`adv-on-${tab}`).setAttribute("aria-checked", String(on));
+  el(`adv-fields-${tab}`, HTMLFieldSetElement).disabled = !on;
+  $(`adv-tab-${tab}`).classList.toggle("is-off", !on);
+}
+
+/** @param {string} tab @param {boolean} [focus] */
+function selectAdvTab(tab, focus = false) {
+  for (const name of ADV_TABS) {
+    const selected = name === tab;
+    const button = $(`adv-tab-${name}`);
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+    $(`adv-panel-${name}`).hidden = !selected;
+  }
+  if (focus) $(`adv-tab-${tab}`).focus();
+}
+
+function equalizationStageOn() {
+  return isOpen("dis-room") || isOpen("dis-headphone") || isOpen("dis-eq");
+}
+
+/* Lock what cannot apply instead of explaining it: the bass boost and tilt
+   need an equalization stage, and headphone compensation already cancels the
+   microphones, so mic deviation correction is skipped while it is on. A
+   locked checkbox shows what will happen (unchecked) and gets its own
+   choice back when it unlocks. */
+function refreshStudioAdvanced() {
+  const toneEq = el("ba-tone-eq", HTMLFieldSetElement);
+  toneEq.disabled = !equalizationStageOn();
+  toneEq.title = toneEq.disabled ? t("studio_adv_locked_no_eq") : "";
+  const bassOff = numOr("ba-bass-gain", 0) === 0;
+  el("ba-bass-fc", HTMLInputElement).disabled = bassOff;
+  el("ba-bass-q", HTMLInputElement).disabled = bassOff;
+  el("ba-balance-db", HTMLInputElement).disabled = val("ba-balance") !== "number";
+
+  const perChannel = checked("ba-decay-per-channel");
+  el("ba-decay", HTMLInputElement).disabled = perChannel;
+  $("ba-decay-channels").hidden = !perChannel;
+
+  el("ba-fs", HTMLSelectElement).disabled = !checked("ba-resample");
+
+  const mic = el("ba-mic-deviation", HTMLInputElement);
+  const blocked = isOpen("dis-headphone");
+  if (blocked && !mic.disabled) {
+    mic.dataset.kept = String(mic.checked);
+    mic.checked = false;
+  } else if (!blocked && mic.disabled) {
+    mic.checked = mic.dataset.kept === "true";
+    delete mic.dataset.kept;
+  }
+  mic.disabled = blocked;
+  $("ba-mic-row").title = blocked ? t("studio_adv_locked_headphone") : "";
+  el("ba-mic-strength", HTMLInputElement).disabled = !mic.checked;
+  el("ba-mic-debug", HTMLInputElement).disabled = !mic.checked;
+}
+
+function refreshStableAdvanced() {
+  el("bf-fs", HTMLSelectElement).disabled = !checked("bf-resample");
+  el("bf-balance-db", HTMLInputElement).disabled = val("bf-balance") !== "number";
+  const perChannel = checked("bf-decay-per-channel");
+  el("bf-decay", HTMLInputElement).disabled = perChannel;
+  $("bf-decay-channels").hidden = !perChannel;
+  const mic = checked("bf-mic-deviation");
+  el("bf-mic-strength", HTMLInputElement).disabled = !mic;
+  el("bf-mic-debug", HTMLInputElement).disabled = !mic;
+}
+
+/** @param {string} id */
+function advField(id) {
+  const node = $(id);
+  if (!(node instanceof HTMLInputElement || node instanceof HTMLSelectElement)) throw new Error(`Not a field: ${id}`);
+  return node;
+}
+
+/** @param {HTMLInputElement | HTMLSelectElement} node */
+function resetField(node) {
+  if (node instanceof HTMLSelectElement) {
+    const initial = Array.from(node.options).findIndex((option) => option.defaultSelected);
+    node.selectedIndex = Math.max(0, initial);
+  } else if (node.type === "checkbox") {
+    node.checked = node.defaultChecked;
+    delete node.dataset.kept;
+  } else {
+    node.value = node.defaultValue;
+  }
+}
+
+/** @param {string} tab */
+function resetAdvTab(tab) {
+  for (const suffix of ADV_FIELDS[tab]) resetField(advField(`ba-${suffix}`));
+  refreshStudioAdvanced();
+}
+
+/* The skins keep separate forms, so a switch in the middle of a session
+   carries the values across. Stable -> Studio turns every tab on or off with
+   the Advanced switch. Studio -> Stable opens the list when any tab is on and
+   carries the defaults for tabs that are off, so nothing a tab held back
+   becomes active. */
+/** @param {string} skin */
+function syncAdvancedForms(skin) {
+  const toStudio = skin === "studio";
+  const stableOpen = isOpen("dis-advanced");
+  for (const tab of ADV_TABS) {
+    const active = toStudio ? stableOpen : advOn(tab);
+    for (const suffix of ADV_FIELDS[tab]) {
+      const from = advField(`${toStudio ? "bf" : "ba"}-${suffix}`);
+      const to = advField(`${toStudio ? "ba" : "bf"}-${suffix}`);
+      if (!toStudio && !active) {
+        resetField(to);
+      } else if (to instanceof HTMLInputElement && to.type === "checkbox" && from instanceof HTMLInputElement) {
+        // A locked Studio checkbox keeps the carried choice until it unlocks.
+        if (toStudio && to.disabled && to.dataset.kept !== undefined) to.dataset.kept = String(from.checked);
+        else to.checked = from.checked;
+      } else {
+        to.value = from.value;
+      }
+    }
+    if (toStudio) setAdvOn(tab, stableOpen);
+  }
+  if (!toStudio) $("dis-advanced").classList.toggle("open", ADV_TABS.some(advOn));
+  refreshStudioAdvanced();
+  refreshStableAdvanced();
 }
 
 /* ------------------------------------------------------------ custom EQ
@@ -1888,6 +2069,31 @@ function buildDecayGrid() {
   }
 }
 
+function buildStudioDecayGrid() {
+  const grid = $("ba-decay-grid");
+  for (const channel of DECAY_CHANNELS) {
+    const cell = document.createElement("label");
+    cell.className = "ch-cell";
+    const code = document.createElement("span");
+    code.className = "ch-code mono";
+    code.textContent = channel;
+    const field = document.createElement("span");
+    field.className = "unit-field";
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.placeholder = "—";
+    input.id = `ba-decay-${channel}`;
+    const unit = document.createElement("span");
+    unit.className = "unit";
+    unit.dataset.i18n = "studio_adv_unit_ms";
+    unit.textContent = t("studio_adv_unit_ms");
+    field.append(input, unit);
+    cell.append(code, field);
+    grid.append(cell);
+  }
+}
+
 function wireEvents() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".nav-item")).forEach((item) => {
     item.addEventListener("click", () => {
@@ -1899,7 +2105,10 @@ function wireEvents() {
   });
 
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-disclosure]")).forEach((head) => {
-    const toggle = () => head.parentElement?.classList.toggle("open");
+    const toggle = () => {
+      head.parentElement?.classList.toggle("open");
+      refreshStudioAdvanced();
+    };
     head.addEventListener("click", toggle);
     head.querySelector(".switch")?.addEventListener("keydown", (event) => {
       if (event instanceof KeyboardEvent && (event.key === "Enter" || event.key === " ")) {
@@ -1958,22 +2167,28 @@ function wireEvents() {
   el("btn-record-headphones", HTMLButtonElement).addEventListener("click", startHeadphonesRecording);
   el("btn-sweep-set", HTMLButtonElement).addEventListener("click", generateSweepSet);
 
-  el("bf-resample", HTMLInputElement).addEventListener("change", () => {
-    el("bf-fs", HTMLSelectElement).disabled = !checked("bf-resample");
+  for (const id of ["bf-resample", "bf-balance", "bf-decay-per-channel", "bf-mic-deviation"]) {
+    $(id).addEventListener("change", refreshStableAdvanced);
+  }
+
+  ADV_TABS.forEach((tab, index) => {
+    const button = $(`adv-tab-${tab}`);
+    button.addEventListener("click", () => selectAdvTab(tab));
+    button.addEventListener("keydown", (event) => {
+      const last = ADV_TABS.length - 1;
+      /** @type {Record<string, number>} */
+      const moves = { ArrowRight: index === last ? 0 : index + 1, ArrowLeft: index === 0 ? last : index - 1, Home: 0, End: last };
+      if (!Object.prototype.hasOwnProperty.call(moves, event.key)) return;
+      event.preventDefault();
+      selectAdvTab(ADV_TABS[moves[event.key]], true);
+    });
+    $(`adv-on-${tab}`).addEventListener("click", () => setAdvOn(tab, !advOn(tab)));
+    $(`adv-reset-${tab}`).addEventListener("click", () => resetAdvTab(tab));
   });
-  el("bf-balance", HTMLSelectElement).addEventListener("change", () => {
-    el("bf-balance-db", HTMLInputElement).disabled = val("bf-balance") !== "number";
-  });
-  el("bf-decay-per-channel", HTMLInputElement).addEventListener("change", () => {
-    const perChannel = checked("bf-decay-per-channel");
-    el("bf-decay", HTMLInputElement).disabled = perChannel;
-    $("bf-decay-channels").hidden = !perChannel;
-  });
-  el("bf-mic-deviation", HTMLInputElement).addEventListener("change", () => {
-    const enabled = checked("bf-mic-deviation");
-    el("bf-mic-strength", HTMLInputElement).disabled = !enabled;
-    el("bf-mic-debug", HTMLInputElement).disabled = !enabled;
-  });
+  el("ba-bass-gain", HTMLInputElement).addEventListener("input", refreshStudioAdvanced);
+  for (const id of ["ba-balance", "ba-resample", "ba-decay-per-channel", "ba-mic-deviation"]) {
+    $(id).addEventListener("change", refreshStudioAdvanced);
+  }
 
   el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () =>
     begin((request) => api().start_brir(request), gatherBrirPayload()),
@@ -2122,7 +2337,9 @@ function showFirstRunLanguageModal(languages) {
 }
 
 buildDecayGrid();
+buildStudioDecayGrid();
 wireEvents();
+refreshStudioAdvanced();
 updateChannelGuidance();
 
 window.addEventListener("pywebviewready", boot);
