@@ -1,7 +1,8 @@
 # AUR 패키지 (`impulcifer-py313-bin`)
 
-릴리스 파이프라인이 GitHub Release의 Linux tarball을 소스로 하는 AUR
-바이너리 패키지를 자동 발행/갱신한다.
+2.x 릴리스 파이프라인이 GitHub Release의 Linux tarball을 소스로 하는 AUR
+바이너리 패키지를 발행/갱신한다. 2.x 릴리스는 `publish.yml`을 수동 실행할
+때만 나므로 이 패키지도 그때만 갱신된다(3.x 릴리스는 AUR을 건드리지 않는다).
 
 ## 동작 방식
 

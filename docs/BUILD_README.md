@@ -256,21 +256,22 @@ EOF
 
 ## CI/CD 자동 빌드
 
-프로젝트는 GitHub Actions의 단일 게이트 릴리스 파이프라인으로 크로스 플랫폼 빌드를 처리합니다.
+이 문서의 Nuitka 빌드는 2.x(유지보수 라인)의 것입니다. 정식 라인인 3.x는 `.github/workflows/release-3x.yml`이 master push마다 자동으로 릴리스하고, 2.x 릴리스 파이프라인은 사람이 실행할 때만 돕니다.
 
 ### 워크플로우 파일
-- `.github/workflows/publish.yml` - **통합 릴리스 파이프라인** (gate → PyPI 발행 → Windows/macOS/Linux Nuitka 빌드 → GitHub Release). 게이트 로직은 `.github/scripts/release_gate.py`.
+- `.github/workflows/publish.yml` - **2.x 릴리스 파이프라인** (수동 실행 → gate → PyPI 발행 → Windows/macOS/Linux Nuitka 빌드 → GitHub Release → AUR). 게이트 로직은 `.github/scripts/release_gate.py --product 2x`.
 - `.github/workflows/build-macos.yml` / `build-linux.yml` - 수동 단일-플랫폼 빌드(`workflow_dispatch`/`workflow_call` 전용, 자동 트리거 없음).
 - `.github/workflows/test.yml` - 테스트/린트/BRIR 무결성(별도, 빌드와 무관).
 
 ### 빌드가 도는 조건 (게이팅)
-크로스 플랫폼 빌드는 **새 버전이 PyPI에 성공적으로 발행된 뒤에만** 실행됩니다. master push 시:
+2.x 크로스 플랫폼 빌드는 **Actions에서 master를 대상으로 `publish.yml`을 실행했을 때, 새 버전이 PyPI에 성공적으로 발행된 뒤에만** 실행됩니다. master에 머지하는 것만으로는 2.x가 배포되지 않습니다.
 
-1. `gate`가 변경 경로를 검사한다. 출하물(`core/`, `gui/`, `i18n/`, 의존성, 번들 자산 등) 변경인데 수동 버전 bump가 없으면 **PATCH를 자동 증가**시켜 master에 커밋한다(`[skip ci]`). 수동 bump(특히 MINOR/MAJOR)는 존중한다.
+1. `gate`가 마지막 2.x 태그(`v<pyproject 버전>`)와 비교한다. 태그가 없으면(수동 bump) 그 버전을 릴리스하고, 태그가 있고 그 뒤로 2.x 출하물(`core/`, `gui/`, `i18n/`, 의존성, 번들 자산 등)이 바뀌었으면 **PATCH를 자동 증가**시켜 master에 커밋한다(`[skip ci]`).
 2. release 대상이면 PyPI에 발행한다(`environment: PyPI`, OIDC Trusted Publisher).
 3. PyPI 발행이 **성공한 경우에만** 3-플랫폼 Nuitka 빌드가 시작된다.
+4. GitHub Release는 `make_latest: false`로 만든다. `/releases/latest`는 3.x 설치본과 2.x→3.x 업그레이드 경로가 읽는 자리라 3.x 릴리스가 차지한다.
 
-문서/CI/테스트만 바꾼 push는 게이트가 release 대상이 아니라고 판정하므로 PyPI 발행도 빌드도 일어나지 않습니다(러너 절약). 자세한 규칙은 루트 `CLAUDE.md`의 "빌드 / 릴리스 파이프라인" 섹션을 참조하세요.
+마지막 2.x 태그 이후 2.x 출하물이 바뀌지 않았으면 게이트가 release 대상이 아니라고 판정하므로 PyPI 발행도 빌드도 일어나지 않습니다(러너 절약). 자세한 규칙은 루트 `CLAUDE.md`의 "빌드 / 릴리스 파이프라인" 섹션을 참조하세요.
 
 > ⚠️ `publish.yml` 파일명은 바꾸지 마세요 — PyPI Trusted Publisher가 OIDC를 이 파일명 + `environment: PyPI`에 바인딩합니다.
 

@@ -108,7 +108,7 @@ updater/
 - **기능 게이트.** 새 기능은 반드시 루트 `features.toml`에 등록하고, `status = "implemented"`로 바꿀 때는 `tests = ["crate-name::test_fn"]`에 실제로 존재하는 검증 테스트를 적는다. `cargo test -p impulcifer-policy`가 누락을 실패로 만든다. 검증 테스트 없는 구현은 머지하지 않는다.
 - **Windows 오디오는 WASAPI만.** ASIO·DirectSound·MME 없음. 기본(`share_mode=auto`)은 exclusive 우선, shared+auto-convert 폴백. 사용자가 exclusive나 shared를 고정하면 폴백 없이 열고, 거부되면 `share_mode_refused`로 실패를 그대로 알린다. cpal 백엔드(macOS/Linux)는 고정 선택을 받지 않는다.
 - **작업 분배.** unsafe 단인 `impulcifer-sys-win`은 Daybreak 워커, 나머지 크레이트(`impulcifer-audio-io` 포함)는 ASTRA 워커가 작업서 단위로 구현한다. 작업서는 `docs/rust/packets/`에 둔다.
-- **CI.** `.github/workflows/rust.yml`이 fmt·clippy·게이트·3 OS 테스트를 돈다. Rust 경로는 릴리스 게이트의 `EXCLUDE`에 있어 2.x 발행을 건드리지 않는다.
+- **CI.** `.github/workflows/rust.yml`이 fmt·clippy·게이트·3 OS 테스트를 돈다. 릴리스는 `release-3x.yml`이 master push마다 자동으로 낸다(아래 "빌드 / 릴리스 파이프라인"). Rust 경로는 2.x 게이트의 `EXCLUDE`에 있어 2.x 발행을 건드리지 않는다.
 - **로컬 검증.** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- --no-deps -D warnings`, `cargo test --workspace`.
 - **성능 감사.** 크레이트가 착륙하면 ASTRA에게 `docs/rust/packets/PA-astra-perf-audit.md` 기반의 `PAnn-astra-perf-<crate>.md`를 맡겨 같은 머신에서 2.x와 비교 측정한다(`benches/perf.rs` 대 `tests/migration/bench_oracle_<crate>.py`). 상대는 최신 CPython(`py -3.14`, 필요하면 free-threaded 3.14t)에서 도는 2.x다. M2·M5의 전체 감사에서는 최대 상주 메모리도 같이 잰다. 모든 연산에서 파이썬 이상이어야 하고 골든은 그대로 통과해야 하며, 보고서는 `docs/rust/perf/<crate>.md`, 등록부 항목은 `perf.<crate>`다. 파이프라인 전체(M2)와 출시 전(M5)에 한 번씩 더 돈다. 기능의 `implemented` 등록은 패리티(골든) 게이트이고 성능 감사는 별도의 `perf.<crate>` 항목으로 추적한다. 크레이트는 그 항목이 `implemented`가 되기 전까지 '감사 전' 상태이며, M2(`perf.pipeline-demo`)와 M5(`perf.release`)의 종료 조건에 들어간다. 파이썬보다 느리면 완료가 아니다.
 
@@ -169,23 +169,27 @@ en.json과 ko.json의 키는 현재 264개로 완전히 일치한다. 이 동기
 
 ### 2. 런타임 변경 시 버전 bump를 포함할 것
 
-`core/`, `autoeq/`, `impulcifer.py`, `gui/`, `i18n/`, `infra/`, `updater/`, 번들 자산, 의존성 등 **출하물(PyPI wheel / standalone 앱)에 영향을 주는 변경**이 포함된 PR에서는 `pyproject.toml`의 `version` 필드를 갱신한다. PyPI는 동일 버전의 재업로드를 허용하지 않는다.
+3.x가 정식 라인이고 2.x는 유지보수 라인이다. 두 라인은 버전도 릴리스도 따로 간다(PyPI 프로젝트 `impulcifer-py313`은 같이 쓴다). **출하물에 영향을 주는 변경**이 포함된 PR에서는 해당 라인의 버전을 갱신한다. PyPI는 동일 버전의 재업로드를 허용하지 않는다.
+
+- **3.x**: `crates/`, `apps/`, `Cargo.toml`·`Cargo.lock`, 3.x가 컴파일해 넣는 `i18n/locales/`, 번들하는 `data/sweep*`·`data/harman*`, `build_scripts/pack_velopack.ps1` → `Cargo.toml`의 `[workspace.package].version`(같은 값을 `apps/impulcifer-app/tauri.conf.json`의 `version`과 `Cargo.lock`의 워크스페이스 패키지에도 쓴다).
+- **2.x**: `core/`, `autoeq/`, `impulcifer.py`, `gui/`, `i18n/`, `infra/`, `updater/`, 번들 자산, 의존성 등 2.x 출하물(2.x wheel / Nuitka 앱) → `pyproject.toml`의 `version`.
 
 SemVer 규칙에 따라 갱신한다.
 
-- PATCH 증가(예: 2.4.11 → 2.4.12): 버그 수정, 성능 개선, 내부 리팩토링
-- MINOR 증가(예: 2.4.11 → 2.5.0): 새 기능 추가, 하위 호환 유지
-- MAJOR 증가(예: 2.4.11 → 3.0.0): 하위 호환이 깨지는 변경
+- PATCH 증가(예: 3.0.1 → 3.0.2): 버그 수정, 성능 개선, 내부 리팩토링
+- MINOR 증가(예: 3.0.1 → 3.1.0): 새 기능 추가, 하위 호환 유지
+- MAJOR 증가(예: 3.0.1 → 4.0.0): 하위 호환이 깨지는 변경
 
-빌드 설정만(`.github/`, 빌드 워크플로 등) 변경한 경우, 문서(`*.md`, `docs/`)만 수정한 경우, 테스트(`tests/`)만 추가/수정한 경우에는 버전 bump가 불필요하다.
+빌드 설정만(`.github/`, 빌드 워크플로 등) 변경한 경우, 문서(`*.md`, `docs/`)만 수정한 경우, 테스트(`tests/`, 크레이트의 `tests/`·`benches/`)만 추가/수정한 경우에는 버전 bump가 불필요하다.
 
-**자동 bump (안전망).** master에 머지되면 릴리스 파이프라인(`.github/workflows/publish.yml`의 `gate` job, 로직은 `.github/scripts/release_gate.py`)이 변경 경로를 검사한다.
+**자동 릴리스와 자동 bump (안전망).** 두 릴리스 파이프라인 모두 `.github/scripts/release_gate.py`의 게이트로 시작한다. 한 라인의 마지막 릴리스는 태그 `v<버전>`이다.
 
-- 출하 변경인데 수동 bump가 누락됐으면 → CI가 **PATCH를 자동 증가**하고 `[skip ci]` 커밋으로 master에 push한 뒤 릴리스를 진행한다. 따라서 PATCH 누락으로 배포가 막히는 일은 없다.
-- 이미 수동으로 bump했으면(특히 MINOR/MAJOR) → **그대로 존중**한다(CI는 추가 bump하지 않음). 즉 MINOR/MAJOR가 필요한 변경은 여전히 손으로 `pyproject.toml`을 올려야 한다.
-- 출하물에 영향이 없는 변경(docs/CI/tests만)이면 → bump도, PyPI publish도, Nuitka 빌드도 **일어나지 않는다**(러너 절약).
+- 현재 버전의 태그가 없으면(수동 bump) → 그 버전을 릴리스한다. MINOR/MAJOR는 이렇게 손으로 올린 것을 **그대로 존중**한다.
+- 태그가 있고 그 뒤로 출하 파일이 바뀌었으면 → CI가 **PATCH를 자동 증가**하고 `[skip ci]` 커밋으로 master에 push한 뒤 릴리스한다. 사전 출시 버전(`3.1.0-alpha.1`)은 자동으로 올리지 않는다.
+- 출하 파일이 바뀌지 않았으면(docs/CI/tests만) → bump도, PyPI publish도, 빌드도 **일어나지 않는다**(러너 절약).
+- **3.x**는 master 머지 때마다 `release-3x.yml`이 이 게이트를 돈다. **2.x**는 master에 머지해도 배포되지 않는다 — 배포하려면 Actions에서 master를 대상으로 `publish.yml`을 실행한다(workflow_dispatch).
 
-경로 판정·제외 목록의 정본은 `.github/scripts/release_gate.py`의 `EXCLUDE`이며, 동작은 `tests/test_release_gate.py`가 고정한다.
+경로 판정의 정본은 `release_gate.py`의 `SHIP_3X`·`NOT_SHIPPED_3X`(3.x)와 `EXCLUDE`(2.x)이며, 동작은 `tests/test_release_gate.py`가 고정한다.
 
 ### 3. CHANGELOG에 변경사항을 기록할 것
 
@@ -208,7 +212,7 @@ SemVer 규칙에 따라 갱신한다.
 
 한국어로 작성하며, 하나의 PR에 여러 카테고리가 포함되면 각각 `####` 소제목으로 분리한다. 버전 bump를 했다면 해당 버전 번호를 사용하고, 버전 bump가 없는 변경(문서, 빌드 설정 등)이면 이전 버전 번호 아래에 날짜만 다르게 추가한다.
 
-출하 변경을 수동 bump 없이 머지해 CI가 PATCH를 자동 증가시킨 경우에는, 자동 bump 커밋이 git log 커밋 제목 기반의 최소 항목을 CHANGELOG에 자동 삽입한다(🔧 카테고리, "CI auto-bump" 명시). 이는 출하 추적용 placeholder이므로, 가능하면 PR에서 수동으로 bump + 의미 있는 CHANGELOG 항목을 직접 작성해 자동 삽입을 피하는 것이 좋다.
+출하 변경을 수동 bump 없이 릴리스해(3.x는 머지, 2.x는 수동 실행) CI가 PATCH를 자동 증가시킨 경우에는, 자동 bump 커밋이 git log 커밋 제목 기반의 최소 항목을 CHANGELOG에 자동 삽입한다(🔧 카테고리, "CI auto-bump" 명시). 이는 출하 추적용 placeholder이므로, 가능하면 PR에서 수동으로 bump + 의미 있는 CHANGELOG 항목을 직접 작성해 자동 삽입을 피하는 것이 좋다.
 
 ### 4. README.md 갱신 필요성을 확인하고 반영할 것
 
@@ -572,25 +576,34 @@ CI 실패가 보고되면 다음 순서로 대응한다.
 
 Nuitka standalone 빌드의 엔트리포인트는 `gui_main.py`다. `pyproject.toml`의 `[project.scripts]`에 정의된 콘솔 스크립트(`impulcifer`, `impulcifer_gui`, `impulcifer_gui_legacy`)는 pip 설치 전용이며 standalone 빌드와 무관하다.
 
-릴리스는 단일 게이트 파이프라인 `.github/workflows/publish.yml` 하나로 처리한다(이전의 `publish.yml` + `python-publish.yml` + `release-cross-platform.yml`을 통합). master push 시 다음 순서로 진행한다.
+릴리스 파이프라인은 둘이다. 3.x(정식)는 `.github/workflows/release-3x.yml`이 master push마다 자동으로, 2.x(유지보수)는 `.github/workflows/publish.yml`이 Actions에서 수동 실행(workflow_dispatch)할 때만 낸다. 둘 다 `release_gate.py` 게이트(`--product 3x` / `--product 2x`, 규칙은 위 "2. 런타임 변경 시 버전 bump")로 시작한다.
 
 ```
-master push
-  └─ gate           : 변경 경로 검사 → 출하 변경이면 (수동 bump 없을 때) PATCH 자동 bump
-  └─ publish-pypi   : (should_release일 때만) wheel 빌드 + PyPI 발행 — environment: PyPI (OIDC)
+master push → release-3x.yml (3.x)
+  └─ gate           : 태그 v<워크스페이스 버전> 대조 → release / PATCH 자동 bump / 중단
+  └─ build-windows  : cargo build + Velopack 패킹 → upgrade-windows (최신 2.x 설치본에 3.x 적용 스모크)
+  └─ build-macos / build-linux : Tauri 번들 + 업데이터 서명
+  └─ wheels         : 3 OS abi3 휠 + sdist → publish-pypi (environment: PyPI, OIDC)
+  └─ create-release : GitHub Release v<버전> (latest.json, releases.win.json, SHA256SUMS.txt)
+
+수동 실행 → publish.yml (2.x)
+  └─ gate           : 태그 v<pyproject 버전> 대조 → release / PATCH 자동 bump / 중단
+  └─ publish-pypi   : wheel 빌드 + PyPI 발행 — environment: PyPI (OIDC)
   └─ build-*        : (publish-pypi 성공 후에만) Windows/macOS/Linux Nuitka 빌드
-  └─ create-release : 산출물 모아 GitHub Release (태그 vX.Y.Z)
+  └─ create-release : GitHub Release v<버전> (make_latest: false)
+  └─ publish-aur    : AUR impulcifer-py313-bin
 ```
 
 핵심 불변식:
 
-- **파일명은 `publish.yml`을 유지해야 한다.** PyPI Trusted Publisher가 OIDC를 워크플로 파일명 + `environment: PyPI`에 바인딩하므로, 파일명을 바꾸면 pypi.org 설정을 함께 갱신하지 않는 한 발행이 깨진다.
-- **빌드는 PyPI 발행 성공 후에만 돈다**(`build-*` 잡의 `needs: publish-pypi`). 출하물에 영향 없는 push(docs/CI/tests만)는 `gate`가 `should_release=false`로 판정해 PyPI·Nuitka 모두 건너뛴다 — 러너 절약. 모든 post-gate 잡은 명시적 `if: needs.gate.outputs.should_release == 'true'`를 유지하고 `always()`/`!cancelled()`를 쓰지 말 것.
-- `gate`의 auto-bump 커밋은 `[skip ci]`를 달아 push하므로 파이프라인이 재트리거되지 않는다(무한 루프 방지). 후속 잡은 bump 커밋 SHA(`release_sha`)를 checkout한다.
-- 게이트 결정 로직은 `.github/scripts/release_gate.py`(순수 함수는 `tests/test_release_gate.py`로 고정), 빌드 플래그는 `build_scripts/nuitka_flags.py`가 정본이다.
+- **워크플로 파일명을 유지해야 한다.** PyPI Trusted Publisher가 OIDC를 워크플로 파일명 + `environment: PyPI`에 바인딩하고 `publish.yml`과 `release-3x.yml`이 모두 등록돼 있으므로, 어느 쪽이든 이름을 바꾸면 pypi.org 설정을 함께 갱신하지 않는 한 발행이 깨진다.
+- **`/releases/latest`는 3.x 몫이다.** 3.x 정식 설치본은 여기서 업데이트를 받고, 2.x 설치본도 여기서 3.x를 받아 올라간다. `publish.yml`의 GitHub Release는 `make_latest: false`를 유지할 것 — 빼면 2.x 수동 릴리스가 3.x 설치본의 업데이트 경로를 가로챈다.
+- **게이트가 릴리스하지 않으면 뒤 잡은 모두 건너뛴다.** 모든 post-gate 잡은 명시적 `if: needs.gate.outputs.should_release == 'true'`를 유지하고 `always()`/`!cancelled()`를 쓰지 말 것. 2.x 빌드는 PyPI 발행 성공 후에만 돈다(`build-*` 잡의 `needs: publish-pypi`).
+- `gate`의 auto-bump 커밋은 `[skip ci]`를 달아 push하므로 파이프라인이 재트리거되지 않는다(무한 루프 방지). 후속 잡은 bump 커밋 SHA(`release_sha`)를 checkout한다. 자동 bump는 master에서만 한다 — 다른 브랜치를 대상으로 실행하면 bump가 필요한 순간 게이트가 실패한다.
+- 게이트 결정 로직은 `.github/scripts/release_gate.py`(순수 함수와 두 워크플로의 트리거는 `tests/test_release_gate.py`로 고정), 2.x 빌드 플래그는 `build_scripts/nuitka_flags.py`가 정본이다.
 
-`build-linux.yml`·`build-macos.yml`은 `workflow_dispatch`/`workflow_call` 전용 수동 단일-플랫폼 빌드 도구로, master push에 자동 실행되지 않는다(러너 낭비 없음).
+`build-linux.yml`·`build-macos.yml`은 `workflow_dispatch`/`workflow_call` 전용 수동 단일-플랫폼 2.x 빌드 도구로, master push에 자동 실행되지 않는다(러너 낭비 없음).
 
 ### master 머지 후 릴리스 파이프라인 확인
 
-PR이 master에 머지되면 위 파이프라인이 돈다. 출하 변경이 포함된 PR을 머지한 뒤에는 `publish.yml` 실행 결과까지 확인한다 — `gate`가 의도대로 release/bump를 판정했는지, auto-bump가 발생했다면 master에 `chore(release): auto-bump ...` 커밋이 올라왔는지, PyPI 발행과 3-플랫폼 빌드가 통과했는지 본다. docs/CI/tests만 바꾼 PR이라면 `gate`가 `should_release=false`로 끝나고 빌드 잡들은 skip되는 것이 정상이다.
+PR이 master에 머지되면 `release-3x.yml`이 돈다. 3.x 출하 변경이 포함된 PR을 머지한 뒤에는 그 실행 결과까지 확인한다 — `gate`가 의도대로 release/bump를 판정했는지, auto-bump가 발생했다면 master에 `chore(release): auto-bump 3.x ...` 커밋이 올라왔는지, 세 OS 빌드·업그레이드 검사·PyPI 발행·GitHub Release가 통과했는지 본다. 3.x 출하 변경이 없는 PR이면 `gate`가 `should_release=false`로 끝나고 나머지 잡은 skip되는 것이 정상이다. 2.x 변경은 머지만으로는 배포되지 않는다. 배포가 필요하면 master를 대상으로 `publish.yml`을 실행하고 같은 방식으로 확인한다.
