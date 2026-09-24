@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.0.2 - 2026-09-24
+### 업데이트 창의 릴리스 노트를 CHANGELOG에서
+
+#### 🐛 버그 수정
+- **업데이트 창의 릴리스 노트가 배포 경로 안내문뿐이던 문제**: 3.x 릴리스는 GitHub Release 본문을 'Impulcifer 3.0.1 (Rust + Tauri 3.x). Windows installs update through Velopack (releases.win.json), …'이라는 고정 문구로 만들었고, 앱의 업데이트 창은 이 본문을 릴리스 노트로 보여 줍니다. 그래서 새 버전을 안내받아도 무엇이 바뀌었는지 알 수 없었습니다. 이제 `release-3x.yml`이 `.github/scripts/release_notes.py`로 CHANGELOG.md에서 그 버전의 `## <버전>` 절을 떼어 Release 본문과 `latest.json`의 `notes`에 씁니다. 절이 없으면 CHANGELOG 링크 한 줄로 대신하고 워크플로에 경고를 남기며, 현재 3.x 버전의 절이 없으면 `tests/test_release_notes.py`가 실패합니다.
+
+#### ⭐ 개선
+- **릴리스 노트를 서식대로 표시**: 업데이트 창은 릴리스 노트를 고정폭 글꼴의 날 텍스트로 보여 줬기 때문에 CHANGELOG의 `####`, `**`, 백틱이 그대로 드러났습니다. 이제 제목, 목록, 굵은 글씨, 코드 표기를 서식대로 그리고(HTML로 해석하지 않고 DOM 노드로 만듭니다), 긴 문단이 덜 접히도록 창을 720px로 넓혔습니다. 업데이트 창은 설치된 버전의 것이 뜨므로 3.0.1 이하에서 3.0.2로 올라갈 때는 서식 없이 보이고, 그다음 업데이트부터 서식이 적용됩니다. `apps/impulcifer-app/tests/ui_gallery.py`에 이 창을 현재 버전의 CHANGELOG 절로 그려 확인하는 장면을 더했습니다.
+
 ## 3.0.1 - 2026-09-24
 ### 3.x 화면 다듬기와 설정 항목 대조, 3.x 자동 릴리스
 

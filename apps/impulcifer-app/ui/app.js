@@ -934,6 +934,90 @@ function setUpdateProgress(value) {
   $("update-progress").style.width = `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 }
 
+/* Release notes are the version's CHANGELOG.md section (release-3x.yml), so
+   they arrive as Markdown. Render the subset CHANGELOG uses (headings,
+   bullets, **bold**, `code`, [text](url), fenced blocks) as DOM nodes; the
+   text never goes through innerHTML, and links keep only their text. */
+/** @param {HTMLElement} target @param {string} text */
+function appendInlineMarkdown(target, text) {
+  const pattern = /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\([^)\s]+\)/g;
+  let last = 0;
+  for (const match of text.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (at > last) target.append(text.slice(last, at));
+    if (match[1] !== undefined) {
+      const code = document.createElement("code");
+      code.textContent = match[1];
+      target.append(code);
+    } else if (match[2] !== undefined) {
+      const strong = document.createElement("strong");
+      appendInlineMarkdown(strong, match[2]);
+      target.append(strong);
+    } else {
+      appendInlineMarkdown(target, match[3]);
+    }
+    last = at + match[0].length;
+  }
+  if (last < text.length) target.append(text.slice(last));
+}
+
+/** @param {HTMLElement} target @param {string} markdown */
+function renderReleaseNotes(target, markdown) {
+  target.replaceChildren();
+  /** @type {HTMLUListElement | null} */
+  let list = null;
+  /** @type {HTMLElement | null} */
+  let fence = null;
+  for (const raw of markdown.replace(/\r\n?/g, "\n").split("\n")) {
+    if (/^\s*```/.test(raw)) {
+      if (fence) {
+        fence = null;
+      } else {
+        fence = document.createElement("pre");
+        target.append(fence);
+        list = null;
+      }
+      continue;
+    }
+    if (fence) {
+      fence.textContent += (fence.textContent ? "\n" : "") + raw;
+      continue;
+    }
+    const line = raw.trimEnd();
+    if (!line.trim() || /^\s*(-{3,}|\*{3,})$/.test(line)) {
+      list = null;
+      continue;
+    }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    const bullet = /^(\s*)[-*]\s+(.*)$/.exec(line);
+    if (heading) {
+      const node = document.createElement("p");
+      node.className = `notes-heading notes-h${heading[1].length}`;
+      appendInlineMarkdown(node, heading[2]);
+      target.append(node);
+      list = null;
+    } else if (bullet) {
+      if (!list) {
+        list = document.createElement("ul");
+        target.append(list);
+      }
+      const item = document.createElement("li");
+      if (bullet[1].length >= 2) item.className = "nested";
+      appendInlineMarkdown(item, bullet[2]);
+      list.append(item);
+    } else if (list && /^\s/.test(line) && list.lastElementChild instanceof HTMLElement) {
+      const item = list.lastElementChild;
+      item.append(" ");
+      appendInlineMarkdown(item, line.trim());
+    } else {
+      const node = document.createElement("p");
+      appendInlineMarkdown(node, line.trim());
+      target.append(node);
+      list = null;
+    }
+  }
+}
+
 /** @param {UpdateInfo} info */
 function showUpdateModal(info) {
   updateState.info = info;
@@ -941,7 +1025,7 @@ function showUpdateModal(info) {
     current: info.current_version,
     latest: info.latest_version,
   });
-  $("update-notes").textContent = info.release_notes || t("update_no_notes");
+  renderReleaseNotes($("update-notes"), info.release_notes || t("update_no_notes"));
   $("update-progress-row").hidden = true;
   setUpdateProgress(0);
   $("update-status").textContent = "";
