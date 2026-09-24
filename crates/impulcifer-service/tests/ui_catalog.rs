@@ -110,7 +110,10 @@ fn ui_scripts_and_markup_are_present_in_the_app_crate() {
 /// text without anyone noticing.
 #[test]
 fn translated_error_messages_are_still_sent_by_the_service() {
-    let js = std::fs::read_to_string(ui_dir().join("app.js")).unwrap();
+    // Windows checkouts may carry CRLF line endings.
+    let js = std::fs::read_to_string(ui_dir().join("app.js"))
+        .unwrap()
+        .replace("\r\n", "\n");
     let start = js.find("function errorSentence(").unwrap();
     let body = &js[start..start + js[start..].find("\n}\n").unwrap()];
     let messages: Vec<_> = regex::Regex::new(r#"case "([^"]+)":"#)
