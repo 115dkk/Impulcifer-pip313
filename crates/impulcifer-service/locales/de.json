@@ -41,7 +41,7 @@
   "cli_info_parallel_threads": "Parallele Verarbeitung mit {threads} Threads",
   "checkbox_custom_eq": "Eigener EQ",
   "studio_disclosure_custom_eq_desc": "AutoEQ-CSV oder Equalizer-APO-Konfiguration, für beide Ohren oder je Ohr",
-  "eq_formats_hint": "Dateien namens eq, eq-left und eq-right im Aufnahmeordner werden automatisch verwendet (zuerst .csv, dann .txt). Eine anderswo gewählte Datei wird an Ort und Stelle gelesen und nie kopiert.",
+  "eq_formats_hint": "Dateien namens eq, eq-left und eq-right im Aufnahmeordner werden automatisch verwendet (zuerst .csv, dann .txt).",
   "eq_slot_both": "Beide Ohren",
   "eq_slot_left": "Linkes Ohr",
   "eq_slot_right": "Rechtes Ohr",
@@ -67,5 +67,11 @@
   "eq_preview_empty": "Für keines der Ohren gilt eine EQ-Datei.",
   "eq_preview_note": "Verstärkung, bevor die Pipeline glättet und Anhebungen auf 40 dB begrenzt.",
   "eq_dir_needed": "Wählen Sie oben den Aufnahmeordner, um zu sehen, welche EQ-Dateien gelten.",
-  "eq_preview_blocked": "Eine der Dateien oben ist nicht lesbar, die Verarbeitung würde mit einem Fehler abbrechen. Korrigieren Sie sie oder schalten Sie den Platz aus."
+  "eq_preview_blocked": "Eine der Dateien oben ist nicht lesbar, die Verarbeitung würde mit einem Fehler abbrechen. Korrigieren Sie sie oder schalten Sie den Platz aus.",
+  "error_measurement_dir_missing": "Aufnahmeordner nicht gefunden: {path}",
+  "error_no_hrir_recordings": "Der Aufnahmeordner enthält keine Lautsprecheraufnahmen wie FL,FR.wav.",
+  "error_folder_missing": "Ordner nicht gefunden: {path}",
+  "error_eq_file_missing": "EQ-Datei nicht gefunden: {path}",
+  "error_job_busy": "Es läuft bereits ein anderer Vorgang. Warten Sie, bis er fertig ist, oder brechen Sie ihn zuerst ab.",
+  "recovery_failed_summary": "Wiederherstellung nicht möglich: {message}"
 }

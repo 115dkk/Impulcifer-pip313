@@ -40,6 +40,7 @@
   --field-border: #cdd0d3;
   --eq-left: #2563eb;
   --eq-right: #dc2626;
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235f6368' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: light;
 }
 
@@ -68,6 +69,7 @@
   --field-border: #33373d;
   --eq-left: #60a5fa;
   --eq-right: #f87171;
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a3a8ae' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
 
@@ -87,7 +89,7 @@ html, body { height: 100%; }
 
 body {
   margin: 0;
-  font: 13px/1.5 "Pretendard", "Segoe UI", system-ui, sans-serif;
+  font: 15px/1.5 "Pretendard", "Segoe UI", system-ui, sans-serif;
   background: var(--bg-1);
   color: var(--fg-0);
 }
@@ -121,8 +123,8 @@ h1, h2, p { margin: 0; }
 }
 
 .brand-logo { width: 28px; height: 28px; }
-.brand-name { font-size: 15px; font-weight: 700; }
-.brand-version { font-size: 12px; color: var(--fg-2); }
+.brand-name { font-size: 17px; font-weight: 700; }
+.brand-version { font-size: 13px; color: var(--fg-2); }
 
 .rule { height: 1px; margin: 0 10px; background: var(--line-soft); }
 
@@ -159,6 +161,7 @@ h1, h2, p { margin: 0; }
   padding: 14px;
 }
 
+/* The version/runtime line keeps its size; it is status, not reading text. */
 .runtime { font-size: 11px; color: var(--fg-2); overflow-wrap: anywhere; }
 
 /* First-run language picker: two-column grid of language buttons. */
@@ -186,8 +189,8 @@ h1, h2, p { margin: 0; }
   margin-bottom: 18px;
 }
 
-.page-header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
-.subtitle { margin-top: 4px; font-size: 13px; color: var(--fg-2); }
+.page-header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.subtitle { margin-top: 4px; font-size: 15px; color: var(--fg-2); }
 .header-actions { display: flex; gap: 8px; }
 
 /* ----------------------------------------------------------------- card */
@@ -214,14 +217,14 @@ h1, h2, p { margin: 0; }
   border-radius: 3px;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 :root[data-theme="dark"] .card-num { color: #9ec3ff; }
 
-.card-title { font-size: 14px; font-weight: 700; }
-.card-meta { margin-left: auto; font-size: 12px; color: var(--fg-2); }
+.card-title { font-size: 16px; font-weight: 700; }
+.card-meta { margin-left: auto; font-size: 13px; color: var(--fg-2); }
 .card-head .btn-link { margin-left: auto; }
 
 .card-body {
@@ -252,7 +255,24 @@ input[type="text"], input:not([type]), input[type="number"], select {
   font: inherit;
 }
 
-input.mono { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+/* The native select draws its arrow about 4px from the right border and
+   indents its text 4px past the padding, so selects neither breathe on the
+   right nor line up with the text fields above and below. Draw the arrow
+   instead: the text starts where an input's does, and the arrow sits 12px
+   in from the border, like the text on the left. */
+select {
+  appearance: none;
+  padding-right: 34px;
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+  text-overflow: ellipsis;
+}
+
+/* Field text in the monospace face stays one step under the body size,
+   where JetBrains Mono matches Pretendard optically. */
+input.mono { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 14px; }
 input.num { width: 110px; }
 select.num { width: 130px; }
 
@@ -284,7 +304,11 @@ input::placeholder { color: var(--fg-3); }
 
 #bf-decay-grid input.num { width: 100%; }
 
-.mini-label { font-size: 12px; color: var(--fg-2); }
+/* The generated-sweep rows sit in their own wrapper; without the card's
+   row gap the speaker list and the track layout touched. */
+#rf-sweep-params { display: grid; gap: 12px; }
+
+.mini-label { font-size: 13px; color: var(--fg-2); }
 
 .check-row {
   display: flex;
@@ -301,12 +325,12 @@ input[type="checkbox"] {
   accent-color: var(--accent);
 }
 
-.hint { font-size: 12px; color: var(--fg-2); }
-.hint.mono { font-size: 11px; }
+.hint { font-size: 13px; color: var(--fg-2); }
+.hint.mono { font-size: 12px; }
 
 .actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.recovery-status { font-size: 14px; font-weight: 700; }
+.recovery-status { font-size: 16px; font-weight: 700; }
 
 .recovery-result[data-status="running"] .recovery-status,
 .recovery-result[data-status="running"] .card-meta { color: var(--accent); }
@@ -323,7 +347,7 @@ input[type="checkbox"] {
 }
 
 .recovery-file-row > span:first-child { color: var(--fg-1); font-weight: 700; }
-.recovery-file-row > span:last-child { color: var(--fg-2); font-size: 11px; overflow-wrap: anywhere; }
+.recovery-file-row > span:last-child { color: var(--fg-2); font-size: 12px; overflow-wrap: anywhere; }
 
 /* Recovery inventory uses the existing card, field and chip dimensions. */
 #recovery-inventory {
@@ -385,7 +409,7 @@ input[type="checkbox"] {
   background: transparent;
   color: var(--accent);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -415,7 +439,7 @@ input[type="checkbox"] {
 
 .disclosure-text { display: grid; gap: 2px; min-width: 0; }
 .disclosure-title { font-weight: 700; }
-.disclosure-desc { font-size: 12px; color: var(--fg-2); }
+.disclosure-desc { font-size: 13px; color: var(--fg-2); }
 
 .switch {
   position: relative;
@@ -479,14 +503,14 @@ input[type="checkbox"] {
 .eq-slot-label { color: var(--fg-1); font-weight: 700; }
 .eq-slot-file { display: grid; gap: 3px; min-width: 0; }
 .eq-file-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
-.eq-file-name { font-size: 12px; overflow-wrap: anywhere; }
+.eq-file-name { font-size: 13px; overflow-wrap: anywhere; }
 .eq-slot[data-state="missing"] .eq-file-name,
 .eq-slot[data-state="off"] .eq-file-name { color: var(--fg-3); font-family: inherit; }
 .eq-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.eq-tag { height: 20px; padding: 0 7px; font-size: 11px; }
+.eq-tag { height: 22px; padding: 0 7px; font-size: 12px; }
 .chip.eq-format-eqapo { background: var(--accent-soft); color: var(--accent-strong); }
 :root[data-theme="dark"] .chip.eq-format-eqapo { color: #9ec3ff; }
-.eq-error { color: var(--err); font-size: 12px; }
+.eq-error { color: var(--err); font-size: 13px; }
 .eq-slot-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
 
 .eq-result {
@@ -499,7 +523,7 @@ input[type="checkbox"] {
 
 .eq-result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; }
 .eq-result-title { font-weight: 700; }
-.eq-ears { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--fg-2); font-size: 12px; }
+.eq-ears { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--fg-2); font-size: 13px; }
 .eq-ear { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 .eq-ear b { color: var(--fg-1); }
 .eq-swatch { flex: none; width: 16px; height: 0; border-top: 2px solid var(--eq-left); }
@@ -510,7 +534,7 @@ input[type="checkbox"] {
 .eq-preview { display: block; width: 100%; height: 180px; }
 .eq-grid { stroke: var(--line); stroke-width: 1; }
 .eq-zero { stroke: var(--fg-3); stroke-width: 1; }
-.eq-axis { fill: var(--fg-2); font: 10px "JetBrains Mono", "Cascadia Mono", Consolas, monospace; }
+.eq-axis { fill: var(--fg-2); font: 11px "JetBrains Mono", "Cascadia Mono", Consolas, monospace; }
 .eq-curve { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .eq-curve-left { stroke: var(--eq-left); }
 .eq-curve-right { stroke: var(--eq-right); stroke-dasharray: 7 4; }
@@ -544,7 +568,7 @@ input[type="checkbox"] {
   border-radius: 6px;
   background: var(--bg-0);
   color: var(--fg-1);
-  font: 12px/1.55 "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  font: 13px/1.55 "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -566,7 +590,7 @@ input[type="checkbox"] {
   border-radius: 4px;
   background: var(--bg-3);
   color: var(--fg-2);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -574,7 +598,7 @@ input[type="checkbox"] {
 .chip.done { color: var(--fg-1); }
 .chip.done::before { content: "✓ "; color: var(--ok); }
 
-.rec-status { font-size: 13px; font-weight: 700; }
+.rec-status { font-size: 15px; font-weight: 700; }
 
 /* Pipeline checklist (Studio activity card): done / current / upcoming. */
 .steps {
@@ -589,7 +613,7 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--fg-3);
 }
 
@@ -601,7 +625,7 @@ input[type="checkbox"] {
   height: 18px;
   border: 1px solid var(--line);
   border-radius: 50%;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -669,7 +693,7 @@ input[type="checkbox"] {
   gap: 10px;
 }
 
-.modal-head h3 { margin: 0; font-size: 16px; }
+.modal-head h3 { margin: 0; font-size: 18px; }
 .modal .log { min-height: 100px; max-height: 180px; }
 .modal-actions { justify-content: flex-end; }
 
@@ -677,7 +701,7 @@ input[type="checkbox"] {
 
 .about-hero { align-items: start; }
 .about-logo { width: 72px; height: 72px; }
-.about-title { font-size: 20px; font-weight: 700; }
+.about-title { font-size: 22px; font-weight: 700; }
 
 .version-pill {
   display: inline-block;
@@ -687,7 +711,7 @@ input[type="checkbox"] {
   border-radius: 3px;
   background: var(--bg-3);
   color: var(--fg-1);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.05em;
 }
@@ -761,7 +785,7 @@ input[type="checkbox"] {
 }
 
 [data-skin="stable"] .card-num { display: none; }
-[data-skin="stable"] .card-title { font-size: 16px; }
+[data-skin="stable"] .card-title { font-size: 18px; }
 
 /* Stable is not a disclosure shell: gated groups read as plain checkboxes
    that reveal their sub-options (CTk toggle_* convention). Advanced

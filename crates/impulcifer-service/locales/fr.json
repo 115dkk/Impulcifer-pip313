@@ -41,7 +41,7 @@
   "cli_info_parallel_threads": "Traitement en parallèle sur {threads} threads",
   "checkbox_custom_eq": "EQ personnalisé",
   "studio_disclosure_custom_eq_desc": "CSV AutoEQ ou configuration Equalizer APO, pour les deux oreilles ou par oreille",
-  "eq_formats_hint": "Les fichiers eq, eq-left et eq-right du dossier d’enregistrement sont utilisés automatiquement (.csv d’abord, puis .txt). Un fichier choisi ailleurs est lu sur place, jamais copié.",
+  "eq_formats_hint": "Les fichiers eq, eq-left et eq-right du dossier d’enregistrement sont utilisés automatiquement (.csv d’abord, puis .txt).",
   "eq_slot_both": "Deux oreilles",
   "eq_slot_left": "Oreille gauche",
   "eq_slot_right": "Oreille droite",
@@ -67,5 +67,11 @@
   "eq_preview_empty": "Aucun fichier d’EQ ne s’applique à l’une ou l’autre oreille.",
   "eq_preview_note": "Gain avant le lissage du traitement et la limite des accentuations à 40 dB.",
   "eq_dir_needed": "Choisissez le dossier d’enregistrement ci-dessus pour voir quels fichiers d’EQ s’appliquent.",
-  "eq_preview_blocked": "Un des fichiers ci-dessus est illisible : le traitement s’arrêterait sur une erreur. Corrigez-le ou désactivez cet emplacement."
+  "eq_preview_blocked": "Un des fichiers ci-dessus est illisible : le traitement s’arrêterait sur une erreur. Corrigez-le ou désactivez cet emplacement.",
+  "error_measurement_dir_missing": "Dossier d’enregistrement introuvable : {path}",
+  "error_no_hrir_recordings": "Le dossier d’enregistrement ne contient aucun enregistrement d’enceinte comme FL,FR.wav.",
+  "error_folder_missing": "Dossier introuvable : {path}",
+  "error_eq_file_missing": "Fichier d’EQ introuvable : {path}",
+  "error_job_busy": "Une autre tâche est déjà en cours. Attendez qu’elle se termine ou annulez-la d’abord.",
+  "recovery_failed_summary": "Restauration impossible : {message}"
 }

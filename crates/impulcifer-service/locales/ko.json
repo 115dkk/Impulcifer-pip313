@@ -41,7 +41,7 @@
   "cli_info_parallel_threads": "{threads}개 스레드로 병렬 처리합니다",
   "checkbox_custom_eq": "사용자 EQ",
   "studio_disclosure_custom_eq_desc": "AutoEQ CSV나 Equalizer APO 설정 파일을 양쪽 귀 또는 한쪽 귀에 적용합니다",
-  "eq_formats_hint": "녹음 폴더의 eq, eq-left, eq-right 파일을 자동으로 씁니다(.csv가 먼저, 없으면 .txt). 다른 곳에서 고른 파일은 그 자리에서 읽고 폴더로 복사하지 않습니다.",
+  "eq_formats_hint": "녹음 폴더의 eq, eq-left, eq-right 파일을 자동으로 씁니다(.csv가 먼저, 없으면 .txt).",
   "eq_slot_both": "양쪽 귀",
   "eq_slot_left": "왼쪽 귀",
   "eq_slot_right": "오른쪽 귀",
@@ -67,5 +67,11 @@
   "eq_preview_empty": "어느 귀에도 적용할 EQ 파일이 없습니다.",
   "eq_preview_note": "파이프라인이 평활화하고 부스트를 40 dB로 제한하기 전의 게인입니다.",
   "eq_dir_needed": "위에서 녹음 폴더를 고르면 어떤 EQ 파일이 적용되는지 보여 줍니다.",
-  "eq_preview_blocked": "위 파일 가운데 읽을 수 없는 것이 있어 처리가 오류로 멈춥니다. 파일을 고치거나 그 칸을 끄세요."
+  "eq_preview_blocked": "위 파일 가운데 읽을 수 없는 것이 있어 처리가 오류로 멈춥니다. 파일을 고치거나 그 칸을 끄세요.",
+  "error_measurement_dir_missing": "녹음 폴더를 찾을 수 없습니다: {path}",
+  "error_no_hrir_recordings": "녹음 폴더에 FL,FR.wav 같은 스피커 녹음 파일이 없습니다.",
+  "error_folder_missing": "폴더를 찾을 수 없습니다: {path}",
+  "error_eq_file_missing": "EQ 파일을 찾을 수 없습니다: {path}",
+  "error_job_busy": "다른 작업이 이미 실행 중입니다. 끝나기를 기다리거나 먼저 취소하세요.",
+  "recovery_failed_summary": "복원하지 못했습니다: {message}"
 }

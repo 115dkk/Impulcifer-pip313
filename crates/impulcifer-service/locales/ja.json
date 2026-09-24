@@ -41,7 +41,7 @@
   "cli_info_parallel_threads": "{threads} スレッドで並列処理します",
   "checkbox_custom_eq": "カスタムEQ",
   "studio_disclosure_custom_eq_desc": "AutoEQ の CSV または Equalizer APO の設定ファイルを両耳または片耳に適用します",
-  "eq_formats_hint": "録音フォルダーの eq、eq-left、eq-right ファイルを自動で使います（.csv を優先し、なければ .txt）。別の場所から選んだファイルはその場で読み込み、フォルダーにはコピーしません。",
+  "eq_formats_hint": "録音フォルダーの eq、eq-left、eq-right ファイルを自動で使います（.csv を優先し、なければ .txt）。",
   "eq_slot_both": "両耳",
   "eq_slot_left": "左耳",
   "eq_slot_right": "右耳",
@@ -67,5 +67,11 @@
   "eq_preview_empty": "どちらの耳にも適用する EQ ファイルがありません。",
   "eq_preview_note": "パイプラインが平滑化し、ブーストを 40 dB に制限する前のゲインです。",
   "eq_dir_needed": "上で録音フォルダーを選ぶと、適用される EQ ファイルを表示します。",
-  "eq_preview_blocked": "上のファイルのうち読み込めないものがあるため、処理はエラーで止まります。修正するかその枠をオフにしてください。"
+  "eq_preview_blocked": "上のファイルのうち読み込めないものがあるため、処理はエラーで止まります。修正するかその枠をオフにしてください。",
+  "error_measurement_dir_missing": "録音フォルダーが見つかりません: {path}",
+  "error_no_hrir_recordings": "録音フォルダーに FL,FR.wav などのスピーカー録音がありません。",
+  "error_folder_missing": "フォルダーが見つかりません: {path}",
+  "error_eq_file_missing": "EQ ファイルが見つかりません: {path}",
+  "error_job_busy": "別の処理がすでに実行中です。終わるのを待つか、先にキャンセルしてください。",
+  "recovery_failed_summary": "復元できませんでした: {message}"
 }
