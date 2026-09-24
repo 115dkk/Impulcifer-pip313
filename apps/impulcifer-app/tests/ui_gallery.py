@@ -18,7 +18,7 @@ LANGUAGES = ("en", "ko")
 VIEWS = ("settings", "info", "recorder")
 RECOVERY_STATES = ("empty", "planning", "ready", "nothing", "error", "succeeded")
 EQ_SCENARIOS = ("eq-folder", "eq-mixed")
-EXPECTED_SHOTS = 2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2
+EXPECTED_SHOTS = 2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2
 
 
 def catalog(language):
@@ -29,9 +29,23 @@ def catalog(language):
     return merged
 
 
+def release_notes():
+    """The update dialog shows the release body, which release-3x.yml takes
+    from the workspace version's CHANGELOG section; render that same text."""
+    sys.path.insert(0, str(ROOT / ".github/scripts"))
+    from release_gate import workspace_version
+    from release_notes import changelog_section
+    version = workspace_version((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+    notes = changelog_section((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), version)
+    assert notes, f"CHANGELOG.md has no section for {version}"
+    return version, notes
+
+
 def mock_script(skin, theme, language, scenario):
+    version, notes = release_notes() if scenario == "update" else (None, None)
     fixture = json.dumps({"skin": skin, "theme": theme, "language": language,
                          "scenario": scenario, "strings": catalog(language),
+                         "release": {"version": version, "notes": notes},
                          "catalogs": {code: catalog(code) for code in LANGUAGES}}, ensure_ascii=False)
     return "const fixture = " + fixture + ";\n" + r"""
 (() => {
@@ -108,8 +122,11 @@ def mock_script(skin, theme, language, scenario):
       return ok({job: {...job("succeeded"), result}, events: [], next_seq: 1});
     },
     cancel_job: () => ok({job: job("cancelled")}),
-    check_for_updates: () => ok({update_available: false, current_version: "3.0.0-alpha.1", latest_version: "3.0.0-alpha.1",
-      download_url: null, release_notes: null, release_url: null}),
+    check_for_updates: () => scenario === "update"
+      ? ok({update_available: true, current_version: "3.0.0-alpha.1", latest_version: fixture.release.version,
+        download_url: "https://example.invalid/Impulcifer-win-Setup.exe", release_notes: fixture.release.notes, release_url: null})
+      : ok({update_available: false, current_version: "3.0.0-alpha.1", latest_version: "3.0.0-alpha.1",
+        download_url: null, release_notes: null, release_url: null}),
     start_update: () => {kind = "update"; return ok({job: job("running")});},
     apply_pending_update: () => ok({restarting: true}),
     select_directory: () => ok({path: directory}),
@@ -342,6 +359,17 @@ def render_gallery(output):
                 page.locator("#bf-eq-preview polyline").first.wait_for()
             page.wait_for_timeout(50)
             shots.append(shoot(page, output, f"processing-eq-{skin}-{language}-{theme}-{scenario}", errors))
+            context.close()
+        for theme, language in itertools.product(THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, "studio", theme, language, "update")
+            navigate(page, "info")
+            page.locator("#btn-check-updates").click()
+            page.locator("#update-modal:not([hidden])").wait_for()
+            notes = page.locator("#update-notes")
+            assert notes.locator(".notes-heading").count() > 0 and notes.locator("li").count() > 0
+            assert notes.locator("strong").count() > 0
+            assert "**" not in notes.inner_text() and "## " not in notes.inner_text()
+            shots.append(shoot(page, output, f"update-studio-{language}-{theme}", errors))
             context.close()
         browser.close()
     assert len(shots) == EXPECTED_SHOTS, f"expected {EXPECTED_SHOTS}, got {len(shots)}"

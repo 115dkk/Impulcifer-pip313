@@ -483,6 +483,11 @@ jobs:
         with:
           path: artifacts
 
+      # The update dialog of an installed app shows the release body as the
+      # release notes, so the body is this version's CHANGELOG.md section.
+      - name: Release notes from CHANGELOG.md
+        run: python .github/scripts/release_notes.py --version "$VERSION" --repo "$GITHUB_REPOSITORY" --tag "$TAG" --out release-notes.md
+
       - name: Assemble the asset set, latest.json and SHA256SUMS.txt
         shell: python
         run: |
@@ -513,7 +518,7 @@ jobs:
               platforms[key] = {"url": base + n, "signature": signature}
           latest = {
               "version": version,
-              "notes": f"Impulcifer {version}. See CHANGELOG.md.",
+              "notes": pathlib.Path("release-notes.md").read_text(encoding="utf-8"),
               "pub_date": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
               "platforms": platforms,
           }
@@ -530,15 +535,15 @@ jobs:
       - name: Create or update the release
         run: |
           set -euo pipefail
-          notes="Impulcifer ${VERSION} (Rust + Tauri 3.x). Windows installs update through Velopack (releases.win.json), macOS and Linux bundles through the Tauri updater (latest.json). Details in CHANGELOG.md."
           flags=()
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" release/* --clobber
+            gh release edit "$TAG" --notes-file release-notes.md
           else
             # A missing tag is created at the released commit (the gate's
             # auto-bump commit when it bumped), never at the default branch head.
-            gh release create "$TAG" release/* --target "$RELEASE_SHA" --title "Impulcifer ${VERSION}" --notes "$notes" "${flags[@]}"
+            gh release create "$TAG" release/* --target "$RELEASE_SHA" --title "Impulcifer ${VERSION}" --notes-file release-notes.md "${flags[@]}"
           fi
           gh release view "$TAG" --json assets -q '.assets[].name'
           # Prerelease installs (macOS/Linux Tauri updater) cannot see GitHub
