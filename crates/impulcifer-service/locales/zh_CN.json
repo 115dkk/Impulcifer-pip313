@@ -41,7 +41,7 @@
   "cli_info_parallel_threads": "使用 {threads} 个线程并行处理",
   "checkbox_custom_eq": "自定义 EQ",
   "studio_disclosure_custom_eq_desc": "将 AutoEQ CSV 或 Equalizer APO 配置应用到双耳或单耳",
-  "eq_formats_hint": "自动使用录音文件夹中的 eq、eq-left、eq-right 文件（优先 .csv，其次 .txt）。从其他位置选择的文件会在原处读取，不会复制。",
+  "eq_formats_hint": "自动使用录音文件夹中的 eq、eq-left、eq-right 文件（优先 .csv，其次 .txt）。",
   "eq_slot_both": "双耳",
   "eq_slot_left": "左耳",
   "eq_slot_right": "右耳",
@@ -67,5 +67,11 @@
   "eq_preview_empty": "没有 EQ 文件应用到任一耳。",
   "eq_preview_note": "处理流程平滑并将提升限制在 40 dB 之前的增益。",
   "eq_dir_needed": "在上方选择录音文件夹，即可查看将应用哪些 EQ 文件。",
-  "eq_preview_blocked": "上方有文件无法读取，处理会报错停止。请修正该文件或关闭对应项。"
+  "eq_preview_blocked": "上方有文件无法读取，处理会报错停止。请修正该文件或关闭对应项。",
+  "error_measurement_dir_missing": "找不到录音文件夹：{path}",
+  "error_no_hrir_recordings": "录音文件夹中没有 FL,FR.wav 之类的扬声器录音。",
+  "error_folder_missing": "找不到文件夹：{path}",
+  "error_eq_file_missing": "找不到 EQ 文件：{path}",
+  "error_job_busy": "已有其他任务正在运行。请等待其完成，或先取消它。",
+  "recovery_failed_summary": "无法恢复：{message}"
 }

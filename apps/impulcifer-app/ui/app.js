@@ -213,14 +213,42 @@ function isOpen(id) {
   return $(id).classList.contains("open");
 }
 
+/* The service keeps the 2.x error envelope (a code, an English message and
+   machine details); people read a sentence in the page language instead.
+   A message the service sends with fixed text maps to its catalogue entry
+   (ui_catalog.rs checks that the service still sends each text below), a
+   missing file names its path, and anything else shows the service's own
+   message. The code and the raw details are never shown. */
+/** @param {IpcError} error */
+function errorSentence(error) {
+  const shareError = shareModeError(error);
+  if (shareError) return shareError;
+  const details = error.details || {};
+  const path = String(details.path ?? details.directory ?? "");
+  switch (error.message) {
+    case "Measurement directory does not exist.":
+      return fmt(t("error_measurement_dir_missing"), { path });
+    case "No HRIR recordings found in the directory.":
+      return t("error_no_hrir_recordings");
+    case "Folder does not exist.":
+    case "Recovery directory does not exist.":
+    case "The selected recovery directory does not exist.":
+      return fmt(t("error_folder_missing"), { path });
+    case "Custom EQ file does not exist.":
+      return fmt(t("error_eq_file_missing"), { path });
+    case "Playback file does not exist.":
+      return fmt(t("message_play_file_not_exist"), { file: path });
+    case "Another job is already running.":
+      return t("error_job_busy");
+  }
+  if (error.code === "FILE_NOT_FOUND") return `${t("error_file_not_found")}: ${path || error.message}`;
+  return error.message;
+}
+
 /** @param {Envelope<unknown>} response */
 function errorText(response) {
   if (!response || response.ok) return "Unknown error";
-  const shareError = shareModeError(response.error);
-  if (shareError) return shareError;
-  const detail = response.error.details || {};
-  const extra = Object.keys(detail).length ? ` ${JSON.stringify(detail)}` : "";
-  return `${response.error.code}: ${response.error.message}${extra}`;
+  return errorSentence(response.error);
 }
 
 /** @param {string} message */
@@ -514,7 +542,7 @@ function finishRecorderStatus(job) {
     setRecorderStatus(t("recording_status_complete"), detail);
     appendLog(detail);
   } else if (job.status === "failed") {
-    const message = job.error ? shareModeError(job.error) || job.error.message : "";
+    const message = job.error ? errorSentence(job.error) : "";
     setRecorderStatus(t("recording_status_error"), message);
     if (state.skin === "stable" && job.error && shareModeError(job.error)) window.alert(message);
   }
@@ -607,12 +635,9 @@ function renderRecoveryJob(job) {
     return;
   }
 
-  const error = job.error || { code: "UNKNOWN_ERROR", message: "" };
+  const error = job.error || { code: "UNKNOWN_ERROR", message: "", details: {}, retryable: false };
   state.lastRecoveryOutputDir = null;
-  detail.textContent = fmt(t("recovery_failed_summary"), {
-    code: error.code,
-    message: error.message,
-  });
+  detail.textContent = fmt(t("recovery_failed_summary"), { message: errorSentence(error) });
 }
 
 /** @returns {RecoveryRequest} */
@@ -673,7 +698,7 @@ function renderRecoveryInventory() {
   $("recovery-ledger").hidden = !visible;
   const message = $("recovery-inventory-message");
   message.textContent = state.recoveryPlanError
-    ? fmt(t("recovery_failed_summary"), { ...state.recoveryPlanError })
+    ? fmt(t("recovery_failed_summary"), { message: errorSentence(state.recoveryPlanError) })
     : t(`recovery_inventory_${state.recoveryState}`);
   if (!visible || !plan) return;
   $("recovery-source-badge").textContent = fmt(t("recovery_inventory_source"), { source: recoverySourceLabel(plan.source_kind) });
@@ -868,7 +893,7 @@ async function pollJob() {
   renderJobState(job);
   if (["succeeded", "failed", "cancelled"].includes(job.status)) {
     if (job.status === "succeeded") setProgress(1);
-    if (job.error) appendLog(shareModeError(job.error) || `${job.error.code}: ${job.error.message}`);
+    if (job.error) appendLog(errorSentence(job.error));
     if (job.kind === "brir") {
       if (job.status === "succeeded") {
         completeSteps();
@@ -1031,7 +1056,7 @@ async function pollUpdateJob() {
         Boolean(result.requires_restart),
       );
     } else {
-      finishUpdate(job.error ? job.error.message : t("update_error_apply"), false);
+      finishUpdate(job.error ? errorSentence(job.error) : t("update_error_apply"), false);
     }
     return;
   }

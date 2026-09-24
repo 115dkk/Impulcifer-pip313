@@ -41,7 +41,7 @@
   "cli_info_parallel_threads": "Procesamiento en paralelo con {threads} hilos",
   "checkbox_custom_eq": "EQ personalizado",
   "studio_disclosure_custom_eq_desc": "CSV de AutoEQ o configuración de Equalizer APO, para ambos oídos o por oído",
-  "eq_formats_hint": "Los archivos eq, eq-left y eq-right de la carpeta de grabación se usan automáticamente (primero .csv, luego .txt). Un archivo elegido en otro lugar se lee donde está y nunca se copia.",
+  "eq_formats_hint": "Los archivos eq, eq-left y eq-right de la carpeta de grabación se usan automáticamente (primero .csv, luego .txt).",
   "eq_slot_both": "Ambos oídos",
   "eq_slot_left": "Oído izquierdo",
   "eq_slot_right": "Oído derecho",
@@ -67,5 +67,11 @@
   "eq_preview_empty": "Ningún archivo de EQ se aplica a ningún oído.",
   "eq_preview_note": "Ganancia antes de que el proceso la suavice y limite los realces a 40 dB.",
   "eq_dir_needed": "Elija arriba la carpeta de grabación para ver qué archivos de EQ se aplican.",
-  "eq_preview_blocked": "Uno de los archivos de arriba no se puede leer, así que el procesamiento se detendría con un error. Corríjalo o desactive esa ranura."
+  "eq_preview_blocked": "Uno de los archivos de arriba no se puede leer, así que el procesamiento se detendría con un error. Corríjalo o desactive esa ranura.",
+  "error_measurement_dir_missing": "No se encontró la carpeta de grabación: {path}",
+  "error_no_hrir_recordings": "La carpeta de grabación no contiene grabaciones de altavoces como FL,FR.wav.",
+  "error_folder_missing": "No se encontró la carpeta: {path}",
+  "error_eq_file_missing": "No se encontró el archivo de EQ: {path}",
+  "error_job_busy": "Ya hay otra tarea en curso. Espere a que termine o cancélela primero.",
+  "recovery_failed_summary": "No se pudo restaurar: {message}"
 }

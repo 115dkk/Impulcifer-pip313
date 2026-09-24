@@ -104,6 +104,43 @@ fn ui_scripts_and_markup_are_present_in_the_app_crate() {
     );
 }
 
+/// `errorSentence` in app.js turns a service error into a catalogue sentence
+/// by its fixed English message. Every message it matches must still be sent
+/// by the service word for word, or the page would fall back to the English
+/// text without anyone noticing.
+#[test]
+fn translated_error_messages_are_still_sent_by_the_service() {
+    let js = std::fs::read_to_string(ui_dir().join("app.js")).unwrap();
+    let start = js.find("function errorSentence(").unwrap();
+    let body = &js[start..start + js[start..].find("\n}\n").unwrap()];
+    let messages: Vec<_> = regex::Regex::new(r#"case "([^"]+)":"#)
+        .unwrap()
+        .captures_iter(body)
+        .map(|c| c[1].to_owned())
+        .collect();
+    assert!(messages.len() >= 7, "found only {messages:?}");
+    let mut sources = String::new();
+    let mut dirs = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                sources.push_str(&std::fs::read_to_string(&path).unwrap());
+            }
+        }
+    }
+    let stale: Vec<_> = messages
+        .iter()
+        .filter(|m| !sources.contains(&format!("\"{m}\"")))
+        .collect();
+    assert!(
+        stale.is_empty(),
+        "app.js translates messages the service no longer sends: {stale:?}"
+    );
+}
+
 /// Keys the BRIR job logs or reports as progress (`events.log(level, "key", …)`,
 /// `events.step("key", …)` and the stage-key table) must resolve in every
 /// language too; the job log renders them through the same catalogue.
