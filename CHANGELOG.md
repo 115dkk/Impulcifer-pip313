@@ -14,6 +14,9 @@ been fixed and old features improved.
 - **Stable 스킨은 그대로**: CTk 화면을 옮긴 Stable은 지금의 한 목록과 스위치를 유지합니다. 사용 중에 스킨을 바꾸면 값을 옮기며, Studio에서 끈 탭의 값은 Stable로 넘어가지 않습니다.
 - 새 문자열 39개를 아홉 언어 카탈로그에 더했습니다. `apps/impulcifer-app/tests/ui_gallery.py`가 탭별 요청 내용, 잠금과 해제, 탭 초기화, 키보드 이동, 스킨 전환 때의 값 이동, 아홉 언어에서 넘치는 요소가 없음을 확인하고 네 탭을 두 테마·두 언어로 그립니다.
 
+#### 🔧 빌드 / 설정 변경
+- **3.x 화면 갤러리 리뷰 이슈**: 새 워크플로 `ui-gallery-3x.yml`이 3.x 화면을 바꾸는 PR마다 `ui_gallery.py`를 돌려 동작 검사와 스크린샷을 만들고, 2.x 갤러리처럼 `webview-gallery` 브랜치에 올린 뒤 'WebView UI 갤러리 리뷰 (3.x)' 이슈를 엽니다.
+
 ## 3.0.2 - 2026-09-24
 ### 업데이트 창의 릴리스 노트를 CHANGELOG에서
 
