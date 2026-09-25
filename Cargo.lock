@@ -2180,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-analysis"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "impulcifer-dsp",
  "impulcifer-types",
@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-app"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "dark-light",
  "impulcifer-audio-io",
@@ -2209,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-audio-io"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "cpal",
  "impulcifer-io",
@@ -2220,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-cli"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "clap",
  "impulcifer-dsp",
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-dsp"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "impulcifer-io",
  "impulcifer-types",
@@ -2247,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-io"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "impulcifer-types",
  "serde_json",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-jobs"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "impulcifer-types",
  "serde_json",
@@ -2265,7 +2265,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-plots"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "plotters",
  "png 0.18.1",
@@ -2275,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-policy"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -2284,7 +2284,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-python"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "impulcifer-cli",
  "impulcifer-service",
@@ -2295,7 +2295,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-service"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "chrono",
  "impulcifer-analysis",
@@ -2325,7 +2325,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-sys-win"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "audio_thread_priority",
  "impulcifer-types",
@@ -2335,7 +2335,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-types"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "serde",
  "serde_json",

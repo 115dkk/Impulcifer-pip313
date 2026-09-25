@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.0.5 - 2026-09-25
+### 휠이 없는 플랫폼에서도 설치되도록 sdist 수정
+
+#### 🐛 버그 수정
+- **3.x 소스 배포본(sdist)이 빌드되지 않던 문제**: PyPI에는 Windows x64, macOS(Apple Silicon), Linux x86_64용 휠만 있어서, 그 밖의 플랫폼(Intel Mac, Linux ARM, musl 등)에서 `pip install impulcifer-py313`을 하면 pip가 sdist를 받아 직접 빌드합니다. 그런데 `impulcifer-service`는 2.x 문자열 카탈로그 `i18n/locales/*.json`을 `include_str!`로 워크스페이스 최상위에서 읽는데, 이 폴더가 어느 크레이트에도 속하지 않아 3.0.0부터 sdist에 빠져 있었고, 빌드는 `couldn't read .../i18n/locales/en.json`으로 실패했습니다. maturin의 `include`는 `..` 경로를 받지 않으므로, 이제 `sync_data.py`가 카탈로그를 `crates/impulcifer-python/i18n/locales/`에 스테이징하고 `pyproject.toml`이 이를 sdist 전용으로 넣어 sdist 최상위(워크스페이스 최상위 자리)에 놓입니다. `rust-toolchain.toml`은 넣지 않습니다. 사용자는 자기 Rust로 빌드하고, 1.97보다 낮으면 `Cargo.toml`의 `rust-version`이 필요한 버전을 알려 줍니다.
+- **빌드 백엔드의 편집 설치 훅**: 3.0.4의 `build_backend.py`는 maturin의 `get_requires_for_build_editable`와 `prepare_metadata_for_build_editable`를 넘기지 않아, Rust가 없는 환경의 `pip install -e`에서 maturin이 Rust를 임시 설치하는 요구 사항이 빠졌습니다. 이제 maturin 훅 여덟 개를 모두 그대로 넘기고 `build_wheel`만 RECORD 보정을 더합니다.
+
+#### 🔧 빌드 / 설정 변경
+- **sdist 빌드 검사**: `rust.yml`에 `sdist` 잡을 더해 PR마다 sdist를 만들고 pip로 휠을 빌드한 뒤(`build_backend.py` 경유) 그 휠로 `crates/impulcifer-python/tests`를 돌립니다. `test_sdist.py`는 sdist 안의 `src/` 코드가 `include_str!`·`include_bytes!`로 읽는 파일(테스트 전용 골든 제외)이 모두 sdist에 있는지 확인합니다.
+- README의 pip 설치 안내에 휠이 있는 플랫폼과, 그 밖의 플랫폼에서 필요한 Rust 1.97 이상을 적었습니다.
+
 ## 3.0.4 - 2026-09-25
 ### PyPI 휠의 RECORD를 파일 내용과 맞게
 

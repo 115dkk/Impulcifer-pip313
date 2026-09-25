@@ -381,7 +381,7 @@ jobs:
       - name: Install maturin
         run: python -m pip install "maturin>=1.7,<2"
 
-      - name: Stage package data
+      - name: Stage package data and catalogs (sync_data.py)
         run: python crates/impulcifer-python/sync_data.py
 
       - name: Build the abi3 wheel (manylinux_2_28 container)

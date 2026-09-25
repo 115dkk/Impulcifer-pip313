@@ -1,20 +1,30 @@
-"""Stage only release sweeps and Harman targets; never modify repository data."""
+"""Stage release sweeps, Harman targets and UI catalogs; never modify repository data.
+
+The sweeps and targets are wheel package data. The 2.x catalogs in i18n/locales
+are compiled into impulcifer-service (include_str! reaches three directories up
+to the workspace root), so the sdist must carry them at its root: they are
+staged beside pyproject.toml, which the sdist puts at the workspace root.
+"""
 from pathlib import Path
 import shutil
 
 CRATE = Path(__file__).resolve().parent
-SOURCE = CRATE.parents[1] / "data"
-DESTINATION = CRATE / "python" / "impulcifer" / "data"
+ROOT = CRATE.parents[1]
+STAGES = [
+    (ROOT / "data", ["sweep*.wav", "harman*.csv"], CRATE / "python" / "impulcifer" / "data"),
+    (ROOT / "i18n" / "locales", ["*.json"], CRATE / "i18n" / "locales"),
+]
 
 
 def main():
-    files = sorted([*SOURCE.glob("sweep*.wav"), *SOURCE.glob("harman*.csv")])
-    if not files:
-        raise SystemExit(f"No package data found in {SOURCE}")
-    DESTINATION.mkdir(parents=True, exist_ok=True)
-    for source in files:
-        shutil.copyfile(source, DESTINATION / source.name)
-        print(f"{source.name}: {source.stat().st_size} bytes")
+    for source, patterns, destination in STAGES:
+        files = sorted(path for pattern in patterns for path in source.glob(pattern))
+        if not files:
+            raise SystemExit(f"No package data found in {source}")
+        destination.mkdir(parents=True, exist_ok=True)
+        for path in files:
+            shutil.copyfile(path, destination / path.name)
+            print(f"{path.relative_to(ROOT)}: {path.stat().st_size} bytes")
 
 
 if __name__ == "__main__":
