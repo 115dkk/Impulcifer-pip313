@@ -13,8 +13,17 @@ when necessary. The ordinary wheel targets CPython 3.9+ via PyO3 0.27 ABI3.
 py -3.14 -m pip install maturin pytest
 py -3.14 E:/Impulcifer/crates/impulcifer-python/sync_data.py
 py -3.14 -m maturin build --release --features python -m E:/Impulcifer/crates/impulcifer-python/Cargo.toml
+py -3.14 E:/Impulcifer/crates/impulcifer-python/repair_record.py
 py -3.14 -m pytest E:/Impulcifer/crates/impulcifer-python/tests -q
 ```
+
+maturin writes RECORD without CSV quoting, so the row for the bundled
+`sweep-seg-FL,FR-stereo-...wav` does not parse and PyPI rejects the wheel.
+`repair_record.py` rewrites RECORD in every wheel under `target/wheels/` and
+checks it against the files; the installed-wheel tests fail without it. A wheel
+built by pip (`pip wheel`, or `pip install` from the sdist) is repaired by the
+package's build backend (`build_backend.py`), so only a direct `maturin build`
+needs the extra command.
 
 `sync_data.py` copies the repository's five `data/sweep*.wav` files and four
 `data/harman*.csv` files into

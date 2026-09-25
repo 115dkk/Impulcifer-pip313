@@ -1,6 +1,8 @@
 [build-system]
 requires = ["maturin>=1.7,<2"]
-build-backend = "maturin"
+# maturin with the wheel's RECORD rewritten as CSV (build_backend.py, repair_record.py)
+build-backend = "build_backend"
+backend-path = ["."]
 
 [project]
 name = "impulcifer-py313"
@@ -15,4 +17,9 @@ impulcifer = "impulcifer:cli"
 features = ["python"]
 python-source = "python"
 module-name = "impulcifer.impulcifer_native"
-include = [{ path = "python/impulcifer/data/*", format = ["sdist", "wheel"] }]
+include = [
+    { path = "python/impulcifer/data/*", format = ["sdist", "wheel"] },
+    # The sdist puts pyproject.toml at its root, so the backend must sit there too.
+    { path = "build_backend.py", format = "sdist" },
+    { path = "repair_record.py", format = "sdist" },
+]

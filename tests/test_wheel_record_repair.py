@@ -1,10 +1,12 @@
-"""Unit tests for crates/impulcifer-python/repair_record.py.
+"""Unit tests for crates/impulcifer-python/repair_record.py and build_backend.py.
 
 maturin writes wheel RECORD rows without CSV quoting, so the bundled
 ``sweep-seg-FL,FR-stereo-...wav`` gets a row that CSV readers split in the
 wrong place and PyPI reports the wheel's contents as not matching RECORD. The
-release workflow rewrites RECORD with this script; these tests pin the rewrite
-on a synthetic wheel built the way maturin writes one.
+workflows rewrite RECORD with repair_record.py after ``maturin build``, and pip
+builds (from the sdist or a checkout) go through build_backend.py, which wraps
+maturin's hooks. These tests pin both on synthetic wheels written the way
+maturin writes them.
 """
 
 from __future__ import annotations
@@ -14,13 +16,16 @@ import csv
 import hashlib
 import importlib.util
 import io
+import os
 from pathlib import Path
+import sys
+import types
 import zipfile
 
 import pytest
 
-_SCRIPT = Path(__file__).resolve().parent.parent / "crates" / "impulcifer-python" / "repair_record.py"
-_spec = importlib.util.spec_from_file_location("repair_record", _SCRIPT)
+_CRATE = Path(__file__).resolve().parent.parent / "crates" / "impulcifer-python"
+_spec = importlib.util.spec_from_file_location("repair_record", _CRATE / "repair_record.py")
 repair_record = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(repair_record)
 
@@ -85,6 +90,14 @@ def test_repair_quotes_the_comma_row_and_keeps_every_other_byte(tmp_path):
     assert not list(tmp_path.glob("*.partial"))
 
 
+def test_repair_keeps_the_modification_time(tmp_path):
+    """The wheel tests pick the newest wheel; a rewrite must not make a stale one newest."""
+    wheel = _maturin_wheel(tmp_path / "a.whl")
+    os.utime(wheel, ns=(1_000_000_000_000_000_000, 1_000_000_000_000_000_000))
+    assert repair_record.repair(wheel) is True
+    assert wheel.stat().st_mtime_ns == 1_000_000_000_000_000_000
+
+
 def test_repair_is_idempotent(tmp_path):
     wheel = _maturin_wheel(tmp_path / "a.whl")
     repair_record.repair(wheel)
@@ -131,3 +144,47 @@ def test_main_fails_on_a_mismatch_and_on_an_empty_directory(tmp_path, capsys):
     empty.mkdir()
     with pytest.raises(SystemExit, match="No wheels found"):
         repair_record.main([str(empty)])
+
+
+HOOKS = [
+    "build_editable",
+    "build_sdist",
+    "get_requires_for_build_sdist",
+    "get_requires_for_build_wheel",
+    "prepare_metadata_for_build_wheel",
+]
+WARNING = "MATURIN_NO_MISSING_BUILD_BACKEND_WARNING"
+
+
+def test_build_backend_repairs_the_wheel_pip_builds(tmp_path, monkeypatch):
+    name = "impulcifer_py313-3.0.0-cp39-abi3-linux_x86_64.whl"
+    maturin = types.ModuleType("maturin")
+    maturin.build_wheel = lambda directory, config=None, metadata=None: _maturin_wheel(Path(directory) / name).name
+    for hook in HOOKS:
+        setattr(maturin, hook, lambda *args, hook=hook: hook)
+    monkeypatch.setitem(sys.modules, "maturin", maturin)
+    monkeypatch.setitem(sys.modules, "repair_record", repair_record)
+    monkeypatch.setenv(WARNING, "")  # restored (unset) after the test
+    monkeypatch.delenv(WARNING)
+    spec = importlib.util.spec_from_file_location("build_backend", _CRATE / "build_backend.py")
+    backend = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(backend)
+
+    assert backend.build_wheel(str(tmp_path)) == name
+    assert repair_record.verify(tmp_path / name) == []
+    assert all(getattr(backend, hook) is getattr(maturin, hook) for hook in HOOKS)
+    assert os.environ[WARNING] == "1"
+
+
+def test_pyproject_builds_through_the_repairing_backend():
+    tomllib = pytest.importorskip("tomllib")
+    config = tomllib.loads((_CRATE / "pyproject.toml").read_text(encoding="utf-8"))
+    assert config["build-system"]["build-backend"] == "build_backend"
+    assert config["build-system"]["backend-path"] == ["."]
+    # The sdist moves pyproject.toml to its root, so the backend files must be there too.
+    sdist = set()
+    for entry in config["tool"]["maturin"]["include"]:
+        formats = [entry["format"]] if isinstance(entry["format"], str) else entry["format"]
+        if "sdist" in formats:
+            sdist.add(entry["path"])
+    assert {"build_backend.py", "repair_record.py"} <= sdist

@@ -36,8 +36,13 @@ def _split(line):
 
 
 def repair(wheel):
-    """Rewrite RECORD as CSV in place; return False if it already was."""
+    """Rewrite RECORD as CSV in place; return False if it already was.
+
+    The file keeps its modification time: the wheel tests pick the newest
+    wheel in target/wheels, and a rewrite must not make a stale one newest.
+    """
     wheel = Path(wheel)
+    stat = wheel.stat()
     with zipfile.ZipFile(wheel) as archive:
         record = _record_name(archive)
         text = archive.read(record).decode("utf-8")
@@ -56,6 +61,7 @@ def repair(wheel):
                 data = fixed.encode("utf-8") if info.filename == record else archive.read(info)
                 output.writestr(copy, data)
     os.replace(partial, wheel)
+    os.utime(wheel, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     return True
 
 
