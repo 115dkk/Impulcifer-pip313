@@ -48,11 +48,14 @@ def main():
         run(["cargo", "clippy", "-p", "impulcifer-python", "--all-targets", "--features", "python", "--", "--no-deps", "-D", "warnings"])
         run(["cargo", "test", "-p", "impulcifer-python"])
         build = ["py", "-3.14", "-m", "maturin", "build", "--release", "--features", "python", "-m", str(CRATE / "Cargo.toml")]
+        repair = [sys.executable, str(CRATE / "repair_record.py")]
         run(build)
+        run(repair)
         run(["py", "-3.14", "-m", "pytest", str(CRATE / "tests"), "-q"])
         run(["cargo", "test", "-p", "impulcifer-policy"])
         if args.free_threaded:
             run(build + ["-i", args.free_threaded])
+            run(repair)
             with tempfile.TemporaryDirectory(prefix="impulcifer-p14-ft-") as directory:
                 run([args.free_threaded, "-m", "venv", directory])
                 python = str(Path(directory) / ("Scripts/python.exe" if os.name == "nt" else "bin/python"))

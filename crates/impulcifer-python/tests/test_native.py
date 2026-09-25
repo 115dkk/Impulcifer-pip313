@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from importlib.metadata import distribution
+import importlib.util
 import io
 import json
 import os
@@ -18,6 +19,7 @@ import tomllib
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
+CRATE = ROOT / "crates" / "impulcifer-python"
 SWEEP = "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
 
 
@@ -72,6 +74,14 @@ def test_extension_module_links_no_audio_library(package):
         pytest.skip("/proc/self/maps and libasound apply only to Linux wheels")
     maps = Path("/proc/self/maps").read_text(encoding="utf-8")
     assert "libasound" not in maps.lower()
+
+
+def test_wheel_record_matches_the_contents(wheel):
+    """PyPI requires RECORD to match the files; maturin leaves the comma in sweep-seg-FL,FR unquoted."""
+    spec = importlib.util.spec_from_file_location("repair_record", CRATE / "repair_record.py")
+    repair_record = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(repair_record)
+    assert repair_record.verify(wheel) == []
 
 
 def test_version(package):

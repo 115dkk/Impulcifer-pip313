@@ -197,5 +197,8 @@ jobs:
           ls -la target/wheels
           ls target/wheels/impulcifer_py313-*-manylinux_2_28_x86_64.whl
 
+      - name: Rewrite RECORD as CSV (maturin leaves the comma in sweep-seg-FL,FR unquoted)
+        run: python crates/impulcifer-python/repair_record.py
+
       - name: Test the installed wheel (crates/impulcifer-python/tests)
         run: python -m pytest crates/impulcifer-python/tests -q
