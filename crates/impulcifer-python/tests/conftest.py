@@ -46,3 +46,8 @@ def isolated_settings(monkeypatch, tmp_path):
 @pytest.fixture
 def package():
     return impulcifer
+
+
+@pytest.fixture
+def wheel():
+    return _WHEELS[-1]

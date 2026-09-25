@@ -4,6 +4,13 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.0.4 - 2026-09-25
+### PyPI 휠의 RECORD를 파일 내용과 맞게
+
+#### 🐛 버그 수정
+- **휠의 RECORD가 들어 있는 파일과 맞지 않던 문제**: 3.x 휠에 넣는 `sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav`는 이름에 쉼표가 있는데, maturin(현재 최신인 1.15.0 포함)은 RECORD를 쓸 때 경로를 따옴표로 감싸지 않습니다. 그래서 RECORD를 CSV로 읽으면 이 줄은 `impulcifer/data/sweep-seg-FL`이라는 없는 파일이 되고, 실제 파일은 RECORD에 없는 것이 됩니다. pip는 설치할 때 'RECORD line has more than three elements' 경고를 냈고 `wheel unpack`은 실패했으며, PyPI는 3.0.3 Windows 휠을 두고 앞으로 이런 휠의 업로드를 받지 않겠다고 알려 왔습니다. 세 OS 휠이 모두 같은 상태였습니다(setuptools가 만드는 2.x 휠은 해당 없음). 이제 `crates/impulcifer-python/repair_record.py`가 빌드된 휠마다 RECORD를 CSV로 다시 쓰고(쉼표가 든 줄만 따옴표로 감싸고 다른 항목의 바이트와 권한은 그대로 둡니다), 다시 읽어 모든 파일의 해시·크기와 맞춰 본 뒤 어긋나면 실패합니다. `release-3x.yml`과 `rust.yml`의 휠 잡, 로컬 `verify.py`가 maturin 빌드 직후 이 스크립트를 돌립니다. 이미 올라간 3.0.3 이하의 휠은 PyPI 안내대로 그대로 둡니다.
+- `tests/test_wheel_record_repair.py`가 maturin 방식의 RECORD로 만든 휠에서 재작성, 다른 항목 보존, 두 번 돌려도 같은 결과, 해시 불일치 검출을 확인하고, `crates/impulcifer-python/tests/test_native.py::test_wheel_record_matches_the_contents`가 CI에서 빌드한 실제 휠의 RECORD를 검사합니다.
+
 ## 3.0.3 - 2026-09-24
 ### Studio 고급 옵션을 켜고 끄는 탭 네 개로
 
