@@ -11,8 +11,10 @@ from pathlib import Path
 from maturin import (  # noqa: F401  (maturin's own hooks, re-exported unchanged)
     build_editable,
     build_sdist,
+    get_requires_for_build_editable,
     get_requires_for_build_sdist,
     get_requires_for_build_wheel,
+    prepare_metadata_for_build_editable,
     prepare_metadata_for_build_wheel,
 )
 from maturin import build_wheel as _maturin_build_wheel

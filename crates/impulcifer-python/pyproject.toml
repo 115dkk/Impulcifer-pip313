@@ -22,4 +22,7 @@ include = [
     # The sdist puts pyproject.toml at its root, so the backend must sit there too.
     { path = "build_backend.py", format = "sdist" },
     { path = "repair_record.py", format = "sdist" },
+    # impulcifer-service compiles in the 2.x catalogs from <workspace>/i18n/locales;
+    # sync_data.py stages them here so they land at the sdist (workspace) root.
+    { path = "i18n/locales/*.json", format = "sdist" },
 ]

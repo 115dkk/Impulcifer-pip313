@@ -158,6 +158,8 @@ issue-body.md
 /apps/impulcifer-app/gen/
 # Wheel package data staged by crates/impulcifer-python/sync_data.py (copies of data/)
 /crates/impulcifer-python/python/impulcifer/data/
+# ...and the i18n/locales catalogs it stages for the sdist
+/crates/impulcifer-python/i18n/
 
 # npm (apps/impulcifer-app type checking)
 node_modules/

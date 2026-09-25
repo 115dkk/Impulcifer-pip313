@@ -44,6 +44,8 @@ pip install impulcifer-py313
 uv pip install impulcifer-py313
 ```
 
+PyPI의 3.x 패키지는 Windows x64, macOS(Apple Silicon), Linux x86_64(glibc 2.28 이상)용 휠로 올라갑니다. 그 밖의 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 받아 직접 빌드하므로 Rust 1.97 이상이 필요합니다([rustup](https://rustup.rs)으로 설치). Rust가 아예 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
+
 WebView 프론트엔드(2.10부터 기본 인터페이스)를 pip 환경에서 쓰려면 선택적 extra를 설치합니다. 플랫폼별로 Windows는 Microsoft Edge WebView2, macOS는 WKWebView(Cocoa), Linux는 WebKit2GTK를 사용하며 Qt backend로 fallback하지 않습니다.
 
 ```bash

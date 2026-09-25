@@ -28,7 +28,10 @@ needs the extra command.
 `sync_data.py` copies the repository's five `data/sweep*.wav` files and four
 `data/harman*.csv` files into
 `E:/Impulcifer/crates/impulcifer-python/python/impulcifer/data/`.
-Those staged files are wheel package data. Sync them again after changing their
+Those staged files are wheel package data. It also copies the `i18n/locales/*.json`
+catalogs into `E:/Impulcifer/crates/impulcifer-python/i18n/locales/`: impulcifer-service
+compiles them in from the workspace root, and the sdist (`maturin sdist`) puts
+them at its root, where that path resolves. Sync them again after changing their
 repository originals. No demo recordings, generated demo outputs, or TrueHD
 master assets are bundled by P14. The staging command never writes to the source
 data directory. Wheels appear in `E:/Impulcifer/target/wheels/`.

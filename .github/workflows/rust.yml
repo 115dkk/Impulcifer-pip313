@@ -173,7 +173,7 @@ jobs:
       - name: Install maturin and pytest
         run: python -m pip install "maturin>=1.7,<2" pytest
 
-      - name: Stage package data (copies of data/ into the wheel)
+      - name: Stage package data and catalogs (sync_data.py)
         run: python crates/impulcifer-python/sync_data.py
 
       - name: Build the abi3 wheel (manylinux_2_28 container)
@@ -201,4 +201,56 @@ jobs:
         run: python crates/impulcifer-python/repair_record.py
 
       - name: Test the installed wheel (crates/impulcifer-python/tests)
+        run: python -m pytest crates/impulcifer-python/tests -q
+
+  sdist:
+    name: python sdist builds with pip
+    needs: lint
+    runs-on: ubuntu-latest
+    # Where no wheel exists (Intel macOS, Linux aarch64, musl, ...) pip builds
+    # the sdist through build_backend.py. Build it the same way here and run the
+    # wheel tests against the result, so a file the sdist lacks fails the PR.
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target-sdist
+    steps:
+      - uses: actions/checkout@v5
+
+      # The sdist carries no rust-toolchain.toml (users build with their own
+      # toolchain; rust-version in Cargo.toml names the minimum), so pin the
+      # workspace toolchain for the build outside the checkout.
+      - name: Install toolchain (rust-toolchain.toml)
+        run: |
+          rustup show
+          echo "RUSTUP_TOOLCHAIN=$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" >> "$GITHUB_ENV"
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target-sdist
+          key: rust-sdist-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: rust-sdist-
+
+      - name: Install maturin and pytest
+        run: python -m pip install "maturin>=1.7,<2" pytest
+
+      - name: Stage package data and catalogs (sync_data.py)
+        run: python crates/impulcifer-python/sync_data.py
+
+      - name: Build the sdist
+        run: python -m maturin sdist -m crates/impulcifer-python/Cargo.toml -o "$RUNNER_TEMP/sdist"
+
+      - name: Build a wheel from the sdist with pip (PEP 517, build_backend.py)
+        run: python -m pip wheel --no-deps -w "$RUNNER_TEMP/from-sdist" "$RUNNER_TEMP"/sdist/*.tar.gz
+
+      - name: Test the wheel built from the sdist (crates/impulcifer-python/tests)
+        env:
+          IMPULCIFER_WHEEL_DIR: ${{ runner.temp }}/from-sdist
         run: python -m pytest crates/impulcifer-python/tests -q

@@ -146,11 +146,14 @@ def test_main_fails_on_a_mismatch_and_on_an_empty_directory(tmp_path, capsys):
         repair_record.main([str(empty)])
 
 
+# Every PEP 517/660 hook maturin defines besides build_wheel.
 HOOKS = [
     "build_editable",
     "build_sdist",
+    "get_requires_for_build_editable",
     "get_requires_for_build_sdist",
     "get_requires_for_build_wheel",
+    "prepare_metadata_for_build_editable",
     "prepare_metadata_for_build_wheel",
 ]
 WARNING = "MATURIN_NO_MISSING_BUILD_BACKEND_WARNING"
