@@ -2,106 +2,166 @@
 
 [![PyPI version](https://badge.fury.io/py/impulcifer-py313.svg)](https://badge.fury.io/py/impulcifer-py313)
 
-Impulcifer-py313은 [Jaakko Pasanen의 Impulcifer](https://github.com/jaakkopasanen/impulcifer)를 바탕으로 한 포크입니다. 스피커와 헤드폰 측정 파일에서 개인 BRIR WAV를 만들고, HeSuVi, JamesDSP, Hangloose Convolver 같은 컨볼버에서 쓸 수 있는 출력을 만듭니다.
+Impulcifer-py313은 [Jaakko Pasanen의 Impulcifer](https://github.com/jaakkopasanen/impulcifer)를 바탕으로 한 포크입니다. 귀에 넣은 바이노럴 마이크로 스피커 소리를 녹음하고, 그 녹음으로 헤드폰에서 스피커를 재현하는 개인 BRIR WAV를 만듭니다. 만든 파일은 HeSuVi(Equalizer APO), JamesDSP, Hangloose Convolver 같은 컨볼버에 넣어 씁니다.
 
-이 포크는 원본 Impulcifer의 측정과 보정 흐름을 유지하면서, Python 3.13/3.14, PyPI 배포, standalone 빌드, Modern GUI에서 쓰기 쉽게 정리하는 데 초점을 둡니다. 세부 변경 내역은 [CHANGELOG.md](CHANGELOG.md)를 보세요.
+지금 정식 버전은 3.x입니다. 2.x까지는 이 처리를 Python과 NumPy·SciPy·Matplotlib으로 했고, 3.x는 같은 처리를 컴파일 언어로 다시 써서 실행 파일 하나로 돌립니다. 화면은 운영체제에 들어 있는 웹뷰(Windows의 WebView2, macOS의 WKWebView)로 그립니다. 그래서 앱에는 Python 런타임이 들어가지 않고, Windows·macOS 앱에는 브라우저 엔진도 들어가지 않습니다. 그 결과 Windows 설치 파일이 209 MiB에서 26 MiB로, 데모 데이터 처리 시간이 5.6초에서 1.9초로 줄었습니다(아래 측정값). 처리 결과는 단계마다 2.x의 출력과 대조해 허용 오차 안에서 맞췄습니다.
 
-## 지원 범위
+PyPI 패키지 `impulcifer-py313`도 3.x로 계속 올라갑니다. 3.x 패키지에는 CLI와 Python API가 들어 있고, 따로 설치되는 의존 패키지는 없습니다. 2.x(Python 판)는 유지보수 라인으로 남아 있습니다. 변경 내역은 [CHANGELOG.md](CHANGELOG.md)에 있습니다.
 
-- Python 3.9 이상에서 실행합니다. Python 3.13/3.14 경로를 계속 확인합니다.
-- PyPI 패키지, standalone 릴리스, Modern GUI를 제공합니다.
-- CLI와 GUI에서 BRIR 생성, 룸 보정, 헤드폰 보정, Custom EQ, Virtual Bass, TrueHD 레이아웃 출력, 마이크 착용 편차 보정을 다룹니다.
-- 일반 Python에서는 process 기반 병렬 처리를, free-threaded Python에서는 thread 기반 병렬 처리를 우선 사용합니다. standalone 빌드는 free-threaded Python을 대상으로 하지 않습니다.
-- free-threaded 런타임은 CPython 3.14.4 이상(가능하면 최신 패치)을 권합니다. 3.14.1~3.14.4 패치에 free-threaded GC 일시정지 증가, GC 성능 회귀, mimalloc 메모리 누수 수정이 순차 반영되었습니다. CI는 free-threaded 3.14t에서도 전체 테스트를 확인합니다.
+## 2.x와 3.x 측정값
+
+아래 값은 2026-10-01에 Linux 컨테이너 하나(Intel Xeon 4 vCPU, 메모리 16 GiB, Ubuntu 24.04)에서 2.14.3과 3.0.5를 나란히 돌려 잰 것입니다. 두 버전 모두 PyPI 휠과 GitHub Releases의 파일을 그대로 썼고, CLI는 Python 3.13에 설치해 실행했습니다. 메모리는 측정한 프로세스와 그 자식 프로세스들의 PSS(여러 프로세스가 함께 쓰는 메모리를 나눠 센 값)를 더한 값이며, 단위는 MiB입니다. 측정 방법과 회차별 값은 [docs/rust/perf/2x-vs-3x-linux.md](docs/rust/perf/2x-vs-3x-linux.md)에 있습니다.
+
+### 설치 크기
+
+| 항목 | 2.14.3 | 3.0.5 |
+| --- | ---: | ---: |
+| Windows 설치 파일 (`Impulcifer-win-Setup.exe`) | 209.1 MiB | 25.8 MiB |
+| Windows 포터블 (`Impulcifer-win-Portable.zip`) | 201.9 MiB | 18.6 MiB |
+| macOS 디스크 이미지 (`.dmg`) | 182.5 MiB | 17.1 MiB |
+| Linux AppImage | 261.0 MiB | 92.6 MiB |
+| PyPI 휠 (Linux x86_64) | 67.8 MiB | 12.1 MiB |
+| `pip install` 뒤의 `site-packages` | 459 MiB (패키지 31개) | 30 MiB (패키지 1개) |
+
+Linux AppImage는 두 버전이 담는 내용이 다릅니다. 3.x AppImage는 웹 엔진(WebKitGTK)을 안에 넣었고, 2.x AppImage는 시스템에 설치된 WebKitGTK를 썼습니다.
+
+### 처리 시간과 메모리
+
+`data/demo`의 녹음으로 BRIR을 만드는 데 걸린 시간과 그동안의 최대 메모리입니다. 기본 처리 행은 기본 설정, `--vbass`, 테스트 신호 자동 감지 세 경우를 합친 24회의 중앙값이고, 나머지 행은 5회의 중앙값입니다.
+
+| 작업 | 2.14.3 | 3.0.5 |
+| --- | ---: | ---: |
+| 기본 처리 (요약 그래프 2장 포함) | 5.6초, 453 MiB | 1.9초, 389 MiB |
+| `--plot` (그래프 55장 저장) | 53.9초, 3,214 MiB | 3.9초, 671 MiB |
+| `impulcifer --version` (실행 후 바로 종료) | 1.0초, 125 MiB | 0.02초, 13 MiB |
+
+`--version` 행의 메모리는 프로세스 하나의 최대 RSS입니다. 2.x는 명령을 실행하자마자 NumPy·SciPy 등을 불러오므로, 아무 처리를 하지 않아도 1초가 걸리고 125 MiB를 씁니다. 기본 처리에서 2.x는 프로세스 5개(본 프로세스와 작업 프로세스 4개)로 일을 나누고, 3.x는 한 프로세스 안의 스레드로 나눕니다. 기본 처리의 최대 메모리는 두 버전이 비슷하고, 메모리 차이는 그래프를 모두 저장할 때 크게 벌어집니다.
+
+같은 데모 처리를 Windows(Intel Core i5-12600KF)에서 잰 기록은 [docs/rust/perf/release.md](docs/rust/perf/release.md)에 있습니다. 그 측정에서 3.x는 일반 Python 3.14에서 돌린 2.x보다 11.6배, free-threaded Python 3.14t에서 돌린 2.x보다 5.0배 빨랐습니다.
+
+### 앱을 켜 두었을 때의 메모리
+
+두 버전의 Linux AppImage를 가상 화면(Xvfb)에 띄우고 30초 기다린 뒤, 15초 동안 잰 값의 중앙값입니다. 세 번 띄운 결과의 중앙값을 적었습니다.
+
+| 항목 | 2.14.3 | 3.0.5 |
+| --- | ---: | ---: |
+| 앱 프로세스 | 334 MiB | 101 MiB |
+| 웹 엔진 프로세스까지 더한 전체 | 670 MiB | 429 MiB |
+
+두 버전 모두 같은 웹 엔진(WebKitGTK)으로 화면을 그리므로, 차이는 거의 앱 프로세스에서 납니다. 2.x 앱은 첫 처리가 라이브러리 로딩으로 멈추지 않도록 시작하자마자 SciPy·Matplotlib 등을 미리 불러 두므로, 처리하지 않고 켜 두기만 해도 이 라이브러리들이 메모리를 차지합니다. 이 측정은 GPU가 없는 가상 화면에서 했으므로, 실제 데스크톱에서는 웹 엔진 프로세스의 크기가 다를 수 있습니다.
+
+## 지원 환경
+
+| 형태 | 플랫폼 | 필요한 것 |
+| --- | --- | --- |
+| 앱 | Windows 10/11 x64 | Microsoft Edge WebView2 런타임. Windows 11에는 기본으로 들어 있습니다. |
+| 앱 | macOS (Apple Silicon) | Intel Mac용 앱은 없습니다. |
+| 앱 | Linux x86_64 (AppImage) | FUSE 2(`libfuse2`). Ubuntu 22.04에서 빌드하므로 그보다 오래된 glibc에서는 실행되지 않을 수 있습니다. |
+| PyPI 패키지 | Python 3.9 이상 | Windows x64, macOS(Apple Silicon), Linux x86_64(glibc 2.28 이상)에서는 미리 빌드한 휠을 받습니다. |
+
+PyPI 휠이 없는 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 받아 직접 빌드하므로 Rust 1.97 이상이 필요합니다([rustup](https://rustup.rs)으로 설치). Rust가 아예 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
 
 ## 설치
 
-### Python 패키지
+### 앱
 
-가상 환경 안에 설치하는 방식을 권합니다.
+[GitHub Releases의 최신 릴리스](https://github.com/115dkk/Impulcifer-pip313/releases/latest)에서 운영체제에 맞는 파일을 받습니다.
+
+| 운영체제 | 파일 |
+| --- | --- |
+| Windows | `Impulcifer-win-Setup.exe`(설치) 또는 `Impulcifer-win-Portable.zip`(압축을 풀어 바로 실행) |
+| macOS | `Impulcifer-<버전>-macOS.dmg` |
+| Linux | `Impulcifer-<버전>-x86_64.AppImage` |
+
+Linux에서는 받은 AppImage에 실행 권한을 주고 실행합니다.
+
+```bash
+chmod +x Impulcifer-*-x86_64.AppImage
+./Impulcifer-*-x86_64.AppImage
+```
+
+### PyPI 패키지 (CLI와 Python API)
+
+가상 환경 안에 설치하기를 권합니다.
 
 ```bash
 python -m venv venv
-```
-
-Windows:
-
-```bash
-venv\Scripts\activate
+source venv/bin/activate        # Windows에서는 venv\Scripts\activate
 pip install impulcifer-py313
 ```
 
-macOS 또는 Linux:
+`uv`를 쓴다면 `uv pip install impulcifer-py313`으로 설치합니다. 설치하면 `impulcifer` 명령과 `import impulcifer`로 쓰는 Python API가 생깁니다. 3.x PyPI 패키지에는 GUI와 녹음 기능이 없으므로, 녹음과 화면 조작이 필요하면 앱을 설치합니다.
+
+### 2.x를 계속 쓰려면
+
+2.x는 PyPI와 [v2.14.3 릴리스](https://github.com/115dkk/Impulcifer-pip313/releases/tag/v2.14.3)에 남아 있습니다. pip로 2.x를 설치하려면 버전을 3 미만으로 고정합니다. 2.x PyPI 패키지는 Python 3.9~3.14를 지원하고, `impulcifer_gui`(CustomTkinter 화면)와 `impulcifer_webview`(웹뷰 화면) 명령을 함께 설치합니다.
 
 ```bash
-source venv/bin/activate
-pip install impulcifer-py313
+pip install "impulcifer-py313<3"
 ```
 
-`uv`를 쓴다면 다음처럼 설치할 수 있습니다.
-
-```bash
-uv pip install impulcifer-py313
-```
-
-PyPI의 3.x 패키지는 Windows x64, macOS(Apple Silicon), Linux x86_64(glibc 2.28 이상)용 휠로 올라갑니다. 그 밖의 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 받아 직접 빌드하므로 Rust 1.97 이상이 필요합니다([rustup](https://rustup.rs)으로 설치). Rust가 아예 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
-
-WebView 프론트엔드(2.10부터 기본 인터페이스)를 pip 환경에서 쓰려면 선택적 extra를 설치합니다. 플랫폼별로 Windows는 Microsoft Edge WebView2, macOS는 WKWebView(Cocoa), Linux는 WebKit2GTK를 사용하며 Qt backend로 fallback하지 않습니다.
-
-```bash
-pip install "impulcifer-py313[webview]"
-```
-
-Linux에서는 PyGObject 소스 빌드를 위해 시스템 패키지가 먼저 필요합니다 (Debian/Ubuntu 기준):
+2.x 웹뷰 화면을 pip 환경에서 쓰려면 `pip install "impulcifer-py313[webview]<3"`로 설치합니다. Linux에서는 그 전에 WebKitGTK와 PyGObject 빌드용 시스템 패키지가 필요합니다(Debian/Ubuntu 기준).
 
 ```bash
 sudo apt-get install -y gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
   libgirepository1.0-dev libgirepository-2.0-dev libcairo2-dev pkg-config gcc python3-dev
 ```
 
-### Standalone 릴리스
+Arch 계열 배포판의 AUR 패키지 [`impulcifer-py313-bin`](https://aur.archlinux.org/packages/impulcifer-py313-bin)은 2.x입니다. 3.x 릴리스로는 갱신되지 않습니다.
 
-Python을 따로 설치하지 않고 쓰려면 [GitHub Releases](https://github.com/115dkk/Impulcifer-pip313/releases)에서 운영체제에 맞는 파일을 받으세요. 릴리스 파일 이름과 구성은 버전마다 달라질 수 있으므로, 각 릴리스의 설명을 확인해 주세요.
+## 업데이트
 
-### Arch Linux (AUR)
+앱은 실행 중에 새 버전을 확인하고, 사용자가 허락하면 내려받아 설치합니다. Windows는 Velopack으로, macOS와 Linux는 서명을 확인한 업데이트 파일로 설치합니다. 2.x 앱에서 업데이트를 확인해도 3.x가 새 버전으로 표시됩니다.
 
-Arch 계열 배포판에서는 AUR의 [`impulcifer-py313-bin`](https://aur.archlinux.org/packages/impulcifer-py313-bin) 패키지로 설치할 수 있습니다. 릴리스 tarball 기반 바이너리 패키지이며 새 릴리스마다 자동으로 갱신됩니다.
-
-```bash
-yay -S impulcifer-py313-bin
-```
-
-WebView UI를 쓰려면 `webkit2gtk-4.1`을 함께 설치하세요 (없으면 CustomTkinter UI로 폴백).
-
-## 실행
-
-GUI를 쓰려면 다음 명령을 실행합니다.
+PyPI 패키지는 pip로 갱신합니다.
 
 ```bash
-impulcifer_gui
+pip install --upgrade impulcifer-py313
 ```
 
-WebView 프론트엔드는 다음 명령으로 실행합니다 (Windows/macOS/Linux). Pulse 디자인의 Studio/Stable 스킨, Recorder / Processing / Output Recovery / Settings / Info 탭, CustomTkinter GUI와 동등한 BRIR 옵션 전체(가상 저음, decay, channel balance, 마이크 편차 보정 등), 네이티브 파일·폴더 선택, 자동 업데이트, 9개 언어와 dark/light/system 테마를 제공합니다.
+pip로 설치한 2.x를 이 명령으로 갱신하면 3.x로 올라가면서 `impulcifer_gui`, `impulcifer_webview` 명령이 사라집니다. 2.x 화면을 계속 쓰려면 위의 `"impulcifer-py313<3"`로 고정합니다.
+
+## 사용법
+
+### 앱
+
+앱의 다섯 메뉴로 작업합니다.
+
+* **녹음:** 스피커마다 sweep을 재생하고 바이노럴 마이크로 녹음합니다. 기본으로는 sweep 파일 없이 sweep을 즉석에서 만들어 재생하고, 스피커 순서와 트랙 레이아웃(mono, stereo, 5.1, 7.1, 7.1.4, 7.1.6)을 고를 수 있습니다. 특수한 녹음에는 파일 재생 방식도 씁니다. 스피커 녹음은 `FL,FR.wav` 같은 이름으로, 헤드폰 보정 녹음은 `headphones.wav`로 저장합니다.
+* **처리:** 녹음 폴더에서 BRIR을 만듭니다. 테스트 신호는 녹음에서 자동으로 알아내며, '폴더 분석' 버튼으로 알아낸 샘플레이트·sweep 길이·신뢰도를 처리 전에 볼 수 있습니다. 처리 중에는 취소할 수 있습니다.
+* **출력 복원:** 남아 있는 출력 파일로 빠진 형식을 다시 만듭니다. 아래 '출력 파일'에 자세히 적었습니다.
+* **설정:** 언어(9개), 테마(다크, 라이트, 시스템), 레이아웃 프리셋을 고릅니다. Studio는 고급 옵션을 음색·레벨, 시간 응답, 출력 파일, 보정·그래프 네 탭으로 나눠 탭마다 켜고 끄며, Stable은 2.x의 CustomTkinter 화면처럼 한 목록으로 보여 줍니다.
+* **정보:** 버전, 시스템 정보, 프로젝트 링크를 보여 줍니다.
+
+옵션 위에 마우스를 올리면 짧은 설명이 나옵니다.
+
+### CLI
+
+측정 폴더를 지정해 실행합니다. 옵션은 2.x와 같습니다. 저장소의 `data/demo`에는 바로 처리해 볼 수 있는 데모 녹음이 있습니다.
 
 ```bash
-impulcifer_webview
+impulcifer --dir_path "data/demo" --plot
 ```
 
-Standalone 릴리스(2.10+)의 기본 인터페이스는 WebView입니다. CustomTkinter 인터페이스도 계속 함께 설치되며, 설정 탭의 "기본 인터페이스" 선택이나 실행 인자 `--frontend=ctk`로 전환할 수 있습니다 (`--frontend=webview`로 되돌리기). WebView 스택을 사용할 수 없는 환경에서는 자동으로 CustomTkinter로 폴백합니다.
+전체 옵션은 `impulcifer --help`로 봅니다.
 
-> **CustomTkinter 지원 안내**: CustomTkinter 인터페이스는 버전 2 동안 유지보수와 기능 추가를 포함해 계속 완전히 지원됩니다. 버전 3부터는 제거되지 않고 지금의 레거시 GUI처럼 업데이트 없이 동결 상태로 유지됩니다 — 버전 3에서 제거되는 것은 구버전 레거시 GUI(`impulcifer_gui_legacy`)입니다.
+### Python API
 
-CLI를 쓰려면 측정 폴더를 지정합니다.
+```python
+import impulcifer
+from impulcifer import impulcifer_native as native
 
-```bash
-impulcifer --dir_path "data/demo" --test_signal default --plot
+# 처리 옵션은 CLI와 같은 이름의 키워드 인자로 주고, hesuvi.wav의 경로를 돌려받습니다.
+path = impulcifer.main(dir_path="measurements", vbass=True, vbass_freq=250)
+
+# 진행률과 로그를 받으려면 native.run에 콜백을 넘깁니다.
+native.run(
+    {"dir_path": "measurements"},
+    progress=lambda event: print(event["progress"], event["message"]),
+)
 ```
 
-사용 가능한 CLI 옵션은 다음 명령으로 확인할 수 있습니다.
-
-```bash
-impulcifer --help
-```
+`decay`를 숫자나 스피커별 딕셔너리로 줄 때 Python API의 단위는 초입니다(CLI는 밀리초). 이 밖에 `impulcifer.detect_sweep(폴더)`, `impulcifer.generate_sweep_set(폴더)`, `impulcifer.recover_brir_outputs(폴더)`가 있습니다.
 
 ## 입력 파일
 
@@ -109,18 +169,35 @@ impulcifer --help
 
 | 파일 | 설명 |
 | --- | --- |
-| `FL,FR.wav`, `FC.wav`, `SL,SR.wav` 등 | 스피커 측정 파일입니다. 파일 이름의 스피커 이름을 보고 채널을 판단합니다. `FC,X.wav`처럼 `X`는 건너뛸 스윕 자리를 뜻합니다(센터 스피커를 스테레오 분절 sweep으로 녹음했을 때 나머지 한쪽). 원본 Impulcifer와 같은 규칙이며, 2.14.2까지는 이런 파일을 통째로 무시해 해당 채널이 빠졌습니다. |
+| `FL,FR.wav`, `FC.wav`, `SL,SR.wav` 등 | 스피커 측정 파일입니다. 파일 이름의 스피커 이름을 보고 채널을 판단합니다. `FC,X.wav`의 `X`는 건너뛸 sweep 자리입니다(센터 스피커를 스테레오 분절 sweep으로 녹음했을 때 나머지 한쪽). 원본 Impulcifer와 같은 규칙입니다. |
 | `headphones.wav` | 기본 헤드폰 보정 측정 파일입니다. `--headphone_compensation_file`로 다른 파일을 지정할 수 있습니다. |
-| `room-target.csv` | 룸 보정 목표 응답입니다. 없으면 flat target을 씁니다. |
+| `room-target.csv` | 룸 보정 목표 응답입니다. 없으면 평탄한 목표를 씁니다. |
 | `room-mic-calibration.csv` 또는 `room-mic-calibration.txt` | 룸 측정 마이크 보정 파일입니다. 없으면 마이크 보정을 건너뜁니다. |
-| `eq.csv`, `eq-left.csv`, `eq-right.csv` | Custom EQ 파일입니다. `eq.csv`는 양쪽 공통, `eq-left.csv`와 `eq-right.csv`는 좌우 개별 EQ입니다. 같은 이름의 `.txt`(예: `eq.txt`)도 인식합니다. |
+| `eq.csv`, `eq-left.csv`, `eq-right.csv` | Custom EQ 파일입니다. `eq.csv`는 양쪽 공통, `eq-left.csv`와 `eq-right.csv`는 좌우 개별 EQ입니다. 같은 이름의 `.txt`(예: `eq.txt`)도 읽습니다. |
+| `test.wav` | 녹음 때 쓴 sweep입니다. 녹음 화면에서 sweep 설정을 바꿔 녹음하면 자동으로 저장되고, 처리할 때 그대로 씁니다. |
 
-Custom EQ 파일은 두 가지 형식을 지원합니다. 확장자가 아니라 내용으로 형식을 판별합니다.
+Custom EQ 파일은 두 가지 형식을 읽습니다. 형식은 확장자가 아니라 내용으로 판별합니다.
 
-- **AutoEQ 결과 CSV**: 기존과 동일한 `frequency,raw,error,...` 형식입니다. error 열이 없는 평문 2열(`주파수 게인`) 파일은 값을 그대로 적용할 EQ 게인 곡선으로 해석합니다.
-- **EqualizerAPO(-XT) 설정 텍스트**: `Preamp:`, `Filter n: ON PK Fc ... Hz Gain ... dB Q ...`, `GraphicEQ:` 형식입니다. AutoEQ의 ParametricEQ.txt/GraphicEQ.txt 내보내기와 EqualizerAPO-XT에서 저장한 설정을 그대로 쓸 수 있습니다. 크기 응답으로 표현 가능한 명령(Filter 바이쿼드/IIR, Preamp, GraphicEQ, `Convolution`)은 적용하고, 그럴 수 없는 명령(`Copy`, `Delay`, `MultiConvolution`, VSTPlugin 등)은 경고와 함께 바이패스합니다. `Convolution:`은 IR 파일의 크기 응답만 반영하며(위상 제외) EqualizerAPO처럼 샘플레이트가 다르면 적용하지 않습니다. `Channel: L`/`Channel: R` 스코핑은 좌/우 EQ 곡선으로 분리 적용되고, `Include:`는 같은 폴더 기준 상대 경로면 따라 들어가며, `If: sampleRate == 48000` 같은 단순 샘플레이트 조건 분기는 평가됩니다(그 외 조건식 블록은 보수적으로 바이패스).
+* **AutoEQ 결과 CSV:** `frequency,raw,error,...` 형식입니다. error 열이 없는 2열(`주파수 게인`) 파일은 값을 그대로 적용할 EQ 게인 곡선으로 읽습니다.
+* **EqualizerAPO(-XT) 설정 텍스트:** `Preamp:`, `Filter n: ON PK Fc ... Hz Gain ... dB Q ...`, `GraphicEQ:` 형식입니다. AutoEQ의 ParametricEQ.txt·GraphicEQ.txt 내보내기와 EqualizerAPO-XT에서 저장한 설정을 그대로 쓸 수 있습니다. 크기 응답으로 나타낼 수 있는 명령(Filter 바이쿼드·IIR, Preamp, GraphicEQ, `Convolution`)은 적용하고, 나타낼 수 없는 명령(`Copy`, `Delay`, `MultiConvolution`, VSTPlugin 등)은 경고를 남기고 건너뜁니다. `Convolution:`은 IR 파일의 크기 응답만 반영하고(위상 제외), EqualizerAPO처럼 샘플레이트가 다르면 적용하지 않습니다. `Channel: L`·`Channel: R` 구간은 좌우 EQ 곡선에 따로 적용하고, `Include:`는 같은 폴더 기준 상대 경로면 따라 들어가며, `If: sampleRate == 48000` 같은 단순한 샘플레이트 조건은 평가합니다(그 밖의 조건식 구간은 건너뜁니다).
 
-Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전에 이 파일들이 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`로 복사됩니다.
+## 출력 파일
+
+처리가 끝나면 측정 폴더에 다음 파일이 생깁니다.
+
+* **`hesuvi.wav`:** HeSuVi(Equalizer APO)용 BRIR입니다.
+* **`hrir.wav`:** 스피커 순서대로 늘어놓은 BRIR입니다.
+* **`responses.wav`, `headphone-responses.wav`, `room-responses.wav`:** 처리 중간의 임펄스 응답입니다.
+* **`README.md`:** 출력 샘플레이트, 적용한 정규화 게인, 스피커·귀별 PNR·ITD·RT60, 반사음 레벨을 적은 요약입니다.
+* **`plots/`:** 헤드폰 보정 그래프와 결과 그래프입니다. `--plot`을 주면 스피커·귀별 응답 그래프와 양이 레벨차(ILD)·위상차(IPD)·IACC 그래프 등을 더 저장합니다(데모에서는 모두 55장).
+
+스피커 하나는 왼쪽 귀·오른쪽 귀 트랙 두 개로 저장됩니다. 몇 번째 트랙이 어느 스피커의 소리를 어느 귀로 보내는지는 [채널 순서 문서](docs/brir-channel-order.md)에 정리했습니다.
+
+뒤쪽의 무음 확장 채널은 자동으로 뺍니다. `hesuvi.wav`의 앞 14채널과 `hrir.wav`의 앞 16채널은 항상 남기고, 그 뒤로는 마지막 유효 스피커까지 남깁니다. 그래서 와이드·상단 스피커가 없는 일반 측정은 각각 14채널, 16채널로 저장됩니다. 중간의 빈자리와 한쪽 귀에만 응답이 있는 스피커는 그대로 두고, 전체 샘플이 정확히 0인 뒤쪽 스피커 쌍만 뺍니다. FL·FR만 측정해도 `hesuvi.wav`의 앞 14채널을 남기는 까닭은 Equalizer APO가 모자란 IR 채널을 처음부터 반복해 적용하기 때문입니다. 이 채널들을 빼면 다른 스피커에 엉뚱한 응답이 적용됩니다. 근거는 [채널 호환성 분석](docs/silent-channel-compatibility.md)에 있습니다.
+
+'중간 무음 채널도 제거'(`--remove_silent_channels`, 기본값 꺼짐)를 켜면 개별 무음 채널까지 빼므로, FL·FR만 있는 출력은 4채널이 됩니다. 이렇게 만든 파일은 채널 위치가 바뀌어 HeSuVi 등에서 쓸 수 없을 수 있습니다. 줄인 WAV 안에는 남은 채널 이름을 기록해 두므로 출력 복원에서 원래 배치로 되돌릴 수 있습니다. 다만 오디오 편집기로 이 정보를 지우면 원래 배치를 알 수 없습니다.
+
+출력 복원은 남아 있는 출력만으로 빠진 형식을 다시 만듭니다. `Hangloose` 폴더의 스피커별 WAV만 남았다면 정해진 채널 순서로 `hrir.wav`와 `hesuvi.wav`를 모두 다시 만들고, 둘 중 하나만 남았다면 나머지 하나를 만듭니다. `hrir.wav`나 `hesuvi.wav`에서 스피커별 Hangloose 파일을 함께 만들 수도 있습니다. 출력 폴더, 그 안의 `Hangloose` 폴더, 분할 WAV가 바로 들어 있는 폴더 중 어느 것을 골라도 되고, 이미 있는 파일은 건드리지 않고 빠진 파일만 만듭니다.
 
 ## CLI 옵션
 
@@ -129,37 +206,37 @@ Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전�
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
 | `--dir_path PATH` | 필수 | 측정 파일을 읽고 결과를 저장할 폴더입니다. |
-| `--test_signal VALUE` | 자동 감지 (`test.wav` → 녹음 분석 → 내장 `default`) | 측정에 쓴 sweep WAV, TrueHD/MLP 파일, 미리 정한 이름, `auto`(녹음에서 스윕 파라미터 자동 복원) 또는 `generate:<길이>s@<샘플레이트>`(예: `generate:6.15s@48000`, 파라미터로 직접 생성)입니다. |
-| `--room_target PATH` | `dir_path/room-target.csv` | 룸 보정 목표 응답 CSV입니다. 파일이 없으면 flat target을 씁니다. |
+| `--test_signal VALUE` | 자동 감지 (`test.wav` → 녹음 분석 → 내장 `default`) | 측정에 쓴 sweep WAV, TrueHD/MLP 파일, 미리 정한 이름, `auto`(녹음에서 sweep 파라미터 자동 복원) 또는 `generate:<길이>s@<샘플레이트>`(예: `generate:6.15s@48000`, 파라미터로 직접 생성)입니다. |
+| `--room_target PATH` | `dir_path/room-target.csv` | 룸 보정 목표 응답 CSV입니다. 파일이 없으면 평탄한 목표를 씁니다. |
 | `--room_mic_calibration PATH` | `dir_path/room-mic-calibration.csv`, 없으면 `.txt` | 룸 측정 마이크 보정 파일입니다. |
-| `--headphone_compensation_file PATH` | `dir_path/headphones.wav` | 헤드폰 보정 측정 WAV입니다. 폴더를 주면 흔히 쓰는 파일명을 찾아봅니다. |
-| `--fs HZ` | 측정 신호의 샘플레이트 | 출력 샘플레이트입니다. 지정하면 결과를 해당 샘플레이트로 맞춥니다. |
+| `--headphone_compensation_file PATH` | `dir_path/headphones.wav` | 헤드폰 보정 측정 WAV입니다. 폴더를 주면 흔히 쓰는 파일 이름을 찾아봅니다. |
+| `--fs HZ` | 측정 신호의 샘플레이트 | 출력 샘플레이트입니다. 지정하면 결과를 그 샘플레이트로 맞춥니다. |
 
 `--test_signal`에는 다음 약칭을 쓸 수 있습니다.
 
 | 값 | 의미 |
 | --- | --- |
-| `auto` | 폴더의 `test.wav` → 녹음 파일 분석(스윕 길이 그리드 복원) → 내장 기본 순으로 해석합니다. 미지정 시 기본 동작과 같습니다. 잡음 바닥이 높은 녹음과 녹음 첫머리의 잡음 덩어리는 2.14.3부터 스윕으로 오인하지 않습니다. |
-| `generate:<길이>s@<fs>` | 파라미터로 sweep을 직접 생성합니다. 길이는 생성기 그리드에 스냅됩니다. |
+| `auto` | 폴더의 `test.wav` → 녹음 파일 분석(sweep 길이 그리드 복원) → 내장 기본 순으로 찾습니다. 지정하지 않았을 때와 같습니다. |
+| `generate:<길이>s@<fs>` | 파라미터로 sweep을 직접 만듭니다. 길이는 생성기 그리드에 맞춰집니다. |
 | `default`, `1`, `sweep`, `2` | 내장 기본 sweep WAV입니다. |
 | `stereo`, `3` | `FL,FR` 스테레오 분절 sweep입니다. |
 | `mono-left`, `4` | `FL` 모노 분절 sweep입니다. |
 | `left`, `5` | `FL` 스테레오 분절 sweep입니다. |
 | `right`, `6` | `FR` 스테레오 분절 sweep입니다. |
 
-스윕 파일(.pkl estimator 포함)을 반드시 준비할 필요는 없습니다. 2.11부터 레코더는 기본적으로 sweep을 즉석에서 생성해 재생하며(내장 파일과 비트 단위 동일), 커스텀 파라미터로 녹음하면 `test.wav`가 녹음 폴더에 자동 저장되어 BRIR 처리에서 그대로 인식됩니다. 레거시 `.pkl` estimator 입력은 제거되었습니다.
+sweep 파일을 따로 준비하지 않아도 됩니다. 녹음 화면은 기본으로 sweep을 즉석에서 만들어 재생하고(내장 파일과 같은 신호), 설정을 바꿔 녹음하면 `test.wav`를 녹음 폴더에 저장해 처리 때 그대로 씁니다.
 
 ### 보정과 목표 응답
 
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
 | `--channel_balance VALUE` | 사용 안 함 | 좌우 레벨이나 응답 차이를 보정합니다. `trend`, `left`, `right`, `avg`, `min`, `mids` 또는 dB 값을 받습니다. |
-| `--decay VALUE` | 사용 안 함 | 잔향 꼬리를 줄입니다. `300`처럼 전체 ms 값을 주거나 `FL:500,FC:100`처럼 채널별 ms 값을 줄 수 있습니다. |
-| `--target_level DB` | 사용 안 함 | 좌우 평균 레벨을 지정한 dB로 맞춥니다. 클리핑을 피하려면 보통 음수 값을 씁니다. |
-| `--fr_combination_method average|conservative` | `average` | 여러 룸 측정 응답을 합치는 방식입니다. |
-| `--specific_limit HZ` | `400` | speaker-ear specific 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. |
-| `--generic_limit HZ` | `300` | generic 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. |
-| `--bass_boost DB` | 사용 안 함 | 저역 shelf boost입니다. `6` 또는 `6,150,0.69`처럼 gain, Fc, Q를 줄 수 있습니다. |
+| `--decay VALUE` | 사용 안 함 | 잔향 꼬리를 줄입니다. `300`처럼 전체 ms 값을 주거나 `FL:500,FC:100`처럼 채널별 ms 값을 줍니다. |
+| `--target_level DB` | 사용 안 함 | 좌우 평균 레벨을 지정한 dB로 맞춥니다. 클리핑을 피하려면 보통 음수를 씁니다. |
+| `--fr_combination_method average\|conservative` | `average` | 여러 룸 측정 응답을 합치는 방식입니다. |
+| `--specific_limit HZ` | `400` | 스피커·귀별 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. |
+| `--generic_limit HZ` | `300` | 공통 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. |
+| `--bass_boost DB` | 사용 안 함 | 저역 셸프 부스트입니다. `6`처럼 게인만 주거나(Fc 105 Hz, Q 0.76) `6,150,0.69`처럼 게인, Fc, Q를 줍니다. |
 | `--tilt DB_PER_OCT` | `0.0` | 목표 응답 기울기입니다. 양수는 밝게, 음수는 어둡게 맞춥니다. |
 | `--no_room_correction` | 룸 보정 켜짐 | 룸 보정을 건너뜁니다. |
 | `--no_headphone_compensation` | 헤드폰 보정 켜짐 | 헤드폰 보정을 건너뜁니다. |
@@ -169,41 +246,41 @@ Studio GUI에서 Custom EQ 파일을 다른 위치에서 고르면, 처리 전�
 
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
-| `--plot` | 꺼짐 | 처리 그래프를 PNG로 저장합니다. |
-| `--interactive_plots` | 꺼짐 | Bokeh 기반 HTML 플롯을 저장합니다. |
-| `--c MS` | `1.0` | IR 앞부분을 자를 때 남길 headroom입니다. 단위는 ms입니다. |
-| `--jamesdsp` | 꺼짐 | `FL/FR` 기반의 `jamesdsp.wav`를 추가로 만듭니다. |
-| `--remove_silent_channels` | 꺼짐 | 중간 무음 채널까지 제거합니다. 채널 위치가 바뀌므로 HeSuVi 등과 호환되지 않을 수 있습니다. |
-| `--hangloose` | 꺼짐 | Hangloose Convolver용 스피커별 stereo IR 파일을 만듭니다. |
-| `--output_truehd_layouts` | 꺼짐 | TrueHD용 레이아웃 출력을 추가로 만듭니다. |
-| `--info` | 꺼짐 | 버전, Python, 운영체제, 주요 의존성 정보를 출력하고 종료합니다. |
-| `-V`, `--version` | 꺼짐 | Impulcifer 버전을 출력하고 종료합니다. |
+| `--plot` | 꺼짐 | 처리 그래프를 PNG로 모두 저장합니다. |
+| `--interactive_plots` | 꺼짐 | 대화형 HTML 그래프를 `interactive_plots/`에 저장합니다. |
+| `--c MS` | `1.0` | IR 앞부분을 자를 때 남길 여유 시간입니다. 단위는 ms입니다. |
+| `--jamesdsp` | 꺼짐 | `FL`·`FR`로 만든 `jamesdsp.wav`를 추가로 저장합니다. |
+| `--remove_silent_channels` | 꺼짐 | 중간 무음 채널까지 뺍니다. 채널 위치가 바뀌므로 HeSuVi 등과 맞지 않을 수 있습니다. |
+| `--hangloose` | 꺼짐 | Hangloose Convolver용 스피커별 스테레오 IR 파일을 저장합니다. |
+| `--output_truehd_layouts` | 꺼짐 | TrueHD용 레이아웃 출력을 추가로 저장합니다. |
+| `--info` | 꺼짐 | 버전, 운영체제, CPU 코어 수, 데이터 폴더 등을 출력하고 끝냅니다. |
+| `-V`, `--version` | 꺼짐 | 버전을 출력하고 끝냅니다. |
 
 ### Virtual Bass
 
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
 | `--vbass` | 꺼짐 | Virtual Bass 합성을 켭니다. |
-| `--vbass_freq HZ` | `250` | Virtual Bass crossover 주파수입니다. |
-| `--vbass_hp HZ` | `15.0` | 합성 저역에 적용할 high-pass 주파수입니다. |
-| `--vbass_polarity auto|normal|invert` | `auto` | 합성 저역 polarity 처리 방식입니다. |
+| `--vbass_freq HZ` | `250` | Virtual Bass 크로스오버 주파수입니다. |
+| `--vbass_hp HZ` | `15.0` | 합성한 저역에 적용할 하이패스 주파수입니다. |
+| `--vbass_polarity auto\|normal\|invert` | `auto` | 합성한 저역의 극성 처리 방식입니다. |
 
 ### 마이크 착용 편차 보정
 
-방향과 무관한 좌우 마이크 불일치(착용·감도)를 보정합니다(v4.0). 헤드폰 보상을 같은 마이크로 측정하면 마이크 응답이 보상 단계에서 이미 소거되므로, **헤드폰 보상이 켜져 있으면 이 보정은 자동으로 생략**됩니다. 자세한 내용은 [마이크 착용 편차 보정](docs/README_microphone_deviation_correction.md) 문서를 참고하세요.
+방향과 상관없는 좌우 마이크 차이(착용 깊이·각도·감도)를 보정합니다. 헤드폰 보정을 같은 마이크로 측정하면 마이크 응답이 그 단계에서 이미 상쇄되므로, **헤드폰 보정이 켜져 있으면 이 보정은 건너뜁니다.** 자세한 내용은 [마이크 착용 편차 보정](docs/README_microphone_deviation_correction.md) 문서에 있습니다.
 
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
-| `--microphone_deviation_correction` | 꺼짐 | 좌우 마이크 불일치를 보정합니다. 헤드폰 보상이 켜져 있으면 생략됩니다. |
+| `--microphone_deviation_correction` | 꺼짐 | 좌우 마이크 차이를 보정합니다. 헤드폰 보정이 켜져 있으면 건너뜁니다. |
 | `--mic_deviation_strength VALUE` | `0.7` | 보정 강도입니다. `0.0`은 보정 없음, `1.0`은 전체 보정입니다. |
-| `--mic_deviation_debug_plots` | 꺼짐 | 마이크 착용 편차 보정 진단 그래프를 저장합니다. |
+| `--mic_deviation_debug_plots` | 꺼짐 | 2.x에서는 보정 진단 그래프를 저장합니다. 3.x는 이 옵션을 받지만 아직 그래프를 만들지 않습니다. |
 
 ## CLI 예시
 
-데모 폴더를 처리하고 그래프를 저장합니다.
+데모 폴더를 처리하고 그래프를 모두 저장합니다.
 
 ```bash
-impulcifer --dir_path "data/demo" --test_signal default --plot
+impulcifer --dir_path "data/demo" --plot
 ```
 
 룸 보정과 헤드폰 보정을 끄고 측정 IR만 정리합니다.
@@ -212,7 +289,7 @@ impulcifer --dir_path "data/demo" --test_signal default --plot
 impulcifer --dir_path "measurements" --no_room_correction --no_headphone_compensation
 ```
 
-Virtual Bass와 JamesDSP 출력을 함께 만듭니다.
+Virtual Bass를 켜고 JamesDSP 출력도 함께 만듭니다.
 
 ```bash
 impulcifer --dir_path "measurements" --vbass --vbass_freq 250 --jamesdsp
@@ -224,58 +301,56 @@ impulcifer --dir_path "measurements" --vbass --vbass_freq 250 --jamesdsp
 impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 ```
 
-## GUI에서 할 수 있는 일
+## 알려진 제한
 
-- Recorder에서 sweep 재생과 녹음을 진행합니다. 기본은 파일 없이 sweep을 즉석 생성해 재생하는 방식이며(스피커 목록·레이아웃 선택, 커스텀 모드에서 샘플레이트/길이 지정 — mono/stereo/5.1/7.1/7.1.4/7.1.6 지원), 특수한 녹음을 위해 파일 재생 모드도 유지됩니다. 스피커 측정은 `FL,FR.wav` 같은 이름으로 저장하고, 헤드폰 보정은 별도 버튼으로 `headphones.wav`를 만듭니다.
-- Impulcifer 탭에서 BRIR 생성 옵션을 지정하고 처리 중 취소할 수 있습니다. 테스트 신호는 기본적으로 녹음에서 자동 감지되며, "폴더 분석" 버튼으로 감지 결과(샘플레이트/스윕 길이/신뢰도)를 미리 확인할 수 있습니다.
-- Output Recovery(출력 복원) 탭은 남아 있는 출력만으로 누락된 형식을 복원합니다. `Hangloose`의 스피커별 WAV만 남았다면 정해진 채널 순서로 `hrir.wav`와 `hesuvi.wav`를 모두 재조립하고, 둘 중 하나만 남았다면 다른 하나를 복원합니다. `hrir.wav` 또는 `hesuvi.wav`에서 스피커별 Hangloose 파일을 함께 만드는 옵션도 제공합니다. 출력 루트, 그 안의 `Hangloose` 폴더, 또는 분할 WAV가 바로 들어 있는 폴더를 선택할 수 있으며, 기존 파일은 그대로 보존하고 누락된 파일만 새로 만듭니다.
-- **불필요한 무음 확장 채널은 자동으로 제거합니다.** 생성·복원 모두 `hesuvi.wav`의 앞 14채널과 `hrir.wav`의 앞 16채널은 유지하고, 이후에는 마지막 유효 스피커까지 남깁니다. 와이드·상단 응답이 없는 일반 측정은 각각 14/16채널로 저장됩니다. 중간의 빈자리와 한쪽 귀에만 응답이 있는 스피커는 보존합니다. 미약한 신호를 무음으로 간주하지 않으며, 전체 샘플이 정확히 0인 뒤쪽 스피커 쌍만 제거합니다. 스피커 하나는 왼쪽 귀·오른쪽 귀 트랙 두 개로 저장되며, 몇 번째 트랙이 어느 스피커의 소리를 어느 귀로 보내는지는 [채널 순서 문서](docs/brir-channel-order.md)에 정리했습니다.
-- **FL·FR만 측정해도 HeSuVi의 앞 14채널은 필요합니다.** Equalizer APO는 부족한 IR 채널을 처음부터 반복 적용하므로, 이 채널들을 제거하면 다른 스피커에 잘못된 응답이 적용됩니다. 고정된 채널 순서를 유지하므로 별도 메타데이터 없이 기존 32/30채널 파일과 새 16~32/14~30채널 파일을 모두 복원할 수 있습니다. 자세한 근거는 [채널 호환성 분석](docs/silent-channel-compatibility.md)에 정리했습니다.
-- **중간 무음 채널도 제거**는 생성 고급 옵션과 출력 복원의 별도 선택 기능입니다(기본값 꺼짐). 켜면 개별 무음 채널까지 빼므로 FL/FR 응답만 있는 출력은 4채널로 줄어듭니다. **채널 위치가 달라져 HeSuVi 등과 호환되지 않을 수 있다는 경고를 표시합니다.** 축소 WAV 내부에 남은 채널 이름을 저장하며, 복원할 때 이 옵션을 끄면 누락된 형식을 호환 배치로 만듭니다. 기존 파일은 보존합니다. 파일 이동에는 별도 메타데이터 파일이 필요하지 않지만, 오디오 편집기로 내부 채널 정보를 삭제하면 원래 배치를 식별할 수 없으므로 주의하세요.
+3.x에는 2.x와 다른 점과 아직 없는 기능이 있습니다.
 
+* **Windows 녹음은 WASAPI만 씁니다:** 2.x에서 고를 수 있던 DirectSound·MME 장치는 3.x에서 쓸 수 없습니다. 장치 접근 방식은 기본값이 '독점 우선, 거부하면 공유'이고, 독점이나 공유로 고정하면 그 방식으로만 엽니다.
+* **macOS 앱은 Apple Silicon 전용입니다:** Intel Mac에서는 PyPI 패키지(CLI와 Python API)만 쓸 수 있습니다.
+* **PyPI 패키지에는 화면과 녹음이 없습니다:** 녹음은 앱에서 합니다.
+* **CustomTkinter 화면은 2.x에만 있습니다:** 3.x 앱에서는 Stable 프리셋이 그 화면의 배치를 따릅니다.
+* **마이크 착용 편차 보정의 진단 그래프:** `--mic_deviation_debug_plots`를 줘도 3.x는 그래프를 만들지 않습니다.
+* **설치 파일에 코드 서명이 없습니다:** 처음 실행할 때 Windows SmartScreen이나 macOS Gatekeeper가 경고를 띄울 수 있습니다.
+* **TrueHD(`.mlp`, `.thd`, `.truehd`) 입력에는 FFmpeg 4.0 이상이 필요합니다:** 3.x는 FFmpeg를 자동으로 설치하지 않으므로 미리 설치해 둡니다(Windows는 `winget install Gyan.FFmpeg`, macOS는 `brew install ffmpeg`, Linux는 `sudo apt install ffmpeg`).
 
+3.x의 결과는 2.x와 비트 단위로 같지 않습니다. 처리 단계마다 2.x 출력과 대조해 허용 오차 안에 있는지 테스트로 확인합니다. 원본 Impulcifer와 비교해도 같은 입력에서 수치 라이브러리와 보정 옵션 차이로 결과가 조금 다를 수 있습니다.
 
-- Studio skin에서는 같은 작업을 더 넓은 화면 구성으로 다룹니다.
-- UI Settings에서 언어와 테마를 바꿀 수 있습니다.
+## 소스에서 빌드하고 테스트하기
 
-각 옵션 위에 마우스를 올리면 짧은 설명을 확인할 수 있습니다.
+3.x는 저장소 루트의 Cargo 워크스페이스(`crates/`, `apps/impulcifer-app`)이고, 툴체인 버전은 `rust-toolchain.toml`(1.97)에 고정돼 있습니다. 구조는 [docs/rust/ARCHITECTURE.md](docs/rust/ARCHITECTURE.md)에 있습니다.
+
+```bash
+cargo test --workspace                                    # 전체 테스트
+cargo run -p impulcifer-cli --release -- --dir_path data/demo   # CLI
+```
+
+앱 패키지는 Tauri CLI(`npm install -g @tauri-apps/cli@^2`)로 `apps/impulcifer-app`에서 만듭니다. Linux에서 빌드하려면 `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libasound2-dev` 등이 필요하고, 플랫폼별 명령은 [docs/rust/PACKAGING.md](docs/rust/PACKAGING.md)에 있습니다. PyPI 휠 빌드는 [tests/migration/README-python.md](tests/migration/README-python.md)에 적었습니다.
+
+2.x는 저장소 루트의 Python 코드(`impulcifer.py`, `core/`, `gui/` 등)입니다. `pip install -e .`로 설치하고 `pytest tests/`로 테스트합니다. Nuitka 단독 실행 파일 빌드는 [빌드 가이드](docs/BUILD_README.md)에 있습니다.
 
 ## 추가 문서
 
-- [hrir.wav·hesuvi.wav 채널 순서와 귀 배정](docs/brir-channel-order.md)
-- [TrueHD/MLP 지원 및 레이아웃 출력](docs/README_TrueHD.md)
-- [마이크 착용 편차 보정](docs/README_microphone_deviation_correction.md)
-- [Python 3.14 및 Nuitka 빌드 메모](docs/README_PYTHON314.md)
-- [빌드 가이드 (Nuitka standalone)](docs/BUILD_README.md)
-- [성능 최적화 요약](docs/OPTIMIZATION_SUMMARY.md)
-
-## 주의 사항
-
-- `.mlp`, `.thd`, `.truehd` 입력은 FFmpeg가 필요합니다. FFmpeg가 없으면 실행 중 설치 안내가 나올 수 있습니다.
-- Custom EQ는 처리 시점에 측정 폴더의 `eq.csv`, `eq-left.csv`, `eq-right.csv`(없으면 같은 이름의 `.txt`)를 기준으로 읽습니다. AutoEQ CSV와 EqualizerAPO 설정 텍스트를 모두 인식합니다.
-- 원본 Impulcifer와 같은 입력을 쓰더라도 Python, NumPy, SciPy, 보정 옵션 차이로 결과가 달라질 수 있습니다. 주요 경로는 회귀 테스트로 확인합니다.
-
-## 업데이트
-
-pip 설치본은 pip으로 갱신합니다.
-
-```bash
-pip install --upgrade impulcifer-py313
-```
-
-스탠드얼론 빌드는 앱 안의 업데이트 확인으로 갱신합니다. Windows 인스톨러 설치본은 Velopack이 자동 업데이트를 처리하고, macOS(DMG)/Linux(AppImage)는 새 릴리스 파일을 내려받아 SHA-256 검증(릴리스의 `SHA256SUMS.txt`) 후 설치합니다 — AppImage로 실행 중이면 실행 파일이 제자리에서 새 버전으로 교체됩니다.
+* [hrir.wav·hesuvi.wav 채널 순서와 귀 배정](docs/brir-channel-order.md)
+* [무음 확장 채널 호환성 분석](docs/silent-channel-compatibility.md)
+* [TrueHD/MLP 지원 및 레이아웃 출력](docs/README_TrueHD.md)
+* [마이크 착용 편차 보정](docs/README_microphone_deviation_correction.md)
+* [2.x와 3.x 비교 측정 (Linux)](docs/rust/perf/2x-vs-3x-linux.md)
+* [3.x 출시 전 성능 감사 (Windows)](docs/rust/perf/release.md)
+* [3.x 구조](docs/rust/ARCHITECTURE.md)
+* [2.x Python 3.14 및 Nuitka 빌드 메모](docs/README_PYTHON314.md)
+* [2.x 빌드 가이드 (Nuitka)](docs/BUILD_README.md)
 
 ## 라이선스
 
-이 프로젝트는 MIT License를 따릅니다. 전체 문구는 [LICENSE](LICENSE)를 보세요.
+이 프로젝트는 MIT License를 따릅니다. 전체 문구는 [LICENSE](LICENSE)에 있습니다.
 
-저작권 표기는 `LICENSE`와 맞췄습니다.
+저작권 표기는 `LICENSE`와 같습니다.
 
-- Copyright (c) 2018- Jaakko Pasanen
-- Copyright (c) 2024- 115dkk
-- Copyright (c) 2025- LionLion123
-- Copyright (c) 2025- SDC (DCinside)
+* Copyright (c) 2018- Jaakko Pasanen
+* Copyright (c) 2024- 115dkk
+* Copyright (c) 2025- LionLion123
+* Copyright (c) 2025- SDC (DCinside)
 
 ## 기여와 문의
 
-버그를 찾았거나 개선할 점이 있으면 [이슈 트래커](https://github.com/115dkk/Impulcifer-pip313/issues)에 남겨 주세요.
+버그를 찾았거나 고칠 점이 있으면 [이슈 트래커](https://github.com/115dkk/Impulcifer-pip313/issues)에 남겨 주세요.
