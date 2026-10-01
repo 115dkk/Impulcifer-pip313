@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.0.6 - 2026-10-01
+### PyPI 프로젝트 페이지에 설명 표시
+
+#### 🐛 버그 수정
+- **PyPI 3.x 페이지의 설명이 비어 있던 문제**: 3.x 휠과 sdist를 만드는 `crates/impulcifer-python/pyproject.toml`에 `readme`가 없어서, 3.0.0부터 PyPI의 `impulcifer-py313` 페이지에 프로젝트 설명이 표시되지 않았습니다(2.x는 저장소 README를 썼습니다). 이제 PyPI용 설명 `crates/impulcifer-python/README.md`를 따로 두고 `readme`로 지정했습니다. 패키지가 무엇이고 무엇을 할 수 있는지, 설치, CLI, Python API, 2.x를 계속 쓰는 방법, 녹음과 화면 조작에는 앱이 필요하다는 점을 담았고, PyPI는 상대 링크를 저장소 기준으로 풀지 않으므로 링크는 모두 절대 주소로 적었습니다. sdist 최상위에 이 파일이 들어가는지 `crates/impulcifer-python/tests/test_sdist.py`가 확인합니다.
+
 ## 3.0.5 - 2026-09-25
 ### 휠이 없는 플랫폼에서도 설치되도록 sdist 수정
 
