@@ -144,6 +144,12 @@ def test_archive_paths_outside_the_cache_are_refused(gui, release):
     assert not (gui.cache_root() / "9.8.7").exists()
 
 
+def test_unpublished_release_says_to_wait(gui, release):
+    asset, entry = ASSETS["zip"]
+    with pytest.raises(gui.LauncherError, match="not published yet"):
+        gui.install("9.8.7", gui.Target(asset, "zip", entry))
+
+
 def test_unreachable_release_names_the_url(gui, release, monkeypatch):
     monkeypatch.setenv(gui.BASE_URL_ENV, "http://127.0.0.1:9")
     asset, entry = ASSETS["zip"]

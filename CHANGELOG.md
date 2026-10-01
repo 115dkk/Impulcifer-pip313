@@ -18,7 +18,11 @@ been fixed and old features improved.
   - 받은 앱은 릴리스 앱과 같은 프로그램이므로 녹음도 됩니다.
   - 이 컨테이너에서 실제 v3.0.5 AppImage를 받아(93 MiB, 약 2초) FUSE 없이 앱 화면이 뜨는 것까지 확인했습니다.
   - `crates/impulcifer-python/tests/test_gui.py`가 로컬 HTTP 서버로 만든 가짜 릴리스로 세 형식의 설치·재사용·체크섬 불일치·자산 없음·위험한 경로·실행 명령·콘솔 스크립트 선언을 확인합니다. `features.toml`에 `python.gui_launcher`로 등록했습니다.
+  - 릴리스가 아직 없으면(SHA256SUMS.txt가 404) 연결 문제로 안내하지 않고, 이 버전의 앱이 아직 게시되지 않았으니 잠시 뒤 다시 실행하라고 알려 줍니다.
 - **README**: pip 설치 안내, 업데이트, 앱 실행, 알려진 제한을 `impulcifer_gui`에 맞게 고쳤습니다. 'pip로 설치하면 녹음과 화면을 쓸 수 없다'는 제한을 빼고, 처음 실행할 때 인터넷이 필요하다는 점과 앱이 없는 플랫폼을 적었습니다. CLAUDE.md에는 실행기가 릴리스 자산 이름에 의존한다는 점을 적었습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **PyPI 발행을 GitHub Release 뒤로**: `release-3x.yml`의 `publish-pypi`는 휠 빌드만 기다려서, 새 버전이 PyPI에 먼저 올라가고 세 OS 앱 빌드와 업그레이드 검사를 기다리는 GitHub Release는 몇 분 뒤에 생겼습니다. 그 사이에 설치한 사용자의 `impulcifer_gui`는 받을 앱이 없으므로, 이제 `publish-pypi`가 `create-release`까지 기다립니다. 앱 빌드가 실패하면 그 버전은 PyPI에도 올라가지 않습니다. `tests/test_release_gate.py::test_pypi_waits_for_the_github_release`가 이 순서를 고정합니다.
 
 ## 3.0.7 - 2026-10-01
 ### 마이크 편차 진단 그래프를 3.x에서도 저장, README 알려진 제한 정리

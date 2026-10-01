@@ -584,8 +584,9 @@ master push → release-3x.yml (3.x)
   └─ gate           : 태그 v<워크스페이스 버전> 대조 → release / PATCH 자동 bump / 중단
   └─ build-windows  : cargo build + Velopack 패킹 → upgrade-windows (최신 2.x 설치본에 3.x 적용 스모크)
   └─ build-macos / build-linux : Tauri 번들 + 업데이터 서명
-  └─ wheels         : 3 OS abi3 휠 + sdist → publish-pypi (environment: PyPI, OIDC)
+  └─ wheels         : 3 OS abi3 휠 + sdist
   └─ create-release : GitHub Release v<버전> (latest.json, releases.win.json, SHA256SUMS.txt)
+  └─ publish-pypi   : (create-release 뒤) PyPI 발행 — environment: PyPI (OIDC). impulcifer_gui가 같은 버전의 릴리스 앱을 받으므로 릴리스가 먼저 있어야 한다
 
 수동 실행 → publish.yml (2.x)
   └─ gate           : 태그 v<pyproject 버전> 대조 → release / PATCH 자동 bump / 중단

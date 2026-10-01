@@ -114,10 +114,20 @@ def _fetch(url, destination, log):
     return digest.hexdigest()
 
 
-def _checksums(url):
+def _checksums(url, tag_version):
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
             text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            raise LauncherError(
+                f"The app for v{tag_version} is not published yet. "
+                f"Try again in a few minutes, or download the app from {RELEASES}."
+            ) from error
+        raise LauncherError(
+            f"Could not download {url} (HTTP {error.code}). Run impulcifer_gui again later, "
+            f"or download the app from {RELEASES}."
+        ) from error
     except (urllib.error.URLError, OSError) as error:
         raise LauncherError(
             f"Could not download {url} ({getattr(error, 'reason', error)}). "
@@ -172,7 +182,7 @@ def install(tag_version, chosen, root=None, log=None):
         return program
     asset = chosen.asset_name(tag_version)
     url = base_url(tag_version)
-    expected = _checksums(f"{url}/SHA256SUMS.txt").get(asset)
+    expected = _checksums(f"{url}/SHA256SUMS.txt", tag_version).get(asset)
     if expected is None:
         raise LauncherError(
             f"Release v{tag_version} has no {asset}. "
