@@ -4,13 +4,6 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
-## 3.0.5 - 2026-10-01
-### README를 3.x 기준으로 다시 쓰고 2.x와 실측 비교를 더함
-
-#### ⭐ 문서 추가 (릴리스 후 추가, 출하물 변화 없음)
-- **README를 3.x 기준으로 다시 씀**: 지금까지의 README는 2.x(Python 판)의 설치·실행 방법을 중심으로 적혀 있어, 3.x가 처리를 컴파일된 실행 파일로 옮기고 화면을 운영체제의 웹뷰로 그린다는 점, PyPI 3.x 패키지에는 CLI와 Python API만 있고 화면과 녹음은 앱에 있다는 점이 빠져 있었습니다. 이제 3.x 앱(Windows 설치 파일·포터블, macOS Apple Silicon DMG, Linux AppImage)과 PyPI 패키지를 기준으로 지원 환경, 설치, 업데이트, 앱의 다섯 메뉴, CLI, Python API(`impulcifer.main`, `impulcifer_native.run`의 진행률 콜백)를 적었습니다. 2.x를 계속 쓰는 방법(`pip install "impulcifer-py313<3"`, v2.14.3 릴리스, 2.x 전용 AUR 패키지)과 pip로 2.x를 갱신하면 GUI 명령이 사라진다는 점도 적었습니다. 알려진 제한으로 Windows 녹음은 WASAPI만 쓴다는 점, macOS 앱은 Apple Silicon 전용이라는 점, `--mic_deviation_debug_plots`가 3.x에서 그래프를 만들지 않는다는 점, 설치 파일에 코드 서명이 없다는 점, TrueHD 입력용 FFmpeg를 3.x가 자동으로 설치하지 않는다는 점을 밝혔습니다. 출력 파일 목록과 무음 채널·출력 복원 설명은 앱 설명에서 떼어 '출력 파일' 절로 옮겼고, `--interactive_plots` 설명의 Bokeh 언급과 `--info` 설명을 3.x 동작에 맞게 고쳤습니다.
-- **2.x와 3.x 비교 측정**: 같은 Linux 컨테이너(Intel Xeon 4 vCPU, Ubuntu 24.04)에서 PyPI의 2.14.3·3.0.5 휠과 GitHub Release의 두 AppImage를 나란히 돌려, 설치 크기(Windows 설치 파일 209.1 → 25.8 MiB, `pip install` 뒤 459 → 30 MiB), 데모 처리 시간과 최대 메모리(기본 5.6초·453 MiB → 1.9초·389 MiB, `--plot` 53.9초·3,214 MiB → 3.9초·671 MiB), 명령 시작 비용(1.0초·125 MiB → 0.02초·13 MiB), 앱을 켜 두었을 때의 메모리(앱 프로세스 334 → 101 MiB, 웹 엔진 포함 670 → 429 MiB)를 재서 README에 표로 넣었습니다. 측정 환경, 회차별 값, 재현 명령은 `docs/rust/perf/2x-vs-3x-linux.md`에, 측정 스크립트는 `tests/migration/bench_2x_vs_3x.py`에 있습니다.
-
 ## 3.0.5 - 2026-09-25
 ### 휠이 없는 플랫폼에서도 설치되도록 sdist 수정
 
@@ -21,6 +14,10 @@ been fixed and old features improved.
 #### 🔧 빌드 / 설정 변경
 - **sdist 빌드 검사**: `rust.yml`에 `sdist` 잡을 더해 PR마다 sdist를 만들고 pip로 휠을 빌드한 뒤(`build_backend.py` 경유) 그 휠로 `crates/impulcifer-python/tests`를 돌립니다. `test_sdist.py`는 sdist 안의 `src/` 코드가 `include_str!`·`include_bytes!`로 읽는 파일(테스트 전용 골든 제외)이 모두 sdist에 있는지 확인합니다.
 - README의 pip 설치 안내에 휠이 있는 플랫폼과, 그 밖의 플랫폼에서 필요한 Rust 1.97 이상을 적었습니다.
+
+#### ⭐ 문서 추가 (릴리스 후 추가, 출하물 변화 없음)
+- **README를 3.x 기준으로 다시 씀**: 지금까지의 README는 2.x(Python 판)의 설치·실행 방법을 중심으로 적혀 있어, 3.x가 처리를 컴파일된 실행 파일로 옮기고 화면을 운영체제의 웹뷰로 그린다는 점, PyPI 3.x 패키지에는 CLI와 Python API만 있고 화면과 녹음은 앱에 있다는 점이 빠져 있었습니다. 이제 3.x 앱(Windows 설치 파일·포터블, macOS Apple Silicon DMG, Linux AppImage)과 PyPI 패키지를 기준으로 지원 환경, 설치, 업데이트, 앱의 다섯 메뉴, CLI, Python API(`impulcifer.main`, `impulcifer_native.run`의 진행률 콜백)를 적었습니다. 2.x를 계속 쓰는 방법(`pip install "impulcifer-py313<3"`, v2.14.3 릴리스, 2.x 전용 AUR 패키지)과 pip로 2.x를 갱신하면 GUI 명령이 사라진다는 점도 적었습니다. 알려진 제한으로 Windows 녹음은 WASAPI만 쓴다는 점, macOS 앱은 Apple Silicon 전용이라는 점, `--mic_deviation_debug_plots`가 3.x에서 그래프를 만들지 않는다는 점, 설치 파일에 코드 서명이 없다는 점, TrueHD 입력용 FFmpeg를 3.x가 자동으로 설치하지 않는다는 점을 밝혔습니다. 출력 파일 목록과 무음 채널·출력 복원 설명은 앱 설명에서 떼어 '출력 파일' 절로 옮겼고, `--interactive_plots` 설명의 Bokeh 언급과 `--info` 설명을 3.x 동작에 맞게 고쳤습니다.
+- **2.x와 3.x 비교 측정**: 같은 Linux 컨테이너(Intel Xeon 4 vCPU, Ubuntu 24.04)에서 PyPI의 2.14.3·3.0.5 휠과 GitHub Release의 두 AppImage를 나란히 돌려, 설치 크기(Windows 설치 파일 209.1 → 25.8 MiB, `pip install` 뒤 459 → 30 MiB), 데모 처리 시간과 최대 메모리(기본 5.6초·453 MiB → 1.9초·389 MiB, `--plot` 53.9초·3,214 MiB → 3.9초·671 MiB), 명령 시작 비용(1.0초·125 MiB → 0.02초·13 MiB), 앱을 켜 두었을 때의 메모리(앱 프로세스 334 → 101 MiB, 웹 엔진 포함 670 → 429 MiB)를 재서 README에 표로 넣었습니다. 측정 환경, 회차별 값, 재현 명령은 `docs/rust/perf/2x-vs-3x-linux.md`에, 측정 스크립트는 `tests/migration/bench_2x_vs_3x.py`에 있습니다.
 
 ## 3.0.4 - 2026-09-25
 ### PyPI 휠의 RECORD를 파일 내용과 맞게
