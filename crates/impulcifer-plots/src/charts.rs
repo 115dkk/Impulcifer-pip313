@@ -415,6 +415,98 @@ pub fn plot_headphones(
         Ok(())
     })
 }
+/// 2.x `_plot_mismatch` (core/microphone_deviation_correction.py:457-484), written as
+/// plots/microphone_deviation_v4.png. Unlike 2.x, each ear's line is the gain its
+/// filter applies (2.x drew +Δ/2 under the left-ear label).
+pub fn plot_mic_deviation(path: &Path, m: &MicDeviation<'_>) -> Result<(), PlotError> {
+    validate(m.frequency, &[m.mismatch_db, m.left_db, m.right_db])?;
+    if [m.mismatch_db, m.left_db, m.right_db]
+        .iter()
+        .any(|v| v.len() != m.frequency.len())
+    {
+        return Err(PlotError::Invalid(
+            "mic deviation curves require one shared grid".into(),
+        ));
+    }
+    let (lo, hi) = m.band;
+    if !(lo.is_finite() && hi.is_finite() && 0. < lo && lo < hi) {
+        return Err(PlotError::Invalid(
+            "mic deviation band must be 0 < low < high".into(),
+        ));
+    }
+    let lines = [
+        line(
+            m.frequency,
+            m.mismatch_db,
+            "Estimated mismatch Δ",
+            BOTH,
+            Dash::Solid,
+        ),
+        line(
+            m.frequency,
+            m.left_db,
+            "Correction applied · left",
+            LEFT,
+            Dash::Short,
+        ),
+        line(
+            m.frequency,
+            m.right_db,
+            "Correction applied · right",
+            RIGHT,
+            Dash::Long,
+        ),
+    ];
+    let reference = match m.anchor {
+        "frontal" => "the centre speakers",
+        "diffuse" => "every speaker",
+        other => other,
+    };
+    let largest = m
+        .frequency
+        .iter()
+        .zip(m.right_db)
+        .filter(|(f, _)| (lo..=hi).contains(*f))
+        .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()));
+    let footer_lines = vec![
+        largest.map_or_else(
+            || "Largest correction: none in the weighted band".into(),
+            |(f, v)| {
+                format!(
+                    "Largest correction: {:+.1} dB left, {v:+.1} dB right at {}",
+                    -v,
+                    frequency(*f)
+                )
+            },
+        ),
+        format!(
+            "Estimated from {reference} · strength {:.2} · weighted {}–{}",
+            m.correction_strength,
+            frequency(lo),
+            frequency(hi)
+        ),
+    ];
+    png_file(path, SINGLE, |root| {
+        let area = content(root);
+        footer(&area, &footer_lines)?;
+        let panel = area.margin(0, ROW * footer_lines.len() as i32 + PAD * 2, 0, 0);
+        let a = fr_panel(
+            &panel,
+            "Microphone deviation correction",
+            "Δ is the left/right level difference shared by every speaker direction (positive: left louder). Each ear is corrected by half of it.",
+            &lines,
+            None,
+            None,
+            false,
+        )?;
+        for f in [lo, hi] {
+            if (a.limits.x.0..=a.limits.x.1).contains(&f) {
+                rule(&panel, a.map(f, a.limits.y.0), a.map(f, a.limits.y.1), ZERO)?;
+            }
+        }
+        Ok(())
+    })
+}
 pub fn plot_eq(
     path: &Path,
     left: Option<&FrCurve>,

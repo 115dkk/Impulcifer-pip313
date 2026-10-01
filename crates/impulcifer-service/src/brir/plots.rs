@@ -6,6 +6,7 @@ use impulcifer_dsp::{
     hrir::Hrir,
     interp::Spline,
     ir::ImpulseResponse,
+    mic_deviation::MicDeviationAnalysis,
     spectrogram,
     stages::equalize::AppliedEqualization,
 };
@@ -109,6 +110,22 @@ pub fn headphones(
         &display(right, applied_right)?,
         left.center_value((100.0, 10000.0)),
         right.center_value((100.0, 10000.0)),
+    )
+    .map_err(error)
+}
+/// 2.x `_plot_mismatch`: plots/microphone_deviation_v4.png when `mic_deviation_debug_plots`.
+pub fn mic_deviation(path: &Path, a: &MicDeviationAnalysis) -> Result<(), DspError> {
+    impulcifer_plots::plot_mic_deviation(
+        path,
+        &impulcifer_plots::MicDeviation {
+            frequency: &a.frequency,
+            mismatch_db: &a.mismatch_db,
+            left_db: &a.left_db,
+            right_db: &a.right_db,
+            band: a.band,
+            anchor: &a.anchor,
+            correction_strength: a.correction_strength,
+        },
     )
     .map_err(error)
 }

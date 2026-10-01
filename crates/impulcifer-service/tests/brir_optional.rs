@@ -6,7 +6,7 @@ use impulcifer_types::job::JobStatus;
 use serde_json::json;
 
 #[test]
-fn optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings() {
+fn optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings() {
     let temp = Temp::demo();
     let jobs = JobRegistry::new();
     let service = service(&temp, jobs.clone());
@@ -25,15 +25,14 @@ fn optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warning
     ] {
         assert!(p.events.iter().any(|e| e.payload["key"] == key), "{key}");
     }
-    // Only the mic-deviation debug plots remain unported; the interactive
-    // report is rendered (before the 44.1 kHz resample, at 48 kHz like 2.x).
-    assert_eq!(
-        p.events
+    // Every requested plot is rendered: the mic-deviation debug chart and the
+    // interactive report (before the 44.1 kHz resample, at 48 kHz like 2.x).
+    assert!(
+        !p.events
             .iter()
-            .filter(|e| e.payload["key"] == "cli_plots_not_available_yet")
-            .count(),
-        1
+            .any(|e| e.payload["key"] == "cli_plots_not_available_yet")
     );
+    assert!(temp.0.join("plots/microphone_deviation_v4.png").is_file());
     assert!(p.events.iter().any(|e| {
         e.payload["key"] == "cli_success_interactive_saved"
             && e.payload["level"] == "SUCCESS"
@@ -177,4 +176,31 @@ fn mic_deviation_is_skipped_with_headphone_compensation() {
             .iter()
             .any(|e| e.payload["key"] == "cli_correcting_deviation")
     );
+}
+
+/// 2.x writes plots/microphone_deviation_v4.png only when asked to
+/// (core/pipeline.py _stage_mic_deviation, plot_analysis=mic_deviation_debug_plots).
+#[test]
+fn mic_deviation_debug_plot_is_written_only_on_request() {
+    for requested in [false, true] {
+        let temp = Temp::demo();
+        let jobs = JobRegistry::new();
+        let service = service(&temp, jobs.clone());
+        let result = service.call(
+            "start_brir",
+            vec![json!({
+                "dir_path": temp.0,
+                "do_headphone_compensation": false,
+                "microphone_deviation_correction": true,
+                "mic_deviation_debug_plots": requested,
+            })],
+        );
+        assert_eq!(result["ok"], true, "{result}");
+        let p = wait(&jobs, result["data"]["job"]["job_id"].as_str().unwrap());
+        assert_eq!(p.job.status, JobStatus::Succeeded, "{:?}", p.job.error);
+        assert_eq!(
+            temp.0.join("plots/microphone_deviation_v4.png").is_file(),
+            requested
+        );
+    }
 }

@@ -13,6 +13,7 @@ readme = "README.md"
 
 [project.scripts]
 impulcifer = "impulcifer:cli"
+impulcifer_gui = "impulcifer.gui:cli"
 
 [tool.maturin]
 features = ["python"]

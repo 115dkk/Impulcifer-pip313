@@ -615,3 +615,38 @@ fn gallery() {
     .unwrap();
     println!("P23_SYNTHETIC_GALLERY {}", d.display());
 }
+
+#[test]
+fn mic_deviation_chart_is_single_size_and_rejects_bad_input() {
+    let d = directory();
+    let frequency: Vec<_> = (0..700).map(|i| 20.0 * 1.01_f64.powi(i)).collect();
+    let mismatch: Vec<_> = frequency
+        .iter()
+        .map(|f| 2.0 * (f.log10() * 2.0).sin())
+        .collect();
+    let right: Vec<_> = mismatch.iter().map(|d| d * 0.35).collect();
+    let left: Vec<_> = right.iter().map(|d| -d).collect();
+    let chart = MicDeviation {
+        frequency: &frequency,
+        mismatch_db: &mismatch,
+        left_db: &left,
+        right_db: &right,
+        band: (200.0, 16000.0),
+        anchor: "frontal",
+        correction_strength: 0.7,
+    };
+    let path = d.join("microphone_deviation_v4.png");
+    plot_mic_deviation(&path, &chart).unwrap();
+    let (width, height, _) = decode(&path);
+    assert_eq!((width, height), (1600, 1000));
+    let short = MicDeviation {
+        right_db: &right[..10],
+        ..chart
+    };
+    assert!(plot_mic_deviation(&d.join("short.png"), &short).is_err());
+    let inverted = MicDeviation {
+        band: (16000.0, 200.0),
+        ..chart
+    };
+    assert!(plot_mic_deviation(&d.join("band.png"), &inverted).is_err());
+}

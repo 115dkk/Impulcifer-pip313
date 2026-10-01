@@ -421,7 +421,9 @@ jobs:
 
   publish-pypi:
     name: Publish to PyPI (project impulcifer-py313)
-    needs: [gate, wheels]
+    # After the GitHub Release: impulcifer_gui in the wheel downloads this
+    # version's app from it, so the release must exist before pip can install.
+    needs: [gate, wheels, create-release]
     # Master pushes always publish; a dispatch publishes unless publish_pypi=false.
     if: needs.gate.outputs.should_release == 'true' && (github.event_name == 'push' || inputs.publish_pypi)
     runs-on: ubuntu-latest
