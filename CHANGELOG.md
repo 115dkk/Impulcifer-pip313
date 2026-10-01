@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.0.7 - 2026-10-01
+### 마이크 편차 진단 그래프를 3.x에서도 저장, README 알려진 제한 정리
+
+#### ⭐ 새로운 기능 / 개선
+- **마이크 착용 편차 보정 진단 그래프(`--mic_deviation_debug_plots`)**: 3.x는 이 옵션을 받기만 하고 그래프를 만들지 않은 채 'not available yet' 경고를 남겼습니다. 이제 2.x처럼 `plots/microphone_deviation_v4.png`를 저장합니다. 그래프에는 추정한 좌우 불일치 Δ, 각 귀의 필터가 실제로 적용하는 보정량(왼쪽 −Δ·강도/2, 오른쪽 +Δ·강도/2), 가중 대역(200 Hz–16 kHz) 경계가 나오고, 아래에 가장 큰 보정량과 추정 기준(센터 스피커 또는 전체 스피커)을 적었습니다. 2.x와 같이 보정이 실제로 HRIR을 바꿨을 때만 저장합니다(불일치가 0.05 dB 미만이면 보정도 그래프도 건너뜁니다. 헤드폰 보정이 켜져 있으면 보정 단계 자체를 건너뜁니다). 2.x 그래프는 '좌측 보정량 (−Δ/2)' 범례 아래에 +Δ/2 곡선을 그려 좌우 보정 곡선의 부호가 뒤바뀌어 보이는데, 3.x는 필터가 쓰는 곡선을 그대로 그립니다. 보정량 계산을 필터 설계와 그래프가 함께 쓰는 한 곳(`MicMatching::correction_half`)으로 모아 두 결과가 어긋나지 않게 했고, 출력 WAV는 바뀌지 않습니다(`golden_mic_deviation_matches_python` 통과). `features.toml`의 `config.mic_deviation_debug_plots`를 검증 테스트와 함께 `implemented`로 바꿨습니다.
+
+#### ⭐ 문서
+- **README 알려진 제한 정리**: 오래전부터 WASAPI로 통일된 Windows 녹음 항목을 뺐고, 구현된 마이크 편차 진단 그래프 항목을 지웠습니다. 'PyPI 패키지에는 화면과 녹음이 없습니다'는 무슨 뜻인지 알 수 없었으므로, pip로 설치한 3.x에는 2.x의 `impulcifer_gui` 같은 화면 명령이 없어 녹음하거나 화면에서 처리하려면 앱을 받아야 한다고 바꿔 적었습니다.
+- **독자에게 할 일을 말하는 문장으로**: '미리 설치해 둡니다', 'AppImage에 실행 권한을 주고 실행합니다', '버전을 3 미만으로 고정합니다'처럼 절차나 요구 사항을 남의 일처럼 서술한 문장과, 'macOS 앱은 Apple Silicon 전용입니다'처럼 제한을 상태로만 적은 문장을 '~해야 합니다', '~할 수 있습니다', '~할 수 없습니다'로 고쳤습니다. 같은 규칙을 make-interfaces-feel-better의 `write.md`에도 더했습니다.
+
 ## 3.0.5 - 2026-09-25
 ### 휠이 없는 플랫폼에서도 설치되도록 sdist 수정
 

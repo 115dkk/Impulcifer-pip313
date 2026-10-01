@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/impulcifer-py313.svg)](https://badge.fury.io/py/impulcifer-py313)
 
-Impulcifer-py313은 [Jaakko Pasanen의 Impulcifer](https://github.com/jaakkopasanen/impulcifer)를 바탕으로 한 포크입니다. 귀에 넣은 바이노럴 마이크로 스피커 소리를 녹음하고, 그 녹음으로 헤드폰에서 스피커를 재현하는 개인 BRIR WAV를 만듭니다. 만든 파일은 HeSuVi(Equalizer APO), JamesDSP, Hangloose Convolver 같은 컨볼버에 넣어 씁니다.
+Impulcifer-py313은 [Jaakko Pasanen의 Impulcifer](https://github.com/jaakkopasanen/impulcifer)를 바탕으로 한 포크입니다. 귀에 넣은 바이노럴 마이크로 스피커 소리를 녹음하고, 그 녹음으로 헤드폰에서 스피커를 재현하는 개인 BRIR WAV를 만듭니다. 만든 파일은 HeSuVi(Equalizer APO), JamesDSP, Hangloose Convolver 같은 컨볼버에 넣어 쓸 수 있습니다.
 
 지금 정식 버전은 3.x입니다. 2.x까지는 이 처리를 Python과 NumPy·SciPy·Matplotlib으로 했고, 3.x는 같은 처리를 컴파일 언어로 다시 써서 실행 파일 하나로 돌립니다. 화면은 운영체제에 들어 있는 웹뷰(Windows의 WebView2, macOS의 WKWebView)로 그립니다. 그래서 앱에는 Python 런타임이 들어가지 않고, Windows·macOS 앱에는 브라우저 엔진도 들어가지 않습니다. 그 결과 Windows 설치 파일이 209 MiB에서 26 MiB로, 데모 데이터 처리 시간이 5.6초에서 1.9초로 줄었습니다(아래 측정값). 처리 결과는 단계마다 2.x의 출력과 대조해 허용 오차 안에서 맞췄습니다.
 
@@ -54,18 +54,18 @@ Linux AppImage는 두 버전이 담는 내용이 다릅니다. 3.x AppImage는 �
 
 | 형태 | 플랫폼 | 필요한 것 |
 | --- | --- | --- |
-| 앱 | Windows 10/11 x64 | Microsoft Edge WebView2 런타임. Windows 11에는 기본으로 들어 있습니다. |
-| 앱 | macOS (Apple Silicon) | Intel Mac용 앱은 없습니다. |
-| 앱 | Linux x86_64 (AppImage) | FUSE 2(`libfuse2`). Ubuntu 22.04에서 빌드하므로 그보다 오래된 glibc에서는 실행되지 않을 수 있습니다. |
+| 앱 | Windows 10/11 x64 | Microsoft Edge WebView2 런타임이 있어야 합니다(Windows 11에는 기본으로 들어 있습니다). |
+| 앱 | macOS (Apple Silicon) | Intel Mac에서는 앱을 쓸 수 없습니다. |
+| 앱 | Linux x86_64 (AppImage) | FUSE 2(`libfuse2`)가 있어야 합니다. Ubuntu 22.04에서 빌드하므로 그보다 오래된 배포판에서는 실행되지 않을 수 있습니다. |
 | PyPI 패키지 | Python 3.9 이상 | Windows x64, macOS(Apple Silicon), Linux x86_64(glibc 2.28 이상)에서는 미리 빌드한 휠을 받습니다. |
 
-PyPI 휠이 없는 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 받아 직접 빌드하므로 Rust 1.97 이상이 필요합니다([rustup](https://rustup.rs)으로 설치). Rust가 아예 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
+PyPI 휠이 없는 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 받아 직접 빌드하므로 Rust 1.97 이상이 있어야 합니다([rustup](https://rustup.rs)으로 설치). Rust가 아예 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
 
 ## 설치
 
 ### 앱
 
-[GitHub Releases의 최신 릴리스](https://github.com/115dkk/Impulcifer-pip313/releases/latest)에서 운영체제에 맞는 파일을 받습니다.
+[GitHub Releases의 최신 릴리스](https://github.com/115dkk/Impulcifer-pip313/releases/latest)에서 운영체제에 맞는 파일을 받아야 합니다.
 
 | 운영체제 | 파일 |
 | --- | --- |
@@ -73,7 +73,7 @@ PyPI 휠이 없는 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 �
 | macOS | `Impulcifer-<버전>-macOS.dmg` |
 | Linux | `Impulcifer-<버전>-x86_64.AppImage` |
 
-Linux에서는 받은 AppImage에 실행 권한을 주고 실행합니다.
+Linux에서는 받은 AppImage에 실행 권한을 줘야 실행할 수 있습니다.
 
 ```bash
 chmod +x Impulcifer-*-x86_64.AppImage
@@ -90,60 +90,60 @@ source venv/bin/activate        # Windows에서는 venv\Scripts\activate
 pip install impulcifer-py313
 ```
 
-`uv`를 쓴다면 `uv pip install impulcifer-py313`으로 설치합니다. 설치하면 `impulcifer` 명령과 `import impulcifer`로 쓰는 Python API가 생깁니다. 3.x PyPI 패키지에는 GUI와 녹음 기능이 없으므로, 녹음과 화면 조작이 필요하면 앱을 설치합니다.
+`uv`를 쓴다면 `uv pip install impulcifer-py313`으로 설치할 수 있습니다. 설치하면 `impulcifer` 명령과 Python API(`import impulcifer`)를 쓸 수 있습니다. pip로 설치한 3.x에는 `impulcifer_gui` 같은 화면 명령이 없으므로, 녹음하거나 화면에서 처리하려면 앱을 설치해야 합니다.
 
 ### 2.x를 계속 쓰려면
 
-2.x는 PyPI와 [v2.14.3 릴리스](https://github.com/115dkk/Impulcifer-pip313/releases/tag/v2.14.3)에 남아 있습니다. pip로 2.x를 설치하려면 버전을 3 미만으로 고정합니다. 2.x PyPI 패키지는 Python 3.9~3.14를 지원하고, `impulcifer_gui`(CustomTkinter 화면)와 `impulcifer_webview`(웹뷰 화면) 명령을 함께 설치합니다.
+2.x는 PyPI와 [v2.14.3 릴리스](https://github.com/115dkk/Impulcifer-pip313/releases/tag/v2.14.3)에 남아 있습니다. pip로 2.x를 설치하려면 버전을 3 미만으로 고정해야 합니다. 2.x PyPI 패키지는 Python 3.9~3.14를 지원하고, `impulcifer_gui`(CustomTkinter 화면)와 `impulcifer_webview`(웹뷰 화면) 명령을 함께 설치합니다.
 
 ```bash
 pip install "impulcifer-py313<3"
 ```
 
-2.x 웹뷰 화면을 pip 환경에서 쓰려면 `pip install "impulcifer-py313[webview]<3"`로 설치합니다. Linux에서는 그 전에 WebKitGTK와 PyGObject 빌드용 시스템 패키지가 필요합니다(Debian/Ubuntu 기준).
+2.x 웹뷰 화면을 pip 환경에서 쓰려면 `pip install "impulcifer-py313[webview]<3"`로 설치해야 합니다. Linux에서는 그 전에 WebKitGTK와 PyGObject 빌드용 시스템 패키지를 설치해야 합니다(Debian/Ubuntu 기준).
 
 ```bash
 sudo apt-get install -y gir1.2-gtk-3.0 gir1.2-webkit2-4.1 \
   libgirepository1.0-dev libgirepository-2.0-dev libcairo2-dev pkg-config gcc python3-dev
 ```
 
-Arch 계열 배포판의 AUR 패키지 [`impulcifer-py313-bin`](https://aur.archlinux.org/packages/impulcifer-py313-bin)은 2.x입니다. 3.x 릴리스로는 갱신되지 않습니다.
+Arch 계열 배포판의 AUR 패키지 [`impulcifer-py313-bin`](https://aur.archlinux.org/packages/impulcifer-py313-bin)으로는 2.x만 설치할 수 있습니다. 3.x를 쓰려면 AppImage를 받아야 합니다.
 
 ## 업데이트
 
 앱은 실행 중에 새 버전을 확인하고, 사용자가 허락하면 내려받아 설치합니다. Windows는 Velopack으로, macOS와 Linux는 서명을 확인한 업데이트 파일로 설치합니다. 2.x 앱에서 업데이트를 확인해도 3.x가 새 버전으로 표시됩니다.
 
-PyPI 패키지는 pip로 갱신합니다.
+PyPI 패키지는 다음 명령으로 갱신할 수 있습니다.
 
 ```bash
 pip install --upgrade impulcifer-py313
 ```
 
-pip로 설치한 2.x를 이 명령으로 갱신하면 3.x로 올라가면서 `impulcifer_gui`, `impulcifer_webview` 명령이 사라집니다. 2.x 화면을 계속 쓰려면 위의 `"impulcifer-py313<3"`로 고정합니다.
+pip로 설치한 2.x를 이 명령으로 갱신하면 3.x로 올라가면서 `impulcifer_gui`, `impulcifer_webview` 명령이 사라집니다. 2.x 화면을 계속 쓰려면 위의 `"impulcifer-py313<3"`로 고정해야 합니다.
 
 ## 사용법
 
 ### 앱
 
-앱의 다섯 메뉴로 작업합니다.
+앱은 다섯 메뉴로 나뉩니다.
 
-* **녹음:** 스피커마다 sweep을 재생하고 바이노럴 마이크로 녹음합니다. 기본으로는 sweep 파일 없이 sweep을 즉석에서 만들어 재생하고, 스피커 순서와 트랙 레이아웃(mono, stereo, 5.1, 7.1, 7.1.4, 7.1.6)을 고를 수 있습니다. 특수한 녹음에는 파일 재생 방식도 씁니다. 스피커 녹음은 `FL,FR.wav` 같은 이름으로, 헤드폰 보정 녹음은 `headphones.wav`로 저장합니다.
+* **녹음:** 스피커마다 sweep을 재생하고 바이노럴 마이크로 녹음합니다. 기본으로는 sweep 파일 없이 sweep을 즉석에서 만들어 재생하고, 스피커 순서와 트랙 레이아웃(mono, stereo, 5.1, 7.1, 7.1.4, 7.1.6)을 고를 수 있습니다. 특수한 녹음에는 sweep 파일을 재생하는 방식을 쓸 수 있습니다. 스피커 녹음은 `FL,FR.wav` 같은 이름으로, 헤드폰 보정 녹음은 `headphones.wav`로 저장합니다.
 * **처리:** 녹음 폴더에서 BRIR을 만듭니다. 테스트 신호는 녹음에서 자동으로 알아내며, '폴더 분석' 버튼으로 알아낸 샘플레이트·sweep 길이·신뢰도를 처리 전에 볼 수 있습니다. 처리 중에는 취소할 수 있습니다.
 * **출력 복원:** 남아 있는 출력 파일로 빠진 형식을 다시 만듭니다. 아래 '출력 파일'에 자세히 적었습니다.
-* **설정:** 언어(9개), 테마(다크, 라이트, 시스템), 레이아웃 프리셋을 고릅니다. Studio는 고급 옵션을 음색·레벨, 시간 응답, 출력 파일, 보정·그래프 네 탭으로 나눠 탭마다 켜고 끄며, Stable은 2.x의 CustomTkinter 화면처럼 한 목록으로 보여 줍니다.
+* **설정:** 언어(9개), 테마(다크, 라이트, 시스템), 레이아웃 프리셋을 고를 수 있습니다. Studio는 고급 옵션을 음색·레벨, 시간 응답, 출력 파일, 보정·그래프 네 탭으로 나눠 탭마다 켜고 끄며, Stable은 2.x의 CustomTkinter 화면처럼 한 목록으로 보여 줍니다.
 * **정보:** 버전, 시스템 정보, 프로젝트 링크를 보여 줍니다.
 
 옵션 위에 마우스를 올리면 짧은 설명이 나옵니다.
 
 ### CLI
 
-측정 폴더를 지정해 실행합니다. 옵션은 2.x와 같습니다. 저장소의 `data/demo`에는 바로 처리해 볼 수 있는 데모 녹음이 있습니다.
+`--dir_path`로 측정 폴더를 지정해야 합니다. 옵션은 2.x와 같습니다. 저장소의 `data/demo`에는 바로 처리해 볼 수 있는 데모 녹음이 있습니다.
 
 ```bash
 impulcifer --dir_path "data/demo" --plot
 ```
 
-전체 옵션은 `impulcifer --help`로 봅니다.
+전체 옵션은 `impulcifer --help`로 확인할 수 있습니다.
 
 ### Python API
 
@@ -151,21 +151,21 @@ impulcifer --dir_path "data/demo" --plot
 import impulcifer
 from impulcifer import impulcifer_native as native
 
-# 처리 옵션은 CLI와 같은 이름의 키워드 인자로 주고, hesuvi.wav의 경로를 돌려받습니다.
+# 처리 옵션을 CLI와 같은 이름의 키워드 인자로 넘기면 hesuvi.wav의 경로를 돌려받습니다.
 path = impulcifer.main(dir_path="measurements", vbass=True, vbass_freq=250)
 
-# 진행률과 로그를 받으려면 native.run에 콜백을 넘깁니다.
+# 진행률과 로그가 필요하면 native.run에 콜백을 넘겨야 합니다.
 native.run(
     {"dir_path": "measurements"},
     progress=lambda event: print(event["progress"], event["message"]),
 )
 ```
 
-`decay`를 숫자나 스피커별 딕셔너리로 줄 때 Python API의 단위는 초입니다(CLI는 밀리초). 이 밖에 `impulcifer.detect_sweep(폴더)`, `impulcifer.generate_sweep_set(폴더)`, `impulcifer.recover_brir_outputs(폴더)`가 있습니다.
+`decay`를 숫자나 스피커별 딕셔너리로 넘길 때는 초 단위로 줘야 합니다(CLI는 밀리초). 이 밖에 `impulcifer.detect_sweep(폴더)`, `impulcifer.generate_sweep_set(폴더)`, `impulcifer.recover_brir_outputs(폴더)`를 쓸 수 있습니다.
 
 ## 입력 파일
 
-`--dir_path`로 지정한 폴더에 측정 파일과 보정 파일을 둡니다.
+`--dir_path`로 지정한 폴더에 측정 파일과 보정 파일을 둬야 합니다.
 
 | 파일 | 설명 |
 | --- | --- |
@@ -195,7 +195,7 @@ Custom EQ 파일은 두 가지 형식을 읽습니다. 형식은 확장자가 �
 
 뒤쪽의 무음 확장 채널은 자동으로 뺍니다. `hesuvi.wav`의 앞 14채널과 `hrir.wav`의 앞 16채널은 항상 남기고, 그 뒤로는 마지막 유효 스피커까지 남깁니다. 그래서 와이드·상단 스피커가 없는 일반 측정은 각각 14채널, 16채널로 저장됩니다. 중간의 빈자리와 한쪽 귀에만 응답이 있는 스피커는 그대로 두고, 전체 샘플이 정확히 0인 뒤쪽 스피커 쌍만 뺍니다. FL·FR만 측정해도 `hesuvi.wav`의 앞 14채널을 남기는 까닭은 Equalizer APO가 모자란 IR 채널을 처음부터 반복해 적용하기 때문입니다. 이 채널들을 빼면 다른 스피커에 엉뚱한 응답이 적용됩니다. 근거는 [채널 호환성 분석](docs/silent-channel-compatibility.md)에 있습니다.
 
-'중간 무음 채널도 제거'(`--remove_silent_channels`, 기본값 꺼짐)를 켜면 개별 무음 채널까지 빼므로, FL·FR만 있는 출력은 4채널이 됩니다. 이렇게 만든 파일은 채널 위치가 바뀌어 HeSuVi 등에서 쓸 수 없을 수 있습니다. 줄인 WAV 안에는 남은 채널 이름을 기록해 두므로 출력 복원에서 원래 배치로 되돌릴 수 있습니다. 다만 오디오 편집기로 이 정보를 지우면 원래 배치를 알 수 없습니다.
+'중간 무음 채널도 제거'(`--remove_silent_channels`, 기본값 꺼짐)를 켜면 개별 무음 채널까지 빼므로, FL·FR만 있는 출력은 4채널이 됩니다. 이렇게 만든 파일은 채널 위치가 바뀌어 HeSuVi 등에서 쓸 수 없을 수 있습니다. 줄인 WAV 안에는 남은 채널 이름을 기록해 두므로 출력 복원에서 원래 배치로 되돌릴 수 있습니다. 다만 오디오 편집기로 이 정보를 지우면 원래 배치로 되돌릴 수 없습니다.
 
 출력 복원은 남아 있는 출력만으로 빠진 형식을 다시 만듭니다. `Hangloose` 폴더의 스피커별 WAV만 남았다면 정해진 채널 순서로 `hrir.wav`와 `hesuvi.wav`를 모두 다시 만들고, 둘 중 하나만 남았다면 나머지 하나를 만듭니다. `hrir.wav`나 `hesuvi.wav`에서 스피커별 Hangloose 파일을 함께 만들 수도 있습니다. 출력 폴더, 그 안의 `Hangloose` 폴더, 분할 WAV가 바로 들어 있는 폴더 중 어느 것을 골라도 되고, 이미 있는 파일은 건드리지 않고 빠진 파일만 만듭니다.
 
@@ -273,7 +273,7 @@ sweep 파일을 따로 준비하지 않아도 됩니다. 녹음 화면은 기본
 | --- | --- | --- |
 | `--microphone_deviation_correction` | 꺼짐 | 좌우 마이크 차이를 보정합니다. 헤드폰 보정이 켜져 있으면 건너뜁니다. |
 | `--mic_deviation_strength VALUE` | `0.7` | 보정 강도입니다. `0.0`은 보정 없음, `1.0`은 전체 보정입니다. |
-| `--mic_deviation_debug_plots` | 꺼짐 | 2.x에서는 보정 진단 그래프를 저장합니다. 3.x는 이 옵션을 받지만 아직 그래프를 만들지 않습니다. |
+| `--mic_deviation_debug_plots` | 꺼짐 | 추정한 좌우 불일치와 귀별 보정량을 `plots/microphone_deviation_v4.png`로 저장합니다. 보정을 실제로 적용했을 때만 저장합니다. |
 
 ## CLI 예시
 
@@ -303,17 +303,15 @@ impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 
 ## 알려진 제한
 
-3.x에는 2.x와 다른 점과 아직 없는 기능이 있습니다.
+3.x를 쓰기 전에 다음을 알아 두어야 합니다.
 
-* **Windows 녹음은 WASAPI만 씁니다:** 2.x에서 고를 수 있던 DirectSound·MME 장치는 3.x에서 쓸 수 없습니다. 장치 접근 방식은 기본값이 '독점 우선, 거부하면 공유'이고, 독점이나 공유로 고정하면 그 방식으로만 엽니다.
-* **macOS 앱은 Apple Silicon 전용입니다:** Intel Mac에서는 PyPI 패키지(CLI와 Python API)만 쓸 수 있습니다.
-* **PyPI 패키지에는 화면과 녹음이 없습니다:** 녹음은 앱에서 합니다.
-* **CustomTkinter 화면은 2.x에만 있습니다:** 3.x 앱에서는 Stable 프리셋이 그 화면의 배치를 따릅니다.
-* **마이크 착용 편차 보정의 진단 그래프:** `--mic_deviation_debug_plots`를 줘도 3.x는 그래프를 만들지 않습니다.
-* **설치 파일에 코드 서명이 없습니다:** 처음 실행할 때 Windows SmartScreen이나 macOS Gatekeeper가 경고를 띄울 수 있습니다.
-* **TrueHD(`.mlp`, `.thd`, `.truehd`) 입력에는 FFmpeg 4.0 이상이 필요합니다:** 3.x는 FFmpeg를 자동으로 설치하지 않으므로 미리 설치해 둡니다(Windows는 `winget install Gyan.FFmpeg`, macOS는 `brew install ffmpeg`, Linux는 `sudo apt install ffmpeg`).
+* **Intel Mac에서는 앱을 쓸 수 없습니다:** macOS 앱은 Apple Silicon용만 있으므로, Intel Mac에서는 PyPI 패키지(CLI와 Python API)만 쓸 수 있습니다.
+* **pip로 설치하면 녹음과 화면을 쓸 수 없습니다:** 3.x PyPI 패키지에는 `impulcifer` 명령과 Python API만 들어 있고, 2.x의 `impulcifer_gui` 같은 화면 명령이 없습니다. 녹음하거나 화면에서 처리하려면 앱을 받아야 합니다.
+* **CustomTkinter 화면을 쓰려면 2.x를 설치해야 합니다:** 3.x 앱에서는 Stable 프리셋이 그 화면의 배치를 따릅니다.
+* **처음 실행할 때 보안 경고가 뜰 수 있습니다:** 설치 파일에 코드 서명이 없어서 Windows SmartScreen이나 macOS Gatekeeper가 실행을 막을 수 있습니다. Windows에서는 '추가 정보'를 누른 뒤 '실행'을 눌러야 하고, macOS에서는 시스템 설정의 '개인정보 보호 및 보안'에서 실행을 허용해야 합니다.
+* **TrueHD(`.mlp`, `.thd`, `.truehd`)를 입력하려면 FFmpeg 4.0 이상이 있어야 합니다:** 3.x는 FFmpeg를 자동으로 설치하지 않으므로 미리 설치해야 합니다(Windows는 `winget install Gyan.FFmpeg`, macOS는 `brew install ffmpeg`, Linux는 `sudo apt install ffmpeg`).
 
-3.x의 결과는 2.x와 비트 단위로 같지 않습니다. 처리 단계마다 2.x 출력과 대조해 허용 오차 안에 있는지 테스트로 확인합니다. 원본 Impulcifer와 비교해도 같은 입력에서 수치 라이브러리와 보정 옵션 차이로 결과가 조금 다를 수 있습니다.
+같은 측정을 2.x와 3.x로 처리하면 결과 파일이 비트 단위로 같지 않습니다. 그 차이는 처리 단계마다 2.x 출력과 대조하는 테스트의 허용 오차 안에 있습니다. 원본 Impulcifer와 비교해도 수치 라이브러리와 보정 옵션 차이로 결과가 조금 다를 수 있습니다.
 
 ## 소스에서 빌드하고 테스트하기
 
@@ -324,9 +322,9 @@ cargo test --workspace                                    # 전체 테스트
 cargo run -p impulcifer-cli --release -- --dir_path data/demo   # CLI
 ```
 
-앱 패키지는 Tauri CLI(`npm install -g @tauri-apps/cli@^2`)로 `apps/impulcifer-app`에서 만듭니다. Linux에서 빌드하려면 `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libasound2-dev` 등이 필요하고, 플랫폼별 명령은 [docs/rust/PACKAGING.md](docs/rust/PACKAGING.md)에 있습니다. PyPI 휠 빌드는 [tests/migration/README-python.md](tests/migration/README-python.md)에 적었습니다.
+앱 패키지는 Tauri CLI(`npm install -g @tauri-apps/cli@^2`)로 `apps/impulcifer-app`에서 만들 수 있습니다. Linux에서 빌드하려면 `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libasound2-dev` 등을 설치해야 하고, 플랫폼별 명령은 [docs/rust/PACKAGING.md](docs/rust/PACKAGING.md)에 있습니다. PyPI 휠 빌드는 [tests/migration/README-python.md](tests/migration/README-python.md)에 적었습니다.
 
-2.x는 저장소 루트의 Python 코드(`impulcifer.py`, `core/`, `gui/` 등)입니다. `pip install -e .`로 설치하고 `pytest tests/`로 테스트합니다. Nuitka 단독 실행 파일 빌드는 [빌드 가이드](docs/BUILD_README.md)에 있습니다.
+2.x는 저장소 루트의 Python 코드(`impulcifer.py`, `core/`, `gui/` 등)입니다. `pip install -e .`로 설치하고 `pytest tests/`로 테스트할 수 있습니다. Nuitka 단독 실행 파일 빌드는 [빌드 가이드](docs/BUILD_README.md)에 있습니다.
 
 ## 추가 문서
 

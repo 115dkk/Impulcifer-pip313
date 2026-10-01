@@ -6,7 +6,9 @@ use crate::{
     estimator::SweepEstimator,
     fr::FrequencyResponse,
     hrir::{Hrir, compact_tracks},
-    mic_deviation::{MicDeviationOptions, apply_mic_deviation_correction},
+    mic_deviation::{
+        MicDeviationAnalysis, MicDeviationOptions, apply_mic_deviation_correction_with_analysis,
+    },
     stages::{
         equalize::{AppliedEqualization, EqInputs, equalize_hrir},
         headphone::HeadphoneCompensation,
@@ -46,6 +48,10 @@ pub trait StageObserver {
     /// The corrections the equalize stage applied, one per speaker and ear, in
     /// task order. Not called when the stage does not run.
     fn on_equalized(&mut self, _applied: &[AppliedEqualization]) -> Result<(), DspError> {
+        Ok(())
+    }
+    /// The mic-deviation correction's curves, when it changed the HRIR.
+    fn on_mic_deviation(&mut self, _analysis: &MicDeviationAnalysis) -> Result<(), DspError> {
         Ok(())
     }
     /// Python logger.step, core/pipeline.py:516-972; p10_stage_table.
@@ -221,13 +227,16 @@ pub fn run_pipeline(
                 },
             )?,
             StageKey::MicDeviation => {
-                apply_mic_deviation_correction(
+                let (_, analysis) = apply_mic_deviation_correction_with_analysis(
                     &mut hrir,
                     &MicDeviationOptions {
                         correction_strength: config.mic_deviation_strength,
                         ..Default::default()
                     },
                 )?;
+                if let Some(analysis) = analysis {
+                    observer.on_mic_deviation(&analysis)?;
+                }
             }
             StageKey::WriteResponses => {
                 responses_tracks = hrir.stack_tracks(&HEXADECAGONAL_TRACK_ORDER, false)?

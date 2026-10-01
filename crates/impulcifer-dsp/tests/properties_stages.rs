@@ -3,7 +3,10 @@ use impulcifer_dsp::{
     channel_balance::ChannelBalance,
     hrir::{Hrir, SpeakerIrs},
     ir::ImpulseResponse,
-    mic_deviation::{Anchor, MicDeviationOptions, MicMatching, apply_mic_deviation_correction},
+    mic_deviation::{
+        Anchor, MicDeviationOptions, MicMatching, apply_mic_deviation_correction,
+        apply_mic_deviation_correction_with_analysis,
+    },
     pipeline::total_steps,
     stages::{readme::readme_data, room::correction_limit_mask},
     virtual_bass::{VirtualBassOptions, apply_virtual_bass},
@@ -70,6 +73,11 @@ fn mic_deviation_skips_below_threshold() {
     assert!(summary.max_error_db < 0.05);
     assert!(summary.speakers_processed.is_empty());
     assert_eq!(h.speakers[0].left.as_ref().unwrap().data, before);
+    // 2.x returns before _plot_mismatch, so there is nothing to chart either.
+    let (_, analysis) =
+        apply_mic_deviation_correction_with_analysis(&mut h, &MicDeviationOptions::default())
+            .unwrap();
+    assert!(analysis.is_none());
 }
 /// Python averages powers, not dB, from every selected anchor; microphone_deviation_correction.py:195-238; p10_mic_deviation.
 fn check_anchor(

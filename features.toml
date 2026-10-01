@@ -373,14 +373,14 @@ note = "2.5 ms head crop end to end (P25); CLI --c"
 id = "config.jamesdsp"
 kind = "config"
 status = "implemented"
-tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
 note = "jamesdsp.wav matrix and file like 2.x"
 
 [[feature]]
 id = "config.hangloose"
 kind = "config"
 status = "implemented"
-tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
 note = "Hangloose/<speaker>.wav matrices and files like 2.x"
 
 [[feature]]
@@ -400,9 +400,9 @@ note = "0.3 end to end (P25, 5e-4 ratio budget: 2.x moves up to 5.6e-4 against i
 [[feature]]
 id = "config.mic_deviation_debug_plots"
 kind = "config"
-status = "planned"
-tests = []
-note = "accepted on every surface (CLI golden, IPC, wheel) but 3.x writes no plots and logs cli_plots_not_available_yet; 2.x saves the mic-deviation analysis plots under plots/ (core/pipeline.py _stage_mic_deviation)"
+status = "implemented"
+tests = ["impulcifer-service::mic_deviation_debug_plot_is_written_only_on_request", "impulcifer-dsp::mic_deviation_analysis_is_what_the_filters_apply", "impulcifer-dsp::mic_deviation_skips_below_threshold", "impulcifer-plots::mic_deviation_chart_is_single_size_and_rejects_bad_input", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "3.0.7: plots/microphone_deviation_v4.png like 2.x _plot_mismatch (core/microphone_deviation_correction.py:457-484), written only when the correction ran and changed the HRIR (2.x returns before plotting below 0.05 dB, and the stage is skipped with headphone compensation); each ear's line is the gain its filter applies (left -Δ·s/2, right +Δ·s/2), where 2.x drew +Δ·s/2 under the left-ear label"
 
 [[feature]]
 id = "config.output_truehd_layouts"
@@ -671,14 +671,14 @@ tests = ["impulcifer-sys-win::silent_packet_is_zero_filled"]
 id = "output.hrir_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 note = "PCM_32, hexadecagonal order, trailing silent pairs trimmed; ICHL map when remove_silent_channels"
 
 [[feature]]
 id = "output.hesuvi_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.responses_wav"
@@ -712,19 +712,19 @@ note = "P24: the six 2.x Bokeh panels (interaural overlay, ILD, IPD, IACC, EDC, 
 id = "output.hangloose_wavs"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.jamesdsp_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.truehd_layout_wavs"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.recovery"

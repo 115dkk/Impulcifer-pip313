@@ -48,6 +48,22 @@ pub struct MicDeviationSummary {
     pub correction_strength: f64,
     pub speakers_processed: Vec<String>,
 }
+/// What the correction did, for the `mic_deviation_debug_plots` chart
+/// (2.x `_plot_mismatch`, core/microphone_deviation_correction.py:457-484).
+#[derive(Clone, Debug, PartialEq)]
+pub struct MicDeviationAnalysis {
+    pub fs: u32,
+    pub frequency: Vec<f64>,
+    /// Estimated direction-independent left/right mismatch Δ in dB (positive: left louder).
+    pub mismatch_db: Vec<f64>,
+    /// Gain the correction filter applies to each ear: −Δ·strength/2 left, +Δ·strength/2 right.
+    pub left_db: Vec<f64>,
+    pub right_db: Vec<f64>,
+    /// Band the estimate is weighted to (`f_min`, `f_max`).
+    pub band: (f64, f64),
+    pub anchor: String,
+    pub correction_strength: f64,
+}
 #[derive(Clone, Debug)]
 pub struct MicMatching {
     pub fs: u32,
@@ -262,12 +278,13 @@ impl MicMatching {
         fir.truncate(2048.min(self.fs as usize / 10));
         Ok(fir)
     }
-    /// Python design_correction_filters, core/microphone_deviation_correction.py:247-262; p10_mic_deviation.
-    pub fn design_correction_filters(&mut self) -> Result<[Vec<f64>; 2], DspError> {
+    /// Half the scaled mismatch, clamped to `max_correction_db`: the right ear gets
+    /// +half, the left ear −half (Python design_correction_filters, lines 247-262).
+    fn correction_half(&mut self) -> Result<Vec<f64>, DspError> {
         if self.mismatch_db.is_none() {
             self.estimate_interaural_mismatch()?;
         }
-        let half: Vec<_> = self
+        Ok(self
             .mismatch_db
             .as_ref()
             .unwrap()
@@ -278,7 +295,25 @@ impl MicMatching {
                     self.options.max_correction_db,
                 )
             })
-            .collect();
+            .collect())
+    }
+    /// The curves behind the debug chart, from the same half curve the filters use.
+    pub fn analysis(&mut self) -> Result<MicDeviationAnalysis, DspError> {
+        let half = self.correction_half()?;
+        Ok(MicDeviationAnalysis {
+            fs: self.fs,
+            frequency: self.frequency.clone(),
+            mismatch_db: self.mismatch_db.clone().unwrap_or_default(),
+            left_db: half.iter().map(|d| -d).collect(),
+            right_db: half,
+            band: (self.options.f_min, self.options.f_max),
+            anchor: self.anchor_used.clone(),
+            correction_strength: self.options.correction_strength,
+        })
+    }
+    /// Python design_correction_filters, core/microphone_deviation_correction.py:247-262; p10_mic_deviation.
+    pub fn design_correction_filters(&mut self) -> Result<[Vec<f64>; 2], DspError> {
+        let half = self.correction_half()?;
         Ok([
             self.fir_from_curve(
                 &half.iter().map(|d| -d).collect::<Vec<_>>(),
@@ -327,6 +362,14 @@ pub fn apply_mic_deviation_correction(
     hrir: &mut Hrir,
     options: &MicDeviationOptions,
 ) -> Result<MicDeviationSummary, DspError> {
+    apply_mic_deviation_correction_with_analysis(hrir, options).map(|(summary, _)| summary)
+}
+/// As [`apply_mic_deviation_correction`], also returning the debug-chart curves when
+/// the correction was applied; 2.x plots nothing when it skips a mismatch below 0.05 dB.
+pub fn apply_mic_deviation_correction_with_analysis(
+    hrir: &mut Hrir,
+    options: &MicDeviationOptions,
+) -> Result<(MicDeviationSummary, Option<MicDeviationAnalysis>), DspError> {
     let mut m = MicMatching::new(hrir.fs, options);
     for s in &hrir.speakers {
         if let (Some(l), Some(r)) = (&s.left, &s.right) {
@@ -345,10 +388,10 @@ pub fn apply_mic_deviation_correction(
     m.estimate_interaural_mismatch()?;
     let mut summary = m.analysis_summary()?;
     if summary.max_error_db < 0.05 {
-        return Ok(summary);
+        return Ok((summary, None));
     }
     let firs = m.design_correction_filters()?;
     hrir.equalize(&firs[0], &firs[1]);
     summary.speakers_processed = summary.speakers_analyzed.clone();
-    Ok(summary)
+    Ok((summary, Some(m.analysis()?)))
 }

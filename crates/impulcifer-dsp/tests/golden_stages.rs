@@ -6,7 +6,10 @@ use impulcifer_dsp::{
     estimator::SweepEstimator,
     fr::{FrequencyResponse, magnitude_to_frequency_response},
     hrir::Hrir,
-    mic_deviation::{MicDeviationOptions, MicMatching, apply_mic_deviation_correction},
+    mic_deviation::{
+        MicDeviationOptions, MicMatching, apply_mic_deviation_correction,
+        apply_mic_deviation_correction_with_analysis,
+    },
     pipeline::{self, PipelineInputs, StageObserver, StageProgress},
     stages::{
         eq_files::*,
@@ -900,6 +903,33 @@ fn golden_mic_deviation_matches_python() {
     );
     assert_eq!(summary.anchor, v["summary"]["anchor"].as_str().unwrap());
     apply_mic_deviation_correction(&mut h, &options).unwrap();
+    snapshots(&h, &fixture("manifest")["mic"], 1e-3);
+}
+/// The debug chart's curves are the gains the filters apply: right +Δ·s/2 and left
+/// −Δ·s/2, clamped to max_correction_db; 2.x _plot_mismatch draws the same Δ.
+#[test]
+fn mic_deviation_analysis_is_what_the_filters_apply() {
+    let _gate = NumericGate;
+    let mut h = cropped();
+    let options = MicDeviationOptions::default();
+    let (summary, analysis) =
+        apply_mic_deviation_correction_with_analysis(&mut h, &options).unwrap();
+    assert!(summary.max_error_db >= 0.05);
+    let a = analysis.expect("an applied correction reports its curves");
+    assert_eq!(a.frequency.len(), a.mismatch_db.len());
+    assert_eq!(a.anchor, summary.anchor);
+    assert_eq!(a.band, (options.f_min, options.f_max));
+    db(
+        "mic mismatch",
+        &a.mismatch_db,
+        &fixture("mic_deviation")["mismatch_db"],
+    );
+    for ((m, l), r) in a.mismatch_db.iter().zip(&a.left_db).zip(&a.right_db) {
+        let half = (m * options.correction_strength / 2.0)
+            .clamp(-options.max_correction_db, options.max_correction_db);
+        assert_eq!(*r, half);
+        assert_eq!(*l, -half);
+    }
     snapshots(&h, &fixture("manifest")["mic"], 1e-3);
 }
 /// Python decay stage; core/pipeline.py:702-724; p10_decay.
