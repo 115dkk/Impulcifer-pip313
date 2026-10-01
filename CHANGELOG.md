@@ -4,6 +4,22 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.1.0 - 2026-10-01
+### pip로 설치해도 `impulcifer_gui`로 3.x 앱을 실행
+
+#### ⭐ 새로운 기능
+- **`impulcifer_gui` 명령**: 3.x PyPI 패키지에는 `impulcifer` 명령과 Python API만 있었습니다. 그래서 pip 사용자는 화면과 녹음을 쓸 수 없었고, 2.x를 pip로 갱신하면 `impulcifer_gui`가 사라졌습니다. 휠은 manylinux 검사 때문에 앱도 오디오 백엔드도 넣을 수 없으므로, 이제 `impulcifer_gui`(`impulcifer.gui:cli`)가 같은 버전의 릴리스 앱을 받아 실행합니다.
+  - 받는 파일은 플랫폼마다 다릅니다(Windows는 `Impulcifer-win-Portable.zip`, macOS Apple Silicon은 `Impulcifer-<버전>-aarch64.app.tar.gz`, Linux x86_64는 `Impulcifer-<버전>-x86_64.AppImage`). 처음 실행할 때 `releases/download/v<버전>`에서 받습니다.
+  - 받은 파일은 그 릴리스의 `SHA256SUMS.txt`로 확인하고, 임시 폴더에서 푼 뒤 사용자 캐시(`<캐시>/impulcifer-py313/app/<버전>`)로 옮깁니다. 다음부터는 받은 앱을 바로 실행합니다.
+  - 체크섬이 다르거나 압축 파일 안에 캐시 밖을 가리키는 경로가 있으면 아무것도 설치하지 않습니다.
+  - 실행하면 앱이 닫힐 때까지 기다립니다. macOS는 `open -W -n`으로 실행하고, Linux에서 FUSE 2가 없으면 `APPIMAGE_EXTRACT_AND_RUN=1`로 AppImage를 풀어서 실행합니다.
+  - 앱이 없는 플랫폼(Intel Mac, Linux ARM)에서는 쓸 수 있는 것(`impulcifer` 명령)을 알려 주고 종료 코드 2로 끝냅니다.
+  - `--download-only`를 주면 앱을 받기만 하고 경로를 출력합니다.
+  - 받은 앱은 릴리스 앱과 같은 프로그램이므로 녹음도 됩니다.
+  - 이 컨테이너에서 실제 v3.0.5 AppImage를 받아(93 MiB, 약 2초) FUSE 없이 앱 화면이 뜨는 것까지 확인했습니다.
+  - `crates/impulcifer-python/tests/test_gui.py`가 로컬 HTTP 서버로 만든 가짜 릴리스로 세 형식의 설치·재사용·체크섬 불일치·자산 없음·위험한 경로·실행 명령·콘솔 스크립트 선언을 확인합니다. `features.toml`에 `python.gui_launcher`로 등록했습니다.
+- **README**: pip 설치 안내, 업데이트, 앱 실행, 알려진 제한을 `impulcifer_gui`에 맞게 고쳤습니다. 'pip로 설치하면 녹음과 화면을 쓸 수 없다'는 제한을 빼고, 처음 실행할 때 인터넷이 필요하다는 점과 앱이 없는 플랫폼을 적었습니다. CLAUDE.md에는 실행기가 릴리스 자산 이름에 의존한다는 점을 적었습니다.
+
 ## 3.0.7 - 2026-10-01
 ### 마이크 편차 진단 그래프를 3.x에서도 저장, README 알려진 제한 정리
 

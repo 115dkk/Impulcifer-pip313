@@ -90,7 +90,7 @@ source venv/bin/activate        # Windows에서는 venv\Scripts\activate
 pip install impulcifer-py313
 ```
 
-`uv`를 쓴다면 `uv pip install impulcifer-py313`으로 설치할 수 있습니다. 설치하면 `impulcifer` 명령과 Python API(`import impulcifer`)를 쓸 수 있습니다. pip로 설치한 3.x에는 `impulcifer_gui` 같은 화면 명령이 없으므로, 녹음하거나 화면에서 처리하려면 앱을 설치해야 합니다.
+`uv`를 쓴다면 `uv pip install impulcifer-py313`으로 설치할 수 있습니다. 설치하면 `impulcifer` 명령과 Python API(`import impulcifer`)를 쓸 수 있고, `impulcifer_gui`로 앱 화면을 띄울 수 있습니다. `impulcifer_gui`는 처음 실행할 때 같은 버전의 앱(Windows 19 MiB, macOS 17 MiB, Linux 93 MiB)을 GitHub Releases에서 받아 릴리스의 SHA256SUMS.txt로 확인한 뒤 사용자 캐시에 두고 실행합니다. 그래서 처음 한 번은 인터넷에 연결돼 있어야 하고, 그다음부터는 받은 앱을 바로 실행합니다. 받은 앱은 릴리스 앱과 같은 프로그램이므로 녹음도 할 수 있습니다.
 
 ### 2.x를 계속 쓰려면
 
@@ -119,13 +119,13 @@ PyPI 패키지는 다음 명령으로 갱신할 수 있습니다.
 pip install --upgrade impulcifer-py313
 ```
 
-pip로 설치한 2.x를 이 명령으로 갱신하면 3.x로 올라가면서 `impulcifer_gui`, `impulcifer_webview` 명령이 사라집니다. 2.x 화면을 계속 쓰려면 위의 `"impulcifer-py313<3"`로 고정해야 합니다.
+pip로 설치한 2.x를 이 명령으로 갱신하면 3.x로 올라갑니다. 그 뒤로 `impulcifer_gui`는 3.x 앱을 띄우고, `impulcifer_webview`와 `impulcifer_gui_legacy` 명령은 사라집니다. 2.x 화면을 계속 쓰려면 위의 `"impulcifer-py313<3"`로 고정해야 합니다. pip 패키지를 갱신하면 `impulcifer_gui`는 다음 실행 때 새 버전의 앱을 받습니다.
 
 ## 사용법
 
 ### 앱
 
-앱은 다섯 메뉴로 나뉩니다.
+설치한 앱을 실행하거나, pip로 설치했다면 `impulcifer_gui`를 실행해야 합니다. 앱은 다섯 메뉴로 나뉩니다.
 
 * **녹음:** 스피커마다 sweep을 재생하고 바이노럴 마이크로 녹음합니다. 기본으로는 sweep 파일 없이 sweep을 즉석에서 만들어 재생하고, 스피커 순서와 트랙 레이아웃(mono, stereo, 5.1, 7.1, 7.1.4, 7.1.6)을 고를 수 있습니다. 특수한 녹음에는 sweep 파일을 재생하는 방식을 쓸 수 있습니다. 스피커 녹음은 `FL,FR.wav` 같은 이름으로, 헤드폰 보정 녹음은 `headphones.wav`로 저장합니다.
 * **처리:** 녹음 폴더에서 BRIR을 만듭니다. 테스트 신호는 녹음에서 자동으로 알아내며, '폴더 분석' 버튼으로 알아낸 샘플레이트·sweep 길이·신뢰도를 처리 전에 볼 수 있습니다. 처리 중에는 취소할 수 있습니다.
@@ -305,8 +305,8 @@ impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 
 3.x를 쓰기 전에 다음을 알아 두어야 합니다.
 
-* **Intel Mac에서는 앱을 쓸 수 없습니다:** macOS 앱은 Apple Silicon용만 있으므로, Intel Mac에서는 PyPI 패키지(CLI와 Python API)만 쓸 수 있습니다.
-* **pip로 설치하면 녹음과 화면을 쓸 수 없습니다:** 3.x PyPI 패키지에는 `impulcifer` 명령과 Python API만 들어 있고, 2.x의 `impulcifer_gui` 같은 화면 명령이 없습니다. 녹음하거나 화면에서 처리하려면 앱을 받아야 합니다.
+* **Intel Mac과 Linux ARM에서는 앱을 쓸 수 없습니다:** 앱은 Windows x64, macOS(Apple Silicon), Linux x86_64용만 있으므로, 그 밖의 플랫폼에서는 `impulcifer_gui`도 쓸 수 없고 PyPI 패키지의 CLI와 Python API만 쓸 수 있습니다.
+* **`impulcifer_gui`를 처음 실행할 때는 인터넷에 연결돼 있어야 합니다:** pip 패키지에는 앱이 들어 있지 않고, 처음 실행할 때 GitHub Releases에서 받습니다. 연결할 수 없는 환경에서는 앱을 직접 받아 설치해야 합니다.
 * **CustomTkinter 화면을 쓰려면 2.x를 설치해야 합니다:** 3.x 앱에서는 Stable 프리셋이 그 화면의 배치를 따릅니다.
 * **처음 실행할 때 보안 경고가 뜰 수 있습니다:** 설치 파일에 코드 서명이 없어서 Windows SmartScreen이나 macOS Gatekeeper가 실행을 막을 수 있습니다. Windows에서는 '추가 정보'를 누른 뒤 '실행'을 눌러야 하고, macOS에서는 시스템 설정의 '개인정보 보호 및 보안'에서 실행을 허용해야 합니다.
 * **TrueHD(`.mlp`, `.thd`, `.truehd`)를 입력하려면 FFmpeg 4.0 이상이 있어야 합니다:** 3.x는 FFmpeg를 자동으로 설치하지 않으므로 미리 설치해야 합니다(Windows는 `winget install Gyan.FFmpeg`, macOS는 `brew install ffmpeg`, Linux는 `sudo apt install ffmpeg`).
