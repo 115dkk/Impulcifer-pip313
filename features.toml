@@ -629,7 +629,7 @@ tests = ["impulcifer-sys-win::probe_matrix_runs_without_panic", "impulcifer-sys-
 id = "audio.output_exclusive"
 kind = "audio"
 status = "implemented"
-tests = ["impulcifer-sys-win::open_and_play_silence_exclusive_or_shared"]
+tests = ["impulcifer-sys-win::open_and_play_silence_exclusive_or_shared", "impulcifer-sys-win::waveformatex_fallback_still_carries_float32"]
 
 [[feature]]
 id = "audio.output_shared_autoconvert"
@@ -641,7 +641,7 @@ tests = ["impulcifer-sys-win::open_and_play_silence_exclusive_or_shared"]
 id = "audio.input_exclusive"
 kind = "audio"
 status = "implemented"
-tests = ["impulcifer-sys-win::probe_matrix_runs_without_panic", "impulcifer-sys-win::discontinuity_flag_is_reported"]
+tests = ["impulcifer-sys-win::probe_matrix_runs_without_panic", "impulcifer-sys-win::discontinuity_flag_is_reported", "impulcifer-sys-win::waveformatex_fallback_still_carries_float32"]
 
 [[feature]]
 id = "audio.input_shared_autoconvert"

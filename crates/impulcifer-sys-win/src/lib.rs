@@ -11,8 +11,9 @@
 //! MTA on its calling thread, and an opened session keeps that apartment alive
 //! until all of its WASAPI objects have been dropped. `OutputSession` and
 //! `InputSession` are deliberately `!Send`; callers must create, use, and drop a
-//! session on one OS thread. This crate never uses `WaveFormat::parse` or
-//! `Device::from_raw`.
+//! session on one OS thread. wasapi's raw-pointer constructors are `unsafe fn`
+//! (`Device::from_raw`, and `WaveFormat::parse` since 0.25 after
+//! HEnquist/wasapi-rs#65), so `forbid(unsafe_code)` keeps both out.
 
 use std::collections::VecDeque;
 
@@ -990,6 +991,58 @@ mod windows_backend {
         }
     }
 
+    /// Whether a format the device accepted still moves `spec` as float32 samples.
+    fn carries_spec_as_float32(format: &WaveFormat, spec: StreamSpec) -> bool {
+        format.get_samplespersec() == spec.sample_rate
+            && format.get_nchannels() == spec.channels
+            && format.get_subformat().ok() == Some(SampleType::Float)
+    }
+
+    #[cfg(test)]
+    mod format_tests {
+        use super::*;
+
+        #[test]
+        fn waveformatex_fallback_still_carries_float32() {
+            // accepted_format retries one and two channels as a plain WAVEFORMATEX.
+            // wasapi 0.24 zeroed SubFormat in that copy, so get_subformat failed and
+            // the open refused a format the driver had just accepted. 0.25 keeps it.
+            for channels in [1, 2] {
+                let spec = StreamSpec {
+                    sample_rate: 48_000,
+                    channels,
+                };
+                let plain = requested_format(spec).to_waveformatex().unwrap();
+                assert!(carries_spec_as_float32(&plain, spec), "{channels} ch");
+            }
+        }
+
+        #[test]
+        fn float32_check_rejects_another_rate_or_channel_count() {
+            let spec = StreamSpec {
+                sample_rate: 48_000,
+                channels: 2,
+            };
+            assert!(carries_spec_as_float32(&requested_format(spec), spec));
+            let other_rate = StreamSpec {
+                sample_rate: 44_100,
+                ..spec
+            };
+            assert!(!carries_spec_as_float32(
+                &requested_format(other_rate),
+                spec
+            ));
+            let other_channels = StreamSpec {
+                channels: 1,
+                ..spec
+            };
+            assert!(!carries_spec_as_float32(
+                &requested_format(other_channels),
+                spec
+            ));
+        }
+    }
+
     fn initialize_audio_client(
         device: &Device,
         direction: Direction,
@@ -1013,10 +1066,7 @@ mod windows_backend {
         }
         let requested = requested_format(spec);
         let accepted = accepted_format(&client, &requested, mode)?;
-        if accepted.get_samplespersec() != spec.sample_rate
-            || accepted.get_nchannels() != spec.channels
-            || accepted.get_subformat().ok() != Some(SampleType::Float)
-        {
+        if !carries_spec_as_float32(&accepted, spec) {
             return Err(AudioError::UnsupportedFormat(format!(
                 "device did not accept requested {} Hz, {} channel, float32 transport verbatim",
                 spec.sample_rate, spec.channels
