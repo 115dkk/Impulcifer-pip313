@@ -199,6 +199,20 @@ pub fn headphones_limits(left: &FrCurve, right: &FrCurve) -> Result<(f64, f64), 
     }
     Ok((lo * 1.1, hi * 1.1))
 }
+/// Input of the microphone-deviation debug chart: the estimated left/right mismatch
+/// and the gain the correction applied to each ear, on one frequency grid.
+#[derive(Clone, Copy, Debug)]
+pub struct MicDeviation<'a> {
+    pub frequency: &'a [f64],
+    pub mismatch_db: &'a [f64],
+    pub left_db: &'a [f64],
+    pub right_db: &'a [f64],
+    /// Band the estimate is weighted to; outside it the correction fades to zero.
+    pub band: (f64, f64),
+    /// "frontal" (centre speakers only) or "diffuse" (every speaker).
+    pub anchor: &'a str,
+    pub correction_strength: f64,
+}
 /// Input of the interaural overlay: the two ears of one speaker with the time
 /// origins the pipeline computed (ImpulseResponse.peak_index semantics).
 #[derive(Clone, Copy, Debug)]

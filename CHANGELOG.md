@@ -4,6 +4,33 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.1.0 - 2026-10-01
+### pip로 설치해도 `impulcifer_gui`로 3.x 앱 실행, 마이크 편차 진단 그래프, PyPI 프로젝트 설명
+
+#### ⭐ 새로운 기능
+- **`impulcifer_gui` 명령**: 3.x PyPI 패키지에는 `impulcifer` 명령과 Python API만 있었습니다. 그래서 pip 사용자는 화면과 녹음을 쓸 수 없었고, 2.x를 pip로 갱신하면 `impulcifer_gui`가 사라졌습니다. 휠은 manylinux 검사 때문에 앱도 오디오 백엔드도 넣을 수 없으므로, 이제 `impulcifer_gui`(`impulcifer.gui:cli`)가 같은 버전의 릴리스 앱을 받아 실행합니다.
+  - 받는 파일은 플랫폼마다 다릅니다(Windows는 `Impulcifer-win-Portable.zip`, macOS Apple Silicon은 `Impulcifer-<버전>-aarch64.app.tar.gz`, Linux x86_64는 `Impulcifer-<버전>-x86_64.AppImage`). 처음 실행할 때 `releases/download/v<버전>`에서 받습니다.
+  - 받은 파일은 그 릴리스의 `SHA256SUMS.txt`로 확인하고, 임시 폴더에서 푼 뒤 사용자 캐시(`<캐시>/impulcifer-py313/app/<버전>`)로 옮깁니다. 다음부터는 받은 앱을 바로 실행합니다.
+  - 체크섬이 다르거나 압축 파일 안에 캐시 밖을 가리키는 경로가 있으면 아무것도 설치하지 않습니다.
+  - 실행하면 앱이 닫힐 때까지 기다립니다. macOS는 `open -W -n`으로 실행하고, Linux에서 FUSE 2가 없으면 `APPIMAGE_EXTRACT_AND_RUN=1`로 AppImage를 풀어서 실행합니다.
+  - 앱이 없는 플랫폼(Intel Mac, Linux ARM)에서는 쓸 수 있는 것(`impulcifer` 명령)을 알려 주고 종료 코드 2로 끝냅니다.
+  - `--download-only`를 주면 앱을 받기만 하고 경로를 출력합니다.
+  - 받은 앱은 릴리스 앱과 같은 프로그램이므로 녹음도 됩니다.
+  - 릴리스가 아직 없으면(SHA256SUMS.txt가 404) 연결 문제로 안내하지 않고, 이 버전의 앱이 아직 게시되지 않았으니 잠시 뒤 다시 실행하라고 알려 줍니다.
+  - 이 컨테이너에서 실제 v3.0.5 AppImage를 받아(93 MiB, 약 2초) FUSE 없이 앱 화면이 뜨는 것까지 확인했습니다.
+  - `crates/impulcifer-python/tests/test_gui.py`가 로컬 HTTP 서버로 만든 가짜 릴리스로 세 형식의 설치·재사용·체크섬 불일치·자산 없음·위험한 경로·실행 명령·콘솔 스크립트 선언을 확인합니다. `features.toml`에 `python.gui_launcher`로 등록했습니다.
+- **마이크 착용 편차 보정 진단 그래프(`--mic_deviation_debug_plots`)**: 3.x는 이 옵션을 받기만 하고 그래프를 만들지 않은 채 'not available yet' 경고를 남겼습니다. 이제 2.x처럼 `plots/microphone_deviation_v4.png`를 저장합니다. 그래프에는 추정한 좌우 불일치 Δ, 각 귀의 필터가 실제로 적용하는 보정량(왼쪽 −Δ·강도/2, 오른쪽 +Δ·강도/2), 가중 대역(200 Hz–16 kHz) 경계가 나오고, 아래에 가장 큰 보정량과 추정 기준(센터 스피커 또는 전체 스피커)을 적었습니다. 2.x와 같이 보정이 실제로 HRIR을 바꿨을 때만 저장합니다(불일치가 0.05 dB 미만이면 보정도 그래프도 건너뜁니다. 헤드폰 보정이 켜져 있으면 보정 단계 자체를 건너뜁니다). 2.x 그래프는 '좌측 보정량 (−Δ/2)' 범례 아래에 +Δ/2 곡선을 그려 좌우 보정 곡선의 부호가 뒤바뀌어 보이는데, 3.x는 필터가 쓰는 곡선을 그대로 그립니다. 보정량 계산을 필터 설계와 그래프가 함께 쓰는 한 곳(`MicMatching::correction_half`)으로 모아 두 결과가 어긋나지 않게 했고, 출력 WAV는 바뀌지 않습니다(`golden_mic_deviation_matches_python` 통과). `features.toml`의 `config.mic_deviation_debug_plots`를 검증 테스트와 함께 `implemented`로 바꿨습니다.
+
+#### 🐛 버그 수정
+- **PyPI 3.x 페이지의 설명이 비어 있던 문제**: 3.x 휠과 sdist를 만드는 `crates/impulcifer-python/pyproject.toml`에 `readme`가 없어서, 3.0.0부터 PyPI의 `impulcifer-py313` 페이지에 프로젝트 설명이 표시되지 않았습니다(2.x는 저장소 README를 썼습니다). 이제 PyPI용 설명 `crates/impulcifer-python/README.md`를 따로 두고 `readme`로 지정했습니다. 패키지가 무엇이고 무엇을 할 수 있는지, 설치, `impulcifer_gui`로 앱을 띄우는 방법, CLI, Python API, 2.x를 계속 쓰는 방법을 담았고, PyPI는 상대 링크를 저장소 기준으로 풀지 않으므로 링크는 모두 절대 주소로 적었습니다. sdist 최상위에 이 파일이 들어가는지 `crates/impulcifer-python/tests/test_sdist.py`가 확인합니다.
+
+#### 🔧 빌드 / 설정 변경
+- **PyPI 발행을 GitHub Release 뒤로**: `release-3x.yml`의 `publish-pypi`는 휠 빌드만 기다려서, 새 버전이 PyPI에 먼저 올라가고 세 OS 앱 빌드와 업그레이드 검사를 기다리는 GitHub Release는 몇 분 뒤에 생겼습니다. 그 사이에 설치한 사용자의 `impulcifer_gui`는 받을 앱이 없으므로, 이제 `publish-pypi`가 `create-release`까지 기다립니다. 앱 빌드가 실패하면 그 버전은 PyPI에도 올라가지 않습니다. `tests/test_release_gate.py::test_pypi_waits_for_the_github_release`가 이 순서를 고정합니다.
+
+#### ⭐ 문서
+- **README 알려진 제한 정리**: 오래전부터 WASAPI로 통일된 Windows 녹음 항목과, 이제 구현된 마이크 편차 진단 그래프 항목을 뺐습니다. 'PyPI 패키지에는 화면과 녹음이 없습니다' 항목도 `impulcifer_gui`로 해소되어 뺐고, 대신 처음 실행할 때 인터넷이 필요하다는 점과 앱이 없는 플랫폼(Intel Mac, Linux ARM)을 적었습니다. pip 설치 안내, 업데이트, 앱 실행 절도 `impulcifer_gui`에 맞게 고쳤습니다. CLAUDE.md에는 실행기가 릴리스 자산 이름에 의존한다는 점을 적었습니다.
+- **독자에게 할 일을 말하는 문장으로**: '미리 설치해 둡니다', 'AppImage에 실행 권한을 주고 실행합니다', '버전을 3 미만으로 고정합니다'처럼 절차나 요구 사항을 남의 일처럼 서술한 문장과, 'macOS 앱은 Apple Silicon 전용입니다'처럼 제한을 상태로만 적은 문장을 '~해야 합니다', '~할 수 있습니다', '~할 수 없습니다'로 고쳤습니다. 같은 규칙을 make-interfaces-feel-better의 `write.md`에도 더했습니다.
+
 ## 3.0.5 - 2026-09-25
 ### 휠이 없는 플랫폼에서도 설치되도록 sdist 수정
 

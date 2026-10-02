@@ -373,14 +373,14 @@ note = "2.5 ms head crop end to end (P25); CLI --c"
 id = "config.jamesdsp"
 kind = "config"
 status = "implemented"
-tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
 note = "jamesdsp.wav matrix and file like 2.x"
 
 [[feature]]
 id = "config.hangloose"
 kind = "config"
 status = "implemented"
-tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
+tests = ["impulcifer-dsp::golden_optional_outputs_match_python", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings", "impulcifer-service::output_variants_preserve_pcm32_tracks_names_and_write_order", "impulcifer-cli::golden_cli_parsing_matches_python"]
 note = "Hangloose/<speaker>.wav matrices and files like 2.x"
 
 [[feature]]
@@ -400,9 +400,9 @@ note = "0.3 end to end (P25, 5e-4 ratio budget: 2.x moves up to 5.6e-4 against i
 [[feature]]
 id = "config.mic_deviation_debug_plots"
 kind = "config"
-status = "planned"
-tests = []
-note = "accepted on every surface (CLI golden, IPC, wheel) but 3.x writes no plots and logs cli_plots_not_available_yet; 2.x saves the mic-deviation analysis plots under plots/ (core/pipeline.py _stage_mic_deviation)"
+status = "implemented"
+tests = ["impulcifer-service::mic_deviation_debug_plot_is_written_only_on_request", "impulcifer-dsp::mic_deviation_analysis_is_what_the_filters_apply", "impulcifer-dsp::mic_deviation_skips_below_threshold", "impulcifer-plots::mic_deviation_chart_is_single_size_and_rejects_bad_input", "impulcifer-cli::golden_cli_parsing_matches_python"]
+note = "3.1.0: plots/microphone_deviation_v4.png like 2.x _plot_mismatch (core/microphone_deviation_correction.py:457-484), written only when the correction ran and changed the HRIR (2.x returns before plotting below 0.05 dB, and the stage is skipped with headphone compensation); each ear's line is the gain its filter applies (left -Δ·s/2, right +Δ·s/2), where 2.x drew +Δ·s/2 under the left-ear label"
 
 [[feature]]
 id = "config.output_truehd_layouts"
@@ -671,14 +671,14 @@ tests = ["impulcifer-sys-win::silent_packet_is_zero_filled"]
 id = "output.hrir_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 note = "PCM_32, hexadecagonal order, trailing silent pairs trimmed; ICHL map when remove_silent_channels"
 
 [[feature]]
 id = "output.hesuvi_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::demo_brir_matches_python_within_budget", "impulcifer-service::demo_vbass_matches_python_within_budget", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.responses_wav"
@@ -712,19 +712,19 @@ note = "P24: the six 2.x Bokeh panels (interaural overlay, ILD, IPD, IACC, EDC, 
 id = "output.hangloose_wavs"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.jamesdsp_wav"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.truehd_layout_wavs"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_with_only_unsupported_plot_warnings"]
+tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
 
 [[feature]]
 id = "output.recovery"
@@ -1245,8 +1245,15 @@ note = "JobRegistry + NoopHost, 100 ms polling, the 2.x console prefixes and [NN
 id = "python.wheel_main"
 kind = "python"
 status = "implemented"
-tests = ["pytest:crates/impulcifer-python/tests/test_native.py::test_main_runs_demo_and_writes_hesuvi", "pytest:crates/impulcifer-python/tests/test_native.py::test_progress_and_log_callbacks_receive_cli_keys", "pytest:crates/impulcifer-python/tests/test_native.py::test_error_raises_runtime_error_with_code", "pytest:crates/impulcifer-python/tests/test_native.py::test_concurrent_runs_release_interpreter", "pytest:crates/impulcifer-python/tests/test_native.py::test_generate_sweep_set_and_recovery", "pytest:crates/impulcifer-python/tests/test_native.py::test_package_data_override_is_preserved", "pytest:crates/impulcifer-python/tests/test_native.py::test_extension_module_links_no_audio_library", "pytest:crates/impulcifer-python/tests/test_native.py::test_wheel_record_matches_the_contents", "pytest:crates/impulcifer-python/tests/test_sdist.py::test_sdist_carries_every_file_the_crates_include", "pytest:crates/impulcifer-python/tests/test_sdist.py::test_sdist_builds_through_the_repairing_backend", "impulcifer-policy::python_wheel_builds_without_a_native_audio_backend", "impulcifer-audio-io::null_backend_lists_nothing_and_refuses_to_open", "impulcifer-service::audio_free_service_answers_devices_and_recording_honestly"]
-note = "published to the same PyPI project as 2.x, impulcifer-py313 (owner decision 2026-09-09: no migration cost for users; alphas need pip --pre); maturin wheel (abi3-py39; separate cp314t wheel because PyO3 0.27 ignores abi3 on free-threaded builds): impulcifer.main(**kwargs) runs the service BRIR job with the GIL released, callbacks per event, RuntimeError with the service code; detect_sweep, generate_sweep_set, recover_brir_outputs; package data staged by sync_data.py and found through IMPULCIFER_DATA_DIR; alpha.2: every wheel is built without a native audio backend (service/CLI default-features = false, NullBackend: no devices, audio_backend none, share_modes auto only, recording fails with DEVICE_ERROR), so the Linux wheel is a manylinux_2_28 wheel built by PyO3/maturin-action with --auditwheel check and goes to PyPI too; run by the wheel job of rust.yml on Ubuntu (container) and Windows; 3.0.4: repair_record.py rewrites every built wheel's RECORD as CSV because maturin leaves the comma in sweep-seg-FL,FR unquoted and PyPI will reject wheels whose RECORD does not match their files (run after maturin build in the workflows and verify.py; pip builds from the sdist or a checkout go through build_backend.py, maturin's hooks with build_wheel repairing its output); 3.0.5: the sdist builds (sync_data.py stages i18n/locales, which impulcifer-service compiles in from the workspace root, beside pyproject.toml so it lands at the sdist root; the sdist job of rust.yml builds a wheel from it with pip and runs these tests)"
+tests = ["pytest:crates/impulcifer-python/tests/test_native.py::test_main_runs_demo_and_writes_hesuvi", "pytest:crates/impulcifer-python/tests/test_native.py::test_progress_and_log_callbacks_receive_cli_keys", "pytest:crates/impulcifer-python/tests/test_native.py::test_error_raises_runtime_error_with_code", "pytest:crates/impulcifer-python/tests/test_native.py::test_concurrent_runs_release_interpreter", "pytest:crates/impulcifer-python/tests/test_native.py::test_generate_sweep_set_and_recovery", "pytest:crates/impulcifer-python/tests/test_native.py::test_package_data_override_is_preserved", "pytest:crates/impulcifer-python/tests/test_native.py::test_extension_module_links_no_audio_library", "pytest:crates/impulcifer-python/tests/test_native.py::test_wheel_record_matches_the_contents", "pytest:crates/impulcifer-python/tests/test_sdist.py::test_sdist_carries_every_file_the_crates_include", "pytest:crates/impulcifer-python/tests/test_sdist.py::test_sdist_builds_through_the_repairing_backend", "pytest:crates/impulcifer-python/tests/test_sdist.py::test_sdist_carries_the_pypi_description", "impulcifer-policy::python_wheel_builds_without_a_native_audio_backend", "impulcifer-audio-io::null_backend_lists_nothing_and_refuses_to_open", "impulcifer-service::audio_free_service_answers_devices_and_recording_honestly"]
+note = "published to the same PyPI project as 2.x, impulcifer-py313 (owner decision 2026-09-09: no migration cost for users; alphas need pip --pre); maturin wheel (abi3-py39; separate cp314t wheel because PyO3 0.27 ignores abi3 on free-threaded builds): impulcifer.main(**kwargs) runs the service BRIR job with the GIL released, callbacks per event, RuntimeError with the service code; detect_sweep, generate_sweep_set, recover_brir_outputs; package data staged by sync_data.py and found through IMPULCIFER_DATA_DIR; alpha.2: every wheel is built without a native audio backend (service/CLI default-features = false, NullBackend: no devices, audio_backend none, share_modes auto only, recording fails with DEVICE_ERROR), so the Linux wheel is a manylinux_2_28 wheel built by PyO3/maturin-action with --auditwheel check and goes to PyPI too; run by the wheel job of rust.yml on Ubuntu (container) and Windows; 3.0.4: repair_record.py rewrites every built wheel's RECORD as CSV because maturin leaves the comma in sweep-seg-FL,FR unquoted and PyPI will reject wheels whose RECORD does not match their files (run after maturin build in the workflows and verify.py; pip builds from the sdist or a checkout go through build_backend.py, maturin's hooks with build_wheel repairing its output); 3.0.5: the sdist builds (sync_data.py stages i18n/locales, which impulcifer-service compiles in from the workspace root, beside pyproject.toml so it lands at the sdist root; the sdist job of rust.yml builds a wheel from it with pip and runs these tests); 3.1.0: crates/impulcifer-python/README.md is the PyPI description (pyproject readme), carried at the sdist root"
+
+[[feature]]
+id = "python.gui_launcher"
+kind = "python"
+status = "implemented"
+tests = ["pytest:crates/impulcifer-python/tests/test_gui.py::test_targets_are_the_released_app_builds", "pytest:crates/impulcifer-python/tests/test_gui.py::test_first_run_downloads_checks_and_unpacks_then_reuses", "pytest:crates/impulcifer-python/tests/test_gui.py::test_checksum_mismatch_installs_nothing", "pytest:crates/impulcifer-python/tests/test_gui.py::test_release_without_the_asset_is_reported", "pytest:crates/impulcifer-python/tests/test_gui.py::test_archive_paths_outside_the_cache_are_refused", "pytest:crates/impulcifer-python/tests/test_gui.py::test_unpublished_release_says_to_wait", "pytest:crates/impulcifer-python/tests/test_gui.py::test_unreachable_release_names_the_url", "pytest:crates/impulcifer-python/tests/test_gui.py::test_commands_wait_for_the_app", "pytest:crates/impulcifer-python/tests/test_gui.py::test_download_only_prints_the_program", "pytest:crates/impulcifer-python/tests/test_gui.py::test_unsupported_platform_says_what_still_works", "pytest:crates/impulcifer-python/tests/test_gui.py::test_release_url_is_the_version_tag", "pytest:crates/impulcifer-python/tests/test_gui.py::test_wheel_declares_the_console_script"]
+note = "3.1.0: impulcifer_gui (impulcifer.gui:cli) starts the 3.x app from a pip install. The wheel stays free of the app and of any audio backend (manylinux), so the first run downloads this version's release asset (Windows Impulcifer-win-Portable.zip -> current/impulcifer-app.exe, macOS arm64 Impulcifer-<v>-aarch64.app.tar.gz -> Impulcifer.app via open -W -n, Linux x86_64 Impulcifer-<v>-x86_64.AppImage, APPIMAGE_EXTRACT_AND_RUN=1 without FUSE 2) from releases/download/v<semver>, checks it against that release's SHA256SUMS.txt, unpacks it into the user cache (<cache>/impulcifer-py313/app/<version>) through a staging directory and reuses it after a .complete marker; Intel macOS and ARM Linux have no app and get exit 2; IMPULCIFER_RELEASE_BASE_URL and IMPULCIFER_APP_CACHE redirect it for tests; release-3x.yml publishes to PyPI only after the GitHub Release exists (publish-pypi needs create-release), and a missing SHA256SUMS.txt (404) says the release is not published yet"
 
 [[feature]]
 id = "python.cli_entry"

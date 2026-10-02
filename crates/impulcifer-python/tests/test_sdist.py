@@ -52,3 +52,10 @@ def test_sdist_builds_through_the_repairing_backend(sdist):
     files, _ = sdist
     root = next(iter(files)).split("/", 1)[0]
     assert {f"{root}/pyproject.toml", f"{root}/build_backend.py", f"{root}/repair_record.py"} <= files
+
+
+def test_sdist_carries_the_pypi_description(sdist):
+    """PyPI shows this README as the project description; without it the page is blank (3.0.5)."""
+    files, _ = sdist
+    root = next(iter(files)).split("/", 1)[0]
+    assert f"{root}/README.md" in files

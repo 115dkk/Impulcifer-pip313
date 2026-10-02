@@ -9,9 +9,11 @@ name = "impulcifer-py313"
 requires-python = ">=3.9"
 dynamic = ["version"]
 description = "Impulcifer Rust BRIR processing and command-line interface"
+readme = "README.md"
 
 [project.scripts]
 impulcifer = "impulcifer:cli"
+impulcifer_gui = "impulcifer.gui:cli"
 
 [tool.maturin]
 features = ["python"]

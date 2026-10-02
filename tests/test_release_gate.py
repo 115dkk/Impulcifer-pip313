@@ -269,6 +269,13 @@ def test_release_jobs_build_the_gated_commit():
     assert "GITHUB_SHA" not in after_gate
 
 
+def test_pypi_waits_for_the_github_release():
+    """impulcifer_gui fetches the app of its own version from the GitHub Release."""
+    text = (_GATE_PATH.parents[1] / "workflows" / "release-3x.yml").read_text(encoding="utf-8")
+    publish = text.split("\n  publish-pypi:\n", 1)[1].split("\n  create-release:\n", 1)[0]
+    assert "needs: [gate, wheels, create-release]" in publish
+
+
 def test_2x_release_never_takes_releases_latest():
     text = (_GATE_PATH.parents[1] / "workflows" / "publish.yml").read_text(encoding="utf-8")
     assert "make_latest: false" in text

@@ -105,6 +105,19 @@ impl StageObserver for Observer<'_, '_> {
         }
         Ok(())
     }
+    fn on_mic_deviation(
+        &mut self,
+        analysis: &impulcifer_dsp::mic_deviation::MicDeviationAnalysis,
+    ) -> Result<(), DspError> {
+        if self.config.mic_deviation_debug_plots {
+            self.check_cancelled()?;
+            super::plots::mic_deviation(
+                &self.directory.join("plots/microphone_deviation_v4.png"),
+                analysis,
+            )?;
+        }
+        Ok(())
+    }
     fn on_plot(
         &mut self,
         key: StageKey,
@@ -156,10 +169,6 @@ impl StageObserver for Observer<'_, '_> {
                     json!({})
                 },
             );
-        }
-        if key == StageKey::MicDeviation && self.config.mic_deviation_debug_plots {
-            self.events
-                .log("warning", "cli_plots_not_available_yet", json!({}));
         }
         if key == StageKey::MicDeviationSkipped {
             self.events
