@@ -2180,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-analysis"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "impulcifer-dsp",
  "impulcifer-types",
@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-app"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "dark-light",
  "impulcifer-audio-io",
@@ -2209,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-audio-io"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "cpal",
  "impulcifer-io",
@@ -2220,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-cli"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "clap",
  "impulcifer-dsp",
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-dsp"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "impulcifer-io",
  "impulcifer-types",
@@ -2247,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-io"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "impulcifer-types",
  "serde_json",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-jobs"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "impulcifer-types",
  "serde_json",
@@ -2265,7 +2265,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-plots"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "plotters",
  "png 0.18.1",
@@ -2275,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-policy"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2284,7 +2284,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-python"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "impulcifer-cli",
  "impulcifer-service",
@@ -2295,7 +2295,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-service"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "chrono",
  "impulcifer-analysis",
@@ -2325,7 +2325,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-sys-win"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "audio_thread_priority",
  "impulcifer-types",
@@ -2335,7 +2335,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-types"
-version = "3.1.0"
+version = "3.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -5755,9 +5755,9 @@ dependencies = [
 
 [[package]]
 name = "wasapi"
-version = "0.24.0"
+version = "0.25.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee144c215d8d31e94c1a599fbaf540ca82a7017e4f1786816b179f334fac751d"
+checksum = "5225a7c681bdaf6a63aa0ffc287adba7fd5a04b592a2730643869ce45641da99"
 dependencies = [
  "log",
  "num-integer",

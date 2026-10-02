@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.1.1 - 2026-10-02
+### wasapi 0.25로 올림: `WaveFormat::parse` 금지를 컴파일러가 강제, exclusive 스테레오 폴백 복구
+
+#### 🐛 버그 수정
+- **exclusive 모드의 WAVEFORMATEX 폴백이 늘 거부되던 문제**: 장치가 1·2채널 float32를 WAVEFORMATEXTENSIBLE로는 거부하고 단순 WAVEFORMATEX로만 받으면, `impulcifer-sys-win`은 Microsoft 안내대로 WAVEFORMATEX로 다시 묻습니다. 그런데 wasapi 0.24의 `to_waveformatex`가 그 사본의 SubFormat을 0으로 지워서, 장치가 받아들인 형식을 우리 확인(샘플레이트·채널 수·float32가 그대로인지)이 'float32가 아니다'로 판정해 열기를 거부했습니다. `share_mode=auto`에서는 shared로 넘어갔고, exclusive로 고정했으면 `share_mode_refused`로 끝났습니다. wasapi 0.25의 `to_waveformatex`는 SubFormat·채널 마스크·유효 비트를 그대로 두므로 이제 이런 장치도 exclusive로 열립니다. 지금까지 실측한 장치(`docs/rust/HARDWARE.md`) 가운데 이 경우에 해당하는 것은 없었고, 실기 재측정은 하지 않았습니다. 확인 로직을 `carries_spec_as_float32`로 떼어 내고 Windows 테스트 `waveformatex_fallback_still_carries_float32`가 1·2채널 폴백 형식이 이 확인을 통과하는지 고정합니다.
+
+#### 🔧 빌드 / 설정 변경
+- **wasapi 0.24 → 0.25**: 2026-09-08 보고한 HEnquist/wasapi-rs#65가 0.25.0(2026-10-01)에서 해결됐습니다. `WaveFormat::parse`가 `&WAVEFORMATEX`를 받아 그 뒤 22바이트를 더 읽는 안전 함수였는데, 이제 `*const WAVEFORMATEX`를 받는 `unsafe fn`입니다. `Device::from_raw`는 이미 `unsafe fn`이었으므로, 우리가 문서 규칙으로 막아 오던 두 API를 이제 모든 크레이트의 `#![forbid(unsafe_code)]`가 컴파일 단계에서 막습니다(`parse`를 부르면 E0133로 빌드가 실패하는 것을 확인했습니다). 유지보수자가 안전한 대안으로 안내한 `parse_from_blob_bytes`는 형식을 바이트 슬라이스로 받을 때 쓰는 함수인데, 우리 코드는 형식을 `get_mixformat`·`is_supported`·`WaveFormat::new`로만 다루고 바이트로 받는 곳이 없어 바꿀 자리가 없습니다. 0.25의 최소 Rust 버전은 1.85이고 `windows` 0.62를 그대로 써서 의존성 트리는 wasapi 한 줄만 바뀝니다. 우리 코드는 그대로 컴파일되고, Windows 대상 clippy(`-D warnings`)도 통과합니다. CLAUDE.md, ADR 0002 7항, `docs/rust/ARCHITECTURE.md`에 이 변화를 적었습니다.
+
 ## 3.1.0 - 2026-10-01
 ### pip로 설치해도 `impulcifer_gui`로 3.x 앱 실행, 마이크 편차 진단 그래프, PyPI 프로젝트 설명
 

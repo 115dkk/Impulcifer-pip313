@@ -131,7 +131,7 @@ pub trait InputSession {    // !Send
 
 측정 세션 계약은 2.x `core/recorder.py::play_and_record`와 같습니다. 입력 스트림을 먼저 열고 준비 확인 → 출력 재생을 끝까지 하고 드레인 → 입력 정지 → 두 스레드 조인. 세션 객체는 스레드 간에 넘기지 않고, 스레드 사이에는 엔드포인트 ID·설정·소유 버퍼·결과만 오갑니다. Windows에서는 각 오디오 스레드가 자기 MTA를 초기화하고 자기 COM 객체를 그 스레드에서 해제합니다.
 
-Windows에서 `share_mode=auto`는 exclusive를 먼저 시도하고 `UnsupportedFormat`이면 shared + auto-convert로 다시 시도하지만, 고정 `share_mode`는 실패해도 다른 모드로 다시 시도하지 않습니다. 채널 수는 엔드포인트 mix format과 같게 열고 트랙 배치는 우리가 합니다. wasapi-rs의 `WaveFormat::parse`와 `Device::from_raw`는 쓰지 않습니다. SILENT 패킷은 0으로 채웁니다.
+Windows에서 `share_mode=auto`는 exclusive를 먼저 시도하고 `UnsupportedFormat`이면 shared + auto-convert로 다시 시도하지만, 고정 `share_mode`는 실패해도 다른 모드로 다시 시도하지 않습니다. 채널 수는 엔드포인트 mix format과 같게 열고 트랙 배치는 우리가 합니다. wasapi-rs의 `WaveFormat::parse`와 `Device::from_raw`는 쓰지 않습니다. wasapi 0.25부터 둘 다 `unsafe fn`이라 `forbid(unsafe_code)`가 컴파일 단계에서 막습니다. SILENT 패킷은 0으로 채웁니다.
 
 ## 4. 스레딩
 
