@@ -47,3 +47,20 @@ PA05 6차 측정에서는 Rust 재생마다 별도의 Python `sd.InputStream`을
 2. **shared + auto-convert가 실질 기본 경로**이며 44.1/48/96 kHz 전부 동작합니다. 2.x가 DirectSound에 기대던 이유(레이트 변환)를 WASAPI 안에서 해결했습니다.
 3. 시작 직후 underrun/discontinuity 1회는 재생 시작 전 버퍼 프라이밍 순서를 점검할 항목입니다(`audio-io` 세션 패킷 P02에서 "입력 준비 확인 → 출력 시작" 순서와 함께 다룸).
 4. 16채널 캡처 엔드포인트가 막힌 원인은 별도로 확인합니다(다른 앱의 독점 점유 여부). 백엔드 코드 변경 없음.
+
+## 2026-10-07, 개발 머신 (Windows 11 22621, wasapi-rs 0.25.0, 3.1.2)
+
+3.1.1에서 wasapi-rs를 0.25.0으로 올린 뒤 3.1.2에서 exclusive probe 진단을 고치면서, 같은 날 같은 머신에서 0.24.0과 0.25.0의 프로브 매트릭스를 연달아 재생성해 비교했습니다.
+
+### 엔드포인트
+
+2026-09-07 표와 견주면 출력에 LG HDR 4K(NVIDIA High Definition Audio, 2ch/48000)가 늘었고, 기본 출력은 스피커(TOPPING USB DAC), 기본 입력은 CABLE Output(16ch)입니다. 그 밖의 엔드포인트는 같습니다.
+
+### 프로브 매트릭스 (44.1/48/96 kHz × 2/8/16ch × exclusive/shared)
+
+- **판정은 0.24.0과 0.25.0이 전부 같습니다.** 114개 항목 중 지원/거부가 바뀐 것은 없고, exclusive float32를 받는 엔드포인트는 여전히 Line(Realphones System-Wide) 하나(44.1/48/96 kHz 전부 verbatim)입니다.
+- 바뀐 것은 exclusive의 detail 문구뿐입니다. 거부는 `exclusive float32 format rejected: IsFormatSupported refused every candidate (verbatim, plain WAVEFORMATEX for mono and stereo, each channel mask)`로, 수락은 통과한 후보를 적습니다(`exclusive float32 format accepted verbatim`). 업스트림 헬퍼의 "Could not find a compatible format"은 더 이상 쓰지 않습니다. 장치가 사라지는 등 포맷과 무관한 HRESULT는 이제 probe의 오류로 올라가며, 이 경우는 실기에서 재현하지 않았습니다.
+- 0.25.0의 `to_waveformatex`는 평문 WAVEFORMATEX 후보의 서브포맷과 채널 마스크를 보존합니다. 이 머신에는 그 후보만 받는 장치가 없어 판정에 차이가 없습니다.
+- 하드웨어 테스트(`cargo test -p impulcifer-sys-win --test hardware -- --ignored`) 3개는 0.24.0과 0.25.0 모두 통과했습니다.
+
+전체 표는 `cargo run -p impulcifer-sys-win --example hardware_probe`로 재생성할 수 있습니다.

@@ -931,60 +931,140 @@ mod windows_backend {
         }
     }
 
+    /// The exclusive-mode candidate that IsFormatSupported accepted.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum ExclusiveCandidate {
+        /// The requested WAVEFORMATEXTENSIBLE as given.
+        Verbatim,
+        /// The same format as a plain WAVEFORMATEX (cbSize 0).
+        PlainWaveFormatEx,
+        /// The requested format with this channel mask instead.
+        ChannelMask(u32),
+    }
+
+    impl ExclusiveCandidate {
+        fn describe(self) -> String {
+            match self {
+                Self::Verbatim => "exclusive float32 format accepted verbatim".to_string(),
+                Self::PlainWaveFormatEx => {
+                    "exclusive float32 format accepted as a plain WAVEFORMATEX (cbSize 0)"
+                        .to_string()
+                }
+                Self::ChannelMask(mask) => {
+                    format!("exclusive float32 format accepted with channel mask {mask:#x}")
+                }
+            }
+        }
+    }
+
+    /// Outcome of the exclusive-mode format search. A query that failed for a
+    /// reason other than the format (device invalidated, audio service down)
+    /// is an `Err`, never one of these.
+    enum ExclusiveSearch {
+        Accepted(WaveFormat, ExclusiveCandidate),
+        /// IsFormatSupported refused every candidate as a format.
+        Refused,
+    }
+
+    const EXCLUSIVE_REFUSED_DETAIL: &str = "exclusive float32 format rejected: IsFormatSupported refused every candidate (verbatim, plain WAVEFORMATEX for mono and stereo, each channel mask)";
+
+    /// Runs the candidates wasapi's `is_supported_exclusive_with_quirks` tries
+    /// (verbatim, plain WAVEFORMATEX for mono and stereo, then each channel
+    /// mask), but keeps every HRESULT that is not a format refusal as an error.
+    /// The upstream helper folds a device that vanished mid-query into
+    /// UnsupportedFormat, which would read as a permanent refusal in the open
+    /// path and as a wrong diagnostic in the probe.
+    fn search_exclusive_format(
+        client: &AudioClient,
+        requested: &WaveFormat,
+    ) -> Result<ExclusiveSearch, AudioError> {
+        let query =
+            |format: &WaveFormat| match client.is_supported(format, &WasapiShareMode::Exclusive) {
+                Ok(_) => Ok(true),
+                Err(wasapi::WasapiError::Windows(e))
+                    if e.code().0 as u32 == AUDCLNT_E_UNSUPPORTED_FORMAT =>
+                {
+                    Ok(false)
+                }
+                Err(wasapi::WasapiError::UnsupportedFormat) => Ok(false),
+                Err(e) => Err(backend_error("exclusive format query", e)),
+            };
+        if query(requested)? {
+            return Ok(ExclusiveSearch::Accepted(
+                requested.clone(),
+                ExclusiveCandidate::Verbatim,
+            ));
+        }
+        // wasapi 0.25 declines to describe an ambiguous format (24-bit) as a
+        // plain WAVEFORMATEX. That candidate is then skipped, as upstream does;
+        // it never happens for the float32 32/32 transport requested here.
+        if requested.get_nchannels() <= 2
+            && let Ok(plain) = requested.to_waveformatex()
+            && query(&plain)?
+        {
+            return Ok(ExclusiveSearch::Accepted(
+                plain,
+                ExclusiveCandidate::PlainWaveFormatEx,
+            ));
+        }
+        for mask in wasapi::make_channelmasks(requested.get_nchannels() as usize) {
+            if mask == requested.get_dwchannelmask() {
+                continue;
+            }
+            let candidate = WaveFormat::new(
+                32,
+                32,
+                &SampleType::Float,
+                requested.get_samplespersec() as usize,
+                requested.get_nchannels() as usize,
+                Some(mask),
+            );
+            if query(&candidate)? {
+                return Ok(ExclusiveSearch::Accepted(
+                    candidate,
+                    ExclusiveCandidate::ChannelMask(mask),
+                ));
+            }
+        }
+        Ok(ExclusiveSearch::Refused)
+    }
+
+    #[cfg(test)]
+    mod exclusive_format_tests {
+        use super::*;
+
+        #[test]
+        fn exclusive_probe_detail_names_the_accepted_candidate() {
+            assert_eq!(
+                ExclusiveCandidate::Verbatim.describe(),
+                "exclusive float32 format accepted verbatim"
+            );
+            assert!(
+                ExclusiveCandidate::PlainWaveFormatEx
+                    .describe()
+                    .contains("plain WAVEFORMATEX")
+            );
+            assert_eq!(
+                ExclusiveCandidate::ChannelMask(0x3f).describe(),
+                "exclusive float32 format accepted with channel mask 0x3f"
+            );
+            assert!(EXCLUSIVE_REFUSED_DETAIL.starts_with("exclusive float32 format rejected: "));
+        }
+    }
+
     fn accepted_format(
         client: &AudioClient,
         requested: &WaveFormat,
         mode: ShareMode,
     ) -> Result<WaveFormat, AudioError> {
         match mode {
-            ShareMode::Exclusive => {
-                // Match wasapi's safe quirks candidates, but preserve failures
-                // from EVERY query. Its helper collapses transient HRESULTs into
-                // UnsupportedFormat, which must not become a permanent refusal.
-                let query = |format: &WaveFormat| match client
-                    .is_supported(format, &WasapiShareMode::Exclusive)
-                {
-                    Ok(_) => Ok(true),
-                    Err(wasapi::WasapiError::Windows(e))
-                        if e.code().0 as u32 == AUDCLNT_E_UNSUPPORTED_FORMAT =>
-                    {
-                        Ok(false)
-                    }
-                    Err(wasapi::WasapiError::UnsupportedFormat) => Ok(false),
-                    Err(e) => Err(backend_error("exclusive format query", e)),
-                };
-                if query(requested)? {
-                    return Ok(requested.clone());
-                }
-                if requested.get_nchannels() <= 2 {
-                    let plain = requested
-                        .to_waveformatex()
-                        .map_err(|e| backend_error("exclusive format conversion", e))?;
-                    if query(&plain)? {
-                        return Ok(plain);
-                    }
-                }
-                for mask in wasapi::make_channelmasks(requested.get_nchannels() as usize) {
-                    if mask == requested.get_dwchannelmask() {
-                        continue;
-                    }
-                    let candidate = WaveFormat::new(
-                        32,
-                        32,
-                        &SampleType::Float,
-                        requested.get_samplespersec() as usize,
-                        requested.get_nchannels() as usize,
-                        Some(mask),
-                    );
-                    if query(&candidate)? {
-                        return Ok(candidate);
-                    }
-                }
-                Err(unsupported(
+            ShareMode::Exclusive => match search_exclusive_format(client, requested)? {
+                ExclusiveSearch::Accepted(format, _) => Ok(format),
+                ExclusiveSearch::Refused => Err(unsupported(
                     "exclusive 32-bit float format rejected",
                     wasapi::WasapiError::UnsupportedFormat,
-                ))
-            }
+                )),
+            },
             // Initialize is authoritative for AUTOCONVERTPCM. An ignored
             // IsFormatSupported query adds a COM round trip to every open.
             ShareMode::SharedAutoConvert => Ok(requested.clone()),
@@ -1192,13 +1272,13 @@ mod windows_backend {
                 .map_err(|err| backend_error("failed to create WASAPI audio client", err))?;
             let format = requested_format(spec);
             let (supported, detail) = match mode {
-                ShareMode::Exclusive => match client.is_supported_exclusive_with_quirks(&format) {
-                    Ok(_) => (
-                        true,
-                        "exclusive float32 format accepted verbatim (possibly with a driver-compatible channel mask)"
-                            .to_string(),
-                    ),
-                    Err(err) => (false, format!("exclusive float32 format rejected: {err}")),
+                // A query that fails for a reason other than the format (the
+                // device vanished mid-probe) surfaces as the probe's error, as
+                // `mix_format` and `get_iaudioclient` failures do above; it is
+                // not a refusal and must not be reported as one.
+                ShareMode::Exclusive => match search_exclusive_format(&client, &format)? {
+                    ExclusiveSearch::Accepted(_, candidate) => (true, candidate.describe()),
+                    ExclusiveSearch::Refused => (false, EXCLUSIVE_REFUSED_DETAIL.to_string()),
                 },
                 ShareMode::SharedAutoConvert => {
                     match client.is_supported(&format, &WasapiShareMode::Shared) {
