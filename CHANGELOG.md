@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.1.1 - 2026-10-07
+### 보안 정책(SECURITY.md) 추가
+
+#### 🔧 빌드 / 설정 변경 (출하물과 무관)
+- **`SECURITY.md` 추가**: 보안 신고를 받는 사람(@115dkk), 신고 대상(3.x 앱과 업데이터, PyPI 패키지, 2.x 앱, 입력 파일 파서, 릴리스 워크플로), 보안 수정을 받는 버전(최신 3.x, 2.x는 가능한 범위에서), GitHub 비공개 취약점 신고 링크, 신고 뒤 처리 방식을 적었습니다. 문서만 바뀌므로 버전은 그대로입니다.
+
 ## 3.1.1 - 2026-10-02
 ### wasapi 0.25로 올림: `WaveFormat::parse` 금지를 컴파일러가 강제, exclusive 스테레오 폴백 복구
 
