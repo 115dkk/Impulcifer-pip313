@@ -4,12 +4,6 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
-## 3.1.1 - 2026-10-07
-### 보안 정책(SECURITY.md) 추가
-
-#### 🔧 빌드 / 설정 변경 (출하물과 무관)
-- **`SECURITY.md` 추가**: 보안 신고를 받는 사람(@115dkk), 신고 대상(3.x 앱과 업데이터, PyPI 패키지, 2.x 앱, 입력 파일 파서, 릴리스 워크플로), 보안 수정을 받는 버전(최신 3.x, 2.x는 가능한 범위에서), GitHub 비공개 취약점 신고 링크, 신고 뒤 처리 방식을 적었습니다. 문서만 바뀌므로 버전은 그대로입니다.
-
 ## 3.1.1 - 2026-10-02
 ### wasapi 0.25로 올림: `WaveFormat::parse` 금지를 컴파일러가 강제, exclusive 스테레오 폴백 복구
 
@@ -18,6 +12,9 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **wasapi 0.24 → 0.25**: 2026-09-08 보고한 HEnquist/wasapi-rs#65가 0.25.0(2026-10-01)에서 해결됐습니다. `WaveFormat::parse`가 `&WAVEFORMATEX`를 받아 그 뒤 22바이트를 더 읽는 안전 함수였는데, 이제 `*const WAVEFORMATEX`를 받는 `unsafe fn`입니다. `Device::from_raw`는 이미 `unsafe fn`이었으므로, 우리가 문서 규칙으로 막아 오던 두 API를 이제 모든 크레이트의 `#![forbid(unsafe_code)]`가 컴파일 단계에서 막습니다(`parse`를 부르면 E0133로 빌드가 실패하는 것을 확인했습니다). 유지보수자가 안전한 대안으로 안내한 `parse_from_blob_bytes`는 형식을 바이트 슬라이스로 받을 때 쓰는 함수인데, 우리 코드는 형식을 `get_mixformat`·`is_supported`·`WaveFormat::new`로만 다루고 바이트로 받는 곳이 없어 바꿀 자리가 없습니다. 0.25의 최소 Rust 버전은 1.85이고 `windows` 0.62를 그대로 써서 의존성 트리는 wasapi 한 줄만 바뀝니다. 우리 코드는 그대로 컴파일되고, Windows 대상 clippy(`-D warnings`)도 통과합니다. CLAUDE.md, ADR 0002 7항, `docs/rust/ARCHITECTURE.md`에 이 변화를 적었습니다.
+
+#### 🔧 빌드 / 설정 변경 (릴리스 후 추가, 출하물 변화 없음)
+- **`SECURITY.md` 추가**: 보안 신고를 받는 사람(@115dkk), 신고 대상(3.x 앱과 업데이터, PyPI 패키지, 2.x 앱, 입력 파일 파서, 릴리스 워크플로), 보안 수정을 받는 버전(최신 3.x, 2.x는 가능한 범위에서), GitHub 비공개 취약점 신고 링크, 신고 뒤 처리 방식을 적었습니다. 문서만 바뀌므로 버전은 그대로입니다.
 
 ## 3.1.0 - 2026-10-01
 ### pip로 설치해도 `impulcifer_gui`로 3.x 앱 실행, 마이크 편차 진단 그래프, PyPI 프로젝트 설명
