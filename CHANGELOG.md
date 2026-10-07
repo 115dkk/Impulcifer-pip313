@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.1.2 - 2026-10-07
+### exclusive probe가 장치 오류를 포맷 거부로 보고하던 진단 수정
+
+#### 🐛 버그 수정
+- **exclusive probe의 잘못된 진단**: 장치 접근 방식 probe(`AudioBackend::probe`의 exclusive)는 업스트림 wasapi의 `is_supported_exclusive_with_quirks`를 그대로 써 왔는데, 이 헬퍼는 어떤 오류든 `UnsupportedFormat`으로 접습니다. 그래서 probe 도중 장치가 뽑히는 등 포맷과 무관한 HRESULT도 "exclusive float32 format rejected"로 보고됐습니다(캐시에는 남지 않지만 진단 문구가 틀림). 열기 경로(`accepted_format`)가 이미 쓰던 후보 탐색을 `search_exclusive_format`으로 빼서 probe도 같이 씁니다. 결과는 셋입니다. 수락(어느 후보가 통과했는지: verbatim, 평문 WAVEFORMATEX, 채널 마스크), 모든 후보 거부, 포맷과 무관한 실패. probe는 거부를 `supported: false`로, 그 밖의 실패는 `mix_format` 실패와 같이 probe의 오류로 올립니다. 열기 경로의 후보 순서와 오류 분류는 그대로이고, wasapi 0.25가 `to_waveformatex`에 오류를 돌려주는 포맷(24비트)은 업스트림처럼 그 후보만 건너뜁니다(이 크레이트는 float32 32/32만 요청하므로 실제로는 생기지 않음). 개발 머신에서 wasapi-rs 0.24.0과 0.25.0으로 같은 날 프로브 매트릭스(44.1/48/96 kHz × 2/8/16ch × exclusive/shared, 114개 항목)를 연달아 재생성해 비교했고, 판정은 전부 같으며(exclusive float32는 Line(Realphones System-Wide)만 수락) 바뀐 것은 exclusive detail 문구뿐입니다(`docs/rust/HARDWARE.md`에 절 추가).
+
 ## 3.1.1 - 2026-10-02
 ### wasapi 0.25로 올림: `WaveFormat::parse` 금지를 컴파일러가 강제, exclusive 스테레오 폴백 복구
 
