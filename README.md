@@ -234,7 +234,7 @@ sweep 파일을 따로 준비하지 않아도 됩니다. 녹음 화면은 기본
 | `--decay VALUE` | 사용 안 함 | 잔향 꼬리를 줄입니다. `300`처럼 전체 ms 값을 주거나 `FL:500,FC:100`처럼 채널별 ms 값을 줍니다. |
 | `--target_level DB` | 사용 안 함 | 좌우 평균 레벨을 지정한 dB로 맞춥니다. 클리핑을 피하려면 보통 음수를 씁니다. |
 | `--fr_combination_method average\|conservative` | `average` | 여러 룸 측정 응답을 합치는 방식입니다. |
-| `--room_range modes\|schroeder\|extreme\|legacy` | `schroeder` | 룸 보정 범위입니다. `modes`는 룸 모드 공진만 줄이고 저역 밸런스는 그대로 둡니다. `schroeder`는 슈레더 주파수까지 평탄하게 맞추고, 실제 방 EQ로는 메울 수 없는 딥도 메웁니다. `extreme`은 10 kHz까지 넓게 스무딩한 음색 보정을 더합니다. `legacy`는 2.x 동작입니다. 어느 범위든 스피커의 저역 롤오버는 자동으로 찾아 부스트하지 않습니다. 자세한 내용은 `docs/rust/ROOM_CORRECTION.md`에 있습니다. |
+| `--room_range modes\|schroeder\|extreme\|legacy` | `schroeder` | 룸 보정 범위입니다. `modes`는 룸 모드 공진만 줄이고 저역 밸런스는 그대로 둡니다. `schroeder`는 슈레더 주파수까지 평탄하게 맞추고, 실제 방 EQ로는 메울 수 없는 딥도 메웁니다. `extreme`은 10 kHz까지 넓게 스무딩한 음색 보정을 더합니다. `legacy`는 2.x 동작입니다. `legacy`를 뺀 세 범위는 스피커의 저역 롤오버를 자동으로 찾아 그 아래를 부스트하지 않습니다. 자세한 내용은 `docs/rust/ROOM_CORRECTION.md`에 있습니다. |
 | `--room_volume M3` | 50으로 가정 | 슈레더 주파수를 계산할 방 부피(m³)입니다. |
 | `--schroeder_freq HZ` | 측정에서 추정 | 슈레더 주파수를 직접 지정합니다. |
 | `--room_max_boost DB` | `12` | 스피커·귀별 룸 측정으로 딥을 메울 때 쓰는 최대 부스트입니다. |
