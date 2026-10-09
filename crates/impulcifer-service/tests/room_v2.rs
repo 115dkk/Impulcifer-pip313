@@ -94,7 +94,8 @@ fn demo_default_room_range_runs_schroeder() {
     let wav = impulcifer_io::read_wav(&new.0.join("hesuvi.wav")).unwrap();
     assert!(wav.tracks.iter().flatten().all(|x| x.is_finite()));
     let (legacy, keys) = run_demo("legacy");
-    assert!(!keys.iter().any(|k| k == "cli_room_range"));
+    assert!(!keys.iter().any(|k| k.starts_with("cli_room_")));
+    assert!(keys.iter().any(|k| k == "cli_running_room_correction"));
     assert_ne!(
         std::fs::read(new.0.join("hesuvi.wav")).unwrap(),
         std::fs::read(legacy.0.join("hesuvi.wav")).unwrap()
@@ -114,6 +115,108 @@ fn demo_default_room_range_runs_schroeder() {
         }
     }
 }
+fn load_room(
+    temp: &Temp,
+    config: &ProcessingConfig,
+) -> (impulcifer_dsp::stages::room::RoomCorrection, Events) {
+    let dir = discover(&temp.0, config).unwrap();
+    let estimator = open_estimator(&dir, Some("default")).unwrap();
+    let mut events = Events::default();
+    let inputs = load_inputs(&dir, &estimator, config, &mut events).unwrap();
+    (inputs.room.unwrap(), events)
+}
+
+#[test]
+fn room_v2_generic_plot_uses_the_applied_gain() {
+    let temp = Temp::new();
+    // Only generic room data; load_inputs also requires an HRIR recording.
+    for (source, target) in [
+        ("FL,FR.wav", "FL,FR.wav"),
+        ("room-FL,FR-left.wav", "room.wav"),
+    ] {
+        std::fs::copy(root().join("data/demo").join(source), temp.0.join(target)).unwrap();
+    }
+    let (room, _) = load_room(
+        &temp,
+        &ProcessingConfig {
+            plot: true,
+            ..Default::default()
+        },
+    );
+    assert!(temp.0.join("plots/room/room.png").is_file());
+    assert_eq!(room.frs.term, impulcifer_dsp::stages::room::RoomTerm::Gain);
+    assert!(!room.frs.entries.is_empty());
+    for (_, _, fr) in &room.frs.entries {
+        assert_eq!(fr.name, "generic_room");
+        assert_eq!(
+            fr.error,
+            fr.equalization.iter().map(|g| -g).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn room_v2_numeric_options_reach_the_room_stage() {
+    let temp = Temp::demo();
+    let (room, events) = load_room(
+        &temp,
+        &ProcessingConfig {
+            room_volume: Some(100.0),
+            ..Default::default()
+        },
+    );
+    assert!(
+        events
+            .0
+            .iter()
+            .any(|(_, key, args)| key == "cli_room_schroeder" && args["volume"] == "100.0")
+    );
+    assert!(
+        !events
+            .0
+            .iter()
+            .any(|(_, key, _)| key == "cli_room_schroeder_assumed")
+    );
+    // Ensure the fixture has boosts before checking that the zero cap removes them.
+    assert!(
+        room.frs
+            .entries
+            .iter()
+            .any(|(_, _, fr)| fr.equalization.iter().any(|g| *g > 0.0))
+    );
+
+    let (_, events) = load_room(
+        &temp,
+        &ProcessingConfig {
+            schroeder_freq: Some(400.0),
+            ..Default::default()
+        },
+    );
+    assert!(
+        events
+            .0
+            .iter()
+            .any(|(_, key, args)| key == "cli_room_schroeder_override" && args["freq"] == 400)
+    );
+    assert!(events.0.iter().any(|(_, key, args)| key == "cli_room_range"
+        && args["range"] == "schroeder"
+        && args["f_hi"] == 400));
+
+    let (room, _) = load_room(
+        &temp,
+        &ProcessingConfig {
+            room_max_boost: 0.0,
+            ..Default::default()
+        },
+    );
+    assert_eq!(room.frs.term, impulcifer_dsp::stages::room::RoomTerm::Gain);
+    assert!(!room.frs.entries.is_empty());
+    for (_, _, fr) in room.frs.entries {
+        assert!(!fr.equalization.is_empty());
+        assert!(fr.equalization.iter().all(|g| *g <= 0.0));
+    }
+}
+
 #[test]
 fn room_v2_selfcheck_logs_warning() {
     let temp = Temp::demo();
@@ -127,15 +230,9 @@ fn room_v2_selfcheck_logs_warning() {
         schroeder_freq: Some(400.0),
         ..Default::default()
     };
-    let dir = discover(&temp.0, &config).unwrap();
-    let estimator = open_estimator(&dir, Some("default")).unwrap();
-    let mut events = Events::default();
-    let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
+    let (room, events) = load_room(&temp, &config);
     assert!(
-        inputs
-            .room
-            .unwrap()
-            .diagnostics
+        room.diagnostics
             .unwrap()
             .ears
             .iter()
@@ -155,17 +252,13 @@ fn room_v2_with_vbass_logs_handoff() {
         vbass: true,
         ..Default::default()
     };
-    let dir = discover(&temp.0, &config).unwrap();
-    let estimator = open_estimator(&dir, Some("default")).unwrap();
-    let mut events = Events::default();
-    let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
+    let (room, events) = load_room(&temp, &config);
     assert!(
         events
             .0
             .iter()
             .any(|(_, k, a)| k == "cli_room_vbass_handoff" && a["freq"] == 250)
     );
-    let room = inputs.room.unwrap();
     for (_, _, fr) in room.frs.entries {
         assert!(
             fr.frequency

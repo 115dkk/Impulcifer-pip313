@@ -302,6 +302,7 @@ pub fn load_inputs(
                 &target,
                 calibration.as_ref(),
                 config,
+                &room.frs,
                 &cancelled,
             )?;
         }

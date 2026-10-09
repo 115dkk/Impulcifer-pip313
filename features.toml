@@ -316,25 +316,25 @@ tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impul
 id = "config.room_volume"
 kind = "config"
 status = "implemented"
-tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-dsp::room_v2_schroeder_estimate_sources_and_clamps"]
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-dsp::room_v2_schroeder_estimate_sources_and_clamps", "impulcifer-service::room_v2_numeric_options_reach_the_room_stage"]
 
 [[feature]]
 id = "config.schroeder_freq"
 kind = "config"
 status = "implemented"
-tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-dsp::room_v2_schroeder_estimate_sources_and_clamps"]
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-dsp::room_v2_schroeder_estimate_sources_and_clamps", "impulcifer-service::room_v2_numeric_options_reach_the_room_stage"]
 
 [[feature]]
 id = "config.room_max_boost"
 kind = "config"
 status = "implemented"
-tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-cli::cli_room_v2_options_parse_and_validate"]
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-cli::cli_room_v2_options_parse_and_validate", "impulcifer-service::room_v2_numeric_options_reach_the_room_stage"]
 
 [[feature]]
 id = "room.v2_ranges"
 kind = "stage"
 status = "implemented"
-tests = ["impulcifer-dsp::room_v2_schroeder_range_corrects_modes_and_fills_specific_dips", "impulcifer-dsp::room_v2_modes_range_keeps_bass_balance", "impulcifer-dsp::room_v2_extreme_is_diotic_above_700_hz", "impulcifer-service::demo_default_room_range_runs_schroeder"]
+tests = ["impulcifer-dsp::room_v2_schroeder_range_corrects_modes_and_fills_specific_dips", "impulcifer-dsp::room_v2_modes_range_keeps_bass_balance", "impulcifer-dsp::room_v2_extreme_is_diotic_above_700_hz", "impulcifer-dsp::room_v2_extreme_room_correction_is_diotic_above_700_hz", "impulcifer-service::demo_default_room_range_runs_schroeder"]
 
 [[feature]]
 id = "room.schroeder_estimate"

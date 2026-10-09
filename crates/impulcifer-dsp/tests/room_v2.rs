@@ -14,8 +14,10 @@ fn root() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-#[test]
-fn room_v2_legacy_range_is_bit_exact() {
+fn demo_room() -> (
+    impulcifer_dsp::hrir::Hrir,
+    impulcifer_dsp::estimator::SweepEstimator,
+) {
     use impulcifer_dsp::{estimator::SweepEstimator, hrir::Hrir, stages::room::*};
     let wav =
         impulcifer_io::read_wav(&root().join("data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"))
@@ -46,6 +48,63 @@ fn room_v2_legacy_range_is_bit_exact() {
         }
     }
     assert!(!rir.speakers.is_empty());
+    (rir, estimator)
+}
+
+#[test]
+fn room_v2_extreme_room_correction_is_diotic_above_700_hz() {
+    use impulcifer_dsp::stages::room;
+    let (mut rir, estimator) = demo_room();
+    let target = room::prepare_room_target(None, 48000).unwrap();
+    let applied = room::room_correction(
+        &mut rir,
+        &[],
+        &target,
+        None,
+        &estimator,
+        &options(RoomRange::Extreme),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(applied.frs.term, RoomTerm::Gain);
+    let left = &applied
+        .frs
+        .entries
+        .iter()
+        .find(|(s, side, _)| s == "FL" && *side == Side::Left)
+        .unwrap()
+        .2;
+    let right = &applied
+        .frs
+        .entries
+        .iter()
+        .find(|(s, side, _)| s == "FL" && *side == Side::Right)
+        .unwrap()
+        .2;
+    assert_eq!(left.frequency, right.frequency);
+    assert!(
+        left.frequency
+            .iter()
+            .zip(&left.equalization)
+            .zip(&right.equalization)
+            .any(|((f, l), r)| *f < 500.0 && (l - r).abs() > 1e-9)
+    );
+    for ((f, l), r) in left
+        .frequency
+        .iter()
+        .zip(&left.equalization)
+        .zip(&right.equalization)
+    {
+        if *f >= 700.0 {
+            assert!((l - r).abs() < 1e-9, "{f} Hz: {l} != {r}");
+        }
+    }
+}
+
+#[test]
+fn room_v2_legacy_range_is_bit_exact() {
+    use impulcifer_dsp::stages::room::*;
+    let (mut rir, estimator) = demo_room();
     let target = prepare_room_target(None, 48000).unwrap();
     let mut old = rir.clone();
     old.for_each_ir(|ir| ir.crop_head(1.0));
@@ -167,8 +226,25 @@ fn room_v2_schroeder_estimate_sources_and_clamps() {
     let v = estimate_schroeder(&[&ir], Some(50.0), None);
     assert_eq!(v.source, SchroederSource::Volume);
     assert!((v.freq - 2000.0 * (v.t60.unwrap() / 50.0).sqrt()).abs() < 1e-10);
-    assert_eq!(estimate_schroeder(&[&ir], Some(0.01), None).freq, 500.0);
-    assert_eq!(estimate_schroeder(&[&ir], Some(10000.0), None).freq, 80.0);
+    for (t60, assumed_clamp, volume, volume_clamp) in
+        [(0.1, 120.0, 100.0, 80.0), (2.0, 300.0, 10.0, 500.0)]
+    {
+        let ir = noise_ir(t60);
+        for (volume, expected, source) in [
+            (None, assumed_clamp, SchroederSource::AssumedVolume),
+            (Some(volume), volume_clamp, SchroederSource::Volume),
+        ] {
+            let estimate = estimate_schroeder(&[&ir], volume, None);
+            assert_eq!(estimate.source, source);
+            let unclamped = 2000.0 * (estimate.t60.unwrap() / volume.unwrap_or(50.0)).sqrt();
+            if t60 < 1.0 {
+                assert!(unclamped < expected, "{estimate:?}, unclamped {unclamped}");
+            } else {
+                assert!(unclamped > expected, "{estimate:?}, unclamped {unclamped}");
+            }
+            assert_eq!(estimate.freq, expected);
+        }
+    }
     assert_eq!(
         estimate_schroeder(&[], None, None).source,
         SchroederSource::Fallback

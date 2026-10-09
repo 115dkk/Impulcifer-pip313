@@ -3,7 +3,7 @@
 
 use impulcifer_cli::{
     Parsed,
-    options::{CliType, OPTIONS},
+    options::{CliType, EXTENSION_OPTIONS, OPTIONS},
     parse, run,
 };
 use impulcifer_types::config::{FIELD_NAMES, ProcessingConfig};
@@ -43,7 +43,10 @@ fn cli_room_v2_options_parse_and_validate() {
         assert!(!baseline.contains_key(name));
     }
     for (flag, value, expected) in [
+        ("--room_range", "legacy", json!("legacy")),
         ("--room_range", "modes", json!("modes")),
+        ("--room_range", "schroeder", json!("schroeder")),
+        ("--room_range", "extreme", json!("extreme")),
         ("--room_volume", "50", json!(50.0)),
         ("--schroeder_freq", "400", json!(400.0)),
         ("--room_max_boost", "12", json!(12.0)),
@@ -87,8 +90,9 @@ fn cli_room_v2_options_parse_and_validate() {
     let Parsed::Help(help) = parse(&args(&["impulcifer", "--help"])).unwrap() else {
         panic!()
     };
-    for name in impulcifer_types::config::EXTENSION_FIELD_NAMES {
-        assert!(help.contains(name));
+    for option in EXTENSION_OPTIONS {
+        assert!(help.contains(option.flag), "{}", option.flag);
+        assert!(help.contains(option.help), "{}", option.flag);
     }
 }
 
@@ -196,7 +200,7 @@ fn cli_help_mentions_every_option() {
         let (code, out, err) = invoke(&["impulcifer", flag]);
         assert_eq!(code, 0);
         assert!(err.is_empty());
-        for option in OPTIONS {
+        for option in OPTIONS.iter().chain(EXTENSION_OPTIONS) {
             assert!(out.contains(option.flag), "{}", option.flag);
             assert!(out.contains(option.help), "{}", option.flag);
         }
