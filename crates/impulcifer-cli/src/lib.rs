@@ -8,7 +8,7 @@ mod settings;
 
 use clap::error::{ContextKind, ErrorKind};
 use impulcifer_types::{config::ProcessingConfig, constants::SPEAKER_NAMES};
-use options::{CliType, OPTIONS};
+use options::{CliType, EXTENSION_OPTIONS, OPTIONS};
 use serde_json::{Map, Value, json};
 use std::io::Write;
 
@@ -56,7 +56,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, CliError> {
         }
     };
     let mut kwargs = Map::new();
-    for option in OPTIONS {
+    for option in OPTIONS.iter().chain(EXTENSION_OPTIONS) {
         if option.dest == "version" {
             continue;
         }
@@ -88,6 +88,12 @@ pub fn parse(argv: &[String]) -> Result<Parsed, CliError> {
                         }
                         CliType::Float => {
                             let number = raw.trim().parse::<f64>().map_err(|_| invalid("float"))?;
+                            if impulcifer_types::config::EXTENSION_FIELD_NAMES
+                                .contains(&option.dest)
+                                && !number.is_finite()
+                            {
+                                return Err(invalid("finite float"));
+                            }
                             finite(number)?
                         }
                         _ => json!(raw),
@@ -153,6 +159,15 @@ pub fn parse(argv: &[String]) -> Result<Parsed, CliError> {
         }
         kwargs.insert("decay".into(), Value::Object(decay));
     }
+    let extensions = kwargs
+        .iter()
+        .filter(|(k, _)| impulcifer_types::config::EXTENSION_FIELD_NAMES.contains(&k.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    ProcessingConfig::from_kwargs(&extensions)
+        .map_err(|e| CliError::argument(e.to_string()))?
+        .validate_room_options()
+        .map_err(|e| CliError::argument(e.to_string()))?;
     Ok(Parsed::Kwargs(kwargs))
 }
 

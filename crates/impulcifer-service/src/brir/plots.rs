@@ -361,7 +361,7 @@ pub fn room(
                 )?;
                 if let Some((_, _, fr)) = room
                     .frs
-                    .0
+                    .entries
                     .iter()
                     .find(|(name, ear, _)| name == &s.speaker && *ear == side)
                 {

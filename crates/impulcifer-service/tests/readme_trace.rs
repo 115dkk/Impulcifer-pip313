@@ -35,7 +35,7 @@ fn readme_numerical_trace_on_identical_oracle_samples() {
         let config = ProcessingConfig {
             dir_path: Some(temp.0.to_string_lossy().into_owned()),
             vbass: scenario == "vbass",
-            ..Default::default()
+            ..ProcessingConfig::oracle_defaults()
         };
         let dir = discover(&temp.0, &config).unwrap();
         let auto = open_estimator(&dir, None).unwrap();
@@ -119,7 +119,7 @@ fn readme_numerical_trace_on_identical_oracle_samples() {
             .as_ref()
             .unwrap()
             .frs
-            .0
+            .entries
             .iter()
             .find(|(s, side, _)| s == "FR" && *side == impulcifer_types::constants::Side::Left)
             .unwrap()

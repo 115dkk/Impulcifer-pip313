@@ -30,6 +30,10 @@ pub struct ProcessingConfig {
     pub fr_combination_method: String,
     pub specific_limit: f64,
     pub generic_limit: f64,
+    pub room_range: String,
+    pub room_volume: Option<f64>,
+    pub schroeder_freq: Option<f64>,
+    pub room_max_boost: f64,
     pub bass_boost_gain: f64,
     pub bass_boost_fc: f64,
     pub bass_boost_q: f64,
@@ -68,6 +72,10 @@ impl Default for ProcessingConfig {
             fr_combination_method: "average".to_string(),
             specific_limit: 400.0,
             generic_limit: 300.0,
+            room_range: "schroeder".into(),
+            room_volume: None,
+            schroeder_freq: None,
+            room_max_boost: 12.0,
             bass_boost_gain: 0.0,
             bass_boost_fc: 105.0,
             bass_boost_q: 0.76,
@@ -129,6 +137,14 @@ pub const FIELD_NAMES: [&str; 33] = [
     "vbass_polarity",
 ];
 
+/// 3.x-only options, separate from the frozen 2.x dataclass surface.
+pub const EXTENSION_FIELD_NAMES: [&str; 4] = [
+    "room_range",
+    "room_volume",
+    "schroeder_freq",
+    "room_max_boost",
+];
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("invalid value for {field}: {reason}")]
@@ -136,6 +152,46 @@ pub enum ConfigError {
 }
 
 impl ProcessingConfig {
+    /// The 2.x dataclass defaults; use in tests that compare against 2.x oracle output.
+    pub fn oracle_defaults() -> Self {
+        Self {
+            room_range: "legacy".into(),
+            ..Self::default()
+        }
+    }
+
+    /// Validate the 3.x room options without changing legacy validation semantics.
+    pub fn validate_room_options(&self) -> Result<(), ConfigError> {
+        let invalid = |field: &str, reason: &str| ConfigError::Invalid {
+            field: field.into(),
+            reason: reason.into(),
+        };
+        if !["legacy", "modes", "schroeder", "extreme"].contains(&self.room_range.as_str()) {
+            return Err(invalid(
+                "room_range",
+                "must be legacy, modes, schroeder or extreme",
+            ));
+        }
+        for (field, value, lo, hi, exclusive) in [
+            ("room_volume", self.room_volume, 0.0, 10000.0, true),
+            ("schroeder_freq", self.schroeder_freq, 50.0, 1000.0, false),
+            (
+                "room_max_boost",
+                Some(self.room_max_boost),
+                0.0,
+                24.0,
+                false,
+            ),
+        ] {
+            if let Some(v) = value
+                && (!v.is_finite() || v > hi || v < lo || (exclusive && v == lo))
+            {
+                return Err(invalid(field, "outside supported range"));
+            }
+        }
+        Ok(())
+    }
+
     /// Build a config from a loose JSON object, ignoring unknown keys exactly
     /// like 2.x `ProcessingConfig.from_kwargs`. Known keys with the wrong type
     /// are an error.
@@ -144,7 +200,8 @@ impl ProcessingConfig {
     ) -> Result<Self, ConfigError> {
         let mut filtered = serde_json::Map::new();
         for (key, value) in kwargs {
-            if FIELD_NAMES.contains(&key.as_str()) {
+            if FIELD_NAMES.contains(&key.as_str()) || EXTENSION_FIELD_NAMES.contains(&key.as_str())
+            {
                 filtered.insert(key.clone(), value.clone());
             }
         }

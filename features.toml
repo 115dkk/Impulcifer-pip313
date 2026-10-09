@@ -297,14 +297,68 @@ id = "config.specific_limit"
 kind = "config"
 status = "implemented"
 tests = ["impulcifer-service::config_specific_room_unlimited_matches_python", "impulcifer-dsp::golden_option_variants_match_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
-note = "0 (no limit) on the demo's specific room measurements, through the stage and end to end (P25)"
+note = "Legacy-only: 0 (no limit) on the demo's specific room measurements, through the stage and end to end (P25)"
 
 [[feature]]
 id = "config.generic_limit"
 kind = "config"
 status = "implemented"
 tests = ["impulcifer-service::config_generic_room_unlimited_matches_python", "impulcifer-dsp::golden_generic_room_matches_python", "impulcifer-cli::golden_cli_parsing_matches_python"]
-note = "0 (no limit) on a generic room.wav, at the stage and end to end (P25)"
+note = "Legacy-only: 0 (no limit) on a generic room.wav, at the stage and end to end (P25)"
+
+[[feature]]
+id = "config.room_range"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-cli::cli_room_v2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_volume"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-dsp::room_v2_schroeder_estimate_sources_and_clamps"]
+
+[[feature]]
+id = "config.schroeder_freq"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-dsp::room_v2_schroeder_estimate_sources_and_clamps"]
+
+[[feature]]
+id = "config.room_max_boost"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-cli::cli_room_v2_options_parse_and_validate"]
+
+[[feature]]
+id = "room.v2_ranges"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_v2_schroeder_range_corrects_modes_and_fills_specific_dips", "impulcifer-dsp::room_v2_modes_range_keeps_bass_balance", "impulcifer-dsp::room_v2_extreme_is_diotic_above_700_hz", "impulcifer-service::demo_default_room_range_runs_schroeder"]
+
+[[feature]]
+id = "room.schroeder_estimate"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_v2_schroeder_estimate_sources_and_clamps"]
+
+[[feature]]
+id = "room.rolloff_detection"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_v2_rolloff_detects_sealed_and_ported_speakers", "impulcifer-dsp::room_v2_rolloff_is_never_boosted"]
+
+[[feature]]
+id = "room.vbass_handoff"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_v2_vbass_handoff_mask_follows_lr8", "impulcifer-service::room_v2_with_vbass_logs_handoff"]
+
+[[feature]]
+id = "room.self_check"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_v2_self_check_warns_when_residual_is_large", "impulcifer-service::room_v2_selfcheck_logs_warning"]
 
 [[feature]]
 id = "config.bass_boost_gain"
@@ -451,7 +505,7 @@ id = "stage.room_correction"
 kind = "stage"
 status = "implemented"
 tests = ["impulcifer-dsp::golden_default_pipeline_matches_python", "impulcifer-dsp::pipeline_observer_reports_order_steps_and_totals", "impulcifer-dsp::golden_generic_room_matches_python", "impulcifer-dsp::room_measurement_names_accept_the_skip_placeholder"]
-note = "specific + generic room corrections, limit masks; room-responses matrix returned for P11 to write"
+note = "Specific + generic room corrections dispatch to v2 ranges by default; legacy retains exact 2.x limit masks and room-responses output"
 
 [[feature]]
 id = "stage.headphone_compensation"

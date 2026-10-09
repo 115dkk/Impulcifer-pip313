@@ -215,8 +215,81 @@ pub fn load_inputs(
                 },
                 specific_limit: config.specific_limit,
                 generic_limit: config.generic_limit,
+                range: room::RoomRange::parse(&config.room_range).ok_or_else(|| {
+                    impulcifer_dsp::DspError::InvalidArgument("invalid room_range".into())
+                })?,
+                room_volume: config.room_volume,
+                schroeder_freq: config.schroeder_freq,
+                max_boost_db: config.room_max_boost,
+                vbass_crossover: config.vbass.then_some(config.vbass_freq as f64),
             },
         )?;
+        if let Some(d) = room_result.as_ref().and_then(|r| r.diagnostics.as_ref()) {
+            use impulcifer_dsp::stages::room_v2::{RolloffSource, SchroederSource};
+            events.log(
+                "info",
+                "cli_room_range",
+                json!({"range":d.range.as_str(), "f_hi":d.f_hi.round() as i64}),
+            );
+            let s = &d.schroeder;
+            let (level, key, args) = match s.source {
+                SchroederSource::Override => (
+                    "info",
+                    "cli_room_schroeder_override",
+                    json!({"freq":s.freq.round() as i64}),
+                ),
+                SchroederSource::Fallback => (
+                    "warning",
+                    "cli_room_schroeder_fallback",
+                    json!({"freq":s.freq.round() as i64}),
+                ),
+                SchroederSource::Volume => (
+                    "info",
+                    "cli_room_schroeder",
+                    json!({"freq":s.freq.round() as i64,"t60":format!("{:.2}",s.t60.unwrap()),"volume":format!("{:.1}",s.volume.unwrap())}),
+                ),
+                SchroederSource::AssumedVolume => (
+                    "info",
+                    "cli_room_schroeder_assumed",
+                    json!({"freq":s.freq.round() as i64,"t60":format!("{:.2}",s.t60.unwrap())}),
+                ),
+            };
+            events.log(level, key, args);
+            for ear in &d.ears {
+                let side = match ear.side {
+                    Some(Side::Left) => "left",
+                    Some(Side::Right) => "right",
+                    _ => "both",
+                };
+                if let Some(r) = ear.rolloff {
+                    events.log(
+                        "info",
+                        match r.source {
+                            RolloffSource::Slope => "cli_room_rolloff",
+                            RolloffSource::Snr => "cli_room_rolloff_snr",
+                        },
+                        json!({"speaker":ear.speaker,"side":side,"freq":r.freq.round() as i64}),
+                    );
+                }
+                if !ear.snr_available {
+                    events.log(
+                        "warning",
+                        "cli_room_snr_unavailable",
+                        json!({"speaker":ear.speaker,"side":side}),
+                    );
+                }
+                if let Some(rms) = ear.residual_rms_db.filter(|r| *r > 3.0) {
+                    events.log("warning","cli_room_selfcheck_warning",json!({"speaker":ear.speaker,"side":side,"rms":format!("{rms:.1}"),"lo":ear.residual_lo.round() as i64,"hi":ear.residual_hi.round() as i64}));
+                }
+            }
+            if let Some(freq) = d.vbass_crossover {
+                events.log(
+                    "info",
+                    "cli_room_vbass_handoff",
+                    json!({"freq":freq.round() as i64}),
+                );
+            }
+        }
         if config.plot
             && let Some(room) = &room_result
         {

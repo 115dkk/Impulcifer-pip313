@@ -33,6 +33,66 @@ fn invoke(argv: &[&str]) -> (i32, String, String) {
 }
 
 #[test]
+fn cli_room_v2_options_parse_and_validate() {
+    let Parsed::Kwargs(baseline) =
+        parse(&args(&["impulcifer", "--dir_path", "measurements"])).unwrap()
+    else {
+        panic!()
+    };
+    for name in impulcifer_types::config::EXTENSION_FIELD_NAMES {
+        assert!(!baseline.contains_key(name));
+    }
+    for (flag, value, expected) in [
+        ("--room_range", "modes", json!("modes")),
+        ("--room_volume", "50", json!(50.0)),
+        ("--schroeder_freq", "400", json!(400.0)),
+        ("--room_max_boost", "12", json!(12.0)),
+    ] {
+        let Parsed::Kwargs(mut kwargs) = parse(&args(&[
+            "impulcifer",
+            "--dir_path",
+            "measurements",
+            flag,
+            value,
+        ]))
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(kwargs.remove(&flag[2..]), Some(expected));
+        assert_eq!(kwargs, baseline);
+    }
+    for (flag, value) in [
+        ("--room_range", "bad"),
+        ("--room_volume", "0"),
+        ("--room_volume", "10001"),
+        ("--schroeder_freq", "49"),
+        ("--schroeder_freq", "1001"),
+        ("--room_max_boost", "-1"),
+        ("--room_max_boost", "25"),
+        ("--room_max_boost", "NaN"),
+    ] {
+        assert_eq!(
+            parse(&args(&[
+                "impulcifer",
+                "--dir_path",
+                "measurements",
+                flag,
+                value
+            ]))
+            .unwrap_err()
+            .exit_code,
+            2
+        );
+    }
+    let Parsed::Help(help) = parse(&args(&["impulcifer", "--help"])).unwrap() else {
+        panic!()
+    };
+    for name in impulcifer_types::config::EXTENSION_FIELD_NAMES {
+        assert!(help.contains(name));
+    }
+}
+
+#[test]
 fn golden_cli_options_match_python() {
     let oracle = golden("p13_options.json");
     let oracle = oracle.as_array().unwrap();
@@ -55,7 +115,15 @@ fn golden_cli_options_match_python() {
             CliType::FlagFalse => "_StoreFalseAction",
             _ => "_StoreAction",
         };
-        let actual = json!({"option_strings":flags,"dest":option.dest,"help":option.help,
+        let help = if ["specific_limit", "generic_limit"].contains(&option.dest) {
+            option
+                .help
+                .strip_suffix(" Used only with --room_range legacy.")
+                .unwrap()
+        } else {
+            option.help
+        };
+        let actual = json!({"option_strings":flags,"dest":option.dest,"help":help,
             "type":type_name,"action":action,"choices":if option.choices.is_empty() { Value::Null } else { json!(option.choices) },
             "default":option.default.value().unwrap_or(json!("SUPPRESS")),"required":false});
         assert_eq!(&actual, expected, "{}", option.flag);

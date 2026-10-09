@@ -405,7 +405,7 @@ const CANONICAL_IPC: [&str; 25] = [
     "select_directory",
     "open_url",
 ];
-const CANONICAL_CONFIG: [&str; 33] = [
+const CANONICAL_CONFIG: [&str; 37] = [
     "dir_path",
     "test_signal",
     "room_target",
@@ -420,6 +420,10 @@ const CANONICAL_CONFIG: [&str; 33] = [
     "fr_combination_method",
     "specific_limit",
     "generic_limit",
+    "room_range",
+    "room_volume",
+    "schroeder_freq",
+    "room_max_boost",
     "bass_boost_gain",
     "bass_boost_fc",
     "bass_boost_q",

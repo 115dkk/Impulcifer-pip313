@@ -43,6 +43,13 @@ fn mag_at(ir: &[f64], fs: u32, freq: f64) -> f64 {
 fn duplicate_sos(sos: &Sos, times: usize) -> Sos {
     Sos(sos.0.repeat(times))
 }
+/// LR8 high-pass shared with the room correction hand-off.
+pub(crate) fn highpass_sos(crossover: f64, fs: u32) -> Sos {
+    duplicate_sos(
+        &filters::butter(4, crossover / (fs as f64 / 2.0), BType::Highpass),
+        2,
+    )
+}
 /// Python _rbj_high_shelf, core/virtual_bass.py:65-79; p10_vbass.
 fn rbj_high_shelf(fc: f64, fs: u32, gain: f64, q: f64) -> Sos {
     let a = 10.0_f64.powf(gain / 40.0);
@@ -113,7 +120,7 @@ pub fn apply_virtual_bass(hrir: &mut Hrir, options: &VirtualBassOptions) -> Resu
     .into_iter()
     .flat_map(|(fc, g, q)| rbj_high_shelf(fc, fs, g, q).0)
     .collect());
-    let high = duplicate_sos(&filters::butter(4, xo / nyq, BType::Highpass), 2);
+    let high = highpass_sos(xo, fs);
     let mut mags = Vec::new();
     for s in &hrir.speakers {
         if let (Some(l), Some(r)) = (&s.left, &s.right) {

@@ -1,7 +1,7 @@
 //! Python objects never enter a service worker. Waits run detached; event
 //! delivery attaches only on the calling thread and without a service lock.
 use impulcifer_service::{ImpulciferService, NoopHost};
-use impulcifer_types::config::FIELD_NAMES;
+use impulcifer_types::config::{EXTENSION_FIELD_NAMES, FIELD_NAMES};
 use pyo3::{exceptions::PyRuntimeError, prelude::*, types::PyDict};
 use serde_json::{Value, json};
 use std::{io::Write, time::Duration};
@@ -62,7 +62,7 @@ fn run(
     // Filter before serialization: retired kwargs may contain arbitrary Python
     // objects, circular containers, or other values JSON cannot represent.
     let filtered = PyDict::new(py);
-    for name in FIELD_NAMES {
+    for name in FIELD_NAMES.into_iter().chain(EXTENSION_FIELD_NAMES) {
         if let Some(value) = config.get_item(name)? {
             filtered.set_item(name, value)?;
         }

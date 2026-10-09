@@ -287,6 +287,11 @@ fn inputs() -> &'static PipelineInputs {
             Some(&mic),
             &estimator,
             &RoomCorrectionOptions {
+                range: RoomRange::Legacy,
+                room_volume: None,
+                schroeder_freq: None,
+                max_boost_db: 12.0,
+                vbass_crossover: None,
                 fr_combination_method: FrCombination::Average,
                 specific_limit: 400.0,
                 generic_limit: 300.0,
@@ -529,7 +534,7 @@ fn check_room(frs: &RoomFrs, files: &Value) {
             Side::Right
         };
         let (_, _, fr) = frs
-            .0
+            .entries
             .iter()
             .find(|(s, e, _)| s == v["speaker"].as_str().unwrap() && *e == side)
             .unwrap();
@@ -588,7 +593,7 @@ fn golden_default_pipeline_matches_python() {
     snapshots(&equalized(), &manifest["equalize"], 1e-3);
     let mut observer = Observer::default();
     let output = pipeline::run_pipeline(
-        &ProcessingConfig::default(),
+        &ProcessingConfig::oracle_defaults(),
         inputs().clone(),
         &mut observer,
     )
@@ -809,7 +814,7 @@ fn golden_vbass_matches_python() {
     let out = pipeline::run_pipeline(
         &ProcessingConfig {
             vbass: true,
-            ..Default::default()
+            ..ProcessingConfig::oracle_defaults()
         },
         inputs().clone(),
         &mut Observer::default(),
@@ -979,7 +984,7 @@ fn golden_resample_matches_python() {
     let out = pipeline::run_pipeline(
         &ProcessingConfig {
             fs: Some(44100),
-            ..Default::default()
+            ..ProcessingConfig::oracle_defaults()
         },
         inputs().clone(),
         &mut Observer::default(),
@@ -1008,7 +1013,8 @@ fn golden_option_variants_match_python() {
     let _gate = NumericGate;
     let manifest = fixture("manifest");
     for (key, v) in manifest["options"].as_object().unwrap() {
-        let config: ProcessingConfig = serde_json::from_value(json!({key:v["value"]})).unwrap();
+        let mut config: ProcessingConfig = serde_json::from_value(json!({key:v["value"]})).unwrap();
+        config.room_range = "legacy".into();
         let mut input = inputs().clone();
         if key == "specific_limit" {
             let mut rir = Hrir {
@@ -1036,6 +1042,11 @@ fn golden_option_variants_match_python() {
                 Some(&calibration()),
                 &input.estimator,
                 &RoomCorrectionOptions {
+                    range: RoomRange::Legacy,
+                    room_volume: None,
+                    schroeder_freq: None,
+                    max_boost_db: 12.0,
+                    vbass_crossover: None,
                     fr_combination_method: FrCombination::Average,
                     specific_limit: 0.0,
                     generic_limit: 300.0,
@@ -1179,6 +1190,11 @@ fn golden_generic_room_matches_python() {
                 Some(&calibration()),
                 e,
                 &RoomCorrectionOptions {
+                    range: RoomRange::Legacy,
+                    room_volume: None,
+                    schroeder_freq: None,
+                    max_boost_db: 12.0,
+                    vbass_crossover: None,
                     fr_combination_method: FrCombination::Average,
                     specific_limit: 400.0,
                     generic_limit: 0.0,
@@ -1187,7 +1203,10 @@ fn golden_generic_room_matches_python() {
             .unwrap()
             .unwrap();
             let expected = fixture("manifest")["generic_limit_room"].clone();
-            assert_eq!(generic.frs.0.len(), expected.as_array().unwrap().len());
+            assert_eq!(
+                generic.frs.entries.len(),
+                expected.as_array().unwrap().len()
+            );
             check_room(&generic.frs, &expected);
         }
     }
