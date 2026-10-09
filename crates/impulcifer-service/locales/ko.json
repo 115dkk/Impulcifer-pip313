@@ -135,7 +135,7 @@
   "label_room_tuning_phase_limit": "시간 응답 보정 상한:",
   "checkbox_room_tuning_phase_schroeder": "슈레더 주파수까지만 시간 응답 보정",
   "tooltip_room_tuning_phase_schroeder": "선택하면 슈레더 주파수까지 룸의 저음 시간 응답만 보정합니다. 선택을 해제하면 전 대역의 시간 응답을 보정하되, 양쪽 귀 위치의 룸 측정이 일치하는 대역에만 적용합니다.",
-  "label_room_tuning_phase_current": "현재 설정: {limit}(Studio 레이아웃에서 고른 값). 선택하거나 선택을 해제하면 이 값이 바뀝니다.",
+  "label_room_tuning_phase_current": "현재 설정: {limit}(Studio 레이아웃에서 고른 값)",
   "option_room_tuning_phase_off": "끔",
   "option_room_tuning_phase_schroeder": "슈레더",
   "option_room_tuning_phase_full": "전 대역",

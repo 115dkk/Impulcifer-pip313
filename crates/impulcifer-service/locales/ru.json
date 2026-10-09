@@ -135,7 +135,7 @@
   "label_room_tuning_phase_limit": "Временная коррекция до:",
   "checkbox_room_tuning_phase_schroeder": "Корректировать временную характеристику только до частоты Шрёдера",
   "tooltip_room_tuning_phase_schroeder": "Флажок установлен: корректируется только временная характеристика баса в помещении до частоты Шрёдера. Флажок снят: временная характеристика корректируется во всей полосе, где измерения помещения в точках расположения обоих ушей согласуются.",
-  "label_room_tuning_phase_current": "Текущая настройка: {limit}, выбрана в компоновке Studio. Установка или снятие флажка заменяет это значение.",
+  "label_room_tuning_phase_current": "Текущая настройка: {limit}, выбрана в компоновке Studio",
   "option_room_tuning_phase_off": "Выкл.",
   "option_room_tuning_phase_schroeder": "Шрёдер",
   "option_room_tuning_phase_full": "Вся полоса",

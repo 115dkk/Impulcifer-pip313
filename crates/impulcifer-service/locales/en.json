@@ -135,7 +135,7 @@
   "label_room_tuning_phase_limit": "Timing correction up to:",
   "checkbox_room_tuning_phase_schroeder": "Correct timing only up to the Schroeder frequency",
   "tooltip_room_tuning_phase_schroeder": "Checked: only the room's bass timing up to the Schroeder frequency is corrected. Unchecked: timing is corrected over the full band, where the room measurements at both ear positions agree.",
-  "label_room_tuning_phase_current": "Current setting: {limit}, chosen in the Studio layout. Checking or unchecking the box replaces it.",
+  "label_room_tuning_phase_current": "Current setting: {limit}, chosen in the Studio layout",
   "option_room_tuning_phase_off": "Off",
   "option_room_tuning_phase_schroeder": "Schroeder",
   "option_room_tuning_phase_full": "Full band",

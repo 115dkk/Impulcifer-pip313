@@ -135,7 +135,7 @@
   "label_room_tuning_phase_limit": "Zeitkorrektur bis:",
   "checkbox_room_tuning_phase_schroeder": "Zeitverhalten nur bis zur Schroederfrequenz korrigieren",
   "tooltip_room_tuning_phase_schroeder": "Aktiviert: Nur das Zeitverhalten des Basses im Raum bis zur Schroederfrequenz wird korrigiert. Deaktiviert: Das Zeitverhalten wird im gesamten Band korrigiert, jedoch nur dort, wo die Raummessungen an beiden Ohrpositionen übereinstimmen.",
-  "label_room_tuning_phase_current": "Aktuelle Einstellung: {limit}, im Studio-Layout gewählt. Aktivieren oder Deaktivieren des Kontrollkästchens ersetzt diesen Wert.",
+  "label_room_tuning_phase_current": "Aktuelle Einstellung: {limit}, im Studio-Layout gewählt",
   "option_room_tuning_phase_off": "Aus",
   "option_room_tuning_phase_schroeder": "Schroederfreq.",
   "option_room_tuning_phase_full": "Gesamtes Band",

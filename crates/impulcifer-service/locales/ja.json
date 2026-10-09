@@ -135,7 +135,7 @@
   "label_room_tuning_phase_limit": "時間応答の補正上限:",
   "checkbox_room_tuning_phase_schroeder": "シュレーダー周波数までのみ時間応答を補正",
   "tooltip_room_tuning_phase_schroeder": "チェックを入れると、シュレーダー周波数までの部屋の低音の時間応答のみを補正します。チェックを外すと、全帯域を対象に、両耳の位置でのルーム測定が一致する帯域の時間応答を補正します。",
-  "label_room_tuning_phase_current": "現在の設定: {limit}（Studio レイアウトで選んだ値）。チェックを入れるか外すと、この値が変わります。",
+  "label_room_tuning_phase_current": "現在の設定: {limit}（Studio レイアウトで選んだ値）",
   "option_room_tuning_phase_off": "オフ",
   "option_room_tuning_phase_schroeder": "シュレーダー",
   "option_room_tuning_phase_full": "全帯域",

@@ -135,7 +135,7 @@
   "label_room_tuning_phase_limit": "Corrección temporal hasta:",
   "checkbox_room_tuning_phase_schroeder": "Corregir la respuesta temporal solo hasta la frecuencia de Schroeder",
   "tooltip_room_tuning_phase_schroeder": "Casilla marcada: solo se corrige la respuesta temporal de los graves de la sala hasta la frecuencia de Schroeder. Casilla desmarcada: se corrige la respuesta temporal en toda la banda, donde coinciden las mediciones de sala en las posiciones de ambos oídos.",
-  "label_room_tuning_phase_current": "Ajuste actual: {limit}, elegido en el diseño Studio. Marcar o desmarcar la casilla sustituye este valor.",
+  "label_room_tuning_phase_current": "Ajuste actual: {limit}, elegido en el diseño Studio",
   "option_room_tuning_phase_off": "Desactivado",
   "option_room_tuning_phase_schroeder": "Frec. Schroeder",
   "option_room_tuning_phase_full": "Banda completa",

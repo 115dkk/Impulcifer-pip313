@@ -135,7 +135,7 @@
   "label_room_tuning_phase_limit": "時間響應校正上限：",
   "checkbox_room_tuning_phase_schroeder": "僅校正施羅德頻率以內的時間響應",
   "tooltip_room_tuning_phase_schroeder": "勾選時：僅校正施羅德頻率以內的房間低音時間響應。取消勾選時：在全頻段內，校正雙耳位置的房間量測一致的頻段的時間響應。",
-  "label_room_tuning_phase_current": "目前設定：{limit}（在 Studio 版面配置中選擇的值）。勾選或取消勾選會取代此值。",
+  "label_room_tuning_phase_current": "目前設定：{limit}（在 Studio 版面配置中選擇的值）",
   "option_room_tuning_phase_off": "關閉",
   "option_room_tuning_phase_schroeder": "施羅德",
   "option_room_tuning_phase_full": "全頻段",
