@@ -77,7 +77,7 @@ The rolloff multiplier affects only boosts: zero below rolloff, a rising half-Ha
 
 The upper fade is a falling half-Hann from `f_hi/sqrt(2)` to f_hi, except extreme uses 5–10 kHz. The log-frequency half-Hann is `0.5*(1+cos(pi*t))`, with t clamped to [0,1].
 
-For extreme, blend final left/right gains per speaker toward their mean using a rising half-Hann from 500 to 700 Hz. Above 700 Hz they are identical, including the effect of different SNR caps. This happens after caps, upper fade and virtual-bass hand-off, not before smoothing.
+For extreme, blend final left/right gains per speaker toward their mean using a rising half-Hann from 500 to 700 Hz. Above 700 Hz they are identical. This happens after caps, upper fade and virtual-bass hand-off, not before smoothing. The blend must not undo a per-ear limit: each ear's final boost limit is its boost cap after the rolloff and SNR limits, times the upper fade and the hand-off mask, and the mean is first lowered to the smaller of the two ears' limits (`min(mean, limit_L, limit_R)`; cuts are unaffected because the cut caps are the same for both ears). Each blended gain is then a mix of two values within that ear's limit, so both ears stay within their own limits, and above 700 Hz both equal the limited mean. Without this step an ear whose SNR allows no boost received half of the other ear's boost.
 
 ## Virtual-bass hand-off
 
@@ -399,10 +399,20 @@ The demo has no geometry mismatch; final peaks shift 478/481 samples for the
 480-sample design origin, within the accepted ±5 samples.
 
 The demo's per-ear representativeness RMS is 1.59–3.45 dB (speaker means
-2.20–2.71 dB): no weak warnings. The requested pre-echo formula still warns on
-SL-left at the tuning hook: −67.97 → −26.66 dB. The other 13 channels do not
-warn. The demo no-pre-echo-warning assertion remains red; thresholds and the
-filter have not been retuned to hide this remaining acceptance discrepancy.
+2.20–2.71 dB): no weak warnings. No ear warns about pre-echo either, and
+`room_tuning_runs_on_the_demo` asserts both. The loudest tuned pre-echo is
+SL-left: −31.49 dB at the default 10 ms and −33.43 dB with auto delay (4 ms),
+below the −30 dB threshold; every other ear is at most −35.68 dB at 10 ms
+(3.2.1 release CLI). An earlier draft of this section recorded an SL-left
+warning at −26.66 dB from a previous version of the measurement; it no longer
+applies, and neither the thresholds nor the filter were retuned for it.
+
+On the demo the information-only diagnostics rise for every speaker: at 10 ms
+the LF EDT goes from 452–493 ms to 531–602 ms and the median excess GD from
+3.1–5.1 ms to 4.6–7.3 ms (FL: 461 → 580 ms, 3.85 → 6.34 ms). Tuning reproduces
+the processor's correction at the room measurement points; it does not promise
+a shorter bass decay or a smaller excess GD in the binaural result, and a
+false `weak` says only that the room measurements represent the ears.
 
 Auto-delay has a separate black-box golden:
 `tests/migration/goldens/room_tuning_secs_auto_delay.json`. Its `ir.construction`

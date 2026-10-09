@@ -708,9 +708,13 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 [data-skin="stable"] #adv-studio { display: none; }
 
 /* The tuning phase limit: a slider of stops in Studio, one checkbox in
-   Stable. Both read the same setting (app.js syncRoomPhase). */
+   Stable, plus a line naming a limit the checkbox cannot show. All read
+   the same setting (app.js updateRoomRows). */
 [data-skin="studio"] #bf-room-phase-schroeder-row,
+[data-skin="studio"] #bf-room-phase-current,
 [data-skin="stable"] #bf-room-phase-limit-row { display: none; }
+/* The line sits under the checkbox's label: 16px box + 8px gap. */
+#bf-room-phase-current { margin: -4px 0 0 24px; }
 
 .adv-tabs { display: grid; gap: 12px; }
 

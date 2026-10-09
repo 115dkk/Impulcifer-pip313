@@ -119,10 +119,11 @@ impl StageObserver for Observer<'_, '_> {
                 );
             }
             if speaker.weak() {
+                let db = speaker.representation_mean_db().unwrap_or_default();
                 self.events.log(
                     "warning",
                     "cli_room_tuning_weak",
-                    json!({"speaker":speaker.speaker}),
+                    json!({"speaker":speaker.speaker,"db":format!("{db:.1}")}),
                 );
             }
             if self.config.room_tuning_level_match && speaker.level_difference_db.abs() > 2.0 {

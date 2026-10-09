@@ -329,6 +329,10 @@ fn upper_frequency(range: RoomRange, schroeder: f64) -> f64 {
 }
 
 /// Convert an unmasked, calibrated room error to a gain. Exposed for synthetic DSP tests.
+///
+/// Returns the final boost limit per grid point: the boost cap after the
+/// rolloff and SNR limits, the upper fade and the bass hand-off. The gain
+/// never exceeds it; [`blend_diotic`] needs it to keep that true.
 pub fn correction_gain(
     fr: &mut FrequencyResponse,
     snr: Option<&[f64]>,
@@ -337,7 +341,7 @@ pub fn correction_gain(
     generic: bool,
     fs: u32,
     options: &RoomCorrectionOptions,
-) -> Result<(), DspError> {
+) -> Result<Vec<f64>, DspError> {
     let f = &fr.frequency;
     let e = &fr.error;
     if snr.is_some_and(|s| s.len() != f.len()) {
@@ -387,7 +391,7 @@ pub fn correction_gain(
     let handoff = options
         .vbass_crossover
         .map(|fc| vbass_handoff_mask(f, fc, fs));
-    fr.equalization = f
+    let (equalization, boost_limit) = f
         .iter()
         .enumerate()
         .map(|(i, f)| {
@@ -426,12 +430,15 @@ pub fn correction_gain(
             } else {
                 f_hi / SQRT_2
             };
-            gain * half_hann(*f, start, f_hi) * handoff.as_ref().map_or(1.0, |mask| mask[i])
+            let fade = half_hann(*f, start, f_hi);
+            let mask = handoff.as_ref().map_or(1.0, |mask| mask[i]);
+            (gain * fade * mask, boost_cap * fade * mask)
         })
-        .collect();
+        .unzip();
+    fr.equalization = equalization;
     fr.error = fr.equalization.iter().map(|g| -g).collect();
     fr.error_smoothed = fr.error.clone();
-    Ok(())
+    Ok(boost_limit)
 }
 
 pub fn residual(
@@ -467,7 +474,13 @@ pub fn residual(
 }
 
 /// Apply the final diotic blend, after per-ear limits, fades and bass hand-off.
-pub fn blend_diotic(frs: &mut RoomFrs) {
+///
+/// `boost_limits[k]` is what [`correction_gain`] returned for
+/// `frs.entries[k]`. The pair is blended toward its mean, but the mean never
+/// boosts more than the stricter ear's limit: averaging must not restore a
+/// boost that one ear's rolloff or SNR limit removed. Both ears' blended
+/// gains stay within their own limits, and above 700 Hz they are equal.
+pub fn blend_diotic(frs: &mut RoomFrs, boost_limits: &[Vec<f64>]) {
     for speaker in SPEAKER_NAMES {
         let left = frs
             .entries
@@ -478,10 +491,13 @@ pub fn blend_diotic(frs: &mut RoomFrs) {
             .iter()
             .position(|(s, side, _)| s == speaker && *side == Side::Right);
         if let (Some(l), Some(r)) = (left, right) {
-            for i in 0..frs.entries[l].2.frequency.len() {
+            let limits = boost_limits[l].iter().zip(&boost_limits[r]);
+            debug_assert_eq!(limits.len(), frs.entries[l].2.frequency.len());
+            for (i, (limit_l, limit_r)) in limits.enumerate() {
                 let alpha = 1.0 - half_hann(frs.entries[l].2.frequency[i], 500.0, 700.0);
                 let mean =
                     (frs.entries[l].2.equalization[i] + frs.entries[r].2.equalization[i]) / 2.0;
+                let mean = mean.min(*limit_l).min(*limit_r);
                 for index in [l, r] {
                     let fr = &mut frs.entries[index].2;
                     fr.equalization[i] = (1.0 - alpha) * fr.equalization[i] + alpha * mean;
@@ -569,7 +585,7 @@ pub(super) fn room_correction(
             let rolloff = detect_rolloff(&fr.frequency, &fr.raw, snr.as_deref());
             let original = fr.error.clone();
             let mut fr = fr.clone();
-            correction_gain(
+            let boost_limit = correction_gain(
                 &mut fr,
                 snr.as_deref(),
                 rolloff,
@@ -580,6 +596,7 @@ pub(super) fn room_correction(
             )?;
             Ok((
                 fr,
+                boost_limit,
                 original,
                 EarDiagnostics {
                     speaker: speaker.clone(),
@@ -596,13 +613,17 @@ pub(super) fn room_correction(
     let results = results.into_iter().collect::<Result<Vec<_>, DspError>>()?;
     let mut diagnostics = Vec::with_capacity(results.len());
     let mut originals = Vec::with_capacity(results.len());
-    for ((_, _, fr), (updated, original, diagnostic)) in frs.entries.iter_mut().zip(results) {
+    let mut boost_limits = Vec::with_capacity(results.len());
+    for ((_, _, fr), (updated, boost_limit, original, diagnostic)) in
+        frs.entries.iter_mut().zip(results)
+    {
         *fr = updated;
+        boost_limits.push(boost_limit);
         originals.push(original);
         diagnostics.push(diagnostic);
     }
     if options.range == RoomRange::Extreme {
-        blend_diotic(&mut frs);
+        blend_diotic(&mut frs, &boost_limits);
     }
     for ((_, _, fr), (diag, original)) in frs
         .entries

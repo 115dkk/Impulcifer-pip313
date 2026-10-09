@@ -164,8 +164,8 @@ fn gain(
     generic: bool,
     snr: Option<&[f64]>,
     roll: Option<Rolloff>,
-) {
-    correction_gain(fr, snr, roll, 400.0, generic, 48000, options).unwrap();
+) -> Vec<f64> {
+    correction_gain(fr, snr, roll, 400.0, generic, 48000, options).unwrap()
 }
 #[test]
 fn room_v2_rolloff_detects_sealed_and_ported_speakers() {
@@ -372,8 +372,8 @@ fn room_v2_extreme_is_diotic_above_700_hz() {
     let mut left = response(|f| peak(f, 2000.0, 4.0, 4.0));
     let mut right = response(|f| peak(f, 2000.0, 4.0, -4.0));
     let snr = vec![21.0; left.frequency.len()];
-    gain(&mut left, &options(RoomRange::Extreme), false, None, None);
-    gain(
+    let left_limit = gain(&mut left, &options(RoomRange::Extreme), false, None, None);
+    let right_limit = gain(
         &mut right,
         &options(RoomRange::Extreme),
         false,
@@ -387,7 +387,7 @@ fn room_v2_extreme_is_diotic_above_700_hz() {
             ("FL".into(), Side::Right, right),
         ],
     };
-    blend_diotic(&mut frs);
+    blend_diotic(&mut frs, &[left_limit, right_limit]);
     for (i, f) in frs.entries[0].2.frequency.iter().enumerate() {
         let l = frs.entries[0].2.equalization[i];
         let r = frs.entries[1].2.equalization[i];
@@ -399,6 +399,46 @@ fn room_v2_extreme_is_diotic_above_700_hz() {
             assert_eq!(r, 0.0);
         }
     }
+}
+/// The diotic mean must not undo one ear's SNR limit: both ears need +6 dB
+/// around 800 Hz, the left measurement has 20 dB SNR (no boost allowed) and
+/// the right one 40 dB. Before the fix the shared gain was +3 dB in both ears.
+#[test]
+fn room_v2_extreme_blend_keeps_the_stricter_snr_limit() {
+    let dip = |f: f64| peak(f, 800.0, 2.0, -6.0);
+    let mut left = response(dip);
+    let mut right = response(dip);
+    let opt = options(RoomRange::Extreme);
+    let n = left.frequency.len();
+    let left_limit = gain(&mut left, &opt, false, Some(&vec![20.0; n]), None);
+    let right_limit = gain(&mut right, &opt, false, Some(&vec![40.0; n]), None);
+    let at = index(&left.frequency, 800.0);
+    assert!(left.equalization[at] <= 0.0);
+    assert!(right.equalization[at] > 4.0, "{}", right.equalization[at]);
+    for (eq, limit) in [(&left, &left_limit), (&right, &right_limit)] {
+        assert!(eq.equalization.iter().zip(limit).all(|(g, l)| g <= l));
+    }
+    let mut frs = RoomFrs {
+        term: RoomTerm::Gain,
+        entries: vec![
+            ("FL".into(), Side::Left, left),
+            ("FL".into(), Side::Right, right),
+        ],
+    };
+    blend_diotic(&mut frs, &[left_limit.clone(), right_limit.clone()]);
+    let (l, r) = (&frs.entries[0].2, &frs.entries[1].2);
+    for (i, f) in l.frequency.iter().enumerate() {
+        assert!(l.equalization[i] <= left_limit[i] + 1e-9, "left at {f} Hz");
+        assert!(
+            r.equalization[i] <= right_limit[i] + 1e-9,
+            "right at {f} Hz"
+        );
+        assert_eq!(l.error[i], -l.equalization[i]);
+        if *f >= 700.0 {
+            assert_eq!(l.equalization[i], r.equalization[i], "{f} Hz");
+        }
+    }
+    assert!(l.equalization[at] <= 0.0 && r.equalization[at] <= 0.0);
 }
 #[test]
 fn room_v2_vbass_handoff_mask_follows_lr8() {

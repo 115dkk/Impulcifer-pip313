@@ -1609,9 +1609,10 @@ function roomModeHint(mode) {
 /* How far up tuning corrects timing. "off" corrects the magnitude only and
    adds no delay, "full" is the whole band (the default, as the processor
    tuning follows). Studio picks one of eight stops on a slider; Stable only
-   asks whether to stop at the Schroeder frequency, and unchecked is the full
-   band. The control of the current skin decides; a skin switch carries the
-   meaning across (syncRoomPhase). */
+   asks whether to stop at the Schroeder frequency. The slider holds the
+   limit in both skins: a limit Stable's checkbox cannot show (Off, a Hz
+   stop) is kept and named on the line under it (updateRoomRows), and
+   ticking or clearing the box replaces it (onRoomPhaseCheckbox). */
 
 /** @type {readonly RoomPhaseLimit[]} */
 const ROOM_PHASE_STOPS = ["off", "schroeder", 500, 1000, 2000, 5000, 10000, "full"];
@@ -1687,10 +1688,9 @@ function setRoomPhaseLimit(spec) {
   updateRoomPhaseReadout();
 }
 
-/* Stable has only the Schroeder frequency and the full band: Studio ->
-   Stable checks the box for the Schroeder stop alone (Off and the Hz stops
-   become the full band), and Stable -> Studio puts the slider on the
-   Schroeder stop or the full band. */
+/* Studio -> Stable ticks the box for the Schroeder stop alone. The slider
+   keeps every other stop, so Off or a Hz stop still applies in Stable (the
+   line under the box names it) and is back on the slider in Studio. */
 /** @param {string} skin */
 function syncRoomPhase(skin) {
   if (skin === "stable") {
@@ -1769,6 +1769,12 @@ function updateRoomRows() {
     "bf-room-tuning-delay-row": tuning && limit !== "off",
   };
   for (const [id, shown] of Object.entries(rows)) $(id).hidden = !shown;
+  // Stable's checkbox shows only Schroeder or the full band; name any other
+  // limit the slider keeps. The styles hide this line in Studio.
+  const current = $("bf-room-phase-current");
+  const named = tuning && limit !== "schroeder" && limit !== "full";
+  current.hidden = !named;
+  current.textContent = named ? fmt(t("label_room_tuning_phase_current"), { limit: roomPhaseText(limit) }) : "";
   el("bf-room-tuning-delay", HTMLInputElement).disabled = checked("bf-room-tuning-delay-auto");
   updateRoomPhaseReadout();
   $("bf-room-mode-tip").textContent = roomModeHint(mode);

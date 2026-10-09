@@ -534,28 +534,39 @@ def room_phase_checks(browser):
         return page.evaluate("gatherBrirPayload()")
 
     # Stable shows only whether the limit is the Schroeder stop. A limit it cannot show (Off, a Hz stop) is
-    # kept until the checkbox is used, so switching skins never changes what is processed.
+    # kept until the checkbox is used, so switching skins never changes what is processed, and the line
+    # under the checkbox names it.
     checkbox = page.locator("#bf-room-phase-schroeder")
+    current = page.locator("#bf-room-phase-current")
     for stop, limit in ((0, "off"), (1, "schroeder"), (4, 2000), (7, "full")):
         slider.focus()
         page.keyboard.press("Home")
         for _ in range(stop):
             page.keyboard.press("ArrowRight")
+        assert not current.is_visible(), stop
+        readout = page.locator("#bf-room-phase-limit-value").inner_text()
         switch("stable")
         schroeder = limit == "schroeder"
         assert checkbox.is_visible() and checkbox.is_checked() == schroeder and not slider.is_visible(), stop
         assert page.locator('button.info-tip[aria-describedby="bf-room-phase-schroeder-tip"]').is_visible()
         assert page.locator("#bf-room-tuning-delay-row").is_visible() == (limit != "off"), stop
         assert all(shown(facts)) == schroeder, stop
+        assert current.is_visible() == (limit in ("off", 2000)), stop
+        if limit in ("off", 2000):  # named as Studio's readout names it
+            expected = page.evaluate("(name) => fmt(t('label_room_tuning_phase_current'), {limit: name})", readout)
+            assert current.inner_text() == expected and readout in expected, (stop, current.inner_text())
         request = stable_request()
         assert request["room_tuning_phase_limit"] == limit, (stop, request)
         switch("studio")
         assert slider.input_value() == str(stop), stop
     switch("stable")
+    assert not current.is_visible()  # the loop ends on the full band
     checkbox.check()
     assert stable_request()["room_tuning_phase_limit"] == "schroeder" and all(shown(facts))
+    assert not current.is_visible()
     checkbox.uncheck()
     assert stable_request()["room_tuning_phase_limit"] == "full" and not any(shown(facts))
+    assert not current.is_visible()
     checkbox.check()
     assert stable_request()["room_tuning_phase_limit"] == "schroeder" and all(shown(facts))
     page.locator("#bf-room-mode-eq").click()
@@ -588,7 +599,7 @@ def tooltip_checks(browser):
                 seen.add(tip)
                 bubble = page.locator(f"#{tip}")
                 assert bubble.get_attribute("role") == "tooltip", tip
-                assert page.locator(f'[aria-describedby="{tip}"]:not(.info-tip)').count() == 1, tip
+                assert page.locator(f'[aria-describedby~="{tip}"]:not(.info-tip)').count() == 1, tip
                 button.scroll_into_view_if_needed()
                 button.focus()  # reach it by Tab so :focus-visible applies, as for a keyboard user
                 page.keyboard.press("Shift+Tab")
