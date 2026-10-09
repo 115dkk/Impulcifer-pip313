@@ -19,12 +19,12 @@ carries the ``brir-change`` label, which the workflow passes as
 ``--allow-change``: a baseline difference is then reported as a warning. The
 thread check is never waived.
 
-A base run that fails is a failure too, unless the base CLI predates the
-scenario: every scenario names the first 3.x version whose CLI runs it, and
-only a base older than that (``--version``, SemVer order including
-pre-releases) has no baseline. A PR that adds a
-scenario for a new option gives it the version that ships the option. With
-``--allow-change`` a failing base run is a warning (the PR may fix it).
+A base run that fails is a failure too, label or not, unless the base CLI
+predates the scenario: every scenario names the first 3.x version whose CLI
+runs it, and only a base older than that (``--version``, SemVer order
+including pre-releases) has no baseline. A PR that adds a scenario, or gives
+one an option the base lacks, sets that version to the one shipping the
+option.
 
 Local use, after building both binaries::
 
@@ -187,9 +187,6 @@ def main() -> int:
             elif not base.ok and base_version is not None and base_version < version_key(since):
                 verdict = "no baseline"
                 warnings.append(f"{name}: the base CLI predates this scenario ({since})\n{base.log}")
-            elif not base.ok and options.allow_change:
-                verdict = "base failed (allowed)"
-                warnings.append(f"{name}: the base CLI failed (brir-change label)\n{base.log}")
             elif not base.ok:
                 verdict = "BASE FAILED"
                 failures.append(f"{name}: the base CLI failed on a scenario it supports since {since}"
