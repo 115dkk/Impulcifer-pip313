@@ -29,6 +29,136 @@ fn peak(x: &[f64]) -> usize {
         .unwrap()
         .0
 }
+fn reference_bands(f: f64) -> [f64; 5] {
+    let l = |fc: f64| 1. / (1. + (f / fc).powi(4));
+    [
+        l(100.),
+        (1. - l(100.)) * l(150.),
+        (1. - l(150.)) * l(200.),
+        (1. - l(200.)) * l(300.),
+        1. - l(300.),
+    ]
+}
+fn reference_five_real(data: &[f64], low: bool, df: f64) -> Vec<f64> {
+    let data: Vec<_> = data.iter().map(|v| Complex64::new(*v, 0.)).collect();
+    let sm =
+        room_tuning::RESOLUTIONS[usize::from(low)].map(|b| room_tuning::smooth_bins(&data, 1. / b));
+    (0..data.len())
+        .map(|k| {
+            reference_bands(k as f64 * df)
+                .iter()
+                .enumerate()
+                .map(|(i, w)| sm[i][k].re * w)
+                .sum()
+        })
+        .collect()
+}
+fn reference_metric(
+    pair: &room_tuning::PairMeasurement,
+    options: &TuningOptions,
+    delay_ms: f64,
+) -> f64 {
+    let fs = pair.irs[0].fs;
+    let n = fs as usize;
+    let start = peak(&pair.irs[0].data)
+        .min(peak(&pair.irs[1].data))
+        .saturating_sub((0.001 * fs as f64).round() as usize);
+    let irs = pair.irs.each_ref().map(|ir| {
+        let mut data = ir.data.get(start..).unwrap_or_default().to_vec();
+        data.resize(n, 0.);
+        ImpulseResponse {
+            fs: ir.fs,
+            data,
+            recording: None,
+        }
+    });
+    let scoring = TuningOptions {
+        phase_limit: PhaseLimit::Full,
+        level_match: false,
+        ..options.clone()
+    };
+    let a = room_tuning::design_speaker(
+        &pair.speakers[0],
+        &[(pair.side, irs[0].clone())],
+        &scoring,
+        delay_ms,
+        None,
+        None,
+    )
+    .unwrap();
+    let b = room_tuning::design_speaker(
+        &pair.speakers[1],
+        &[(pair.side, irs[1].clone())],
+        &scoring,
+        delay_ms,
+        None,
+        None,
+    )
+    .unwrap();
+    let peaks = irs.each_ref().map(|ir| peak(&ir.data));
+    let width = (0.005 * fs as f64).round() as usize;
+    let rms = |i: usize| {
+        let values = &irs[i].data[peaks[i].saturating_sub(width)..(peaks[i] + width).min(n)];
+        (values.iter().map(|v| v * v).sum::<f64>() / values.len() as f64).sqrt()
+    };
+    let gain = rms(0) / rms(1).max(1e-12);
+    let latest = peaks[0].max(peaks[1]);
+    let shifted: [Vec<f64>; 2] = [&a.full_filter, &b.full_filter]
+        .into_iter()
+        .enumerate()
+        .map(|(i, filter)| {
+            let shift = latest - peaks[i];
+            (0..n)
+                .map(|j| {
+                    j.checked_sub(shift).map_or(0., |j| filter[j]) * if i == 1 { gain } else { 1. }
+                })
+                .collect()
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    let q = shifted
+        .iter()
+        .flat_map(|f| f.iter().enumerate())
+        .max_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
+        .unwrap()
+        .0;
+    let crop_start = q as isize - (delay_ms / 1000. * fs as f64) as isize;
+    let filters = shifted.each_ref().map(|f| {
+        let crop: Vec<_> = (0..(0.51 * fs as f64).round() as usize)
+            .map(|i| {
+                let j = crop_start + i as isize;
+                if j < 0 {
+                    0.
+                } else {
+                    f.get(j as usize).copied().unwrap_or(0.)
+                }
+            })
+            .collect();
+        room_tuning::spectrum(&crop, n)
+    });
+    let h = irs.each_ref().map(|ir| room_tuning::spectrum(&ir.data, n));
+    let summed: Vec<_> = (0..h[0].len())
+        .map(|k| (h[0][k] * filters[0][k] + h[1][k] * filters[1][k]).norm())
+        .collect();
+    let after = reference_five_real(&summed, false, 1.);
+    let lo = ((a.low_cutoff + b.low_cutoff) / 2.).max(10.);
+    let errors: Vec<_> = (lo.floor() as usize + 1..=300.min(after.len() - 1))
+        .map(|k| {
+            let w = 1. + ((300. - k as f64) / (300. - lo).max(1e-12)).clamp(0., 1.);
+            let e = 20. * (after[k] + 1e-12).log10()
+                - (20. * (a.reference * a.target[k]).max(1e-12).log10() + 6.);
+            (w, e)
+        })
+        .collect();
+    let weight = errors.iter().map(|v| v.0).sum::<f64>();
+    let mean = errors.iter().map(|(w, e)| w * e).sum::<f64>() / weight;
+    errors
+        .iter()
+        .map(|(w, e)| w * (e.abs() + 0.35 * (e - mean).abs()))
+        .sum::<f64>()
+        / weight
+}
 #[test]
 fn room_tuning_excess_part_is_all_pass() {
     let p = design(&synthetic(), &options());
@@ -224,6 +354,52 @@ fn room_tuning_level_match_uses_median() {
 fn room_tuning_level_match_skips_inconsistent() {
     let out = room_tuning::level_trims(&[1., 0.5, 0.25], &[1., 0.5 * 10_f64.powf(3. / 20.), 0.25]);
     assert!(out.iter().any(|v| v.1));
+}
+#[test]
+fn room_tuning_auto_delay_metric_matches_reference_bits() {
+    let mut h = synthetic();
+    let mut s = h.speakers[0].clone();
+    s.speaker = "FR".into();
+    h.speakers.push(s);
+    let pairs = room_tuning::recording_pairs(&h, &["FL".into(), "FR".into()], None);
+    let options = options();
+    for pair in &pairs {
+        for delay in 2..=10 {
+            let expected = reference_metric(pair, &options, delay as f64);
+            let actual =
+                room_tuning::auto_delay_metric(pair, &options, delay as f64, None, None).unwrap();
+            assert_eq!(actual.to_bits(), expected.to_bits());
+        }
+    }
+}
+#[test]
+fn room_tuning_auto_delay_is_thread_count_independent() {
+    let mut h = synthetic();
+    let mut s = h.speakers[0].clone();
+    s.speaker = "FR".into();
+    h.speakers.push(s);
+    let pairs = room_tuning::recording_pairs(&h, &["FL".into(), "FR".into()], None);
+    let options = TuningOptions {
+        delay: TuningDelay::Auto,
+        pairs,
+        ..options()
+    };
+    let run = |threads| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap()
+            .install(|| design(&h, &options))
+    };
+    let one = run(1);
+    let four = run(4);
+    assert_eq!(one.report.auto_scores, four.report.auto_scores);
+    assert_eq!(one.report.delay_samples, four.report.delay_samples);
+    assert_eq!(one.report.speakers.len(), four.report.speakers.len());
+    for (a, b) in one.report.speakers.iter().zip(&four.report.speakers) {
+        assert_eq!(a.filter, b.filter);
+        assert_eq!(a.full_filter, b.full_filter);
+    }
 }
 #[test]
 fn room_tuning_auto_delay_is_one_value() {

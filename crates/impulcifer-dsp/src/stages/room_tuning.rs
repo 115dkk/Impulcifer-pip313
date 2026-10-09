@@ -10,7 +10,16 @@ use impulcifer_types::{
     config::{PhaseLimit, TuningDelay},
     constants::{IPSILATERAL_PAIRS, Side},
 };
-use std::f64::consts::{PI, SQRT_2};
+use rayon::prelude::*;
+use std::{
+    cell::RefCell,
+    f64::consts::{PI, SQRT_2},
+};
+
+thread_local! {
+    static REAL_PLANNER_F32: RefCell<realfft::RealFftPlanner<f32>> =
+        RefCell::new(realfft::RealFftPlanner::new());
+}
 
 /// Normal and Low fractional-octave denominators.
 pub const RESOLUTIONS: [[f64; 5]; 2] = [[24., 12., 6., 3., 1.], [12., 6., 3., 2., 1.]];
@@ -234,7 +243,7 @@ pub fn excess_spectrum(ir: &ImpulseResponse, n: usize) -> (Vec<Complex64>, Vec<f
     for (v, sample) in input.iter_mut().zip(&ir.data) {
         *v = *sample as f32;
     }
-    let plan = realfft::RealFftPlanner::<f32>::new().plan_fft_forward(n);
+    let plan = REAL_PLANNER_F32.with(|p| p.borrow_mut().plan_fft_forward(n));
     let mut raw = plan.make_output_vec();
     plan.process(&mut input, &mut raw)
         .expect("valid tuning FFT buffers");
@@ -370,15 +379,33 @@ pub fn design_speaker(
     )
 }
 
-fn design_speaker_inner(
-    speaker: &str,
+#[derive(Debug)]
+struct Analysis {
+    fs: u32,
+    n: usize,
+    count: usize,
+    f: Vec<f64>,
+    mag: Vec<f64>,
+    phase_on: bool,
+    weights: Vec<f64>,
+    impulse: Option<Vec<f64>>,
+    reference: f64,
+    low_cutoff: f64,
+    high_cutoff: f64,
+    target: Vec<f64>,
+    inv: Vec<f64>,
+    fade: Vec<f64>,
+    minimum: Vec<Complex64>,
+    minimum_impulse: Option<Vec<f64>>,
+}
+
+fn analyze(
     points: &[(Side, ImpulseResponse)],
     options: &TuningOptions,
-    delay_ms: f64,
     calibration: Option<&FrequencyResponse>,
     target_curve: Option<&FrequencyResponse>,
     mut stages: Option<&mut TuningStages>,
-) -> Result<SpeakerTuning, DspError> {
+) -> Result<Analysis, DspError> {
     let fs = points
         .first()
         .ok_or_else(|| DspError::InvalidArgument("tuning requires a point".into()))?
@@ -454,26 +481,7 @@ fn design_speaker_inner(
         }
         x = five(&x, false, df).into_iter().map(unit).collect();
     }
-    let pr_low = delay_ms.clamp(2., 25.);
-    let pr_mid = 10_f64.min(pr_low / 2.);
-    let pr_high = 5_f64.min(pr_low / 4.);
-    let excess = if phase_on {
-        let impulse = fft::irfft(&x, n);
-        let copies =
-            [pr_low, pr_mid, pr_high].map(|pre| fft::rfft(&window(&impulse, fs, pre, None)));
-        (0..count)
-            .map(|k| {
-                let w = bands(f[k]);
-                unit(
-                    copies[0][k] * (w[0] + w[1])
-                        + copies[1][k] * (w[2] + w[3])
-                        + copies[2][k] * w[4],
-                )
-            })
-            .collect::<Vec<_>>()
-    } else {
-        vec![Complex64::new(1., 0.); count]
-    };
+    let impulse = phase_on.then(|| fft::irfft(&x, n));
     let sm = RESOLUTIONS[0].map(|b| smooth_input_magnitude(&mag, 1. / b));
     let mut m: Vec<f64> = (0..count)
         .map(|k| {
@@ -554,51 +562,100 @@ fn design_speaker_inner(
         inv[k] = inv[k] * (1. - fade[k]) + fade[k];
     }
     let minimum = minimum_phase(&inv, n);
-    let hm = if phase_on {
-        let impulse = fft::irfft(&minimum, n);
-        let long = fft::rfft(&window(&impulse, fs, pr_low, Some(500.)));
-        let short = fft::rfft(&window(&impulse, fs, pr_low, Some(10.)));
-        (0..count)
-            .map(|k| long[k] * (1. - fade[k]) + short[k] * fade[k])
+    let minimum_impulse = phase_on.then(|| fft::irfft(&minimum, n));
+    Ok(Analysis {
+        fs,
+        n,
+        count,
+        f,
+        mag,
+        phase_on,
+        weights,
+        impulse,
+        reference,
+        low_cutoff,
+        high_cutoff,
+        target,
+        inv,
+        fade,
+        minimum,
+        minimum_impulse,
+    })
+}
+
+fn finish(
+    a: &Analysis,
+    speaker: &str,
+    points: &[(Side, ImpulseResponse)],
+    delay_ms: f64,
+    mut stages: Option<&mut TuningStages>,
+) -> Result<SpeakerTuning, DspError> {
+    let df = a.fs as f64 / a.n as f64;
+    let pr_low = delay_ms.clamp(2., 25.);
+    let pr_mid = 10_f64.min(pr_low / 2.);
+    let pr_high = 5_f64.min(pr_low / 4.);
+    let excess = if a.phase_on {
+        let impulse = a.impulse.as_ref().unwrap();
+        let copies =
+            [pr_low, pr_mid, pr_high].map(|pre| fft::rfft(&window(impulse, a.fs, pre, None)));
+        (0..a.count)
+            .map(|k| {
+                let w = bands(a.f[k]);
+                unit(
+                    copies[0][k] * (w[0] + w[1])
+                        + copies[1][k] * (w[2] + w[3])
+                        + copies[2][k] * w[4],
+                )
+            })
             .collect::<Vec<_>>()
     } else {
-        minimum
+        vec![Complex64::new(1., 0.); a.count]
+    };
+    let hm = if a.phase_on {
+        let impulse = a.minimum_impulse.as_ref().unwrap();
+        let long = fft::rfft(&window(impulse, a.fs, pr_low, Some(500.)));
+        let short = fft::rfft(&window(impulse, a.fs, pr_low, Some(10.)));
+        (0..a.count)
+            .map(|k| long[k] * (1. - a.fade[k]) + short[k] * a.fade[k])
+            .collect::<Vec<_>>()
+    } else {
+        a.minimum.clone()
     };
     if let Some(s) = stages.as_deref_mut() {
         s.windowed_minimum = hm.iter().map(|v| v.norm()).collect();
     }
-    let delay = if phase_on {
-        (delay_ms * fs as f64 / 1000.).round() as usize
+    let delay = if a.phase_on {
+        (delay_ms * a.fs as f64 / 1000.).round() as usize
     } else {
         0
     };
-    let initial: Vec<_> = (0..count)
+    let initial: Vec<_> = (0..a.count)
         .map(|k| {
             excess[k]
                 * hm[k]
-                * Complex64::from_polar(1., -2. * PI * k as f64 * delay as f64 / n as f64)
+                * Complex64::from_polar(1., -2. * PI * k as f64 * delay as f64 / a.n as f64)
         })
         .collect();
-    let sim: Vec<_> = (0..count).map(|k| mag[k] * initial[k].norm()).collect();
+    let sim: Vec<_> = (0..a.count).map(|k| a.mag[k] * initial[k].norm()).collect();
     let tonal = five_real(&sim, true, df);
-    let macro_raw: Vec<_> = (0..count)
+    let macro_raw: Vec<_> = (0..a.count)
         .map(|k| {
-            let v = (reference * target[k] / tonal[k].max(1e-12)).clamp(0.5, 2.);
+            let v = (a.reference * a.target[k] / tonal[k].max(1e-12)).clamp(0.5, 2.);
             if v > 1. {
-                1. + (v - 1.) * ((20000. - f[k]) / 10000.).clamp(0., 1.)
+                1. + (v - 1.) * ((20000. - a.f[k]) / 10000.).clamp(0., 1.)
             } else {
                 v
             }
         })
         .collect();
     let macro_gain = smooth_real(&macro_raw, 1.);
-    let residual: Vec<_> = (0..count)
-        .map(|k| (sim[k] * macro_gain[k] / (reference * target[k]).max(1e-12)).max(1.))
+    let residual: Vec<_> = (0..a.count)
+        .map(|k| (sim[k] * macro_gain[k] / (a.reference * a.target[k]).max(1e-12)).max(1.))
         .collect();
     let peaks = smooth_real(&residual, 1. / 48.);
-    let mut post: Vec<_> = (0..count)
+    let mut post: Vec<_> = (0..a.count)
         .map(|k| {
-            let cw = ((500. - f[k]) / 200.).clamp(0., 1.);
+            let cw = ((500. - a.f[k]) / 200.).clamp(0., 1.);
             macro_gain[k] * ((1. - cw) + (1. / peaks[k]).powf(0.6) * cw)
         })
         .collect();
@@ -606,29 +663,29 @@ fn design_speaker_inner(
         s.crush = post.iter().zip(&macro_gain).map(|(p, m)| p / m).collect();
     }
     post[0] = post[1];
-    let post = minimum_phase(&post, n);
+    let post = minimum_phase(&post, a.n);
     let full_filter = fft::irfft(
         &initial
             .iter()
             .zip(post)
             .map(|(a, b)| a * b)
             .collect::<Vec<_>>(),
-        n,
+        a.n,
     );
-    let mut filter = full_filter[..((0.51 * fs as f64).round() as usize).min(n)].to_vec();
-    let fade_len = (0.005 * fs as f64).round() as usize;
+    let mut filter = full_filter[..((0.51 * a.fs as f64).round() as usize).min(a.n)].to_vec();
+    let fade_len = (0.005 * a.fs as f64).round() as usize;
     let start = filter.len().saturating_sub(fade_len);
     for (i, v) in filter[start..].iter_mut().enumerate() {
         *v *= (1. - i as f64 / fade_len as f64).powi(2);
     }
     let corrected_share =
-        weights.iter().filter(|v| **v >= 0.5).count() as f64 / weights.len() as f64;
+        a.weights.iter().filter(|v| **v >= 0.5).count() as f64 / a.weights.len() as f64;
     Ok(SpeakerTuning {
         speaker: speaker.into(),
         points: points.len(),
-        reference,
-        low_cutoff,
-        high_cutoff,
+        reference: a.reference,
+        low_cutoff: a.low_cutoff,
+        high_cutoff: a.high_cutoff,
         trim_db: 0.,
         trim_source: "skipped",
         level_difference_db: 0.,
@@ -636,8 +693,8 @@ fn design_speaker_inner(
         pre_echo_db: -600.,
         pre_echo_channels: Vec::new(),
         design_origin: delay,
-        target,
-        phase_corrected: phase_on,
+        target: a.target.clone(),
+        phase_corrected: a.phase_on,
         mismatch: false,
         lf_edt_before_ms: 0.,
         lf_edt_after_ms: 0.,
@@ -645,13 +702,32 @@ fn design_speaker_inner(
         excess_median_after_ms: 0.,
         representation_rms_db: Vec::new(),
         filter,
-        weights,
+        weights: a.weights.clone(),
         full_filter,
         excess,
-        inverse: inv,
+        inverse: a.inv.clone(),
         macro_gain,
         omni: points.to_vec(),
     })
+}
+
+fn design_speaker_inner(
+    speaker: &str,
+    points: &[(Side, ImpulseResponse)],
+    options: &TuningOptions,
+    delay_ms: f64,
+    calibration: Option<&FrequencyResponse>,
+    target_curve: Option<&FrequencyResponse>,
+    mut stages: Option<&mut TuningStages>,
+) -> Result<SpeakerTuning, DspError> {
+    let analysis = analyze(
+        points,
+        options,
+        calibration,
+        target_curve,
+        stages.as_deref_mut(),
+    )?;
+    finish(&analysis, speaker, points, delay_ms, stages)
 }
 
 pub fn prepare_tuning(
@@ -670,8 +746,9 @@ pub fn prepare_tuning(
         )));
     }
     let build = |d| {
-        hrir.speakers
-            .iter()
+        let results: Vec<_> = hrir
+            .speakers
+            .par_iter()
             .filter(|s| s.left.is_some() || s.right.is_some())
             .map(|s| {
                 let points: Vec<_> = [(Side::Left, &s.left), (Side::Right, &s.right)]
@@ -680,7 +757,8 @@ pub fn prepare_tuning(
                     .collect();
                 design_speaker(&s.speaker, &points, options, d, calibration, target)
             })
-            .collect::<Result<Vec<_>, _>>()
+            .collect();
+        results.into_iter().collect::<Result<Vec<_>, _>>()
     };
     let mut scores = Vec::new();
     let mut file_scores: Vec<_> = pairs
@@ -695,13 +773,25 @@ pub fn prepare_tuning(
         TuningDelay::Ms(d) => d,
         TuningDelay::Auto if options.phase_limit == PhaseLimit::Off => 0.,
         TuningDelay::Auto => {
+            let prepared: Vec<_> = pairs
+                .par_iter()
+                .map(|pair| prepare_auto_delay(pair, options, calibration, target))
+                .collect();
+            let prepared = prepared.into_iter().collect::<Result<Vec<_>, _>>()?;
+            let metrics: Vec<_> = (2..=10)
+                .flat_map(|d| pairs.iter().enumerate().map(move |(i, pair)| (d, i, pair)))
+                .collect::<Vec<_>>()
+                .par_iter()
+                .map(|(d, i, pair)| evaluate_auto_delay(&prepared[*i], pair, *d as f64))
+                .collect();
+            let metrics = metrics.into_iter().collect::<Result<Vec<_>, _>>()?;
             let mut best = (10, f64::INFINITY);
+            let mut metrics = metrics.into_iter();
             for d in 2..=10 {
                 if !pairs.is_empty() {
                     let mut score = 0.;
-                    for (pair, curve) in pairs.iter().zip(&mut file_scores) {
-                        let metric =
-                            auto_delay_metric(pair, options, d as f64, calibration, target)?;
+                    for curve in &mut file_scores {
+                        let metric = metrics.next().unwrap();
                         curve.metrics.push((d, metric));
                         score += metric;
                     }
@@ -735,15 +825,23 @@ pub fn prepare_tuning(
         pairs: pairs.to_vec(),
     })
 }
-/// SECS stereo scoring only: common-start inputs, gain/arrival matching and joint crop.
-/// None of these pair-specific shifts or gains is applied to the production FIRs.
-pub fn auto_delay_metric(
+struct AutoDelayPrepared {
+    fs: u32,
+    n: usize,
+    irs: [ImpulseResponse; 2],
+    analyses: [Analysis; 2],
+    peaks: [usize; 2],
+    gain: f64,
+    latest: usize,
+    h: [Vec<Complex64>; 2],
+}
+
+fn prepare_auto_delay(
     pair: &PairMeasurement,
     options: &TuningOptions,
-    delay_ms: f64,
     calibration: Option<&FrequencyResponse>,
     target: Option<&FrequencyResponse>,
-) -> Result<f64, DspError> {
+) -> Result<AutoDelayPrepared, DspError> {
     let fs = pair.irs[0].fs;
     let n = fs as usize;
     let start = peak(&pair.irs[0].data)
@@ -763,22 +861,22 @@ pub fn auto_delay_metric(
         level_match: false,
         ..options.clone()
     };
-    let a = design_speaker(
-        &pair.speakers[0],
-        &[(pair.side, irs[0].clone())],
-        &scoring,
-        delay_ms,
-        calibration,
-        target,
-    )?;
-    let b = design_speaker(
-        &pair.speakers[1],
-        &[(pair.side, irs[1].clone())],
-        &scoring,
-        delay_ms,
-        calibration,
-        target,
-    )?;
+    let analyses = [
+        analyze(
+            &[(pair.side, irs[0].clone())],
+            &scoring,
+            calibration,
+            target,
+            None,
+        )?,
+        analyze(
+            &[(pair.side, irs[1].clone())],
+            &scoring,
+            calibration,
+            target,
+            None,
+        )?,
+    ];
     let peaks = irs.each_ref().map(|ir| peak(&ir.data));
     let width = (0.005 * fs as f64).round() as usize;
     let rms = |i: usize| {
@@ -787,14 +885,47 @@ pub fn auto_delay_metric(
     };
     let gain = rms(0) / rms(1).max(1e-12);
     let latest = peaks[0].max(peaks[1]);
+    let h = irs.each_ref().map(|ir| spectrum(&ir.data, n));
+    Ok(AutoDelayPrepared {
+        fs,
+        n,
+        irs,
+        analyses,
+        peaks,
+        gain,
+        latest,
+        h,
+    })
+}
+
+fn evaluate_auto_delay(
+    prepared: &AutoDelayPrepared,
+    pair: &PairMeasurement,
+    delay_ms: f64,
+) -> Result<f64, DspError> {
+    let a = finish(
+        &prepared.analyses[0],
+        &pair.speakers[0],
+        &[(pair.side, prepared.irs[0].clone())],
+        delay_ms,
+        None,
+    )?;
+    let b = finish(
+        &prepared.analyses[1],
+        &pair.speakers[1],
+        &[(pair.side, prepared.irs[1].clone())],
+        delay_ms,
+        None,
+    )?;
     let shifted: [Vec<f64>; 2] = [&a.full_filter, &b.full_filter]
         .into_iter()
         .enumerate()
         .map(|(i, filter)| {
-            let shift = latest - peaks[i];
-            (0..n)
+            let shift = prepared.latest - prepared.peaks[i];
+            (0..prepared.n)
                 .map(|j| {
-                    j.checked_sub(shift).map_or(0., |j| filter[j]) * if i == 1 { gain } else { 1. }
+                    j.checked_sub(shift).map_or(0., |j| filter[j])
+                        * if i == 1 { prepared.gain } else { 1. }
                 })
                 .collect()
         })
@@ -809,9 +940,9 @@ pub fn auto_delay_metric(
         .0;
     // Scoring uses truncation after seconds-to-samples conversion (9 ms at
     // 48 kHz becomes 431). The production design origin remains rounded D_s.
-    let crop_start = q as isize - (delay_ms / 1000. * fs as f64) as isize;
+    let crop_start = q as isize - (delay_ms / 1000. * prepared.fs as f64) as isize;
     let filters = shifted.each_ref().map(|f| {
-        let crop: Vec<_> = (0..(0.51 * fs as f64).round() as usize)
+        let crop: Vec<_> = (0..(0.51 * prepared.fs as f64).round() as usize)
             .map(|i| {
                 let j = crop_start + i as isize;
                 if j < 0 {
@@ -821,11 +952,10 @@ pub fn auto_delay_metric(
                 }
             })
             .collect();
-        spectrum(&crop, n)
+        spectrum(&crop, prepared.n)
     });
-    let h = irs.each_ref().map(|ir| spectrum(&ir.data, n));
-    let summed: Vec<_> = (0..h[0].len())
-        .map(|k| (h[0][k] * filters[0][k] + h[1][k] * filters[1][k]).norm())
+    let summed: Vec<_> = (0..prepared.h[0].len())
+        .map(|k| (prepared.h[0][k] * filters[0][k] + prepared.h[1][k] * filters[1][k]).norm())
         .collect();
     let after = five_real(&summed, false, 1.);
     let lo = ((a.low_cutoff + b.low_cutoff) / 2.).max(10.);
@@ -847,6 +977,20 @@ pub fn auto_delay_metric(
         .sum::<f64>()
         / weight)
 }
+
+/// SECS stereo scoring only: common-start inputs, gain/arrival matching and joint crop.
+/// None of these pair-specific shifts or gains is applied to the production FIRs.
+pub fn auto_delay_metric(
+    pair: &PairMeasurement,
+    options: &TuningOptions,
+    delay_ms: f64,
+    calibration: Option<&FrequencyResponse>,
+    target: Option<&FrequencyResponse>,
+) -> Result<f64, DspError> {
+    let prepared = prepare_auto_delay(pair, options, calibration, target)?;
+    evaluate_auto_delay(&prepared, pair, delay_ms)
+}
+
 /// Preserve only within-recording comparisons; independent recordings share no clock.
 pub fn recording_pairs(hrir: &Hrir, names: &[String], side: Option<Side>) -> Vec<PairMeasurement> {
     let mut out = Vec::new();
@@ -919,62 +1063,70 @@ pub fn lf_decay_bands(ir: &ImpulseResponse) -> [f64; 7] {
     let n = (2 * ir.data.len().max(ir.fs as usize)).next_power_of_two();
     let h = spectrum(&ir.data, n);
     let start = peak(&ir.data);
-    EDT_BANDS.map(|fc| {
-        let edge = 2_f64.powf(1. / 6.);
-        let lo = (PI * fc / edge / ir.fs as f64).tan();
-        let hi = (PI * fc * edge / ir.fs as f64).tan();
-        let filtered: Vec<_> = h
-            .iter()
-            .enumerate()
-            .map(|(k, v)| {
-                let omega = (PI * k as f64 / n as f64).tan();
-                let gain = if k == 0 || k == n / 2 {
-                    0.
-                } else {
-                    let ratio = (omega * omega - lo * hi) / ((hi - lo) * omega);
-                    1. / (1. + ratio.powi(8))
-                };
-                v * gain
-            })
-            .collect();
-        let data = fft::irfft(&filtered, n);
-        let mut energy = vec![0.; ir.data.len() - start];
-        let mut total = 0.;
-        for (out, v) in energy
-            .iter_mut()
-            .rev()
-            .zip(data[start..ir.data.len()].iter().rev())
-        {
-            total += v * v;
-            *out = total;
-        }
-        if total <= 1e-30 {
-            return 0.;
-        }
-        let mut count = 0.;
-        let mut sx = 0.;
-        let mut sy = 0.;
-        let mut sxx = 0.;
-        let mut sxy = 0.;
-        for (i, e) in energy.iter().enumerate() {
-            let db = 10. * (e / total).max(1e-30).log10();
-            if db < -10. {
-                break;
+    let omega: Vec<_> = (0..h.len())
+        .map(|k| (PI * k as f64 / n as f64).tan())
+        .collect();
+    EDT_BANDS
+        .par_iter()
+        .map(|fc| {
+            let edge = 2_f64.powf(1. / 6.);
+            let lo = (PI * fc / edge / ir.fs as f64).tan();
+            let hi = (PI * fc * edge / ir.fs as f64).tan();
+            let filtered: Vec<_> = h
+                .iter()
+                .enumerate()
+                .map(|(k, v)| {
+                    let omega = omega[k];
+                    let gain = if k == 0 || k == n / 2 {
+                        0.
+                    } else {
+                        let ratio = (omega * omega - lo * hi) / ((hi - lo) * omega);
+                        1. / (1. + ratio.powi(8))
+                    };
+                    v * gain
+                })
+                .collect();
+            let data = fft::irfft(&filtered, n);
+            let mut energy = vec![0.; ir.data.len() - start];
+            let mut total = 0.;
+            for (out, v) in energy
+                .iter_mut()
+                .rev()
+                .zip(data[start..ir.data.len()].iter().rev())
+            {
+                total += v * v;
+                *out = total;
             }
-            let t = i as f64 / ir.fs as f64;
-            count += 1.;
-            sx += t;
-            sy += db;
-            sxx += t * t;
-            sxy += t * db;
-        }
-        let denominator = count * sxx - sx * sx;
-        if denominator <= 0. {
-            return 0.;
-        }
-        let slope = (count * sxy - sx * sy) / denominator;
-        if slope < 0. { -60000. / slope } else { 0. }
-    })
+            if total <= 1e-30 {
+                return 0.;
+            }
+            let mut count = 0.;
+            let mut sx = 0.;
+            let mut sy = 0.;
+            let mut sxx = 0.;
+            let mut sxy = 0.;
+            for (i, e) in energy.iter().enumerate() {
+                let db = 10. * (e / total).max(1e-30).log10();
+                if db < -10. {
+                    break;
+                }
+                let t = i as f64 / ir.fs as f64;
+                count += 1.;
+                sx += t;
+                sy += db;
+                sxx += t * t;
+                sxy += t * db;
+            }
+            let denominator = count * sxx - sx * sx;
+            if denominator <= 0. {
+                return 0.;
+            }
+            let slope = (count * sxy - sx * sy) / denominator;
+            if slope < 0. { -60000. / slope } else { 0. }
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 impl SpeakerTuning {
     pub fn weak(&self) -> bool {
@@ -1107,95 +1259,106 @@ pub fn apply_tuning(hrir: &mut Hrir, plan: &TuningPlan) -> Result<TuningReport, 
             }
         }
     }
-    for speaker in &mut hrir.speakers {
-        let mut entry = report
-            .speakers
-            .iter_mut()
-            .find(|s| s.speaker == speaker.speaker);
-        let mut decay_before = [0.; 7];
-        let mut decay_after = [0.; 7];
-        let mut ear_count = 0.;
-        // Per ear (pre-echo, direct) before and after tuning. The pre-echo of
-        // a speaker is heard against its louder direct sound, so both ears are
-        // referred to the larger of the two direct levels: the head-shadowed
-        // contralateral direct sound would otherwise inflate the ratio.
-        let mut echo_parts: Vec<EarEcho> = Vec::new();
-        for (side, ir) in [
-            (Side::Left, &mut speaker.left),
-            (Side::Right, &mut speaker.right),
-        ] {
-            let Some(ir) = ir else {
-                continue;
-            };
-            let length = ir.data.len() + report.delay_samples;
-            if let Some(s) = entry.as_deref_mut() {
-                ear_count += 1.;
-                let before_parts = pre_echo_parts(ir);
-                s.excess_median_before_ms += excess_group_delay_median(ir);
-                for (sum, value) in decay_before.iter_mut().zip(lf_decay_bands(ir)) {
-                    *sum += value;
+    let report_speakers = &report.speakers;
+    let delay_samples = report.delay_samples;
+    let fs = hrir.fs;
+    let updates: Vec<_> = hrir
+        .speakers
+        .par_iter_mut()
+        .map(|speaker| {
+            let mut indexed_entry = report_speakers
+                .iter()
+                .position(|s| s.speaker == speaker.speaker)
+                .map(|index| (index, report_speakers[index].clone()));
+            let mut decay_before = [0.; 7];
+            let mut decay_after = [0.; 7];
+            let mut ear_count = 0.;
+            // Per ear (pre-echo, direct) before and after tuning. The pre-echo of
+            // a speaker is heard against its louder direct sound, so both ears are
+            // referred to the larger of the two direct levels: the head-shadowed
+            // contralateral direct sound would otherwise inflate the ratio.
+            let mut echo_parts: Vec<EarEcho> = Vec::new();
+            for (side, ir) in [
+                (Side::Left, &mut speaker.left),
+                (Side::Right, &mut speaker.right),
+            ] {
+                let Some(ir) = ir else {
+                    continue;
+                };
+                let length = ir.data.len() + delay_samples;
+                if let Some((_, s)) = indexed_entry.as_mut() {
+                    ear_count += 1.;
+                    let before_parts = pre_echo_parts(ir);
+                    s.excess_median_before_ms += excess_group_delay_median(ir);
+                    for (sum, value) in decay_before.iter_mut().zip(lf_decay_bands(ir)) {
+                        *sum += value;
+                    }
+                    if let Some((_, omni)) = s.omni.iter().find(|(e, _)| *e == side) {
+                        let mag = |ir: &ImpulseResponse| {
+                            smooth_real(
+                                &spectrum(&ir.data, ir.fs as usize)
+                                    .iter()
+                                    .map(|v| 20. * v.norm().max(1e-12).log10())
+                                    .collect::<Vec<_>>(),
+                                1. / 6.,
+                            )
+                        };
+                        let a = mag(omni);
+                        let b = mag(ir);
+                        let diff: Vec<_> = a.iter().zip(b).map(|(a, b)| a - b).collect();
+                        let center = mean_band(&diff, 1., 100., 300.);
+                        let rms = (diff[30..301]
+                            .iter()
+                            .map(|v| (v - center).powi(2))
+                            .sum::<f64>()
+                            / 271.)
+                            .sqrt();
+                        s.representation_rms_db.push((side, rms));
+                    }
+                    ir.data = conv::convolve(&ir.data, &s.filter, conv::Mode::Full);
+                    ir.data.resize(length, 0.);
+                    let len = (0.005 * fs as f64).round() as usize;
+                    let start = ir.data.len().saturating_sub(len);
+                    for (i, v) in ir.data[start..].iter_mut().enumerate() {
+                        *v *= 0.5 * (1. + (PI * i as f64 / len as f64).cos());
+                    }
+                    s.excess_median_after_ms += excess_group_delay_median(ir);
+                    for (sum, value) in decay_after.iter_mut().zip(lf_decay_bands(ir)) {
+                        *sum += value;
+                    }
+                    echo_parts.push((side, before_parts, pre_echo_parts(ir)));
+                } else if delay_samples > 0 {
+                    let mut data = vec![0.; delay_samples];
+                    data.extend_from_slice(&ir.data);
+                    ir.data = data;
                 }
-                if let Some((_, omni)) = s.omni.iter().find(|(e, _)| *e == side) {
-                    let mag = |ir: &ImpulseResponse| {
-                        smooth_real(
-                            &spectrum(&ir.data, ir.fs as usize)
-                                .iter()
-                                .map(|v| 20. * v.norm().max(1e-12).log10())
-                                .collect::<Vec<_>>(),
-                            1. / 6.,
-                        )
-                    };
-                    let a = mag(omni);
-                    let b = mag(ir);
-                    let diff: Vec<_> = a.iter().zip(b).map(|(a, b)| a - b).collect();
-                    let center = mean_band(&diff, 1., 100., 300.);
-                    let rms = (diff[30..301]
-                        .iter()
-                        .map(|v| (v - center).powi(2))
-                        .sum::<f64>()
-                        / 271.)
-                        .sqrt();
-                    s.representation_rms_db.push((side, rms));
-                }
-                ir.data = conv::convolve(&ir.data, &s.filter, conv::Mode::Full);
-                ir.data.resize(length, 0.);
-                let len = (0.005 * hrir.fs as f64).round() as usize;
-                let start = ir.data.len().saturating_sub(len);
-                for (i, v) in ir.data[start..].iter_mut().enumerate() {
-                    *v *= 0.5 * (1. + (PI * i as f64 / len as f64).cos());
-                }
-                s.excess_median_after_ms += excess_group_delay_median(ir);
-                for (sum, value) in decay_after.iter_mut().zip(lf_decay_bands(ir)) {
-                    *sum += value;
-                }
-                echo_parts.push((side, before_parts, pre_echo_parts(ir)));
-            } else if report.delay_samples > 0 {
-                let mut data = vec![0.; report.delay_samples];
-                data.extend_from_slice(&ir.data);
-                ir.data = data;
             }
-        }
-        if let Some(s) = entry
-            && ear_count > 0.
-        {
-            let reference_before = echo_parts.iter().map(|e| e.1.1).fold(0., f64::max);
-            let reference_after = echo_parts.iter().map(|e| e.2.1).fold(0., f64::max);
-            for (side, before, after) in &echo_parts {
-                let after_db = level_db(after.0, reference_after);
-                s.pre_echo_db = s.pre_echo_db.max(after_db);
-                s.pre_echo_channels.push(PreEcho {
-                    side: *side,
-                    before_db: level_db(before.0, reference_before),
-                    after_db,
-                });
+            if let Some((_, s)) = indexed_entry.as_mut()
+                && ear_count > 0.
+            {
+                let reference_before = echo_parts.iter().map(|e| e.1.1).fold(0., f64::max);
+                let reference_after = echo_parts.iter().map(|e| e.2.1).fold(0., f64::max);
+                for (side, before, after) in &echo_parts {
+                    let after_db = level_db(after.0, reference_after);
+                    s.pre_echo_db = s.pre_echo_db.max(after_db);
+                    s.pre_echo_channels.push(PreEcho {
+                        side: *side,
+                        before_db: level_db(before.0, reference_before),
+                        after_db,
+                    });
+                }
+                s.lf_edt_before_ms =
+                    percentile(decay_before.iter().map(|v| v / ear_count).collect(), 0.5);
+                s.lf_edt_after_ms =
+                    percentile(decay_after.iter().map(|v| v / ear_count).collect(), 0.5);
+                s.excess_median_before_ms /= ear_count;
+                s.excess_median_after_ms /= ear_count;
             }
-            s.lf_edt_before_ms =
-                percentile(decay_before.iter().map(|v| v / ear_count).collect(), 0.5);
-            s.lf_edt_after_ms =
-                percentile(decay_after.iter().map(|v| v / ear_count).collect(), 0.5);
-            s.excess_median_before_ms /= ear_count;
-            s.excess_median_after_ms /= ear_count;
-        }
+            indexed_entry
+        })
+        .collect();
+    for (index, entry) in updates.into_iter().flatten() {
+        report.speakers[index] = entry;
     }
     Ok(report)
 }
