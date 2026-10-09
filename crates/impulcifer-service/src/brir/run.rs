@@ -90,6 +90,54 @@ struct Observer<'a, 'b> {
     headphone: Option<(FrequencyResponse, FrequencyResponse)>,
 }
 impl StageObserver for Observer<'_, '_> {
+    fn on_room_tuned(
+        &mut self,
+        report: &impulcifer_dsp::stages::room_tuning::TuningReport,
+    ) -> Result<(), DspError> {
+        if report.speakers.is_empty() {
+            self.events
+                .log("info", "cli_room_tuning_no_data", json!({}));
+        } else {
+            if report.f_ph == 0.0 {
+                self.events.log("info", "cli_room_tuning_off", json!({}));
+            }
+            self.events.log("info", "cli_room_tuning", json!({"freq":report.f_ph.round() as u32,"delay":(report.delay_samples as f64 * 1000.0 / self.sample_rate as f64).round() as u32}));
+        }
+        for speaker in &report.speakers {
+            if speaker.points == 1 {
+                self.events.log(
+                    "info",
+                    "cli_room_tuning_single_point",
+                    json!({"speaker":speaker.speaker}),
+                );
+            }
+            if speaker.mismatch {
+                self.events.log(
+                    "warning",
+                    "cli_room_tuning_mismatch",
+                    json!({"speaker":speaker.speaker}),
+                );
+            }
+            if speaker.weak() {
+                self.events.log(
+                    "warning",
+                    "cli_room_tuning_weak",
+                    json!({"speaker":speaker.speaker}),
+                );
+            }
+            if self.config.room_tuning_level_match && speaker.level_difference_db.abs() > 2.0 {
+                self.events.log("warning", "cli_room_tuning_level_inconsistent", json!({"speaker":speaker.speaker,"db":format!("{:.1}",speaker.level_difference_db)}));
+            }
+            if let Some(db) = speaker.pre_echo_warning_db() {
+                self.events.log(
+                    "warning",
+                    "cli_room_tuning_preecho",
+                    json!({"speaker":speaker.speaker,"db":format!("{db:.1}")}),
+                );
+            }
+        }
+        Ok(())
+    }
     fn on_equalized(&mut self, applied: &[AppliedEqualization]) -> Result<(), DspError> {
         self.check_cancelled()?;
         if let (Some((headphone_left, headphone_right)), Some((applied_left, applied_right))) = (

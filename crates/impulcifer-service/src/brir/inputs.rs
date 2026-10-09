@@ -181,6 +181,7 @@ pub fn load_inputs(
             .map(|fr| room::prepare_mic_calibration(fr, fs))
             .transpose()?;
         let mut rir = empty(fs);
+        let mut room_pairs = Vec::new();
         for (path, names) in &dir.room.recordings {
             events.check_cancelled()?;
             ingest(
@@ -194,36 +195,81 @@ pub fn load_inputs(
                 names.side,
                 estimator,
             )?;
+            if config.room_mode == "tuning" {
+                room_pairs.extend(impulcifer_dsp::stages::room_tuning::recording_pairs(
+                    &rir,
+                    &names.speakers,
+                    names.side,
+                ));
+            }
         }
-        let generic = if let Some(path) = &dir.room.generic {
+        let generic = if config.room_mode == "tuning" {
+            if dir.room.generic.is_some() {
+                events.log("info", "cli_room_tuning_room_wav_ignored", json!({}));
+            }
+            Vec::new()
+        } else if let Some(path) = &dir.room.generic {
             let wav = read_wav(path)?;
             room::split_generic_room_recording(estimator, wav.sample_rate, &wav.tracks)?
         } else {
             Vec::new()
         };
-        room_result = room::room_correction(
-            &mut rir,
-            &generic,
-            &target,
-            calibration.as_ref(),
-            estimator,
-            &RoomCorrectionOptions {
-                fr_combination_method: if config.fr_combination_method == "conservative" {
-                    FrCombination::Conservative
-                } else {
-                    FrCombination::Average
-                },
-                specific_limit: config.specific_limit,
-                generic_limit: config.generic_limit,
-                range: room::RoomRange::parse(&config.room_range).ok_or_else(|| {
-                    impulcifer_dsp::DspError::InvalidArgument("invalid room_range".into())
-                })?,
-                room_volume: config.room_volume,
-                schroeder_freq: config.schroeder_freq,
-                max_boost_db: config.room_max_boost,
-                vbass_crossover: config.vbass.then_some(config.vbass_freq as f64),
+        let options = RoomCorrectionOptions {
+            fr_combination_method: if config.fr_combination_method == "conservative" {
+                FrCombination::Conservative
+            } else {
+                FrCombination::Average
             },
-        )?;
+            specific_limit: config.specific_limit,
+            generic_limit: config.generic_limit,
+            range: room::RoomRange::parse(&config.room_range).ok_or_else(|| {
+                impulcifer_dsp::DspError::InvalidArgument("invalid room_range".into())
+            })?,
+            room_volume: config.room_volume,
+            schroeder_freq: config.schroeder_freq,
+            max_boost_db: config.room_max_boost,
+            vbass_crossover: config.vbass.then_some(config.vbass_freq as f64),
+        };
+        room_result = if config.room_mode == "tuning" {
+            Some(room::room_correction_tuning(
+                &mut rir,
+                &generic,
+                &target,
+                calibration.as_ref(),
+                estimator,
+                &options,
+                &impulcifer_dsp::stages::room_tuning::TuningOptions {
+                    delay: impulcifer_types::config::TuningDelay::parse(&config.room_tuning_delay)
+                        .ok_or_else(|| {
+                            impulcifer_dsp::DspError::InvalidArgument(
+                                "invalid room_tuning_delay".into(),
+                            )
+                        })?,
+                    phase_limit: impulcifer_types::config::PhaseLimit::parse(
+                        &config.room_tuning_phase_limit,
+                    )
+                    .ok_or_else(|| {
+                        impulcifer_dsp::DspError::InvalidArgument(
+                            "invalid room_tuning_phase_limit".into(),
+                        )
+                    })?,
+                    max_boost: config.room_tuning_max_boost,
+                    curtain: config.room_tuning_curtain,
+                    level_match: config.room_tuning_level_match,
+                    pairs: room_pairs,
+                    ..Default::default()
+                },
+            )?)
+        } else {
+            room::room_correction(
+                &mut rir,
+                &generic,
+                &target,
+                calibration.as_ref(),
+                estimator,
+                &options,
+            )?
+        };
         if let Some(d) = room_result.as_ref().and_then(|r| r.diagnostics.as_ref()) {
             use impulcifer_dsp::stages::room_v2::{RolloffSource, SchroederSource};
             events.log(
@@ -291,6 +337,7 @@ pub fn load_inputs(
             }
         }
         if config.plot
+            && config.room_mode != "tuning"
             && let Some(room) = &room_result
         {
             let token = events.cancel_token();

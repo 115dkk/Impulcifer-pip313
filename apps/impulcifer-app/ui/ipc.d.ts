@@ -14,7 +14,7 @@ interface UiSettings {
 interface SweepDefaults { layouts: string[]; default_fs: number; default_duration: number; speaker_names: string[] }
 interface Bootstrap {
   version: string; platform: string; install_kind: string; webview_backend: string;
-  brir_defaults: ProcessingRequest; sweep: SweepDefaults; ui: UiSettings; active_job: Job | null;
+  brir_defaults: BrirDefaults; sweep: SweepDefaults; ui: UiSettings; active_job: Job | null;
   capabilities: { recording: boolean; brir: boolean; output_recovery: boolean;
     recording_cancel: boolean; brir_cancel: boolean; output_recovery_cancel: boolean; share_modes: SharePreference[] };
 }
@@ -53,9 +53,22 @@ interface ProcessingRequest {
   /* 3.x only. specific_limit and generic_limit apply to the legacy range alone.
      A null room_volume (m³) means 50 m³ is assumed; a null schroeder_freq (Hz) is estimated. */
   room_range?: RoomRange; room_volume?: number | null; schroeder_freq?: number | null; room_max_boost?: number;
+  /* 3.x only. "tuning" (ADR 0005) is a separate mode with its own settings and ignores room_range,
+     room_max_boost and fr_combination_method; the room_tuning_* fields are read in tuning mode alone.
+     room_tuning_phase_limit is how far up timing is corrected ("off", "schroeder", "full" or Hz,
+     300–20000); room_volume and schroeder_freq apply to tuning only at "schroeder". room_tuning_delay
+     is "auto" or ms (2–20) and is not read when the limit is "off". room_tuning_max_boost is in dB,
+     room_tuning_curtain (Hz) is where the detailed correction stops. */
+  room_mode?: RoomMode; room_tuning_phase_limit?: RoomPhaseLimit; room_tuning_delay?: "auto" | number;
+  room_tuning_max_boost?: number; room_tuning_curtain?: number; room_tuning_level_match?: boolean;
   confirm_warnings?: boolean;
 }
 type RoomRange = "legacy" | "modes" | "schroeder" | "extreme";
+type RoomMode = "eq" | "tuning";
+type RoomPhaseLimit = "off" | "schroeder" | "full" | number;
+/* bootstrap's defaults carry the CLI spec for the tuning delay and limit, e.g. "10" or "auto". */
+type BrirDefaults = Omit<ProcessingRequest, "room_tuning_delay" | "room_tuning_phase_limit"> &
+  { room_tuning_delay?: string | number; room_tuning_phase_limit?: string | number | null };
 type EqSlotName = "both" | "left" | "right";
 type EqChoice = { mode: "folder" } | { mode: "off" } | { mode: "file"; path: string };
 interface EqRequest extends Pick<ProcessingRequest, "eq_file" | "eq_left_file" | "eq_right_file"> { dir_path: string }
@@ -136,7 +149,7 @@ interface IpcApi {
 type IpcMethod = keyof IpcApi;
 type IpcResponse<M extends IpcMethod> = Awaited<ReturnType<IpcApi[M]>>;
 interface AppState {
-  booted: boolean; version: string; platform: string; strings: Record<string, string>; brirDefaults: ProcessingRequest;
+  booted: boolean; version: string; platform: string; strings: Record<string, string>; brirDefaults: BrirDefaults;
   sweepDefaults?: Partial<SweepDefaults>; language: string; theme: string; skin: string;
   jobId: string | null; jobKind: JobKind | null; lastJob: Job | null; lastRecoveryJob: JobOf<"output_recovery"> | null;
   startPending: boolean; nextSeq: number; pollTimer: number | undefined; resolvedRecordPath: string;

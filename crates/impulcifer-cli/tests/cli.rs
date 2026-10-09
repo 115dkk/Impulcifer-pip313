@@ -50,6 +50,18 @@ fn cli_room_v2_options_parse_and_validate() {
         ("--room_volume", "50", json!(50.0)),
         ("--schroeder_freq", "400", json!(400.0)),
         ("--room_max_boost", "12", json!(12.0)),
+        ("--room_mode", "eq", json!("eq")),
+        ("--room_mode", "tuning", json!("tuning")),
+        ("--room_tuning_delay", "2", json!("2")),
+        ("--room_tuning_delay", "20", json!("20")),
+        ("--room_tuning_delay", "auto", json!("auto")),
+        ("--room_tuning_phase_limit", "off", json!("off")),
+        ("--room_tuning_phase_limit", "schroeder", json!("schroeder")),
+        ("--room_tuning_phase_limit", "full", json!("full")),
+        ("--room_tuning_phase_limit", "300", json!("300")),
+        ("--room_tuning_max_boost", "6", json!(6.0)),
+        ("--room_tuning_curtain", "300", json!(300.0)),
+        ("--room_tuning_level_match", "false", json!(false)),
     ] {
         let Parsed::Kwargs(mut kwargs) = parse(&args(&[
             "impulcifer",
@@ -73,6 +85,16 @@ fn cli_room_v2_options_parse_and_validate() {
         ("--room_max_boost", "-1"),
         ("--room_max_boost", "25"),
         ("--room_max_boost", "NaN"),
+        ("--room_mode", "bad"),
+        ("--room_tuning_delay", "1.9"),
+        ("--room_tuning_phase_limit", "299"),
+        ("--room_tuning_phase_limit", "20001"),
+        ("--room_tuning_phase_limit", "NaN"),
+        ("--room_tuning_max_boost", "13"),
+        ("--room_tuning_curtain", "99"),
+        ("--room_tuning_curtain", "5001"),
+        ("--room_tuning_delay", "20.1"),
+        ("--room_tuning_delay", "NaN"),
     ] {
         assert_eq!(
             parse(&args(&[
@@ -90,6 +112,18 @@ fn cli_room_v2_options_parse_and_validate() {
     let Parsed::Help(help) = parse(&args(&["impulcifer", "--help"])).unwrap() else {
         panic!()
     };
+    assert!(
+        parse(&args(&[
+            "impulcifer",
+            "--dir_path",
+            "measurements",
+            "--room_mode",
+            "tuning",
+            "--room_range",
+            "legacy"
+        ]))
+        .is_ok()
+    );
     for option in EXTENSION_OPTIONS {
         assert!(help.contains(option.flag), "{}", option.flag);
         assert!(help.contains(option.help), "{}", option.flag);

@@ -7,5 +7,6 @@ pub mod equalize;
 pub mod headphone;
 pub mod readme;
 pub mod room;
+pub mod room_tuning;
 pub mod room_v2;
 pub mod target;

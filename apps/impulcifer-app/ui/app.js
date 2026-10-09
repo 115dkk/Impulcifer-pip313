@@ -123,8 +123,10 @@ function applyStrings() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-i18n]")).forEach((node) => {
     node.textContent = t(node.dataset.i18n || "");
   });
+  // Every info button has the same name; its description is the bubble it opens.
+  document.querySelectorAll(".info-tip").forEach((button) => button.setAttribute("aria-label", t("button_more_info")));
   updateChannelGuidance();
-  updateRoomRange();
+  updateRoomRows();
   refreshResolvedPath();
   renderSteps();
   renderJobState(state.lastJob);
@@ -174,6 +176,7 @@ function applySkin(code) {
   if (previous !== state.skin) {
     scheduleRecoveryPlan();
     syncAdvancedForms(state.skin);
+    syncRoomPhase(state.skin);
   }
 }
 
@@ -1445,11 +1448,263 @@ async function detectSweep() {
   }
 }
 
-/* ------------------------------------------------- room correction range
-   The legacy range is the 2.x stage and the only one that reads the two
-   limits; the other ranges read the room volume, the Schroeder frequency
-   and the boost cap instead. Rows are hidden, not cleared, so switching the
-   range keeps what was typed. */
+/* --------------------------------------------------------- info tooltips
+   An "i" button after a label holds the description of its control in a
+   bubble (role="tooltip"; the control and the button point to it with
+   aria-describedby). It opens on mouse hover and on keyboard focus; a click
+   or tap pins it open until the next click, a click elsewhere, Escape or
+   focus leaving. Escape also keeps it shut while the pointer stays on the
+   button. One bubble is open at a time. The bubble is fixed-positioned
+   under the button, so a card's overflow cannot clip it, and kept inside the
+   window; on scroll or resize it follows the button and closes once the
+   button leaves the visible part of the page. */
+
+/** @type {{ button: HTMLButtonElement, bubble: HTMLElement, pinned: boolean } | null} */
+let openTip = null;
+/** @type {number | undefined} */
+let tipCloseTimer;
+/** A button whose bubble Escape or a click closed: hover does not reopen it until the pointer leaves. */
+/** @type {HTMLButtonElement | null} */
+let tipSuppressed = null;
+
+/** @param {HTMLButtonElement} button */
+function tipBubble(button) {
+  return $(button.getAttribute("aria-describedby") || "");
+}
+
+/* Below the button, starting at its left edge; flipped to end at its right
+   edge when that would leave the window, then held 8px inside it. Above the
+   button when there is no room below. */
+/** @param {HTMLButtonElement} button @param {HTMLElement} bubble */
+function placeTip(button, bubble) {
+  const margin = 8;
+  const gap = 6;
+  const anchor = button.getBoundingClientRect();
+  const width = bubble.offsetWidth;
+  const height = bubble.offsetHeight;
+  let left = anchor.left;
+  if (left + width > window.innerWidth - margin) left = anchor.right - width;
+  left = Math.max(margin, Math.min(left, window.innerWidth - margin - width));
+  let top = anchor.bottom + gap;
+  if (top + height > window.innerHeight - margin && anchor.top - gap - height >= margin) top = anchor.top - gap - height;
+  bubble.style.left = `${Math.round(left)}px`;
+  bubble.style.top = `${Math.round(top)}px`;
+}
+
+/** @param {HTMLButtonElement} button @param {boolean} pin */
+function showTip(button, pin) {
+  window.clearTimeout(tipCloseTimer);
+  if (openTip && openTip.button !== button) hideTip();
+  const bubble = tipBubble(button);
+  const pinned = pin || (openTip !== null && openTip.pinned);
+  openTip = { button, bubble, pinned };
+  placeTip(button, bubble);
+  bubble.dataset.open = "true";
+  button.classList.add("is-open");
+}
+
+function followTip() {
+  if (!openTip) return;
+  const anchor = openTip.button.getBoundingClientRect();
+  const view = $("content").getBoundingClientRect();
+  if (anchor.bottom < view.top || anchor.top > view.bottom || anchor.width === 0) hideTip();
+  else placeTip(openTip.button, openTip.bubble);
+}
+
+function hideTip() {
+  window.clearTimeout(tipCloseTimer);
+  if (!openTip) return;
+  delete openTip.bubble.dataset.open;
+  openTip.button.classList.remove("is-open");
+  openTip = null;
+}
+
+function wireTips() {
+  /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("button.info-tip")).forEach((button) => {
+    const tip = button.parentElement;
+    if (!tip) return;
+    // The wrapper holds the bubble too, so moving onto the bubble keeps it open.
+    tip.addEventListener("pointerenter", (event) => {
+      if (event.pointerType === "mouse" && tipSuppressed !== button) showTip(button, false);
+    });
+    tip.addEventListener("pointerleave", (event) => {
+      if (event.pointerType !== "mouse") return;
+      if (tipSuppressed === button) tipSuppressed = null;
+      if (openTip?.button === button && !openTip.pinned && !button.matches(":focus-visible")) {
+        window.clearTimeout(tipCloseTimer);
+        tipCloseTimer = window.setTimeout(hideTip, 150);
+      }
+    });
+    button.addEventListener("focus", () => {
+      if (button.matches(":focus-visible")) showTip(button, false);
+    });
+    // Focus leaving closes it, unless the pointer moved onto the bubble (a click there blurs the button).
+    button.addEventListener("blur", () => {
+      if (openTip?.button === button && !tip.matches(":hover")) hideTip();
+    });
+    button.addEventListener("click", () => {
+      if (openTip?.button === button && openTip.pinned) {
+        hideTip();
+        tipSuppressed = button;
+      } else {
+        tipSuppressed = null;
+        showTip(button, true);
+      }
+    });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !openTip) return;
+    tipSuppressed = openTip.button;
+    hideTip();
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (openTip && event.target instanceof Node && !openTip.button.parentElement?.contains(event.target)) hideTip();
+  });
+  $("content").addEventListener("scroll", followTip, { passive: true });
+  window.addEventListener("resize", followTip);
+}
+
+/* ------------------------------------------- room correction mode & rows
+   Room EQ (ADR 0004) corrects the magnitude at each ear position. Virtual
+   room tuning (ADR 0005) is a separate mode with its own settings, so while
+   it is chosen the Room EQ rows (range, boost cap, legacy limits, FR
+   combination) are hidden and not sent. Of the room facts, tuning reads the
+   volume and the Schroeder frequency only at the Schroeder timing limit.
+   Rows are hidden, not cleared, so switching the mode, the range or the
+   limit keeps what was typed. */
+
+/** @type {readonly RoomMode[]} */
+const ROOM_MODES = ["eq", "tuning"];
+
+/** @param {unknown} value @returns {value is RoomMode} */
+function isRoomMode(value) {
+  return typeof value === "string" && ROOM_MODES.some((mode) => mode === value);
+}
+
+/** @returns {RoomMode} */
+function roomMode() {
+  return $("bf-room-mode-tuning").getAttribute("aria-checked") === "true" ? "tuning" : "eq";
+}
+
+/** @param {RoomMode} mode @param {boolean} [focus] */
+function setRoomMode(mode, focus = false) {
+  for (const name of ROOM_MODES) {
+    const button = $(`bf-room-mode-${name}`);
+    button.setAttribute("aria-checked", String(name === mode));
+    button.tabIndex = name === mode ? 0 : -1;
+  }
+  if (focus) $(`bf-room-mode-${mode}`).focus();
+  updateRoomRows();
+}
+
+/** @param {RoomMode} mode */
+function roomModeHint(mode) {
+  return mode === "tuning" ? t("tooltip_room_mode_tuning") : t("tooltip_room_mode_eq");
+}
+
+/* How far up tuning corrects timing. "off" corrects the magnitude only and
+   adds no delay, "full" is the whole band (the default, as the processor
+   tuning follows). Studio picks one of eight stops on a slider; Stable only
+   asks whether to stop at the Schroeder frequency, and unchecked is the full
+   band. The control of the current skin decides; a skin switch carries the
+   meaning across (syncRoomPhase). */
+
+/** @type {readonly RoomPhaseLimit[]} */
+const ROOM_PHASE_STOPS = ["off", "schroeder", 500, 1000, 2000, 5000, 10000, "full"];
+const ROOM_PHASE_SCHROEDER = ROOM_PHASE_STOPS.indexOf("schroeder");
+const ROOM_PHASE_FULL = ROOM_PHASE_STOPS.length - 1;
+
+/** @returns {number} the slider's stop, 0 to ROOM_PHASE_FULL */
+function roomPhaseStop() {
+  const stop = Math.round(Number(el("bf-room-phase-limit", HTMLInputElement).value));
+  return Number.isFinite(stop) ? Math.max(0, Math.min(ROOM_PHASE_FULL, stop)) : ROOM_PHASE_FULL;
+}
+
+/** @param {RoomPhaseLimit} limit */
+function roomPhaseText(limit) {
+  switch (limit) {
+    case "off": return t("option_room_tuning_phase_off");
+    case "schroeder": return t("option_room_tuning_phase_schroeder");
+    case "full": return t("option_room_tuning_phase_full");
+    default:
+      return limit < 1000
+        ? `${limit} ${t("studio_adv_unit_hz")}`
+        : `${limit / 1000} ${t("studio_adv_unit_khz")}`;
+  }
+}
+
+/* The readout and aria-valuetext name the stop. --range-p (0–1) and
+   --range-gaps on the slider's wrapper place the accent fill, which WebKit
+   cannot draw from the value on its own, and the stop ticks. */
+function updateRoomPhaseReadout() {
+  const slider = el("bf-room-phase-limit", HTMLInputElement);
+  const stop = roomPhaseStop();
+  const text = roomPhaseText(ROOM_PHASE_STOPS[stop]);
+  el("bf-room-phase-limit-value", HTMLOutputElement).value = text;
+  slider.setAttribute("aria-valuetext", text);
+  slider.parentElement?.style.setProperty("--range-p", String(stop / ROOM_PHASE_FULL));
+  slider.parentElement?.style.setProperty("--range-gaps", String(ROOM_PHASE_FULL));
+}
+
+/** @returns {RoomPhaseLimit} */
+function roomPhaseLimit() {
+  if (state.skin === "stable") return checked("bf-room-phase-schroeder") ? "schroeder" : "full";
+  return ROOM_PHASE_STOPS[roomPhaseStop()];
+}
+
+/* Sets both controls from a limit spec as bootstrap sends it: "off",
+   "schroeder", "full", or Hz (a number or a numeric string), which lands
+   on the nearest stop by octaves, 20000 Hz being the full band. Anything
+   else is the full band. */
+/** @param {unknown} spec */
+function setRoomPhaseLimit(spec) {
+  const named = typeof spec === "string" ? ROOM_PHASE_STOPS.indexOf(/** @type {RoomPhaseLimit} */ (spec)) : -1;
+  const hz = typeof spec === "number" || (typeof spec === "string" && spec.trim() !== "") ? Number(spec) : NaN;
+  let stop = ROOM_PHASE_FULL;
+  if (named >= 0) {
+    stop = named;
+  } else if (Number.isFinite(hz) && hz > 0) {
+    let best = Infinity;
+    ROOM_PHASE_STOPS.forEach((limit, index) => {
+      const at = limit === "full" ? 20000 : limit;
+      if (typeof at !== "number") return;
+      const distance = Math.abs(Math.log2(hz / at));
+      if (distance < best) {
+        best = distance;
+        stop = index;
+      }
+    });
+  }
+  el("bf-room-phase-limit", HTMLInputElement).value = String(stop);
+  el("bf-room-phase-schroeder", HTMLInputElement).checked = stop === ROOM_PHASE_SCHROEDER;
+  updateRoomPhaseReadout();
+}
+
+/* Stable has only the Schroeder frequency and the full band: Studio ->
+   Stable checks the box for the Schroeder stop alone (Off and the Hz stops
+   become the full band), and Stable -> Studio puts the slider on the
+   Schroeder stop or the full band. */
+/** @param {string} skin */
+function syncRoomPhase(skin) {
+  if (skin === "stable") {
+    el("bf-room-phase-schroeder", HTMLInputElement).checked = roomPhaseStop() === ROOM_PHASE_SCHROEDER;
+  } else {
+    el("bf-room-phase-limit", HTMLInputElement).value = String(checked("bf-room-phase-schroeder") ? ROOM_PHASE_SCHROEDER : ROOM_PHASE_FULL);
+  }
+  updateRoomRows();
+}
+
+/* The tuning delay is "auto" or a fixed number of ms; bootstrap sends its
+   default as the CLI spec ("10" or "auto"). */
+function defaultTuningDelay() {
+  const spec = Number(state.brirDefaults.room_tuning_delay);
+  return Number.isFinite(spec) && spec > 0 ? spec : 10;
+}
+
+/** @returns {"auto" | number} */
+function roomTuningDelay() {
+  return checked("bf-room-tuning-delay-auto") ? "auto" : numOr("bf-room-tuning-delay", defaultTuningDelay());
+}
 
 /** @type {readonly RoomRange[]} */
 const ROOM_RANGES = ["modes", "schroeder", "extreme", "legacy"];
@@ -1475,22 +1730,84 @@ function roomRangeHint(range) {
   }
 }
 
-function updateRoomRange() {
+/* Applies the mode, the range and the timing limit together: which rows
+   show, the delay's lock, the readout and the mode and range tooltips. */
+function updateRoomRows() {
+  const mode = roomMode();
+  const tuning = mode === "tuning";
   const range = roomRange();
   const legacy = range === "legacy";
-  for (const id of ["bf-room-volume-row", "bf-schroeder-freq-row", "bf-room-max-boost-row"]) $(id).hidden = legacy;
-  for (const id of ["bf-specific-limit-row", "bf-generic-limit-row"]) $(id).hidden = !legacy;
-  $("bf-room-range-hint").textContent = roomRangeHint(range);
+  const limit = roomPhaseLimit();
+  const roomFacts = tuning ? limit === "schroeder" : !legacy;
+  /** @type {Record<string, boolean>} row id -> shown */
+  const rows = {
+    "bf-room-range-row": !tuning,
+    "bf-room-volume-row": roomFacts,
+    "bf-schroeder-freq-row": roomFacts,
+    "bf-room-max-boost-row": !tuning && !legacy,
+    "bf-specific-limit-row": !tuning && legacy,
+    "bf-generic-limit-row": !tuning && legacy,
+    "bf-fr-combination-row": !tuning,
+    // Both phase-limit controls follow the mode; the styles show each in its own skin.
+    "bf-room-tuning-max-boost-row": tuning,
+    "bf-room-tuning-curtain-row": tuning,
+    "bf-room-tuning-level-match-row": tuning,
+    "bf-room-phase-limit-row": tuning,
+    "bf-room-phase-schroeder-row": tuning,
+    "bf-room-tuning-delay-row": tuning && limit !== "off",
+  };
+  for (const [id, shown] of Object.entries(rows)) $(id).hidden = !shown;
+  el("bf-room-tuning-delay", HTMLInputElement).disabled = checked("bf-room-tuning-delay-auto");
+  updateRoomPhaseReadout();
+  $("bf-room-mode-tip").textContent = roomModeHint(mode);
+  $("bf-room-range-tip").textContent = roomRangeHint(range);
   el("bf-schroeder-freq", HTMLInputElement).placeholder = t("placeholder_schroeder_freq");
 }
 
-/* The range and the boost cap start from the service's defaults. The room
-   volume and the Schroeder frequency start empty and are sent as null: the
-   service then assumes 50 m³ and estimates the frequency. */
+/* Every room setting starts from the service's defaults. The room volume
+   and the Schroeder frequency start empty and are sent as null: the service
+   then assumes 50 m³ and estimates the frequency. */
 function applyRoomDefaults() {
-  const range = state.brirDefaults.room_range;
-  el("bf-room-range", HTMLSelectElement).value = isRoomRange(range) ? range : "schroeder";
+  const defaults = state.brirDefaults;
+  el("bf-room-range", HTMLSelectElement).value = isRoomRange(defaults.room_range) ? defaults.room_range : "schroeder";
   el("bf-room-max-boost", HTMLInputElement).value = String(brirDefault("room_max_boost", 12));
+  el("bf-room-tuning-max-boost", HTMLInputElement).value = String(brirDefault("room_tuning_max_boost", 6));
+  el("bf-room-tuning-curtain", HTMLInputElement).value = String(brirDefault("room_tuning_curtain", 300));
+  el("bf-room-tuning-level-match", HTMLInputElement).checked = defaults.room_tuning_level_match !== false;
+  el("bf-room-tuning-delay", HTMLInputElement).value = String(defaultTuningDelay());
+  el("bf-room-tuning-delay-auto", HTMLInputElement).checked = defaults.room_tuning_delay === "auto";
+  setRoomPhaseLimit(defaults.room_tuning_phase_limit);
+  setRoomMode(isRoomMode(defaults.room_mode) ? defaults.room_mode : "eq");
+}
+
+/** @param {ProcessingRequest} args */
+function addRoomEqArgs(args) {
+  const range = roomRange();
+  args.room_range = range;
+  if (range === "legacy") {
+    args.specific_limit = numOr("bf-specific-limit", brirDefault("specific_limit", 400));
+    args.generic_limit = numOr("bf-generic-limit", brirDefault("generic_limit", 300));
+  } else {
+    args.room_volume = numOrNull("bf-room-volume");
+    args.schroeder_freq = numOrNull("bf-schroeder-freq");
+    args.room_max_boost = numOr("bf-room-max-boost", brirDefault("room_max_boost", 12));
+  }
+  args.fr_combination_method = val("bf-fr-combination");
+}
+
+/** @param {ProcessingRequest} args */
+function addRoomTuningArgs(args) {
+  const limit = roomPhaseLimit();
+  args.room_tuning_phase_limit = limit;
+  // Off adds no delay, so there is none to send.
+  if (limit !== "off") args.room_tuning_delay = roomTuningDelay();
+  if (limit === "schroeder") {
+    args.room_volume = numOrNull("bf-room-volume");
+    args.schroeder_freq = numOrNull("bf-schroeder-freq");
+  }
+  args.room_tuning_max_boost = numOr("bf-room-tuning-max-boost", brirDefault("room_tuning_max_boost", 6));
+  args.room_tuning_curtain = numOr("bf-room-tuning-curtain", brirDefault("room_tuning_curtain", 300));
+  args.room_tuning_level_match = checked("bf-room-tuning-level-match");
 }
 
 function gatherBrirPayload() {
@@ -1504,19 +1821,12 @@ function gatherBrirPayload() {
     do_equalization: isOpen("dis-eq"),
   };
   if (isOpen("dis-room")) {
-    const range = roomRange();
+    const mode = roomMode();
     args.room_target = val("bf-room-target") || null;
     args.room_mic_calibration = val("bf-mic-calibration") || null;
-    args.room_range = range;
-    if (range === "legacy") {
-      args.specific_limit = numOr("bf-specific-limit", brirDefault("specific_limit", 400));
-      args.generic_limit = numOr("bf-generic-limit", brirDefault("generic_limit", 300));
-    } else {
-      args.room_volume = numOrNull("bf-room-volume");
-      args.schroeder_freq = numOrNull("bf-schroeder-freq");
-      args.room_max_boost = numOr("bf-room-max-boost", brirDefault("room_max_boost", 12));
-    }
-    args.fr_combination_method = val("bf-fr-combination");
+    args.room_mode = mode;
+    if (mode === "tuning") addRoomTuningArgs(args);
+    else addRoomEqArgs(args);
   }
   if (isOpen("dis-headphone")) {
     const headphoneFile = val("bf-headphone-file");
@@ -2205,7 +2515,25 @@ function wireEvents() {
   el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", refreshResolvedPath);
   el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", refreshResolvedPath);
   el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", updateTestSignalVisibility);
-  el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRange);
+  el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRows);
+  ROOM_MODES.forEach((mode, index) => {
+    const button = $(`bf-room-mode-${mode}`);
+    button.addEventListener("click", () => setRoomMode(mode));
+    // Radio group: the arrows move the choice itself, wrapping at the ends.
+    button.addEventListener("keydown", (event) => {
+      const last = ROOM_MODES.length - 1;
+      const next = index === last ? 0 : index + 1;
+      const previous = index === 0 ? last : index - 1;
+      /** @type {Record<string, number>} */
+      const moves = { ArrowRight: next, ArrowDown: next, ArrowLeft: previous, ArrowUp: previous, Home: 0, End: last };
+      if (!Object.prototype.hasOwnProperty.call(moves, event.key)) return;
+      event.preventDefault();
+      setRoomMode(ROOM_MODES[moves[event.key]], true);
+    });
+  });
+  // The limit decides which rows below it show (the room facts, the delay).
+  el("bf-room-phase-limit", HTMLInputElement).addEventListener("input", updateRoomRows);
+  for (const id of ["bf-room-phase-schroeder", "bf-room-tuning-delay-auto"]) $(id).addEventListener("change", updateRoomRows);
   el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
   // The preview is drawn at its rendered width; redraw when that changes
   // (window resize, or the disclosure opening from display: none).
@@ -2398,6 +2726,7 @@ function showFirstRunLanguageModal(languages) {
 buildDecayGrid();
 buildStudioDecayGrid();
 wireEvents();
+wireTips();
 refreshStudioAdvanced();
 updateChannelGuidance();
 

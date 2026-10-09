@@ -441,6 +441,179 @@ def advanced_checks(browser):
     print("Gallery advanced checks: per-tab requests, locks, reset, keyboard, skin carry-over, 9-language layout OK", flush=True)
 
 
+def room_phase_checks(browser):
+    """Virtual room tuning: its own rows replace the Room EQ rows, the timing
+    limit is an eight-stop slider in Studio and one checkbox in Stable, the
+    rows it governs (room facts, delay) follow it, a skin switch keeps its
+    meaning, and only tuning mode sends the room_tuning_* fields."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "processing")
+    disclosure(page, "room", True)
+    eq_rows = ("#bf-room-range-row", "#bf-room-max-boost-row", "#bf-fr-combination-row")
+    tuning_rows = ("#bf-room-tuning-max-boost-row", "#bf-room-tuning-curtain-row", "#bf-room-tuning-level-match-row",
+                   'button.info-tip[aria-describedby="bf-room-phase-limit-tip"]')
+    facts = ("#bf-room-volume-row", "#bf-schroeder-freq-row")
+
+    def shown(selectors):
+        return [page.locator(selector).is_visible() for selector in selectors]
+
+    request = brir_request(page)
+    assert request["room_mode"] == "eq" and not any(key.startswith("room_tuning") for key in request), request
+    assert all(shown(eq_rows + facts)) and not any(shown(tuning_rows + ("#bf-room-tuning-delay-row",)))
+    # The mode and range tooltips follow the choice.
+
+    def tip_text(tip):
+        return page.locator(f"#{tip}").text_content()
+
+    assert tip_text("bf-room-mode-tip") == page.evaluate("t('tooltip_room_mode_eq')")
+    page.locator("#bf-room-range").select_option("modes")
+    assert tip_text("bf-room-range-tip") == page.evaluate("t('tooltip_room_range_modes')")
+    page.locator("#bf-room-range").select_option("schroeder")
+
+    page.locator("#bf-room-mode-tuning").click()
+    assert tip_text("bf-room-mode-tip") == page.evaluate("t('tooltip_room_mode_tuning')")
+    slider = page.locator("#bf-room-phase-limit")
+    assert slider.is_visible() and not page.locator("#bf-room-phase-schroeder").is_visible()
+    assert all(shown(tuning_rows)) and not any(shown(eq_rows + facts))
+    assert slider.input_value() == "7" and page.locator("#bf-room-tuning-delay-row").is_visible()
+    request = brir_request(page)
+    assert request["room_tuning_phase_limit"] == "full" and request["room_tuning_delay"] == 10, request
+    assert request["room_tuning_max_boost"] == 6 and request["room_tuning_curtain"] == 300, request
+    assert request["room_tuning_level_match"] is True, request
+    assert not {"room_range", "room_max_boost", "fr_combination_method", "room_volume", "schroeder_freq"} & request.keys(), request
+
+    named = {"off": "option_room_tuning_phase_off", "schroeder": "option_room_tuning_phase_schroeder",
+             "full": "option_room_tuning_phase_full"}
+    for stop, limit in enumerate(("off", "schroeder", 500, 1000, 2000, 5000, 10000, "full")):
+        slider.focus()  # Generate takes the focus
+        page.keyboard.press("Home")
+        for _ in range(stop):
+            page.keyboard.press("ArrowRight")
+        text = page.locator("#bf-room-phase-limit-value").inner_text()
+        assert slider.get_attribute("aria-valuetext") == text, stop
+        if limit in named:
+            assert text == page.evaluate(f"t('{named[limit]}')"), (stop, text)
+        assert page.locator("#bf-room-tuning-delay-row").is_visible() == (limit != "off"), stop
+        assert all(shown(facts)) == (limit == "schroeder") and any(shown(facts)) == (limit == "schroeder"), stop
+        request = brir_request(page)
+        assert request["room_tuning_phase_limit"] == limit, (stop, request)
+        assert ("room_tuning_delay" in request) == (limit != "off"), (stop, request)
+        assert ("room_volume" in request) == (limit == "schroeder"), (stop, request)
+
+    # Automatic delay locks the number and sends "auto"; level matching can be turned off.
+    page.locator("#bf-room-tuning-delay-auto").check()
+    assert disabled(page, "#bf-room-tuning-delay")
+    page.locator("#bf-room-tuning-level-match").uncheck()
+    request = brir_request(page)
+    assert request["room_tuning_delay"] == "auto" and request["room_tuning_level_match"] is False, request
+    page.locator("#bf-room-tuning-delay-auto").uncheck()
+    page.locator("#bf-room-tuning-level-match").check()
+    assert not disabled(page, "#bf-room-tuning-delay")
+
+    # Defaults arrive as CLI specs: a numeric or named limit, a delay of "auto" or a number as text.
+    page.evaluate("state.brirDefaults = {room_mode: 'tuning', room_tuning_phase_limit: '2000', room_tuning_delay: 'auto'};"
+                  "applyRoomDefaults()")
+    assert slider.input_value() == "4" and page.locator("#bf-room-tuning-delay-auto").is_checked()
+    page.evaluate("state.brirDefaults = {room_mode: 'tuning', room_tuning_phase_limit: 'schroeder', room_tuning_delay: '7'};"
+                  "applyRoomDefaults()")
+    assert slider.input_value() == "1" and page.locator("#bf-room-tuning-delay").input_value() == "7"
+    assert not page.locator("#bf-room-tuning-delay-auto").is_checked() and all(shown(facts))
+    page.evaluate("state.brirDefaults = {room_mode: 'tuning'}; applyRoomDefaults()")
+    assert slider.input_value() == "7" and page.locator("#bf-room-tuning-delay").input_value() == "10"
+
+    def switch(skin):
+        navigate(page, "settings")
+        page.locator("#sf-skin").select_option(skin)
+        page.wait_for_function(f"document.documentElement.dataset.skin === '{skin}'")
+        if page.locator("#job-modal").is_visible():  # Stable shows the finished job in its dialog
+            page.locator("#job-modal-close").click()
+        navigate(page, "processing")
+
+    # Stable runs jobs in a dialog, so its requests are read without starting one.
+    def stable_request():
+        return page.evaluate("gatherBrirPayload()")
+
+    # Stable has only the Schroeder frequency and the full band: Off and the Hz stops become the full band.
+    checkbox = page.locator("#bf-room-phase-schroeder")
+    for stop, schroeder in ((0, False), (1, True), (4, False), (7, False)):
+        slider.focus()
+        page.keyboard.press("Home")
+        for _ in range(stop):
+            page.keyboard.press("ArrowRight")
+        switch("stable")
+        assert checkbox.is_visible() and checkbox.is_checked() == schroeder and not slider.is_visible(), stop
+        assert page.locator('button.info-tip[aria-describedby="bf-room-phase-schroeder-tip"]').is_visible()
+        assert page.locator("#bf-room-tuning-delay-row").is_visible()
+        assert all(shown(facts)) == schroeder, stop
+        request = stable_request()
+        assert request["room_tuning_phase_limit"] == ("schroeder" if schroeder else "full"), (stop, request)
+        switch("studio")
+        assert slider.input_value() == ("1" if schroeder else "7"), stop
+    switch("stable")
+    checkbox.check()
+    assert stable_request()["room_tuning_phase_limit"] == "schroeder" and all(shown(facts))
+    page.locator("#bf-room-mode-eq").click()
+    request = stable_request()
+    assert not any(key.startswith("room_tuning") for key in request) and not checkbox.is_visible(), request
+    assert all(shown(eq_rows + facts))
+    assert not errors, errors
+    context.close()
+    print("Gallery room tuning checks: rows per mode and limit, eight stops, auto delay, defaults, Stable checkbox, "
+          "skin carry-over OK", flush=True)
+
+
+def tooltip_checks(browser):
+    """Every info tooltip in Room Correction and Virtual Bass, in both skins and
+    both room modes: the control and the button name the bubble, keyboard focus
+    opens it inside the window, Escape closes it and keeps the focus; hover
+    opens it, a click pins it and a click elsewhere closes it."""
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "en", "idle")
+        navigate(page, "processing")
+        disclosure(page, "room", True)
+        disclosure(page, "vbass", True)
+        seen = set()
+        for mode in ("eq", "tuning"):
+            page.locator(f"#bf-room-mode-{mode}").click()
+            for button in page.locator("#dis-room button.info-tip, #dis-vbass button.info-tip").all():
+                if not button.is_visible():
+                    continue
+                tip = button.get_attribute("aria-describedby")
+                seen.add(tip)
+                bubble = page.locator(f"#{tip}")
+                assert bubble.get_attribute("role") == "tooltip", tip
+                assert page.locator(f'[aria-describedby="{tip}"]:not(.info-tip)').count() == 1, tip
+                button.scroll_into_view_if_needed()
+                button.focus()  # reach it by Tab so :focus-visible applies, as for a keyboard user
+                page.keyboard.press("Shift+Tab")
+                page.keyboard.press("Tab")
+                page.wait_for_function(f"document.getElementById('{tip}').hasAttribute('data-open')")
+                inside = page.evaluate(f"""() => {{ const r = document.getElementById('{tip}').getBoundingClientRect();
+                    return r.left >= 8 && r.right <= innerWidth - 8 && r.width > 0 && r.width <= 320; }}""")
+                assert inside, (skin, tip)
+                page.keyboard.press("Escape")
+                assert bubble.get_attribute("data-open") is None, (skin, tip)
+                assert page.evaluate("document.activeElement.getAttribute('aria-describedby')") == tip, (skin, tip)
+        expected = {"bf-room-mode-tip", "bf-room-range-tip", "bf-room-tuning-curtain-tip", "bf-room-tuning-level-match-tip",
+                    "bf-vbass-freq-tip", "bf-room-phase-limit-tip" if skin == "studio" else "bf-room-phase-schroeder-tip"}
+        assert seen == expected, (skin, seen)
+        # Hover opens, a click pins it past the pointer leaving, a click elsewhere closes it.
+        button = page.locator('button.info-tip[aria-describedby="bf-room-tuning-level-match-tip"]')
+        bubble = page.locator("#bf-room-tuning-level-match-tip")
+        button.hover()
+        page.wait_for_function("document.getElementById('bf-room-tuning-level-match-tip').hasAttribute('data-open')")
+        button.click()
+        page.mouse.move(2, 2)
+        page.wait_for_timeout(300)
+        assert bubble.get_attribute("data-open") is not None
+        page.mouse.click(2, 2)
+        assert bubble.get_attribute("data-open") is None
+        assert not errors, errors
+        context.close()
+    print("Gallery tooltip checks: every Room Correction and Virtual Bass tooltip opens on focus inside the window, "
+          "closes on Escape; hover, click pin and outside click OK", flush=True)
+
+
 def open_eq(page):
     head = page.locator("#dis-eq > .disclosure-head")
     if "open" not in (page.locator("#dis-eq").get_attribute("class") or ""):
@@ -457,6 +630,8 @@ def render_gallery(output):
         browser = playwright.chromium.launch()
         behavior_checks(browser)
         advanced_checks(browser)
+        room_phase_checks(browser)
+        tooltip_checks(browser)
         for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
             context, page, errors = open_page(browser, skin, theme, language, "idle")
             for view in VIEWS:

@@ -493,8 +493,37 @@ pub(super) fn room_correction(
     mic: Option<&FrequencyResponse>,
     estimator: &SweepEstimator,
     options: &RoomCorrectionOptions,
+    tuning_options: Option<&super::room_tuning::TuningOptions>,
 ) -> Result<RoomCorrection, DspError> {
     rir.for_each_ir(|ir| ir.crop_head(1.0));
+    if let Some(tuning_options) = tuning_options {
+        let mut tuning_options = tuning_options.clone();
+        if tuning_options.phase_limit == impulcifer_types::config::PhaseLimit::Schroeder {
+            let irs = rir
+                .speakers
+                .iter()
+                .flat_map(|s| s.left.iter().chain(&s.right))
+                .collect::<Vec<_>>();
+            tuning_options.schroeder =
+                estimate_schroeder(&irs, options.room_volume, options.schroeder_freq).freq;
+        }
+        let plan = super::room_tuning::prepare_tuning(
+            rir,
+            &tuning_options,
+            mic,
+            Some(target),
+            &tuning_options.pairs,
+        )?;
+        return Ok(RoomCorrection {
+            frs: RoomFrs {
+                term: RoomTerm::Gain,
+                entries: Vec::new(),
+            },
+            responses_tracks: Vec::new(),
+            diagnostics: None,
+            tuning: Some(plan),
+        });
+    }
     let uncropped = rir.clone();
     let specific: Vec<_> = uncropped
         .speakers
@@ -630,6 +659,7 @@ pub(super) fn room_correction(
         }
     }
     Ok(RoomCorrection {
+        tuning: None,
         frs,
         responses_tracks: tracks,
         diagnostics: Some(RoomDiagnostics {

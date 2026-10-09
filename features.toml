@@ -331,6 +331,66 @@ status = "implemented"
 tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-cli::cli_room_v2_options_parse_and_validate", "impulcifer-service::room_v2_numeric_options_reach_the_room_stage"]
 
 [[feature]]
+id = "config.room_mode"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-service::room_tuning_accepts_legacy_range", "impulcifer-cli::cli_room_v2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning_delay"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-cli::cli_room_v2_options_parse_and_validate"]
+
+[[feature]]
+id = "room.virtual_tuning"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning_excess_part_is_all_pass", "impulcifer-dsp::room_tuning_uses_one_filter_per_speaker", "impulcifer-dsp::room_tuning_magnitude_follows_rolloff", "impulcifer-dsp::room_tuning_tone_layer_is_bounded", "impulcifer-dsp::room_tuning_two_points_use_power_average", "impulcifer-dsp::room_tuning_keeps_speaker_timing", "impulcifer-dsp::room_tuning_off_adds_no_delay", "impulcifer-dsp::room_tuning_pre_echo_is_buried", "impulcifer-dsp::room_tuning_reduces_room_excess_group_delay", "impulcifer-dsp::room_tuning_detects_swapped_files", "impulcifer-service::room_tuning_runs_on_the_demo"]
+
+[[feature]]
+id = "config.room_tuning_phase_limit"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_v2_options_parse_and_validate", "impulcifer-service::room_tuning_off_on_the_demo"]
+
+[[feature]]
+id = "config.room_tuning_max_boost"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_v2_options_parse_and_validate", "impulcifer-dsp::room_tuning_magnitude_follows_rolloff"]
+
+[[feature]]
+id = "config.room_tuning_curtain"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_v2_options_parse_and_validate", "impulcifer-dsp::room_tuning_magnitude_follows_rolloff"]
+
+[[feature]]
+id = "config.room_tuning_level_match"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_v2_options_parse_and_validate", "impulcifer-dsp::room_tuning_level_match_uses_median"]
+
+[[feature]]
+id = "room.tuning_level_match"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning_level_match_uses_median", "impulcifer-dsp::room_tuning_level_match_skips_inconsistent"]
+
+[[feature]]
+id = "room.tuning_auto_delay"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning_auto_delay_is_one_value", "impulcifer-dsp::room_tuning_auto_delay_matches_secs", "impulcifer-service::room_tuning_auto_delay_on_the_demo"]
+
+[[feature]]
+id = "room.tuning_secs_reference"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning_matches_secs_reference", "impulcifer-dsp::room_tuning_matches_secs_stages", "impulcifer-dsp::room_tuning_auto_delay_matches_secs", "impulcifer-dsp::room_tuning_preecho_uses_direct_and_baseline", "impulcifer-dsp::room_tuning_weak_uses_representation"]
+
+[[feature]]
 id = "room.v2_ranges"
 kind = "stage"
 status = "implemented"

@@ -63,6 +63,7 @@ pub struct RoomCorrection {
     pub frs: RoomFrs,
     pub responses_tracks: Vec<Vec<f64>>,
     pub diagnostics: Option<RoomDiagnostics>,
+    pub tuning: Option<super::room_tuning::TuningPlan>,
 }
 
 /// Python discover_room_measurements, core/room_correction.py:36-75; p10_generic_room.
@@ -321,6 +322,7 @@ pub fn room_correction(
             mic_calibration,
             estimator,
             options,
+            None,
         )
         .map(Some);
     }
@@ -360,7 +362,29 @@ pub fn room_correction(
         frs,
         responses_tracks,
         diagnostics: None,
+        tuning: None,
     }))
+}
+
+/// Tuning-specific entry point keeps the existing EQ options and oracle callers unchanged.
+pub fn room_correction_tuning(
+    rir: &mut Hrir,
+    generic_irs: &[ImpulseResponse],
+    target: &FrequencyResponse,
+    mic_calibration: Option<&FrequencyResponse>,
+    estimator: &SweepEstimator,
+    options: &RoomCorrectionOptions,
+    tuning_options: &super::room_tuning::TuningOptions,
+) -> Result<RoomCorrection, DspError> {
+    super::room_v2::room_correction(
+        rir,
+        generic_irs,
+        target,
+        mic_calibration,
+        estimator,
+        options,
+        Some(tuning_options),
+    )
 }
 
 #[cfg(test)]

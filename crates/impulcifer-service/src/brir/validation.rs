@@ -159,5 +159,14 @@ pub(crate) fn validate(value: &Value) -> Result<Request, Value> {
         }
     }
     let config = ProcessingConfig::from_kwargs(&params).map_err(|e| invalid(e.to_string()))?;
+    config.validate_room_options().map_err(|e| {
+        let impulcifer_types::config::ConfigError::Invalid { ref field, .. } = e;
+        ipc::error(
+            ErrorCode::InvalidRequest,
+            e.to_string(),
+            json!({"field":field}),
+            false,
+        )
+    })?;
     Ok(Request { config, eq })
 }
