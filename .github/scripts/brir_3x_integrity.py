@@ -3,8 +3,11 @@
 
 ``brir-3x.yml`` builds the release CLI twice on one runner, from the PR's
 base commit and from the PR, and runs this script with both binaries. Every
-scenario processes a fresh copy of ``data/demo`` and hashes each WAV the CLI
-writes (SHA-256 of the file bytes). A scenario passes when
+scenario processes a fresh copy of ``data/demo`` with
+``data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav``, each binary with the
+files of its own revision (``--base-root``), and hashes every WAV in the
+directory afterwards (SHA-256 of the file bytes; the CLI overwrites tracked
+files such as ``room-responses.wav``). A scenario passes when
 
 * the PR's WAVs hash the same as the base's (the 3.x-to-3.x baseline), and
 * the PR's WAVs hash the same again with ``RAYON_NUM_THREADS=1`` (the output
@@ -35,8 +38,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEMO_DIR = PROJECT_ROOT / "data" / "demo"
-TEST_SIGNAL = PROJECT_ROOT / "data" / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
+DEMO = Path("data") / "demo"
+TEST_SIGNAL = Path("data") / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
 
 # (name, CLI arguments). The demo has speaker-ear room recordings, so every
 # scenario without --no_room_correction runs a room correction mode.
@@ -86,12 +89,11 @@ def combined(hashes: dict[str, str]) -> str:
     return digest.hexdigest()
 
 
-def run(binary: Path, work: Path, args: tuple[str, ...], env: dict[str, str]) -> Run:
-    shutil.copytree(DEMO_DIR, work)
-    inputs = {p.relative_to(work) for p in work.rglob("*")}
+def run(binary: Path, root: Path, work: Path, args: tuple[str, ...], env: dict[str, str]) -> Run:
+    shutil.copytree(root / DEMO, work)
     start = time.perf_counter()
     result = subprocess.run(
-        [str(binary), f"--dir_path={work}", f"--test_signal={TEST_SIGNAL}", *args],
+        [str(binary), f"--dir_path={work}", f"--test_signal={root / TEST_SIGNAL}", *args],
         env={**os.environ, **env},
         capture_output=True,
         text=True,
@@ -101,11 +103,7 @@ def run(binary: Path, work: Path, args: tuple[str, ...], env: dict[str, str]) ->
         check=False,
     )
     seconds = time.perf_counter() - start
-    hashes = {
-        str(p.relative_to(work)): sha256(p)
-        for p in sorted(work.rglob("*.wav"))
-        if p.relative_to(work) not in inputs
-    }
+    hashes = {str(p.relative_to(work)): sha256(p) for p in sorted(work.rglob("*.wav"))}
     log = (result.stdout + result.stderr)[-4000:]
     # A scenario writes about 100 MB; keep only the hashes.
     shutil.rmtree(work)
@@ -120,6 +118,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--base", type=Path, required=True, help="CLI built from the base commit")
     parser.add_argument("--head", type=Path, required=True, help="CLI built from the PR")
+    parser.add_argument("--base-root", type=Path, default=PROJECT_ROOT,
+                        help="checkout of the base commit; its data/ feeds the base CLI")
     parser.add_argument("--allow-change", action="store_true",
                         help="report a baseline difference as a warning (PR label brir-change)")
     parser.add_argument("--scenario", action="append", default=[],
@@ -136,9 +136,10 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="brir-3x-") as tmp:
         root = Path(tmp)
         for name, args in scenarios:
-            base = run(options.base, root / "base" / name, args, {})
-            head = run(options.head, root / "head" / name, args, {})
-            single = run(options.head, root / "single" / name, args, {"RAYON_NUM_THREADS": "1"})
+            base = run(options.base, options.base_root, root / "base" / name, args, {})
+            head = run(options.head, PROJECT_ROOT, root / "head" / name, args, {})
+            single = run(options.head, PROJECT_ROOT, root / "single" / name, args,
+                         {"RAYON_NUM_THREADS": "1"})
             if not head.ok or not single.ok:
                 verdict = "PR run failed"
                 failures.append(f"{name}: the PR CLI failed\n{head.log if not head.ok else single.log}")

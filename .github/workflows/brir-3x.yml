@@ -1,10 +1,10 @@
 name: BRIR 3.x integrity
 
 # A PR must not change the 3.x demo BRIRs: the release CLI is built from the
-# PR's base commit and from the PR on the same runner, both process data/demo
-# in every scenario of .github/scripts/brir_3x_integrity.py (room EQ v2 ranges,
-# virtual room tuning, virtual bass, ...), and every WAV must hash the same
-# (SHA-256). The PR's output must also hash the same with one rayon thread.
+# PR's base commit and from the PR on the same runner, each processes its own
+# revision's data/demo in every scenario of .github/scripts/brir_3x_integrity.py
+# (room EQ v2 ranges, virtual room tuning, virtual bass, ...), and every WAV in
+# the output directory must hash the same (SHA-256). The PR's output must also hash the same with one rayon thread.
 # Bytes depend on the platform math library, so there is no stored hash.
 #
 # A PR that is meant to change the output carries the label "brir-change"; a
@@ -90,4 +90,5 @@ jobs:
           ALLOW_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'brir-change') && '--allow-change' || '' }}
         run: |
           python3 .github/scripts/brir_3x_integrity.py \
-            --base "$RUNNER_TEMP/impulcifer-base" --head "$RUNNER_TEMP/impulcifer-head" $ALLOW_CHANGE
+            --base "$RUNNER_TEMP/impulcifer-base" --base-root "$RUNNER_TEMP/base" \
+            --head "$RUNNER_TEMP/impulcifer-head" $ALLOW_CHANGE
