@@ -38,7 +38,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  CARGO_TARGET_DIR: ${{ github.workspace }}/target-brir
 
 jobs:
   integrity:
@@ -68,11 +67,16 @@ jobs:
           key: rust-brir-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: rust-brir-${{ runner.os }}-
 
-      # Each tree builds with its own rust-toolchain.toml; the shared target
-      # directory keeps the dependency builds of the first for the second.
+      # Two target directories, never one. Cargo names path crates by their
+      # path relative to the workspace root, so both trees map to the same
+      # artifacts; the PR build then finds the fingerprints the base build has
+      # just written, judges them fresh by mtime and reuses the base binary
+      # (reproduced: a PR-only source edit built in 0.3 s, nothing compiled).
+      # Each tree also uses its own rust-toolchain.toml.
       - name: Build the base CLI
         env:
           BASE: ${{ github.event.pull_request.base.sha || inputs.base }}
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-brir/base
         run: |
           git worktree add --detach "$RUNNER_TEMP/base" "$BASE"
           (cd "$RUNNER_TEMP/base" && rustup show && cargo build --release --locked -p impulcifer-cli)
@@ -80,10 +84,13 @@ jobs:
           git -C "$RUNNER_TEMP/base" log -1 --format='base %H %s'
 
       - name: Build the PR CLI
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-brir/head
         run: |
           cargo build --release --locked -p impulcifer-cli
           cp "$CARGO_TARGET_DIR/release/impulcifer" "$RUNNER_TEMP/impulcifer-head"
           git log -1 --format='PR %H %s'
+          sha256sum "$RUNNER_TEMP/impulcifer-base" "$RUNNER_TEMP/impulcifer-head"
 
       - name: Compare the demo BRIRs
         env:
