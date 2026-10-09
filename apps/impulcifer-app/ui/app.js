@@ -1467,9 +1467,13 @@ let tipCloseTimer;
 /** @type {HTMLButtonElement | null} */
 let tipSuppressed = null;
 
+/* Every button sits with its bubble in one `.tip` wrapper, so the bubble is
+   found from the markup structure rather than from attribute text. */
 /** @param {HTMLButtonElement} button */
 function tipBubble(button) {
-  return $(button.getAttribute("aria-describedby") || "");
+  const bubble = button.closest(".tip")?.querySelector(".tip-bubble");
+  if (!(bubble instanceof HTMLElement)) throw new Error("Missing tooltip bubble");
+  return bubble;
 }
 
 /* Below the button, starting at its left edge; flipped to end at its right
