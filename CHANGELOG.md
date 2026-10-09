@@ -32,6 +32,7 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **3.x 전용 설정 필드**: `room_range`, `room_volume`, `schroeder_freq`, `room_max_boost`와 가상 룸 튜닝의 `room_mode`, `room_tuning_delay`, `room_tuning_phase_limit`, `room_tuning_max_boost`, `room_tuning_curtain`, `room_tuning_level_match`는 2.x 필드 목록(`FIELD_NAMES`)과 분리한 `EXTENSION_FIELD_NAMES`에, CLI 옵션은 2.x argparse 덤프와 비교하는 `OPTIONS`와 분리한 `EXTENSION_OPTIONS`에 두었습니다. 서비스·CLI·Python 휠이 두 목록을 모두 받습니다. 결정 근거는 ADR 0004·0005, 수치와 알고리즘의 정본은 `docs/rust/ROOM_CORRECTION.md`입니다.
+- **sdist 검사가 이전 커밋의 크레이트로 빌드되던 문제**: `maturin sdist`는 모든 파일의 수정 시각을 같은 옛 시각으로 고정하고, cargo는 경로 크레이트가 바뀌었는지를 수정 시각으로 판단합니다. 그래서 `Cargo.lock`이 그대로인 커밋에서는 캐시한 `target-sdist`의 워크스페이스 크레이트를 새것으로 여겨, sdist 휠을 이전 커밋의 코드로 빌드할 수 있었습니다(이번에는 서비스 크레이트만 다시 컴파일되어 컴파일 오류로 드러남). `rust.yml`의 sdist 잡이 빌드 전에 워크스페이스 크레이트의 캐시만 지웁니다.
 
 ## 3.1.2 - 2026-10-07
 ### exclusive probe가 장치 오류를 포맷 거부로 보고하던 진단 수정
