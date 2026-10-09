@@ -1,5 +1,7 @@
 # A03 (ASTRA): room correction v2 — ranges, Schroeder, rolloff, virtual-bass hand-off
 
+> **Revision 2.** A first run stopped before editing on two contradictions; both are fixed here. (1) The rolloff slope is measured in dB versus `log2 f`, where a high-pass rolloff is a *positive* slope: the condition is now `s ≥ +9`, and the rolloff point is redefined (section 4). (2) The Schroeder-range test overrides `f_S` to 400 Hz so that 210 Hz lies in the full-strength region; the modes test uses the same override. Nothing else changed.
+
 Work in `/home/user/Impulcifer-pip313` on the checked-out branch (do not switch branches, do not commit, do not stash). Read `/home/user/Impulcifer-pip313/CLAUDE.md` (section "3.x Rust 워크스페이스") and `/home/user/Impulcifer-pip313/docs/rust/ARCHITECTURE.md` first. Rules: `#![forbid(unsafe_code)]`, no new dependencies, no shell subprocesses, run every command in the foreground and never in the background, do not query or terminate processes. When you are unsure how an existing helper behaves (smoothing, `decay_times`, `filters::butter`, the catalog), read its source before using it.
 
 **Other workers edit `apps/**` and `crates/impulcifer-service/locales/**` at the same time. Never open those for writing.** Also do not touch `Cargo.toml`'s version, `Cargo.lock`'s workspace versions, `CHANGELOG.md`, `README.md`, `.github/**`, `i18n/**` or the Python 2.x tree (`core/`, `autoeq/`, `impulcifer.py`, `gui/`, `application/`, `infra/`, `updater/`, `tests/`).
@@ -67,11 +69,13 @@ pub struct SchroederEstimate { pub freq: f64, pub t60: Option<f64>, pub volume: 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RolloffSource { Slope, Snr }
+#[derive(Clone, Copy, Debug)]
+pub struct Rolloff { pub freq: f64, pub knee: f64, pub source: RolloffSource }
 #[derive(Clone, Debug)]
 pub struct EarDiagnostics {
     pub speaker: String,              // "room.wav" for the generic measurement
     pub side: Option<Side>,           // None for the generic measurement
-    pub rolloff: Option<(f64, RolloffSource)>,
+    pub rolloff: Option<Rolloff>,
     pub snr_available: bool,
     pub residual_rms_db: Option<f64>,
 }
@@ -83,7 +87,7 @@ pub struct RoomDiagnostics { pub range: RoomRange, pub schroeder: SchroederEstim
 
 pub fn estimate_schroeder(irs: &[&ImpulseResponse], volume: Option<f64>, override_hz: Option<f64>) -> SchroederEstimate;
 pub fn snr_db(ir: &ImpulseResponse, frequency: &[f64]) -> Option<Vec<f64>>;
-pub fn detect_rolloff(frequency: &[f64], measured_db: &[f64], snr_db: Option<&[f64]>) -> Option<(f64, RolloffSource)>;
+pub fn detect_rolloff(frequency: &[f64], measured_db: &[f64], snr_db: Option<&[f64]>) -> Option<Rolloff>;
 pub fn vbass_handoff_mask(frequency: &[f64], crossover: f64, fs: u32) -> Vec<f64>;
 ```
 
@@ -113,11 +117,12 @@ Use all specific IRs, or the generic IRs when there are no specific ones.
 
 `detect_rolloff(frequency, measured_db, snr)` with `measured_db` = mic-calibrated, centred response:
 1. `M = S_{1/6}(measured_db)`.
-2. For `f_c` from 160 Hz downward in 1/12-octave steps (down to 20 Hz): `s(f_c)` = least-squares slope of `M` versus `log2 f` over the grid points in `[f_c/2, f_c]` (dB/oct).
-3. `f_roll` = the first (highest) `f_c` with `s(f_c) ≤ −9` AND `M(f') ≤ M(f_c) − 6` for every grid `f' ≤ f_c/2` where `SNR(f') ≥ 10` (all of them when SNR is `None`). Source `Slope`.
-4. Otherwise, if SNR is available: smooth it `S_{1/3}`; if the region starting at the lowest grid frequency where it stays below 10 dB is non-empty, `f_roll` = its upper edge (capped at 160 Hz). Source `Snr`.
+2. For `f_c` from 160 Hz downward in 1/12-octave steps (down to 20 Hz): `s(f_c)` = least-squares slope of `M` versus `log2 f` over the grid points in `[f_c/2, f_c]` (dB/oct). A high-pass rolloff makes this slope **positive** (the response falls toward low frequencies).
+3. The knee `f_knee` = the first (highest) `f_c` with `s(f_c) ≥ +9` AND `M(f') ≤ M(f_c) − 6` for every grid `f' ≤ f_c/2` where `SNR(f') ≥ 10` (all of them when SNR is `None`). Then the plateau `P` = median of `M` over grid points in `[f_knee, 2·f_knee]`, and `f_roll` = the highest grid frequency `≤ f_knee` with `M ≤ P − 6` (the in-room −6 dB point; `f_knee` itself if none). Enforce `f_knee ≥ f_roll·2^(1/4)`. Source `Slope`.
+4. Otherwise, if SNR is available: smooth it `S_{1/3}`; if the region starting at the lowest grid frequency where it stays below 10 dB is non-empty, `f_roll` = its upper edge (capped at 160 Hz) and `f_knee = f_roll·√2`. Source `Snr`.
 5. Otherwise `None`.
-Specific: per ear. Generic: run it per split IR and take the highest `f_roll`.
+Specific: per ear. Generic: run it per split IR and take the one with the highest `f_roll`.
+Reference values from the advisor's simulation of this exact rule (1/6-oct smoothing, no SNR): 2nd-order 50 Hz high-pass → knee 50 Hz, `f_roll` 35 Hz; 4th-order 45 Hz → knee 67 Hz, `f_roll` 39 Hz; adding +8 dB of boundary gain below 100 Hz lowers `f_roll` to about 30 and 35 Hz; a flat response with a −12 dB, 1/6-oct dip at 35 Hz → `None`.
 
 ### 5. Ranges and the gain rule
 
@@ -134,14 +139,14 @@ Caps (apply to the magnitude of cuts and boosts respectively, `max_boost = room_
 - Cut cap: 24 dB below `f_S`; extreme above `f_S`: 12 dB up to 1 kHz, 6 dB above 1 kHz.
 - Boost cap, specific measurements: `max_boost` up to `f_S`; `min(6, max_boost)` from `f_S` to 1 kHz; `min(3, max_boost)` above 1 kHz. Modes range: `min(6, max_boost)` everywhere.
 - Boost cap, generic measurement: `average` → 0 (cut only); `conservative` → `min(3, max_boost)`; and 0 above `f_S/√2` in every range.
-- Rolloff: boost cap × `r(f)`, `r = 0` below `f_roll`, `r = 1 − h` of a half-Hann fade from `f_roll` to `f_roll·√2` (0 → 1), 1 above. Cuts are untouched below the rolloff.
+- Rolloff: boost cap × `r(f)`, `r = 0` below `f_roll`, `r = 1 − h` of a half-Hann fade from `f_roll` to `f_knee` (0 → 1), 1 above `f_knee`. Cuts are untouched below the rolloff.
 - SNR: boost ≤ `max(0, SNR(f) − 20)`.
 
 Then multiply `G` by the upper fade and, with virtual bass on, by the hand-off mask:
 - Upper fade: half-Hann from `f_hi/√2` (1) to `f_hi` (0); extreme: from 5 kHz (1) to 10 kHz (0).
 - `vbass_handoff_mask(frequency, f_c, fs)`: `|H(f)|` of the virtual-bass high-pass section exactly as `virtual_bass.rs` builds it (`butter(4, f_c/nyq, highpass)` applied twice, i.e. LR8 high-pass), evaluated at each grid frequency, and 0 below `f_c/√2`. Reference values: `f_c·2^{−1/4, 0, 1/4, 1/2, 1}` → 0.20, 0.50, 0.80, 0.94, 0.996 (±0.02). Expose the SOS construction from `virtual_bass.rs` as a `pub(crate)` helper rather than duplicating it; `apply_virtual_bass` output must not change.
 
-Self-check: residual `r = x + G` (modes: on `x`; others on `e`) smoothed `S_{1/6}`, RMS over grid points in `[lo, f_hi/√2]` where `lo = max(20, f_roll·√2 if any, f_c·√2 if virtual bass)`; skip when the interval is empty. Store in `residual_rms_db`; above 3 dB, log a warning.
+Self-check: residual `r = x + G` (modes: on `x`; others on `e`) smoothed `S_{1/6}`, RMS over grid points in `[lo, f_hi/√2]` where `lo = max(20, f_knee if any, f_c·√2 if virtual bass)`; skip when the interval is empty. Store in `residual_rms_db`; above 3 dB, log a warning.
 
 Each v2 entry in `RoomFrs` is a `FrequencyResponse` on the grid with `raw` = measured (centred), `target` = target, `equalization` = `G`, `error = −G` (so the existing room plot, which shows the smoothed error, shows the correction actually applied). `term = Gain`.
 
@@ -178,11 +183,11 @@ Nothing is logged by these keys for `legacy`. `brir_defaults` (bootstrap) must c
 Pin legacy: every test that compares output with a 2.x oracle golden and runs room correction (search `ProcessingConfig::default()` and `ProcessingConfig {` in `crates/*/tests` and `crates/*/src` test modules, and the service/CLI demo parity runs) switches to `ProcessingConfig::oracle_defaults()` or sets `room_range: "legacy".into()`. Tests asserting that 3.x defaults equal the 2.x dataclass compare only `FIELD_NAMES`. Do not loosen any tolerance.
 
 New tests (names fixed; put DSP ones in `crates/impulcifer-dsp/tests/room_v2.rs`):
-- `room_v2_rolloff_detects_sealed_and_ported_speakers`: synthetic `measured_db` from a 2nd-order 50 Hz and a 4th-order 45 Hz high-pass plus +8 dB of boundary gain below 100 Hz (1-oct-wide shelf) → `f_roll` within ½ octave above the corner and never below it; the same flat response with only a −12 dB, 1/6-oct-wide dip at 35 Hz → `None`.
+- `room_v2_rolloff_detects_sealed_and_ported_speakers`: synthetic `measured_db` from an analog 2nd-order 50 Hz and 4th-order 45 Hz Butterworth high-pass on the grid → `f_roll` within ¼ octave of the high-pass's own −6 dB frequency (compute it in the test) and `f_knee` in `[corner, corner·2^(3/4)]`; the same two plus +8 dB of boundary gain below 100 Hz (`8/(1+(f/100)²)`) → detected, with `f_roll` lower than without the boundary gain; a flat response with only a −12 dB, 1/6-oct-wide Gaussian dip at 35 Hz, with and without the boundary gain → `None`.
 - `room_v2_schroeder_estimate_sources_and_clamps`: synthetic exponentially decaying noise IRs (seeded deterministic PRNG, T60 0.4 s, fs 48000, 2 s) → `T60` within 15 %; the four sources and their clamps; override wins.
-- `room_v2_schroeder_range_corrects_modes_and_fills_specific_dips`: with `f_S` overridden to 250 Hz, an error with +8 dB at 60 Hz, −10 dB at 120 Hz and +6 dB at 210 Hz (Lorentzian peaks as in the 2.x analysis, Q 4–6) and no rolloff → `G(60) ≈ −8`, `G(120) ≈ +10` (cap 12), `G(210) ≈ −6` (the legacy mask notch must not appear), each ±1 dB; `G = 0` above 250 Hz.
-- `room_v2_modes_range_keeps_bass_balance`: an error that is a broad +6 dB shelf below 80 Hz plus a +8 dB, Q 5 peak at 60 Hz → the peak is cut by ≥ 6 dB, the shelf at 30 Hz is changed by ≤ 1.5 dB.
-- `room_v2_rolloff_is_never_boosted`: the 45 Hz 4th-order response from the first test → `G ≤ 0.01` below `f_roll` everywhere.
+- `room_v2_schroeder_range_corrects_modes_and_fills_specific_dips`: with `f_S` overridden to 400 Hz (full strength up to 283 Hz), an error with +8 dB at 60 Hz, −10 dB at 120 Hz and +6 dB at 210 Hz (Lorentzian peaks, Q 4–6) and no rolloff → `G(60) ≈ −8`, `G(120) ≈ +10` (cap 12), `G(210) ≈ −6` (the legacy mask would notch here), each ±1 dB; `G = 0` at and above 400 Hz.
+- `room_v2_modes_range_keeps_bass_balance`: with `f_S` overridden to 400 Hz, an error that is a broad +6 dB shelf below 80 Hz plus a +8 dB, Q 5 peak at 60 Hz → the peak is cut by ≥ 6 dB, the shelf at 30 Hz is changed by ≤ 1.5 dB.
+- `room_v2_rolloff_is_never_boosted`: the 45 Hz 4th-order response from the first test, schroeder range with `f_S` 400 Hz → `G ≤ 0.01` below `f_roll` everywhere, and `G` between `f_roll` and `f_knee` no larger than the ramp allows.
 - `room_v2_snr_caps_boosts`: SNR 25 dB at a −10 dB dip → boost ≤ 5 dB.
 - `room_v2_generic_average_is_cut_only`.
 - `room_v2_extreme_is_diotic_above_700_hz`: left/right errors that differ by ±4 dB at 2 kHz → `G_left == G_right` (1e-9) above 700 Hz; above 10 kHz `G = 0`.
@@ -212,4 +217,4 @@ If a command runs longer than your tool allows, split it per crate; never backgr
 
 ## Report format
 
-(1) the public API as landed (signatures); (2) for each section 2–6 one paragraph on any place you had to interpret the spec, with the choice made; (3) the list of tests switched to legacy; (4) new test names, one line each; (5) the pasted `test result:` lines and `git status --porcelain`; (6) the demo run's logged Schroeder frequency, T60, rolloff per ear and residual RMS per ear; (7) anything undone. Do not end your turn before the commands complete.
+(1) the public API as landed (signatures); (2) for each section 2–6 one paragraph on any place you had to interpret the spec, with the choice made; (3) the list of tests switched to legacy; (4) new test names, one line each; (5) the pasted `test result:` lines and `git status --porcelain`; (6) the demo run's logged Schroeder frequency, T60, rolloff and knee per ear and residual RMS per ear; (7) anything undone. Do not end your turn before the commands complete. If you find another contradiction, choose the reading that keeps the stated purpose of the rule, implement it, and list it under (2) instead of stopping.
