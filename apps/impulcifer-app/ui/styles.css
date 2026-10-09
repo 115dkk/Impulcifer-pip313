@@ -40,6 +40,17 @@
   --field-border: #cdd0d3;
   --eq-left: #2563eb;
   --eq-right: #dc2626;
+  /* Range slider: the unfilled track and stop ticks, the fill and thumb
+     (accent-strong here keeps the thumb above 3:1 on bg-1, as the tab mark),
+     the hover halo and the thumb size. */
+  --range-track: #b5b8ba;
+  --range-fill: var(--accent-strong);
+  --range-halo: color-mix(in oklch, var(--range-fill) 22%, transparent);
+  --range-thumb: 16px;
+  /* Tooltip bubble: one step lighter than the surfaces it opens over, with a
+     hairline ring and a soft drop shadow for its elevation. */
+  --tip-bg: var(--bg-0);
+  --tip-shadow: 0 0 0 1px oklch(0 0 0 / 0.1), 0 4px 16px oklch(0 0 0 / 0.14);
   --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235f6368' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: light;
 }
@@ -69,6 +80,12 @@
   --field-border: #33373d;
   --eq-left: #60a5fa;
   --eq-right: #f87171;
+  --range-track: #454a52;
+  --range-fill: var(--accent);
+  /* The halo needs more of the accent to show on a dark surface. */
+  --range-halo: color-mix(in oklch, var(--range-fill) 40%, transparent);
+  --tip-bg: var(--bg-3);
+  --tip-shadow: 0 0 0 1px oklch(1 0 0 / 0.08), 0 8px 24px oklch(0 0 0 / 0.5);
   --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a3a8ae' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: dark;
 }
@@ -325,6 +342,206 @@ input[type="checkbox"] {
   accent-color: var(--accent);
 }
 
+/* Stepped range slider with its value beside it. The input is 40px tall so
+   the whole strip takes clicks, not only the 16px thumb; the track is 4px.
+   WebKit has no progress pseudo-element, so app.js sets --range-p (0–1) on
+   .range-stops and the track gradient fills up to the thumb's centre. Ticks
+   under the track mark the stops (app.js sets --range-gaps, the slider's
+   max − min); the one under the thumb is masked out so it does not poke out
+   below it. */
+.range-field {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.range-stops {
+  position: relative;
+  display: flex;
+  flex: 0 1 300px;
+  min-width: 0;
+}
+
+.range-stops::before {
+  --tick-at: calc(1px + var(--range-p, 0) * (100% - 2px));
+  --tick-mask: linear-gradient(to right, #000 calc(var(--tick-at) - 12px), transparent calc(var(--tick-at) - 12px)
+    calc(var(--tick-at) + 12px), #000 calc(var(--tick-at) + 12px));
+  content: "";
+  position: absolute;
+  top: calc(50% + 6px);
+  left: calc(var(--range-thumb) / 2 - 1px);
+  right: calc(var(--range-thumb) / 2 - 1px);
+  height: 5px;
+  background: linear-gradient(to right, var(--range-track) 0 2px, transparent 2px 100%)
+    0 0 / calc((100% - 2px) / var(--range-gaps, 1)) 100% repeat-x;
+  -webkit-mask-image: var(--tick-mask);
+  mask-image: var(--tick-mask);
+  pointer-events: none;
+}
+
+input[type="range"] {
+  --range-at: calc(var(--range-thumb) / 2 + var(--range-p, 0) * (100% - var(--range-thumb)));
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--range-fill) 0 var(--range-at), var(--range-track) var(--range-at) 100%);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--range-track);
+}
+
+input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--range-fill);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--range-thumb);
+  height: var(--range-thumb);
+  margin-top: calc((4px - var(--range-thumb)) / 2);
+  border: 0;
+  border-radius: 50%;
+  background: var(--range-fill);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  transition-property: box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: var(--range-thumb);
+  height: var(--range-thumb);
+  border: 0;
+  border-radius: 50%;
+  background: var(--range-fill);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  transition-property: box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 0 0 5px var(--range-halo);
+}
+
+input[type="range"]:hover::-moz-range-thumb {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 0 0 5px var(--range-halo);
+}
+
+/* The focus ring goes round the thumb, the same 2px accent as other fields,
+   with a gap of the disclosure body behind it (bg-1). */
+input[type="range"]:focus-visible { outline: none; }
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 4px var(--accent);
+}
+
+input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 4px var(--accent);
+}
+
+/* Fixed width and equal-width digits: dragging changes the text, not the row. */
+.range-value {
+  min-width: 96px;
+  color: var(--fg-0);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------- info tooltip
+   An "i" button after a label opens the control's description in a bubble
+   (app.js wireTips places and opens it). The visible circle is 16px; the
+   button is 24px and a pseudo-element widens the hit area to 40×40 without
+   growing the line: negative vertical margins keep the line box at 16px. */
+.field-label { min-width: 0; }
+
+.tip {
+  display: inline-block;
+  margin: -4px 0 -4px 2px;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+/* After a checkbox's text the row's 8px gap already separates it: keep the
+   same 6px from text to circle as after a field label. */
+.check-row > .tip { margin-left: -6px; }
+
+.info-tip {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition-property: color;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.info-tip::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.info-tip:hover,
+.info-tip.is-open { color: var(--fg-0); }
+
+.tip-bubble {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--tip-bg);
+  box-shadow: var(--tip-shadow);
+  color: var(--fg-1);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  text-wrap: pretty;
+  visibility: hidden;
+  opacity: 0;
+  /* A bubble fading out must not catch the click meant for what is under it. */
+  pointer-events: none;
+  transition-property: opacity, visibility;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.tip-bubble[data-open] { visibility: visible; opacity: 1; pointer-events: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .info-tip, .tip-bubble { transition: none; }
+}
+
 .hint { font-size: 13px; color: var(--fg-2); }
 .hint.mono { font-size: 12px; }
 
@@ -490,6 +707,11 @@ input[type="checkbox"] {
 [data-skin="studio"] #dis-advanced,
 [data-skin="stable"] #adv-studio { display: none; }
 
+/* The tuning phase limit: a slider of stops in Studio, one checkbox in
+   Stable. Both read the same setting (app.js syncRoomPhase). */
+[data-skin="studio"] #bf-room-phase-schroeder-row,
+[data-skin="stable"] #bf-room-phase-limit-row { display: none; }
+
 .adv-tabs { display: grid; gap: 12px; }
 
 .seg {
@@ -519,7 +741,8 @@ input[type="checkbox"] {
 }
 
 .seg-btn:hover { color: var(--fg-0); }
-.seg-btn[aria-selected="true"] { background: var(--bg-1); color: var(--fg-0); box-shadow: inset 0 0 0 1px var(--line); }
+.seg-btn[aria-selected="true"],
+.seg-btn[aria-checked="true"] { background: var(--bg-1); color: var(--fg-0); box-shadow: inset 0 0 0 1px var(--line); }
 
 /* On is a filled dot, off an empty ring: the state reads without colour.
    Light theme uses accent-strong so the dot keeps 3:1 on the strip. */

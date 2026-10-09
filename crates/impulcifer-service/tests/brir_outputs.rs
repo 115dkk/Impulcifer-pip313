@@ -200,7 +200,7 @@ fn demo_readme_korean_bytes_match_python() {
     let jobs = JobRegistry::new();
     let config = ProcessingConfig {
         dir_path: Some(temp.0.to_string_lossy().into_owned()),
-        ..Default::default()
+        ..ProcessingConfig::oracle_defaults()
     };
     let mut catalog = Catalog::english();
     catalog.strings.extend(

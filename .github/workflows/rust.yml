@@ -247,6 +247,18 @@ jobs:
       - name: Build the sdist
         run: python -m maturin sdist -m crates/impulcifer-python/Cargo.toml -o "$RUNNER_TEMP/sdist"
 
+      # maturin writes every sdist file with the same old timestamp (2006-07-24),
+      # and cargo judges path crates fresh by mtime, so the cached target-sdist
+      # would hand the wheel build the workspace crates of an earlier commit
+      # (unchanged Cargo.lock keeps the cache key). Drop only those crates;
+      # registry dependencies stay cached.
+      - name: Drop cached workspace crates from target-sdist
+        run: >
+          cargo clean --release
+          -p impulcifer-types -p impulcifer-io -p impulcifer-analysis -p impulcifer-dsp
+          -p impulcifer-plots -p impulcifer-jobs -p impulcifer-audio-io
+          -p impulcifer-service -p impulcifer-cli -p impulcifer-python
+
       - name: Build a wheel from the sdist with pip (PEP 517, build_backend.py)
         run: python -m pip wheel --no-deps -w "$RUNNER_TEMP/from-sdist" "$RUNNER_TEMP"/sdist/*.tar.gz
 

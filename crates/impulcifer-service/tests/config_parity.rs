@@ -107,6 +107,7 @@ fn scenario(name: &str) {
     prepare(&dir.0, &outside.0, spec);
     let mut config: ProcessingConfig =
         serde_json::from_value(expand(&spec["config"], &outside.0)).unwrap();
+    config.room_range = "legacy".into();
     config.dir_path = Some(dir.0.to_string_lossy().into_owned());
     config.test_signal = Some(
         root()

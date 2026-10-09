@@ -1,0 +1,105 @@
+{
+ "provenance": {
+  "tool": "SECS (Sound Equalization & Correction System) by 한플, DCinside speaker minor gallery",
+  "source": "https://gall.dcinside.com/mgallery/board/view/?id=speakers&no=514096 (secs.zip, SECS.py dated 2026-07-23)",
+  "how": "SECS's own filter generator run as a black box in automatic delay mode on each two-speaker demo room file treated as a stereo pair (first speaker = left channel); the chosen delay and SECS's own score per candidate (lower is better; captured from its evaluator's return value) are stored, no SECS code"
+ },
+ "settings": {
+  "fs": 48000,
+  "max_boost": 6.0,
+  "curtain_hz": 300.0,
+  "res_mode": "Normal",
+  "target": "flat",
+  "candidates_ms": [
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ]
+ },
+ "ir": {
+  "estimator": "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
+  "construction": "split the file into its two speakers' IRs (same recording, common time reference); start = min(peak_A, peak_B) - 48 samples (peak = index of max |h|); take 48000 samples of each from that start (zero-padded); no per-speaker head crop"
+ },
+ "chosen_delay_ms": {
+  "room-FL,FR-left.wav": 10,
+  "room-FL,FR-right.wav": 10,
+  "room-BL,SL-left.wav": 7,
+  "room-BL,SL-right.wav": 10,
+  "room-SR,BR-left.wav": 10,
+  "room-SR,BR-right.wav": 10
+ },
+ "metric_by_candidate_ms": {
+  "room-FL,FR-left.wav": {
+   "2": 4.088186,
+   "3": 4.088025,
+   "4": 3.905079,
+   "5": 3.85586,
+   "6": 3.822987,
+   "7": 3.852803,
+   "8": 3.883167,
+   "9": 3.76671,
+   "10": 3.742088
+  },
+  "room-FL,FR-right.wav": {
+   "2": 4.522515,
+   "3": 4.548246,
+   "4": 4.4036,
+   "5": 4.396415,
+   "6": 4.326531,
+   "7": 4.27364,
+   "8": 4.285332,
+   "9": 4.217483,
+   "10": 4.175643
+  },
+  "room-BL,SL-left.wav": {
+   "2": 3.342865,
+   "3": 3.332341,
+   "4": 3.293492,
+   "5": 3.30711,
+   "6": 3.289457,
+   "7": 3.246864,
+   "8": 3.306369,
+   "9": 3.251945,
+   "10": 3.274453
+  },
+  "room-BL,SL-right.wav": {
+   "2": 3.889301,
+   "3": 3.954044,
+   "4": 3.767929,
+   "5": 3.723291,
+   "6": 3.727692,
+   "7": 3.747639,
+   "8": 3.792418,
+   "9": 3.726251,
+   "10": 3.714683
+  },
+  "room-SR,BR-left.wav": {
+   "2": 4.54235,
+   "3": 4.673697,
+   "4": 4.514537,
+   "5": 4.474333,
+   "6": 4.363302,
+   "7": 4.303343,
+   "8": 4.387222,
+   "9": 4.315766,
+   "10": 4.197232
+  },
+  "room-SR,BR-right.wav": {
+   "2": 3.630569,
+   "3": 3.627398,
+   "4": 3.521257,
+   "5": 3.507199,
+   "6": 3.480388,
+   "7": 3.431048,
+   "8": 3.486237,
+   "9": 3.430782,
+   "10": 3.423216
+  }
+ }
+}

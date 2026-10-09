@@ -134,6 +134,45 @@ pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String
         ));
         out.push_str("\n\n");
     }
+    if let Some(report) = &data.tuning {
+        out.push_str(&format!(
+            "## Virtual room tuning\n\nDelay: {:.2} ms. Phase limit: {:.0} Hz (0 = off).\n\n",
+            report.delay_samples as f64 * 1000.0 / report.fs as f64,
+            report.f_ph
+        ));
+        out.push_str("| Speaker | Points | Low / high cutoff (Hz) | Trim (dB) | Source | Representation RMS (dB) | LF EDT before / after (ms, information) | Median excess GD before / after (ms, information) | Weak |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+        for s in &report.speakers {
+            out.push_str(&format!(
+                "| {} | {} | {:.0} / {:.0} | {:.2} | {} | {} | {:.2} / {:.2} | {:.2} / {:.2} | {} |\n",
+                s.speaker,
+                s.points,
+                s.low_cutoff,
+                s.high_cutoff,
+                s.trim_db,
+                s.trim_source,
+                s.representation_mean_db().map_or_else(|| "—".into(), |v| format!("{v:.2}")),
+                s.lf_edt_before_ms,
+                s.lf_edt_after_ms,
+                s.excess_median_before_ms,
+                s.excess_median_after_ms,
+                s.weak()
+            ));
+        }
+        out.push_str("\nPre-echo uses the first −18 dB direct peak and a 2 ms guard, against the louder of the speaker's two direct sounds. Warn only above −30 dB and at least 6 dB above the same untuned ear. Weak means mean omni/in-ear magnitude RMS exceeds 4 dB (30–300 Hz, level matched at 100–300 Hz); EDT and excess GD are information only.\n\n| Speaker | Ear | Pre-echo untuned / tuned (dB) | Warning |\n| --- | --- | --- | --- |\n");
+        for s in &report.speakers {
+            for p in &s.pre_echo_channels {
+                out.push_str(&format!(
+                    "| {} | {} | {:.2} / {:.2} | {} |\n",
+                    s.speaker,
+                    side(p.side),
+                    p.before_db,
+                    p.after_db,
+                    p.warns()
+                ));
+            }
+        }
+        out.push('\n');
+    }
     if !data.reflections.is_empty() {
         out.push_str(&format!("## {}\n", t("cli_readme_reflection_title")));
         let mut previous = "";

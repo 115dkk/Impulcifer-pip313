@@ -19,7 +19,7 @@ fn scenario(name: &str) {
     let config = ProcessingConfig {
         dir_path: Some(dir.0.to_string_lossy().into_owned()),
         vbass: name == "vbass",
-        ..Default::default()
+        ..ProcessingConfig::oracle_defaults()
     };
     let mut catalog = Catalog::english();
     catalog.readme_date = Some(oracle["date"].as_str().unwrap().into());

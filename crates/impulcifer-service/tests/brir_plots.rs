@@ -53,7 +53,7 @@ fn config(t: &Temp, plot: bool) -> ProcessingConfig {
                 .into_owned(),
         ),
         plot,
-        ..Default::default()
+        ..ProcessingConfig::oracle_defaults()
     }
 }
 fn inputs(t: &Temp, c: &ProcessingConfig) -> impulcifer_dsp::pipeline::PipelineInputs {

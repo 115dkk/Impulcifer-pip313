@@ -27,13 +27,43 @@ pub struct RoomCorrectionOptions {
     pub fr_combination_method: FrCombination,
     pub specific_limit: f64,
     pub generic_limit: f64,
+    pub range: RoomRange,
+    pub room_volume: Option<f64>,
+    pub schroeder_freq: Option<f64>,
+    pub max_boost_db: f64,
+    pub vbass_crossover: Option<f64>,
+}
+impl Default for RoomCorrectionOptions {
+    fn default() -> Self {
+        Self {
+            fr_combination_method: FrCombination::Average,
+            specific_limit: 400.0,
+            generic_limit: 300.0,
+            range: RoomRange::Schroeder,
+            room_volume: None,
+            schroeder_freq: None,
+            max_boost_db: 12.0,
+            vbass_crossover: None,
+        }
+    }
+}
+pub use super::room_v2::{RoomDiagnostics, RoomRange};
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RoomTerm {
+    LegacyError,
+    Gain,
 }
 #[derive(Clone, Debug)]
-pub struct RoomFrs(pub Vec<(String, Side, FrequencyResponse)>);
+pub struct RoomFrs {
+    pub term: RoomTerm,
+    pub entries: Vec<(String, Side, FrequencyResponse)>,
+}
 #[derive(Clone, Debug)]
 pub struct RoomCorrection {
     pub frs: RoomFrs,
     pub responses_tracks: Vec<Vec<f64>>,
+    pub diagnostics: Option<RoomDiagnostics>,
+    pub tuning: Option<super::room_tuning::TuningPlan>,
 }
 
 /// Python discover_room_measurements, core/room_correction.py:36-75; p10_generic_room.
@@ -117,7 +147,10 @@ pub fn calculate_specific_room_corrections(
             }
         }
     }
-    Ok(RoomFrs(out))
+    Ok(RoomFrs {
+        term: RoomTerm::LegacyError,
+        entries: out,
+    })
 }
 /// Python ndarray subtraction, core/room_correction.py:195; p10_room.
 fn subtract(a: &mut [f64], b: &[f64]) -> Result<(), DspError> {
@@ -281,7 +314,22 @@ pub fn room_correction(
     if rir.speakers.is_empty() && generic_irs.is_empty() {
         return Ok(None);
     }
-    let mut frs = RoomFrs(Vec::new());
+    if options.range != RoomRange::Legacy {
+        return super::room_v2::room_correction(
+            rir,
+            generic_irs,
+            target,
+            mic_calibration,
+            estimator,
+            options,
+            None,
+        )
+        .map(Some);
+    }
+    let mut frs = RoomFrs {
+        term: RoomTerm::LegacyError,
+        entries: Vec::new(),
+    };
     let mut responses_tracks = Vec::new();
     if !rir.speakers.is_empty() {
         rir.for_each_ir(|ir| ir.crop_head(1.0));
@@ -305,7 +353,7 @@ pub fn room_correction(
         for s in SPEAKER_NAMES {
             if rir.get(s).is_none() {
                 for side in [Side::Left, Side::Right] {
-                    frs.0.push((s.into(), side, generic.clone()));
+                    frs.entries.push((s.into(), side, generic.clone()));
                 }
             }
         }
@@ -313,7 +361,30 @@ pub fn room_correction(
     Ok(Some(RoomCorrection {
         frs,
         responses_tracks,
+        diagnostics: None,
+        tuning: None,
     }))
+}
+
+/// Tuning-specific entry point keeps the existing EQ options and oracle callers unchanged.
+pub fn room_correction_tuning(
+    rir: &mut Hrir,
+    generic_irs: &[ImpulseResponse],
+    target: &FrequencyResponse,
+    mic_calibration: Option<&FrequencyResponse>,
+    estimator: &SweepEstimator,
+    options: &RoomCorrectionOptions,
+    tuning_options: &super::room_tuning::TuningOptions,
+) -> Result<RoomCorrection, DspError> {
+    super::room_v2::room_correction(
+        rir,
+        generic_irs,
+        target,
+        mic_calibration,
+        estimator,
+        options,
+        Some(tuning_options),
+    )
 }
 
 #[cfg(test)]

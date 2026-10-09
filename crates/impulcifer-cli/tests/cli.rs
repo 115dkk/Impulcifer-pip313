@@ -3,7 +3,7 @@
 
 use impulcifer_cli::{
     Parsed,
-    options::{CliType, OPTIONS},
+    options::{CliType, EXTENSION_OPTIONS, OPTIONS},
     parse, run,
 };
 use impulcifer_types::config::{FIELD_NAMES, ProcessingConfig};
@@ -33,6 +33,104 @@ fn invoke(argv: &[&str]) -> (i32, String, String) {
 }
 
 #[test]
+fn cli_room_v2_options_parse_and_validate() {
+    let Parsed::Kwargs(baseline) =
+        parse(&args(&["impulcifer", "--dir_path", "measurements"])).unwrap()
+    else {
+        panic!()
+    };
+    for name in impulcifer_types::config::EXTENSION_FIELD_NAMES {
+        assert!(!baseline.contains_key(name));
+    }
+    for (flag, value, expected) in [
+        ("--room_range", "legacy", json!("legacy")),
+        ("--room_range", "modes", json!("modes")),
+        ("--room_range", "schroeder", json!("schroeder")),
+        ("--room_range", "extreme", json!("extreme")),
+        ("--room_volume", "50", json!(50.0)),
+        ("--schroeder_freq", "400", json!(400.0)),
+        ("--room_max_boost", "12", json!(12.0)),
+        ("--room_mode", "eq", json!("eq")),
+        ("--room_mode", "tuning", json!("tuning")),
+        ("--room_tuning_delay", "2", json!("2")),
+        ("--room_tuning_delay", "20", json!("20")),
+        ("--room_tuning_delay", "auto", json!("auto")),
+        ("--room_tuning_phase_limit", "off", json!("off")),
+        ("--room_tuning_phase_limit", "schroeder", json!("schroeder")),
+        ("--room_tuning_phase_limit", "full", json!("full")),
+        ("--room_tuning_phase_limit", "300", json!("300")),
+        ("--room_tuning_max_boost", "6", json!(6.0)),
+        ("--room_tuning_curtain", "300", json!(300.0)),
+        ("--room_tuning_level_match", "false", json!(false)),
+    ] {
+        let Parsed::Kwargs(mut kwargs) = parse(&args(&[
+            "impulcifer",
+            "--dir_path",
+            "measurements",
+            flag,
+            value,
+        ]))
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(kwargs.remove(&flag[2..]), Some(expected));
+        assert_eq!(kwargs, baseline);
+    }
+    for (flag, value) in [
+        ("--room_range", "bad"),
+        ("--room_volume", "0"),
+        ("--room_volume", "10001"),
+        ("--schroeder_freq", "49"),
+        ("--schroeder_freq", "1001"),
+        ("--room_max_boost", "-1"),
+        ("--room_max_boost", "25"),
+        ("--room_max_boost", "NaN"),
+        ("--room_mode", "bad"),
+        ("--room_tuning_delay", "1.9"),
+        ("--room_tuning_phase_limit", "299"),
+        ("--room_tuning_phase_limit", "20001"),
+        ("--room_tuning_phase_limit", "NaN"),
+        ("--room_tuning_max_boost", "13"),
+        ("--room_tuning_curtain", "99"),
+        ("--room_tuning_curtain", "5001"),
+        ("--room_tuning_delay", "20.1"),
+        ("--room_tuning_delay", "NaN"),
+    ] {
+        assert_eq!(
+            parse(&args(&[
+                "impulcifer",
+                "--dir_path",
+                "measurements",
+                flag,
+                value
+            ]))
+            .unwrap_err()
+            .exit_code,
+            2
+        );
+    }
+    let Parsed::Help(help) = parse(&args(&["impulcifer", "--help"])).unwrap() else {
+        panic!()
+    };
+    assert!(
+        parse(&args(&[
+            "impulcifer",
+            "--dir_path",
+            "measurements",
+            "--room_mode",
+            "tuning",
+            "--room_range",
+            "legacy"
+        ]))
+        .is_ok()
+    );
+    for option in EXTENSION_OPTIONS {
+        assert!(help.contains(option.flag), "{}", option.flag);
+        assert!(help.contains(option.help), "{}", option.flag);
+    }
+}
+
+#[test]
 fn golden_cli_options_match_python() {
     let oracle = golden("p13_options.json");
     let oracle = oracle.as_array().unwrap();
@@ -55,7 +153,15 @@ fn golden_cli_options_match_python() {
             CliType::FlagFalse => "_StoreFalseAction",
             _ => "_StoreAction",
         };
-        let actual = json!({"option_strings":flags,"dest":option.dest,"help":option.help,
+        let help = if ["specific_limit", "generic_limit"].contains(&option.dest) {
+            option
+                .help
+                .strip_suffix(" Used only with --room_range legacy.")
+                .unwrap()
+        } else {
+            option.help
+        };
+        let actual = json!({"option_strings":flags,"dest":option.dest,"help":help,
             "type":type_name,"action":action,"choices":if option.choices.is_empty() { Value::Null } else { json!(option.choices) },
             "default":option.default.value().unwrap_or(json!("SUPPRESS")),"required":false});
         assert_eq!(&actual, expected, "{}", option.flag);
@@ -128,7 +234,7 @@ fn cli_help_mentions_every_option() {
         let (code, out, err) = invoke(&["impulcifer", flag]);
         assert_eq!(code, 0);
         assert!(err.is_empty());
-        for option in OPTIONS {
+        for option in OPTIONS.iter().chain(EXTENSION_OPTIONS) {
             assert!(out.contains(option.flag), "{}", option.flag);
             assert!(out.contains(option.help), "{}", option.flag);
         }

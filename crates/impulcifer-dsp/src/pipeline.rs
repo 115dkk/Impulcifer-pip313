@@ -41,6 +41,12 @@ pub struct StageProgress {
     pub total: usize,
 }
 pub trait StageObserver {
+    fn on_room_tuned(
+        &mut self,
+        _report: &crate::stages::room_tuning::TuningReport,
+    ) -> Result<(), DspError> {
+        Ok(())
+    }
     /// Read-only plot snapshot before any later resampling; no progress step added.
     fn on_plot(&mut self, _key: StageKey, _hrir: &Hrir) -> Result<(), DspError> {
         Ok(())
@@ -177,6 +183,7 @@ pub fn run_pipeline(
     let mut target = None;
     let mut applied_gain_db = 0.0;
     let mut readme = None;
+    let mut tuning_report = None;
     let mut responses_tracks = Vec::new();
     let mut hrir_tracks = Vec::new();
     let mut hesuvi_tracks = Vec::new();
@@ -212,6 +219,14 @@ pub fn run_pipeline(
                 hrir.align_ipsilateral_all(&IPSILATERAL_PAIRS, 30.0);
                 hrir.align_onset_groups_peak_leftref(None)?;
                 hrir.crop_tails(&estimator)?;
+                if config.do_room_correction
+                    && config.room_mode == "tuning"
+                    && let Some(plan) = room.as_ref().and_then(|r| r.tuning.as_ref())
+                {
+                    let report = crate::stages::room_tuning::apply_tuning(&mut hrir, plan)?;
+                    observer.on_room_tuned(&report)?;
+                    tuning_report = Some(report);
+                }
             }
             StageKey::VirtualBass => apply_virtual_bass(
                 &mut hrir,
@@ -275,11 +290,9 @@ pub fn run_pipeline(
             )?,
             StageKey::Normalize => applied_gain_db = normalize(&mut hrir, config)?,
             StageKey::WriteReadme => {
-                readme = Some(readme_data(
-                    &hrir,
-                    config.fs.unwrap_or(hrir.fs),
-                    applied_gain_db,
-                ))
+                let mut data = readme_data(&hrir, config.fs.unwrap_or(hrir.fs), applied_gain_db);
+                data.tuning = tuning_report.take();
+                readme = Some(data);
             }
             StageKey::Resample => {
                 if let Some(fs) = config.fs.filter(|fs| *fs != hrir.fs) {

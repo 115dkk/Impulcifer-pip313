@@ -30,6 +30,18 @@ pub struct ProcessingConfig {
     pub fr_combination_method: String,
     pub specific_limit: f64,
     pub generic_limit: f64,
+    pub room_range: String,
+    pub room_volume: Option<f64>,
+    pub schroeder_freq: Option<f64>,
+    pub room_max_boost: f64,
+    pub room_mode: String,
+    #[serde(deserialize_with = "string_or_number")]
+    pub room_tuning_delay: String,
+    #[serde(deserialize_with = "string_or_number")]
+    pub room_tuning_phase_limit: String,
+    pub room_tuning_max_boost: f64,
+    pub room_tuning_curtain: f64,
+    pub room_tuning_level_match: bool,
     pub bass_boost_gain: f64,
     pub bass_boost_fc: f64,
     pub bass_boost_q: f64,
@@ -68,6 +80,16 @@ impl Default for ProcessingConfig {
             fr_combination_method: "average".to_string(),
             specific_limit: 400.0,
             generic_limit: 300.0,
+            room_range: "schroeder".into(),
+            room_volume: None,
+            schroeder_freq: None,
+            room_max_boost: 12.0,
+            room_mode: "eq".into(),
+            room_tuning_delay: "10".into(),
+            room_tuning_phase_limit: "full".into(),
+            room_tuning_max_boost: 6.0,
+            room_tuning_curtain: 300.0,
+            room_tuning_level_match: true,
             bass_boost_gain: 0.0,
             bass_boost_fc: 105.0,
             bass_boost_q: 0.76,
@@ -129,6 +151,75 @@ pub const FIELD_NAMES: [&str; 33] = [
     "vbass_polarity",
 ];
 
+/// 3.x-only options, separate from the frozen 2.x dataclass surface.
+pub const EXTENSION_FIELD_NAMES: [&str; 10] = [
+    "room_range",
+    "room_volume",
+    "schroeder_freq",
+    "room_max_boost",
+    "room_mode",
+    "room_tuning_delay",
+    "room_tuning_phase_limit",
+    "room_tuning_max_boost",
+    "room_tuning_curtain",
+    "room_tuning_level_match",
+];
+
+fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::String(s) => Ok(s),
+        serde_json::Value::Number(n) => Ok(n.to_string()),
+        _ => Err(serde::de::Error::custom("expected a string or number")),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TuningDelay {
+    Auto,
+    Ms(f64),
+}
+impl TuningDelay {
+    pub fn parse(s: &str) -> Option<Self> {
+        if s == "auto" {
+            return Some(Self::Auto);
+        }
+        s.parse::<f64>()
+            .ok()
+            .filter(|v| v.is_finite() && (2.0..=20.0).contains(v))
+            .map(Self::Ms)
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PhaseLimit {
+    Off,
+    Schroeder,
+    Full,
+    Hz(f64),
+}
+impl PhaseLimit {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "off" => Some(Self::Off),
+            "schroeder" => Some(Self::Schroeder),
+            "full" => Some(Self::Full),
+            _ => s
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite() && (300.0..=20000.0).contains(v))
+                .map(Self::Hz),
+        }
+    }
+    pub fn frequency(self, fs: u32, schroeder: f64) -> f64 {
+        match self {
+            Self::Off => 0.0,
+            Self::Schroeder => schroeder.min(300.0),
+            Self::Full => fs as f64 / 2.0,
+            Self::Hz(f) if f >= 0.45 * fs as f64 => fs as f64 / 2.0,
+            Self::Hz(f) => f,
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("invalid value for {field}: {reason}")]
@@ -136,6 +227,72 @@ pub enum ConfigError {
 }
 
 impl ProcessingConfig {
+    /// The 2.x dataclass defaults; use in tests that compare against 2.x oracle output.
+    pub fn oracle_defaults() -> Self {
+        Self {
+            room_range: "legacy".into(),
+            ..Self::default()
+        }
+    }
+
+    /// Validate the 3.x room options without changing legacy validation semantics.
+    pub fn validate_room_options(&self) -> Result<(), ConfigError> {
+        let invalid = |field: &str, reason: &str| ConfigError::Invalid {
+            field: field.into(),
+            reason: reason.into(),
+        };
+        if !["legacy", "modes", "schroeder", "extreme"].contains(&self.room_range.as_str()) {
+            return Err(invalid(
+                "room_range",
+                "must be legacy, modes, schroeder or extreme",
+            ));
+        }
+        if !["eq", "tuning"].contains(&self.room_mode.as_str()) {
+            return Err(invalid("room_mode", "must be eq or tuning"));
+        }
+        if TuningDelay::parse(&self.room_tuning_delay).is_none() {
+            return Err(invalid("room_tuning_delay", "must be auto or 2–20 ms"));
+        }
+        if PhaseLimit::parse(&self.room_tuning_phase_limit).is_none() {
+            return Err(invalid(
+                "room_tuning_phase_limit",
+                "must be off, schroeder, full or 300–20000 Hz",
+            ));
+        }
+        for (field, value, lo, hi, exclusive) in [
+            (
+                "room_tuning_max_boost",
+                Some(self.room_tuning_max_boost),
+                0.0,
+                12.0,
+                false,
+            ),
+            (
+                "room_tuning_curtain",
+                Some(self.room_tuning_curtain),
+                100.0,
+                5000.0,
+                false,
+            ),
+            ("room_volume", self.room_volume, 0.0, 10000.0, true),
+            ("schroeder_freq", self.schroeder_freq, 50.0, 1000.0, false),
+            (
+                "room_max_boost",
+                Some(self.room_max_boost),
+                0.0,
+                24.0,
+                false,
+            ),
+        ] {
+            if let Some(v) = value
+                && (!v.is_finite() || v > hi || v < lo || (exclusive && v == lo))
+            {
+                return Err(invalid(field, "outside supported range"));
+            }
+        }
+        Ok(())
+    }
+
     /// Build a config from a loose JSON object, ignoring unknown keys exactly
     /// like 2.x `ProcessingConfig.from_kwargs`. Known keys with the wrong type
     /// are an error.
@@ -144,7 +301,8 @@ impl ProcessingConfig {
     ) -> Result<Self, ConfigError> {
         let mut filtered = serde_json::Map::new();
         for (key, value) in kwargs {
-            if FIELD_NAMES.contains(&key.as_str()) {
+            if FIELD_NAMES.contains(&key.as_str()) || EXTENSION_FIELD_NAMES.contains(&key.as_str())
+            {
                 filtered.insert(key.clone(), value.clone());
             }
         }

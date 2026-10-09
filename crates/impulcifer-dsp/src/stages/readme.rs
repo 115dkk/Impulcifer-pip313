@@ -25,6 +25,7 @@ pub struct ReadmeData {
     pub reflections: Vec<(String, Side, ReflectionLevels)>,
     pub applied_gain_db: f64,
     pub fs: u32,
+    pub tuning: Option<super::room_tuning::TuningReport>,
 }
 /// Python write_readme, core/pipeline_stages.py:525-687; p10_readme.
 pub fn readme_data(hrir: &Hrir, fs: u32, applied_gain: f64) -> ReadmeData {
@@ -105,5 +106,6 @@ pub fn readme_data(hrir: &Hrir, fs: u32, applied_gain: f64) -> ReadmeData {
         reflections,
         applied_gain_db: applied_gain,
         fs,
+        tuning: None,
     }
 }

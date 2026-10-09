@@ -59,7 +59,7 @@ pub fn command() -> Command {
                 .action(ArgAction::Help)
                 .display_order(0),
         );
-    for (index, option) in OPTIONS.iter().enumerate() {
+    for (index, option) in OPTIONS.iter().chain(EXTENSION_OPTIONS).enumerate() {
         let mut arg = Arg::new(option.dest)
             .long(&option.flag[2..])
             .help(option.help)
@@ -84,7 +84,7 @@ pub fn command() -> Command {
 /// argparse-shaped usage for diagnostics; generated from the same option table.
 pub fn usage() -> String {
     let mut text = String::from("usage: impulcifer [-h]");
-    for option in OPTIONS {
+    for option in OPTIONS.iter().chain(EXTENSION_OPTIONS) {
         text.push_str(" [");
         text.push_str(if option.dest == "version" {
             "-V"
@@ -105,6 +105,99 @@ pub fn usage() -> String {
     }
     text
 }
+
+pub static EXTENSION_OPTIONS: &[CliOption] = &[
+    CliOption {
+        flag: "--room_range",
+        short: None,
+        dest: "room_range",
+        kind: CliType::Str,
+        choices: &["legacy", "modes", "schroeder", "extreme"],
+        default: CliDefault::Suppressed,
+        help: "Room correction range. \"modes\" corrects room-mode resonances and keeps the bass balance, \"schroeder\" (default) flattens everything up to the Schroeder frequency, \"extreme\" also applies a smoothed tone correction up to 10 kHz, \"legacy\" is the 2.x behaviour.",
+    },
+    CliOption {
+        flag: "--room_volume",
+        short: None,
+        dest: "room_volume",
+        kind: CliType::Float,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Room volume in cubic metres, used to compute the Schroeder frequency. Without it 50 m³ is assumed.",
+    },
+    CliOption {
+        flag: "--schroeder_freq",
+        short: None,
+        dest: "schroeder_freq",
+        kind: CliType::Float,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Schroeder frequency in Hz. Overrides the estimate from the room measurements.",
+    },
+    CliOption {
+        flag: "--room_max_boost",
+        short: None,
+        dest: "room_max_boost",
+        kind: CliType::Float,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Largest boost in dB that room correction may apply with speaker-ear specific room measurements. Default 12.",
+    },
+    CliOption {
+        flag: "--room_mode",
+        short: None,
+        dest: "room_mode",
+        kind: CliType::Str,
+        choices: &["eq", "tuning"],
+        default: CliDefault::Suppressed,
+        help: "Room correction mode. \"eq\" corrects the frequency response at each ear position. \"tuning\" applies, per speaker, the correction a room-correction processor in the speaker feed would have applied during the recording (frequency response, speaker level and timing; the same filter for both ears) and delays every channel by --room_tuning_delay. --room_range and --room_max_boost apply to \"eq\" only.",
+    },
+    CliOption {
+        flag: "--room_tuning_delay",
+        short: None,
+        dest: "room_tuning_delay",
+        kind: CliType::Str,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Common delay: auto (2–10 ms) or 2–20 ms. Default 10. Used only with --room_mode tuning.",
+    },
+    CliOption {
+        flag: "--room_tuning_phase_limit",
+        short: None,
+        dest: "room_tuning_phase_limit",
+        kind: CliType::Str,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Phase correction limit: off, schroeder, full (default), or 300–20000 Hz. Used only with --room_mode tuning.",
+    },
+    CliOption {
+        flag: "--room_tuning_max_boost",
+        short: None,
+        dest: "room_tuning_max_boost",
+        kind: CliType::Float,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Maximum inverse boost, 0–12 dB. Default 6. Used only with --room_mode tuning.",
+    },
+    CliOption {
+        flag: "--room_tuning_curtain",
+        short: None,
+        dest: "room_tuning_curtain",
+        kind: CliType::Float,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Inverse correction curtain, 100–5000 Hz. Default 300. Used only with --room_mode tuning.",
+    },
+    CliOption {
+        flag: "--room_tuning_level_match",
+        short: None,
+        dest: "room_tuning_level_match",
+        kind: CliType::Str,
+        choices: &["true", "false"],
+        default: CliDefault::Suppressed,
+        help: "Match speaker levels: true (default) or false. Used only with --room_mode tuning.",
+    },
+];
 
 pub const OPTIONS: &[CliOption] = &[
     CliOption {
@@ -237,7 +330,7 @@ pub const OPTIONS: &[CliOption] = &[
         flag: "--specific_limit",
         short: None,
         dest: "specific_limit",
-        help: "Upper limit for room equalization with speaker-ear specific room measurements. Equalization will drop down to 0 dB at this frequency in the leading octave. 0 disables limit.",
+        help: "Upper limit for room equalization with speaker-ear specific room measurements. Equalization will drop down to 0 dB at this frequency in the leading octave. 0 disables limit. Used only with --room_range legacy.",
         kind: CliType::Float,
         choices: &[],
         default: CliDefault::Int(400),
@@ -246,7 +339,7 @@ pub const OPTIONS: &[CliOption] = &[
         flag: "--generic_limit",
         short: None,
         dest: "generic_limit",
-        help: "Upper limit for room equalization with generic room measurements. Equalization will drop down to 0 dB at this frequency in the leading octave. 0 disables limit.",
+        help: "Upper limit for room equalization with generic room measurements. Equalization will drop down to 0 dB at this frequency in the leading octave. 0 disables limit. Used only with --room_range legacy.",
         kind: CliType::Float,
         choices: &[],
         default: CliDefault::Int(300),

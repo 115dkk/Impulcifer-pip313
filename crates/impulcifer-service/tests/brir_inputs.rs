@@ -78,7 +78,7 @@ fn room_and_eq_inputs_use_real_measurements_and_write_responses() {
     let estimator = open_estimator(&dir, Some("default")).unwrap();
     let mut events = Events::default();
     let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
-    assert!(!inputs.room.as_ref().unwrap().frs.0.is_empty());
+    assert!(!inputs.room.as_ref().unwrap().frs.entries.is_empty());
     assert!(inputs.headphone.is_some());
     assert!(inputs.eq_left.is_some());
     assert!(inputs.eq_right.is_some());

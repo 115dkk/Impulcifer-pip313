@@ -1,5 +1,8 @@
 //! Parallel file-free EQ worker, core/parallel_workers.py:69-131.
-use super::{headphone::HeadphoneCompensation, room::RoomFrs};
+use super::{
+    headphone::HeadphoneCompensation,
+    room::{RoomFrs, RoomTerm},
+};
 use crate::{
     DspError,
     fr::{EqualizeParams, FrequencyResponse, generate_frequencies},
@@ -41,7 +44,8 @@ pub fn equalization_curve(
         0.0,
     )?;
     let room = inputs.room_frs.and_then(|r| {
-        r.0.iter()
+        r.entries
+            .iter()
             .find(|(s, e, _)| s == speaker && *e == side)
             .map(|(_, _, f)| f)
     });
@@ -57,7 +61,8 @@ pub fn equalization_curve(
     } else {
         inputs.eq_right
     };
-    for source in [room, hp, eq].into_iter().flatten() {
+    let gain = inputs.room_frs.is_some_and(|r| r.term == RoomTerm::Gain);
+    for source in [room.filter(|_| !gain), hp, eq].into_iter().flatten() {
         if source.error.len() != fr.error.len() {
             return Err(DspError::InvalidArgument(
                 "EQ error grid lengths differ".into(),
@@ -76,6 +81,22 @@ pub fn equalization_curve(
         *e -= t;
     }
     fr.smoothen_heavy_light()?;
+    if let Some(room) = room.filter(|_| gain) {
+        if room.equalization.len() != fr.error.len() {
+            return Err(DspError::InvalidArgument(
+                "room gain grid lengths differ".into(),
+            ));
+        }
+        for ((error, smoothed), gain) in fr
+            .error
+            .iter_mut()
+            .zip(&mut fr.error_smoothed)
+            .zip(&room.equalization)
+        {
+            *error -= gain;
+            *smoothed -= gain;
+        }
+    }
     fr.equalize(&EqualizeParams {
         max_gain: 40.0,
         treble_f_lower: 10000.0,

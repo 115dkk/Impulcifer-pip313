@@ -2,7 +2,7 @@
 use super::eq_select::{EqChoices, SLOTS};
 use crate::args::invalid;
 use impulcifer_types::{
-    config::{FIELD_NAMES, ProcessingConfig},
+    config::{EXTENSION_FIELD_NAMES, FIELD_NAMES, ProcessingConfig},
     constants::SPEAKER_NAMES,
     ipc::{self, ErrorCode},
 };
@@ -19,7 +19,11 @@ pub(crate) fn validate(value: &Value) -> Result<Request, Value> {
         .ok_or_else(|| invalid("BRIR request must be an object."))?;
     let unknown: Vec<_> = object
         .keys()
-        .filter(|k| !FIELD_NAMES.contains(&k.as_str()) && !SLOTS.iter().any(|(f, _, _)| f == k))
+        .filter(|k| {
+            !FIELD_NAMES.contains(&k.as_str())
+                && !EXTENSION_FIELD_NAMES.contains(&k.as_str())
+                && !SLOTS.iter().any(|(f, _, _)| f == k)
+        })
         .collect();
     if !unknown.is_empty() {
         return Err(ipc::error(
@@ -131,6 +135,38 @@ pub(crate) fn validate(value: &Value) -> Result<Request, Value> {
     for (field, _, _) in SLOTS {
         params.remove(field);
     }
+    // Deserialize extensions individually so type errors identify the field too.
+    for name in EXTENSION_FIELD_NAMES {
+        if let Some(value) = params.get(name) {
+            let mut field = serde_json::Map::new();
+            field.insert(name.into(), value.clone());
+            let candidate = ProcessingConfig::from_kwargs(&field).map_err(|e| {
+                ipc::error(
+                    ErrorCode::InvalidRequest,
+                    e.to_string(),
+                    json!({"field":name}),
+                    false,
+                )
+            })?;
+            candidate.validate_room_options().map_err(|e| {
+                ipc::error(
+                    ErrorCode::InvalidRequest,
+                    e.to_string(),
+                    json!({"field":name}),
+                    false,
+                )
+            })?;
+        }
+    }
     let config = ProcessingConfig::from_kwargs(&params).map_err(|e| invalid(e.to_string()))?;
+    config.validate_room_options().map_err(|e| {
+        let impulcifer_types::config::ConfigError::Invalid { ref field, .. } = e;
+        ipc::error(
+            ErrorCode::InvalidRequest,
+            e.to_string(),
+            json!({"field":field}),
+            false,
+        )
+    })?;
     Ok(Request { config, eq })
 }

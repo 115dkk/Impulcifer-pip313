@@ -361,7 +361,7 @@ pub fn room(
                 )?;
                 if let Some((_, _, fr)) = room
                     .frs
-                    .0
+                    .entries
                     .iter()
                     .find(|(name, ear, _)| name == &s.speaker && *ear == side)
                 {
@@ -403,14 +403,28 @@ pub fn room(
         .map_err(error)
     })
 }
-/// Python _plot_generic_room_measurement: recompute plot-only copies, including
-/// individual centered measurements. The pipeline's correction objects are untouched.
+pub(crate) fn applied_generic_room_curve(
+    frs: &impulcifer_dsp::stages::room::RoomFrs,
+) -> Option<FrCurve> {
+    use impulcifer_dsp::stages::room::RoomTerm;
+    if frs.term != RoomTerm::Gain {
+        return None;
+    }
+    frs.entries
+        .iter()
+        .find(|(_, _, fr)| fr.name == "generic_room")
+        .map(|(_, _, fr)| curve(fr))
+}
+
+/// Python _plot_generic_room_measurement: preserve legacy recomputation; v2
+/// displays the applied generic entry. The pipeline's objects are untouched.
 pub fn generic_room(
     dir: &Path,
     irs: &[ImpulseResponse],
     target: &FrequencyResponse,
     calibration: Option<&FrequencyResponse>,
     config: &impulcifer_types::config::ProcessingConfig,
+    applied: &impulcifer_dsp::stages::room::RoomFrs,
     cancelled: &(dyn Fn() -> bool + Sync),
 ) -> Result<(), DspError> {
     if irs.is_empty() {
@@ -421,17 +435,24 @@ pub fn generic_room(
         fr::CenterAt,
         stages::room::{FrCombination, calculate_generic_room_correction},
     };
-    let room = calculate_generic_room_correction(
-        irs,
-        target,
-        calibration,
-        if config.fr_combination_method == "conservative" {
-            FrCombination::Conservative
-        } else {
-            FrCombination::Average
-        },
-        config.generic_limit,
-    )?;
+    let room = if config.room_range == "legacy" {
+        curve(&calculate_generic_room_correction(
+            irs,
+            target,
+            calibration,
+            if config.fr_combination_method == "conservative" {
+                FrCombination::Conservative
+            } else {
+                FrCombination::Average
+            },
+            config.generic_limit,
+        )?)
+    } else if let Some(room) = applied_generic_room_curve(applied) {
+        room
+    } else {
+        // All speakers have specific measurements: no generic gain was applied, so skip room.png.
+        return Ok(());
+    };
     let raws = irs
         .iter()
         .map(|ir| {
@@ -446,9 +467,49 @@ pub fn generic_room(
             Ok(curve(&fr))
         })
         .collect::<Result<Vec<_>, DspError>>()?;
-    impulcifer_plots::plot_generic_room(&dir.join("plots/room/room.png"), &curve(&room), &raws)
+    impulcifer_plots::plot_generic_room(&dir.join("plots/room/room.png"), &room, &raws)
         .map_err(error)
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use impulcifer_dsp::stages::room::{RoomFrs, RoomTerm};
+    use impulcifer_types::constants::Side;
+
+    #[test]
+    fn room_v2_generic_plot_uses_the_applied_gain() {
+        let mut generic = FrequencyResponse::constant("generic_room", None, 0.0, 0.0).unwrap();
+        generic.equalization = generic.frequency.iter().map(|f| -12.0 / f).collect();
+        generic.error = generic.equalization.iter().map(|g| -g).collect();
+        generic.error_smoothed = generic.error.clone();
+        let mut specific = generic.clone();
+        specific.name = "FL-left".into();
+        specific.error.fill(99.0);
+        let mut frs = RoomFrs {
+            term: RoomTerm::Gain,
+            entries: vec![
+                ("FL".into(), Side::Left, specific),
+                ("FR".into(), Side::Left, generic.clone()),
+            ],
+        };
+        let plotted = applied_generic_room_curve(&frs).unwrap();
+        assert_eq!(plotted.frequency, generic.frequency);
+        assert_eq!(
+            plotted.error,
+            generic.equalization.iter().map(|g| -g).collect::<Vec<_>>()
+        );
+        assert_eq!(plotted.error_smoothed, plotted.error);
+        assert_eq!(plotted.equalization, generic.equalization);
+        assert_eq!(plotted.raw, generic.raw);
+        assert_eq!(plotted.target, generic.target);
+        frs.entries.pop();
+        assert!(applied_generic_room_curve(&frs).is_none());
+        frs.entries.push(("FR".into(), Side::Left, generic));
+        frs.term = RoomTerm::LegacyError;
+        assert!(applied_generic_room_curve(&frs).is_none());
+    }
+}
+
 /// The cooperative-cancellation contract (ARCHITECTURE section 4): every
 /// per-speaker task of a rayon batch consults the job before it renders, so a
 /// cancel request never waits for a whole batch. The message matches the

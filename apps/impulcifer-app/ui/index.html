@@ -235,15 +235,79 @@
                   <span class="caret" aria-hidden="true"></span>
                 </div>
                 <div class="disclosure-body">
-                  <div class="field-row">
+                  <div class="field-row" id="bf-room-mode-row">
+                    <span class="field-label"><span id="bf-room-mode-label" data-i18n="label_room_mode">Correction mode:</span><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-mode-tip" class="tip-bubble">Corrects the frequency response at each ear position; the timing of the bass stays as recorded.</span></span></span>
+                    <div class="seg" role="radiogroup" aria-labelledby="bf-room-mode-label" aria-describedby="bf-room-mode-tip">
+                      <button type="button" class="seg-btn" role="radio" id="bf-room-mode-eq" aria-checked="true" tabindex="0" data-i18n="option_room_mode_eq">Room EQ</button>
+                      <button type="button" class="seg-btn" role="radio" id="bf-room-mode-tuning" aria-checked="false" tabindex="-1" data-i18n="option_room_mode_tuning">Virtual room tuning</button>
+                    </div>
+                  </div>
+                  <!-- app.js updateRoomRows shows the rows of the chosen mode. A row that the timing
+                       limit shows or hides sits below it, so changing the limit never moves the slider. -->
+                  <div class="field-row" id="bf-room-range-row">
+                    <span class="field-label"><label for="bf-room-range" data-i18n="label_room_range">Correction range:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-range-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-range-tip" class="tip-bubble">Makes the response flat up to the Schroeder frequency, including dips a real room EQ cannot fill.</span></span></span>
+                    <select id="bf-room-range" aria-describedby="bf-room-range-tip">
+                      <option value="modes" data-i18n="option_room_range_modes">Room modes only</option>
+                      <option value="schroeder" selected data-i18n="option_room_range_schroeder">Up to the Schroeder frequency</option>
+                      <option value="extreme" data-i18n="option_room_range_extreme">Up to 10 kHz</option>
+                      <option value="legacy" data-i18n="option_room_range_legacy">Legacy (2.x)</option>
+                    </select>
+                  </div>
+                  <div class="field-row" id="bf-room-tuning-max-boost-row" hidden>
+                    <label for="bf-room-tuning-max-boost" data-i18n="label_room_max_boost">Max boost (dB):</label>
+                    <input type="number" id="bf-room-tuning-max-boost" class="num mono" value="6" min="0" max="12" step="0.5">
+                  </div>
+                  <div class="field-row" id="bf-room-tuning-curtain-row" hidden>
+                    <span class="field-label"><label for="bf-room-tuning-curtain" data-i18n="label_room_tuning_curtain">Detailed correction up to (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning-curtain-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning-curtain-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_curtain">Above this frequency only a broad tone correction is applied; the detailed correction fades out over the next octave.</span></span></span>
+                    <input type="number" id="bf-room-tuning-curtain" class="num mono" value="300" min="100" max="5000" step="10" aria-describedby="bf-room-tuning-curtain-tip">
+                  </div>
+                  <div class="check-row" id="bf-room-tuning-level-match-row" hidden>
+                    <input type="checkbox" id="bf-room-tuning-level-match" checked aria-describedby="bf-room-tuning-level-match-tip">
+                    <label for="bf-room-tuning-level-match" data-i18n="checkbox_room_tuning_level_match">Match speaker levels</label>
+                    <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning-level-match-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning-level-match-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_level_match">Matches the speakers' levels at the listening position within ±6 dB, as a room-correction processor does. Turn it off to keep the levels as recorded.</span></span>
+                  </div>
+                  <div class="field-row" id="bf-room-phase-limit-row" hidden>
+                    <span class="field-label"><label for="bf-room-phase-limit" data-i18n="label_room_tuning_phase_limit">Timing correction up to:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-phase-limit-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-phase-limit-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_phase_limit">Up to the Schroeder frequency, the room's bass timing is corrected. Higher limits also correct the speaker's own timing, for example around its crossover, where the room measurements at both ear positions agree. Off corrects the frequency response only and adds no delay.</span></span></span>
+                    <div class="range-field">
+                      <span class="range-stops">
+                        <input type="range" id="bf-room-phase-limit" min="0" max="7" step="1" value="7" aria-valuetext="Full band" aria-describedby="bf-room-phase-limit-tip">
+                      </span>
+                      <output class="range-value" id="bf-room-phase-limit-value" for="bf-room-phase-limit">Full band</output>
+                    </div>
+                  </div>
+                  <div class="check-row" id="bf-room-phase-schroeder-row" hidden>
+                    <input type="checkbox" id="bf-room-phase-schroeder" aria-describedby="bf-room-phase-schroeder-tip">
+                    <label for="bf-room-phase-schroeder" data-i18n="checkbox_room_tuning_phase_schroeder">Correct timing only up to the Schroeder frequency</label>
+                    <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-phase-schroeder-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-phase-schroeder-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_phase_schroeder">Checked: only the room's bass timing up to the Schroeder frequency is corrected. Unchecked: timing is corrected over the full band, where the room measurements at both ear positions agree.</span></span>
+                  </div>
+                  <div class="field-row" id="bf-room-volume-row">
+                    <label for="bf-room-volume" data-i18n="label_room_volume">Room volume (m³):</label>
+                    <input type="number" id="bf-room-volume" class="num mono" min="1" max="10000" step="any" placeholder="50">
+                  </div>
+                  <div class="field-row" id="bf-schroeder-freq-row">
+                    <label for="bf-schroeder-freq" data-i18n="label_schroeder_freq">Schroeder frequency (Hz):</label>
+                    <input type="number" id="bf-schroeder-freq" class="num mono" min="50" max="1000" step="any" placeholder="auto">
+                  </div>
+                  <div class="field-row" id="bf-room-tuning-delay-row" hidden>
+                    <label for="bf-room-tuning-delay" data-i18n="label_room_tuning_delay">Tuning delay (ms):</label>
+                    <div class="inline-group">
+                      <input type="number" id="bf-room-tuning-delay" class="num mono" value="10" min="2" max="20" step="1">
+                      <span class="check-row"><input type="checkbox" id="bf-room-tuning-delay-auto"><label for="bf-room-tuning-delay-auto" data-i18n="checkbox_room_tuning_delay_auto">Choose automatically</label></span>
+                    </div>
+                  </div>
+                  <div class="field-row" id="bf-room-max-boost-row">
+                    <label for="bf-room-max-boost" data-i18n="label_room_max_boost">Max boost (dB):</label>
+                    <input type="number" id="bf-room-max-boost" class="num mono" value="12" min="0" max="24" step="0.5">
+                  </div>
+                  <div class="field-row" id="bf-specific-limit-row" hidden>
                     <label for="bf-specific-limit" data-i18n="label_specific_limit">Specific Limit (Hz):</label>
                     <input type="number" id="bf-specific-limit" class="num mono" value="400" min="0">
                   </div>
-                  <div class="field-row">
+                  <div class="field-row" id="bf-generic-limit-row" hidden>
                     <label for="bf-generic-limit" data-i18n="label_generic_limit">Generic Limit (Hz):</label>
                     <input type="number" id="bf-generic-limit" class="num mono" value="300" min="0">
                   </div>
-                  <div class="field-row">
+                  <div class="field-row" id="bf-fr-combination-row">
                     <label for="bf-fr-combination" data-i18n="label_fr_combination">FR Combination Method:</label>
                     <select id="bf-fr-combination">
                       <option value="average" selected>average</option>
@@ -573,8 +637,8 @@
                 </div>
                 <div class="disclosure-body">
                   <div class="field-row">
-                    <label for="bf-vbass-freq" data-i18n="vbass_crossover_freq">Crossover frequency (Hz):</label>
-                    <input type="number" id="bf-vbass-freq" class="num mono" value="250" min="30" max="500">
+                    <span class="field-label"><label for="bf-vbass-freq" data-i18n="vbass_crossover_freq">Crossover frequency (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-vbass-freq-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-vbass-freq-tip" class="tip-bubble" data-i18n="tooltip_vbass_room_handoff">Room correction leaves everything below the crossover to virtual bass, except with the Legacy (2.x) range.</span></span></span>
+                    <input type="number" id="bf-vbass-freq" class="num mono" value="250" min="30" max="500" aria-describedby="bf-vbass-freq-tip">
                   </div>
                   <div class="field-row">
                     <label for="bf-vbass-hp" data-i18n="vbass_hp_freq">Sub-bass high-pass (Hz):</label>

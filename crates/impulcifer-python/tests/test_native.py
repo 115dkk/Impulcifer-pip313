@@ -99,7 +99,8 @@ def test_version(package):
 
 
 def test_main_runs_demo_and_writes_hesuvi(package, demo):
-    output = package.main(**config(package, demo))
+    # The golden is 2.x output, so pin the 2.x room correction (ADR 0004).
+    output = package.main(**config(package, demo), room_range="legacy")
     assert Path(output) == demo / "hesuvi.wav"
     rate, channels, actual = samples(Path(output))
     golden = ROOT / "tests" / "migration" / "goldens" / "p11_default.json"
