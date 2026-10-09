@@ -21,7 +21,8 @@ thread check is never waived.
 
 A base run that fails is a failure too, unless the base CLI predates the
 scenario: every scenario names the first 3.x version whose CLI runs it, and
-only a base older than that (``--version``) has no baseline. A PR that adds a
+only a base older than that (``--version``, SemVer order including
+pre-releases) has no baseline. A PR that adds a
 scenario for a new option gives it the version that ships the option. With
 ``--allow-change`` a failing base run is a warning (the PR may fix it).
 
@@ -124,16 +125,22 @@ def run(binary: Path, root: Path, work: Path, args: tuple[str, ...], env: dict[s
     return Run(result.returncode == 0 and bool(hashes), seconds, hashes, log)
 
 
-def release(text: str) -> tuple[int, int, int] | None:
-    """The X.Y.Z of a version string; a pre-release counts as its release."""
-    match = re.search(r"(\d+)\.(\d+)\.(\d+)", text)
-    return (int(match[1]), int(match[2]), int(match[3])) if match else None
+def version_key(text: str) -> tuple | None:
+    """A SemVer sort key for the first X.Y.Z[-pre] in text: a pre-release sorts
+    before its release, its dot-separated identifiers compare in order, and
+    numeric identifiers compare as numbers and before alphanumeric ones."""
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?", text)
+    if not match:
+        return None
+    pre = (1,) if match[4] is None else (0, *(
+        (0, int(part), "") if part.isdigit() else (1, 0, part) for part in match[4].split(".")))
+    return int(match[1]), int(match[2]), int(match[3]), pre
 
 
-def cli_version(binary: Path) -> tuple[int, int, int] | None:
+def cli_version(binary: Path) -> str:
     result = subprocess.run([str(binary), "--version"], capture_output=True, text=True,
                             encoding="utf-8", errors="replace", timeout=60, check=False)
-    return release(result.stdout) if result.returncode == 0 else None
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
 def differing(a: dict[str, str], b: dict[str, str]) -> list[str]:
@@ -156,8 +163,9 @@ def main() -> int:
     if not scenarios:
         parser.error(f"no scenario matches {options.scenario}")
 
-    base_version = cli_version(options.base)
-    print(f"base CLI version: {'.'.join(map(str, base_version)) if base_version else 'unknown'}")
+    base_text = cli_version(options.base)
+    base_version = version_key(base_text)
+    print(f"base CLI: {base_text or 'version unknown'}")
     rows = []
     failures = []
     warnings = []
@@ -176,7 +184,7 @@ def main() -> int:
                 failures.append(
                     f"{name}: one-thread output differs in {', '.join(differing(head.hashes, single.hashes))}"
                 )
-            elif not base.ok and base_version is not None and base_version < release(since):
+            elif not base.ok and base_version is not None and base_version < version_key(since):
                 verdict = "no baseline"
                 warnings.append(f"{name}: the base CLI predates this scenario ({since})\n{base.log}")
             elif not base.ok and options.allow_change:
