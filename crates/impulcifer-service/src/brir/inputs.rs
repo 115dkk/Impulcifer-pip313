@@ -2,7 +2,7 @@ use super::{BrirError, BrirEvents, discovery::MeasurementDir};
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     fr::FrequencyResponse,
-    hrir::Hrir,
+    hrir::{Hrir, ingest_recording},
     pipeline::PipelineInputs,
     stages::{
         eq_files::{finalize_eq, looks_like_eqapo_config, read_eq_settings, select_eq_pair},
@@ -16,6 +16,7 @@ use impulcifer_types::{
     config::ProcessingConfig,
     constants::{HEXADECAGONAL_TRACK_ORDER, Side},
 };
+use rayon::prelude::*;
 use serde_json::json;
 use std::path::Path;
 
@@ -182,19 +183,36 @@ pub fn load_inputs(
             .transpose()?;
         let mut rir = empty(fs);
         let mut room_pairs = Vec::new();
-        for (path, names) in &dir.room.recordings {
-            events.check_cancelled()?;
-            ingest(
-                &mut rir,
-                path,
-                &names
+        events.check_cancelled()?;
+        let room_recordings: Vec<_> = dir
+            .room
+            .recordings
+            .par_iter()
+            .map(|(path, names)| {
+                let wav = read_wav(path)?;
+                let speakers = names
                     .speakers
                     .iter()
                     .map(String::as_str)
-                    .collect::<Vec<_>>(),
-                names.side,
-                estimator,
-            )?;
+                    .collect::<Vec<_>>();
+                let incoming = ingest_recording(
+                    estimator,
+                    fs,
+                    wav.sample_rate,
+                    &wav.tracks,
+                    &speakers,
+                    names.side,
+                    2.0,
+                )?;
+                Ok(incoming)
+            })
+            .collect();
+        let room_recordings = room_recordings
+            .into_iter()
+            .collect::<Result<Vec<_>, BrirError>>()?;
+        for ((_, names), incoming) in dir.room.recordings.iter().zip(room_recordings) {
+            events.check_cancelled()?;
+            rir.merge_recording(incoming);
             if config.room_mode == "tuning" {
                 room_pairs.extend(impulcifer_dsp::stages::room_tuning::recording_pairs(
                     &rir,

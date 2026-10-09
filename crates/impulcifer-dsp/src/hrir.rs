@@ -210,7 +210,7 @@ impl Hrir {
         if self.fs != estimator.fs {
             return Err(DspError::InvalidArgument("Refusing to open recording because HRIR's sampling rate doesn't match impulse response estimator's sampling rate.".into()));
         }
-        for incoming in ingest_recording(
+        let incoming = ingest_recording(
             estimator,
             self.fs,
             fs,
@@ -218,7 +218,12 @@ impl Hrir {
             speakers,
             side,
             silence_length,
-        )? {
+        )?;
+        self.merge_recording(incoming);
+        Ok(())
+    }
+    pub fn merge_recording(&mut self, incoming: Vec<SpeakerIrs>) {
+        for incoming in incoming {
             if let Some(existing) = self.get_mut(&incoming.speaker) {
                 if incoming.left.is_some() {
                     existing.left = incoming.left;
@@ -230,7 +235,6 @@ impl Hrir {
                 self.speakers.push(incoming);
             }
         }
-        Ok(())
     }
     /// Python write_wav pure stacking, core/hrir.py:427-474; p08_stack.json.
     pub fn stack_tracks(

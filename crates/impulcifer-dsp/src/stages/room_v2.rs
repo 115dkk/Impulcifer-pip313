@@ -11,6 +11,7 @@ use crate::{
     virtual_bass,
 };
 use impulcifer_types::constants::{HEXADECAGONAL_TRACK_ORDER, SPEAKER_NAMES, Side};
+use rayon::prelude::*;
 use std::f64::consts::{PI, SQRT_2};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -113,15 +114,19 @@ pub fn estimate_schroeder(
     volume: Option<f64>,
     override_hz: Option<f64>,
 ) -> SchroederEstimate {
-    let mut times = Vec::new();
-    for ir in irs {
-        if ir.data.len() < 8 || ir.data.iter().all(|v| *v == 0.0) {
-            continue;
-        }
-        let nyq = ir.fs as f64 / 2.0;
-        for center in [125.0, 250.0, 500.0] {
+    let units: Vec<_> = irs
+        .iter()
+        .flat_map(|ir| [125.0, 250.0, 500.0].map(|center| (*ir, center)))
+        .collect();
+    let values: Vec<_> = units
+        .par_iter()
+        .map(|(ir, center)| {
+            if ir.data.len() < 8 || ir.data.iter().all(|v| *v == 0.0) {
+                return None;
+            }
+            let nyq = ir.fs as f64 / 2.0;
             if center * SQRT_2 >= nyq {
-                continue;
+                return None;
             }
             let high = filters::sosfilt(
                 &filters::butter(4, center / SQRT_2 / nyq, BType::Highpass),
@@ -133,14 +138,16 @@ pub fn estimate_schroeder(
             );
             let decay = decay::decay_times(&band, ir.fs, None);
             // The existing helper reports elapsed -30/-20 dB times, not extrapolated T60.
-            let t = decay
+            decay
                 .rt30
                 .map(|t| t * 2.0)
-                .or_else(|| decay.rt20.map(|t| t * 3.0));
-            if let Some(t) = t.filter(|t| (0.05..=3.0).contains(t)) {
-                times.push(t);
-            }
-        }
+                .or_else(|| decay.rt20.map(|t| t * 3.0))
+                .filter(|t| (0.05..=3.0).contains(t))
+        })
+        .collect();
+    let mut times = Vec::new();
+    for value in values.into_iter().flatten() {
+        times.push(value);
     }
     let t60 = median(times);
     let (freq, source) = if let Some(f) = override_hz {
@@ -547,37 +554,52 @@ pub(super) fn room_correction(
         tracks = rir.stack_tracks(&HEXADECAGONAL_TRACK_ORDER, false)?;
         frs.entries = room::calculate_specific_room_corrections(rir, target, mic, 0.0)?.entries;
     }
-    let mut diagnostics = Vec::new();
-    let mut originals = Vec::new();
-    for (speaker, side, fr) in &mut frs.entries {
-        let pair = uncropped.get(speaker).unwrap();
-        let ir = if *side == Side::Left {
-            pair.left.as_ref()
-        } else {
-            pair.right.as_ref()
-        }
-        .unwrap();
-        let snr = snr_db(ir, &fr.frequency);
-        let rolloff = detect_rolloff(&fr.frequency, &fr.raw, snr.as_deref());
-        originals.push(fr.error.clone());
-        correction_gain(
-            fr,
-            snr.as_deref(),
-            rolloff,
-            schroeder.freq,
-            false,
-            rir.fs,
-            options,
-        )?;
-        diagnostics.push(EarDiagnostics {
-            speaker: speaker.clone(),
-            side: Some(*side),
-            rolloff,
-            snr_available: snr.is_some(),
-            residual_rms_db: None,
-            residual_lo: 0.0,
-            residual_hi: 0.0,
-        });
+    let results: Vec<_> = frs
+        .entries
+        .par_iter()
+        .map(|(speaker, side, fr)| {
+            let pair = uncropped.get(speaker).unwrap();
+            let ir = if *side == Side::Left {
+                pair.left.as_ref()
+            } else {
+                pair.right.as_ref()
+            }
+            .unwrap();
+            let snr = snr_db(ir, &fr.frequency);
+            let rolloff = detect_rolloff(&fr.frequency, &fr.raw, snr.as_deref());
+            let original = fr.error.clone();
+            let mut fr = fr.clone();
+            correction_gain(
+                &mut fr,
+                snr.as_deref(),
+                rolloff,
+                schroeder.freq,
+                false,
+                rir.fs,
+                options,
+            )?;
+            Ok((
+                fr,
+                original,
+                EarDiagnostics {
+                    speaker: speaker.clone(),
+                    side: Some(*side),
+                    rolloff,
+                    snr_available: snr.is_some(),
+                    residual_rms_db: None,
+                    residual_lo: 0.0,
+                    residual_hi: 0.0,
+                },
+            ))
+        })
+        .collect();
+    let results = results.into_iter().collect::<Result<Vec<_>, DspError>>()?;
+    let mut diagnostics = Vec::with_capacity(results.len());
+    let mut originals = Vec::with_capacity(results.len());
+    for ((_, _, fr), (updated, original, diagnostic)) in frs.entries.iter_mut().zip(results) {
+        *fr = updated;
+        originals.push(original);
+        diagnostics.push(diagnostic);
     }
     if options.range == RoomRange::Extreme {
         blend_diotic(&mut frs);
