@@ -50,8 +50,12 @@ interface ProcessingRequest {
   remove_silent_channels?: boolean; head_ms?: number; jamesdsp?: boolean; hangloose?: boolean;
   microphone_deviation_correction?: boolean; mic_deviation_strength?: number; mic_deviation_debug_plots?: boolean;
   output_truehd_layouts?: boolean; vbass?: boolean; vbass_freq?: number; vbass_hp?: number; vbass_polarity?: string;
+  /* 3.x only. specific_limit and generic_limit apply to the legacy range alone.
+     A null room_volume (m³) means 50 m³ is assumed; a null schroeder_freq (Hz) is estimated. */
+  room_range?: RoomRange; room_volume?: number | null; schroeder_freq?: number | null; room_max_boost?: number;
   confirm_warnings?: boolean;
 }
+type RoomRange = "legacy" | "modes" | "schroeder" | "extreme";
 type EqSlotName = "both" | "left" | "right";
 type EqChoice = { mode: "folder" } | { mode: "off" } | { mode: "file"; path: string };
 interface EqRequest extends Pick<ProcessingRequest, "eq_file" | "eq_left_file" | "eq_right_file"> { dir_path: string }

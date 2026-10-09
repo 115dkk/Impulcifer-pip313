@@ -236,10 +236,32 @@
                 </div>
                 <div class="disclosure-body">
                   <div class="field-row">
+                    <label for="bf-room-range" data-i18n="label_room_range">Correction range:</label>
+                    <select id="bf-room-range" aria-describedby="bf-room-range-hint">
+                      <option value="modes" data-i18n="option_room_range_modes">Room modes only</option>
+                      <option value="schroeder" selected data-i18n="option_room_range_schroeder">Up to the Schroeder frequency</option>
+                      <option value="extreme" data-i18n="option_room_range_extreme">Up to 10 kHz</option>
+                      <option value="legacy" data-i18n="option_room_range_legacy">Legacy (2.x)</option>
+                    </select>
+                  </div>
+                  <p class="hint" id="bf-room-range-hint">Makes the response flat up to the Schroeder frequency, including dips a real room EQ cannot fill, because the virtual speaker never moves and the measured point is the listening point.</p>
+                  <div class="field-row" id="bf-room-volume-row">
+                    <label for="bf-room-volume" data-i18n="label_room_volume">Room volume (m³):</label>
+                    <input type="number" id="bf-room-volume" class="num mono" min="0" max="10000" step="any" placeholder="50">
+                  </div>
+                  <div class="field-row" id="bf-schroeder-freq-row">
+                    <label for="bf-schroeder-freq" data-i18n="label_schroeder_freq">Schroeder frequency (Hz):</label>
+                    <input type="number" id="bf-schroeder-freq" class="num mono" min="50" max="1000" step="any" placeholder="auto">
+                  </div>
+                  <div class="field-row" id="bf-room-max-boost-row">
+                    <label for="bf-room-max-boost" data-i18n="label_room_max_boost">Max boost (dB):</label>
+                    <input type="number" id="bf-room-max-boost" class="num mono" value="12" min="0" max="24" step="0.5">
+                  </div>
+                  <div class="field-row" id="bf-specific-limit-row" hidden>
                     <label for="bf-specific-limit" data-i18n="label_specific_limit">Specific Limit (Hz):</label>
                     <input type="number" id="bf-specific-limit" class="num mono" value="400" min="0">
                   </div>
-                  <div class="field-row">
+                  <div class="field-row" id="bf-generic-limit-row" hidden>
                     <label for="bf-generic-limit" data-i18n="label_generic_limit">Generic Limit (Hz):</label>
                     <input type="number" id="bf-generic-limit" class="num mono" value="300" min="0">
                   </div>
@@ -588,6 +610,7 @@
                       <option value="invert" data-i18n="vbass_polarity_invert">Invert</option>
                     </select>
                   </div>
+                  <p class="hint" data-i18n="tooltip_vbass_room_handoff">Room correction leaves everything below the crossover to virtual bass, except with the Legacy (2.x) range.</p>
                 </div>
               </div>
             </div>

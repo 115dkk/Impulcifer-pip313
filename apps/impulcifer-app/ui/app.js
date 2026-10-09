@@ -124,6 +124,7 @@ function applyStrings() {
     node.textContent = t(node.dataset.i18n || "");
   });
   updateChannelGuidance();
+  updateRoomRange();
   refreshResolvedPath();
   renderSteps();
   renderJobState(state.lastJob);
@@ -1444,6 +1445,54 @@ async function detectSweep() {
   }
 }
 
+/* ------------------------------------------------- room correction range
+   The legacy range is the 2.x stage and the only one that reads the two
+   limits; the other ranges read the room volume, the Schroeder frequency
+   and the boost cap instead. Rows are hidden, not cleared, so switching the
+   range keeps what was typed. */
+
+/** @type {readonly RoomRange[]} */
+const ROOM_RANGES = ["modes", "schroeder", "extreme", "legacy"];
+
+/** @param {unknown} value @returns {value is RoomRange} */
+function isRoomRange(value) {
+  return typeof value === "string" && ROOM_RANGES.some((range) => range === value);
+}
+
+/** @returns {RoomRange} */
+function roomRange() {
+  const value = val("bf-room-range");
+  return isRoomRange(value) ? value : "schroeder";
+}
+
+/** @param {RoomRange} range */
+function roomRangeHint(range) {
+  switch (range) {
+    case "modes": return t("tooltip_room_range_modes");
+    case "extreme": return t("tooltip_room_range_extreme");
+    case "legacy": return t("tooltip_room_range_legacy");
+    default: return t("tooltip_room_range_schroeder");
+  }
+}
+
+function updateRoomRange() {
+  const range = roomRange();
+  const legacy = range === "legacy";
+  for (const id of ["bf-room-volume-row", "bf-schroeder-freq-row", "bf-room-max-boost-row"]) $(id).hidden = legacy;
+  for (const id of ["bf-specific-limit-row", "bf-generic-limit-row"]) $(id).hidden = !legacy;
+  $("bf-room-range-hint").textContent = roomRangeHint(range);
+  el("bf-schroeder-freq", HTMLInputElement).placeholder = t("placeholder_schroeder_freq");
+}
+
+/* The range and the boost cap start from the service's defaults. The room
+   volume and the Schroeder frequency start empty and are sent as null: the
+   service then assumes 50 m³ and estimates the frequency. */
+function applyRoomDefaults() {
+  const range = state.brirDefaults.room_range;
+  el("bf-room-range", HTMLSelectElement).value = isRoomRange(range) ? range : "schroeder";
+  el("bf-room-max-boost", HTMLInputElement).value = String(brirDefault("room_max_boost", 12));
+}
+
 function gatherBrirPayload() {
   /** @type {ProcessingRequest} */
   const args = {
@@ -1455,10 +1504,18 @@ function gatherBrirPayload() {
     do_equalization: isOpen("dis-eq"),
   };
   if (isOpen("dis-room")) {
+    const range = roomRange();
     args.room_target = val("bf-room-target") || null;
     args.room_mic_calibration = val("bf-mic-calibration") || null;
-    args.specific_limit = numOr("bf-specific-limit", brirDefault("specific_limit", 400));
-    args.generic_limit = numOr("bf-generic-limit", brirDefault("generic_limit", 300));
+    args.room_range = range;
+    if (range === "legacy") {
+      args.specific_limit = numOr("bf-specific-limit", brirDefault("specific_limit", 400));
+      args.generic_limit = numOr("bf-generic-limit", brirDefault("generic_limit", 300));
+    } else {
+      args.room_volume = numOrNull("bf-room-volume");
+      args.schroeder_freq = numOrNull("bf-schroeder-freq");
+      args.room_max_boost = numOr("bf-room-max-boost", brirDefault("room_max_boost", 12));
+    }
     args.fr_combination_method = val("bf-fr-combination");
   }
   if (isOpen("dis-headphone")) {
@@ -2148,6 +2205,7 @@ function wireEvents() {
   el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", refreshResolvedPath);
   el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", refreshResolvedPath);
   el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", updateTestSignalVisibility);
+  el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRange);
   el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
   // The preview is drawn at its rendered width; redraw when that changes
   // (window resize, or the disclosure opening from display: none).
@@ -2258,6 +2316,7 @@ async function boot() {
   state.platform = data.platform;
   state.shareModes = data.capabilities.share_modes;
   state.brirDefaults = data.brir_defaults || {};
+  applyRoomDefaults();
   state.sweepDefaults = data.sweep || {};
   populateSweepLayouts(
     (data.sweep && data.sweep.layouts) || ["mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6"]
