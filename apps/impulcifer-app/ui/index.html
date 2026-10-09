@@ -276,10 +276,11 @@
                     </div>
                   </div>
                   <div class="check-row" id="bf-room-phase-schroeder-row" hidden>
-                    <input type="checkbox" id="bf-room-phase-schroeder" aria-describedby="bf-room-phase-schroeder-tip">
+                    <input type="checkbox" id="bf-room-phase-schroeder" aria-describedby="bf-room-phase-schroeder-tip bf-room-phase-current">
                     <label for="bf-room-phase-schroeder" data-i18n="checkbox_room_tuning_phase_schroeder">Correct timing only up to the Schroeder frequency</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-phase-schroeder-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-phase-schroeder-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_phase_schroeder">Checked: only the room's bass timing up to the Schroeder frequency is corrected. Unchecked: timing is corrected over the full band, where the room measurements at both ear positions agree.</span></span>
                   </div>
+                  <p class="hint" id="bf-room-phase-current" hidden></p>
                   <div class="field-row" id="bf-room-volume-row">
                     <label for="bf-room-volume" data-i18n="label_room_volume">Room volume (m³):</label>
                     <input type="number" id="bf-room-volume" class="num mono" min="1" max="10000" step="any" placeholder="50">

@@ -394,7 +394,7 @@ tests = ["impulcifer-dsp::room_tuning_matches_secs_reference", "impulcifer-dsp::
 id = "room.v2_ranges"
 kind = "stage"
 status = "implemented"
-tests = ["impulcifer-dsp::room_v2_schroeder_range_corrects_modes_and_fills_specific_dips", "impulcifer-dsp::room_v2_modes_range_keeps_bass_balance", "impulcifer-dsp::room_v2_extreme_is_diotic_above_700_hz", "impulcifer-dsp::room_v2_extreme_room_correction_is_diotic_above_700_hz", "impulcifer-service::demo_default_room_range_runs_schroeder"]
+tests = ["impulcifer-dsp::room_v2_schroeder_range_corrects_modes_and_fills_specific_dips", "impulcifer-dsp::room_v2_modes_range_keeps_bass_balance", "impulcifer-dsp::room_v2_extreme_is_diotic_above_700_hz", "impulcifer-dsp::room_v2_extreme_room_correction_is_diotic_above_700_hz", "impulcifer-dsp::room_v2_extreme_blend_keeps_the_stricter_snr_limit", "impulcifer-service::demo_default_room_range_runs_schroeder"]
 
 [[feature]]
 id = "room.schroeder_estimate"
