@@ -106,7 +106,7 @@ Exactly as legacy up to the error: mic calibration subtracted, specific measurem
 ### 3. Schroeder frequency
 
 `estimate_schroeder`:
-- `T60`: for each IR and each octave band centred at 125, 250 and 500 Hz, filter the IR with `butter(4, f/√2, highpass)` then `butter(4, f·√2, lowpass)` (`filters::butter` + `sosfilt`), take `decay_times(..).rt30`, falling back to `rt20`. Keep values in `[0.05, 3.0]` s. `T60` = median of the kept values; `None` if none.
+- `T60`: for each IR and each octave band centred at 125, 250 and 500 Hz, filter the IR with `butter(4, (f/√2)/nyq, highpass)` then `butter(4, (f·√2)/nyq, lowpass)` (`filters::butter` takes a Nyquist-normalised `wn` in `(0, 1)`; `nyq = fs/2`; skip a band whose upper edge is not below `nyq`) and `sosfilt`, take `decay_times(..).rt30`, falling back to `rt20`. Keep values in `[0.05, 3.0]` s. `T60` = median of the kept values; `None` if none.
 - Override given → `freq = clamp(override, 50, 1000)`, source `Override`.
 - Volume given and `T60` known → `freq = clamp(2000·√(T60/V), 80, 500)`, source `Volume`.
 - No volume, `T60` known → `freq = clamp(2000·√(T60/50), 120, 300)`, source `AssumedVolume`.
@@ -131,7 +131,7 @@ Reference values from the advisor's simulation of this exact rule (1/6-oct smoot
 Tier input `x` and the two smoothed views `c` (for cuts) and `b` (for boosts):
 - **modes**: `x = S_{1/24}(e) − S_1(e)` (resonances only; the bass balance is left alone). `c = x`, `b = S_{1/6}(x)`.
 - **schroeder**: `x = e`. `c = S_{1/12}(x)`, `b = S_{1/6}(x)`.
-- **extreme**: for specific measurements, above 500 Hz blend each ear's `e` with the mean of the same speaker's left and right `e`: `x = (1−α)·e_ear + α·mean(e_L, e_R)` with `α` rising 0→1 as `1 − h` of a half-Hann fade from 500 Hz to 700 Hz (diotic above 700 Hz: the omni mic has no head shadow, so per-ear differences there are not ILD). Generic: `x = e`. Below `f_S`: `c = S_{1/12}(x)`, `b = S_{1/6}(x)`. Above `f_S`: `c = b = S_{w(f)}(x)` where `log2 w` is piecewise linear in `log2 f` through `(f_S, 1/12)`, `(1000, 1/3)`, `(4000, 1)` and constant above 4 kHz; compute `S_w` for `w ∈ {1/12, 1/6, 1/3, 1/2, 1}` and interpolate per bin linearly in `log2 w` between the two neighbours.
+- **extreme**: `x = e`. The diotic rule for specific measurements (the omni mic has no head shadow, so per-ear differences above ~700 Hz are not ILD) is applied to the **final** gains, after every cap and fade below: for each speaker with both ears, `G_ear ← (1−α)·G_ear + α·mean(G_L, G_R)` with `α` rising 0→1 as `1 − h` of a half-Hann fade from 500 Hz to 700 Hz. Blending the input instead would not make the gains equal, because smoothing windows above 700 Hz still reach the unequal band and the per-ear SNR caps differ. Below `f_S`: `c = S_{1/12}(x)`, `b = S_{1/6}(x)`. Above `f_S`: `c = b = S_{w(f)}(x)` where `log2 w` is piecewise linear in `log2 f` through `(f_S, 1/12)`, `(1000, 1/3)`, `(4000, 1)` and constant above 4 kHz; compute `S_w` for `w ∈ {1/12, 1/6, 1/3, 1/2, 1}` and interpolate per bin linearly in `log2 w` between the two neighbours.
 
 Gain before caps: `G = −c` where `c > 0`; else `G = max(−b, 0)`.
 
@@ -142,7 +142,7 @@ Caps (apply to the magnitude of cuts and boosts respectively, `max_boost = room_
 - Rolloff: boost cap × `r(f)`, `r = 0` below `f_roll`, `r = 1 − h` of a half-Hann fade from `f_roll` to `f_knee` (0 → 1), 1 above `f_knee`. Cuts are untouched below the rolloff.
 - SNR: boost ≤ `max(0, SNR(f) − 20)`.
 
-Then multiply `G` by the upper fade and, with virtual bass on, by the hand-off mask:
+Then multiply `G` by the upper fade and, with virtual bass on, by the hand-off mask (and, for extreme, apply the diotic blend above last):
 - Upper fade: half-Hann from `f_hi/√2` (1) to `f_hi` (0); extreme: from 5 kHz (1) to 10 kHz (0).
 - `vbass_handoff_mask(frequency, f_c, fs)`: `|H(f)|` of the virtual-bass high-pass section exactly as `virtual_bass.rs` builds it (`butter(4, f_c/nyq, highpass)` applied twice, i.e. LR8 high-pass), evaluated at each grid frequency, and 0 below `f_c/√2`. Reference values: `f_c·2^{−1/4, 0, 1/4, 1/2, 1}` → 0.20, 0.50, 0.80, 0.94, 0.996 (±0.02). Expose the SOS construction from `virtual_bass.rs` as a `pub(crate)` helper rather than duplicating it; `apply_virtual_bass` output must not change.
 
