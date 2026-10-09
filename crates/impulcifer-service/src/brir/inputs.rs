@@ -184,11 +184,17 @@ pub fn load_inputs(
         let mut rir = empty(fs);
         let mut room_pairs = Vec::new();
         events.check_cancelled()?;
+        // Each worker consults the job before its decode, so a cancel still
+        // stops at the next recording instead of after the whole batch.
+        let token = events.cancel_token();
         let room_recordings: Vec<_> = dir
             .room
             .recordings
             .par_iter()
             .map(|(path, names)| {
+                if token.as_ref().is_some_and(|t| t.is_cancelled()) {
+                    return Err(BrirError::Cancelled);
+                }
                 let wav = read_wav(path)?;
                 let speakers = names
                     .speakers
