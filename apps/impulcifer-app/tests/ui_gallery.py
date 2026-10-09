@@ -533,23 +533,29 @@ def room_phase_checks(browser):
     def stable_request():
         return page.evaluate("gatherBrirPayload()")
 
-    # Stable has only the Schroeder frequency and the full band: Off and the Hz stops become the full band.
+    # Stable shows only whether the limit is the Schroeder stop. A limit it cannot show (Off, a Hz stop) is
+    # kept until the checkbox is used, so switching skins never changes what is processed.
     checkbox = page.locator("#bf-room-phase-schroeder")
-    for stop, schroeder in ((0, False), (1, True), (4, False), (7, False)):
+    for stop, limit in ((0, "off"), (1, "schroeder"), (4, 2000), (7, "full")):
         slider.focus()
         page.keyboard.press("Home")
         for _ in range(stop):
             page.keyboard.press("ArrowRight")
         switch("stable")
+        schroeder = limit == "schroeder"
         assert checkbox.is_visible() and checkbox.is_checked() == schroeder and not slider.is_visible(), stop
         assert page.locator('button.info-tip[aria-describedby="bf-room-phase-schroeder-tip"]').is_visible()
-        assert page.locator("#bf-room-tuning-delay-row").is_visible()
+        assert page.locator("#bf-room-tuning-delay-row").is_visible() == (limit != "off"), stop
         assert all(shown(facts)) == schroeder, stop
         request = stable_request()
-        assert request["room_tuning_phase_limit"] == ("schroeder" if schroeder else "full"), (stop, request)
+        assert request["room_tuning_phase_limit"] == limit, (stop, request)
         switch("studio")
-        assert slider.input_value() == ("1" if schroeder else "7"), stop
+        assert slider.input_value() == str(stop), stop
     switch("stable")
+    checkbox.check()
+    assert stable_request()["room_tuning_phase_limit"] == "schroeder" and all(shown(facts))
+    checkbox.uncheck()
+    assert stable_request()["room_tuning_phase_limit"] == "full" and not any(shown(facts))
     checkbox.check()
     assert stable_request()["room_tuning_phase_limit"] == "schroeder" and all(shown(facts))
     page.locator("#bf-room-mode-eq").click()

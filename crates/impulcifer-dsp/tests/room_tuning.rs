@@ -441,3 +441,17 @@ fn synthetic() -> Hrir {
         }],
     }
 }
+#[test]
+fn room_tuning_rejects_low_sample_rates() {
+    // The analysis reads fixed 1 Hz bins up to 500 Hz: refuse instead of panicking.
+    let mut h = synthetic();
+    h.fs = 4000;
+    let o = options();
+    assert!(room_tuning::prepare_tuning(&h, &o, None, None, &o.pairs).is_err());
+}
+#[test]
+fn room_tuning_level_match_skips_silent_ears() {
+    let trims = room_tuning::level_trims(&[1.0, 0.5, 2.0], &[1.0, 0.0, 2.0]);
+    assert!(trims.iter().all(|(t, _, d)| t.is_finite() && d.is_finite()));
+    assert_eq!(trims[1], (0.0, true, 0.0));
+}

@@ -1650,9 +1650,12 @@ function updateRoomPhaseReadout() {
   slider.parentElement?.style.setProperty("--range-gaps", String(ROOM_PHASE_FULL));
 }
 
+/* The Studio slider holds the limit in both skins. Stable's checkbox only
+   shows whether it is the Schroeder stop, and changes the slider when the
+   user ticks or clears it, so a limit Stable cannot show (Off, a Hz stop)
+   survives a skin switch instead of silently becoming the full band. */
 /** @returns {RoomPhaseLimit} */
 function roomPhaseLimit() {
-  if (state.skin === "stable") return checked("bf-room-phase-schroeder") ? "schroeder" : "full";
   return ROOM_PHASE_STOPS[roomPhaseStop()];
 }
 
@@ -1692,9 +1695,14 @@ function setRoomPhaseLimit(spec) {
 function syncRoomPhase(skin) {
   if (skin === "stable") {
     el("bf-room-phase-schroeder", HTMLInputElement).checked = roomPhaseStop() === ROOM_PHASE_SCHROEDER;
-  } else {
-    el("bf-room-phase-limit", HTMLInputElement).value = String(checked("bf-room-phase-schroeder") ? ROOM_PHASE_SCHROEDER : ROOM_PHASE_FULL);
   }
+  updateRoomRows();
+}
+
+/* Stable's checkbox is a direct choice: Schroeder when ticked, the full band when cleared. */
+function onRoomPhaseCheckbox() {
+  el("bf-room-phase-limit", HTMLInputElement).value = String(checked("bf-room-phase-schroeder") ? ROOM_PHASE_SCHROEDER : ROOM_PHASE_FULL);
+  updateRoomPhaseReadout();
   updateRoomRows();
 }
 
@@ -2537,7 +2545,8 @@ function wireEvents() {
   });
   // The limit decides which rows below it show (the room facts, the delay).
   el("bf-room-phase-limit", HTMLInputElement).addEventListener("input", updateRoomRows);
-  for (const id of ["bf-room-phase-schroeder", "bf-room-tuning-delay-auto"]) $(id).addEventListener("change", updateRoomRows);
+  el("bf-room-phase-schroeder", HTMLInputElement).addEventListener("change", onRoomPhaseCheckbox);
+  el("bf-room-tuning-delay-auto", HTMLInputElement).addEventListener("change", updateRoomRows);
   el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
   // The preview is drawn at its rendered width; redraw when that changes
   // (window resize, or the disclosure opening from display: none).

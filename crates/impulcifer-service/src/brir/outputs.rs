@@ -158,7 +158,7 @@ pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String
                 s.weak()
             ));
         }
-        out.push_str("\nPre-echo uses the first −18 dB direct peak and a 0.5 ms guard. Warn only above −30 dB and at least 6 dB above the same untuned ear. Weak means mean omni/in-ear magnitude RMS exceeds 4 dB (30–300 Hz, level matched at 100–300 Hz); EDT and excess GD are information only.\n\n| Speaker | Ear | Pre-echo untuned / tuned (dB) | Warning |\n| --- | --- | --- | --- |\n");
+        out.push_str("\nPre-echo uses the first −18 dB direct peak and a 2 ms guard, against the louder of the speaker's two direct sounds. Warn only above −30 dB and at least 6 dB above the same untuned ear. Weak means mean omni/in-ear magnitude RMS exceeds 4 dB (30–300 Hz, level matched at 100–300 Hz); EDT and excess GD are information only.\n\n| Speaker | Ear | Pre-echo untuned / tuned (dB) | Warning |\n| --- | --- | --- | --- |\n");
         for s in &report.speakers {
             for p in &s.pre_echo_channels {
                 out.push_str(&format!(

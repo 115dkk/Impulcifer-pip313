@@ -661,6 +661,14 @@ pub fn prepare_tuning(
     target: Option<&FrequencyResponse>,
     pairs: &[PairMeasurement],
 ) -> Result<TuningPlan, DspError> {
+    // The analysis and its diagnostics read fixed 1 Hz bins up to 500 Hz and
+    // millisecond windows; below 8 kHz they would run out of bins.
+    if hrir.fs < 8000 {
+        return Err(DspError::InvalidArgument(format!(
+            "virtual room tuning needs a sample rate of at least 8000 Hz, got {}",
+            hrir.fs
+        )));
+    }
     let build = |d| {
         hrir.speakers
             .iter()
@@ -1024,6 +1032,11 @@ pub fn level_trims(references: &[f64], ear_levels: &[f64]) -> Vec<(f64, bool, f6
         .iter()
         .zip(ear_levels)
         .map(|(r, e)| {
+            // A silent in-ear channel leaves nothing to check the omni level
+            // against: leave that speaker untrimmed, with a finite difference.
+            if !(*e > 0. && ear_ref > 0.) {
+                return (0., true, 0.);
+            }
             let omni = 20. * (reference / r.max(1e-12)).log10();
             let ear = 20. * (ear_ref / e.max(1e-12)).log10();
             let diff = omni - ear;
