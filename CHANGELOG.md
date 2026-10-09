@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.2.1 - 2026-10-09
+### 3.x BRIR SHA-256 무결성 검사
+
+#### 🔧 빌드 / 설정 변경
+- **3.x BRIR 무결성 검사(`brir-3x.yml`)**: 2.x의 BRIR 해시 검사처럼, 3.x PR이 데모 BRIR을 바꾸지 않았는지 SHA-256으로 확인합니다. PR의 기준 커밋과 PR에서 릴리스 CLI를 같은 러너에 빌드해 `data/demo`를 13개 시나리오(기본, 룸 EQ v2의 modes·extreme·legacy, 가상 룸 튜닝의 기본·지연 자동·슈레더 위상·크기만, 룸 보정 끔, 가상 베이스, 감쇠·채널 밸런스·베이스 부스트, 44.1 kHz와 추가 출력, 헤드폰 보상 끔)로 처리하고, 나온 WAV 전부의 해시가 같아야 통과합니다. PR 쪽은 rayon 스레드 하나로 한 번 더 돌려 출력이 스레드 수와도 무관한지 봅니다. 데모 데이터로 룸 EQ v2와 가상 룸 튜닝을 반복 실행하고 단일 스레드로도 돌려 출력이 결정론적임을 먼저 확인했습니다. 바이트는 플랫폼 수학 라이브러리에 따라 달라지므로 저장해 둔 해시는 없고, 출력을 일부러 바꾸는 PR은 `brir-change` 라벨로 기준 비교를 경고로 돌립니다(스레드 검사는 그대로).
+
 ## 3.2.0 - 2026-10-09
 ### 룸 보정 범위 선택(룸모드·슈레더·극단적), 저역 롤오버 자동 감지, 가상 베이스와의 경계, 가상 룸 튜닝(SECS 방식)
 

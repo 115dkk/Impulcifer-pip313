@@ -1,0 +1,93 @@
+name: BRIR 3.x integrity
+
+# A PR must not change the 3.x demo BRIRs: the release CLI is built from the
+# PR's base commit and from the PR on the same runner, both process data/demo
+# in every scenario of .github/scripts/brir_3x_integrity.py (room EQ v2 ranges,
+# virtual room tuning, virtual bass, ...), and every WAV must hash the same
+# (SHA-256). The PR's output must also hash the same with one rayon thread.
+# Bytes depend on the platform math library, so there is no stored hash.
+#
+# A PR that is meant to change the output carries the label "brir-change"; a
+# difference from the base is then a warning and the table in the job summary
+# is the record of what changed.
+
+on:
+  pull_request:
+    branches: [ master ]
+    types: [ opened, synchronize, reopened, labeled, unlabeled ]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/**"
+      - "data/**"
+      - "i18n/locales/**"
+      - ".github/scripts/brir_3x_integrity.py"
+      - ".github/workflows/brir-3x.yml"
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Reference commit or ref to compare against"
+        required: true
+        default: "origin/master"
+
+concurrency:
+  group: brir-3x-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_TARGET_DIR: ${{ github.workspace }}/target-brir
+
+jobs:
+  integrity:
+    name: 3.x demo BRIR SHA-256 vs base
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install audio system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+
+      - name: Install toolchain (rust-toolchain.toml)
+        run: rustup show
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target-brir
+          key: rust-brir-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: rust-brir-${{ runner.os }}-
+
+      # Each tree builds with its own rust-toolchain.toml; the shared target
+      # directory keeps the dependency builds of the first for the second.
+      - name: Build the base CLI
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || inputs.base }}
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE"
+          (cd "$RUNNER_TEMP/base" && rustup show && cargo build --release --locked -p impulcifer-cli)
+          cp "$CARGO_TARGET_DIR/release/impulcifer" "$RUNNER_TEMP/impulcifer-base"
+          git -C "$RUNNER_TEMP/base" log -1 --format='base %H %s'
+
+      - name: Build the PR CLI
+        run: |
+          cargo build --release --locked -p impulcifer-cli
+          cp "$CARGO_TARGET_DIR/release/impulcifer" "$RUNNER_TEMP/impulcifer-head"
+          git log -1 --format='PR %H %s'
+
+      - name: Compare the demo BRIRs
+        env:
+          ALLOW_CHANGE: ${{ contains(github.event.pull_request.labels.*.name, 'brir-change') && '--allow-change' || '' }}
+        run: |
+          python3 .github/scripts/brir_3x_integrity.py \
+            --base "$RUNNER_TEMP/impulcifer-base" --head "$RUNNER_TEMP/impulcifer-head" $ALLOW_CHANGE
