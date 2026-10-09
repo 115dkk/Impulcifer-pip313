@@ -64,8 +64,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target-brir
-          key: rust-brir-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: rust-brir-${{ runner.os }}-
+          key: rust-brir-split-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: rust-brir-split-${{ runner.os }}-
 
       # Two target directories, never one. Cargo names path crates by their
       # path relative to the workspace root, so both trees map to the same
