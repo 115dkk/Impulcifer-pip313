@@ -189,5 +189,13 @@
   "cli_readme_layouts_partial": "未量測聲道的音軌為靜音：{missing}",
   "cli_readme_layouts_header_tracks": "音軌",
   "cli_readme_layouts_header_channel": "聲道",
-  "cli_readme_layouts_header_speaker": "喇叭"
+  "cli_readme_layouts_header_speaker": "喇叭",
+  "label_sweep_channel_map": "裝置聲道：",
+  "hint_sweep_layout_codes": "請將每個箭頭後的代碼輸入「Speakers」欄。格式標籤可能指向其他位置：22.2 的第 1 聲道（FL, 60°）在這裡是 WL。",
+  "button_sweep_use_layout": "使用此配置中的所有喇叭",
+  "label_layout_files": "聲道順序檔案：",
+  "option_layout_files_auto": "量測所有喇叭後",
+  "option_layout_files_none": "關閉",
+  "label_layout_files_force": "缺少喇叭時仍要產生的格式：",
+  "hint_layout_files": "缺少的喇叭所對應的音軌為靜音。"
 }

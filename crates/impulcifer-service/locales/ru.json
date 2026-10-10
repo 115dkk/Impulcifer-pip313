@@ -189,5 +189,13 @@
   "cli_readme_layouts_partial": "Дорожки неизмеренных каналов заполнены тишиной: {missing}",
   "cli_readme_layouts_header_tracks": "Дорожки",
   "cli_readme_layouts_header_channel": "Канал",
-  "cli_readme_layouts_header_speaker": "Динамик"
+  "cli_readme_layouts_header_speaker": "Динамик",
+  "label_sweep_channel_map": "Каналы устройства:",
+  "hint_sweep_layout_codes": "Введите код после каждой стрелки в поле «Speakers». Обозначения формата могут указывать на другие позиции: канал 1 формата 22.2 (FL, 60°) здесь обозначен как WL.",
+  "button_sweep_use_layout": "Использовать все динамики этой расстановки",
+  "label_layout_files": "Файлы в порядке каналов:",
+  "option_layout_files_auto": "Когда измерены все динамики",
+  "option_layout_files_none": "Выкл.",
+  "label_layout_files_force": "Создавать даже при отсутствии динамиков:",
+  "hint_layout_files": "Дорожки отсутствующих динамиков заполнены тишиной."
 }

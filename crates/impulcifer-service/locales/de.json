@@ -189,5 +189,13 @@
   "cli_readme_layouts_partial": "Nicht gemessene Kanäle haben stumme Spuren: {missing}",
   "cli_readme_layouts_header_tracks": "Spuren",
   "cli_readme_layouts_header_channel": "Kanal",
-  "cli_readme_layouts_header_speaker": "Lautsprecher"
+  "cli_readme_layouts_header_speaker": "Lautsprecher",
+  "label_sweep_channel_map": "Gerätekanäle:",
+  "hint_sweep_layout_codes": "Geben Sie den Code nach jedem Pfeil in das Feld „Speakers“ ein. Formatbezeichnungen können andere Positionen benennen: Kanal 1 von 22.2 (FL, 60°) ist hier WL.",
+  "button_sweep_use_layout": "Alle Lautsprecher dieser Anordnung verwenden",
+  "label_layout_files": "Dateien in Kanalreihenfolge:",
+  "option_layout_files_auto": "Wenn alle Lautsprecher gemessen sind",
+  "option_layout_files_none": "Aus",
+  "label_layout_files_force": "Auch bei fehlenden Lautsprechern schreiben:",
+  "hint_layout_files": "Die Spuren fehlender Lautsprecher sind stumm."
 }

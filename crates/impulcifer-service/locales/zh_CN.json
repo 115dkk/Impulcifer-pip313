@@ -189,5 +189,13 @@
   "cli_readme_layouts_partial": "未测量声道的音轨为静音：{missing}",
   "cli_readme_layouts_header_tracks": "音轨",
   "cli_readme_layouts_header_channel": "声道",
-  "cli_readme_layouts_header_speaker": "扬声器"
+  "cli_readme_layouts_header_speaker": "扬声器",
+  "label_sweep_channel_map": "设备声道：",
+  "hint_sweep_layout_codes": "请将每个箭头后的代码输入“Speakers”栏。格式标签可能指向其他位置：22.2 的第 1 声道（FL, 60°）在这里是 WL。",
+  "button_sweep_use_layout": "使用此布局中的所有扬声器",
+  "label_layout_files": "声道顺序文件：",
+  "option_layout_files_auto": "测量所有扬声器后",
+  "option_layout_files_none": "关闭",
+  "label_layout_files_force": "缺少扬声器时仍要生成的格式：",
+  "hint_layout_files": "缺少的扬声器所对应的音轨为静音。"
 }

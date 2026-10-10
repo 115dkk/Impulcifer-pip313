@@ -539,6 +539,13 @@ status = "implemented"
 tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-cli::cli_room_v2_options_parse_and_validate"]
 
 [[feature]]
+id = "config.layout_files"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_layout_files_option_parses_and_validates", "impulcifer-service::layout_files_is_a_validated_brir_option"]
+note = "ADR 0007 rule 4: auto (default) writes a format's channel-order file when all its speakers are measured, none writes none, a list of format ids also writes those formats with missing speakers silent"
+
+[[feature]]
 id = "config.vbass_freq"
 kind = "config"
 status = "implemented"
@@ -869,6 +876,27 @@ id = "output.truehd_layout_wavs"
 kind = "output"
 status = "implemented"
 tests = ["impulcifer-service::truehd_layouts_succeed_end_to_end_from_measurements", "impulcifer-service::optional_dsp_stages_and_png_plots_complete_without_unsupported_plot_warnings"]
+
+[[feature]]
+id = "layouts.slot_vocabulary"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-types::every_channel_maps_to_the_nearest_slot_of_its_layer_or_a_cited_exception", "impulcifer-types::no_format_reads_one_slot_twice", "impulcifer-types::left_and_right_channels_read_mirrored_slots", "impulcifer-types::new_slot_codes_never_spell_a_label_of_another_speaker", "impulcifer-types::slots_have_unique_codes_and_positions", "impulcifer-types::every_added_slot_belongs_to_a_format", "impulcifer-types::speaker_names_are_the_slots_after_the_2x_names", "impulcifer-types::hrir_and_hesuvi_append_every_added_slot_after_their_2x_tracks", "impulcifer-types::every_slot_is_on_the_side_of_its_azimuth", "impulcifer-types::every_slot_is_in_exactly_one_ipsilateral_pair", "impulcifer-dsp::recordings_of_every_slot_are_opened", "impulcifer-dsp::onset_alignment_moves_every_slot_to_the_reference"]
+note = "ADR 0007 rules 1, 2 and 5: 40 position-keyed slots (the 15 of 2.x first); every format channel reads the nearest slot of its layer or a cited exception; hrir.wav and hesuvi.wav append the 25 added slots, so 2.x outputs stay byte-identical"
+
+[[feature]]
+id = "layouts.official_orders"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-types::nhk_22_2_lists_the_smpte_st_2036_2_order", "impulcifer-types::auro_13_1_lists_the_auro_wav_white_paper_order", "impulcifer-types::dtsx_30_2_lists_the_ts_103_491_channel_mask_order", "impulcifer-types::atmos_24_1_10_starts_with_the_9_1_6_interchange_order", "impulcifer-types::a_layout_file_reads_both_ears_of_each_slot_in_official_order", "impulcifer-types::format_tables_match_the_official_orders", "impulcifer-types::added_slot_table_matches_the_track_orders"]
+note = "NHK 22.2 = SMPTE ST 2036-2; Auro 13.1 = Auro WAV white paper (0x2FE3F); DTS:X Pro 30.2 = ETSI TS 103 491 Table B-5; Atmos 24.1.10 has no Dolby order above 9.1.6 (9.1.6 interchange order, then the installation guidelines' listing); docs/brir-channel-order.md tables are checked row by row"
+
+[[feature]]
+id = "output.immersive_layout_files"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-service::nhk_22_2_file_puts_every_slot_and_ear_on_its_smpte_channel", "impulcifer-service::complete_formats_are_written_and_listed_ones_are_filled_with_silence", "impulcifer-service::layout_files_none_writes_no_format_file", "impulcifer-service::the_demo_writes_no_format_file_and_no_notice", "impulcifer-dsp::layout_tracks_read_each_slot_and_ear_from_the_table"]
+note = "nhk_22.2.wav, auro_13.1.wav, atmos_24.1.10.wav, dtsx_30.2.wav: two tracks per channel in official order, LFE silent, never compacted, ICHL chunk of format labels; README.md lists each file's channel-to-speaker map; near misses are logged"
 
 [[feature]]
 id = "output.recovery"

@@ -189,5 +189,13 @@
   "cli_readme_layouts_partial": "Channels that were not measured have silent tracks: {missing}",
   "cli_readme_layouts_header_tracks": "Tracks",
   "cli_readme_layouts_header_channel": "Channel",
-  "cli_readme_layouts_header_speaker": "Speaker"
+  "cli_readme_layouts_header_speaker": "Speaker",
+  "label_sweep_channel_map": "Device channels:",
+  "hint_sweep_layout_codes": "Type the code after each arrow into Speakers. Format labels can name other positions: channel 1 of 22.2 (FL, 60°) is WL here.",
+  "button_sweep_use_layout": "Use every speaker in this layout",
+  "label_layout_files": "Channel-order files:",
+  "option_layout_files_auto": "When every speaker is measured",
+  "option_layout_files_none": "Off",
+  "label_layout_files_force": "Write even with missing speakers:",
+  "hint_layout_files": "Tracks of missing speakers are silent."
 }

@@ -189,5 +189,13 @@
   "cli_readme_layouts_partial": "Les canaux non mesurés ont des pistes silencieuses : {missing}",
   "cli_readme_layouts_header_tracks": "Pistes",
   "cli_readme_layouts_header_channel": "Canal",
-  "cli_readme_layouts_header_speaker": "Enceinte"
+  "cli_readme_layouts_header_speaker": "Enceinte",
+  "label_sweep_channel_map": "Canaux du périphérique :",
+  "hint_sweep_layout_codes": "Saisissez le code après chaque flèche dans le champ « Speakers ». Les libellés du format peuvent désigner d’autres positions : le canal 1 de 22.2 (FL, 60°) correspond ici à WL.",
+  "button_sweep_use_layout": "Utiliser toutes les enceintes de cette disposition",
+  "label_layout_files": "Fichiers dans l’ordre des canaux :",
+  "option_layout_files_auto": "Lorsque toutes les enceintes sont mesurées",
+  "option_layout_files_none": "Désactivé",
+  "label_layout_files_force": "Créer même s’il manque des enceintes :",
+  "hint_layout_files": "Les pistes des enceintes manquantes sont silencieuses."
 }
