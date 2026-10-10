@@ -66,10 +66,7 @@ impl Catalog {
         }
     }
     pub fn english() -> Self {
-        Self::from_strings(
-            serde_json::from_str(include_str!("../../../../i18n/locales/en.json"))
-                .expect("English catalogue"),
-        )
+        crate::settings::catalog("en")
     }
     pub fn translate(&self, key: &str, args: &Value) -> String {
         let text = self.strings.get(key).and_then(Value::as_str).unwrap_or(key);

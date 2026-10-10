@@ -899,24 +899,12 @@ fn tail_crossing(time: &[f64], average: &[f64], floor: f64) -> Option<(f64, f64)
 }
 fn speaker_name(code: &str) -> &str {
     match code {
-        "FL" => "Front left speaker",
-        "FR" => "Front right speaker",
-        "FC" => "Center speaker",
-        "BL" => "Back left speaker",
-        "BR" => "Back right speaker",
-        "SL" => "Side left speaker",
-        "SR" => "Side right speaker",
-        "WL" => "Wide left speaker",
-        "WR" => "Wide right speaker",
-        "TFL" => "Top front left speaker",
-        "TFR" => "Top front right speaker",
-        "TSL" => "Top side left speaker",
-        "TSR" => "Top side right speaker",
-        "TBL" => "Top back left speaker",
-        "TBR" => "Top back right speaker",
         "LFE" => "Subwoofer",
         "X" => "Reference microphone",
-        _ => code,
+        _ => impulcifer_types::layouts::SLOTS
+            .iter()
+            .find(|slot| slot.code == code)
+            .map_or(code, |slot| slot.description),
     }
 }
 fn sheet_title(path: &Path, title: &str) -> String {
@@ -1700,10 +1688,10 @@ mod tests {
                 format!("Front left speaker → left ear · {description}")
             );
         }
-        for code in [
-            "FL", "FR", "FC", "BL", "BR", "SL", "SR", "WL", "WR", "TFL", "TFR", "TSL", "TSR",
-            "TBL", "TBR", "X", "LFE",
-        ] {
+        for code in impulcifer_types::constants::SPEAKER_NAMES
+            .into_iter()
+            .chain(["X", "LFE"])
+        {
             assert_ne!(speaker_name(code), code);
         }
     }

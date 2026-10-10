@@ -1,7 +1,9 @@
 //! Insertion-ordered, file-free binaural responses, core/hrir.py.
 use crate::{DspError, conv, decay, estimator::SweepEstimator, fft, ir::ImpulseResponse, windows};
 use impulcifer_types::constants::{
-    SPEAKER_DELAYS, SPEAKER_NAMES, Side, base_channel_count, track_name,
+    HESUVI_TRACK_ORDER, HESUVI_TRACK_ORDER_2X, HEXADECAGONAL_TRACK_ORDER,
+    HEXADECAGONAL_TRACK_ORDER_2X, IPSILATERAL_PAIRS, IPSILATERAL_PAIRS_2X, SPEAKER_DELAYS,
+    SPEAKER_NAMES, Side, base_channel_count, track_name,
 };
 
 #[derive(Clone, Debug)]
@@ -237,6 +239,10 @@ impl Hrir {
         }
     }
     /// Python write_wav pure stacking, core/hrir.py:427-474; p08_stack.json.
+    /// `trim_extensions` drops trailing silent pairs down to the base channel
+    /// count. Without it the 2.x part of a combined order is kept whole, as 2.x
+    /// writes it, and the slots added in 3.x (ADR 0007) end at the last
+    /// measured one, so a 2.x measurement keeps its 2.x files.
     pub fn stack_tracks(
         &self,
         order: &[&str],
@@ -283,15 +289,21 @@ impl Hrir {
                 "selected tracks must have equal lengths for stacking".into(),
             ));
         }
-        if trim_extensions {
-            let minimum = base_channel_count(order);
-            while data.len() > minimum
-                && data[data.len() - 2..]
-                    .iter()
-                    .all(|row| row.iter().all(|x| *x == 0.0))
-            {
-                data.truncate(data.len() - 2);
-            }
+        let minimum = if trim_extensions {
+            base_channel_count(order)
+        } else if order == HEXADECAGONAL_TRACK_ORDER {
+            HEXADECAGONAL_TRACK_ORDER_2X.len()
+        } else if order == HESUVI_TRACK_ORDER {
+            HESUVI_TRACK_ORDER_2X.len()
+        } else {
+            order.len()
+        };
+        while data.len() > minimum
+            && data[data.len() - 2..]
+                .iter()
+                .all(|row| row.iter().all(|x| *x == 0.0))
+        {
+            data.truncate(data.len() - 2);
         }
         Ok(data)
     }
@@ -489,16 +501,24 @@ impl Hrir {
         &mut self,
         groups: Option<&[&[&str]]>,
     ) -> Result<(), DspError> {
-        let defaults: &[&[&str]] = &[
-            &["FL", "FR"],
-            &["SL", "SR"],
-            &["BL", "BR"],
-            &["WL", "WR"],
-            &["TFL", "TFR"],
-            &["TSL", "TSR"],
-            &["TBL", "TBR"],
-            &["FC"],
+        // The 2.x groups, then one group per pair of the slots 3.x added
+        // (ADR 0007); each group moves on its own, so the order is free.
+        let mut defaults: Vec<Vec<&str>> = vec![
+            vec!["FL", "FR"],
+            vec!["SL", "SR"],
+            vec!["BL", "BR"],
+            vec!["WL", "WR"],
+            vec!["TFL", "TFR"],
+            vec!["TSL", "TSR"],
+            vec!["TBL", "TBR"],
+            vec!["FC"],
         ];
+        defaults.extend(
+            IPSILATERAL_PAIRS[IPSILATERAL_PAIRS_2X.len()..]
+                .iter()
+                .map(|&(a, b)| if a == b { vec![a] } else { vec![a, b] }),
+        );
+        let defaults: Vec<&[&str]> = defaults.iter().map(Vec::as_slice).collect();
         let reference = self
             .get("FL")
             .and_then(|s| s.left.as_ref())
@@ -508,7 +528,7 @@ impl Hrir {
                 )
             })?
             .peak_index(0, None, 0.12589) as i64;
-        for group in groups.unwrap_or(defaults) {
+        for group in groups.unwrap_or(&defaults) {
             if *group == ["FL", "FR"] {
                 continue;
             }

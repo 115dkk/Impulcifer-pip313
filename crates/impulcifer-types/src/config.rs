@@ -43,6 +43,7 @@ pub struct ProcessingConfig {
     pub room_tuning_curtain: f64,
     pub room_tuning_level_match: bool,
     pub vbass_mode: String,
+    pub layout_files: String,
     pub bass_boost_gain: f64,
     pub bass_boost_fc: f64,
     pub bass_boost_q: f64,
@@ -92,6 +93,7 @@ impl Default for ProcessingConfig {
             room_tuning_curtain: 300.0,
             room_tuning_level_match: true,
             vbass_mode: "auto".into(),
+            layout_files: "auto".into(),
             bass_boost_gain: 0.0,
             bass_boost_fc: 105.0,
             bass_boost_q: 0.76,
@@ -154,7 +156,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 11] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 12] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -166,6 +168,7 @@ pub const EXTENSION_FIELD_NAMES: [&str; 11] = [
     "room_tuning_curtain",
     "room_tuning_level_match",
     "vbass_mode",
+    "layout_files",
 ];
 
 fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
@@ -257,6 +260,8 @@ impl ProcessingConfig {
         if !["auto", "manual", "legacy"].contains(&self.vbass_mode.as_str()) {
             return Err(invalid("vbass_mode", "must be auto, manual or legacy"));
         }
+        crate::layouts::LayoutFiles::parse(&self.layout_files)
+            .map_err(|reason| invalid("layout_files", &reason))?;
         if TuningDelay::parse(&self.room_tuning_delay).is_none() {
             return Err(invalid("room_tuning_delay", "must be auto or 2–20 ms"));
         }

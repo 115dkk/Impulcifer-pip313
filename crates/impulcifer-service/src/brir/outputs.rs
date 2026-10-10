@@ -12,7 +12,7 @@ impl BrirEvents for Silent {
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     hrir::compact_tracks,
-    pipeline::PipelineOutputs,
+    pipeline::{LayoutOutput, PipelineOutputs},
     stages::readme::{ReadmeData, ReverbKind},
 };
 use impulcifer_io::{brir_layout::append_track_names, write_wav};
@@ -87,7 +87,24 @@ fn local_date() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
+fn missing_channels(channels: &[&impulcifer_types::layouts::FormatChannel]) -> String {
+    channels
+        .iter()
+        .map(|c| format!("{} ({})", c.label, c.slot))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String {
+    render_readme_with_layouts(data, catalog, date, &[])
+}
+
+fn render_readme_with_layouts(
+    data: &ReadmeData,
+    catalog: &Catalog,
+    date: &str,
+    layouts: &[LayoutOutput],
+) -> String {
     let t = |key: &str| catalog.translate(key, &json!({}));
     let mut out = format!(
         "# {}\n\n{}\n\n## {}\n{}\n\n",
@@ -192,6 +209,50 @@ pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String
         }
         out.push('\n');
     }
+    if !layouts.is_empty() {
+        out.push_str(&format!("## {}\n\n", t("cli_readme_layouts_title")));
+        for output in layouts {
+            let layout = output.layout;
+            out.push_str(&format!("### {} ({})\n\n", layout.file_name, layout.name));
+            out.push_str(&format!("{}\n\n", t("cli_readme_layouts_note")));
+            let order_note = match layout.id {
+                "24.1.10" => Some("cli_readme_layouts_atmos_order"),
+                "30.2" => Some("cli_readme_layouts_dts_order"),
+                _ => None,
+            };
+            if let Some(key) = order_note {
+                out.push_str(&format!("{}\n\n", t(key)));
+            }
+            if !output.missing.is_empty() {
+                out.push_str(&catalog.translate(
+                    "cli_readme_layouts_partial",
+                    &json!({"missing":missing_channels(&output.missing)}),
+                ));
+                out.push_str("\n\n");
+            }
+            out.push_str(&format!(
+                "| {} | {} | {} |\n| --- | --- | --- |\n",
+                t("cli_readme_layouts_header_tracks"),
+                t("cli_readme_layouts_header_channel"),
+                t("cli_readme_layouts_header_speaker"),
+            ));
+            for (i, channel) in layout.channels.iter().enumerate() {
+                let slot = if channel.layer == impulcifer_types::layouts::Layer::Lfe {
+                    "—"
+                } else {
+                    channel.slot
+                };
+                out.push_str(&format!(
+                    "| {}–{} | {} | {} |\n",
+                    2 * i + 1,
+                    2 * i + 2,
+                    channel.label,
+                    slot,
+                ));
+            }
+            out.push('\n');
+        }
+    }
     out
 }
 pub fn write_outputs(
@@ -220,7 +281,7 @@ pub(crate) fn write_outputs_checked(
     let date = i18n.readme_date.clone().unwrap_or_else(local_date);
     let readme = dir.join("README.md");
     // Python open(..., "w") uses the host's native text-mode newline.
-    let content = render_readme(&outputs.readme, i18n, &date);
+    let content = render_readme_with_layouts(&outputs.readme, i18n, &date, &outputs.layouts);
     let content = if cfg!(windows) {
         content.replace('\n', "\r\n")
     } else {
@@ -250,6 +311,34 @@ pub(crate) fn write_outputs_checked(
             append_track_names(&path, &names.iter().map(String::as_str).collect::<Vec<_>>())?;
         }
         files.push(path);
+    }
+    for output in &outputs.layouts {
+        let layout = output.layout;
+        let path = dir.join(layout.file_name);
+        events.check_cancelled()?;
+        write_wav(&path, outputs.hrir.fs, &output.tracks, 32)?;
+        let names = layout.label_track_names();
+        append_track_names(&path, &names.iter().map(String::as_str).collect::<Vec<_>>())?;
+        events.log(
+            "success",
+            "cli_success_layout_file",
+            json!({"layout":layout.name,"path":path}),
+        );
+        if !output.missing.is_empty() {
+            events.log(
+                "warning",
+                "cli_warning_layout_partial",
+                json!({"layout":layout.name,"file":layout.file_name,"missing":missing_channels(&output.missing)}),
+            );
+        }
+        files.push(path);
+    }
+    for (layout, missing) in &outputs.layout_notices {
+        events.log(
+            "info",
+            "cli_info_layout_missing",
+            json!({"layout":layout.name,"count":missing.len(),"missing":missing_channels(missing)}),
+        );
     }
     if config.output_truehd_layouts || !outputs.truehd.is_empty() {
         for (label, order, minimum) in [

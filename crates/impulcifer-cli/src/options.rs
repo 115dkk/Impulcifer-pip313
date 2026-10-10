@@ -206,6 +206,15 @@ pub static EXTENSION_OPTIONS: &[CliOption] = &[
         default: CliDefault::Suppressed,
         help: "Virtual bass crossover. \"auto\" (default) finds where the speakers lose bass in the measurements and crosses over one octave above it; \"manual\" uses --vbass_freq (giving --vbass_freq selects manual); \"legacy\" is the 2.x method.",
     },
+    CliOption {
+        flag: "--layout_files",
+        short: None,
+        dest: "layout_files",
+        kind: CliType::Str,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Write the BRIR again in the official channel order of an immersive format: \"auto\" (default) writes NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10 or DTS:X Pro 30.2 when all of its channels are measured; \"none\" writes none; a comma-separated list of 22.2, 13.1, 24.1.10, 30.2 also writes those formats when channels are missing (silent).",
+    },
 ];
 
 pub const OPTIONS: &[CliOption] = &[

@@ -81,6 +81,9 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "3.0.0",
     ),
     ("no_headphone_compensation", ("--no_headphone_compensation",), "3.0.0"),
+    # ADR 0007: the demo's seven speakers write every channel-order file with
+    # the missing speakers silent.
+    ("layout_files_listed", ("--layout_files=13.1,22.2,24.1.10,30.2",), "3.4.0"),
 )
 
 

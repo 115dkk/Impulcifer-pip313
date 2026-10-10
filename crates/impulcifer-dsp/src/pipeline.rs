@@ -26,6 +26,7 @@ use impulcifer_types::{
         HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS, SPEAKER_NAMES,
         TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER,
     },
+    layouts::{FormatChannel, IMMERSIVE_LAYOUTS, ImmersiveLayout, Layer, LayoutFiles},
     stages::StageKey,
 };
 #[derive(Clone, Debug)]
@@ -77,6 +78,12 @@ pub trait StageObserver {
     fn check_cancelled(&self) -> Result<(), DspError>;
 }
 #[derive(Clone, Debug)]
+pub struct LayoutOutput {
+    pub layout: &'static ImmersiveLayout,
+    pub tracks: Vec<Vec<f64>>,
+    pub missing: Vec<&'static FormatChannel>,
+}
+#[derive(Clone, Debug)]
 pub struct PipelineOutputs {
     pub hrir: Hrir,
     pub applied_gain_db: f64,
@@ -84,6 +91,8 @@ pub struct PipelineOutputs {
     pub hrir_tracks: Vec<Vec<f64>>,
     pub hesuvi_tracks: Vec<Vec<f64>>,
     pub responses_tracks: Vec<Vec<f64>>,
+    pub layouts: Vec<LayoutOutput>,
+    pub layout_notices: Vec<(&'static ImmersiveLayout, Vec<&'static FormatChannel>)>,
     pub truehd: Vec<(String, Vec<String>, Vec<Vec<f64>>)>,
     pub jamesdsp: Option<Vec<Vec<f64>>>,
     pub hangloose: Vec<(String, Vec<Vec<f64>>)>,
@@ -174,6 +183,11 @@ fn output_tracks(hrir: &Hrir, order: &[&str], compact: bool) -> Result<Vec<Vec<f
         Ok(tracks)
     }
 }
+/// Both ears of each format channel, with missing slots silent and never compacted.
+pub fn layout_tracks(hrir: &Hrir, layout: &ImmersiveLayout) -> Result<Vec<Vec<f64>>, DspError> {
+    let names = layout.track_names();
+    hrir.stack_tracks(&names.iter().map(String::as_str).collect::<Vec<_>>(), false)
+}
 /// Python run and DSP stage bodies, core/pipeline.py:424-972; p10_default,
 /// p10_vbass, p10_decay, p10_resample. File/plot rows only emit progress.
 pub fn run_pipeline(
@@ -200,6 +214,8 @@ pub fn run_pipeline(
     let mut responses_tracks = Vec::new();
     let mut hrir_tracks = Vec::new();
     let mut hesuvi_tracks = Vec::new();
+    let mut layouts = Vec::new();
+    let mut layout_notices = Vec::new();
     let mut truehd = Vec::new();
     let mut jamesdsp = None;
     let mut hangloose = Vec::new();
@@ -354,6 +370,28 @@ pub fn run_pipeline(
                 )?;
                 hesuvi_tracks =
                     output_tracks(&hrir, &HESUVI_TRACK_ORDER, config.remove_silent_channels)?;
+                let selection =
+                    LayoutFiles::parse(&config.layout_files).map_err(DspError::InvalidArgument)?;
+                for layout in &IMMERSIVE_LAYOUTS {
+                    let missing = layout.missing(|s| hrir.get(s).is_some());
+                    if selection.writes(layout.id, missing.is_empty()) {
+                        layouts.push(LayoutOutput {
+                            layout,
+                            tracks: layout_tracks(&hrir, layout)?,
+                            missing,
+                        });
+                    } else if selection != LayoutFiles::None {
+                        let channels = layout.channels.iter().filter(|c| c.layer != Layer::Lfe);
+                        let count = channels.clone().count();
+                        let outside_7_1 = channels.clone().any(|c| {
+                            !["FL", "FR", "FC", "SL", "SR", "BL", "BR"].contains(&c.slot)
+                                && hrir.get(c.slot).is_some()
+                        });
+                        if 2 * (count - missing.len()) >= count && outside_7_1 {
+                            layout_notices.push((layout, missing));
+                        }
+                    }
+                }
             }
             StageKey::TruehdLayouts => {
                 for (label, order, min) in [
@@ -410,6 +448,8 @@ pub fn run_pipeline(
         hrir_tracks,
         hesuvi_tracks,
         responses_tracks,
+        layouts,
+        layout_notices,
         truehd,
         jamesdsp,
         hangloose,
