@@ -20,8 +20,30 @@ pub const SPEAKER_NAMES: [&str; 40] = {
     out
 };
 
-/// Named sweep track layouts accepted by the recorder (2.x `SWEEP_TRACK_LAYOUTS`).
-pub const SWEEP_TRACK_LAYOUTS: [&str; 6] = ["mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6"];
+/// Named sweep track layouts accepted by the recorder: 2.x plus immersive formats.
+pub const SWEEP_TRACK_LAYOUTS: [&str; 10] = [
+    "mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6", "13.1", "22.2", "24.1.10", "30.2",
+];
+
+/// Two or three ASCII capitals (the 2.x pattern), or a known speaker slot code.
+pub fn is_speaker_code(name: &str) -> bool {
+    ((2..=3).contains(&name.len()) && name.bytes().all(|c| c.is_ascii_uppercase()))
+        || SPEAKER_NAMES.contains(&name)
+}
+
+/// Device channel slots in the 2.x order or the immersive format's official order.
+/// LFE channels retain their `LFE`/`LFE2` slots; mono and stereo are caller-defined.
+pub fn sweep_track_order(layout: &str) -> Option<Vec<&'static str>> {
+    if let Some((_, order)) = SEQUENCE_TRACK_ORDERS
+        .iter()
+        .find(|(name, _)| *name == layout)
+    {
+        Some(order.to_vec())
+    } else {
+        crate::layouts::layout(layout)
+            .map(|layout| layout.channels.iter().map(|c| c.slot).collect())
+    }
+}
 
 /// Exact copies of core.constants.CHANNEL_LAYOUT_MAP (7.0.4 and 7.0.6).
 pub const TRUEHD_11CH_ORDER: [&str; 11] = [

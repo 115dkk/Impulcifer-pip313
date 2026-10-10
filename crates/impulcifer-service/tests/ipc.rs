@@ -327,8 +327,24 @@ fn ipc_bootstrap_shape() {
     assert_eq!(boot["brir_defaults"], defaults);
     assert_eq!(
         boot["sweep"],
-        json!({"layouts":["mono","stereo","5.1","7.1","7.1.4","7.1.6"],"default_fs":48000,"default_duration":5.0,"speaker_names":impulcifer_types::constants::SPEAKER_NAMES.as_slice()})
+        json!({
+            "layouts":["mono","stereo","5.1","7.1","7.1.4","7.1.6","13.1","22.2","24.1.10","30.2"],
+            "default_fs":48000,"default_duration":5.0,
+            "speaker_names":impulcifer_types::constants::SPEAKER_NAMES.as_slice(),
+            "immersive":impulcifer_types::layouts::IMMERSIVE_LAYOUTS.iter().map(|layout| json!({
+                "id":layout.id,"name":layout.name,"file_name":layout.file_name,
+                "channels":layout.channels.iter().map(|channel| json!({
+                    "label":channel.label,"slot":channel.slot
+                })).collect::<Vec<_>>()
+            })).collect::<Vec<_>>()
+        })
     );
+    // ADR 0007: the label is the format's, the slot is the speaker code.
+    assert_eq!(
+        boot["sweep"]["immersive"][0]["channels"][0],
+        json!({"label":"FL","slot":"WL"})
+    );
+    assert_eq!(boot["sweep"]["immersive"][0]["id"], "22.2");
     ui(&boot["ui"]);
     let (id, send) = start_blocked(&f, false);
     let boot = data(f.call("bootstrap", vec![]));

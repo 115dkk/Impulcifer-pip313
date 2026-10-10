@@ -1340,6 +1340,13 @@ tests = ["impulcifer-service::golden_sweep_playback_matches_python"]
 note = "build_sweep_playback: PCM_32 round-tripped sequence, SHA-256 identical to Python for four specs, segments, display name"
 
 [[feature]]
+id = "recording.immersive_layouts"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-service::every_immersive_format_is_a_recorder_layout", "impulcifer-service::each_slot_sweeps_on_its_official_device_channel", "impulcifer-service::a_slot_outside_the_layout_is_refused", "impulcifer-service::digit_slot_codes_name_recordings", "impulcifer-service::filename_speakers_read_digit_slot_codes_whole", "impulcifer-service::ipc_bootstrap_shape"]
+note = "ADR 0007: recorder layouts 13.1, 22.2, 24.1.10, 30.2 put each slot's sweep on the device channel of the format's official order (22.2: FL on channel 7, WL on channel 1) with LFE channels silent; bootstrap sweep.immersive lists each format's channel labels and slots for the recorder's channel map; SL1/SR1/SL2/SR2/BL1/BR1/BL2/BR2 name recordings and room recordings"
+
+[[feature]]
 id = "recording.progress"
 kind = "recording"
 status = "implemented"

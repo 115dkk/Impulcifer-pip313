@@ -77,9 +77,9 @@ pub fn parse_room_measurement_name(file_name: &str) -> Option<RoomMeasurementNam
         (stem, None)
     };
     let speakers: Vec<_> = names.split(',').collect();
-    // Two or three capitals, or a lone X for a skipped sweep; at least one
-    // real name (core/constants.py SPEAKER_LIST_PATTERN, 2.14.3).
-    let named = |s: &&str| (2..=3).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_uppercase());
+    // Two or three capitals or a known slot code, with a lone X for a skipped
+    // sweep; at least one real name (2.x SPEAKER_LIST_PATTERN plus 3.x slots).
+    let named = |s: &&str| impulcifer_types::constants::is_speaker_code(s);
     if !speakers.iter().all(|s| *s == "X" || named(s)) || !speakers.iter().any(named) {
         return None;
     }
