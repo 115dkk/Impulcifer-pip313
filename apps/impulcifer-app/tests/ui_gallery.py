@@ -676,6 +676,41 @@ def tooltip_checks(browser):
           "closes on Escape; hover, click pin and outside click OK", flush=True)
 
 
+def shell_checks(browser):
+    """Only #content scrolls, never the window: every view in both skins, with
+    every Processing card open and each advanced tab shown, keeps the document
+    exactly the window's size from the default window down to a small one. An
+    absolutely positioned element that escapes the scroller (a .sr-only label
+    did on Studio's Processing view) gives the window a second scrollbar and
+    an empty band below the app."""
+    size = "() => { const d = document.documentElement; return [d.scrollWidth, d.scrollHeight, d.clientWidth, d.clientHeight]; }"
+
+    def window_fixed(page, where):
+        for width, height in ((1180, 820), (960, 640), (760, 560)):
+            page.set_viewport_size({"width": width, "height": height})
+            doc_w, doc_h, view_w, view_h = page.evaluate(size)
+            assert doc_w <= view_w and doc_h <= view_h, (where, (width, height), (doc_w, doc_h))
+        page.set_viewport_size({"width": 1280, "height": 860})
+
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "ko", "idle")
+        for view in ("recorder", "processing", "recovery", "settings", "info"):
+            navigate(page, view)
+            window_fixed(page, (skin, view))
+        navigate(page, "processing")
+        for name in ("room", "headphone", "eq", "advanced", "vbass"):
+            if page.locator(f"#dis-{name} > .disclosure-head").is_visible():
+                disclosure(page, name, True)
+        window_fixed(page, (skin, "processing", "open"))
+        for tab in ("tone", "time", "output", "correction"):
+            if page.locator(f"#adv-tab-{tab}").is_visible():
+                page.locator(f"#adv-tab-{tab}").click()
+                window_fixed(page, (skin, "processing", tab))
+        assert not errors, errors
+        context.close()
+    print("Gallery shell checks: the window never scrolls, only the content does, in every view of both skins OK", flush=True)
+
+
 def open_eq(page):
     head = page.locator("#dis-eq > .disclosure-head")
     if "open" not in (page.locator("#dis-eq").get_attribute("class") or ""):
@@ -695,6 +730,7 @@ def render_gallery(output):
         room_phase_checks(browser)
         vbass_checks(browser)
         tooltip_checks(browser)
+        shell_checks(browser)
         for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
             context, page, errors = open_page(browser, skin, theme, language, "idle")
             for view in VIEWS:
