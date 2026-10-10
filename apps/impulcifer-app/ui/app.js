@@ -569,8 +569,11 @@ function recoveryFileNames(paths, outputDir) {
   });
 }
 
-/** @param {RecoverySource} kind */
-function recoverySourceLabel(kind) {
+/* A channel-order file (ADR 0007) is named after its format, so the source
+   is its file name. */
+/** @param {RecoverySource} kind @param {string} sourcePath */
+function recoverySourceLabel(kind, sourcePath) {
+  if (kind === "layout") return sourcePath.replace(/\\/g, "/").split("/").pop() || kind;
   return {
     hangloose: "Hangloose",
     hrir: "hrir.wav",
@@ -627,7 +630,7 @@ function renderRecoveryJob(job) {
     const existing = recoveryFileNames(result.existing_files, result.output_dir);
     state.lastRecoveryOutputDir = result.output_dir;
     detail.textContent = fmt(t("recovery_success_summary"), {
-      source: recoverySourceLabel(result.source_kind),
+      source: recoverySourceLabel(result.source_kind, result.source_path),
       sample_rate: result.sample_rate,
       samples: result.sample_count,
       created: created.length,
@@ -710,7 +713,7 @@ function renderRecoveryInventory() {
     ? fmt(t("recovery_failed_summary"), { message: errorSentence(state.recoveryPlanError) })
     : t(`recovery_inventory_${state.recoveryState}`);
   if (!visible || !plan) return;
-  $("recovery-source-badge").textContent = fmt(t("recovery_inventory_source"), { source: recoverySourceLabel(plan.source_kind) });
+  $("recovery-source-badge").textContent = fmt(t("recovery_inventory_source"), { source: recoverySourceLabel(plan.source_kind, plan.source_path) });
   $("recovery-source-audio").textContent = fmt(t("recovery_inventory_audio"), {
     rate: plan.sample_rate, duration: Math.round(plan.sample_count / plan.sample_rate * 1000),
   });
@@ -1257,13 +1260,56 @@ function updateSweepSourceVisibility() {
   $("rf-play-row").hidden = mode !== "file";
 }
 
+/** @param {string} id */
+function immersiveLayout(id) {
+  return (state.sweepDefaults?.immersive || []).find((layout) => layout.id === id) || null;
+}
+
 /** @param {string[]} layouts */
 function populateSweepLayouts(layouts) {
   const select = el("rf-sweep-layout", HTMLSelectElement);
   const previous = select.value;
   select.replaceChildren();
-  layouts.forEach((layout) => select.add(new Option(layout, layout)));
+  layouts.forEach((layout) => select.add(new Option(immersiveLayout(layout)?.name || layout, layout)));
   select.value = layouts.includes(previous) ? previous : "stereo";
+  renderLayoutMap();
+}
+
+/* An immersive layout (ADR 0007) numbers its device channels in the format's
+   official order, and its labels can name other positions than Impulcifer's
+   speaker codes (22.2's FL is WL), so the map shows the code each channel
+   plays. LFE channels stay silent. */
+function renderLayoutMap() {
+  const layout = immersiveLayout(val("rf-sweep-layout"));
+  $("rf-layout-row").hidden = !layout;
+  if (!layout) return;
+  $("rf-layout-map").replaceChildren(...layout.channels.map((channel, index) => {
+    const lfe = channel.slot.startsWith("LFE");
+    const item = document.createElement("li");
+    item.className = "layout-ch";
+    item.dataset.lfe = String(lfe);
+    /** @param {string} className @param {string} text */
+    const cell = (className, text) => {
+      const span = document.createElement("span");
+      span.className = className; span.textContent = text;
+      return span;
+    };
+    const arrow = cell("layout-ch-arrow", "→");
+    arrow.setAttribute("aria-hidden", "true");
+    item.append(cell("layout-ch-num", String(index + 1)), cell("layout-ch-label", channel.label),
+      arrow, cell("layout-ch-slot", lfe ? "—" : channel.slot));
+    return item;
+  }));
+}
+
+function useLayoutSpeakers() {
+  const layout = immersiveLayout(val("rf-sweep-layout"));
+  if (!layout) return;
+  el("rf-sweep-speakers", HTMLInputElement).value = layout.channels
+    .filter((channel) => !channel.slot.startsWith("LFE"))
+    .map((channel) => channel.slot)
+    .join(",");
+  refreshResolvedPath();
 }
 
 async function refreshResolvedPath() {
@@ -1956,6 +2002,31 @@ function addOutputArgs(args, p) {
   args.hangloose = checked(`${p}-hangloose`);
   args.remove_silent_channels = checked(`${p}-remove-silent-channels`);
   args.output_truehd_layouts = checked(`${p}-truehd`);
+  args.layout_files = layoutFilesValue(p);
+}
+
+/* The four formats a channel-order file can be forced for, in the order of
+   the checkboxes `${p}-layout-force-0..3` (their data-layout holds the id). */
+const LAYOUT_FORCE_COUNT = 4;
+
+/** @param {string} p */
+function layoutForceBoxes(p) {
+  return Array.from({ length: LAYOUT_FORCE_COUNT }, (_, index) => el(`${p}-layout-force-${index}`, HTMLInputElement));
+}
+
+/* "none" writes no channel-order file; otherwise the checked formats are
+   written even when speakers are missing and the rest stay automatic. */
+/** @param {string} p */
+function layoutFilesValue(p) {
+  if (val(`${p}-layout-files`) === "none") return "none";
+  const forced = layoutForceBoxes(p).filter((box) => box.checked).map((box) => box.dataset.layout || "");
+  return forced.length ? forced.join(",") : "auto";
+}
+
+/** @param {string} p */
+function updateLayoutForce(p) {
+  const off = val(`${p}-layout-files`) === "none";
+  for (const box of layoutForceBoxes(p)) box.disabled = off;
 }
 
 /** @param {ProcessingRequest} args @param {string} p */
@@ -1984,7 +2055,8 @@ const ADV_TABS = ["tone", "time", "output", "correction"];
 const ADV_FIELDS = {
   tone: ["bass-gain", "bass-fc", "bass-q", "tilt", "target-level", "balance", "balance-db"],
   time: ["head-ms", "decay", "decay-per-channel", ...DECAY_CHANNELS.map((channel) => `decay-${channel}`)],
-  output: ["resample", "fs", "jamesdsp", "hangloose", "truehd", "remove-silent-channels"],
+  output: ["resample", "fs", "jamesdsp", "hangloose", "truehd", "remove-silent-channels", "layout-files",
+    ...Array.from({ length: 4 }, (_, index) => `layout-force-${index}`)],
   correction: ["mic-deviation", "mic-strength", "mic-debug", "interactive-plots"],
 };
 
@@ -2035,6 +2107,7 @@ function refreshStudioAdvanced() {
   $("ba-decay-channels").hidden = !perChannel;
 
   el("ba-fs", HTMLSelectElement).disabled = !checked("ba-resample");
+  updateLayoutForce("ba");
 
   const mic = el("ba-mic-deviation", HTMLInputElement);
   const blocked = isOpen("dis-headphone");
@@ -2060,6 +2133,7 @@ function refreshStableAdvanced() {
   const mic = checked("bf-mic-deviation");
   el("bf-mic-strength", HTMLInputElement).disabled = !mic;
   el("bf-mic-debug", HTMLInputElement).disabled = !mic;
+  updateLayoutForce("bf");
 }
 
 /** @param {string} id */
@@ -2573,7 +2647,14 @@ function wireEvents() {
     refreshResolvedPath();
   });
   el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", refreshResolvedPath);
-  el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", refreshResolvedPath);
+  el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", () => {
+    renderLayoutMap();
+    refreshResolvedPath();
+  });
+  el("rf-layout-use-all", HTMLButtonElement).addEventListener("click", useLayoutSpeakers);
+  for (const p of ["bf", "ba"]) {
+    el(`${p}-layout-files`, HTMLSelectElement).addEventListener("change", () => updateLayoutForce(p));
+  }
   el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", updateTestSignalVisibility);
   el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRows);
   el("bf-vbass-mode", HTMLSelectElement).addEventListener("change", updateVbassRows);

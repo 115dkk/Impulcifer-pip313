@@ -6,7 +6,10 @@ use impulcifer_dsp::{
     hrir::{Hrir, SpeakerIrs, ingest_recording},
     ir::ImpulseResponse,
 };
-use impulcifer_types::constants::{HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, Side};
+use impulcifer_types::constants::{
+    HESUVI_TRACK_ORDER, HESUVI_TRACK_ORDER_2X, HEXADECAGONAL_TRACK_ORDER,
+    HEXADECAGONAL_TRACK_ORDER_2X, Side,
+};
 
 /// Python ImpulseResponse constructor:16-19; synthetic P08 property fixture.
 fn impulse(n: usize, peak: usize) -> ImpulseResponse {
@@ -141,6 +144,42 @@ fn stack_tracks_trims_only_trailing_pairs() {
     assert_eq!(rows[22][100], 1e-30);
     assert_eq!(
         h.stack_tracks(&["FL-left", "LFE-left"], true)
+            .unwrap()
+            .len(),
+        2
+    );
+}
+/// ADR 0007: an untrimmed stack (responses.wav, headphone-responses.wav,
+/// room-responses.wav) keeps every 2.x track, as 2.x writes them, and adds the
+/// 3.x slots only up to the last measured one.
+#[test]
+fn untrimmed_stack_keeps_the_2x_tracks_and_the_measured_3x_slots() {
+    let mut h = hrir();
+    for (order, length) in [
+        (
+            HEXADECAGONAL_TRACK_ORDER.as_slice(),
+            HEXADECAGONAL_TRACK_ORDER_2X.len(),
+        ),
+        (HESUVI_TRACK_ORDER.as_slice(), HESUVI_TRACK_ORDER_2X.len()),
+    ] {
+        assert_eq!(h.stack_tracks(order, false).unwrap().len(), length);
+    }
+    h.speakers.push(SpeakerIrs {
+        speaker: "HFL".into(),
+        left: Some(impulse(512, 100)),
+        right: None,
+    });
+    let rows = h.stack_tracks(&HEXADECAGONAL_TRACK_ORDER, false).unwrap();
+    let right = HEXADECAGONAL_TRACK_ORDER
+        .iter()
+        .position(|n| *n == "HFL-right")
+        .unwrap();
+    assert_eq!(rows.len(), right + 1);
+    assert_eq!(rows[right - 1][100], 1.0);
+    assert!(rows[right].iter().all(|x| *x == 0.0));
+    // Any other order is stacked whole.
+    assert_eq!(
+        h.stack_tracks(&["FL-left", "LFE-left"], false)
             .unwrap()
             .len(),
         2

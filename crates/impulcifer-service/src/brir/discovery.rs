@@ -30,13 +30,13 @@ pub struct MeasurementDir {
     pub test_signal: Option<PathBuf>,
 }
 /// Speaker list of a recording file name such as `FL,FR.wav`: names of two or
-/// three capitals, where a lone `X` marks a sweep to skip (the other sweep of a
-/// centre recording, `FC,X.wav`). The original Impulcifer and LionLion123
+/// three capitals or a known slot code, where a lone `X` marks a sweep to skip
+/// (the other sweep of a centre recording, `FC,X.wav`). The original Impulcifer and LionLion123
 /// accept `X`; 2.x narrowed the pattern to two or three capitals and so drops
 /// such a file together with its real channel. At least one name must be real.
 pub fn recording_speakers(name: &str) -> Option<Vec<String>> {
     let names: Vec<_> = name.strip_suffix(".wav")?.split(',').collect();
-    let named = |n: &&str| (2..=3).contains(&n.len()) && n.bytes().all(|c| c.is_ascii_uppercase());
+    let named = |n: &&str| impulcifer_types::constants::is_speaker_code(n);
     (names.iter().all(|n| *n == "X" || named(n)) && names.iter().any(named))
         .then(|| names.into_iter().map(str::to_owned).collect())
 }

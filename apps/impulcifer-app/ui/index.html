@@ -103,6 +103,16 @@
                     <option value="stereo">stereo</option>
                   </select>
                 </div>
+                <div class="field-row top" id="rf-layout-row" hidden>
+                  <span id="rf-layout-map-label" data-i18n="label_sweep_channel_map">Device channels:</span>
+                  <div class="adv-stack">
+                    <ol class="layout-map" id="rf-layout-map" aria-labelledby="rf-layout-map-label"></ol>
+                    <p class="hint" data-i18n="hint_sweep_layout_codes">Type the code after each arrow into Speakers. Format labels can name other positions: channel 1 of 22.2 (FL, 60°) is WL here.</p>
+                    <div class="inline-group">
+                      <button type="button" class="btn-link" id="rf-layout-use-all" data-i18n="button_sweep_use_layout">Use every speaker in this layout</button>
+                    </div>
+                  </div>
+                </div>
                 <div class="field-row" id="rf-sweep-custom" hidden>
                   <label for="rf-sweep-fs" data-i18n="label_sweep_fs">Sample rate (Hz):</label>
                   <input id="rf-sweep-fs" class="num mono" type="number" value="48000" min="8000" max="384000">
@@ -470,6 +480,25 @@
                     <input type="checkbox" id="bf-truehd">
                     <label for="bf-truehd" data-i18n="checkbox_truehd_layouts">TrueHD layouts</label>
                   </div>
+                  <div class="field-row">
+                    <label for="bf-layout-files" data-i18n="label_layout_files">Channel-order files:</label>
+                    <select id="bf-layout-files">
+                      <option value="auto" selected data-i18n="option_layout_files_auto">When every speaker is measured</option>
+                      <option value="none" data-i18n="option_layout_files_none">Off</option>
+                    </select>
+                  </div>
+                  <div class="field-row top">
+                    <span data-i18n="label_layout_files_force">Write even with missing speakers:</span>
+                    <div class="adv-stack">
+                      <div class="layout-force">
+                        <div class="check-row"><input type="checkbox" id="bf-layout-force-0" data-layout="13.1"><label for="bf-layout-force-0">Auro-3D 13.1</label></div>
+                        <div class="check-row"><input type="checkbox" id="bf-layout-force-1" data-layout="22.2"><label for="bf-layout-force-1">NHK 22.2</label></div>
+                        <div class="check-row"><input type="checkbox" id="bf-layout-force-2" data-layout="24.1.10"><label for="bf-layout-force-2">Dolby Atmos 24.1.10</label></div>
+                        <div class="check-row"><input type="checkbox" id="bf-layout-force-3" data-layout="30.2"><label for="bf-layout-force-3">DTS:X Pro 30.2</label></div>
+                      </div>
+                      <p class="hint" data-i18n="hint_layout_files">Tracks of missing speakers are silent.</p>
+                    </div>
+                  </div>
                   <div class="check-row">
                     <input type="checkbox" id="bf-mic-deviation">
                     <label for="bf-mic-deviation" data-i18n="checkbox_enable_mic_deviation">Microphone deviation correction</label>
@@ -577,6 +606,25 @@
                       <label class="file-opt"><input type="checkbox" id="ba-jamesdsp"><span class="file-name">JamesDSP</span><span class="file-path mono">jamesdsp.wav</span></label>
                       <label class="file-opt"><input type="checkbox" id="ba-hangloose"><span class="file-name">Hangloose</span><span class="file-path mono">Hangloose/</span></label>
                       <label class="file-opt"><input type="checkbox" id="ba-truehd"><span class="file-name" data-i18n="studio_adv_truehd">TrueHD layouts</span><span class="file-path mono">truehd_11ch · truehd_13ch</span></label>
+                    </div>
+                  </div>
+                  <div class="field-row">
+                    <label for="ba-layout-files" data-i18n="label_layout_files">Channel-order files:</label>
+                    <select id="ba-layout-files">
+                      <option value="auto" selected data-i18n="option_layout_files_auto">When every speaker is measured</option>
+                      <option value="none" data-i18n="option_layout_files_none">Off</option>
+                    </select>
+                  </div>
+                  <div class="field-row top">
+                    <span data-i18n="label_layout_files_force">Write even with missing speakers:</span>
+                    <div class="adv-stack">
+                      <div class="file-grid layout-grid">
+                        <label class="file-opt"><input type="checkbox" id="ba-layout-force-0" data-layout="13.1"><span class="file-name">Auro-3D 13.1</span><span class="file-path mono">auro_13.1.wav</span></label>
+                        <label class="file-opt"><input type="checkbox" id="ba-layout-force-1" data-layout="22.2"><span class="file-name">NHK 22.2</span><span class="file-path mono">nhk_22.2.wav</span></label>
+                        <label class="file-opt"><input type="checkbox" id="ba-layout-force-2" data-layout="24.1.10"><span class="file-name">Dolby Atmos 24.1.10</span><span class="file-path mono">atmos_24.1.10.wav</span></label>
+                        <label class="file-opt"><input type="checkbox" id="ba-layout-force-3" data-layout="30.2"><span class="file-name">DTS:X Pro 30.2</span><span class="file-path mono">dtsx_30.2.wav</span></label>
+                      </div>
+                      <p class="hint" data-i18n="hint_layout_files">Tracks of missing speakers are silent.</p>
                     </div>
                   </div>
                   <div class="field-row">

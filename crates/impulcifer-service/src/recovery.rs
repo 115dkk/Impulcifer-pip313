@@ -15,6 +15,7 @@ use impulcifer_types::{
         track_name,
     },
     ipc::{self, ErrorCode},
+    layouts::{IMMERSIVE_LAYOUTS, ImmersiveLayout},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -503,6 +504,134 @@ fn read_combined(path: &Path, order: &[&str], hrir: bool) -> Result<TrackSet, Re
         speakers,
     })
 }
+fn measured_speakers(tracks: &HashMap<String, Vec<f64>>) -> Vec<String> {
+    SPEAKER_NAMES
+        .into_iter()
+        .filter(|s| {
+            ["left", "right"].into_iter().any(|side| {
+                tracks
+                    .get(&track_name(s, side))
+                    .is_some_and(|data| data.iter().any(|x| *x != 0.0))
+            })
+        })
+        .map(str::to_owned)
+        .collect()
+}
+fn read_layout(path: &Path, layout: &ImmersiveLayout) -> Result<TrackSet, RecoveryError> {
+    let wav = read_matrix(path)?;
+    let channels = layout.channels.len() * 2;
+    if wav.tracks.len() != channels {
+        return Err(RecoveryError::new(
+            RecoveryErrorCode::InvalidChannelCount,
+            format!("{} must contain {channels} channels.", filename(path)),
+            json!({"path":path,"expected":[channels],"actual":wav.tracks.len()}),
+        ));
+    }
+    let labels = layout.label_track_names();
+    let map = read_track_names(
+        path,
+        &labels.iter().map(String::as_str).collect::<Vec<_>>(),
+        channels,
+    )
+    .map_err(|e| {
+        RecoveryError::new(
+            RecoveryErrorCode::InvalidChannelMap,
+            io_message(e),
+            json!({"path":path}),
+        )
+    })?;
+    if map.is_some_and(|names| names != labels) {
+        return Err(RecoveryError::new(
+            RecoveryErrorCode::InvalidChannelMap,
+            "BRIR channel mapping does not match the WAV layout.",
+            json!({"path":path}),
+        ));
+    }
+    let count = wav.tracks[0].len();
+    let mut tracks = HashMap::new();
+    let mut non_silent = Vec::new();
+    // ADR 0007: format order supplies slot names, not positions in hrir.wav.
+    for ((name, label), data) in layout.track_names().into_iter().zip(labels).zip(wav.tracks) {
+        let slot = name.rsplit_once('-').unwrap().0;
+        if slot == "LFE" || slot == "LFE2" {
+            if data.iter().any(|x| *x != 0.0) {
+                non_silent.push(label);
+            }
+        } else {
+            tracks.insert(name, data);
+        }
+    }
+    if !non_silent.is_empty() {
+        return Err(RecoveryError::new(
+            RecoveryErrorCode::NonSilentLfe,
+            format!(
+                "{} contains non-silent LFE tracks that cannot be represented in hesuvi.wav.",
+                filename(path)
+            ),
+            json!({"path":path,"tracks":non_silent}),
+        ));
+    }
+    Ok(TrackSet {
+        speakers: measured_speakers(&tracks),
+        tracks,
+        rate: wav.sample_rate,
+        count,
+    })
+}
+fn verify_layout(
+    source: &TrackSet,
+    layout: &TrackSet,
+    path: &Path,
+    merging: bool,
+) -> Result<(), RecoveryError> {
+    if source.rate != layout.rate {
+        return Err(RecoveryError::new(
+            RecoveryErrorCode::SampleRateMismatch,
+            "Existing layout files use a different sample rate.",
+            json!({"files":[path]}),
+        ));
+    }
+    if source.count != layout.count {
+        return Err(RecoveryError::new(
+            RecoveryErrorCode::SampleCountMismatch,
+            "Existing layout files use a different sample count.",
+            json!({"files":[path]}),
+        ));
+    }
+    let mismatched: Vec<_> = speaker_tracks()
+        .filter(|name| {
+            let (Some(expected), Some(actual)) = (source.tracks.get(name), layout.tracks.get(name))
+            else {
+                return false;
+            };
+            (merging || actual.iter().any(|x| *x != 0.0)) && expected != actual
+        })
+        .collect();
+    if !mismatched.is_empty() {
+        return Err(RecoveryError::new(
+            RecoveryErrorCode::SourceMismatch,
+            "Existing layout files do not match the BRIR source.",
+            json!({"files":[path],"tracks":mismatched}),
+        ));
+    }
+    Ok(())
+}
+fn read_layouts(files: &[(PathBuf, &ImmersiveLayout)]) -> Result<TrackSet, RecoveryError> {
+    let (path, layout) = &files[0];
+    let mut set = read_layout(path, layout)?;
+    for (path, layout) in &files[1..] {
+        let next = read_layout(path, layout)?;
+        verify_layout(&set, &next, path, true)?;
+        set.tracks.extend(next.tracks);
+    }
+    set.speakers = measured_speakers(&set.tracks);
+    for name in speaker_tracks() {
+        set.tracks
+            .entry(name)
+            .or_insert_with(|| vec![0.0; set.count]);
+    }
+    Ok(set)
+}
 fn read_split(dir: &Path) -> Result<(TrackSet, Vec<PathBuf>), RecoveryError> {
     let files = find_split(dir)?;
     if files.is_empty() {
@@ -689,6 +818,12 @@ fn prepare(dir: &Path, options: &RecoveryOptions) -> Result<PreparedRecovery, Re
     let (output, split) = locate(&selected)?;
     let hp = find_named(&output, "hrir.wav", false)?;
     let vp = find_named(&output, "hesuvi.wav", false)?;
+    let mut layouts = Vec::new();
+    for layout in &IMMERSIVE_LAYOUTS {
+        if let Some(path) = find_named(&output, layout.file_name, false)? {
+            layouts.push((path, layout));
+        }
+    }
     let mut existing = Vec::new();
     let (set, kind, source) = match (&hp, &vp) {
         (Some(hp), Some(vp)) => {
@@ -715,18 +850,27 @@ fn prepare(dir: &Path, options: &RecoveryOptions) -> Result<PreparedRecovery, Re
             )
         }
         (None, None) => {
-            let dir = split.as_ref().ok_or_else(|| {
-                RecoveryError::new(
+            if let Some(dir) = &split {
+                let (set, files) = read_split(dir)?;
+                existing.extend(files);
+                (set, "hangloose", dir.clone())
+            } else if !layouts.is_empty() {
+                (read_layouts(&layouts)?, "layout", layouts[0].0.clone())
+            } else {
+                return Err(RecoveryError::new(
                     RecoveryErrorCode::NoRecoverySource,
                     "No hrir.wav, hesuvi.wav, or Hangloose speaker WAV files were found.",
                     json!({"directory":selected}),
-                )
-            })?;
-            let (set, files) = read_split(dir)?;
-            existing.extend(files);
-            (set, "hangloose", dir.clone())
+                ));
+            }
         }
     };
+    for (path, layout) in &layouts {
+        if kind != "layout" {
+            verify_layout(&set, &read_layout(path, layout)?, path, false)?;
+        }
+        existing.push(path.clone());
+    }
     let mut outputs = Vec::new();
     if hp.is_none() {
         outputs.push(combined_output(
@@ -778,6 +922,31 @@ fn prepare(dir: &Path, options: &RecoveryOptions) -> Result<PreparedRecovery, Re
                 speaker: Some(speaker.clone()),
             });
         }
+    }
+    for layout in &IMMERSIVE_LAYOUTS {
+        if layouts.iter().any(|(_, found)| found.id == layout.id)
+            || !layout
+                .missing(|s| set.speakers.iter().any(|measured| measured == s))
+                .is_empty()
+        {
+            continue;
+        }
+        outputs.push(PlannedOutput {
+            target: output.join(layout.file_name),
+            tracks: layout
+                .track_names()
+                .iter()
+                .map(|name| {
+                    set.tracks
+                        .get(name)
+                        .cloned()
+                        .unwrap_or_else(|| vec![0.0; set.count])
+                })
+                .collect(),
+            names: layout.label_track_names(),
+            kind: "layout",
+            speaker: None,
+        });
     }
     let mut seen = HashSet::new();
     existing.retain(|p| {

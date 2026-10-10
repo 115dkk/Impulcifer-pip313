@@ -255,22 +255,30 @@ fn decay_cases() -> Vec<(String, ImpulseResponse, Value)> {
 fn golden_constants_match_python() {
     let v = fixture("constants");
     let o = &v["outputs"];
-    assert_eq!(json!(SPEAKER_NAMES), o["SPEAKER_NAMES"]);
-    assert_eq!(json!(HESUVI_TRACK_ORDER), o["HESUVI_TRACK_ORDER"]);
+    assert_eq!(json!(SPEAKER_NAMES_2X), o["SPEAKER_NAMES"]);
+    // 3.x appends the ADR 0007 slots; the 2.x lists stay their prefixes.
+    assert_eq!(SPEAKER_NAMES[..15], SPEAKER_NAMES_2X);
+    assert_eq!(HESUVI_TRACK_ORDER[..30], HESUVI_TRACK_ORDER_2X);
     assert_eq!(
-        json!(HEXADECAGONAL_TRACK_ORDER),
+        HEXADECAGONAL_TRACK_ORDER[..32],
+        HEXADECAGONAL_TRACK_ORDER_2X
+    );
+    assert_eq!(IPSILATERAL_PAIRS[..8], IPSILATERAL_PAIRS_2X);
+    assert_eq!(json!(HESUVI_TRACK_ORDER_2X), o["HESUVI_TRACK_ORDER"]);
+    assert_eq!(
+        json!(HEXADECAGONAL_TRACK_ORDER_2X),
         o["HEXADECAGONAL_TRACK_ORDER"]
     );
-    assert_eq!(json!(IPSILATERAL_PAIRS), o["IPSILATERAL_PAIRS"]);
+    assert_eq!(json!(IPSILATERAL_PAIRS_2X), o["IPSILATERAL_PAIRS"]);
     for (name, mut values) in [
-        ("LEFT_SIDE_SPEAKERS", LEFT_SIDE_SPEAKERS.to_vec()),
-        ("RIGHT_SIDE_SPEAKERS", RIGHT_SIDE_SPEAKERS.to_vec()),
-        ("CENTER_SPEAKERS", CENTER_SPEAKERS.to_vec()),
+        ("LEFT_SIDE_SPEAKERS", LEFT_SIDE_SPEAKERS_2X.to_vec()),
+        ("RIGHT_SIDE_SPEAKERS", RIGHT_SIDE_SPEAKERS_2X.to_vec()),
+        ("CENTER_SPEAKERS", CENTER_SPEAKERS_2X.to_vec()),
     ] {
         values.sort();
         assert_eq!(json!(values), o[name]);
     }
-    for (i, s) in SPEAKER_NAMES.iter().enumerate() {
+    for (i, s) in SPEAKER_NAMES_2X.iter().enumerate() {
         assert_eq!(SPEAKER_DELAYS[i], number(&o["SPEAKER_DELAYS"][s]));
     }
     for (name, order) in SEQUENCE_TRACK_ORDERS {
@@ -292,7 +300,7 @@ fn golden_constants_match_python() {
         };
         assert_eq!(speaker_side(name), expected);
     }
-    let names: Vec<_> = SPEAKER_NAMES
+    let names: Vec<_> = SPEAKER_NAMES_2X
         .iter()
         .flat_map(|s| [track_name(s, "left"), track_name(s, "right")])
         .collect();

@@ -20,11 +20,20 @@ RECOVERY_STATES = ("empty", "planning", "ready", "nothing", "error", "succeeded"
 EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
-EXPECTED_SHOTS = 2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * len(ADV_TABS)
+EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * len(ADV_TABS)
+                  + 2 * 2 * 2)
+# NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
+# speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
+NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
+            ("FLc", "FL"), ("FRc", "FR"), ("BC", "BC"), ("LFE2", "LFE2"), ("SiL", "SL"), ("SiR", "SR"),
+            ("TpFL", "HFL"), ("TpFR", "HFR"), ("TpFC", "HFC"), ("TpC", "TC"), ("TpBL", "HBL"), ("TpBR", "HBR"),
+            ("TpSiL", "TSL"), ("TpSiR", "TSR"), ("TpBC", "HBC"), ("BtFC", "DFC"), ("BtFL", "DFL"), ("BtFR", "DFR")]
+IMMERSIVE = [{"id": "22.2", "name": "NHK 22.2", "file_name": "nhk_22.2.wav",
+              "channels": [{"label": label, "slot": slot} for label, slot in NHK_22_2]}]
 ADVANCED_KEYS = {"fs", "target_level", "channel_balance", "bass_boost_gain", "bass_boost_fc", "bass_boost_q", "tilt",
                  "decay", "head_ms", "jamesdsp", "hangloose", "remove_silent_channels", "interactive_plots",
                  "microphone_deviation_correction", "mic_deviation_strength", "mic_deviation_debug_plots",
-                 "output_truehd_layouts"}
+                 "output_truehd_layouts", "layout_files"}
 
 
 def catalog(language):
@@ -51,7 +60,7 @@ def mock_script(skin, theme, language, scenario):
     version, notes = release_notes() if scenario == "update" else (None, None)
     fixture = json.dumps({"skin": skin, "theme": theme, "language": language,
                          "scenario": scenario, "strings": catalog(language),
-                         "release": {"version": version, "notes": notes},
+                         "release": {"version": version, "notes": notes}, "immersive": IMMERSIVE,
                          "catalogs": {code: catalog(code) for code in LANGUAGES}}, ensure_ascii=False)
     return "const fixture = " + fixture + ";\n" + r"""
 (() => {
@@ -82,7 +91,8 @@ def mock_script(skin, theme, language, scenario):
     languages: [{code: "en", name: "English"}, {code: "ko", name: "한국어"}]};
   const methods = {
     bootstrap: () => ok({version: "3.0.0-alpha.1", platform: "windows", install_kind: "dev", webview_backend: "edgechromium",
-      brir_defaults: {}, sweep: {layouts: ["stereo", "7.1"], default_fs: 48000, default_duration: 5, speaker_names: ["FL", "FR"]},
+      brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "22.2"], default_fs: 48000, default_duration: 5,
+        speaker_names: ["FL", "FR"], immersive: fixture.immersive},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
         brir_cancel: true, output_recovery_cancel: false, share_modes: scenario === "disabled" ? ["auto"] : ["auto", "exclusive", "shared"]},
       active_job: null, ui: settings}),
@@ -441,6 +451,47 @@ def advanced_checks(browser):
     print("Gallery advanced checks: per-tab requests, locks, reset, keyboard, skin carry-over, 9-language layout OK", flush=True)
 
 
+def layout_checks(browser):
+    """Immersive layouts (ADR 0007): the recorder shows which speaker code each
+    device channel plays and fills them in on request; the output options send
+    layout_files as auto, none or the formats forced with missing speakers."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "recorder")
+    assert not page.locator("#rf-layout-row").is_visible()
+    layout = page.locator("#rf-sweep-layout")
+    assert layout.locator('option[value="22.2"]').inner_text() == "NHK 22.2"
+    layout.select_option("22.2")
+    assert page.locator("#rf-layout-row").is_visible()
+    items = page.locator("#rf-layout-map .layout-ch")
+    assert items.count() == len(NHK_22_2)
+    first = items.nth(0)
+    assert [first.locator(cls).inner_text() for cls in (".layout-ch-num", ".layout-ch-label", ".layout-ch-slot")] == ["1", "FL", "WL"]
+    assert items.nth(3).get_attribute("data-lfe") == "true" and items.nth(3).locator(".layout-ch-slot").inner_text() == "—"
+    assert items.nth(6).locator(".layout-ch-slot").inner_text() == "FL"
+    page.locator("#rf-layout-use-all").click()
+    expected = ",".join(slot for _, slot in NHK_22_2 if not slot.startswith("LFE"))
+    assert page.locator("#rf-sweep-speakers").input_value() == expected
+    layout.select_option("stereo")
+    assert not page.locator("#rf-layout-row").is_visible()
+
+    navigate(page, "processing")
+    assert "layout_files" not in brir_request(page)
+    adv_switch(page, "output", True)
+    assert brir_request(page)["layout_files"] == "auto"
+    page.locator("#adv-panel-output .file-opt", has_text="atmos_24.1.10.wav").click()
+    page.locator("#adv-panel-output .file-opt", has_text="dtsx_30.2.wav").click()
+    assert brir_request(page)["layout_files"] == "24.1.10,30.2"
+    page.locator("#ba-layout-files").select_option("none")
+    assert disabled(page, "#ba-layout-force-2")
+    assert brir_request(page)["layout_files"] == "none"
+    page.locator("#adv-reset-output").click()
+    assert not disabled(page, "#ba-layout-force-2") and not page.locator("#ba-layout-force-2").is_checked()
+    assert brir_request(page)["layout_files"] == "auto"
+    assert not errors, errors
+    context.close()
+    print("Gallery layout checks: recorder channel map, use-all, layout_files auto/none/forced OK", flush=True)
+
+
 def room_phase_checks(browser):
     """Virtual room tuning: its own rows replace the Room EQ rows, the timing
     limit is an eight-stop slider in Studio and one checkbox in Stable, the
@@ -727,6 +778,7 @@ def render_gallery(output):
         browser = playwright.chromium.launch()
         behavior_checks(browser)
         advanced_checks(browser)
+        layout_checks(browser)
         room_phase_checks(browser)
         vbass_checks(browser)
         tooltip_checks(browser)
@@ -767,6 +819,14 @@ def render_gallery(output):
                 if skin == "stable":
                     assert page.evaluate("galleryDialogs.length") == 2
             shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-{scenario}", errors))
+            context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "idle")
+            navigate(page, "recorder")
+            page.locator("#rf-sweep-layout").select_option("22.2")
+            page.locator("#rf-layout-use-all").click()
+            page.locator("#rf-layout-row").scroll_into_view_if_needed()
+            shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-layout-22.2", errors))
             context.close()
         for skin, theme, language, scenario in itertools.product(SKINS, THEMES, LANGUAGES, EQ_SCENARIOS):
             context, page, errors = open_page(browser, skin, theme, language, scenario)
