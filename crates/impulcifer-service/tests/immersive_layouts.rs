@@ -6,7 +6,7 @@ use brir_support::*;
 use impulcifer_io::{brir_layout::read_track_names, read_wav, write_wav};
 use impulcifer_jobs::registry::{JobRegistry, PollResult};
 use impulcifer_types::{
-    constants::{HEXADECAGONAL_TRACK_ORDER, SPEAKER_NAMES},
+    constants::{HEXADECAGONAL_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER_2X, SPEAKER_NAMES},
     job::JobStatus,
     layouts::{IMMERSIVE_LAYOUTS, Layer, layout},
 };
@@ -202,8 +202,11 @@ fn layout_files_none_writes_no_format_file() {
 
 /// The 7-speaker demo (7.1 without LFE) is no immersive format and shares no
 /// slot outside 7.1 with any: no file, no near-miss notice.
+/// A measurement of 2.x speakers keeps the 2.x files: no format file, no
+/// notice, and the intermediate responses keep their 32 tracks instead of
+/// growing by the silent 3.x slots.
 #[test]
-fn the_demo_writes_no_format_file_and_no_notice() {
+fn the_demo_keeps_its_2x_outputs() {
     let temp = Temp::demo();
     let jobs = JobRegistry::new();
     let service = service(&temp, jobs.clone());
@@ -212,6 +215,18 @@ fn the_demo_writes_no_format_file_and_no_notice() {
     assert_eq!(poll.job.status, JobStatus::Succeeded);
     for name in FORMAT_FILES {
         assert!(!temp.0.join(name).exists(), "{name}");
+    }
+    for name in [
+        "responses.wav",
+        "headphone-responses.wav",
+        "room-responses.wav",
+    ] {
+        let wav = read_wav(&temp.0.join(name)).unwrap();
+        assert_eq!(
+            wav.tracks.len(),
+            HEXADECAGONAL_TRACK_ORDER_2X.len(),
+            "{name}"
+        );
     }
     for key in [
         "cli_success_layout_file",

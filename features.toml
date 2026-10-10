@@ -895,7 +895,7 @@ note = "NHK 22.2 = SMPTE ST 2036-2; Auro 13.1 = Auro WAV white paper (0x2FE3F); 
 id = "output.immersive_layout_files"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::nhk_22_2_file_puts_every_slot_and_ear_on_its_smpte_channel", "impulcifer-service::complete_formats_are_written_and_listed_ones_are_filled_with_silence", "impulcifer-service::layout_files_none_writes_no_format_file", "impulcifer-service::the_demo_writes_no_format_file_and_no_notice", "impulcifer-dsp::layout_tracks_read_each_slot_and_ear_from_the_table"]
+tests = ["impulcifer-service::nhk_22_2_file_puts_every_slot_and_ear_on_its_smpte_channel", "impulcifer-service::complete_formats_are_written_and_listed_ones_are_filled_with_silence", "impulcifer-service::layout_files_none_writes_no_format_file", "impulcifer-service::the_demo_keeps_its_2x_outputs", "impulcifer-dsp::layout_tracks_read_each_slot_and_ear_from_the_table"]
 note = "nhk_22.2.wav, auro_13.1.wav, atmos_24.1.10.wav, dtsx_30.2.wav: two tracks per channel in official order, LFE silent, never compacted, ICHL chunk of format labels; README.md lists each file's channel-to-speaker map; near misses are logged"
 
 [[feature]]

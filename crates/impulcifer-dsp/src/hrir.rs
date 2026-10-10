@@ -1,8 +1,9 @@
 //! Insertion-ordered, file-free binaural responses, core/hrir.py.
 use crate::{DspError, conv, decay, estimator::SweepEstimator, fft, ir::ImpulseResponse, windows};
 use impulcifer_types::constants::{
-    IPSILATERAL_PAIRS, IPSILATERAL_PAIRS_2X, SPEAKER_DELAYS, SPEAKER_NAMES, Side,
-    base_channel_count, track_name,
+    HESUVI_TRACK_ORDER, HESUVI_TRACK_ORDER_2X, HEXADECAGONAL_TRACK_ORDER,
+    HEXADECAGONAL_TRACK_ORDER_2X, IPSILATERAL_PAIRS, IPSILATERAL_PAIRS_2X, SPEAKER_DELAYS,
+    SPEAKER_NAMES, Side, base_channel_count, track_name,
 };
 
 #[derive(Clone, Debug)]
@@ -238,6 +239,10 @@ impl Hrir {
         }
     }
     /// Python write_wav pure stacking, core/hrir.py:427-474; p08_stack.json.
+    /// `trim_extensions` drops trailing silent pairs down to the base channel
+    /// count. Without it the 2.x part of a combined order is kept whole, as 2.x
+    /// writes it, and the slots added in 3.x (ADR 0007) end at the last
+    /// measured one, so a 2.x measurement keeps its 2.x files.
     pub fn stack_tracks(
         &self,
         order: &[&str],
@@ -284,15 +289,21 @@ impl Hrir {
                 "selected tracks must have equal lengths for stacking".into(),
             ));
         }
-        if trim_extensions {
-            let minimum = base_channel_count(order);
-            while data.len() > minimum
-                && data[data.len() - 2..]
-                    .iter()
-                    .all(|row| row.iter().all(|x| *x == 0.0))
-            {
-                data.truncate(data.len() - 2);
-            }
+        let minimum = if trim_extensions {
+            base_channel_count(order)
+        } else if order == HEXADECAGONAL_TRACK_ORDER {
+            HEXADECAGONAL_TRACK_ORDER_2X.len()
+        } else if order == HESUVI_TRACK_ORDER {
+            HESUVI_TRACK_ORDER_2X.len()
+        } else {
+            order.len()
+        };
+        while data.len() > minimum
+            && data[data.len() - 2..]
+                .iter()
+                .all(|row| row.iter().all(|x| *x == 0.0))
+        {
+            data.truncate(data.len() - 2);
         }
         Ok(data)
     }
