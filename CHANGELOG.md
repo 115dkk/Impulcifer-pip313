@@ -4,15 +4,6 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
-## 3.3.1 - 2026-10-11
-### 후원 안내 추가
-
-#### 📝 문서
-- **README에 '구걸' 단락**: 지금 모으는 돈(새 Atmos 앱의 드라이버를 Microsoft 서명으로 내기 위한 EV 인증서, 한 번 $359)과 초과분의 쓰임새, GitHub Sponsors 링크를 README 끝에 더했습니다.
-
-#### 🔧 빌드 / 설정 변경
-- **Sponsor 버튼**: `.github/FUNDING.yml`을 더해 저장소 상단에 Sponsor 버튼이 뜹니다.
-
 ## 3.3.1 - 2026-10-10
 ### Studio 처리 화면에 스크롤바가 두 줄 생기던 문제 수정
 
@@ -21,6 +12,10 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **UI 갤러리 검사 추가**: 두 스킨의 모든 화면에서(처리 화면은 모든 카드와 고급 옵션 탭을 연 상태까지) 기본 창 크기부터 작은 창까지 문서가 창보다 커지지 않는지 확인합니다. 고치기 전 코드에서는 이 검사가 실패합니다.
+- **Sponsor 버튼** (2026-10-11): `.github/FUNDING.yml`을 더해 저장소 상단에 Sponsor 버튼이 뜹니다.
+
+#### 📝 문서
+- **README에 '구걸' 단락** (2026-10-11): 지금 모으는 돈(새 Atmos 앱의 드라이버를 Microsoft 서명으로 내기 위한 EV 인증서, 한 번 $359)과 초과분의 쓰임새, GitHub Sponsors 링크를 README 끝에 더했습니다.
 
 ## 3.3.0 - 2026-10-10
 ### 가상 베이스가 크로스오버를 측정에서 찾고, 룸 보정과 맞춰 저음을 합성합니다
