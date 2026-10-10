@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.3.1 - 2026-10-11
+### 후원 안내 추가
+
+#### 📝 문서
+- **README에 '구걸' 단락**: 지금 모으는 돈(새 Atmos 앱의 드라이버를 Microsoft 서명으로 내기 위한 EV 인증서, 한 번 $359)과 초과분의 쓰임새, GitHub Sponsors 링크를 README 끝에 더했습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **Sponsor 버튼**: `.github/FUNDING.yml`을 더해 저장소 상단에 Sponsor 버튼이 뜹니다.
+
 ## 3.3.1 - 2026-10-10
 ### Studio 처리 화면에 스크롤바가 두 줄 생기던 문제 수정
 

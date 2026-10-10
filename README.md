@@ -326,3 +326,18 @@ cargo run -p impulcifer-cli --release -- --dir_path data/demo   # CLI
 ## 기여와 문의
 
 버그를 찾았거나 고칠 점이 있으면 [이슈 트래커](https://github.com/115dkk/Impulcifer-pip313/issues)에 남겨 주세요.
+
+## 구걸
+
+개발자는 돈이 필요합니다.\
+이 프로그램이 좋다고 생각하시면 한 푼만 주십시오...
+
+**지금 모으는 돈:** EV 인증서, 딱 한 번 $359. 개인 BRIR로 헤드폰에서 Dolby Atmos를 듣는 새 앱의 드라이버를 Microsoft 서명으로 내기 위한 비용입니다. 이게 있으면 Secure Boot를 끄지 않고 설치되는 앱을 낼 수 있습니다. (현재 $0 / $359)
+
+**초과분은 이렇게 씁니다:**
+
+* AI 구독료
+* AI 개발사들이 요구하는 하드웨어 키 비용
+* 개발자의 집값 대출 상환에 보탬
+
+[GitHub Sponsors](https://github.com/sponsors/115dkk)
