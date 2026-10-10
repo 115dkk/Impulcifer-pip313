@@ -178,5 +178,16 @@
   "cli_vbass_auto_none": "In den Messungen wurde kein Bassabfall gefunden, daher wurde kein virtueller Bass angewendet. Wählen Sie eine manuelle Übergangsfrequenz, um ihn dennoch anzuwenden",
   "cli_vbass_below_rolloff": "Der Bass von {speaker} fällt unterhalb von etwa {rolloff} Hz ab, zu nahe an der Übergangsfrequenz von {freq} Hz: Der Bass direkt oberhalb der Übergangsfrequenz bleibt schwach",
   "cli_vbass_match": "Pegel des virtuellen Basses an den Frequenzgang zwischen {lo} und {hi} Hz angepasst; um {delay} ms verzögert, um ihn an der Übergangsfrequenz zeitlich auf die Lautsprecher auszurichten",
-  "cli_vbass_room_target": "Der virtuelle Bass folgt dem Bassverlauf der Zielkurve der Raumkorrektur"
+  "cli_vbass_room_target": "Der virtuelle Bass folgt dem Bassverlauf der Zielkurve der Raumkorrektur",
+  "cli_success_layout_file": "{layout} in seiner Kanalreihenfolge geschrieben: {path}",
+  "cli_warning_layout_partial": "{layout}: {file} enthält stumme Spuren für nicht gemessene Kanäle: {missing}",
+  "cli_info_layout_missing": "Für die Datei in der Kanalreihenfolge von {layout} müssen noch {count} Lautsprecher gemessen werden: {missing}",
+  "cli_readme_layouts_title": "Dateien in Kanalreihenfolge",
+  "cli_readme_layouts_note": "Jeder Kanal hat zwei Spuren, zuerst das linke Ohr, in der Kanalreihenfolge des Formats. LFE-Spuren sind stumm.",
+  "cli_readme_layouts_atmos_order": "Dolby veröffentlicht keine Kanalreihenfolge für Konfigurationen über 9.1.6. Die Spuren 1–32 folgen der 9.1.6-Austauschreihenfolge von Apple und AWS MediaConvert; die übrigen folgen der Reihenfolge der Dolby Atmos Home Theater Installation Guidelines. Kein Decoder gibt diese Reihenfolge aus.",
+  "cli_readme_layouts_dts_order": "Die Reihenfolge folgt der 32-Bit-Kanalmaske in ETSI TS 103 491, Tabelle B-5. DTS veröffentlicht keine PCM-Reihenfolge für einen 30.2-Decoder.",
+  "cli_readme_layouts_partial": "Nicht gemessene Kanäle haben stumme Spuren: {missing}",
+  "cli_readme_layouts_header_tracks": "Spuren",
+  "cli_readme_layouts_header_channel": "Kanal",
+  "cli_readme_layouts_header_speaker": "Lautsprecher"
 }

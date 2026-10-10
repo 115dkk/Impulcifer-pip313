@@ -178,5 +178,16 @@
   "cli_vbass_auto_none": "Aucune perte de graves détectée dans les mesures ; la basse virtuelle n’a donc pas été appliquée. Pour l’appliquer malgré tout, choisissez une fréquence de coupure manuelle",
   "cli_vbass_below_rolloff": "{speaker} perd des graves sous environ {rolloff} Hz, trop près de la fréquence de coupure de {freq} Hz : les graves juste au-dessus de la coupure restent faibles",
   "cli_vbass_match": "Niveau de la basse virtuelle ajusté à la réponse entre {lo} et {hi} Hz ; retardé de {delay} ms pour l’aligner sur les enceintes à la fréquence de coupure",
-  "cli_vbass_room_target": "La basse virtuelle suit la forme des graves de la courbe cible de la correction acoustique"
+  "cli_vbass_room_target": "La basse virtuelle suit la forme des graves de la courbe cible de la correction acoustique",
+  "cli_success_layout_file": "{layout} écrit dans son ordre de canaux : {path}",
+  "cli_warning_layout_partial": "{layout} : {file} contient des pistes silencieuses pour les canaux non mesurés : {missing}",
+  "cli_info_layout_missing": "Il reste {count} enceintes à mesurer pour créer le fichier dans l’ordre des canaux de {layout} : {missing}",
+  "cli_readme_layouts_title": "Fichiers dans l’ordre des canaux",
+  "cli_readme_layouts_note": "Chaque canal comporte deux pistes, l’oreille gauche en premier, dans l’ordre des canaux du format. Les pistes LFE sont silencieuses.",
+  "cli_readme_layouts_atmos_order": "Dolby ne publie aucun ordre de canaux au-delà de 9.1.6. Les pistes 1–32 suivent l’ordre d’échange 9.1.6 d’Apple et d’AWS MediaConvert ; les autres suivent l’ordre des Dolby Atmos Home Theater Installation Guidelines. Aucun décodeur ne produit cet ordre.",
+  "cli_readme_layouts_dts_order": "L’ordre suit le masque de canaux de 32 bits du tableau B-5 de la norme ETSI TS 103 491. DTS ne publie aucun ordre PCM pour un décodeur 30.2.",
+  "cli_readme_layouts_partial": "Les canaux non mesurés ont des pistes silencieuses : {missing}",
+  "cli_readme_layouts_header_tracks": "Pistes",
+  "cli_readme_layouts_header_channel": "Canal",
+  "cli_readme_layouts_header_speaker": "Enceinte"
 }

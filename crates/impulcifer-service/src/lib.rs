@@ -159,7 +159,7 @@ impl ImpulciferService {
                     "install_kind": self.update_options.install_kind.as_str(),
                     "brir_defaults": defaults,
                     "sweep": {"layouts": SWEEP_TRACK_LAYOUTS, "default_fs": paths::DEFAULT_SWEEP_FS,
-                        "default_duration": paths::DEFAULT_SWEEP_DURATION, "speaker_names": SPEAKER_NAMES},
+                        "default_duration": paths::DEFAULT_SWEEP_DURATION, "speaker_names": SPEAKER_NAMES.as_slice()},
                     "capabilities": {"recording":true,"brir":true,"output_recovery":true,
                         "recording_cancel":false,"brir_cancel":true,"output_recovery_cancel":false,
                         "share_modes":share_modes},

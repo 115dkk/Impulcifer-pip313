@@ -11,7 +11,13 @@ interface UiSettings {
   language: string; theme: string; skin: string; frontend: string;
   first_run: boolean; languages: Language[]; strings: Record<string, string>;
 }
-interface SweepDefaults { layouts: string[]; default_fs: number; default_duration: number; speaker_names: string[] }
+/* ADR 0007: a format whose BRIR is also written in its own channel order. Each channel reads one
+   Impulcifer speaker code (slot); LFE channels read "LFE"/"LFE2" and are never measured. */
+interface ImmersiveLayoutInfo { id: string; name: string; file_name: string; channels: { label: string; slot: string }[] }
+interface SweepDefaults {
+  layouts: string[]; default_fs: number; default_duration: number; speaker_names: string[];
+  immersive: ImmersiveLayoutInfo[];
+}
 interface Bootstrap {
   version: string; platform: string; install_kind: string; webview_backend: string;
   brir_defaults: BrirDefaults; sweep: SweepDefaults; ui: UiSettings; active_job: Job | null;
@@ -65,6 +71,10 @@ interface ProcessingRequest {
      "manual" uses vbass_freq; "legacy" is the 2.x method. Without vbass_mode, a given vbass_freq
      means "manual". */
   vbass_mode?: VbassMode;
+  /* 3.x only (ADR 0007). "auto" writes a format's channel-order file when all its speakers are
+     measured, "none" writes none, and a comma-separated list of format ids ("22.2,30.2") also
+     writes those formats with missing speakers silent. */
+  layout_files?: string;
   confirm_warnings?: boolean;
 }
 type VbassMode = "auto" | "manual" | "legacy";
@@ -88,13 +98,13 @@ interface EqInspection {
   curves: { frequency: number[]; left: number[] | null; right: number[] | null };
 }
 interface RecoveryRequest { dir_path: string; include_hangloose?: boolean; remove_silent_channels?: boolean; confirm_warnings?: boolean }
-type RecoverySource = "hrir" | "hesuvi" | "hrir+hesuvi" | "hangloose";
+type RecoverySource = "hrir" | "hesuvi" | "hrir+hesuvi" | "hangloose" | "layout";
 interface RecoveryMetadata {
   source_kind: RecoverySource; source_path: string; output_dir: string; sample_rate: number;
   sample_count: number; speakers: string[]; existing_files: string[];
 }
 interface RecoveryPlan extends RecoveryMetadata {
-  planned_files: { path: string; kind: "hrir" | "hesuvi" | "hangloose"; channels: number; speaker: string | null }[];
+  planned_files: { path: string; kind: "hrir" | "hesuvi" | "hangloose" | "layout"; channels: number; speaker: string | null }[];
   hangloose_dir: string | null;
 }
 interface RecoveryResult extends RecoveryMetadata { created_files: string[] }

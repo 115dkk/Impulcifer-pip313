@@ -178,5 +178,16 @@
   "cli_vbass_auto_none": "测量中未发现低音衰减，因此未应用虚拟低音。若仍需应用，请手动选择分频频率",
   "cli_vbass_below_rolloff": "{speaker} 的低音在约 {rolloff} Hz 以下衰减，与 {freq} Hz 的分频点过近：分频点上方附近的低音仍然偏弱",
   "cli_vbass_match": "虚拟低音电平已匹配 {lo} 至 {hi} Hz 的响应；已延迟 {delay} ms，以在分频点与扬声器的时间对齐",
-  "cli_vbass_room_target": "虚拟低音采用房间校正目标曲线的低音形状"
+  "cli_vbass_room_target": "虚拟低音采用房间校正目标曲线的低音形状",
+  "cli_success_layout_file": "已按 {layout} 的声道顺序写入：{path}",
+  "cli_warning_layout_partial": "{layout}：{file} 中未测量声道的音轨为静音：{missing}",
+  "cli_info_layout_missing": "要生成按 {layout} 声道顺序排列的文件，还需测量 {count} 个扬声器：{missing}",
+  "cli_readme_layouts_title": "声道顺序文件",
+  "cli_readme_layouts_note": "按格式的声道顺序排列，每个声道包含两条音轨，左耳在前。LFE 音轨为静音。",
+  "cli_readme_layouts_atmos_order": "Dolby 未公布超过 9.1.6 的声道顺序。音轨 1–32 遵循 Apple 和 AWS MediaConvert 的 9.1.6 交换顺序，其余音轨遵循 Dolby Atmos Home Theater Installation Guidelines 的顺序。没有解码器按此顺序输出。",
+  "cli_readme_layouts_dts_order": "顺序遵循 ETSI TS 103 491 表 B-5 中的 32 位声道掩码。DTS 未公布 30.2 解码器的 PCM 顺序。",
+  "cli_readme_layouts_partial": "未测量声道的音轨为静音：{missing}",
+  "cli_readme_layouts_header_tracks": "音轨",
+  "cli_readme_layouts_header_channel": "声道",
+  "cli_readme_layouts_header_speaker": "扬声器"
 }

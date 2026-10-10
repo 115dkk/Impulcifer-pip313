@@ -327,7 +327,7 @@ fn ipc_bootstrap_shape() {
     assert_eq!(boot["brir_defaults"], defaults);
     assert_eq!(
         boot["sweep"],
-        json!({"layouts":["mono","stereo","5.1","7.1","7.1.4","7.1.6"],"default_fs":48000,"default_duration":5.0,"speaker_names":impulcifer_types::constants::SPEAKER_NAMES})
+        json!({"layouts":["mono","stereo","5.1","7.1","7.1.4","7.1.6"],"default_fs":48000,"default_duration":5.0,"speaker_names":impulcifer_types::constants::SPEAKER_NAMES.as_slice()})
     );
     ui(&boot["ui"]);
     let (id, send) = start_blocked(&f, false);

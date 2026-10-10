@@ -2267,6 +2267,7 @@ dependencies = [
 name = "impulcifer-plots"
 version = "3.3.1"
 dependencies = [
+ "impulcifer-types",
  "plotters",
  "png 0.18.1",
  "serde_json",

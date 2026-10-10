@@ -178,5 +178,16 @@
   "cli_vbass_auto_none": "측정에서 저음이 약해지는 구간을 찾지 못해 가상 베이스를 적용하지 않았습니다. 그래도 적용하려면 수동 크로스오버를 선택하세요",
   "cli_vbass_below_rolloff": "{speaker}의 저음이 약 {rolloff} Hz 아래에서 약해집니다. 크로스오버 {freq} Hz와 너무 가까워 크로스오버 바로 위의 저음은 약한 상태로 남습니다",
   "cli_vbass_match": "가상 베이스 레벨을 {lo}~{hi} Hz의 응답에 맞추고, 크로스오버에서 스피커와 시간을 맞추도록 {delay} ms 지연했습니다",
-  "cli_vbass_room_target": "가상 베이스에 룸 목표 곡선의 저음 형태를 적용합니다"
+  "cli_vbass_room_target": "가상 베이스에 룸 목표 곡선의 저음 형태를 적용합니다",
+  "cli_success_layout_file": "{layout}의 채널 순서로 파일을 저장했어요: {path}",
+  "cli_warning_layout_partial": "{layout}: {file}에서 측정하지 않은 채널의 트랙은 무음이에요: {missing}",
+  "cli_info_layout_missing": "{layout}의 채널 순서 파일을 만들려면 스피커 {count}개를 더 측정해야 해요: {missing}",
+  "cli_readme_layouts_title": "채널 순서 파일",
+  "cli_readme_layouts_note": "포맷의 채널 순서대로 채널마다 왼쪽 귀, 오른쪽 귀 순으로 두 트랙을 넣어요. LFE 트랙은 무음이에요.",
+  "cli_readme_layouts_atmos_order": "Dolby는 9.1.6보다 큰 배치의 채널 순서를 공개하지 않았어요. 트랙 1–32는 Apple과 AWS MediaConvert의 9.1.6 교환 순서를 따르고, 나머지는 Dolby Atmos Home Theater Installation Guidelines의 순서를 따라요. 이 순서로 출력하는 디코더는 없어요.",
+  "cli_readme_layouts_dts_order": "ETSI TS 103 491 표 B-5의 32비트 채널 마스크 순서를 따라요. DTS는 30.2 디코더의 PCM 순서를 공개하지 않았어요.",
+  "cli_readme_layouts_partial": "측정하지 않은 채널의 트랙은 무음이에요: {missing}",
+  "cli_readme_layouts_header_tracks": "트랙",
+  "cli_readme_layouts_header_channel": "채널",
+  "cli_readme_layouts_header_speaker": "스피커"
 }

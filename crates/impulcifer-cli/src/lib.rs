@@ -217,7 +217,9 @@ pub fn config(
     {
         kwargs.remove("vbass_freq");
     }
-    ProcessingConfig::from_kwargs(&kwargs)
+    let config = ProcessingConfig::from_kwargs(&kwargs)?;
+    config.validate_room_options()?;
+    Ok(config)
 }
 
 /// Run synchronously. Diagnostics and job failures never terminate the embedding process.

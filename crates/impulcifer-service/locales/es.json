@@ -178,5 +178,16 @@
   "cli_vbass_auto_none": "No se detectó pérdida de graves en las mediciones, por lo que no se aplicó el bajo virtual. Para aplicarlo de todos modos, elija una frecuencia de cruce manual",
   "cli_vbass_below_rolloff": "{speaker} pierde graves por debajo de unos {rolloff} Hz, demasiado cerca de la frecuencia de cruce de {freq} Hz: los graves justo por encima del cruce siguen siendo débiles",
   "cli_vbass_match": "Nivel del bajo virtual ajustado a la respuesta entre {lo} y {hi} Hz; retrasado {delay} ms para alinearlo con los altavoces en la frecuencia de cruce",
-  "cli_vbass_room_target": "El bajo virtual sigue la forma de los graves de la curva objetivo de la corrección de sala"
+  "cli_vbass_room_target": "El bajo virtual sigue la forma de los graves de la curva objetivo de la corrección de sala",
+  "cli_success_layout_file": "Se ha escrito {layout} en su orden de canales: {path}",
+  "cli_warning_layout_partial": "{layout}: {file} tiene pistas silenciosas para los canales no medidos: {missing}",
+  "cli_info_layout_missing": "Para crear el archivo en el orden de canales de {layout}, faltan por medir {count} altavoces: {missing}",
+  "cli_readme_layouts_title": "Archivos en orden de canales",
+  "cli_readme_layouts_note": "Cada canal tiene dos pistas, primero el oído izquierdo, en el orden de canales del formato. Las pistas LFE son silenciosas.",
+  "cli_readme_layouts_atmos_order": "Dolby no publica un orden de canales para configuraciones superiores a 9.1.6. Las pistas 1–32 siguen el orden de intercambio 9.1.6 de Apple y AWS MediaConvert; las restantes siguen el orden de las Dolby Atmos Home Theater Installation Guidelines. Ningún decodificador genera este orden.",
+  "cli_readme_layouts_dts_order": "El orden sigue la máscara de canales de 32 bits de la tabla B-5 de ETSI TS 103 491. DTS no publica un orden PCM para un decodificador 30.2.",
+  "cli_readme_layouts_partial": "Los canales no medidos tienen pistas silenciosas: {missing}",
+  "cli_readme_layouts_header_tracks": "Pistas",
+  "cli_readme_layouts_header_channel": "Canal",
+  "cli_readme_layouts_header_speaker": "Altavoz"
 }

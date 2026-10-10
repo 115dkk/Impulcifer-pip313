@@ -9,6 +9,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+impulcifer-types = { path = "../impulcifer-types" }
 plotters = { version = "0.3.7", default-features = false, features = ["bitmap_backend", "ab_glyph", "line_series"] }
 png = "0.18"
 thiserror.workspace = true

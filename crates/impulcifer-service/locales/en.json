@@ -178,5 +178,16 @@
   "cli_vbass_auto_none": "No bass loss found in the measurements, so virtual bass was not applied. To apply it anyway, choose a manual crossover",
   "cli_vbass_below_rolloff": "{speaker} loses bass below about {rolloff} Hz, too close to the {freq} Hz crossover: the bass just above the crossover stays weak",
   "cli_vbass_match": "Virtual bass level matched to the response between {lo} and {hi} Hz; delayed {delay} ms to line up with the speakers at the crossover",
-  "cli_vbass_room_target": "Virtual bass follows the bass shape of the room target"
+  "cli_vbass_room_target": "Virtual bass follows the bass shape of the room target",
+  "cli_success_layout_file": "Wrote {layout} in its channel order: {path}",
+  "cli_warning_layout_partial": "{layout}: {file} has silent tracks for channels that were not measured: {missing}",
+  "cli_info_layout_missing": "{layout} needs {count} more speakers for its channel-order file: {missing}",
+  "cli_readme_layouts_title": "Channel-order files",
+  "cli_readme_layouts_note": "Each channel has two tracks, left ear first, in the format’s channel order. LFE tracks are silent.",
+  "cli_readme_layouts_atmos_order": "Dolby publishes no channel order above 9.1.6. Tracks 1–32 follow the 9.1.6 interchange order of Apple and AWS MediaConvert; the remaining tracks follow the order of the Dolby Atmos Home Theater Installation Guidelines. No decoder outputs this order.",
+  "cli_readme_layouts_dts_order": "The order follows the 32-bit channel mask in ETSI TS 103 491 Table B-5. DTS publishes no PCM order for a 30.2 decoder.",
+  "cli_readme_layouts_partial": "Channels that were not measured have silent tracks: {missing}",
+  "cli_readme_layouts_header_tracks": "Tracks",
+  "cli_readme_layouts_header_channel": "Channel",
+  "cli_readme_layouts_header_speaker": "Speaker"
 }

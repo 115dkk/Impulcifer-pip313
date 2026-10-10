@@ -11,4 +11,5 @@ pub mod config;
 pub mod constants;
 pub mod ipc;
 pub mod job;
+pub mod layouts;
 pub mod stages;
