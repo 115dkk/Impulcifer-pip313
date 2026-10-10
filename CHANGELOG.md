@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.3.1 - 2026-10-10
+### Studio 처리 화면에 스크롤바가 두 줄 생기던 문제 수정
+
+#### 🐛 버그 수정
+- **창 전체가 스크롤되던 문제**: Studio 스킨의 처리 화면에서 본문 스크롤바 옆에 창 스크롤바가 하나 더 생겼고, 끝까지 내리면 앱 아래로 빈 공간이 드러났습니다. 채널 밸런스 칸의 화면 읽기용 숨김 라벨이 본문 스크롤 영역이 아니라 문서 전체를 기준으로 배치되어 창 아래로 삐져나갔기 때문입니다(기본 창 크기에서 문서가 창보다 229 px 길었음). 본문 스크롤 영역을 그 안의 요소들의 배치 기준으로 삼아, 이제 본문만 스크롤됩니다.
+
+#### 🔧 빌드 / 설정 변경
+- **UI 갤러리 검사 추가**: 두 스킨의 모든 화면에서(처리 화면은 모든 카드와 고급 옵션 탭을 연 상태까지) 기본 창 크기부터 작은 창까지 문서가 창보다 커지지 않는지 확인합니다. 고치기 전 코드에서는 이 검사가 실패합니다.
+
 ## 3.3.0 - 2026-10-10
 ### 가상 베이스가 크로스오버를 측정에서 찾고, 룸 보정과 맞춰 저음을 합성합니다
 

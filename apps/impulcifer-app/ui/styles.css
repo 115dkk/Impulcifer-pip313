@@ -188,7 +188,12 @@ h1, h2, p { margin: 0; }
   gap: 8px;
 }
 
+/* The scroller is the containing block of everything absolutely positioned
+   inside it (.sr-only labels among them), so its overflow clips them. Left
+   static, such an element hangs off the initial containing block below the
+   window and the document grows a second scrollbar. */
 .content {
+  position: relative;
   overflow-y: auto;
   padding: 24px;
 }
