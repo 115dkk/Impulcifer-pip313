@@ -899,6 +899,13 @@ tests = ["impulcifer-service::nhk_22_2_file_puts_every_slot_and_ear_on_its_smpte
 note = "nhk_22.2.wav, auro_13.1.wav, atmos_24.1.10.wav, dtsx_30.2.wav: two tracks per channel in official order, LFE silent, never compacted, ICHL chunk of format labels; README.md lists each file's channel-to-speaker map; near misses are logged"
 
 [[feature]]
+id = "output.recovery_immersive_layouts"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-service::a_format_file_alone_restores_hrir_hesuvi_and_covered_formats", "impulcifer-service::hrir_restores_the_complete_format_files_only", "impulcifer-service::a_disagreeing_format_file_is_a_source_mismatch_naming_the_slot", "impulcifer-service::malformed_format_files_are_rejected", "impulcifer-service::hangloose_files_of_added_slots_are_recovered", "impulcifer-service::wrong_counts_of_2x_are_valid_3x_extensions"]
+note = "ADR 0007: a channel-order file (nhk_22.2.wav, auro_13.1.wav, atmos_24.1.10.wav, dtsx_30.2.wav) is a recovery source read by slot name, never by position; hrir.wav restores only the format files whose speakers are all measured; an existing format file that disagrees with the source is SOURCE_MISMATCH naming the track; non-silent LFE in a format file is NON_SILENT_LFE"
+
+[[feature]]
 id = "output.recovery"
 kind = "output"
 status = "implemented"
