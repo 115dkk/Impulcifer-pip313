@@ -15,7 +15,10 @@ use crate::{
         readme::{ReadmeData, readme_data},
         room::RoomCorrection,
     },
-    virtual_bass::{VirtualBassOptions, apply_virtual_bass},
+    virtual_bass::{
+        VirtualBassMode, VirtualBassOptions, VirtualBassPlan, VirtualBassReport,
+        VirtualBassV2Options, apply_virtual_bass, apply_virtual_bass_v2,
+    },
 };
 use impulcifer_types::{
     config::{DecaySpec, ProcessingConfig},
@@ -29,6 +32,7 @@ use impulcifer_types::{
 pub struct PipelineInputs {
     pub estimator: SweepEstimator,
     pub hrir: Hrir,
+    pub vbass: Option<VirtualBassPlan>,
     pub room: Option<RoomCorrection>,
     pub headphone: Option<HeadphoneCompensation>,
     pub eq_left: Option<FrequencyResponse>,
@@ -41,6 +45,13 @@ pub struct StageProgress {
     pub total: usize,
 }
 pub trait StageObserver {
+    fn on_virtual_bass(
+        &mut self,
+        _plan: &VirtualBassPlan,
+        _report: Option<&VirtualBassReport>,
+    ) -> Result<(), DspError> {
+        Ok(())
+    }
     fn on_room_tuned(
         &mut self,
         _report: &crate::stages::room_tuning::TuningReport,
@@ -173,6 +184,7 @@ pub fn run_pipeline(
     let PipelineInputs {
         estimator,
         mut hrir,
+        vbass,
         room,
         headphone,
         eq_left,
@@ -181,6 +193,7 @@ pub fn run_pipeline(
     let total = total_steps(config);
     let mut step = 0;
     let mut target = None;
+    let mut vbass = vbass;
     let mut applied_gain_db = 0.0;
     let mut readme = None;
     let mut tuning_report = None;
@@ -228,19 +241,52 @@ pub fn run_pipeline(
                     tuning_report = Some(report);
                 }
             }
-            StageKey::VirtualBass => apply_virtual_bass(
-                &mut hrir,
-                &VirtualBassOptions {
-                    crossover_freq: config.vbass_freq,
-                    head_ms: config.head_ms,
-                    hp_freq: config.vbass_hp,
-                    invert_polarity: match config.vbass_polarity.as_str() {
-                        "normal" => Some(false),
-                        "invert" => Some(true),
-                        _ => None,
-                    },
-                },
-            )?,
+            StageKey::VirtualBass => {
+                let mode = VirtualBassMode::parse(&config.vbass_mode)
+                    .ok_or_else(|| DspError::InvalidArgument("invalid vbass_mode".into()))?;
+                if mode == VirtualBassMode::Legacy {
+                    apply_virtual_bass(
+                        &mut hrir,
+                        &VirtualBassOptions {
+                            crossover_freq: config.vbass_freq,
+                            head_ms: config.head_ms,
+                            hp_freq: config.vbass_hp,
+                            invert_polarity: match config.vbass_polarity.as_str() {
+                                "normal" => Some(false),
+                                "invert" => Some(true),
+                                _ => None,
+                            },
+                        },
+                    )?;
+                } else {
+                    let plan = match vbass.take() {
+                        Some(plan) => plan,
+                        None => VirtualBassPlan::resolve(mode, config.vbass_freq as f64, &hrir)?,
+                    };
+                    let report = if let Some(crossover) = plan.crossover {
+                        apply_virtual_bass_v2(
+                            &mut hrir,
+                            &VirtualBassV2Options {
+                                crossover,
+                                head_ms: config.head_ms,
+                                hp_freq: config.vbass_hp,
+                                invert_polarity: config.vbass_polarity == "invert",
+                                room_gains: room
+                                    .as_ref()
+                                    .filter(|_| {
+                                        config.do_room_correction && config.room_mode != "tuning"
+                                    })
+                                    .map(|r| &r.frs)
+                                    .filter(|frs| frs.term == crate::stages::room::RoomTerm::Gain),
+                                room_target: plan.room_target.as_ref(),
+                            },
+                        )?
+                    } else {
+                        None
+                    };
+                    observer.on_virtual_bass(&plan, report.as_ref())?;
+                }
+            }
             StageKey::MicDeviation => {
                 let (_, analysis) = apply_mic_deviation_correction_with_analysis(
                     &mut hrir,

@@ -71,6 +71,9 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ),
     ("no_room_correction", ("--no_room_correction",), "3.0.0"),
     ("virtual_bass", ("--vbass", "--vbass_freq=250"), "3.0.0"),
+    ("virtual_bass_auto", ("--vbass",), "3.0.0"),
+    ("virtual_bass_legacy", ("--vbass", "--vbass_mode=legacy"), "3.3.0"),
+    ("virtual_bass_tuning", ("--vbass", "--room_mode=tuning"), "3.2.0"),
     ("dsp_shaping", ("--decay=100", "--channel_balance=trend", "--bass_boost=4"), "3.0.0"),
     (
         "resample_and_extra_outputs",

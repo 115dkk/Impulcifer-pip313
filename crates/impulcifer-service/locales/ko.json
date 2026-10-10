@@ -157,6 +157,13 @@
   "label_room_max_boost": "최대 부스트 (dB):",
   "placeholder_schroeder_freq": "자동",
   "tooltip_vbass_room_handoff": "기존 방식 (2.x) 범위를 제외하면, 크로스오버 아래 대역은 룸 보정 대신 가상 베이스가 처리합니다.",
+  "label_vbass_mode": "크로스오버:",
+  "option_vbass_mode_auto": "자동",
+  "option_vbass_mode_manual": "수동",
+  "option_vbass_mode_legacy": "기존 방식 (2.x)",
+  "tooltip_vbass_mode_auto": "스피커의 저음이 약해지는 주파수를 찾아 그보다 한 옥타브 위에 크로스오버를 설정합니다. 저음이 약해지지 않으면 아무것도 추가하지 않습니다.",
+  "tooltip_vbass_mode_manual": "아래 주파수를 사용합니다. 스피커의 저음 한계보다 높게 설정하면 해당 주파수까지의 측정된 저음을 평탄한 합성 저음으로 대체합니다.",
+  "tooltip_vbass_mode_legacy": "2.x 방식입니다. 크로스오버 주파수 한 지점에서만 레벨을 맞추며, 시간 정렬이나 룸 목표 곡선은 적용하지 않습니다.",
   "cli_room_range": "룸 보정 범위: {range}, {f_hi} Hz까지",
   "cli_room_schroeder": "슈레더 주파수 {freq} Hz (잔향 시간 {t60} s, 방 부피 {volume} m³)",
   "cli_room_schroeder_assumed": "슈레더 주파수 {freq} Hz (잔향 시간 {t60} s, 방 부피는 50 m³로 가정)",
@@ -166,5 +173,10 @@
   "cli_room_rolloff_snr": "{speaker} {side}: {freq} Hz 아래의 측정 노이즈가 너무 커서 이 대역은 부스트하지 않습니다",
   "cli_room_snr_unavailable": "{speaker} {side}: 룸 측정 길이가 1초 미만이므로 측정 노이즈 레벨에 따른 부스트 제한은 적용하지 않습니다",
   "cli_room_selfcheck_warning": "{speaker} {side}: 룸 보정 후 {lo}~{hi} Hz에 RMS 오차 {rms} dB가 남아 있습니다. 룸 측정을 확인하세요",
-  "cli_room_vbass_handoff": "{freq} Hz 아래 대역은 룸 보정 대신 가상 베이스가 처리합니다"
+  "cli_room_vbass_handoff": "{freq} Hz 아래 대역은 룸 보정 대신 가상 베이스가 처리합니다",
+  "cli_vbass_auto": "측정에서 찾은 가상 베이스 크로스오버: {freq} Hz ({speaker}의 저음이 {rolloff} Hz 아래에서 약해집니다)",
+  "cli_vbass_auto_none": "측정에서 저음이 약해지는 구간을 찾지 못해 가상 베이스를 적용하지 않았습니다. 그래도 적용하려면 수동 크로스오버를 선택하세요",
+  "cli_vbass_below_rolloff": "{speaker}의 저음이 약 {rolloff} Hz 아래에서 약해집니다. 크로스오버 {freq} Hz와 너무 가까워 크로스오버 바로 위의 저음은 약한 상태로 남습니다",
+  "cli_vbass_match": "가상 베이스 레벨을 {lo}~{hi} Hz의 응답에 맞추고, 크로스오버에서 스피커와 시간을 맞추도록 {delay} ms 지연했습니다",
+  "cli_vbass_room_target": "가상 베이스에 룸 목표 곡선의 저음 형태를 적용합니다"
 }

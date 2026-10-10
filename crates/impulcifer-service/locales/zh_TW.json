@@ -157,6 +157,13 @@
   "label_room_max_boost": "最大提升 (dB)：",
   "placeholder_schroeder_freq": "自動",
   "tooltip_vbass_room_handoff": "除「舊版方式 (2.x)」範圍外，房間校正將分頻點以下的所有頻段交由虛擬低音處理。",
+  "label_vbass_mode": "分頻：",
+  "option_vbass_mode_auto": "自動",
+  "option_vbass_mode_manual": "手動",
+  "option_vbass_mode_legacy": "舊版方式 (2.x)",
+  "tooltip_vbass_mode_auto": "找出喇叭低音開始衰減的頻率，並將分頻頻率設在其上方一個倍頻程處。如果低音沒有衰減，則不加入任何低音。",
+  "tooltip_vbass_mode_manual": "使用下方的頻率。若設為高於喇叭的低頻下限，則將該頻率以下量測到的低音替換為頻率響應平坦的合成低音。",
+  "tooltip_vbass_mode_legacy": "2.x 的方式：僅在分頻頻率這一點匹配電平，不做時間對齊，也不套用房間校正的目標曲線。",
   "cli_room_range": "房間校正範圍：{range}，至 {f_hi} Hz",
   "cli_room_schroeder": "施羅德頻率 {freq} Hz（殘響時間 {t60} s，房間容積 {volume} m³）",
   "cli_room_schroeder_assumed": "施羅德頻率 {freq} Hz（殘響時間 {t60} s，房間容積假定為 50 m³）",
@@ -166,5 +173,10 @@
   "cli_room_rolloff_snr": "{speaker} {side}：{freq} Hz 以下的量測雜訊過大，因此不提升該頻段",
   "cli_room_snr_unavailable": "{speaker} {side}：房間量測長度不足一秒，因此不按量測雜訊電平限制提升",
   "cli_room_selfcheck_warning": "{speaker} {side}：房間校正後，{lo} 至 {hi} Hz 之間仍有 {rms} dB 的均方根誤差；請檢查房間量測",
-  "cli_room_vbass_handoff": "房間校正將 {freq} Hz 以下的頻段交由虛擬低音處理"
+  "cli_room_vbass_handoff": "房間校正將 {freq} Hz 以下的頻段交由虛擬低音處理",
+  "cli_vbass_auto": "根據量測決定的虛擬低音分頻頻率：{freq} Hz（{speaker} 的低音在 {rolloff} Hz 以下衰減）",
+  "cli_vbass_auto_none": "量測中未發現低音衰減，因此未套用虛擬低音。若仍需套用，請手動選擇分頻頻率",
+  "cli_vbass_below_rolloff": "{speaker} 的低音在約 {rolloff} Hz 以下衰減，與 {freq} Hz 的分頻點過近：分頻點上方附近的低音仍然偏弱",
+  "cli_vbass_match": "虛擬低音電平已匹配 {lo} 至 {hi} Hz 的響應；已延遲 {delay} ms，以在分頻點與喇叭的時間對齊",
+  "cli_vbass_room_target": "虛擬低音採用房間校正目標曲線的低音形狀"
 }

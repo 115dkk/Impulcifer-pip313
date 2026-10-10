@@ -110,7 +110,7 @@ import impulcifer
 from impulcifer import impulcifer_native as native
 
 # 처리 옵션을 CLI와 같은 이름의 키워드 인자로 넘기면 hesuvi.wav의 경로를 돌려받습니다.
-path = impulcifer.main(dir_path="measurements", vbass=True, vbass_freq=250)
+path = impulcifer.main(dir_path="measurements", vbass=True)
 
 # 진행률과 로그가 필요하면 native.run에 콜백을 넘겨야 합니다.
 native.run(
@@ -226,10 +226,15 @@ sweep 파일을 따로 준비하지 않아도 됩니다. 녹음 화면은 기본
 
 ### Virtual Bass
 
+스피커가 내지 못하는 저음을 합성한 저음으로 채웁니다. 크로스오버 아래의 측정 응답은 걸러내고, 모든 스피커가 함께 쓰는 합성 저음을 그 자리에 더합니다.
+
+`auto`와 `manual`은 합성 저음을 룸 보정과 맞춥니다(ADR 0006). 레벨은 크로스오버 위 두 옥타브에서 잰 응답의 중앙값에 맞추고, 룸 EQ가 켜져 있으면 보정한 뒤의 응답으로 잽니다. 크로스오버에서 스피커와 위상이 맞도록 모든 스피커의 합성 저음을 같은 시간만큼 늦춥니다. 룸 보정이 룸 목표(`room-target.csv`)를 쓰면 합성 저음도 그 목표의 저역 모양을 따릅니다.
+
 | 옵션 | 기본값 | 설명 |
 | --- | --- | --- |
 | `--vbass` | 꺼짐 | Virtual Bass 합성을 켭니다. |
-| `--vbass_freq HZ` | `250` | Virtual Bass 크로스오버 주파수입니다. |
+| `--vbass_mode auto\|manual\|legacy` | `auto` | 크로스오버를 정하는 방식입니다. `auto`는 측정에서 스피커마다 저음이 줄어드는 지점(평탄한 구간보다 6 dB 낮은 곳)을 찾고, 그중 가장 높은 지점의 한 옥타브 위를 크로스오버로 씁니다. 저음이 줄어드는 곳을 찾지 못하면 아무것도 더하지 않습니다. `manual`은 `--vbass_freq`를 씁니다. 스피커의 한계보다 높게 잡으면 그 주파수까지의 측정 저음을 룸 모드째 합성 저음으로 바꿉니다. `legacy`는 2.x 방식입니다. `--vbass_mode` 없이 `--vbass_freq`를 주면 `manual`입니다. |
+| `--vbass_freq HZ` | `250` | `manual`과 `legacy`의 크로스오버 주파수입니다. |
 | `--vbass_hp HZ` | `15.0` | 합성한 저역에 적용할 하이패스 주파수입니다. |
 | `--vbass_polarity auto\|normal\|invert` | `auto` | 합성한 저역의 극성 처리 방식입니다. |
 
@@ -257,10 +262,10 @@ impulcifer --dir_path "data/demo" --plot
 impulcifer --dir_path "measurements" --no_room_correction --no_headphone_compensation
 ```
 
-Virtual Bass를 켜고 JamesDSP 출력도 함께 만듭니다.
+Virtual Bass를 켜고(크로스오버는 측정에서 찾음) JamesDSP 출력도 함께 만듭니다.
 
 ```bash
-impulcifer --dir_path "measurements" --vbass --vbass_freq 250 --jamesdsp
+impulcifer --dir_path "measurements" --vbass --jamesdsp
 ```
 
 채널별 decay를 지정합니다.

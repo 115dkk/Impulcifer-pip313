@@ -197,6 +197,15 @@ pub static EXTENSION_OPTIONS: &[CliOption] = &[
         default: CliDefault::Suppressed,
         help: "Match speaker levels: true (default) or false. Used only with --room_mode tuning.",
     },
+    CliOption {
+        flag: "--vbass_mode",
+        short: None,
+        dest: "vbass_mode",
+        kind: CliType::Str,
+        choices: &["auto", "manual", "legacy"],
+        default: CliDefault::Suppressed,
+        help: "Virtual bass crossover. \"auto\" (default) finds where the speakers lose bass in the measurements and crosses over one octave above it; \"manual\" uses --vbass_freq (giving --vbass_freq selects manual); \"legacy\" is the 2.x method.",
+    },
 ];
 
 pub const OPTIONS: &[CliOption] = &[

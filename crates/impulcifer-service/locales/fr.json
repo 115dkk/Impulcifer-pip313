@@ -157,6 +157,13 @@
   "label_room_max_boost": "Accentuation max. (dB) :",
   "placeholder_schroeder_freq": "auto",
   "tooltip_vbass_room_handoff": "La correction acoustique laisse tout ce qui est sous la fréquence de coupure à la basse virtuelle, sauf avec la plage « Ancienne méthode (2.x) ».",
+  "label_vbass_mode": "Fréquence de coupure :",
+  "option_vbass_mode_auto": "Automatique",
+  "option_vbass_mode_manual": "Manuelle",
+  "option_vbass_mode_legacy": "Ancienne méthode (2.x)",
+  "tooltip_vbass_mode_auto": "Repère où les enceintes perdent des graves et place la fréquence de coupure une octave au-dessus. Si elles ne perdent pas de graves, rien n’est ajouté.",
+  "tooltip_vbass_mode_manual": "Utilise la fréquence indiquée ci-dessous. Réglée au-dessus de la limite des enceintes dans le grave, elle remplace les graves mesurés jusqu’à cette fréquence par des graves synthétisés à réponse plate.",
+  "tooltip_vbass_mode_legacy": "La méthode de 2.x : le niveau est ajusté uniquement à la fréquence de coupure, sans alignement temporel ni courbe cible de la correction acoustique.",
   "cli_room_range": "Plage de correction acoustique : {range}, jusqu’à {f_hi} Hz",
   "cli_room_schroeder": "Fréquence de Schroeder {freq} Hz (temps de réverbération {t60} s, volume de la pièce {volume} m³)",
   "cli_room_schroeder_assumed": "Fréquence de Schroeder {freq} Hz (temps de réverbération {t60} s, volume de la pièce supposé de 50 m³)",
@@ -166,5 +173,10 @@
   "cli_room_rolloff_snr": "{speaker} {side} : la mesure est trop bruitée sous {freq} Hz, donc aucune accentuation n’y est appliquée",
   "cli_room_snr_unavailable": "{speaker} {side} : la mesure de la pièce dure moins d’une seconde, donc son niveau de bruit ne limite pas les accentuations",
   "cli_room_selfcheck_warning": "{speaker} {side} : une erreur RMS de {rms} dB subsiste entre {lo} et {hi} Hz après la correction acoustique ; vérifiez la mesure de la pièce",
-  "cli_room_vbass_handoff": "La correction acoustique laisse la plage sous {freq} Hz à la basse virtuelle"
+  "cli_room_vbass_handoff": "La correction acoustique laisse la plage sous {freq} Hz à la basse virtuelle",
+  "cli_vbass_auto": "Fréquence de coupure de la basse virtuelle : {freq} Hz, déterminée à partir des mesures ({speaker} perd des graves sous {rolloff} Hz)",
+  "cli_vbass_auto_none": "Aucune perte de graves détectée dans les mesures ; la basse virtuelle n’a donc pas été appliquée. Pour l’appliquer malgré tout, choisissez une fréquence de coupure manuelle",
+  "cli_vbass_below_rolloff": "{speaker} perd des graves sous environ {rolloff} Hz, trop près de la fréquence de coupure de {freq} Hz : les graves juste au-dessus de la coupure restent faibles",
+  "cli_vbass_match": "Niveau de la basse virtuelle ajusté à la réponse entre {lo} et {hi} Hz ; retardé de {delay} ms pour l’aligner sur les enceintes à la fréquence de coupure",
+  "cli_vbass_room_target": "La basse virtuelle suit la forme des graves de la courbe cible de la correction acoustique"
 }

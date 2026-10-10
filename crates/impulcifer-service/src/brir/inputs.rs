@@ -10,6 +10,7 @@ use impulcifer_dsp::{
         headphone::headphone_compensation,
         room::{self, FrCombination, RoomCorrectionOptions},
     },
+    virtual_bass::{VirtualBassMode, VirtualBassPlan},
 };
 use impulcifer_io::{read_wav, write_wav};
 use impulcifer_types::{
@@ -36,6 +37,24 @@ fn ingest(
     let wav = read_wav(path)?;
     hrir.open_recording_samples(estimator, wav.sample_rate, &wav.tracks, names, side, 2.0)?;
     Ok(())
+}
+fn ingest_measurements(
+    dir: &MeasurementDir,
+    estimator: &SweepEstimator,
+    events: &mut dyn BrirEvents,
+) -> Result<Hrir, BrirError> {
+    let mut hrir = empty(estimator.fs);
+    for (path, names) in &dir.recordings {
+        events.check_cancelled()?;
+        ingest(
+            &mut hrir,
+            path,
+            &names.iter().map(String::as_str).collect::<Vec<_>>(),
+            None,
+            estimator,
+        )?;
+    }
+    Ok(hrir)
 }
 fn csv(path: &Path) -> Result<FrequencyResponse, BrirError> {
     let text = std::fs::read_to_string(path)?;
@@ -159,6 +178,22 @@ pub fn load_inputs(
     events: &mut dyn BrirEvents,
 ) -> Result<PipelineInputs, BrirError> {
     let fs = estimator.fs;
+    let mode = VirtualBassMode::parse(&config.vbass_mode)
+        .ok_or_else(|| impulcifer_dsp::DspError::InvalidArgument("invalid vbass_mode".into()))?;
+    let mut opened_hrir = None;
+    let mut vbass_plan = None;
+    if config.vbass && mode != VirtualBassMode::Legacy {
+        let hrir = ingest_measurements(dir, estimator, events)?;
+        let mut cropped = hrir.clone();
+        cropped.crop_heads(config.head_ms)?;
+        cropped.crop_tails(estimator)?;
+        vbass_plan = Some(VirtualBassPlan::resolve(
+            mode,
+            config.vbass_freq as f64,
+            &cropped,
+        )?);
+        opened_hrir = Some(hrir);
+    }
     let mut room_result = None;
     if config.do_room_correction {
         events.step("cli_running_room_correction", json!({}))?;
@@ -172,6 +207,11 @@ pub fn load_inputs(
             .map(csv)
             .transpose()?;
         let target = room::prepare_room_target(target_csv.as_ref(), fs)?;
+        if let Some(plan) = &mut vbass_plan
+            && (config.room_mode == "tuning" || config.room_range != "legacy")
+        {
+            plan.room_target = Some(target.clone());
+        }
         let calibration = dir
             .room
             .calibration
@@ -252,7 +292,13 @@ pub fn load_inputs(
             room_volume: config.room_volume,
             schroeder_freq: config.schroeder_freq,
             max_boost_db: config.room_max_boost,
-            vbass_crossover: config.vbass.then_some(config.vbass_freq as f64),
+            vbass_crossover: if !config.vbass {
+                None
+            } else if let Some(plan) = &vbass_plan {
+                plan.crossover
+            } else {
+                Some(config.vbass_freq as f64)
+            },
         };
         room_result = if config.room_mode == "tuning" {
             Some(room::room_correction_tuning(
@@ -477,17 +523,10 @@ pub fn load_inputs(
     }
     events.step("cli_creating_target", json!({}))?;
     events.step("cli_opening_measurements", json!({}))?;
-    let mut hrir = empty(fs);
-    for (path, names) in &dir.recordings {
-        events.check_cancelled()?;
-        ingest(
-            &mut hrir,
-            path,
-            &names.iter().map(String::as_str).collect::<Vec<_>>(),
-            None,
-            estimator,
-        )?;
-    }
+    let hrir = match opened_hrir {
+        Some(hrir) => hrir,
+        None => ingest_measurements(dir, estimator, events)?,
+    };
     if hrir.speakers.is_empty() {
         return Err(BrirError::Missing(
             "No HRIR recordings found in the directory.".into(),
@@ -497,6 +536,7 @@ pub fn load_inputs(
     Ok(PipelineInputs {
         estimator: estimator.clone(),
         hrir,
+        vbass: vbass_plan,
         room: room_result,
         headphone,
         eq_left,

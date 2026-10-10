@@ -157,6 +157,13 @@
   "label_room_max_boost": "Max boost (dB):",
   "placeholder_schroeder_freq": "auto",
   "tooltip_vbass_room_handoff": "Room correction leaves everything below the crossover to virtual bass, except with the Legacy (2.x) range.",
+  "label_vbass_mode": "Crossover:",
+  "option_vbass_mode_auto": "Automatic",
+  "option_vbass_mode_manual": "Manual",
+  "option_vbass_mode_legacy": "Legacy (2.x)",
+  "tooltip_vbass_mode_auto": "Finds where the speakers lose bass and sets the crossover one octave above that frequency. If they do not lose bass, nothing is added.",
+  "tooltip_vbass_mode_manual": "Uses the frequency below. Set above the speakers' limit, it replaces the measured bass up to that frequency with flat synthesized bass.",
+  "tooltip_vbass_mode_legacy": "The 2.x method: the level is matched at the crossover frequency alone, without timing alignment or the room target.",
   "cli_room_range": "Room correction range: {range}, up to {f_hi} Hz",
   "cli_room_schroeder": "Schroeder frequency {freq} Hz (reverberation time {t60} s, room volume {volume} m³)",
   "cli_room_schroeder_assumed": "Schroeder frequency {freq} Hz (reverberation time {t60} s, room volume assumed to be 50 m³)",
@@ -166,5 +173,10 @@
   "cli_room_rolloff_snr": "{speaker} {side}: the measurement is too noisy below {freq} Hz, so nothing is boosted there",
   "cli_room_snr_unavailable": "{speaker} {side}: the room measurement is shorter than one second, so boosts are not limited by its noise level",
   "cli_room_selfcheck_warning": "{speaker} {side}: {rms} dB RMS error remains between {lo} and {hi} Hz after room correction; check the room measurement",
-  "cli_room_vbass_handoff": "Room correction leaves the range below {freq} Hz to virtual bass"
+  "cli_room_vbass_handoff": "Room correction leaves the range below {freq} Hz to virtual bass",
+  "cli_vbass_auto": "Virtual bass crossover: {freq} Hz, found in the measurements ({speaker} loses bass below {rolloff} Hz)",
+  "cli_vbass_auto_none": "No bass loss found in the measurements, so virtual bass was not applied. To apply it anyway, choose a manual crossover",
+  "cli_vbass_below_rolloff": "{speaker} loses bass below about {rolloff} Hz, too close to the {freq} Hz crossover: the bass just above the crossover stays weak",
+  "cli_vbass_match": "Virtual bass level matched to the response between {lo} and {hi} Hz; delayed {delay} ms to line up with the speakers at the crossover",
+  "cli_vbass_room_target": "Virtual bass follows the bass shape of the room target"
 }

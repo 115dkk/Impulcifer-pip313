@@ -157,6 +157,13 @@
   "label_room_max_boost": "Max. Anhebung (dB):",
   "placeholder_schroeder_freq": "automatisch",
   "tooltip_vbass_room_handoff": "Die Raumkorrektur überlässt alles unterhalb der Übergangsfrequenz dem virtuellen Bass, außer im Bereich „Bisheriges Verfahren (2.x)“.",
+  "label_vbass_mode": "Übergangsfrequenz:",
+  "option_vbass_mode_auto": "Automatisch",
+  "option_vbass_mode_manual": "Manuell",
+  "option_vbass_mode_legacy": "Bisheriges Verfahren (2.x)",
+  "tooltip_vbass_mode_auto": "Ermittelt, unterhalb welcher Frequenz der Bass der Lautsprecher abfällt, und setzt die Übergangsfrequenz eine Oktave darüber. Fällt der Bass nicht ab, wird nichts hinzugefügt.",
+  "tooltip_vbass_mode_manual": "Verwendet die unten eingestellte Frequenz. Liegt sie über der Bassgrenze der Lautsprecher, wird der gemessene Bass bis zu dieser Frequenz durch synthetisierten Bass mit flachem Frequenzgang ersetzt.",
+  "tooltip_vbass_mode_legacy": "Das Verfahren von 2.x: Der Pegel wird nur an der Übergangsfrequenz angepasst, ohne zeitliche Ausrichtung oder Zielkurve der Raumkorrektur.",
   "cli_room_range": "Raumkorrekturbereich: {range}, bis {f_hi} Hz",
   "cli_room_schroeder": "Schroederfrequenz {freq} Hz (Nachhallzeit {t60} s, Raumvolumen {volume} m³)",
   "cli_room_schroeder_assumed": "Schroederfrequenz {freq} Hz (Nachhallzeit {t60} s, angenommenes Raumvolumen 50 m³)",
@@ -166,5 +173,10 @@
   "cli_room_rolloff_snr": "{speaker} {side}: Die Messung ist unterhalb von {freq} Hz zu verrauscht, daher wird dort nichts angehoben",
   "cli_room_snr_unavailable": "{speaker} {side}: Die Raummessung ist kürzer als eine Sekunde, daher werden Anhebungen nicht durch ihren Rauschpegel begrenzt",
   "cli_room_selfcheck_warning": "{speaker} {side}: Nach der Raumkorrektur verbleibt zwischen {lo} und {hi} Hz ein RMS-Fehler von {rms} dB; prüfen Sie die Raummessung",
-  "cli_room_vbass_handoff": "Die Raumkorrektur überlässt den Bereich unterhalb von {freq} Hz dem virtuellen Bass"
+  "cli_room_vbass_handoff": "Die Raumkorrektur überlässt den Bereich unterhalb von {freq} Hz dem virtuellen Bass",
+  "cli_vbass_auto": "Übergangsfrequenz für virtuellen Bass: {freq} Hz, aus den Messungen ermittelt (der Bass von {speaker} fällt unterhalb von {rolloff} Hz ab)",
+  "cli_vbass_auto_none": "In den Messungen wurde kein Bassabfall gefunden, daher wurde kein virtueller Bass angewendet. Wählen Sie eine manuelle Übergangsfrequenz, um ihn dennoch anzuwenden",
+  "cli_vbass_below_rolloff": "Der Bass von {speaker} fällt unterhalb von etwa {rolloff} Hz ab, zu nahe an der Übergangsfrequenz von {freq} Hz: Der Bass direkt oberhalb der Übergangsfrequenz bleibt schwach",
+  "cli_vbass_match": "Pegel des virtuellen Basses an den Frequenzgang zwischen {lo} und {hi} Hz angepasst; um {delay} ms verzögert, um ihn an der Übergangsfrequenz zeitlich auf die Lautsprecher auszurichten",
+  "cli_vbass_room_target": "Der virtuelle Bass folgt dem Bassverlauf der Zielkurve der Raumkorrektur"
 }

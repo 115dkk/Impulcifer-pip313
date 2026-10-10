@@ -157,6 +157,13 @@
   "label_room_max_boost": "最大ブースト (dB):",
   "placeholder_schroeder_freq": "自動",
   "tooltip_vbass_room_handoff": "従来方式 (2.x) の範囲を除き、クロスオーバーより下の帯域はルーム補正ではなくバーチャルベースが処理します。",
+  "label_vbass_mode": "クロスオーバー:",
+  "option_vbass_mode_auto": "自動",
+  "option_vbass_mode_manual": "手動",
+  "option_vbass_mode_legacy": "従来方式 (2.x)",
+  "tooltip_vbass_mode_auto": "スピーカーの低音が弱くなる周波数を探し、その 1 オクターブ上にクロスオーバーを設定します。低音が弱くならない場合は何も追加しません。",
+  "tooltip_vbass_mode_manual": "下の周波数を使用します。スピーカーの低音の限界より高く設定すると、その周波数までの測定された低音を、平坦な周波数応答の合成低音に置き換えます。",
+  "tooltip_vbass_mode_legacy": "2.x の方式です。クロスオーバー周波数の 1 点だけでレベルを合わせ、時間の整合やルーム補正のターゲットカーブは適用しません。",
   "cli_room_range": "ルーム補正範囲: {range}、{f_hi} Hz まで",
   "cli_room_schroeder": "シュレーダー周波数 {freq} Hz（残響時間 {t60} s、部屋の容積 {volume} m³）",
   "cli_room_schroeder_assumed": "シュレーダー周波数 {freq} Hz（残響時間 {t60} s、部屋の容積を 50 m³ と仮定）",
@@ -166,5 +173,10 @@
   "cli_room_rolloff_snr": "{speaker} {side}: {freq} Hz より下の測定ノイズが大きすぎるため、この帯域はブーストしません",
   "cli_room_snr_unavailable": "{speaker} {side}: ルーム測定の長さが 1 秒未満のため、測定ノイズレベルによるブースト制限は適用しません",
   "cli_room_selfcheck_warning": "{speaker} {side}: ルーム補正後も {lo}～{hi} Hz に {rms} dB の RMS 誤差が残っています。ルーム測定を確認してください",
-  "cli_room_vbass_handoff": "{freq} Hz より下の帯域はルーム補正ではなくバーチャルベースが処理します"
+  "cli_room_vbass_handoff": "{freq} Hz より下の帯域はルーム補正ではなくバーチャルベースが処理します",
+  "cli_vbass_auto": "測定から求めたバーチャルベースのクロスオーバー: {freq} Hz（{speaker} の低音は {rolloff} Hz より下で弱くなります）",
+  "cli_vbass_auto_none": "測定で低音が弱くなる帯域が見つからなかったため、バーチャルベースは適用しませんでした。それでも適用する場合は、手動でクロスオーバーを選択してください",
+  "cli_vbass_below_rolloff": "{speaker} の低音は約 {rolloff} Hz より下で弱くなります。クロスオーバーの {freq} Hz に近すぎるため、クロスオーバーのすぐ上の低音は弱いままです",
+  "cli_vbass_match": "バーチャルベースのレベルを {lo}～{hi} Hz の応答に合わせ、クロスオーバーでスピーカーとタイミングが合うように {delay} ms 遅延させました",
+  "cli_vbass_room_target": "バーチャルベースにルーム補正のターゲットカーブの低音特性を適用します"
 }

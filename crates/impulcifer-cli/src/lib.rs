@@ -204,6 +204,22 @@ fn clap_error(error: &clap::Error) -> CliError {
     })
 }
 
+/// The run configuration for parsed `kwargs`. argparse fills `vbass_freq` with
+/// its default; only a crossover given on the command line (abbreviations
+/// included) selects manual virtual bass in `ProcessingConfig::from_kwargs`.
+pub fn config(
+    argv: &[String],
+    mut kwargs: Map<String, Value>,
+) -> Result<ProcessingConfig, impulcifer_types::config::ConfigError> {
+    if !options::command()
+        .try_get_matches_from(argv)
+        .is_ok_and(|matches| matches.contains_id("vbass_freq"))
+    {
+        kwargs.remove("vbass_freq");
+    }
+    ProcessingConfig::from_kwargs(&kwargs)
+}
+
 /// Run synchronously. Diagnostics and job failures never terminate the embedding process.
 /// Ctrl-C cancellation is intentionally not installed (no signal-handling dependency).
 pub fn run(argv: &[String], out: &mut dyn Write, err: &mut dyn Write) -> i32 {
@@ -211,7 +227,7 @@ pub fn run(argv: &[String], out: &mut dyn Write, err: &mut dyn Write) -> i32 {
         Ok(Parsed::Help(text)) => out.write_all(text.as_bytes()).map(|_| 0),
         Ok(Parsed::Version) => writeln!(out, "Impulcifer {}", env!("CARGO_PKG_VERSION")).map(|_| 0),
         Ok(Parsed::Info) => console::info(out).map(|_| 0),
-        Ok(Parsed::Kwargs(kwargs)) => match ProcessingConfig::from_kwargs(&kwargs) {
+        Ok(Parsed::Kwargs(kwargs)) => match config(argv, kwargs) {
             Ok(config) => console::execute(config, settings::catalog(), out, err),
             Err(error) => writeln!(err, "{error}").map(|_| 1),
         },

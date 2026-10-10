@@ -579,6 +579,49 @@ def room_phase_checks(browser):
           "skin carry-over OK", flush=True)
 
 
+def vbass_checks(browser):
+    """Virtual bass crossover modes: Automatic hides the frequency and sends no
+    vbass_freq, Manual and Legacy show and send it, the tooltip follows the
+    mode, bootstrap defaults apply, and Stable sends the same request."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "processing")
+    disclosure(page, "vbass", True)
+    mode = page.locator("#bf-vbass-mode")
+    freq_row = page.locator("#bf-vbass-freq-row")
+    tip = page.locator("#bf-vbass-mode-tip")
+    assert mode.input_value() == "auto" and not freq_row.is_visible()
+    assert tip.text_content() == page.evaluate("t('tooltip_vbass_mode_auto')")
+    request = brir_request(page)
+    assert request["vbass"] is True and request["vbass_mode"] == "auto" and "vbass_freq" not in request, request
+    for name in ("manual", "legacy"):
+        mode.select_option(name)
+        assert freq_row.is_visible(), name
+        assert tip.text_content() == page.evaluate(f"t('tooltip_vbass_mode_{name}')"), name
+        page.locator("#bf-vbass-freq").fill("120")
+        request = brir_request(page)
+        assert request["vbass_mode"] == name and request["vbass_freq"] == 120, request
+    mode.select_option("auto")
+    assert not freq_row.is_visible()
+    page.evaluate("state.brirDefaults = {vbass_mode: 'manual', vbass_freq: 90}; applyVbassDefaults()")
+    assert mode.input_value() == "manual" and freq_row.is_visible()
+    assert page.locator("#bf-vbass-freq").input_value() == "90"
+    page.evaluate("state.brirDefaults = {}; applyVbassDefaults()")
+    assert mode.input_value() == "auto" and page.locator("#bf-vbass-freq").input_value() == "250"
+    navigate(page, "settings")
+    page.locator("#sf-skin").select_option("stable")
+    page.wait_for_function("document.documentElement.dataset.skin === 'stable'")
+    if page.locator("#job-modal").is_visible():  # Stable shows the finished job in its dialog
+        page.locator("#job-modal-close").click()
+    navigate(page, "processing")
+    assert mode.is_visible() and not freq_row.is_visible()
+    mode.select_option("manual")
+    request = page.evaluate("gatherBrirPayload()")
+    assert request["vbass_mode"] == "manual" and request["vbass_freq"] == 250, request
+    assert not errors, errors
+    context.close()
+    print("Gallery virtual bass checks: modes, frequency row, tooltips, requests, defaults, Stable OK", flush=True)
+
+
 def tooltip_checks(browser):
     """Every info tooltip in Room Correction and Virtual Bass, in both skins and
     both room modes: the control and the button name the bubble, keyboard focus
@@ -589,6 +632,7 @@ def tooltip_checks(browser):
         navigate(page, "processing")
         disclosure(page, "room", True)
         disclosure(page, "vbass", True)
+        page.locator("#bf-vbass-mode").select_option("manual")  # shows the crossover frequency and its tooltip
         seen = set()
         for mode in ("eq", "tuning"):
             page.locator(f"#bf-room-mode-{mode}").click()
@@ -612,7 +656,8 @@ def tooltip_checks(browser):
                 assert bubble.get_attribute("data-open") is None, (skin, tip)
                 assert page.evaluate("document.activeElement.getAttribute('aria-describedby')") == tip, (skin, tip)
         expected = {"bf-room-mode-tip", "bf-room-range-tip", "bf-room-tuning-curtain-tip", "bf-room-tuning-level-match-tip",
-                    "bf-vbass-freq-tip", "bf-room-phase-limit-tip" if skin == "studio" else "bf-room-phase-schroeder-tip"}
+                    "bf-vbass-mode-tip", "bf-vbass-freq-tip",
+                    "bf-room-phase-limit-tip" if skin == "studio" else "bf-room-phase-schroeder-tip"}
         assert seen == expected, (skin, seen)
         # Hover opens, a click pins it past the pointer leaving, a click elsewhere closes it.
         button = page.locator('button.info-tip[aria-describedby="bf-room-tuning-level-match-tip"]')
@@ -648,6 +693,7 @@ def render_gallery(output):
         behavior_checks(browser)
         advanced_checks(browser)
         room_phase_checks(browser)
+        vbass_checks(browser)
         tooltip_checks(browser)
         for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
             context, page, errors = open_page(browser, skin, theme, language, "idle")

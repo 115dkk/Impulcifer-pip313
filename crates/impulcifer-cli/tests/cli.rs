@@ -2,7 +2,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use impulcifer_cli::{
-    Parsed,
+    Parsed, config,
     options::{CliType, EXTENSION_OPTIONS, OPTIONS},
     parse, run,
 };
@@ -62,6 +62,7 @@ fn cli_room_v2_options_parse_and_validate() {
         ("--room_tuning_max_boost", "6", json!(6.0)),
         ("--room_tuning_curtain", "300", json!(300.0)),
         ("--room_tuning_level_match", "false", json!(false)),
+        ("--vbass_mode", "legacy", json!("legacy")),
     ] {
         let Parsed::Kwargs(mut kwargs) = parse(&args(&[
             "impulcifer",
@@ -75,6 +76,47 @@ fn cli_room_v2_options_parse_and_validate() {
         };
         assert_eq!(kwargs.remove(&flag[2..]), Some(expected));
         assert_eq!(kwargs, baseline);
+    }
+    let mode_error = parse(&args(&[
+        "impulcifer",
+        "--dir_path",
+        "measurements",
+        "--vbass_mode",
+        "bogus",
+    ]))
+    .unwrap_err();
+    assert_eq!(mode_error.exit_code, 2);
+    for choice in ["auto", "manual", "legacy"] {
+        assert!(
+            mode_error.message.contains(choice),
+            "{}",
+            mode_error.message
+        );
+    }
+    // A crossover on the command line, abbreviated or not, selects manual mode;
+    // the parser's default does not, and an explicit mode wins.
+    for (argv, mode, freq) in [
+        (vec!["--vbass_freq", "120"], "manual", 120),
+        (vec!["--vbass_freq=120"], "manual", 120),
+        (vec!["--vbass_fr", "120"], "manual", 120),
+        (vec!["--vbass"], "auto", 250),
+        (vec!["--vbass", "--vbass_mode", "legacy"], "legacy", 250),
+        (
+            vec!["--vbass_freq", "90", "--vbass_mode", "auto"],
+            "auto",
+            90,
+        ),
+    ] {
+        let argv = args(&[&["impulcifer", "--dir_path", "measurements"][..], &argv[..]].concat());
+        let Parsed::Kwargs(kwargs) = parse(&argv).unwrap() else {
+            panic!()
+        };
+        let config = config(&argv, kwargs).unwrap();
+        assert_eq!(
+            (config.vbass_mode.as_str(), config.vbass_freq),
+            (mode, freq),
+            "{argv:?}"
+        );
     }
     for (flag, value) in [
         ("--room_range", "bad"),
@@ -186,9 +228,18 @@ fn golden_cli_options_match_python() {
         config,
         ProcessingConfig {
             dir_path: Some("measurements".into()),
+            vbass_mode: "manual".into(),
             ..ProcessingConfig::default()
         }
     );
+    let automatic = ProcessingConfig::from_kwargs(
+        &defaults
+            .into_iter()
+            .filter(|(key, _)| key != "vbass_freq")
+            .collect(),
+    )
+    .unwrap();
+    assert_eq!(automatic.vbass_mode, "auto");
 }
 
 #[test]

@@ -42,6 +42,7 @@ pub struct ProcessingConfig {
     pub room_tuning_max_boost: f64,
     pub room_tuning_curtain: f64,
     pub room_tuning_level_match: bool,
+    pub vbass_mode: String,
     pub bass_boost_gain: f64,
     pub bass_boost_fc: f64,
     pub bass_boost_q: f64,
@@ -90,6 +91,7 @@ impl Default for ProcessingConfig {
             room_tuning_max_boost: 6.0,
             room_tuning_curtain: 300.0,
             room_tuning_level_match: true,
+            vbass_mode: "auto".into(),
             bass_boost_gain: 0.0,
             bass_boost_fc: 105.0,
             bass_boost_q: 0.76,
@@ -152,7 +154,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 10] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 11] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -163,6 +165,7 @@ pub const EXTENSION_FIELD_NAMES: [&str; 10] = [
     "room_tuning_max_boost",
     "room_tuning_curtain",
     "room_tuning_level_match",
+    "vbass_mode",
 ];
 
 fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
@@ -231,11 +234,12 @@ impl ProcessingConfig {
     pub fn oracle_defaults() -> Self {
         Self {
             room_range: "legacy".into(),
+            vbass_mode: "legacy".into(),
             ..Self::default()
         }
     }
 
-    /// Validate the 3.x room options without changing legacy validation semantics.
+    /// Validate the 3.x extension options without changing legacy validation semantics.
     pub fn validate_room_options(&self) -> Result<(), ConfigError> {
         let invalid = |field: &str, reason: &str| ConfigError::Invalid {
             field: field.into(),
@@ -249,6 +253,9 @@ impl ProcessingConfig {
         }
         if !["eq", "tuning"].contains(&self.room_mode.as_str()) {
             return Err(invalid("room_mode", "must be eq or tuning"));
+        }
+        if !["auto", "manual", "legacy"].contains(&self.vbass_mode.as_str()) {
+            return Err(invalid("vbass_mode", "must be auto, manual or legacy"));
         }
         if TuningDelay::parse(&self.room_tuning_delay).is_none() {
             return Err(invalid("room_tuning_delay", "must be auto or 2–20 ms"));
@@ -306,11 +313,17 @@ impl ProcessingConfig {
                 filtered.insert(key.clone(), value.clone());
             }
         }
-        serde_json::from_value(serde_json::Value::Object(filtered)).map_err(|e| {
-            ConfigError::Invalid {
+        let explicit_crossover =
+            kwargs.contains_key("vbass_freq") && !kwargs.contains_key("vbass_mode");
+        let mut config: Self = serde_json::from_value(serde_json::Value::Object(filtered))
+            .map_err(|e| ConfigError::Invalid {
                 field: "<kwargs>".to_string(),
                 reason: e.to_string(),
-            }
-        })
+            })?;
+        // An explicit crossover opts into manual mode unless the caller chose a mode.
+        if explicit_crossover {
+            config.vbass_mode = "manual".into();
+        }
+        Ok(config)
     }
 }
