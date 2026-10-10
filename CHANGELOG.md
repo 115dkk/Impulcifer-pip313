@@ -26,7 +26,7 @@ been fixed and old features improved.
 - **CI가 리뷰를 대신한다는 머지 기준**: CLAUDE.md의 '작업 완료' 기준에 머지 규칙을 더했습니다. 현재 커밋의 필수 체크가 모두 통과하고 충돌과 열린 리뷰 스레드가 없으면 사람의 리뷰를 기다리지 않고 머지합니다. 출력을 일부러 바꾸는 PR은 `brir-change` 라벨과 PR 설명의 근거를 갖춘 뒤에 머지합니다. 화면을 바꾼 PR에서 갤러리 워크플로가 여는 리뷰 이슈는 머지를 막지 않고, 그 링크를 사용자에게 알려 화면을 따로 확인할 수 있게 합니다. 문서만 바뀌므로 버전은 그대로입니다.
 
 #### 🔧 빌드 / 설정 변경 (릴리스 후 추가, 출하물 변화 없음)
-- **에이전트 허용 규칙**: `.claude/settings.json`의 `permissions.allow`에 git, 읽기 전용 셸 명령(`cat`, `grep`, `find` 등), 빌드·테스트 명령(`cargo fmt`/`clippy`/`test`/`build`/`run`, `pytest`, `ruff`, `npm ci`/`npm run`), GPT 워커(`gpt-agent`), PR 작업용 GitHub 도구를 더했습니다. 자동 권한 모드가 일상적인 커밋·푸시·검증 명령을 묻거나 막지 않게 하려는 것입니다.
+- **에이전트 허용 규칙**: `.claude/settings.json`의 `permissions.allow`에 git, 읽기 전용 셸 명령(`cat`, `grep`, `find` 등), 빌드·테스트 명령(`cargo fmt`/`clippy`/`test`/`build`/`run`, `pytest`, `ruff`, `npm ci`/`npm run`), GPT 워커(`gpt-agent`), PR 작업용 GitHub 도구를 더했습니다. 자동 권한 모드가 일상적인 커밋·푸시·검증 명령을 묻거나 막지 않게 하려는 것입니다. 대신 되돌릴 수 없는 git 명령은 `permissions.deny`로 막습니다. master 강제 푸시와 삭제, `reset --hard`, `clean`, 작업 트리 전체 되돌리기, `stash clear`, reflog 만료, `gc --prune`, 히스토리 재작성(`filter-branch`, `filter-repo`), `update-ref -d`가 대상이고, `git -C <경로>` 형태로 불러도 막힙니다.
 
 ## 3.3.1 - 2026-10-10
 ### Studio 처리 화면에 스크롤바가 두 줄 생기던 문제 수정

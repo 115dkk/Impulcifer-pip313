@@ -38,6 +38,28 @@
       "mcp__github__actions_list",
       "mcp__github__actions_get",
       "mcp__github__get_job_logs"
+    ],
+    "deny": [
+      "Bash(git *push*--force*master*)",
+      "Bash(git *push*master*--force*)",
+      "Bash(git *push*-f *master*)",
+      "Bash(git *push*master* -f*)",
+      "Bash(git *push*+*master*)",
+      "Bash(git *push*--delete*master*)",
+      "Bash(git *push*-d *master*)",
+      "Bash(git *push* :master*)",
+      "Bash(git *reset*--hard*)",
+      "Bash(git *clean -*)",
+      "Bash(git *checkout -- .)",
+      "Bash(git *checkout .)",
+      "Bash(git *restore .)",
+      "Bash(git *restore -- .)",
+      "Bash(git *stash clear*)",
+      "Bash(git *reflog expire*)",
+      "Bash(git *gc*--prune*)",
+      "Bash(git *filter-branch*)",
+      "Bash(git *filter-repo*)",
+      "Bash(git *update-ref -d*)"
     ]
   }
 }
