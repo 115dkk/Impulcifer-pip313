@@ -13,7 +13,8 @@ fn table(name: &str) -> Vec<Vec<String>> {
         env!("CARGO_MANIFEST_DIR"),
         "/../../docs/brir-channel-order.md"
     );
-    let text = std::fs::read_to_string(path).unwrap();
+    // A Windows checkout may turn the document's line ends into CRLF.
+    let text = std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
     let start = format!("<!-- channel-table:{name} -->\n");
     let end = format!("\n<!-- /channel-table:{name} -->");
     let body = text
