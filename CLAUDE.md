@@ -578,6 +578,8 @@ CI 실패가 보고되면 다음 순서로 대응한다.
 
 체크가 `pending`/`queued`인 상태로 보고하지 말 것 — 사용자가 추가로 모니터링해야 할 짐이 된다.
 
+**이 저장소에서는 CI가 리뷰를 대신한다.** 위 셋이 충족되고 열린 리뷰 스레드가 없으면 사람의 리뷰나 승인을 기다리지 않고 머지한다(저장소 관례대로 머지 커밋). 리뷰 봇(Codex 등)의 지적은 반영하거나 답한 뒤 스레드를 닫는다. 출력을 일부러 바꾸는 PR은 `brir-change` 라벨을 달고 PR 설명에 근거를 적은 뒤에 머지한다. 이 라벨이 붙으면 brir-3x의 기준 비교가 경고로 바뀌기 때문이다. 머지한 뒤에는 아래 "master 머지 후 릴리스 파이프라인 확인"을 따른다.
+
 ## 빌드 / 릴리스 파이프라인
 
 Nuitka standalone 빌드의 엔트리포인트는 `gui_main.py`다. `pyproject.toml`의 `[project.scripts]`에 정의된 콘솔 스크립트(`impulcifer`, `impulcifer_gui`, `impulcifer_gui_legacy`)는 pip 설치 전용이며 standalone 빌드와 무관하다.
