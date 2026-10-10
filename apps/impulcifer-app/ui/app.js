@@ -127,6 +127,7 @@ function applyStrings() {
   document.querySelectorAll(".info-tip").forEach((button) => button.setAttribute("aria-label", t("button_more_info")));
   updateChannelGuidance();
   updateRoomRows();
+  updateVbassRows();
   refreshResolvedPath();
   renderSteps();
   renderJobState(state.lastJob);
@@ -1798,6 +1799,44 @@ function applyRoomDefaults() {
   setRoomMode(isRoomMode(defaults.room_mode) ? defaults.room_mode : "eq");
 }
 
+/** @type {readonly VbassMode[]} */
+const VBASS_MODES = ["auto", "manual", "legacy"];
+
+/** @param {unknown} value @returns {value is VbassMode} */
+function isVbassMode(value) {
+  return typeof value === "string" && VBASS_MODES.some((mode) => mode === value);
+}
+
+/** @returns {VbassMode} */
+function vbassMode() {
+  const value = val("bf-vbass-mode");
+  return isVbassMode(value) ? value : "auto";
+}
+
+/** @param {VbassMode} mode */
+function vbassModeHint(mode) {
+  switch (mode) {
+    case "manual": return t("tooltip_vbass_mode_manual");
+    case "legacy": return t("tooltip_vbass_mode_legacy");
+    default: return t("tooltip_vbass_mode_auto");
+  }
+}
+
+/* Automatic picks the crossover itself, so the frequency row shows only for
+   the other two; the tooltip follows the choice. */
+function updateVbassRows() {
+  const mode = vbassMode();
+  $("bf-vbass-freq-row").hidden = mode === "auto";
+  $("bf-vbass-mode-tip").textContent = vbassModeHint(mode);
+}
+
+function applyVbassDefaults() {
+  const defaults = state.brirDefaults;
+  el("bf-vbass-mode", HTMLSelectElement).value = isVbassMode(defaults.vbass_mode) ? defaults.vbass_mode : "auto";
+  el("bf-vbass-freq", HTMLInputElement).value = String(brirDefault("vbass_freq", 250));
+  updateVbassRows();
+}
+
 /** @param {ProcessingRequest} args */
 function addRoomEqArgs(args) {
   const range = roomRange();
@@ -1859,8 +1898,11 @@ function gatherBrirPayload() {
     addCorrectionArgs(args, "bf");
   }
   if (isOpen("dis-vbass")) {
+    const mode = vbassMode();
     args.vbass = true;
-    args.vbass_freq = Math.max(30, Math.min(500, Math.trunc(numOr("bf-vbass-freq", brirDefault("vbass_freq", 250)))));
+    args.vbass_mode = mode;
+    // Automatic finds its own crossover, so there is no frequency to send.
+    if (mode !== "auto") args.vbass_freq = Math.max(30, Math.min(500, Math.trunc(numOr("bf-vbass-freq", brirDefault("vbass_freq", 250)))));
     args.vbass_hp = numOr("bf-vbass-hp", brirDefault("vbass_hp", 15.0));
     args.vbass_polarity = val("bf-vbass-polarity");
   }
@@ -2534,6 +2576,7 @@ function wireEvents() {
   el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", refreshResolvedPath);
   el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", updateTestSignalVisibility);
   el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRows);
+  el("bf-vbass-mode", HTMLSelectElement).addEventListener("change", updateVbassRows);
   ROOM_MODES.forEach((mode, index) => {
     const button = $(`bf-room-mode-${mode}`);
     button.addEventListener("click", () => setRoomMode(mode));
@@ -2664,6 +2707,7 @@ async function boot() {
   state.shareModes = data.capabilities.share_modes;
   state.brirDefaults = data.brir_defaults || {};
   applyRoomDefaults();
+  applyVbassDefaults();
   state.sweepDefaults = data.sweep || {};
   populateSweepLayouts(
     (data.sweep && data.sweep.layouts) || ["mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6"]

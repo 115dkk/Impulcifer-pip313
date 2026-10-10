@@ -26,6 +26,19 @@ impl BrirEvents for Events {
 }
 #[test]
 fn config_room_range_defaults_and_validation() {
+    assert_eq!(ProcessingConfig::default().vbass_mode, "auto");
+    assert_eq!(ProcessingConfig::oracle_defaults().vbass_mode, "legacy");
+    let manual =
+        ProcessingConfig::from_kwargs(json!({"vbass":true,"vbass_freq":120}).as_object().unwrap())
+            .unwrap();
+    assert_eq!(manual.vbass_mode, "manual");
+    let automatic = ProcessingConfig::from_kwargs(
+        json!({"vbass":true,"vbass_freq":120,"vbass_mode":"auto"})
+            .as_object()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(automatic.vbass_mode, "auto");
     let temp = Temp::new();
     let service = service(&temp, JobRegistry::new());
     let boot = service.call("bootstrap", vec![]);
@@ -40,6 +53,7 @@ fn config_room_range_defaults_and_validation() {
     assert_eq!(defaults["room_tuning_max_boost"], 6.0);
     assert_eq!(defaults["room_tuning_curtain"], 300.0);
     assert_eq!(defaults["room_tuning_level_match"], true);
+    assert_eq!(defaults["vbass_mode"], "auto");
     let numeric = ProcessingConfig::from_kwargs(
         json!({"room_tuning_delay": 10, "room_tuning_phase_limit": 300})
             .as_object()
@@ -60,6 +74,8 @@ fn config_room_range_defaults_and_validation() {
         ("room_volume", json!("bad")),
         ("room_mode", json!("bad")),
         ("room_mode", json!(3)),
+        ("vbass_mode", json!("bogus")),
+        ("vbass_mode", json!(3)),
         ("room_tuning_delay", json!(1.9)),
         ("room_tuning_delay", json!(20.1)),
         ("room_tuning_delay", json!(null)),
@@ -565,19 +581,59 @@ fn room_v2_with_vbass_logs_handoff() {
         ..Default::default()
     };
     let (room, events) = load_room(&temp, &config);
-    assert!(
-        events
-            .0
-            .iter()
-            .any(|(_, k, a)| k == "cli_room_vbass_handoff" && a["freq"] == 250)
-    );
+    let crossover = events
+        .0
+        .iter()
+        .find_map(|(_, key, args)| {
+            (key == "cli_room_vbass_handoff").then(|| args["freq"].as_i64().unwrap())
+        })
+        .expect("automatic virtual-bass handoff log");
+    assert!((60..=130).contains(&crossover), "crossover {crossover} Hz");
     for (_, _, fr) in room.frs.entries {
         assert!(
             fr.frequency
                 .iter()
                 .zip(fr.equalization)
-                .filter(|(f, _)| **f < 250.0 / 2.0_f64.sqrt())
+                .filter(|(f, _)| **f < crossover as f64 / 2.0_f64.sqrt())
                 .all(|(_, g)| g == 0.0)
         );
     }
+}
+
+#[test]
+fn demo_vbass_auto_log_precedes_level_match() {
+    let temp = Temp::demo();
+    let config = ProcessingConfig {
+        dir_path: Some(temp.0.to_string_lossy().into_owned()),
+        vbass: true,
+        ..Default::default()
+    };
+    let jobs = JobRegistry::new();
+    let job = jobs
+        .start(JobKind::Brir, true, move |ctx| {
+            let out = run_brir(&config, &Catalog::english(), ctx)?;
+            Ok(json!({"output_path":out.output_path}))
+        })
+        .unwrap();
+    let poll = wait(&jobs, &job.job_id);
+    assert_eq!(
+        poll.job.status,
+        JobStatus::Succeeded,
+        "{:?}",
+        poll.job.error
+    );
+    let keys: Vec<_> = poll
+        .events
+        .iter()
+        .filter_map(|event| event.payload.get("key").and_then(Value::as_str))
+        .collect();
+    let automatic = keys
+        .iter()
+        .position(|key| *key == "cli_vbass_auto")
+        .unwrap();
+    let matched = keys
+        .iter()
+        .position(|key| *key == "cli_vbass_match")
+        .unwrap();
+    assert!(automatic < matched, "{keys:?}");
 }

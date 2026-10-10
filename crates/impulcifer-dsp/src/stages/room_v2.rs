@@ -84,7 +84,7 @@ pub struct RoomDiagnostics {
     pub ears: Vec<EarDiagnostics>,
 }
 
-fn smooth(frequency: &[f64], data: &[f64], width: f64) -> Result<Vec<f64>, DspError> {
+pub(crate) fn smooth(frequency: &[f64], data: &[f64], width: f64) -> Result<Vec<f64>, DspError> {
     let mut fr = FrequencyResponse::new(
         "room smoothing",
         Some(frequency.to_vec()),
@@ -93,7 +93,7 @@ fn smooth(frequency: &[f64], data: &[f64], width: f64) -> Result<Vec<f64>, DspEr
     fr.smoothen(width, width, 100.0, 10000.0)?;
     Ok(fr.smoothed)
 }
-fn median(mut data: Vec<f64>) -> Option<f64> {
+pub(crate) fn median(mut data: Vec<f64>) -> Option<f64> {
     if data.is_empty() {
         return None;
     }

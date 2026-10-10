@@ -61,8 +61,13 @@ interface ProcessingRequest {
      room_tuning_curtain (Hz) is where the detailed correction stops. */
   room_mode?: RoomMode; room_tuning_phase_limit?: RoomPhaseLimit; room_tuning_delay?: "auto" | number;
   room_tuning_max_boost?: number; room_tuning_curtain?: number; room_tuning_level_match?: boolean;
+  /* 3.x only (ADR 0006). "auto" finds the crossover in the measurements and ignores vbass_freq;
+     "manual" uses vbass_freq; "legacy" is the 2.x method. Without vbass_mode, a given vbass_freq
+     means "manual". */
+  vbass_mode?: VbassMode;
   confirm_warnings?: boolean;
 }
+type VbassMode = "auto" | "manual" | "legacy";
 type RoomRange = "legacy" | "modes" | "schroeder" | "extreme";
 type RoomMode = "eq" | "tuning";
 type RoomPhaseLimit = "off" | "schroeder" | "full" | number;

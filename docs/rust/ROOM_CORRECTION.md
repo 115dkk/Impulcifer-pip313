@@ -13,7 +13,7 @@ The Rust room stage defaults to `schroeder`. The Python 2.x implementation is un
 
 `room_mode` defaults to `eq` (`eq` or `tuning`). Tuning is independent of the range and accepts `legacy`; see the processor specification below.
 
-These are extension fields, not additions to the frozen 33-field 2.x list. CLI defaults are suppressed: omitting the flags preserves the old kwargs object. The service bootstrap includes all ten extension defaults. Service validation returns `INVALID_REQUEST` with `details.field`; CLI validation exits 2. `specific_limit` and `generic_limit` apply only in legacy mode.
+These are extension fields, not additions to the frozen 33-field 2.x list. CLI defaults are suppressed: omitting the flags preserves the old kwargs object. The service bootstrap includes all eleven extension defaults (the eleventh, `vbass_mode`, is described under "Virtual bass v2"). Service validation returns `INVALID_REQUEST` with `details.field`; CLI validation exits 2. `specific_limit` and `generic_limit` apply only in legacy mode.
 
 ## Measurement preparation
 
@@ -82,6 +82,55 @@ For extreme, blend final left/right gains per speaker toward their mean using a 
 ## Virtual-bass hand-off
 
 The room gain is multiplied by the magnitude response of the exact LR8 high-pass used by virtual bass: order-4 Butterworth high-pass duplicated twice. The shared SOS constructor leaves virtual-bass synthesis unchanged. Below crossover/sqrt(2) the mask is explicitly zero. At crossover times `2^(-1/4),1,2^(1/4),sqrt(2),2`, the mask is approximately 0.20, 0.50, 0.80, 0.94 and 0.996 (test tolerance 0.02). Invalid or Nyquist-exceeding cutoffs return the identity mask, matching virtual bass's existing early-return behaviour at Nyquist.
+
+## Virtual bass v2
+
+ADR 0006. `vbass_mode` is `auto` (default), `manual` or `legacy`. Legacy runs the unchanged 2.x function (`apply_virtual_bass`); oracle tests select it through `ProcessingConfig::oracle_defaults()`. Manual uses `vbass_freq`; `from_kwargs` selects manual when the kwargs carry `vbass_freq` without `vbass_mode`. Auto and manual share everything below except where the crossover comes from.
+
+### Crossover
+
+For every speaker with both ears, the cropped responses (as after `CropAndAlign`; `crop_heads` and `crop_tails` suffice) go through `magnitude_to_frequency_response` and are power-averaged per grid point, `10·log10((10^(L/10)+10^(R/10))/2)`. The average goes to `detect_rolloff` without SNR (the slope search of "Low-frequency rolloff" above). The automatic crossover is twice the highest rolloff (`freq`, the point 6 dB under the plateau), rounded to whole hertz and clamped to 30–500 Hz. With no rolloff at all, auto applies nothing and logs `cli_vbass_auto_none`. Manual warns (`cli_vbass_below_rolloff`) when its crossover is below the highest rolloff times √2.
+
+The pair average is what makes the detection usable on in-ear responses: per ear, a room-mode dip can pass for a rolloff, and the other ear usually fills it. The demo resolves to 109 Hz (FL, 6 dB down at 54 Hz). One octave above a 2nd–4th order rolloff's −6 dB point the speaker is within 0.3–1.2 dB, so the high-passed measurement is intact at the crossover.
+
+The service resolves the crossover before the room stage, because the hand-off mask needs it: when virtual bass is on and not legacy, it opens the measurements first, crops a copy and resolves the plan there. Progress steps keep their order.
+
+### Synthesis
+
+The unit synthetic bass, the interaural shelf, the ITD, the head delay and the LR8 high-pass of the measured response are the legacy ones. What changes:
+
+| Step | Rule |
+| --- | --- |
+| Level band | B = [f_c, min(4 f_c, 0.45 fs)] |
+| Level | For each speaker, the ear that receives the unshelved copy (left for left-side speakers, otherwise right): `magnitude_to_frequency_response`, plus the room EQ v2 gain of that ear when room EQ v2 runs (`RoomTerm::Gain`, hand-off mask included), smoothed at 1/6 octave, median over B. The gain is the median over speakers minus the same median of the unit bass before its low-pass. |
+| Room target | Only with room correction on, in a v2 range or tuning, and a target that is not flat: a minimum-phase filter of `T(min(f, 2 f_c)) − T_B` on a 2n FFT, with T_B the target's median over B. |
+| Alignment | One delay d ∈ [0, fs/f_c) samples for every speaker: the argmax of the cross-correlation between the high-passed measurement and the synthetic bass, summed over all ears, restricted to f_c/√2–f_c·√2. |
+| Output | high-passed measurement + synthetic bass delayed by head + d (and ± ITD on the far ear). |
+
+Sums run sequentially in speaker order, left then right ear.
+
+Demo measurements with the release CLI (`--no_room_correction`, `responses.wav`; "legacy" is `--vbass_mode legacy`):
+
+| Quantity | Legacy | v2 |
+| --- | --- | --- |
+| Level reference spread across ears at 250 Hz | 11 dB (one FFT bin) | median over two octaves |
+| Synthetic level against the direct ears' median over B, median, f_c = 83 / 120 / 250 Hz | −1.1 / 0.0 / +1.0 dB | −0.4 / +0.4 / +0.1 dB |
+| Shift of the synthetic bass from a +10 dB, Q 4 resonance at 280 Hz filtered into every recording (f_c = 250 Hz) | +5.4 dB | +1.2 dB; 0 dB when room EQ removes it (synthetic test) |
+| Crossover cancellation against the branches' power sum, median (worst), f_c = 83 / 120 / 250 Hz | −1.2 (−4.3) / −6.5 (−10.0) / −10.8 (−13.3) dB | −0.3 (−0.7) / −2.0 (−5.9) / −0.3 (−1.6) dB |
+
+With 14 ears the demo averages the single bin's spread away; a stereo measurement averages four.
+
+A delay per speaker would line up each speaker better, but two speakers playing the same mono bass would then cancel each other's synthetic bass; one delay keeps them coherent as in 2.x.
+
+### Logs
+
+| Level | Key | Arguments |
+| --- | --- | --- |
+| info | cli_vbass_auto | freq, speaker, rolloff (integer Hz) |
+| warning | cli_vbass_auto_none | — |
+| warning | cli_vbass_below_rolloff | freq, speaker, rolloff |
+| info | cli_vbass_match | lo, hi (integer Hz), delay (ms, 1 decimal) |
+| info | cli_vbass_room_target | — |
 
 ## Equalization, plots and self-check
 

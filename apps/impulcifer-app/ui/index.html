@@ -637,7 +637,15 @@
                   <span class="caret" aria-hidden="true"></span>
                 </div>
                 <div class="disclosure-body">
-                  <div class="field-row">
+                  <div class="field-row" id="bf-vbass-mode-row">
+                    <span class="field-label"><label for="bf-vbass-mode" data-i18n="label_vbass_mode">Crossover:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-vbass-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-vbass-mode-tip" class="tip-bubble">Finds where the speakers lose bass and puts the crossover one octave above it.</span></span></span>
+                    <select id="bf-vbass-mode" aria-describedby="bf-vbass-mode-tip">
+                      <option value="auto" selected data-i18n="option_vbass_mode_auto">Automatic</option>
+                      <option value="manual" data-i18n="option_vbass_mode_manual">Manual</option>
+                      <option value="legacy" data-i18n="option_vbass_mode_legacy">Legacy (2.x)</option>
+                    </select>
+                  </div>
+                  <div class="field-row" id="bf-vbass-freq-row" hidden>
                     <span class="field-label"><label for="bf-vbass-freq" data-i18n="vbass_crossover_freq">Crossover frequency (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-vbass-freq-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-vbass-freq-tip" class="tip-bubble" data-i18n="tooltip_vbass_room_handoff">Room correction leaves everything below the crossover to virtual bass, except with the Legacy (2.x) range.</span></span></span>
                     <input type="number" id="bf-vbass-freq" class="num mono" value="250" min="30" max="500" aria-describedby="bf-vbass-freq-tip">
                   </div>

@@ -7,6 +7,7 @@ use impulcifer_dsp::{
     fr::FrequencyResponse,
     pipeline::{StageObserver, StageProgress, run_pipeline, total_steps},
     stages::equalize::AppliedEqualization,
+    virtual_bass::{VirtualBassMode, VirtualBassPlan, VirtualBassReport},
 };
 use impulcifer_jobs::registry::{JobContext, JobFailure};
 use impulcifer_types::{
@@ -85,11 +86,55 @@ struct Observer<'a, 'b> {
     decay_channels: usize,
     sample_rate: u32,
     previous: Option<StageKey>,
+    vbass_crossover: Option<f64>,
+    vbass_applied: bool,
     directory: &'a Path,
     estimator: &'a impulcifer_dsp::estimator::SweepEstimator,
     headphone: Option<(FrequencyResponse, FrequencyResponse)>,
 }
 impl StageObserver for Observer<'_, '_> {
+    fn on_virtual_bass(
+        &mut self,
+        plan: &VirtualBassPlan,
+        report: Option<&VirtualBassReport>,
+    ) -> Result<(), DspError> {
+        match (plan.mode, plan.crossover) {
+            (VirtualBassMode::Auto, Some(crossover)) => {
+                if let Some(limiting) = plan.limiting_rolloff() {
+                    self.events.log(
+                        "info",
+                        "cli_vbass_auto",
+                        json!({"freq":crossover.round() as i64,"speaker":limiting.speaker,"rolloff":limiting.freq.round() as i64}),
+                    );
+                }
+            }
+            (VirtualBassMode::Auto, None) => {
+                self.events.log("warning", "cli_vbass_auto_none", json!({}));
+            }
+            (VirtualBassMode::Manual, _) => {
+                if let Some(rolloff) = plan.crossover_below_rolloff() {
+                    self.events.log(
+                        "warning",
+                        "cli_vbass_below_rolloff",
+                        json!({"freq":plan.crossover.unwrap().round() as i64,"speaker":rolloff.speaker,"rolloff":rolloff.freq.round() as i64}),
+                    );
+                }
+            }
+            (VirtualBassMode::Legacy, _) => {}
+        }
+        if let Some(report) = report {
+            self.vbass_applied = true;
+            self.events.log(
+                "info",
+                "cli_vbass_match",
+                json!({"lo":report.band.0.round() as i64,"hi":report.band.1.round() as i64,"delay":format!("{:.1}",report.delay_samples as f64 * 1000.0 / self.sample_rate as f64)}),
+            );
+            if report.target_shaped {
+                self.events.log("info", "cli_vbass_room_target", json!({}));
+            }
+        }
+        Ok(())
+    }
     fn on_room_tuned(
         &mut self,
         report: &impulcifer_dsp::stages::room_tuning::TuningReport,
@@ -201,7 +246,7 @@ impl StageObserver for Observer<'_, '_> {
     }
     fn on_stage(&mut self, progress: StageProgress) {
         let key = progress.key;
-        if self.previous == Some(StageKey::VirtualBass) {
+        if self.previous == Some(StageKey::VirtualBass) && self.vbass_applied {
             self.events
                 .log("success", "vbass_status_complete", json!({}));
         }
@@ -226,14 +271,16 @@ impl StageObserver for Observer<'_, '_> {
         if key == StageKey::VirtualBass {
             self.events
                 .log("info", "vbass_status_processing", json!({}));
-            if self.config.vbass_freq as f64 >= self.sample_rate as f64 / 2.0 {
-                self.events.log("error", "vbass_error_sr_limit", json!({}));
-            } else if self.config.vbass_freq > 300 {
-                self.events.log(
-                    "warning",
-                    "vbass_warning_high_crossover",
-                    json!({"freq":self.config.vbass_freq}),
-                );
+            if let Some(crossover) = self.vbass_crossover {
+                if crossover >= self.sample_rate as f64 / 2.0 {
+                    self.events.log("error", "vbass_error_sr_limit", json!({}));
+                } else if crossover > 300.0 {
+                    self.events.log(
+                        "warning",
+                        "vbass_warning_high_crossover",
+                        json!({"freq":crossover.round() as i64}),
+                    );
+                }
             }
         }
         if key == StageKey::Decay && self.decay_channels > 0 {
@@ -318,6 +365,10 @@ pub(crate) fn run_with_choices(
         events.same_fs = config.fs == Some(estimator.fs);
         events.check_cancelled()?;
         let inputs = load_inputs(&dir, &estimator, config, &mut events)?;
+        let vbass_crossover = inputs
+            .vbass
+            .as_ref()
+            .map_or(Some(config.vbass_freq as f64), |plan| plan.crossover);
         let headphone = inputs
             .headphone
             .as_ref()
@@ -351,6 +402,8 @@ pub(crate) fn run_with_choices(
                 decay_channels,
                 sample_rate: estimator.fs,
                 previous: None,
+                vbass_crossover,
+                vbass_applied: config.vbass_mode == "legacy",
                 directory: &dir.dir,
                 estimator: &estimator,
                 headphone,

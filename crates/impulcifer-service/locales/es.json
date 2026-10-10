@@ -157,6 +157,13 @@
   "label_room_max_boost": "Realce máx. (dB):",
   "placeholder_schroeder_freq": "auto",
   "tooltip_vbass_room_handoff": "La corrección de sala deja todo lo que está por debajo de la frecuencia de cruce al bajo virtual, salvo con el rango «Método anterior (2.x)».",
+  "label_vbass_mode": "Frecuencia de cruce:",
+  "option_vbass_mode_auto": "Automática",
+  "option_vbass_mode_manual": "Manual",
+  "option_vbass_mode_legacy": "Método anterior (2.x)",
+  "tooltip_vbass_mode_auto": "Detecta dónde los altavoces pierden graves y sitúa la frecuencia de cruce una octava por encima. Si no pierden graves, no se añade nada.",
+  "tooltip_vbass_mode_manual": "Usa la frecuencia indicada abajo. Si se fija por encima del límite de graves de los altavoces, sustituye los graves medidos hasta esa frecuencia por graves sintetizados de respuesta plana.",
+  "tooltip_vbass_mode_legacy": "El método de 2.x: el nivel se ajusta solo en la frecuencia de cruce, sin alineación temporal ni curva objetivo de la corrección de sala.",
   "cli_room_range": "Rango de corrección de sala: {range}, hasta {f_hi} Hz",
   "cli_room_schroeder": "Frecuencia de Schroeder {freq} Hz (tiempo de reverberación {t60} s, volumen de sala {volume} m³)",
   "cli_room_schroeder_assumed": "Frecuencia de Schroeder {freq} Hz (tiempo de reverberación {t60} s, volumen de sala supuesto de 50 m³)",
@@ -166,5 +173,10 @@
   "cli_room_rolloff_snr": "{speaker} {side}: la medición tiene demasiado ruido por debajo de {freq} Hz, por lo que no se aplica ningún realce en ese rango",
   "cli_room_snr_unavailable": "{speaker} {side}: la medición de sala dura menos de un segundo, por lo que su nivel de ruido no limita los realces",
   "cli_room_selfcheck_warning": "{speaker} {side}: queda un error RMS de {rms} dB entre {lo} y {hi} Hz tras la corrección de sala; compruebe la medición de sala",
-  "cli_room_vbass_handoff": "La corrección de sala deja el rango por debajo de {freq} Hz al bajo virtual"
+  "cli_room_vbass_handoff": "La corrección de sala deja el rango por debajo de {freq} Hz al bajo virtual",
+  "cli_vbass_auto": "Frecuencia de cruce del bajo virtual: {freq} Hz, obtenida de las mediciones ({speaker} pierde graves por debajo de {rolloff} Hz)",
+  "cli_vbass_auto_none": "No se detectó pérdida de graves en las mediciones, por lo que no se aplicó el bajo virtual. Para aplicarlo de todos modos, elija una frecuencia de cruce manual",
+  "cli_vbass_below_rolloff": "{speaker} pierde graves por debajo de unos {rolloff} Hz, demasiado cerca de la frecuencia de cruce de {freq} Hz: los graves justo por encima del cruce siguen siendo débiles",
+  "cli_vbass_match": "Nivel del bajo virtual ajustado a la respuesta entre {lo} y {hi} Hz; retrasado {delay} ms para alinearlo con los altavoces en la frecuencia de cruce",
+  "cli_vbass_room_target": "El bajo virtual sigue la forma de los graves de la curva objetivo de la corrección de sala"
 }

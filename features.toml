@@ -533,6 +533,12 @@ tests = ["impulcifer-dsp::golden_vbass_matches_python", "impulcifer-service::dem
 note = "defaults (250 Hz, 15 Hz high-pass, auto polarity) at the stage and end to end"
 
 [[feature]]
+id = "config.vbass_mode"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impulcifer-cli::cli_room_v2_options_parse_and_validate"]
+
+[[feature]]
 id = "config.vbass_freq"
 kind = "config"
 status = "implemented"
@@ -612,6 +618,30 @@ id = "stage.virtual_bass"
 kind = "stage"
 status = "implemented"
 tests = ["impulcifer-dsp::golden_vbass_matches_python"]
+
+[[feature]]
+id = "vbass.auto_crossover"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::vbass_v2_auto_crossover_follows_the_highest_rolloff", "impulcifer-service::room_v2_with_vbass_logs_handoff"]
+
+[[feature]]
+id = "vbass.band_level"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::vbass_v2_level_ignores_a_mode_above_the_crossover", "impulcifer-dsp::vbass_v2_level_uses_the_room_gain"]
+
+[[feature]]
+id = "vbass.alignment"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::vbass_v2_alignment_finds_the_speaker_low_end_delay"]
+
+[[feature]]
+id = "vbass.room_target"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::vbass_v2_follows_the_room_target_below_the_crossover"]
 
 [[feature]]
 id = "stage.mic_deviation_skipped"

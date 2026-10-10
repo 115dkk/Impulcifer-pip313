@@ -315,6 +315,7 @@ fn inputs() -> &'static PipelineInputs {
         PipelineInputs {
             estimator,
             hrir,
+            vbass: None,
             room,
             headphone: Some(headphone_compensation(&hp).unwrap()),
             eq_left: None,
@@ -1317,6 +1318,7 @@ fn golden_optional_outputs_match_python() {
             PipelineInputs {
                 estimator: inputs().estimator.clone(),
                 hrir,
+                vbass: None,
                 room: None,
                 headphone: None,
                 eq_left: None,
