@@ -350,7 +350,7 @@ pub fn design_rc(
     {
         return Err(DspError::InvalidArgument("invalid correction band".into()));
     }
-    let (f, h) = spectra(points, calibration);
+    let (f, h) = spectra(points, &opts.policy, calibration);
     let p = power(&h, &opts.policy);
     let level_db = level(&p, &f, target);
     let res = resolution(&f);

@@ -271,8 +271,82 @@ pub fn smoke() {
     }
 }
 
+fn room_tuning2_bench() {
+    use impulcifer_dsp::{
+        estimator::SweepEstimator,
+        hrir::Hrir,
+        stages::{room, room_tuning2::*},
+    };
+    use impulcifer_io::read_wav;
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let wav = read_wav(&root.join("data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")).unwrap();
+    let estimator = SweepEstimator::from_samples(wav.sample_rate, &wav.tracks[0]).unwrap();
+    let mut points = Vec::new();
+    for side in ["left", "right"] {
+        let file = format!("room-FL,FR-{side}.wav");
+        let names = room::parse_room_measurement_name(&file).unwrap();
+        let wav = read_wav(&root.join("data/demo").join(file)).unwrap();
+        let mut h = Hrir {
+            fs: wav.sample_rate,
+            speakers: vec![],
+        };
+        h.open_recording_samples(
+            &estimator,
+            wav.sample_rate,
+            &wav.tracks,
+            &["FL", "FR"],
+            names.side,
+            2.,
+        )
+        .unwrap();
+        let s = h.get("FL").unwrap();
+        points.push(s.left.as_ref().or(s.right.as_ref()).unwrap().clone());
+    }
+    let golden: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/migration/goldens/room_tuning_secs2_rc.json"
+    ))
+    .unwrap();
+    for (name, mode) in [
+        ("zero", Tuning2Mode::Zero),
+        ("mixed", Tuning2Mode::Mixed),
+        ("linear", Tuning2Mode::Linear),
+        ("long", Tuning2Mode::Long),
+        ("ultra-60", Tuning2Mode::Ultra(60.)),
+    ] {
+        let opts = RcOptions {
+            mode,
+            policy: PositionPolicy::Listening {
+                index: 0,
+                weight: 1.,
+            },
+            ..Default::default()
+        };
+        let band = correction_band(&[&points], &opts);
+        black_box(design_rc(&points, &opts, &band, None, None).unwrap());
+        let mut times = Vec::new();
+        for _ in 0..3 {
+            let start = Instant::now();
+            black_box(design_rc(&points, &opts, &band, None, None).unwrap());
+            times.push(start.elapsed().as_secs_f64());
+        }
+        times.sort_by(f64::total_cmp);
+        println!(
+            "room_tuning2/{name} FL two positions: median {:.6}s min {:.6}s SECS {}s",
+            times[1],
+            times[0],
+            golden["entries"][format!("two/FL/{name}")]["secs_seconds"]
+        );
+    }
+}
+
 #[allow(dead_code)]
 fn main() {
+    if std::env::args().any(|s| s.contains("room_tuning2"))
+        || std::env::var("PA02_FILTER").is_ok_and(|s| s.contains("room_tuning2"))
+    {
+        room_tuning2_bench();
+        return;
+    }
     let inputs = Inputs::new(false);
     let filter = std::env::var("PA02_FILTER").unwrap_or_default();
     println!("| op | size | rust median ms | rust min ms |");

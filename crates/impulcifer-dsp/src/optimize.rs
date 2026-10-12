@@ -383,15 +383,38 @@ pub fn least_squares<F: FnMut(&[f64]) -> Vec<f64>>(
                 0.
             }
         });
-        // faer is built without rayon: get_global_parallelism() is Par::Seq.
-        let svd = aug
-            .thin_svd()
-            .map_err(|_| DspError::InvalidArgument("TRF SVD did not converge".into()))?;
-        let s: Vec<_> = (0..n).map(|i| svd.S().column_vector()[i]).collect();
+        // Explicit Seq also survives downstream Cargo feature unification.
+        use faer::{
+            Par,
+            diag::Diag,
+            dyn_stack::{MemBuffer, MemStack},
+            linalg::svd::{self, ComputeSvdVectors},
+        };
+        let mut u = Mat::zeros(m + n, n);
+        let mut vv = Mat::zeros(n, n);
+        let mut singular = Diag::zeros(n);
+        let mut scratch = MemBuffer::new(svd::svd_scratch::<f64>(
+            m + n,
+            n,
+            ComputeSvdVectors::Thin,
+            ComputeSvdVectors::Thin,
+            Par::Seq,
+            Default::default(),
+        ));
+        svd::svd(
+            aug.as_ref(),
+            singular.as_mut(),
+            Some(u.as_mut()),
+            Some(vv.as_mut()),
+            Par::Seq,
+            MemStack::new(&mut scratch),
+            Default::default(),
+        )
+        .map_err(|_| DspError::InvalidArgument("TRF SVD did not converge".into()))?;
+        let s: Vec<_> = (0..n).map(|i| singular.column_vector()[i]).collect();
         let uf: Vec<_> = (0..n)
-            .map(|k| (0..m).map(|i| svd.U()[(i, k)] * f[i]).sum())
+            .map(|k| (0..m).map(|i| u[(i, k)] * f[i]).sum())
             .collect();
-        let vv = svd.V().to_owned();
         let theta = 0.995_f64.max(1. - gn);
         let mut actual = -1.;
         let mut xn = x.clone();

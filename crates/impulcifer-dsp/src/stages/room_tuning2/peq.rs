@@ -9,12 +9,12 @@ fn ring(f: f64, g: f64) -> f64 {
 fn divide(a: Complex64, b: Complex64) -> Complex64 {
     if b.re.abs() >= b.im.abs() {
         let r = b.im / b.re;
-        let d = b.re + b.im * r;
-        Complex64::new((a.re + a.im * r) / d, (a.im - a.re * r) / d)
+        let d = 1. / (b.re + b.im * r);
+        Complex64::new((a.re + a.im * r) * d, (a.im - a.re * r) * d)
     } else {
         let r = b.re / b.im;
-        let d = b.re * r + b.im;
-        Complex64::new((a.re * r + a.im) / d, (a.im * r - a.re) / d)
+        let d = 1. / (b.re * r + b.im);
+        Complex64::new((a.re * r + a.im) * d, (a.im * r - a.re) * d)
     }
 }
 fn band(z: &[Complex64], f: f64, q: f64, g: f64, fs: f64) -> Vec<Complex64> {

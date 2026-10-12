@@ -127,10 +127,13 @@ fn chosen(policy: &PositionPolicy, n: usize) -> Vec<usize> {
 }
 fn weights(policy: &PositionPolicy, n: usize) -> Vec<f64> {
     let mut w = vec![1.; n];
-    if let PositionPolicy::Listening { index, weight } = policy {
-        if *index < n {
-            w[*index] = *weight;
-        }
+    if n == 1 {
+        return w;
+    }
+    if let PositionPolicy::Listening { index, weight } = policy
+        && *index < n
+    {
+        w[*index] = *weight;
     }
     w
 }
@@ -145,12 +148,17 @@ fn curve(fr: Option<&FrequencyResponse>, f: &[f64]) -> Vec<f64> {
 }
 fn spectra(
     points: &[ImpulseResponse],
+    policy: &PositionPolicy,
     calibration: Option<&FrequencyResponse>,
 ) -> (Vec<f64>, Vec<Vec<Complex64>>) {
     let fs = points[0].fs as f64;
     let n = analysis_len(points[0].fs);
     let f = grid(n, fs);
-    let b = onset(&points[0].data);
+    // Any common b is valid; use an order-invariant anchor for equal ears.
+    let b = match policy {
+        PositionPolicy::Symmetric => points.iter().map(|p| onset(&p.data)).min().unwrap(),
+        PositionPolicy::Listening { .. } => onset(&points[0].data),
+    };
     let cal = calibration.map(|c| {
         mp(
             &curve(Some(c), &f)
@@ -217,7 +225,7 @@ pub fn channel_level(
     if validate(points, &opts, target, calibration).is_err() {
         return f64::NAN;
     }
-    let (f, h) = spectra(points, calibration);
+    let (f, h) = spectra(points, policy, calibration);
     level(&power(&h, policy), &f, target)
 }
 /// All measured speakers contribute to the automatic decay estimate. Invalid
@@ -324,15 +332,15 @@ fn validate(
     {
         return Err(invalid());
     }
-    if let Tuning2Mode::Ultra(v) = opts.mode {
-        if !v.is_finite() || !(30. ..=200.).contains(&v) {
-            return Err(invalid());
-        }
+    if let Tuning2Mode::Ultra(v) = opts.mode
+        && (!v.is_finite() || !(30. ..=200.).contains(&v))
+    {
+        return Err(invalid());
     }
-    if let PositionPolicy::Listening { index, weight } = opts.policy {
-        if index >= points.len() || !weight.is_finite() || weight <= 0. {
-            return Err(invalid());
-        }
+    if let PositionPolicy::Listening { index, weight } = opts.policy
+        && (index >= points.len() || !weight.is_finite() || weight <= 0.)
+    {
+        return Err(invalid());
     }
     for fr in [target, cal].into_iter().flatten() {
         if fr.frequency.is_empty()
