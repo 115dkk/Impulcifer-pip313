@@ -1,88 +1,335 @@
-# A08 room tuning 2 measurements
+# A08b MIMO guard investigation
 
-2026-10-12, Linux container, release profile. **Partial implementation, not an acceptance report:** the deterministic guard fixture and end-to-end MIMO variance gate fail. The existing A07 fit-prefix test also fails in this worktree; its source is excluded from A08.
+2026-10-12, current branch, same Linux container. **Blocked; not an acceptance report.** No runtime, solver, dependency, or tolerance changes were made. The instruction “if none does, implement nothing new” was followed after all three proposed guard rules failed. Only a reproducible diagnostic test, this report, and the MIMO guard row of the fixture README were added/updated.
 
-## Timing
+## 1. Oracle hypotheses
 
-`cargo bench -p impulcifer-dsp --bench perf --no-run`, then the resulting binary with `mimo` or `room_tuning2`. RC timings are medians of three runs from the unchanged existing benchmark. MIMO timings are single runs, not statistically stable medians. The MIMO benchmark prepares RC outside the measured section; the application timing includes MIMO and diagnostics but not RC preparation.
+The diagnostic reconstructs every tried output from the frozen `x`, `g`, low-pass, and kept `u`, without rerunning RC or the linear solver. All 14 per-input fixtures are covered: seven inputs each for mixed/100/low40 and mixed/150/auto. There is no linear per-input stage fixture. Band checks use the unchanged before-peak bands for every hypothesis. Tail values are compared in the fixture's units (0.15 × dB); tails are recorded only for trials whose band check passes. Thus 85 is the count of all recorded band and tail values, not 85 tail values.
 
-| Case | Rust seconds | Reference / interpretation |
-| --- | ---: | --- |
-| RC zero, FL / two positions | 0.857882 | Regenerated golden has no `secs_seconds` |
-| RC mixed | 0.407558 | Regenerated golden has no `secs_seconds` |
-| RC linear | 0.936585 | Regenerated golden has no `secs_seconds` |
-| RC long | 0.528135 | Regenerated golden has no `secs_seconds` |
-| RC ultra-60 | 0.841699 | Regenerated golden has no `secs_seconds` |
-| MIMO demo, 7 inputs | 1.080584 | ADR 0008 records about 6 s for SECS ideal-FIR design: roughly 5.6× faster; historical, not a fresh matched run |
-| MIMO demo, amortized/input | 0.154369 | Total / 7, parallel inputs; not isolated input latency |
-| Whole apply, demo | 1.364873 | RC + supports convolution and diagnostics; preparation excluded |
-| Synthetic 24 speakers, one input, R=23, m=4140 | 23.479461 | No matched SECS timing; scaling still needs optimization |
+| Rule | Compared | Within absolute 1e-9 | Worst absolute difference | Location |
+| --- | ---: | ---: | ---: | --- |
+| H1: before ∪ after | 85 | 83 | 0.141260003353921471 | mixed/100/low40 FC, trial 0, tail |
+| H2: before only | 85 | 64 | 0.703463765237492100 | mixed/150/auto FL, trial 0, tail |
+| H3: after only | 85 | 73 | 0.662287960113471685 | mixed/100/low40 FR, trial 1, tail |
 
-Peak RSS over the combined benchmark process: **1,162,252 KiB** (Python `resource.getrusage(RUSAGE_CHILDREN)`). `/usr/bin/time` is unavailable. Peak includes preparation, the seven-input run and the large synthetic run; it is not an isolated solver-memory measure.
+**No rule qualifies. H1 remains in production unchanged, not accepted.** H2 resolves the two known H1 discrepancies but fails 21 other recorded values. All individual failures, before/after peaks, rounded selected modes, and per-mode `(frequency, a, b)` energies are printed below. The 1e-9 tolerance has not changed. The new diagnostic deliberately fails unless one hypothesis uniquely reproduces the oracle.
 
-The benchmark's RC uses aligned BRIRs, symmetric positions, and zero trims in the design-only timing. The synthetic set repeats the seven BRIRs with 11-sample increments in delay. All 23 other channels are candidates. SECS's downstream IIR realization, unnecessary for BRIR FIR convolution, reportedly did not finish after 30 minutes / about 1.9 CPU-hours with two workers on this demo. That is not a directly comparable completed runtime and is not included in a speedup claim.
+## 2. Dependency-order gates
 
-## Numerical method
+Frozen path inputs → normal equations → bisection/kept u → guard → final supports/level → application is the required order. This run confirms normal equations and solves; guard remains blocked. A production path-stage reconstruction gate and final-support/level gate were not added after the stop condition. Existing normal/solve/guard MEASURE lines follow below.
 
-Build each convolution Gram block with prefix sums along diagonals, starting at the short end, combining the full interval and nine times the early interval. Never subtract two long accumulated sums. Build the right-hand side directly over the late interval. Use a sequential `faer` symmetric eigendecomposition once, then 19 shifted solves, with two residual-refinement passes against the original matrix. Matrix-vector multiplication walks contiguous columns while maintaining ascending accumulation order per output. No dependency features changed; no hand-written SIMD assembly added.
+## 3. End-to-end and bounds
 
-Dense construction / Cholesky cross-check on the oracle FL demo input:
+The unchanged end-to-end test reports each of three settings against all five oracle variants (NumPy AVX-512, OpenBLAS Haswell, Sandybridge, Nehalem, LAPACK gesvd). Complete reference/variant rows follow below. Existing changed-step acceptance is retained. Support/level/late observations are **not accepted bounds**; provisional measured × 1.5 constants were not introduced while the guard is unresolved.
 
-- normal matrix relative L2: 4.367886386622643e-16;
-- right-hand side relative L2: 1.2718377008542517e-15;
-- kept solution relative L2: 6.564296201359275e-14;
-- bisection decisions: 19/19; kept index 15/15.
+| Setting | Rust changed steps | NumPy AVX-512 | Haswell | Sandybridge | Nehalem | gesvd | Result |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| linear/150/auto | 1 | 1 | 2 | 1 | 1 | 1 | PASS ≤ 2 |
+| mixed/100/low40 | 2 | 1 | 1 | 1 | 1 | 3 | PASS ≤ 3 |
+| mixed/150/auto | 4 | 1 | 1 | 1 | 1 | 2 | FAIL > 2 |
 
-Across 14 MIMO path fixtures, diagonal/block-row/right-side maximum absolute error was 2.6020852139652106e-18 and relative L2 1.3910722556760364e-15. One ill-conditioned discarded trial's ratio differs by 1.6782690435074165e-9 relative; its decision agrees. Kept-u comparisons pass 1e-9 relative plus 1e-12 component floor. Solver alternatives have not yet been benchmarked head-to-head.
+All ranges and trims pass their exact/1e-10 checks. Full per-input support and late metrics are in the output below. These are current A07d results, not the previous A08 table.
 
-## Acceptance blockers
+## 4. RC attribution
 
-The specified tail guard unions the before/after late peaks. In `mixed_fsiso100_low40_BL`, at scale 0, the new after peak 44.8 Hz yields 1.006313368383 dB. Independent SciPy `butter`/`sosfilt` reproduces it. The fixture instead records 0.906165519807 dB (scaled by .15), the maximum from the before-only peaks, and accepts scale 0. The implementation follows the written union rule and accepts −3 dB. `FC` in this setting also has a different first tail value (4.010703 vs 3.068970 dB), but both accept −3 dB. Other tested guard values agree to the 1e-9 gate. These two differences remain explicit failures, not relaxed budgets.
+Not performed. No claim is made that RC explains all support differences. The frozen-path hypothesis comparison does eliminate Rust RC and solver differences as explanations for its guard mismatches.
 
-End-to-end, ranges and channel gains match; mixed/150 changes four guard steps whereas the worst oracle variant changes two. The test reports all variants alongside Rust for every input. The current A07 RC dependency is not being changed by this packet. No claim is made that its error explains the entire support difference: the requested perturbation study is still missing.
+## 5. Solver and speed
 
-## End-to-end reference table
+Production remains one sequential faer symmetric eigendecomposition reused over nineteen regularizations, with two refinement passes. No faer feature changes. The requested 24-speaker eigendecomposition-versus-19-Cholesky experiment was not implemented after the stop condition. Existing demo and synthetic 24-speaker benchmark timings are refreshed below, for one thread and the default pool; demo per-input is amortized total/7, not isolated input latency. Application benchmark excludes preparation and uses aligned BRIRs as RC inputs; it must not be mistaken for the requested whole omni prepare+apply measurement.
 
-Ranges match exactly in all settings. Channel trims differ by less than 1e-10 dB. FR is off in both mixed settings, as in the oracle; no linear input is off. Below, tail is the oracle-scaled quantity (0.15 × dB), and Δlevel is Rust minus oracle. These are observations, not accepted error budgets.
+## 6. Performance and AVX state
 
-| Setting | Input | Δlevel dB | Support relative L2 | Support max absolute | Band dB | Scaled tail |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| linear/150 | FL | 0.000006 | .287468 | .008287 | -.524368 | .136594 |
-| linear/150 | FR | 0.000132 | .027359 | .000412 | -1.471571 | .127671 |
-| linear/150 | FC | 0.000184 | .062972 | .002853 | -2.299518 | .146009 |
-| linear/150 | BL | 0.000185 | .864185 | .040442 | -2.110440 | .098243 |
-| linear/150 | SL | 0.000015 | .002836 | .000040 | -.694834 | .138547 |
-| linear/150 | SR | 0.000061 | .096630 | .001925 | -1.649012 | .103477 |
-| linear/150 | BR | 5.999637 | .999595 | .041566 | -3.627970 | .091802 |
-| mixed/100 | FL | -6.000115 | .613369 | .040656 | -1.959224 | .101959 |
-| mixed/100 | FR | 0 | 0 | 0 | off | off |
-| mixed/100 | FC | -.000051 | .170091 | .005632 | -4.101202 | .073013 |
-| mixed/100 | BL | -3.000004 | .649112 | .048744 | -.210916 | .104618 |
-| mixed/100 | SL | -3.000014 | .295495 | .009573 | -.032959 | .121658 |
-| mixed/100 | SR | -.000036 | .046852 | .002130 | -.295400 | .085050 |
-| mixed/100 | BR | .000048 | .047002 | .000813 | -.063088 | .114781 |
-| mixed/150 | FL | 3.000158 | .556373 | .023009 | -3.280105 | -.037133 |
-| mixed/150 | FR | 0 | 0 | 0 | off | off |
-| mixed/150 | FC | .000111 | .110751 | .003372 | -3.069238 | -.070906 |
-| mixed/150 | BL | -2.999989 | .481085 | .025302 | -1.842558 | .106686 |
-| mixed/150 | SL | -3.000020 | .294028 | .013693 | -1.435263 | .110139 |
-| mixed/150 | SR | -.000040 | .035031 | .000730 | -1.399293 | .107097 |
-| mixed/150 | BR | 3.000023 | .417810 | .008533 | -.919626 | .134981 |
+RC benchmark: FL, two per-recording room positions, median of three after warm-up, existing benchmark unchanged. Reference seconds supplied by the owner: mixed 0.88, zero 1.55, linear 2.22, long 0.73, ultra-60 1.91. The output below states each speedup. Process peak RSS is collected with `resource.getrusage(RUSAGE_CHILDREN)` in a fresh wrapper per invocation, in KiB, and includes benchmark setup; it is not isolated solver RSS. ADR 0008 records approximately 6 s for SECS ideal-FIR MIMO design on seven speakers; comparisons to that are historical, not a newly matched oracle run. Its unused IIR stage had not finished after 30 minutes and is not used as a finite speedup denominator.
 
-Changed guard steps / worst variant: linear/150 **1/2**, mixed/100 **3/3**, mixed/150 **4/2 (FAIL)**. Large support differences, notably linear BL even without a step change, require investigation; do not infer equivalence from the step-count gate alone.
+The previously diagnosed `faer` `std` → `private-gemm-x86` assembly path could leave dirty AVX state: a scalar loop went from approximately 17 to 190 ns/point. This branch keeps faer without `std`; the policy check `no_assembly_kernels_that_leave_avx_state_dirty` passes. The current RC benchmark's scalar-loop timing is included below. A before/after `design_mimo` scalar-loop experiment was not added, so this report does not claim that additional empirical check passed.
 
-## Application demo
+| RC mode | Oracle s | Rust one thread s | Speedup | Rust default (4) s | Speedup |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| mixed | 0.88 | 0.368211 | 2.390× | 0.352445 | 2.497× |
+| zero | 1.55 | 0.622969 | 2.488× | 0.632818 | 2.449× |
+| linear | 2.22 | 0.643376 | 3.451× | 0.350845 | 6.328× |
+| long | 0.73 | 0.296264 | 2.464× | 0.296744 | 2.460× |
+| ultra-60 | 1.91 | 0.585058 | 3.265× | 0.430246 | 4.439× |
 
-Prepared from uncropped omni measurements; applied to aligned, tail-cropped BRIRs. All channels have 16 PEQ bands, no weak/geometry flags. Geometry pairs were not populated in this test, so the absence of mismatch is not a positive geometry validation. Both thread pools (1 and 4 threads) produce identical samples. Every input has six supports in this omni-prepared demo (different RC source from the reference tests).
+Rust is faster than the supplied oracle timings in all five RC modes. These are shared-container measurements with visible timing variation, not isolated-machine confidence intervals.
 
-| Speaker | Level dB | Trim dB | Strength | EDT before / RC / MIMO ms | Excess GD before / RC / MIMO ms | MIMO scale dB | Late energy vs RC dB |
-| --- | ---: | ---: | ---: | --- | --- | ---: | ---: |
-| FL | -40.889121 | -0.418035 | .7 | 461.256 / 463.549 / 372.769 | 3.854 / 1.991 / 1.798 | -6 | -5.272899 |
-| FR | -40.882314 | -0.424842 | .9 | 492.821 / 511.481 / 349.200 | 3.421 / 1.953 / 1.793 | -3 | -6.117236 |
-| FC | -40.680217 | -0.626939 | .7 | 452.473 / 438.778 / 300.764 | 3.486 / 1.783 / 1.627 | -3 | -7.919117 |
-| BL | -40.811125 | -0.496030 | .7 | 457.634 / 417.386 / 283.639 | 3.140 / 2.196 / 1.943 | -3 | -8.056308 |
-| SL | -40.999350 | -0.307806 | .9 | 479.726 / 479.124 / 341.403 | 4.112 / 2.624 / 2.518 | -3 | -6.807418 |
-| SR | -40.492690 | -0.814466 | .3 | 463.646 / 448.772 / 314.377 | 3.757 / 2.241 / 1.640 | -3 | -8.196525 |
-| BR | -41.307156 | 0 | .9 | 457.112 / 469.150 / 398.477 | 5.091 / 5.236 / 5.289 | -3 | -6.440456 |
+| MIMO case | One thread s | Default (4) s |
+| --- | ---: | ---: |
+| Demo design, 7 inputs | 3.473190 | 1.744264 |
+| Demo design, amortized/input | 0.496170 | 0.249181 |
+| Existing apply-only demo | 4.331241 | 2.292334 |
+| 24 speakers, one input, R=23/m=4140 | 20.881968 | 19.885931 |
 
-Pre-echo per ear is printed by `room_tuning2_runs_on_the_demo_dsp`; worst after levels range from about −29.71 to −39.02 dB. The output support band-limit test currently checks the design response only, not the finite cropped BRIR difference; the requested stronger assertion is unfinished. Zero-mode latency and nonempty geometry-pair cases also need explicit coverage.
+Against ADR 0008's historical ≈6 s demo ideal-FIR design, Rust design is approximately **1.73× faster with one thread**, **3.44× with the default pool**. No oracle 24-speaker timing is available. Peak RSS: RC 177,140/227,096 KiB; combined MIMO benchmark 1,048,388/1,157,152 KiB (one/default). Whole omni prepare+apply remains unmeasured.
+
+## 7. Verification
+
+All commands run foreground with `CARGO_PROFILE_TEST_OPT_LEVEL=2 CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_TEST_INCREMENTAL=false` for test commands. Formatting and DSP clippy pass. Policy: 8 passed / 1 failed, because three existing A08 integration-test roots lack `#![forbid(unsafe_code)]` (`golden_secs2_mimo.rs`, `room_tuning2_apply.rs`, `room_tuning2_mimo.rs`). Complete DSP suite: only the MIMO golden and application targets fail; the A07d fit tests now pass. The new hypothesis test is an explicit additional failure documenting the stop condition. No commit, branch switch, stash, delegation, exporter/oracle access, or access under `/tmp/claude-0/` occurred.
+
+## 8. Undone
+
+Because none of H1/H2/H3 matches all recorded values: no new production rule, path/final gates, measured × 1.5 end-to-end constants, full-convolution application band-limit fix/test, zero latency test, populated geometry test, observer test, public diagnostic input validation, RC substitution study, alternative solver, whole prepare+apply benchmark, or post-MIMO scalar-loop probe. A08 is not complete. Owner investigation of the two H1 anomalies or a fourth explicitly specified rule is needed; replacing H1 with H2 is not justified.
+
+## Reproducible output
+
+### cargo test -p impulcifer-dsp --test golden_secs2_mimo --test room_tuning2_apply -- --nocapture --test-threads=1
+
+```text
+MEASURE mimo_mixed_fsiso100_low40_BL level=-15.000084258023438 scale=Some(-3.0) band=-0.19195988119285648 tail=0.5808457596383699
+MEASURE mimo_mixed_fsiso100_low40_BR level=-24.00010524385602 scale=Some(-12.0) band=-0.06243078149539595 tail=0.908751557650133
+MEASURE mimo_mixed_fsiso100_low40_FC level=-15.000037307299136 scale=Some(-3.0) band=-4.122298100924869 tail=0.5689415332966512
+MEASURE mimo_mixed_fsiso100_low40_FL level=-12.0000699792339 scale=Some(0.0) band=-10.249788782520678 tail=0.18872112155973744
+MEASURE mimo_mixed_fsiso100_low40_FR level=-300 scale=None band=-99 tail=-99
+MEASURE mimo_mixed_fsiso100_low40_SL level=-18.000035095320438 scale=Some(-6.0) band=-0.04496169965587617 tail=0.36500250391603406
+MEASURE mimo_mixed_fsiso100_low40_SR level=-15.000111472631978 scale=Some(-3.0) band=-0.28929096914687497 tail=0.549178244245708
+MEASURE mimo_mixed_fsiso150_auto_BL level=-15.000270529084647 scale=Some(-3.0) band=-4.065330969053649 tail=0.9125628364346327
+MEASURE mimo_mixed_fsiso150_auto_BR level=-24.000220395108972 scale=Some(-12.0) band=-0.6081353552107888 tail=0.7131159097576961
+MEASURE mimo_mixed_fsiso150_auto_FC level=-15.000155292099628 scale=Some(-3.0) band=-2.9811769119882037 tail=-0.4689659952149005
+MEASURE mimo_mixed_fsiso150_auto_FL level=-18.000274427054453 scale=Some(-6.0) band=-2.667884635736206 tail=0.9189360294575586
+MEASURE mimo_mixed_fsiso150_auto_FR level=-300 scale=None band=-99 tail=-99
+MEASURE mimo_mixed_fsiso150_auto_SL level=-18.000097182541076 scale=Some(-6.0) band=-2.057378430019924 tail=0.3982310621953786
+MEASURE mimo_mixed_fsiso150_auto_SR level=-21.000039234205442 scale=Some(-9.0) band=-1.3693743311777706 tail=0.700727652942069
+MEASURE MIMO normal equations: max_abs=2.60208521396521064e-18, max_relative_l2=1.39107225567603637e-15, values=120960
+MEASURE MIMO solve: max_abs=4.69810181868979271e-8, max_relative_l2=1.67826904350741651e-9, values=15386
+MEASURE MIMO guard: max_abs=1.41260003353902486e-1, max_relative_l2=3.01715670796333379e-1, values=85
+FAILED
+test mimo_guard_hypotheses ... HYPOTHESIS H1 compared=85 within_1e-9=83 worst=1.41260003353921471e-1 where=mimo_mixed_fsiso100_low40_FC/trial0/tail
+HYPOTHESIS H2 compared=85 within_1e-9=64 worst=7.03463765237492100e-1 where=mimo_mixed_fsiso150_auto_FL/trial0/tail
+HYPOTHESIS H3 compared=85 within_1e-9=73 worst=6.62287960113471685e-1 where=mimo_mixed_fsiso100_low40_FR/trial1/tail
+MISMATCH H1 mimo_mixed_fsiso100_low40_BL trial=0 before=[46.2890625, 76.171875, 71.77734375, 50.68359375, 33.10546875, 129.931640625] after=[130.224609375, 142.08984375, 145.3125, 122.900390625, 149.70703125, 44.82421875] modes/a/b=[(33.1, 1.4443579934759775e-6, 1.7640034101380402e-6), (44.8, 3.4956873494491193e-6, 4.407211775058825e-6), (46.3, 9.733025938871192e-6, 3.5138509181647297e-6), (50.7, 1.3834556887075742e-6, 1.3405359985263904e-6), (71.8, 8.943446292864695e-7, 6.992142524916982e-7), (76.2, 1.0572962014565515e-6, 1.302606448806078e-6), (122.9, 1.2881880523728577e-5, 9.073956245655053e-6), (129.9, 3.11620785951077e-6, 3.177138538000767e-6), (130.2, 2.575937333411777e-6, 2.5870806971890873e-6), (142.1, 9.280128860649638e-6, 9.284168457834956e-6), (145.3, 1.2691552790968828e-5, 1.269492333475064e-5), (149.7, 2.190584404555774e-6, 2.1915774743548837e-6)] got=0.1509470052575174 expected=0.13592482797111435
+MISMATCH H3 mimo_mixed_fsiso100_low40_BL trial=0 before=[46.2890625, 76.171875, 71.77734375, 50.68359375, 33.10546875, 129.931640625] after=[130.224609375, 142.08984375, 145.3125, 122.900390625, 149.70703125, 44.82421875] modes/a/b=[(44.8, 3.4956873494491193e-6, 4.407211775058825e-6), (122.9, 1.2881880523728577e-5, 9.073956245655053e-6), (130.2, 2.575937333411777e-6, 2.5870806971890873e-6), (142.1, 9.280128860649638e-6, 9.284168457834956e-6), (145.3, 1.2691552790968828e-5, 1.269492333475064e-5), (149.7, 2.190584404555774e-6, 2.1915774743548837e-6)] got=0.1509470052575174 expected=0.13592482797111435
+MISMATCH H3 mimo_mixed_fsiso100_low40_BR trial=0 before=[46.875, 52.001953125, 63.8671875, 137.548828125, 90.8203125, 56.25] after=[137.98828125, 133.447265625, 144.287109375, 147.94921875, 151.46484375, 157.32421875] modes/a/b=[(133.4, 1.3348559702693923e-5, 1.3379645991557249e-5), (138.0, 8.452070163043923e-6, 8.433601349866208e-6), (144.3, 7.418099089794952e-6, 7.399826346384765e-6), (147.9, 7.09121634359013e-6, 7.087896022383699e-6), (151.5, 2.283609025355435e-6, 2.2832718897017903e-6), (157.3, 6.431792560593856e-7, 6.431184660412316e-7)] got=0.0015153216745645663 expected=0.649184478942306
+MISMATCH H2 mimo_mixed_fsiso100_low40_BR trial=1 before=[46.875, 52.001953125, 63.8671875, 137.548828125, 90.8203125, 56.25] after=[137.841796875, 45.703125, 48.046875, 133.30078125, 51.85546875, 144.287109375] modes/a/b=[(46.9, 1.6712311939362943e-5, 5.994374252275669e-6), (52.0, 1.1611626494164617e-6, 2.3151182324504794e-6), (56.2, 8.165451811599304e-6, 5.530196885795673e-6), (63.9, 8.130065925621887e-6, 7.2097561679252386e-6), (90.8, 1.1434282553692367e-5, 5.804455517334205e-6), (137.5, 8.314050801679956e-6, 8.300759625236692e-6)] got=0.449520176378922 expected=0.4700869320122055
+MISMATCH H2 mimo_mixed_fsiso100_low40_BR trial=2 before=[46.875, 52.001953125, 63.8671875, 137.548828125, 90.8203125, 56.25] after=[45.99609375, 47.75390625, 137.841796875, 51.85546875, 133.30078125, 64.013671875] modes/a/b=[(46.9, 1.6712311939362943e-5, 8.451655810572112e-6), (52.0, 1.1611626494164617e-6, 1.852396920843488e-6), (56.2, 8.165451811599304e-6, 6.229920351486729e-6), (63.9, 8.130065925621887e-6, 7.410731031402984e-6), (90.8, 1.1434282553692367e-5, 7.181195032940139e-6), (137.5, 8.314050801679956e-6, 8.30463989002079e-6)] got=0.30426148917031504 expected=0.32071469613002085
+MISMATCH H1 mimo_mixed_fsiso100_low40_FC trial=0 before=[47.021484375, 50.68359375, 78.22265625, 53.173828125, 71.630859375, 120.99609375] after=[130.224609375, 122.4609375, 141.796875, 54.4921875, 57.71484375, 44.23828125] modes/a/b=[(44.2, 1.3620778522677706e-6, 3.4298272673451813e-6), (47.0, 1.986709909333855e-5, 3.7418565355438562e-6), (50.7, 1.2157108347139994e-6, 2.464491185112402e-6), (53.2, 3.873242705892385e-6, 2.4859214076414848e-6), (54.5, 1.7564261700343676e-6, 2.436702693718884e-6), (57.7, 5.685440525347499e-6, 2.814245358091727e-6), (71.6, 9.818038781838194e-7, 7.341546649140904e-7), (78.2, 7.539097712954829e-6, 3.0576499524705494e-6), (121.0, 1.596854839888909e-5, 6.036788939961458e-6), (122.5, 1.2637607719022713e-5, 8.243608856577193e-6), (130.2, 1.8530813456800697e-6, 1.8350100808730275e-6), (141.8, 1.0601078600066142e-5, 1.0604453374287967e-5)] got=0.6016054761641578 expected=0.46034547281023636
+MISMATCH H3 mimo_mixed_fsiso100_low40_FC trial=0 before=[47.021484375, 50.68359375, 78.22265625, 53.173828125, 71.630859375, 120.99609375] after=[130.224609375, 122.4609375, 141.796875, 54.4921875, 57.71484375, 44.23828125] modes/a/b=[(44.2, 1.3620778522677706e-6, 3.4298272673451813e-6), (54.5, 1.7564261700343676e-6, 2.436702693718884e-6), (57.7, 5.685440525347499e-6, 2.814245358091727e-6), (122.5, 1.2637607719022713e-5, 8.243608856577193e-6), (130.2, 1.8530813456800697e-6, 1.8350100808730275e-6), (141.8, 1.0601078600066142e-5, 1.0604453374287967e-5)] got=0.6016054761641578 expected=0.46034547281023636
+MISMATCH H3 mimo_mixed_fsiso100_low40_FC trial=1 before=[47.021484375, 50.68359375, 78.22265625, 53.173828125, 71.630859375, 120.99609375] after=[130.078125, 45.703125, 121.875, 47.75390625, 54.052734375, 51.708984375] modes/a/b=[(45.7, 9.213617296198525e-6, 4.1544169332223935e-6), (47.8, 1.8415815133114448e-5, 6.056307168704594e-6), (51.7, 2.6632742951821002e-6, 2.1012499902011785e-6), (54.1, 2.3773270555637852e-6, 2.302794349778847e-6), (121.9, 1.4644634213605373e-5, 9.219487474798064e-6), (130.1, 1.8580466882006e-6, 1.8588022182055928e-6)] got=0.00026483926965753784 expected=0.0853412299944713
+MISMATCH H3 mimo_mixed_fsiso100_low40_FL trial=0 before=[46.875, 78.515625, 71.630859375, 65.478515625, 34.130859375, 51.5625] after=[130.37109375, 123.6328125, 142.08984375, 35.009765625, 119.970703125, 52.294921875] modes/a/b=[(35.0, 8.183705983388023e-6, 2.1537984456060434e-6), (52.3, 1.174302660212908e-6, 8.022978417319553e-7), (120.0, 1.5072098118020982e-5, 4.795318616807822e-6), (123.6, 1.1646894995503634e-5, 1.0313220812160793e-5), (130.4, 1.5358012226123563e-6, 1.4817878255809364e-6), (142.1, 1.1995894749299669e-5, 1.199533941912925e-5)] got=-0.000030158118627469665 expected=0.02830816823401809
+MISMATCH H3 mimo_mixed_fsiso100_low40_FR trial=1 before=[46.728515625, 51.85546875, 63.8671875, 57.12890625, 138.134765625, 133.0078125] after=[137.98828125, 132.71484375, 134.765625, 45.556640625, 47.900390625, 155.419921875] modes/a/b=[(45.6, 3.905592235605884e-6, 3.3453991623715606e-6), (47.9, 9.011538234355752e-6, 4.38567618070172e-6), (132.7, 1.7935245388122786e-5, 1.8103402928085797e-5), (134.8, 1.3050890158479109e-5, 1.3177248981783378e-5), (138.0, 9.134842130261613e-6, 8.949999462518697e-6), (155.4, 1.0366948326735554e-6, 1.0370109003034552e-6)] got=0.006276926164554081 expected=0.6685648862780258
+MISMATCH H3 mimo_mixed_fsiso100_low40_SL trial=0 before=[45.849609375, 50.9765625, 56.982421875, 138.8671875, 63.720703125, 91.259765625] after=[138.8671875, 132.71484375, 145.3125, 149.12109375, 152.63671875, 155.712890625] modes/a/b=[(132.7, 1.2862379484195857e-5, 1.2889086892817595e-5), (138.9, 5.680800317935722e-6, 5.6621750429678026e-6), (145.3, 1.4216183751135373e-5, 1.415640665668513e-5), (149.1, 4.214730058490016e-6, 4.216670422099068e-6), (152.6, 1.8630180145417188e-6, 1.8631557940851426e-6), (155.7, 9.176918464338382e-7, 9.176459710001763e-7)] got=0.00135124938275926 expected=0.41169866169378716
+MISMATCH H2 mimo_mixed_fsiso100_low40_SL trial=1 before=[45.849609375, 50.9765625, 56.982421875, 138.8671875, 63.720703125, 91.259765625] after=[138.8671875, 132.71484375, 45.41015625, 145.3125, 51.26953125, 149.12109375] modes/a/b=[(45.8, 4.876108124474539e-6, 3.2045732897277912e-6), (51.0, 1.3749475891468168e-6, 1.7881197304967442e-6), (57.0, 1.2956594128849779e-5, 5.890513104553981e-6), (63.7, 5.816767476753115e-6, 5.913085440278443e-6), (91.3, 1.0776163953487507e-5, 5.059152331961983e-6), (138.9, 5.680800317935722e-6, 5.6676091751614094e-6)] got=0.1711656771769051 expected=0.2949347560026777
+MISMATCH H2 mimo_mixed_fsiso100_low40_SL trial=2 before=[45.849609375, 50.9765625, 56.982421875, 138.8671875, 63.720703125, 91.259765625] after=[138.8671875, 45.556640625, 51.123046875, 47.607421875, 132.71484375, 145.3125] modes/a/b=[(45.8, 4.876108124474539e-6, 3.6076241160624304e-6), (51.0, 1.3749475891468168e-6, 1.4445693135967543e-6), (57.0, 1.2956594128849779e-5, 7.61776935113626e-6), (63.7, 5.816767476753115e-6, 5.859817605869434e-6), (91.3, 1.0776163953487507e-5, 6.483774652081177e-6), (138.9, 5.680800317935722e-6, 5.671458968598775e-6)] got=0.03217836183728067 expected=0.05475037558740204
+MISMATCH H3 mimo_mixed_fsiso100_low40_SR trial=0 before=[45.849609375, 130.224609375, 51.26953125, 76.904296875, 65.185546875, 71.19140625] after=[130.224609375, 146.484375, 141.796875, 159.814453125, 149.560546875, 120.1171875] modes/a/b=[(120.1, 1.3695102472005536e-5, 3.2614034700592312e-6), (130.2, 2.9068628232194777e-6, 2.9474180377392133e-6), (141.8, 5.6760701994298546e-6, 5.6833076495230754e-6), (146.5, 7.909841495664796e-6, 7.9143145482797e-6), (149.6, 2.236726816124635e-6, 2.238024199711869e-6), (159.8, 9.997633158568268e-6, 9.993559726972173e-6)] got=0.009025799094535613 expected=0.15833175007483147
+MISMATCH H3 mimo_mixed_fsiso100_low40_SR trial=1 before=[45.849609375, 130.224609375, 51.26953125, 76.904296875, 65.185546875, 71.19140625] after=[130.224609375, 123.779296875, 159.814453125, 146.630859375, 45.41015625, 141.943359375] modes/a/b=[(45.4, 4.942702907147716e-6, 3.6920770042310505e-6), (123.8, 1.3886927519567602e-5, 1.0597829913291168e-5), (130.2, 2.9068628232194777e-6, 2.930938732935761e-6), (141.9, 5.952296172940943e-6, 5.95764447804202e-6), (146.6, 7.741387972559997e-6, 7.744606296529687e-6), (159.8, 9.997633158568268e-6, 9.994748949734658e-6)] got=0.005373303931556115 expected=0.08237673663687238
+MISMATCH H2 mimo_mixed_fsiso150_auto_BL trial=0 before=[46.2890625, 76.171875, 71.77734375, 50.68359375, 33.10546875, 129.931640625] after=[33.544921875, 45.263671875, 51.416015625, 54.4921875, 28.857421875, 48.046875] modes/a/b=[(33.1, 1.4443579934759775e-6, 1.63980824762983e-6), (46.3, 9.733025938871192e-6, 4.25559776270947e-6), (50.7, 1.3834556887075742e-6, 1.038238840453569e-6), (71.8, 8.943446292864695e-7, 6.06320439429297e-7), (76.2, 1.0572962014565515e-6, 1.4889099885159772e-6), (129.9, 3.11620785951077e-6, 2.927005083922726e-6)] got=0.22300765727572025 expected=0.4093308716455926
+MISMATCH H3 mimo_mixed_fsiso150_auto_BL trial=1 before=[46.2890625, 76.171875, 71.77734375, 50.68359375, 33.10546875, 129.931640625] after=[45.41015625, 33.3984375, 51.26953125, 76.025390625, 72.0703125, 28.857421875] modes/a/b=[(28.9, 5.438139022495625e-7, 3.4762071605469434e-7), (33.4, 1.5179008393414098e-6, 1.6553748547225525e-6), (45.4, 4.879339120075219e-6, 4.350413470969128e-6), (51.3, 8.965995852548862e-7, 5.762530941590808e-7), (72.1, 6.110531979111855e-7, 3.184280729709857e-7), (76.0, 1.0385645297983494e-6, 1.2201763334035267e-6)] got=0.10498366670133237 expected=0.13688442546522608
+MISMATCH H2 mimo_mixed_fsiso150_auto_BR trial=0 before=[46.875, 52.001953125, 63.8671875, 137.548828125, 90.8203125, 56.25] after=[51.5625, 130.517578125, 45.41015625, 48.046875, 139.306640625, 134.1796875] modes/a/b=[(46.9, 1.6712311939362943e-5, 5.062870850231326e-6), (52.0, 1.1611626494164617e-6, 2.5225933352336306e-6), (56.2, 8.165451811599304e-6, 4.9744434051577065e-6), (63.9, 8.130065925621887e-6, 6.436924579190145e-6), (90.8, 1.1434282553692367e-5, 3.919339945434108e-6), (137.5, 8.314050801679956e-6, 3.5724627402748156e-6)] got=0.5054312795162647 expected=0.5787447711884571
+MISMATCH H2 mimo_mixed_fsiso150_auto_BR trial=1 before=[46.875, 52.001953125, 63.8671875, 137.548828125, 90.8203125, 56.25] after=[45.703125, 47.900390625, 51.708984375, 130.517578125, 139.013671875, 134.033203125] modes/a/b=[(46.9, 1.6712311939362943e-5, 7.544170078820436e-6), (52.0, 1.1611626494164617e-6, 1.976843079926684e-6), (56.2, 8.165451811599304e-6, 5.7859658682162175e-6), (63.9, 8.130065925621887e-6, 6.811977015778873e-6), (90.8, 1.1434282553692367e-5, 5.58880815844446e-6), (137.5, 8.314050801679956e-6, 4.354583120507368e-6)] got=0.34661870869809824 expected=0.39678759150876375
+MISMATCH H2 mimo_mixed_fsiso150_auto_BR trial=2 before=[46.875, 52.001953125, 63.8671875, 137.548828125, 90.8203125, 56.25] after=[46.142578125, 47.4609375, 51.85546875, 138.8671875, 64.16015625, 133.88671875] modes/a/b=[(46.9, 1.6712311939362943e-5, 9.76018657748008e-6), (52.0, 1.1611626494164617e-6, 1.6643749542507676e-6), (56.2, 8.165451811599304e-6, 6.420549299323184e-6), (63.9, 8.130065925621887e-6, 7.137070323634942e-6), (90.8, 1.1434282553692367e-5, 7.032728713189754e-6), (137.5, 8.314050801679956e-6, 5.208906625041704e-6)] got=0.23453717131718502 expected=0.24949333572187687
+MISMATCH H2 mimo_mixed_fsiso150_auto_BR trial=3 before=[46.875, 52.001953125, 63.8671875, 137.548828125, 90.8203125, 56.25] after=[46.875, 51.85546875, 64.013671875, 138.8671875, 56.103515625, 133.740234375] modes/a/b=[(46.9, 1.6712311939362943e-5, 1.1559247105469185e-5), (52.0, 1.1611626494164617e-6, 1.4801989241804059e-6), (56.2, 8.165451811599304e-6, 6.899906043000589e-6), (63.9, 8.130065925621887e-6, 7.3970777499319695e-6), (90.8, 1.1434282553692367e-5, 8.186271056441746e-6), (137.5, 8.314050801679956e-6, 5.964390599538462e-6)] got=0.15814053988660634 expected=0.1696732705174344
+MISMATCH H3 mimo_mixed_fsiso150_auto_FC trial=0 before=[47.021484375, 50.68359375, 78.22265625, 53.173828125, 71.630859375, 120.99609375] after=[33.984375, 54.19921875, 29.443359375, 51.85546875, 57.568359375, 45.556640625] modes/a/b=[(29.4, 5.913876686349771e-7, 4.838217730457126e-7), (34.0, 1.8381350169135223e-6, 1.3208617337580665e-6), (45.6, 8.292327387969346e-6, 3.8089702125689883e-6), (51.9, 3.0963657639930387e-6, 2.1222631243655985e-6), (54.2, 2.2013639830991174e-6, 2.3208520491019376e-6), (57.6, 5.560520925535431e-6, 3.5209654176862674e-6)] got=0.03443339861296742 expected=0.21522840827596243
+MISMATCH H2 mimo_mixed_fsiso150_auto_FC trial=1 before=[47.021484375, 50.68359375, 78.22265625, 53.173828125, 71.630859375, 120.99609375] after=[53.90625, 45.703125, 51.708984375, 48.046875, 33.69140625, 29.296875] modes/a/b=[(47.0, 1.986709909333855e-5, 7.919548719992576e-6), (50.7, 1.2157108347139994e-6, 1.0599889835910303e-6), (53.2, 3.873242705892385e-6, 2.9463105963175463e-6), (71.6, 9.818038781838194e-7, 5.423581979418561e-7), (78.2, 7.539097712954829e-6, 4.096787809184195e-6), (121.0, 1.596854839888909e-5, 5.5092634787862395e-6)] got=-0.0892934033476395 expected=-0.07034489928225392
+MISMATCH H2 mimo_mixed_fsiso150_auto_FL trial=0 before=[46.875, 78.515625, 71.630859375, 65.478515625, 34.130859375, 51.5625] after=[34.716796875, 29.8828125, 51.85546875, 54.638671875, 129.931640625, 157.32421875] modes/a/b=[(34.1, 3.894197043768232e-6, 1.828706356506283e-6), (46.9, 2.202770049990866e-5, 3.705641541131132e-6), (51.6, 8.88028697630928e-7, 7.290048389863324e-7), (65.5, 3.231372987527207e-6, 2.783689992900815e-6), (71.6, 1.5491806170045397e-6, 9.794218319276328e-7), (78.5, 8.074105616149076e-6, 3.050762482669663e-6)] got=-0.09714933300016151 expected=0.6063144322373306
+MISMATCH H2 mimo_mixed_fsiso150_auto_FL trial=1 before=[46.875, 78.515625, 71.630859375, 65.478515625, 34.130859375, 51.5625] after=[34.423828125, 47.900390625, 45.703125, 29.8828125, 51.708984375, 76.318359375] modes/a/b=[(34.1, 3.894197043768232e-6, 2.135157984365764e-6), (46.9, 2.202770049990866e-5, 7.0964313703291464e-6), (51.6, 8.88028697630928e-7, 6.114783807612893e-7), (65.5, 3.231372987527207e-6, 2.0917786195117643e-6), (71.6, 1.5491806170045397e-6, 8.645433491316763e-7), (78.5, 8.074105616149076e-6, 4.1572629130775285e-6)] got=-0.24306884077341814 expected=0.2253945202894408
+MISMATCH H2 mimo_mixed_fsiso150_auto_FL trial=2 before=[46.875, 78.515625, 71.630859375, 65.478515625, 34.130859375, 51.5625] after=[47.021484375, 34.27734375, 76.46484375, 29.8828125, 78.955078125, 51.708984375] modes/a/b=[(34.1, 3.894197043768232e-6, 2.500148588250813e-6), (46.9, 2.202770049990866e-5, 1.047472183142083e-5), (51.6, 8.88028697630928e-7, 6.100663726170167e-7), (65.5, 3.231372987527207e-6, 2.012295730645521e-6), (71.6, 1.5491806170045397e-6, 9.235211366370746e-7), (78.5, 8.074105616149076e-6, 5.120471179981254e-6)] got=-0.24457487061854458 expected=0.1378404044186305
+MISMATCH H2 mimo_mixed_fsiso150_auto_FR trial=0 before=[46.728515625, 51.85546875, 63.8671875, 57.12890625, 138.134765625, 133.0078125] after=[51.416015625, 130.517578125, 45.263671875, 55.6640625, 139.013671875, 47.900390625] modes/a/b=[(46.7, 7.341315629149469e-6, 3.460991188036327e-6), (51.9, 7.183723871307114e-7, 2.2540182768583346e-6), (57.1, 8.484601508169203e-6, 5.130796479643595e-6), (63.9, 9.064967319632628e-6, 7.137802210755185e-6), (133.0, 1.7738373742827155e-5, 2.4081447147143995e-6), (138.1, 9.040755159841633e-6, 3.8109205064331835e-6)] got=0.7449117040570857 expected=0.9288259459389677
+MISMATCH H2 mimo_mixed_fsiso150_auto_FR trial=1 before=[46.728515625, 51.85546875, 63.8671875, 57.12890625, 138.134765625, 133.0078125] after=[45.41015625, 51.5625, 47.900390625, 130.517578125, 138.8671875, 55.95703125] modes/a/b=[(46.7, 7.341315629149469e-6, 4.2894306487235645e-6), (51.9, 7.183723871307114e-7, 1.5874149977891943e-6), (57.1, 8.484601508169203e-6, 5.9198707091625314e-6), (63.9, 9.064967319632628e-6, 7.619917852064268e-6), (133.0, 1.7738373742827155e-5, 5.396848729457694e-6), (138.1, 9.040755159841633e-6, 4.5867263475217744e-6)] got=0.516511272972346 expected=0.626178943776004
+MISMATCH H2 mimo_mixed_fsiso150_auto_FR trial=2 before=[46.728515625, 51.85546875, 63.8671875, 57.12890625, 138.134765625, 133.0078125] after=[45.556640625, 47.75390625, 51.5625, 138.720703125, 56.689453125, 134.1796875] modes/a/b=[(46.7, 7.341315629149469e-6, 5.027971798420649e-6), (51.9, 7.183723871307114e-7, 1.2242927789398459e-6), (57.1, 8.484601508169203e-6, 6.57347574577922e-6), (63.9, 9.064967319632628e-6, 8.001494279629406e-6), (133.0, 1.7738373742827155e-5, 8.255198875740039e-6), (138.1, 9.040755159841633e-6, 5.5108572181986196e-6)] got=0.34730348616260526 expected=0.43734075989564986
+MISMATCH H2 mimo_mixed_fsiso150_auto_FR trial=3 before=[46.728515625, 51.85546875, 63.8671875, 57.12890625, 138.134765625, 133.0078125] after=[45.703125, 47.314453125, 51.708984375, 138.720703125, 56.982421875, 64.013671875] modes/a/b=[(46.7, 7.341315629149469e-6, 5.627024874858174e-6), (51.9, 7.183723871307114e-7, 1.0217494832762796e-6), (57.1, 8.484601508169203e-6, 7.0837970745585556e-6), (63.9, 9.064967319632628e-6, 8.2918098523979e-6), (133.0, 1.7738373742827155e-5, 1.0650892213760756e-5), (138.1, 9.040755159841633e-6, 6.352988067033736e-6)] got=0.22949219433715495 expected=0.27795911972001036
+MISMATCH H2 mimo_mixed_fsiso150_auto_FR trial=4 before=[46.728515625, 51.85546875, 63.8671875, 57.12890625, 138.134765625, 133.0078125] after=[45.849609375, 51.708984375, 63.8671875, 57.12890625, 138.57421875, 134.033203125] modes/a/b=[(46.7, 7.341315629149469e-6, 6.089315440707678e-6), (51.9, 7.183723871307114e-7, 9.056883220885619e-7), (57.1, 8.484601508169203e-6, 7.468935624718987e-6), (63.9, 9.064967319632628e-6, 8.507451571559115e-6), (133.0, 1.7738373742827155e-5, 1.2533423226772759e-5), (138.1, 9.040755159841633e-6, 7.0433422755260576e-6)] got=0.150943706214668 expected=0.18710503828934952
+MISMATCH H3 mimo_mixed_fsiso150_auto_SR trial=0 before=[45.849609375, 130.224609375, 51.26953125, 76.904296875, 65.185546875, 71.19140625] after=[51.416015625, 45.41015625, 33.544921875, 54.345703125, 48.193359375, 129.638671875] modes/a/b=[(33.5, 1.4424759083583646e-6, 1.572368522209389e-6), (45.4, 4.942702907147716e-6, 4.0193808146738665e-6), (48.2, 1.0062658388301473e-5, 3.6890938917675926e-6), (51.4, 3.001665309199296e-6, 2.608488099611766e-6), (54.3, 3.757371117818856e-6, 2.8060797544292307e-6), (129.6, 4.943508539135871e-6, 3.1382615808602175e-6)] got=0.056168658695148886 expected=0.19198155557492974
+MISMATCH H2 mimo_mixed_fsiso150_auto_SR trial=1 before=[45.849609375, 130.224609375, 51.26953125, 76.904296875, 65.185546875, 71.19140625] after=[51.26953125, 45.41015625, 54.19921875, 76.46484375, 33.251953125, 130.224609375] modes/a/b=[(45.8, 6.738643206956804e-6, 4.237628470290249e-6), (51.3, 3.1095153106404305e-6, 2.510611526994684e-6), (65.2, 4.449606566495021e-6, 2.3197615814509913e-6), (71.2, 1.7415278488015024e-6, 8.014858887160413e-7), (76.9, 1.9020273916020574e-6, 2.2525899107425826e-6), (130.2, 2.9068628232194777e-6, 1.0780463879678968e-6)] got=0.11019805133673262 expected=0.26038518999596383
+MISMATCH H2 mimo_mixed_fsiso150_auto_SR trial=2 before=[45.849609375, 130.224609375, 51.26953125, 76.904296875, 65.185546875, 71.19140625] after=[51.26953125, 45.556640625, 76.46484375, 130.224609375, 54.052734375, 65.478515625] modes/a/b=[(45.8, 6.738643206956804e-6, 4.753492856725987e-6), (51.3, 3.1095153106404305e-6, 2.543299226545278e-6), (65.2, 4.449606566495021e-6, 2.3440981047496733e-6), (71.2, 1.7415278488015024e-6, 9.580082823883976e-7), (76.9, 1.9020273916020574e-6, 2.094609763152742e-6), (130.2, 2.9068628232194777e-6, 8.05140587111109e-7)] got=0.06282953467355402 expected=0.17776130541836718
+MISMATCH H2 mimo_mixed_fsiso150_auto_SR trial=3 before=[45.849609375, 130.224609375, 51.26953125, 76.904296875, 65.185546875, 71.19140625] after=[51.26953125, 45.556640625, 130.224609375, 76.611328125, 65.33203125, 54.052734375] modes/a/b=[(45.8, 6.738643206956804e-6, 5.225725888015548e-6), (51.3, 3.1095153106404305e-6, 2.6373838293320285e-6), (65.2, 4.449606566495021e-6, 2.6594642833819067e-6), (71.2, 1.7415278488015024e-6, 1.127687944673138e-6), (76.9, 1.9020273916020574e-6, 2.010500820176417e-6), (130.2, 2.9068628232194777e-6, 1.0144896305297565e-6)] got=0.036131231356642965 expected=0.10510914794131339
+FAILED
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.85s
+error: test failed, to rerun pass `-p impulcifer-dsp --test golden_secs2_mimo`
+EXIT 101
+```
+
+### cargo test -p impulcifer-dsp --test room_tuning2_apply -- --nocapture --test-threads=1
+
+```text
+test room_tuning2_matches_secs2_mimo ... REFERENCE linear/fsiso150/auto design_seconds=4.282585074
+REFERENCE linear/fsiso150/auto/FL level_delta=0.000188081 support_l2=0.288824656 max_abs=8.243445869001135e-3 scale=Some(-9.0) late=-0.525864165/0.130862513 expected_late={"tail_change":0.08370939864836278,"worst_band_db":-0.6064483500395426}
+VARIANT lapack_gesvd linear/fsiso150/auto/FL level_delta=0.000221907487990336 support_l2=0.0009604909769251142
+VARIANT numpy_avx512 linear/fsiso150/auto/FL level_delta=0.00012091377130474257 support_l2=0.004554591390944338
+VARIANT openblas_haswell linear/fsiso150/auto/FL level_delta=3.0001723657445325 support_l2=0.4263540323387467
+VARIANT openblas_nehalem linear/fsiso150/auto/FL level_delta=0.00004771968328753928 support_l2=0.008926386927595596
+VARIANT openblas_sandybridge linear/fsiso150/auto/FL level_delta=0.00014175597568311105 support_l2=0.011656157952275297
+REFERENCE linear/fsiso150/auto/FR level_delta=0.000010606 support_l2=0.024134045 max_abs=3.483291835019407e-4 scale=Some(-12.0) late=-1.470954490/0.128462488 expected_late={"tail_change":0.14222138227025163,"worst_band_db":-1.4648569392012694}
+VARIANT lapack_gesvd linear/fsiso150/auto/FR level_delta=0.00016300189424001132 support_l2=0.02983133346991192
+VARIANT numpy_avx512 linear/fsiso150/auto/FR level_delta=0.00012555305741912548 support_l2=0.0383368659435643
+VARIANT openblas_haswell linear/fsiso150/auto/FR level_delta=0.00019137715653982923 support_l2=0.01611175889990373
+VARIANT openblas_nehalem linear/fsiso150/auto/FR level_delta=0.0002143162194450099 support_l2=0.00904850767840343
+VARIANT openblas_sandybridge linear/fsiso150/auto/FR level_delta=0.000056710824310357566 support_l2=0.03821530131852947
+REFERENCE linear/fsiso150/auto/FC level_delta=-0.000038602 support_l2=0.075339184 max_abs=3.5597207914406554e-3 scale=Some(-3.0) late=-2.304386369/0.137692916 expected_late={"tail_change":0.13771264653410775,"worst_band_db":-2.2793132763253414}
+VARIANT lapack_gesvd linear/fsiso150/auto/FC level_delta=0.00018949327049178066 support_l2=0.061081515346080965
+VARIANT numpy_avx512 linear/fsiso150/auto/FC level_delta=-0.00005583028765876463 support_l2=0.01997579118304714
+VARIANT openblas_haswell linear/fsiso150/auto/FC level_delta=0.00021780846086016936 support_l2=0.02210484883027762
+VARIANT openblas_nehalem linear/fsiso150/auto/FC level_delta=0.000060379821738010264 support_l2=0.0151194758903638
+VARIANT openblas_sandybridge linear/fsiso150/auto/FC level_delta=0.00018396035895840157 support_l2=0.01897336558729884
+REFERENCE linear/fsiso150/auto/BL level_delta=-0.000060510 support_l2=0.856236901 max_abs=4.072551538073092e-2 scale=Some(-6.0) late=-2.151258726/0.106628222 expected_late={"tail_change":0.04190150648954669,"worst_band_db":-1.0677465323667348}
+VARIANT lapack_gesvd linear/fsiso150/auto/BL level_delta=0.00026865413046550657 support_l2=0.028070370923001627
+VARIANT numpy_avx512 linear/fsiso150/auto/BL level_delta=0.00007318987838189628 support_l2=0.017380409602197264
+VARIANT openblas_haswell linear/fsiso150/auto/BL level_delta=0.0001624999548788253 support_l2=0.030880263501578884
+VARIANT openblas_nehalem linear/fsiso150/auto/BL level_delta=0.00018160346605355926 support_l2=0.03582868813943077
+VARIANT openblas_sandybridge linear/fsiso150/auto/BL level_delta=0.00015744712332832478 support_l2=0.02229407877849507
+REFERENCE linear/fsiso150/auto/SL level_delta=0.000126758 support_l2=0.002952399 max_abs=4.5078403455346e-5 scale=Some(-12.0) late=-0.694915853/0.138533284 expected_late={"tail_change":0.1390985731402232,"worst_band_db":-0.6948801146916603}
+VARIANT lapack_gesvd linear/fsiso150/auto/SL level_delta=0.00011283439409126572 support_l2=0.002769856625883196
+VARIANT numpy_avx512 linear/fsiso150/auto/SL level_delta=-0.000012512275912257564 support_l2=0.004009376629365894
+VARIANT openblas_haswell linear/fsiso150/auto/SL level_delta=-0.00002867862720634662 support_l2=0.00442394609696436
+VARIANT openblas_nehalem linear/fsiso150/auto/SL level_delta=0.000016201026774353977 support_l2=0.003179192960809436
+VARIANT openblas_sandybridge linear/fsiso150/auto/SL level_delta=0.00012846459052795467 support_l2=0.002906346838777276
+REFERENCE linear/fsiso150/auto/SR level_delta=0.000302507 support_l2=0.131069288 max_abs=2.832724423060042e-3 scale=Some(-9.0) late=-1.698287293/0.103212703 expected_late={"tail_change":0.10498591518950333,"worst_band_db":-1.6204982439111302}
+VARIANT lapack_gesvd linear/fsiso150/auto/SR level_delta=0.0001904302429984739 support_l2=0.01447413419078992
+VARIANT numpy_avx512 linear/fsiso150/auto/SR level_delta=0.00014458391180482977 support_l2=0.12654170329233358
+VARIANT openblas_haswell linear/fsiso150/auto/SR level_delta=0.000154522732092488 support_l2=0.09122836544649573
+VARIANT openblas_nehalem linear/fsiso150/auto/SR level_delta=0.00010571584392948807 support_l2=0.08699963050550528
+VARIANT openblas_sandybridge linear/fsiso150/auto/SR level_delta=0.00009807726321042765 support_l2=0.09374330707671129
+REFERENCE linear/fsiso150/auto/BR level_delta=2.999677627 support_l2=0.416991467 max_abs=1.7023277354976864e-2 scale=Some(-3.0) late=-2.440014541/0.033446457 expected_late={"tail_change":0.09583169987829296,"worst_band_db":-1.6826220757655916}
+VARIANT lapack_gesvd linear/fsiso150/auto/BR level_delta=2.999715484828714 support_l2=0.42498341860072786
+VARIANT numpy_avx512 linear/fsiso150/auto/BR level_delta=2.999886553301719 support_l2=0.4316634407462263
+VARIANT openblas_haswell linear/fsiso150/auto/BR level_delta=2.999836854245274 support_l2=0.43174721457933424
+VARIANT openblas_nehalem linear/fsiso150/auto/BR level_delta=2.999688039709815 support_l2=0.41738503204732463
+VARIANT openblas_sandybridge linear/fsiso150/auto/BR level_delta=2.9997662085091896 support_l2=0.43171070528799643
+REFERENCE linear/fsiso150/auto changed_steps=1 worst_variant=2
+REFERENCE mixed/fsiso100/low40 design_seconds=3.907189496
+REFERENCE mixed/fsiso100/low40/FL level_delta=-6.000058927 support_l2=0.611694919 max_abs=4.0568759298774834e-2 scale=Some(-6.0) late=-1.961815875/0.100982475 expected_late={"tail_change":0.028308168234011305,"worst_band_db":-10.24978878252253}
+VARIANT lapack_gesvd mixed/fsiso100/low40/FL level_delta=-6.000012378282056 support_l2=0.5323570678148551
+VARIANT numpy_avx512 mixed/fsiso100/low40/FL level_delta=0.000011317074930516924 support_l2=0.03988093794806209
+VARIANT openblas_haswell mixed/fsiso100/low40/FL level_delta=-0.00004453865321529804 support_l2=0.0014716351698517718
+VARIANT openblas_nehalem mixed/fsiso100/low40/FL level_delta=0.00000720411783738939 support_l2=0.06341824173278726
+VARIANT openblas_sandybridge mixed/fsiso100/low40/FL level_delta=0.000040039985568895986 support_l2=0.0038348229769119735
+REFERENCE mixed/fsiso100/low40/FR level_delta=0.000000000 support_l2=0.000000000 max_abs=0e0 scale=None late=-99.000000000/-14.850000000 expected_late={"tail_change":null,"worst_band_db":null}
+VARIANT lapack_gesvd mixed/fsiso100/low40/FR level_delta=0 support_l2=0.0
+VARIANT numpy_avx512 mixed/fsiso100/low40/FR level_delta=0 support_l2=0.0
+VARIANT openblas_haswell mixed/fsiso100/low40/FR level_delta=0 support_l2=0.0
+VARIANT openblas_nehalem mixed/fsiso100/low40/FR level_delta=0 support_l2=0.0
+VARIANT openblas_sandybridge mixed/fsiso100/low40/FR level_delta=0 support_l2=0.0
+REFERENCE mixed/fsiso100/low40/FC level_delta=0.000001164 support_l2=0.171632354 max_abs=5.794038041964592e-3 scale=Some(-3.0) late=-4.074004127/0.016158924 expected_late={"tail_change":0.08534122999447218,"worst_band_db":-4.1222981009248025}
+VARIANT lapack_gesvd mixed/fsiso100/low40/FC level_delta=0.0000036529197107171285 support_l2=0.035947658635556726
+VARIANT numpy_avx512 mixed/fsiso100/low40/FC level_delta=0.000015267142686070656 support_l2=0.0031966834072174495
+VARIANT openblas_haswell mixed/fsiso100/low40/FC level_delta=-0.00004647757225839655 support_l2=0.010223116193791194
+VARIANT openblas_nehalem mixed/fsiso100/low40/FC level_delta=0.00002737674172337279 support_l2=0.007213016138601747
+VARIANT openblas_sandybridge mixed/fsiso100/low40/FC level_delta=-0.00005566896961184398 support_l2=0.004516579063628009
+REFERENCE mixed/fsiso100/low40/BL level_delta=0.000049349 support_l2=0.684538820 max_abs=4.9634474725065186e-2 scale=Some(0.0) late=-0.219016499/0.113716110 expected_late={"tail_change":0.13592482797111505,"worst_band_db":-0.2716423185952849}
+VARIANT lapack_gesvd mixed/fsiso100/low40/BL level_delta=-3.0000184254121205 support_l2=0.30407892160125505
+VARIANT numpy_avx512 mixed/fsiso100/low40/BL level_delta=0.000018496691726710424 support_l2=0.05602306786475751
+VARIANT openblas_haswell mixed/fsiso100/low40/BL level_delta=0.0000157090283270378 support_l2=0.05759276201435488
+VARIANT openblas_nehalem mixed/fsiso100/low40/BL level_delta=-0.00006046669609460764 support_l2=0.05514502509769374
+VARIANT openblas_sandybridge mixed/fsiso100/low40/BL level_delta=0.000027839111956140528 support_l2=0.06231943314387411
+REFERENCE mixed/fsiso100/low40/SL level_delta=5.999990128 support_l2=0.997751333 max_abs=3.3977349403671864e-2 scale=Some(0.0) late=-0.087601295/0.144793987 expected_late={"tail_change":0.05475037558740551,"worst_band_db":-0.04496169965587714}
+VARIANT lapack_gesvd mixed/fsiso100/low40/SL level_delta=6.000033891562957 support_l2=1.045620096248696
+VARIANT numpy_avx512 mixed/fsiso100/low40/SL level_delta=-6.000078689651492 support_l2=0.5163992888060525
+VARIANT openblas_haswell mixed/fsiso100/low40/SL level_delta=-3.0000099866116905 support_l2=0.29981584459635224
+VARIANT openblas_nehalem mixed/fsiso100/low40/SL level_delta=-5.999991683643646 support_l2=0.5145248209435467
+VARIANT openblas_sandybridge mixed/fsiso100/low40/SL level_delta=-2.9999692145949517 support_l2=0.3072595000766432
+REFERENCE mixed/fsiso100/low40/SR level_delta=0.000007659 support_l2=0.048394655 max_abs=2.0526655411892756e-3 scale=Some(-3.0) late=-0.295199906/0.085078889 expected_late={"tail_change":0.08237673663687096,"worst_band_db":-0.28929096914684144}
+VARIANT lapack_gesvd mixed/fsiso100/low40/SR level_delta=0.000049536239243863633 support_l2=0.06398019860045645
+VARIANT numpy_avx512 mixed/fsiso100/low40/SR level_delta=0.000030886344665859156 support_l2=0.1013728023083956
+VARIANT openblas_haswell mixed/fsiso100/low40/SR level_delta=0.00008902264812604699 support_l2=0.06647656089331555
+VARIANT openblas_nehalem mixed/fsiso100/low40/SR level_delta=0.00009026457823146927 support_l2=0.0509089082252906
+VARIANT openblas_sandybridge mixed/fsiso100/low40/SR level_delta=0.00010421311790409504 support_l2=0.07312506779996229
+REFERENCE mixed/fsiso100/low40/BR level_delta=0.000094302 support_l2=0.051423937 max_abs=8.188387357764212e-4 scale=Some(-12.0) late=-0.063420751/0.114564850 expected_late={"tail_change":0.1363127336475263,"worst_band_db":-0.06243078149539497}
+VARIANT lapack_gesvd mixed/fsiso100/low40/BR level_delta=-0.000010971341666277112 support_l2=0.007954483034918585
+VARIANT numpy_avx512 mixed/fsiso100/low40/BR level_delta=0.0000912016784972991 support_l2=0.002514611318415844
+VARIANT openblas_haswell mixed/fsiso100/low40/BR level_delta=-0.00000952785324059846 support_l2=0.0020093929382828573
+VARIANT openblas_nehalem mixed/fsiso100/low40/BR level_delta=-0.00006536410170809859 support_l2=0.003137998629225176
+VARIANT openblas_sandybridge mixed/fsiso100/low40/BR level_delta=0.00008777970851880923 support_l2=0.002018185218223796
+REFERENCE mixed/fsiso100/low40 changed_steps=2 worst_variant=3
+REFERENCE mixed/fsiso150/auto design_seconds=4.576465989
+REFERENCE mixed/fsiso150/auto/FL level_delta=3.000137012 support_l2=0.552352940 max_abs=2.286118965221605e-2 scale=Some(-3.0) late=-3.272194575/-0.031991093 expected_late={"tail_change":0.137840404418629,"worst_band_db":-2.667884635736209}
+VARIANT lapack_gesvd mixed/fsiso150/auto/FL level_delta=0.0001907588505929425 support_l2=0.1214591456283015
+VARIANT numpy_avx512 mixed/fsiso150/auto/FL level_delta=0.00006207282770276379 support_l2=0.018631018692080857
+VARIANT openblas_haswell mixed/fsiso150/auto/FL level_delta=0.00012076418121509391 support_l2=0.0016504974412136098
+VARIANT openblas_nehalem mixed/fsiso150/auto/FL level_delta=0.00016083474337236225 support_l2=0.0307512868201759
+VARIANT openblas_sandybridge mixed/fsiso150/auto/FL level_delta=0.00011153566116206548 support_l2=0.00446914449703479
+REFERENCE mixed/fsiso150/auto/FR level_delta=0.000000000 support_l2=0.000000000 max_abs=0e0 scale=None late=-99.000000000/-14.850000000 expected_late={"tail_change":null,"worst_band_db":null}
+VARIANT lapack_gesvd mixed/fsiso150/auto/FR level_delta=0 support_l2=0.0
+VARIANT numpy_avx512 mixed/fsiso150/auto/FR level_delta=0 support_l2=0.0
+VARIANT openblas_haswell mixed/fsiso150/auto/FR level_delta=0 support_l2=0.0
+VARIANT openblas_nehalem mixed/fsiso150/auto/FR level_delta=0 support_l2=0.0
+VARIANT openblas_sandybridge mixed/fsiso150/auto/FR level_delta=0 support_l2=0.0
+REFERENCE mixed/fsiso150/auto/FC level_delta=-0.000172211 support_l2=0.111513805 max_abs=3.47789131811247e-3 scale=Some(-3.0) late=-3.060627663/-0.068009630 expected_late={"tail_change":-0.07034489928225182,"worst_band_db":-2.9811769119890696}
+VARIANT lapack_gesvd mixed/fsiso150/auto/FC level_delta=0.00007980659141004764 support_l2=0.0245137249968377
+VARIANT numpy_avx512 mixed/fsiso150/auto/FC level_delta=0.00010420614476025492 support_l2=0.0028787261994542928
+VARIANT openblas_haswell mixed/fsiso150/auto/FC level_delta=-0.00006752565775691721 support_l2=0.007210344874246437
+VARIANT openblas_nehalem mixed/fsiso150/auto/FC level_delta=0.00008486779362826269 support_l2=0.005543982634476855
+VARIANT openblas_sandybridge mixed/fsiso150/auto/FC level_delta=-0.00006198980194405124 support_l2=0.003999997958384296
+REFERENCE mixed/fsiso150/auto/BL level_delta=-2.999819828 support_l2=0.492801656 max_abs=2.570030624777369e-2 scale=Some(-6.0) late=-1.953334607/0.118607561 expected_late={"tail_change":0.1368844254652269,"worst_band_db":-4.065330969053657}
+VARIANT lapack_gesvd mixed/fsiso150/auto/BL level_delta=-2.9998969722027056 support_l2=0.301359589620858
+VARIANT numpy_avx512 mixed/fsiso150/auto/BL level_delta=0.0002465260837425376 support_l2=0.04446900309758868
+VARIANT openblas_haswell mixed/fsiso150/auto/BL level_delta=0.00006935708501920601 support_l2=0.0455077742183558
+VARIANT openblas_nehalem mixed/fsiso150/auto/BL level_delta=0.000022722558563614825 support_l2=0.0413897604941415
+VARIANT openblas_sandybridge mixed/fsiso150/auto/BL level_delta=0.00021025101471394692 support_l2=0.04471134625903966
+REFERENCE mixed/fsiso150/auto/SL level_delta=5.999853564 support_l2=0.997116455 max_abs=4.638508098436068e-2 scale=Some(0.0) late=-4.280387785/0.134381462 expected_late={"tail_change":0.05973465932930784,"worst_band_db":-2.05737843001986}
+VARIANT lapack_gesvd mixed/fsiso150/auto/SL level_delta=5.999852798847016 support_l2=1.0213289004106538
+VARIANT numpy_avx512 mixed/fsiso150/auto/SL level_delta=-6.000120737984265 support_l2=0.5102735179681622
+VARIANT openblas_haswell mixed/fsiso150/auto/SL level_delta=-3.0000279837421076 support_l2=0.29907502774945727
+VARIANT openblas_nehalem mixed/fsiso150/auto/SL level_delta=-6.000098330634884 support_l2=0.5091987236228102
+VARIANT openblas_sandybridge mixed/fsiso150/auto/SL level_delta=-3.000005744302115 support_l2=0.30458539829788883
+REFERENCE mixed/fsiso150/auto/SR level_delta=-0.000041656 support_l2=0.035409672 max_abs=7.311277028378312e-4 scale=Some(-9.0) late=-1.400107467/0.107108121 expected_late={"tail_change":0.10510914794130934,"worst_band_db":-1.369374331177764}
+VARIANT lapack_gesvd mixed/fsiso150/auto/SR level_delta=-0.00001449981483503393 support_l2=0.050398692294140734
+VARIANT numpy_avx512 mixed/fsiso150/auto/SR level_delta=0.00003763829093728077 support_l2=0.0966011300066491
+VARIANT openblas_haswell mixed/fsiso150/auto/SR level_delta=-0.0000418534507993229 support_l2=0.053042879177995696
+VARIANT openblas_nehalem mixed/fsiso150/auto/SR level_delta=-0.0001701709756716241 support_l2=0.04083812415048273
+VARIANT openblas_sandybridge mixed/fsiso150/auto/SR level_delta=-0.0000730670613968698 support_l2=0.05476476422005671
+REFERENCE mixed/fsiso150/auto/BR level_delta=3.000056023 support_l2=0.420080874 max_abs=8.44650190314724e-3 scale=Some(-9.0) late=-0.908534338/0.146518262 expected_late={"tail_change":0.10696738646365453,"worst_band_db":-0.6081353552108064}
+VARIANT lapack_gesvd mixed/fsiso150/auto/BR level_delta=-0.00012391478329121242 support_l2=0.006386466978344232
+VARIANT numpy_avx512 mixed/fsiso150/auto/BR level_delta=-0.00015035013589681512 support_l2=0.002676334995035794
+VARIANT openblas_haswell mixed/fsiso150/auto/BR level_delta=0.000028186501637605943 support_l2=0.001625278554819554
+VARIANT openblas_nehalem mixed/fsiso150/auto/BR level_delta=-0.00017627489907212635 support_l2=0.002012947025977743
+VARIANT openblas_sandybridge mixed/fsiso150/auto/BR level_delta=0.00007355540867592936 support_l2=0.0014958634580454868
+REFERENCE mixed/fsiso150/auto changed_steps=4 worst_variant=2
+FAILED
+test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 64.20s
+error: test failed, to rerun pass `-p impulcifer-dsp --test room_tuning2_apply`
+EXIT 101
+```
+
+### cargo test -p impulcifer-dsp --test room_tuning2_mimo -- --nocapture --test-threads=1
+
+```text
+test room_tuning2_mimo_fast_normal_equations ... MEASURE dense normal matrix=4.367886386622643e-16 rhs=1.2718377008542517e-15
+MEASURE dense kept u=6.564296201359275e-14, decisions=19/19 kept=15/15
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.13s
+EXIT 0
+```
+
+### room_tuning2: threads=1
+
+```text
+LOG10 ns/point=11.587299 threads=1
+room_tuning2/zero FL two positions: median 0.622969s min 0.582893s SECS 1.55s speedup 2.488x target=4x
+room_tuning2/mixed FL two positions: median 0.368211s min 0.311505s SECS 0.88s speedup 2.390x target=4x
+room_tuning2/linear FL two positions: median 0.643376s min 0.517589s SECS 2.22s speedup 3.451x target=4x
+room_tuning2/long FL two positions: median 0.296264s min 0.287076s SECS 0.73s speedup 2.464x target=4x
+room_tuning2/ultra-60 FL two positions: median 0.585058s min 0.493493s SECS 1.91s speedup 3.265x target=4x
+PEAK_RSS_KIB 177140
+EXIT 0
+```
+
+### mimo: threads=1
+
+```text
+mimo/demo total=3.473190s per_input=0.496170s
+mimo/apply_demo 4.331241s
+mimo/24_speakers per_input=20.881968s R=23 m=4140
+PEAK_RSS_KIB 1048388
+EXIT 0
+```
+
+### room_tuning2: threads=default
+
+```text
+LOG10 ns/point=8.402269 threads=4
+room_tuning2/zero FL two positions: median 0.632818s min 0.608600s SECS 1.55s speedup 2.449x target=4x
+room_tuning2/mixed FL two positions: median 0.352445s min 0.352150s SECS 0.88s speedup 2.497x target=4x
+room_tuning2/linear FL two positions: median 0.350845s min 0.322088s SECS 2.22s speedup 6.328x target=4x
+room_tuning2/long FL two positions: median 0.296744s min 0.282894s SECS 0.73s speedup 2.460x target=4x
+room_tuning2/ultra-60 FL two positions: median 0.430246s min 0.403764s SECS 1.91s speedup 4.439x target=4x
+PEAK_RSS_KIB 227096
+EXIT 0
+```
+
+### mimo: threads=default
+
+```text
+mimo/demo total=1.744264s per_input=0.249181s
+mimo/apply_demo 2.292334s
+mimo/24_speakers per_input=19.885931s R=23 m=4140
+PEAK_RSS_KIB 1157152
+EXIT 0
+```
