@@ -28,7 +28,6 @@ length/sha256/first-32/last-32 descriptors (lists of descriptors when chunked).
 Spectra on the 131072-point analysis grid are stored at `s2_bins.json`'s bins.
 Implementers of the Rust port must not open or run this script (clean room).
 """
-from pathlib import Path
 import csv
 import hashlib
 import json
@@ -36,6 +35,7 @@ import os
 import platform
 import sys
 import types
+from pathlib import Path
 
 import numpy as np
 import scipy
@@ -56,20 +56,21 @@ CHUNK = 24_000
 
 # ------------------------------------------------------------------ the oracle
 sys.path.insert(0, str(SRC))
-from secs import correction_engine as ce  # noqa: E402
-from secs import calibration as cal  # noqa: E402
+from secs import correction_engine as ce  # noqa: I001 (the oracle's own import order)
+from secs import calibration as cal
+
 _mimo_src = (SRC / "secs" / "mimo.py").read_text(encoding="utf-8")
 assert _mimo_src.count("if len(positions) < 3:") == 1
 mimo = types.ModuleType("secs.mimo")
 mimo.__file__ = str(SRC / "secs" / "mimo.py")
-exec(compile(_mimo_src.replace("if len(positions) < 3:", "if len(positions) < 2:"), mimo.__file__, "exec"),
+exec(compile(_mimo_src.replace("if len(positions) < 3:", "if len(positions) < 2:"), mimo.__file__, "exec"),  # noqa: S102
      mimo.__dict__)
 sys.modules["secs.mimo"] = mimo
 
 N = ce.N_FFT
 FS = ce.SR
 F = ce.freqs()
-BINS = sorted(set(range(0, 2731)) | set(range(2731, N // 2 + 1, 32)) | {N // 2})
+BINS = sorted(set(range(2731)) | set(range(2731, N // 2 + 1, 32)) | {N // 2})
 SPEAKERS = ["FL", "FR", "FC", "BL", "BR", "SL", "SR"]
 OMNI_FILE = {"FL": "room-FL,FR", "FR": "room-FL,FR", "FC": "room-FC", "BL": "room-BL,SL", "SL": "room-BL,SL",
              "SR": "room-SR,BR", "BR": "room-SR,BR"}
@@ -546,12 +547,12 @@ def export_mimo():
         originals = {}
 
         def wrap(module, attr, key, record):
-            originals[(module, attr)] = getattr(module, attr)
-            original = originals[(module, attr)]
+            originals[(module, attr)] = getattr(module, attr)  # noqa: B023 (used within this iteration)
+            original = originals[(module, attr)]  # noqa: B023
 
             def wrapper(*args, **kwargs):
                 out = original(*args, **kwargs)
-                log[key].append(record(args, kwargs, out))
+                log[key].append(record(args, kwargs, out))  # noqa: B023
                 return out
             setattr(module, attr, wrapper)
 
@@ -565,8 +566,8 @@ def export_mimo():
         try:
             design = None
             for i in e.chain:
-                for key in log:
-                    log[key].clear()
+                for entries in log.values():
+                    entries.clear()
                 design_i = mimo.design_mimo(e, fsiso=fsiso, positions=[1, 2], f_low=f_low, inputs=[i])
                 design = design_i
                 if not log["vstack"]:
@@ -574,7 +575,6 @@ def export_mimo():
                     continue
                 A = log["vstack"][0]
                 AtA = A.T @ A
-                cands = list(design_i.supports.get(i, {}) or [r for r, v in design_i.ranges.items() if v and r != i])
                 R = A.shape[1] // mimo.TAPS_LOW
                 scale = float(np.mean(np.diag(AtA)))
                 lam = [float(d[0] - AtA[0, 0]) for d, _rhs, _u in log["solve"]]
@@ -623,9 +623,9 @@ def r10(values):
     return [float(f"{v:.10g}") for v in np.asarray(values, float)]
 
 
-E2E_BINS = sorted(set(int(round(x / (FS / N))) for x in np.concatenate([
+E2E_BINS = sorted({int(round(x / (FS / N))) for x in np.concatenate([  # noqa: RUF046 (numpy scalars)
     15 * 2 ** (np.arange(0, 48 * np.log2(1000 / 15)) / 48), 1000 * 2 ** (np.arange(0, 6 * np.log2(23000 / 1000) + 1) / 6)])
-    if x <= 23000))
+    if x <= 23000})
 
 
 def write_reference(name, payload):

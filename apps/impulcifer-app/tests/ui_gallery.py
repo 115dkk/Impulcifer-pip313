@@ -8,8 +8,8 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 SKINS = ("studio", "stable")
@@ -649,13 +649,13 @@ def room_tuning2_checks(browser):
         navigate(page, "processing")
         disclosure(page, "room", True)
 
-        def shown(selectors):
+        def shown(selectors, page=page):
             return [page.locator(selector).is_visible() for selector in selectors]
 
-        def tip(name):
+        def tip(name, page=page):
             return page.locator(f"#{name}").text_content()
 
-        def request():
+        def request(page=page):
             return page.evaluate("gatherBrirPayload()")
 
         for mode in ("eq", "tuning"):

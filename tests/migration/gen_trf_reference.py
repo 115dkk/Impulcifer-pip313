@@ -151,7 +151,7 @@ def main():
     distance = np.max(np.abs(other[:count]-reference[:count]), axis=1) / np.max(np.abs(reference[:count]), axis=1)
     outside = np.flatnonzero(distance > 1e-9)
     cases[-1]["horizon"] = int(outside[0]) if len(outside) else None
-    cases[-1]["oracle_gesvd"] = dict(main_x=variant["main_x"], cost=variant["cost"], rel_distance=distance.tolist())
+    cases[-1]["oracle_gesvd"] = {"main_x": variant["main_x"], "cost": variant["cost"], "rel_distance": distance.tolist()}
     output = Path(__file__).parent / "goldens/trf_scipy_reference.json"
     output.write_text(json.dumps({
         "scipy": scipy.__version__, "numpy": np.__version__,
