@@ -533,7 +533,7 @@ fn mimo_bench() {
         .collect();
     mimo_scalar_probe("before-demo");
     let start = Instant::now();
-    black_box(design_mimo(&h, &inputs, opts.mimo.as_ref().unwrap()).unwrap());
+    black_box(design_supports(&h, &inputs, opts.mimo.as_ref().unwrap()).unwrap());
     let elapsed = start.elapsed().as_secs_f64();
     mimo_scalar_probe("after-demo");
     println!(
@@ -600,13 +600,13 @@ fn mimo_bench() {
         response: &plan.speakers[0].rc.response,
     }];
     let start = Instant::now();
-    black_box(design_mimo(&large, &input, opts.mimo.as_ref().unwrap()).unwrap());
+    black_box(design_supports(&large, &input, opts.mimo.as_ref().unwrap()).unwrap());
     println!(
         "mimo/24_speakers per_input={:.6}s R=23 m=4140",
         start.elapsed().as_secs_f64()
     );
     mimo_scalar_probe("after-24");
-    mimo::design_mimo_observed(&large, &input, opts.mimo.as_ref().unwrap(), &|_, s| {
+    mimo::design_supports_observed(&large, &input, opts.mimo.as_ref().unwrap(), &|_, s| {
         mimo_solver_compare(s)
     })
     .unwrap();

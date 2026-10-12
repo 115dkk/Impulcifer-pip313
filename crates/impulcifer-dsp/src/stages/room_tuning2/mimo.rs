@@ -251,7 +251,7 @@ pub fn bisect(
     Ok((logs, ratios, kept, best))
 }
 fn guard(x: &[Vec<f64>], y: &[Vec<f64>], fsiso: f64) -> (f64, f64) {
-    let peaks = late_peaks(x, 6);
+    let peaks = late_mode_frequencies(x, 6);
     let mut edges = Vec::new();
     let mut i = 0;
     while i as f64 / 3. <= (fsiso / 20.).log2() + 1e-9 {
@@ -292,7 +292,7 @@ fn guard(x: &[Vec<f64>], y: &[Vec<f64>], fsiso: f64) -> (f64, f64) {
     }
     let mut modes: Vec<_> = peaks
         .into_iter()
-        .chain(late_peaks(y, 6))
+        .chain(late_mode_frequencies(y, 6))
         .map(|p| (p * 10.).round_ties_even() / 10.)
         .collect();
     modes.sort_by(f64::total_cmp);
@@ -438,16 +438,16 @@ fn long_spectrum(ir: &crate::ir::ImpulseResponse, b: usize, n: usize) -> Vec<Com
         })
         .collect()
 }
-pub fn design_mimo(
+pub fn design_supports(
     brirs: &Hrir,
     inputs: &[MimoInput<'_>],
     opts: &MimoOptions,
 ) -> Result<MimoDesign, DspError> {
-    design_mimo_observed(brirs, inputs, opts, &|_, _| {})
+    design_supports_observed(brirs, inputs, opts, &|_, _| {})
 }
 /// Observe frozen-input stage boundaries without retaining all normal matrices.
 /// Called in input workers; observers must not change the design.
-pub fn design_mimo_observed(
+pub fn design_supports_observed(
     brirs: &Hrir,
     inputs: &[MimoInput<'_>],
     opts: &MimoOptions,

@@ -4,7 +4,7 @@
 
 ## 1. Guard hypotheses — resolved: band-edge peaks
 
-The defect was in `late_peaks`, not in the oracle guard. The 20–160 Hz mask
+The defect was in `late_peaks` (now `late_mode_frequencies`), not in the oracle guard. The 20–160 Hz mask
 must be applied to the summed power over the **whole** 2049-bin grid before
 peak finding. Outside bins are zero. The former interior-only search omitted
 bins 137 (20.068359375 Hz) and 1092 (159.9609375 Hz). The full masked-array
@@ -29,7 +29,7 @@ BL now selects 0 dB, exactly as the fixture does. No guard exceptions,
 extra trials, expected-support rescaling, or expected-level offsets remain,
 including the frozen-RC application check.
 
-`late_peaks_include_band_edges` uses synthetic late two-tap signals with
+`late_mode_frequencies_include_band_edges` (then `late_peaks_include_band_edges`) uses synthetic late two-tap signals with
 power `2−2cos(w)` (rising), `2+2cos(w)` (falling), and `2−2cos(2w)`
 (interior peak). SciPy 1.18.1 `find_peaks(power * mask)` gives bins
 1092, 137, and 1024 respectively. A late impulse at sample 2048 gives exact
@@ -51,7 +51,7 @@ remain exact.
 | Dense normal cross-check | matrix rel 4.367886386622643e-16 | rhs rel 1.271837700854252e-15 | PASS |
 | Dense kept solve | — | 6.564296201359275e-14 | PASS, 19/19 decisions, kept 15/15 |
 
-The new production observer `design_mimo_observed` exposes stage boundaries without retaining matrices for all inputs. g is compared after explicit canonical-name reordering (recording order places BR last). The observer currently runs after each input's solve; therefore these are dependency-isolating comparisons, not a fail-before-solve execution sequence. A complete x/direct reconstruction gate from an exported matching RC spectrum remains unavailable: the MIMO fixtures do not export that spectrum. No comparison of an input with itself is presented as a path gate.
+The new production observer `design_mimo_observed` (now `design_supports_observed`) exposes stage boundaries without retaining matrices for all inputs. g is compared after explicit canonical-name reordering (recording order places BR last). The observer currently runs after each input's solve; therefore these are dependency-isolating comparisons, not a fail-before-solve execution sequence. A complete x/direct reconstruction gate from an exported matching RC spectrum remains unavailable: the MIMO fixtures do not export that spectrum. No comparison of an input with itself is presented as a path gate.
 
 Application checks added:
 

@@ -217,7 +217,7 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
                 response: &s.rc.response,
             })
             .collect();
-        report.mimo = Some(design_mimo(hrir, &inputs, opts)?);
+        report.mimo = Some(design_supports(hrir, &inputs, opts)?);
     }
     let original = hrir.clone();
     let fs = hrir.fs;

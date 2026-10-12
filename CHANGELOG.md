@@ -21,10 +21,11 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **3.x BRIR 무결성 검사 시나리오 추가**: `room_tuning2`, `room_tuning2_zero`, `room_tuning2_linear`, `room_tuning2_mimo`, `virtual_bass_tuning2`를 더해 22개가 됐습니다. 모두 3.5.0부터 있는 옵션이라 기준 커밋에서는 '기준 없음' 경고로 끝나고, 스레드 수 검사는 그대로 받습니다. 데모의 MIMO 출력은 1스레드와 4스레드에서 SHA-256이 같습니다.
+- **테스트를 최적화 빌드로**: 워크스페이스의 `[profile.test]`를 opt-level 2로 올렸습니다. 최적화하지 않은 빌드에서는 가상 룸 튜닝 2 데모 파이프라인 하나가 서비스 테스트의 잡 시간 제한(240초)을 넘겼습니다. Rust는 최적화 수준과 무관하게 부동소수점 의미를 지키고(fast-math 없음), 오버플로 검사와 디버그 단언은 그대로 켜져 있습니다. 최적화 없이 돌리려면 `CARGO_PROFILE_TEST_OPT_LEVEL=0`을 줍니다.
 
 #### 📝 문서
 - ADR 0008(가상 룸 튜닝 v2), `docs/rust/ROOM_CORRECTION.md`의 "Virtual room tuning v2" 절, README의 옵션과 출처 표기, 성능 보고서 `docs/rust/perf/room-tuning2.md`를 더했습니다.
-- **출처 기록**: `docs/rust/provenance/room-tuning2-secs2.md`에 SECS 2와 무엇이 같고 무엇이 다른지, 누가 SECS 2 소스를 보았고 누가 보지 않았는지, 남는 위험과 crates.io 공개 전에 할 일을 정리했습니다. 구현 워커의 보고서 원문도 함께 남겼습니다.
+- **출처 기록**: `docs/rust/provenance/room-tuning2-secs2.md`에 SECS 2와 무엇이 같고 무엇이 다른지, 누가 SECS 2 소스를 보았고 누가 보지 않았는지, 남는 위험과 crates.io 공개 전에 할 일을 정리했습니다. 구현 워커의 보고서 원문도 함께 남겼습니다. 명세 쪽 이름이 넘어와 SECS 2의 함수 이름과 같던 식별자 여섯 개(`late_peaks` 등)는 우리 이름(`late_mode_frequencies` 등)으로 바꿨습니다.
 - **등가 검증**: SECS 2(GPL-3.0) 소스는 저장소에 넣지 않았고, 이식한 워커에게도 보여 주지 않았습니다. `tests/migration/export_goldens_secs2.py`가 SECS 2를 오라클로 돌려 함수·단계 경계마다 픽스처(`s2_*`)를 남기고, Rust는 의존 순서대로 픽스처를 하나씩 맞춥니다. PEQ 맞춤은 SciPy `least_squares`(TRF)를 옮긴 것입니다. 반복 경로는 오라클 자신이 다른 BLAS·LAPACK에서 갈라지기 시작하는 지점까지 27개 맞춤 모두 1e-9 안에서 같습니다(최대 2.3e-14). 끝단 결과는 SECS 2를 다섯 가지 연산 환경(NumPy AVX-512, OpenBLAS 커널 셋, LAPACK gesvd)으로 돌렸을 때의 흩어짐 안에 있습니다. 61채널 중 0.1 dB 넘게 다른 채널은 19개, 1 dB 넘게 다른 채널은 7개이고, SECS 2끼리는 각각 최대 32개, 15개입니다. MIMO는 오라클의 채널 보정 출력을 넣으면 서포트가 6e-13 안에서, 가드 값 85개가 모두 2e-12 안에서 같습니다.
 
 ## 3.4.0 - 2026-10-10

@@ -144,7 +144,7 @@ fn room_tuning2_matches_secs2_mimo() {
             assert!((i.gain_db - entry["gain_db"][i.speaker].as_f64().unwrap()).abs() < 1e-10);
         }
         let start = std::time::Instant::now();
-        let design = mimo::design_mimo_observed(
+        let design = mimo::design_supports_observed(
             &brir,
             &inputs,
             &MimoOptions {

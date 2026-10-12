@@ -2,13 +2,13 @@ use crate::{DspError, fft::Complex64, optimize};
 use std::f64::consts::PI;
 pub(super) type Bands = Vec<(f64, f64, f64)>;
 fn ring(f: f64, g: f64) -> f64 {
-    ring_q_cap(f, g, 30.)
+    max_q_for_ring(f, g, 30.)
 }
-pub fn ring_q_cap(f: f64, g: f64, ring_ms: f64) -> f64 {
+pub fn max_q_for_ring(f: f64, g: f64, ring_ms: f64) -> f64 {
     PI * f * ring_ms / 1000. / 10_f64.powf(g / 40.)
 }
 /// Narrow the supplied per-band logarithmic bounds using the ring-time cap.
-pub fn ring_boxes(bands: &[(f64, f64, f64)], lb: &mut [f64], ub: &mut [f64], ring_ms: f64) {
+pub fn ring_time_bounds(bands: &[(f64, f64, f64)], lb: &mut [f64], ub: &mut [f64], ring_ms: f64) {
     assert_eq!(lb.len(), bands.len() * 3);
     assert_eq!(ub.len(), lb.len());
     for (i, &(f, _, g)) in bands.iter().enumerate() {
@@ -22,7 +22,7 @@ pub fn ring_boxes(bands: &[(f64, f64, f64)], lb: &mut [f64], ub: &mut [f64], rin
             ub[k + 2] = (g / 2.).min(-0.25);
         }
         ub[k + 1] = ub[k + 1]
-            .min(ring_q_cap(f / 1.2, ub[k + 2], ring_ms).max(0.31).ln())
+            .min(max_q_for_ring(f / 1.2, ub[k + 2], ring_ms).max(0.31).ln())
             .max(0.31_f64.ln());
     }
 }
@@ -177,7 +177,7 @@ pub fn fit_with_trace(
         ub.extend([top.ln(), 20_f64.ln(), boost]);
         x.extend([f.ln(), q.ln(), g]);
     }
-    ring_boxes(&bands, &mut lb, &mut ub, 30.);
+    ring_time_bounds(&bands, &mut lb, &mut ub, 30.);
     for i in 0..x.len() {
         x[i] = x[i].clamp(lb[i] + 1e-6, ub[i] - 1e-6);
     }

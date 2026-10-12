@@ -55,7 +55,7 @@ pub fn smooth(x: &[f64], f: &[f64], b: &[f64]) -> Vec<f64> {
         })
         .collect()
 }
-pub fn smooth_complex(x: &[Complex64], f: &[f64], b: &[f64]) -> Vec<Complex64> {
+pub fn smooth_phasors(x: &[Complex64], f: &[f64], b: &[f64]) -> Vec<Complex64> {
     let re = smooth(&x.iter().map(|v| v.re).collect::<Vec<_>>(), f, b);
     let im = smooth(&x.iter().map(|v| v.im).collect::<Vec<_>>(), f, b);
     re.into_iter()
@@ -159,7 +159,7 @@ pub fn low_rate(x: &[Complex64], f: &[f64], n: usize) -> Vec<f64> {
     out.truncate(n);
     out
 }
-pub fn late_peaks(xs: &[Vec<f64>], count: usize) -> Vec<f64> {
+pub fn late_mode_frequencies(xs: &[Vec<f64>], count: usize) -> Vec<f64> {
     let mut power = vec![0.; 2049];
     for x in xs {
         let mut x = x.clone();
@@ -229,7 +229,7 @@ pub fn firwin(taps: usize, cutoff: f64, fs: f64) -> Vec<f64> {
     h
 }
 /// Delay-removed, complex-smoothed group delay on an arbitrary frequency grid.
-pub fn gd_curve(h: &[Complex64], f: &[f64], g: &[f64], frac: f64, fs: f64) -> Vec<f64> {
+pub fn smoothed_group_delay(h: &[Complex64], f: &[f64], g: &[f64], frac: f64, fs: f64) -> Vec<f64> {
     let n = 2 * (h.len() - 1);
     let t = argmax(&fft::irfft(h, n).iter().map(|x| x.abs()).collect::<Vec<_>>()) as f64 / fs;
     let shifted: Vec<_> = h
@@ -237,7 +237,7 @@ pub fn gd_curve(h: &[Complex64], f: &[f64], g: &[f64], frac: f64, fs: f64) -> Ve
         .zip(f)
         .map(|(h, f)| *h * Complex64::from_polar(1., 2. * PI * f * t))
         .collect();
-    let s = smooth_complex(&shifted, f, &[frac]);
+    let s = smooth_phasors(&shifted, f, &[frac]);
     let re: Vec<_> = s.iter().map(|x| x.re).collect();
     let im: Vec<_> = s.iter().map(|x| x.im).collect();
     let phase = unwrap(

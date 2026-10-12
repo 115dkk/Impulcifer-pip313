@@ -42,7 +42,7 @@ fn long_modes(
     let mut out = Vec::new();
     for i in chosen(policy, h.len()) {
         let x = low_rate(&h[i], f, 300);
-        let modes: Vec<_> = late_peaks(std::slice::from_ref(&x), 8)
+        let modes: Vec<_> = late_mode_frequencies(std::slice::from_ref(&x), 8)
             .into_iter()
             .filter(|p| *p >= band.low && *p <= band.high.min(160.))
             .filter_map(|p| mode_decay(&x, p, 1.5).filter(|t| *t > 0.).map(|t| (p, t)))
@@ -181,7 +181,7 @@ fn fir_run(
     for v in &mut v {
         *v /= total;
     }
-    let vs = smooth_complex(&v, f, &[beta]);
+    let vs = smooth_phasors(&v, f, &[beta]);
     if let Some(t) = capture.as_deref_mut() {
         t.v = v.clone();
         t.v_smoothed = vs.clone();
@@ -369,7 +369,7 @@ fn score(
         for (r, f) in r.iter_mut().zip(f) {
             *r *= Complex64::from_polar(1., 2. * PI * f * t);
         }
-        let s = smooth_complex(&r, f, &[24.]);
+        let s = smooth_phasors(&r, f, &[24.]);
         let re: Vec<_> = s.iter().map(|s| s.re).collect();
         let im: Vec<_> = s.iter().map(|s| s.im).collect();
         let phase = unwrap(

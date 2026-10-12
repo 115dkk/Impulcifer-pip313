@@ -33,7 +33,7 @@ fn smooth() {
         if name.contains("complex") {
             e.complex(
                 &name,
-                &p::smooth_complex(&complex(&i["x"]), &f, &b),
+                &p::smooth_phasors(&complex(&i["x"]), &f, &b),
                 &complex(&v["outputs"]["y"]),
             );
         } else {
@@ -120,7 +120,11 @@ fn ring_caps_boxes() {
         let r = array(row);
         e.real(
             &format!("cap/{i}"),
-            &[peq::ring_q_cap(r[0], r[1], number(&v["inputs"]["ring_ms"]))],
+            &[peq::max_q_for_ring(
+                r[0],
+                r[1],
+                number(&v["inputs"]["ring_ms"]),
+            )],
             &[r[2]],
         );
     }
@@ -128,7 +132,7 @@ fn ring_caps_boxes() {
     let i = &v["inputs"];
     let mut lb = array(&i["lb"]);
     let mut ub = array(&i["ub"]);
-    peq::ring_boxes(&bands(&i["bands"]), &mut lb, &mut ub, number(&i["ring_ms"]));
+    peq::ring_time_bounds(&bands(&i["bands"]), &mut lb, &mut ub, number(&i["ring_ms"]));
     e.real("lb", &lb, &array(&v["outputs"]["lb"]));
     e.real("ub", &ub, &array(&v["outputs"]["ub"]));
     e.finish("ring_caps_boxes");
@@ -169,7 +173,7 @@ fn to_low() {
     e.finish("to_low");
 }
 #[test]
-fn late_peaks() {
+fn late_mode_frequencies() {
     let v = fixture("late_peaks");
     let xs: Vec<_> = v["inputs"]["xs"]
         .as_array()
@@ -186,7 +190,7 @@ fn late_peaks() {
     ] {
         e.compare(
             key,
-            &p::late_peaks(signals, n),
+            &p::late_mode_frequencies(signals, n),
             &array(&v["outputs"][key]),
             0.,
             0.,
@@ -195,7 +199,7 @@ fn late_peaks() {
     e.finish("late_peaks");
 }
 #[test]
-fn late_peaks_include_band_edges() {
+fn late_mode_frequencies_include_band_edges() {
     // SciPy 1.18.1 reference (2026-10-12): x=zeros(4096); x[0]=10;
     // x[start:start+len(taps)]=taps; x[:90]=0; f=rfftfreq(4096, 1/600);
     // power=abs(rfft(x))**2; find_peaks(power*((f>=20)&(f<=160)))[0]
@@ -216,13 +220,13 @@ fn late_peaks_include_band_edges() {
         x[start..start + taps.len()].copy_from_slice(taps);
         let xs = [x];
         let expected = [bin as f64 * 600. / 4096.];
-        assert_eq!(p::late_peaks(&xs, 0), Vec::<f64>::new());
-        assert_eq!(p::late_peaks(&xs, 1), expected, "{name}");
-        e.compare(name, &p::late_peaks(&xs, 8), &expected, 0., 0.);
+        assert_eq!(p::late_mode_frequencies(&xs, 0), Vec::<f64>::new());
+        assert_eq!(p::late_mode_frequencies(&xs, 1), expected, "{name}");
+        e.compare(name, &p::late_mode_frequencies(&xs, 8), &expected, 0., 0.);
     }
-    assert!(p::late_peaks(&[vec![0.; 4096]], 8).is_empty());
-    assert!(p::late_peaks(&[], 8).is_empty());
-    e.finish("late_peaks_include_band_edges");
+    assert!(p::late_mode_frequencies(&[vec![0.; 4096]], 8).is_empty());
+    assert!(p::late_mode_frequencies(&[], 8).is_empty());
+    e.finish("late_mode_frequencies_include_band_edges");
 }
 #[test]
 fn mode_t60() {
@@ -295,14 +299,14 @@ fn butter_band() {
     e.finish("butter_band");
 }
 #[test]
-fn gd_curve() {
+fn smoothed_group_delay() {
     let mut e = Errors::default();
     for (name, v) in fixtures("gd_curve_") {
         let i = &v["inputs"];
         let ir = array(&i["ir"]);
         e.real(
             &name,
-            &p::gd_curve(
+            &p::smoothed_group_delay(
                 &fft::rfft(&ir),
                 &p::grid(ir.len(), 48000.),
                 &array(&i["g"]),

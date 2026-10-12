@@ -9,6 +9,13 @@ rust-version = "1.97"
 license = "MIT"
 repository = "https://github.com/115dkk/Impulcifer-pip313"
 
+# Tests run optimized: at opt-level 0 one virtual room tuning 2 pipeline (its
+# SECS 2 fits and MIMO designs) outlasts the service tests' 240 s job timeout.
+# Optimization does not relax float semantics in Rust (no fast-math), and
+# overflow checks and debug assertions stay on.
+[profile.test]
+opt-level = 2
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 unsafe_op_in_unsafe_fn = "deny"

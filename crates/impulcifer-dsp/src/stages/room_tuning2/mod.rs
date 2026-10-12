@@ -7,7 +7,8 @@ pub use apply::{
 };
 pub mod mimo;
 pub use mimo::{
-    MimoDesign, MimoInput, MimoInputResult, MimoOptions, MimoSupport, design_mimo, support_response,
+    MimoDesign, MimoInput, MimoInputResult, MimoOptions, MimoSupport, design_supports,
+    support_response,
 };
 pub mod peq;
 pub mod primitives;
