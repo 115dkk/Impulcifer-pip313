@@ -878,12 +878,15 @@ references below sit on top of them.
 
 The oracle runs with NumPy's SIMD dispatch limited to the X86-64-v2 baseline, so
 its `log10`/`exp` are the C library's like Rust's. That matters: SECS 2 itself,
-on the same data, changes its corrections by up to 1.86 dB (8 of 61 channels by
-more than 1 dB) when only the last bit of some `log10`/`exp` values changes,
-because its PEQ refinement usually stops at the evaluation cap. Equivalence is
-therefore stage by stage on the oracle's own inputs, and end to end within the
-oracle's own last-bit sensitivity (`tests/migration/README-secs2.md`, "SECS
-against itself").
+on the same data, changes its corrections by up to 2.66 dB, and 7–9 of 61
+channels by more than 1 dB, when only the last bits of some operations change
+the way another computer changes them (NumPy's AVX-512 kernels, OpenBLAS kernels
+of older CPUs, LAPACK's other SVD driver): its PEQ refinement usually stops at
+the evaluation cap and its path is determined only for the first 1–15
+evaluations. Equivalence is therefore stage by stage on the oracle's own inputs
+(fit traces up to the oracle's own horizon), and end to end within the oracle's
+own spread across computers (`tests/migration/README-secs2.md`, "SECS against
+itself").
 
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of

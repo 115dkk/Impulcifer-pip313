@@ -840,7 +840,8 @@ def export_variance(rc_reference, mimo_reference):
             path = Path(tmp) / "variant.json"
             subprocess.run([sys.executable, "-I", __file__, "--variant", name, "--out", str(path)], env=env, check=True)
             data = json.loads(path.read_text())
-        variants[name] = {"rc": compare_rc(rc_reference, data["rc"]), "mimo": compare_mimo(mimo_reference, data["mimo"])}
+        variants[name] = {"rc": compare_rc(rc_reference, data["rc"]), "mimo": compare_mimo(mimo_reference, data["mimo"]),
+                          "fits": data["fits"]}
         print(f"variant {name}: {summarize(variants[name]['rc'])}", flush=True)
     keys = next(iter(variants.values()))["rc"].keys()
     envelope = {k: {"mag_db": np.max([v["rc"][k]["mag_db"] for v in variants.values()], axis=0).tolist(),
@@ -856,13 +857,75 @@ def export_variance(rc_reference, mimo_reference):
         "summary": {n: summarize(v["rc"]) for n, v in variants.items()} | {"envelope": summarize(envelope)},
         "rc": {n: v["rc"] for n, v in variants.items()}, "rc_envelope": envelope,
         "mimo": {n: v["mimo"] for n, v in variants.items()}})
+    annotate_fits({n: v["fits"] for n, v in variants.items()})
+
+
+def read_values(desc):
+    if isinstance(desc, list):
+        return np.concatenate([read_values(d) for d in desc]) if desc else np.zeros(0)
+    return np.fromfile(OUT / desc["file"], dtype="<f8")
+
+
+def fit_fixtures():
+    """Every exported fit with a trace: name -> (inputs, reference main_x rows)."""
+    out = {}
+    for path in sorted(OUT.glob("s2_fit_*.json")):
+        data = json.loads(path.read_text())
+        o = data["outputs"]
+        if "main_x" not in o:
+            continue
+        rows = read_values(o["main_x"]).reshape(-1, o["params"])
+        out[path.name[len("s2_fit_"):-len(".json")]] = (data["inputs"], rows)
+    return out
+
+
+def fit_trace(inputs):
+    kwargs = {k: v for k, v in inputs["kwargs"].items()}
+    ce.fit_peq(np.array(inputs["g"], float), np.array(inputs["corr_db"], float), int(inputs["n"]), **kwargs)
+    entry = _FIT_LOG.pop()
+    return entry["least_squares"]
+
+
+def rel_distances(rows, ref):
+    count = min(len(rows), len(ref))
+    return [float(np.max(np.abs(rows[i] - ref[i])) / max(float(np.max(np.abs(ref[i]))), 1e-300)) for i in range(count)]
 
 
 def run_variant(name, path):
     use_gesvd(VARIANTS[name].get("gesvd", False))
     rc, _lift = rc_reference_entries()
     mimo_entries = mimo_reference_entries()
-    path.write_text(json.dumps(plain({"rc": rc, "mimo": mimo_entries}), allow_nan=False))
+    fits = {}
+    for fit, (inputs, ref) in fit_fixtures().items():
+        trace = fit_trace(inputs)
+        fits[fit] = {"rel_distance": rel_distances(np.array(trace["main"]), ref), "cost": trace["result"]["cost"],
+                     "nfev": trace["result"]["nfev"]}
+    path.write_text(json.dumps(plain({"rc": rc, "mimo": mimo_entries, "fits": fits}), allow_nan=False))
+
+
+def first_over(rel, threshold=1e-9):
+    return next((i for i, r in enumerate(rel) if r > threshold), None)
+
+
+def annotate_fits(per_variant):
+    """Add every variant's trace distance and the horizon (the earliest evaluation where any variant of the
+    oracle leaves the reference by more than 1e-9) to each fit fixture."""
+    for path in sorted(OUT.glob("s2_fit_*.json")):
+        name = path.name[len("s2_fit_"):-len(".json")]
+        data = json.loads(path.read_text())
+        o = data["outputs"]
+        if "main_x" not in o:
+            continue
+        variants = {"lapack_gesvd_inprocess": o["oracle_gesvd"]["rel_distance"]}
+        variants.update({v: per_variant[v][name]["rel_distance"] for v in per_variant})
+        firsts = {v: first_over(r) for v, r in variants.items()}
+        evals = len(o["main_cost"])
+        o["oracle_variants"] = {v: {"first_index_over_1e-9": firsts[v], "rel_distance": variants[v],
+                                    "cost": (per_variant[v][name]["cost"] if v in per_variant else o["oracle_gesvd"]["cost"])}
+                                for v in variants}
+        o["horizon"] = min((f for f in firsts.values() if f is not None), default=evals)
+        payload = plain({"inputs": data["inputs"], "outputs": o, "meta": data["meta"]})
+        write_bytes(path, (json.dumps(payload, allow_nan=False, separators=(",", ":")) + "\n").encode())
 
 
 def check_libm():
@@ -883,13 +946,13 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     rc_reference = export_end_to_end_rc()
     mimo_reference = export_end_to_end_mimo()
-    export_variance(rc_reference, mimo_reference)
     export_primitives()
     export_synthetic_fits()
     export_rc()
     export_mimo()
-    total = sum(size for _name, size in WRITTEN)
-    print(f"wrote {len(WRITTEN)} s2 files, {total} bytes")
+    export_variance(rc_reference, mimo_reference)
+    sizes = dict(WRITTEN)
+    print(f"wrote {len(sizes)} s2 files, {sum(sizes.values())} bytes")
     stale = sorted(p.name for p in OUT.glob("s2_*") if p.name not in {n for n, _s in WRITTEN})
     assert not stale, stale
 
