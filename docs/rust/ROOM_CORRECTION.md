@@ -574,8 +574,16 @@ The grid is `f_k = k*fs/N`, k = 0…N/2, computed as `numpy.fft.rfftfreq(N, 1/fs
 - RC window: `a = max(0, o − int(0.002*fs))`, `w = h[a : a+int(0.5*fs)]`
   (shorter if h ends), the last `K = int(0.2*len(w))` samples multiplied by
   `0.5*(1+cos(π*k/K))`, k = 0…K−1;
-- spectrum `H = rfft_N(w)*exp(−j*2π*f*(a−b)/fs)`, where b is the onset at the
-  speaker's first position. Any common b gives the same RC up to rounding.
+- spectrum `H_p = rfft_N(w)*exp(−j*2π*f*(a−o)/fs)`: every position is placed
+  on its own onset, so its window starts 2 ms before time zero. SECS places
+  all positions on the listening position's onset (the earliest onset of all
+  its speakers there). The chain removes each position's delay before using
+  its phase, so only the long-mode analysis sees where a response sits in
+  time; it must see each position as SECS sees its listening position, and
+  positions recorded in different files have unrelated latencies. (In a SECS
+  run of several speakers, one shared origin moves every speaker but the
+  earliest away from −2 ms, which changes their long-mode analysis: such a run
+  is a reference for levels only.)
 
 Microphone calibration, when configured, divides every H by the minimum-phase
 response whose magnitude is `10^(c(f)/20)`, c interpolated linearly in Hz with
@@ -722,7 +730,9 @@ in order.
 `B_lo = Fit(g, c·[g ≤ 500], 16, lo = max(15, lo/1.4), hi = 400)`;
 `rest = c − 20*log10(|PEQ(g; B_lo)| + 1e-12)`;
 `B_hi = Fit(g, rest·[g ≥ 300], 16, lo = 400, hi = min(20000, hi))`.
-`F = PEQ(f; B_lo ++ B_hi)`, no FIR, no lift, phase strength 0. (`·[cond]` keeps
+`F = PEQ(f; B_lo ++ B_hi)`, no FIR, no lift, phase strength 0 and no phase
+resolution (SECS reports a one-tap unit FIR and its default resolution 6;
+both mean "none"). (`·[cond]` keeps
 the value where the condition holds and puts 0 elsewhere.)
 
 ### FIR modes
@@ -865,6 +875,15 @@ each correction run's intermediate spectra and FIR realizations, MIMO paths,
 normal equations, bisection, guard and supports). `tests/migration/README-secs2.md`
 documents the families, the encoding and the measured budgets. The end-to-end
 references below sit on top of them.
+
+The oracle runs with NumPy's SIMD dispatch limited to the X86-64-v2 baseline, so
+its `log10`/`exp` are the C library's like Rust's. That matters: SECS 2 itself,
+on the same data, changes its corrections by up to 1.86 dB (8 of 61 channels by
+more than 1 dB) when only the last bit of some `log10`/`exp` values changes,
+because its PEQ refinement usually stops at the evaluation cap. Equivalence is
+therefore stage by stage on the oracle's own inputs, and end to end within the
+oracle's own last-bit sensitivity (`tests/migration/README-secs2.md`, "SECS
+against itself").
 
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of

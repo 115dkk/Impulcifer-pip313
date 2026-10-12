@@ -11,8 +11,25 @@ commit ceac0ad), not the 2.x tree. Specification:
 
 ```text
 cargo run --release -p impulcifer-dsp --example secs2_inputs -- <inputs>
-SECS2_SRC=<SECS 2 checkout>/src SECS2_INPUTS=<inputs> python tests/migration/export_goldens_secs2.py
+NPY_DISABLE_CPU_FEATURES="X86_V3 X86_V4 AVX512_ICL AVX512_SPR" OPENBLAS_NUM_THREADS=1 \
+  SECS2_SRC=<SECS 2 checkout>/src SECS2_INPUTS=<inputs> python tests/migration/export_goldens_secs2.py
 ```
+
+**NumPy dispatch.** On an AVX-512 machine NumPy computes float64 `log10` and
+`exp` with SIMD kernels that differ from the C library in the last bit (12 %
+of `log10` and 4.7 % of `exp` values on the export machine); `sin`, `cos`
+and `log` agree. A PEQ fit that stops after 150 evaluations amplifies such a
+bit into a different path. The oracle therefore runs with NumPy's dispatch
+above the X86-64-v2 baseline disabled (list exactly the features
+`numpy.show_runtime()` reports as found): its transcendental functions are
+then the C library's, the same functions Rust's `f64` methods call on Linux.
+The exporter checks this (`check_libm`) and refuses to run otherwise; every
+fixture's `meta.numpy_dispatch` records it. "SECS against itself" below shows
+what the two dispatches do to SECS's own results.
+
+The same exporter writes the two end-to-end references
+(`room_tuning_secs2_rc.json`, `room_tuning_secs2_mimo.json`), which are
+integration checks and may exceed 200 kB.
 
 `examples/secs2_inputs.rs` writes the demo inputs exactly as the Rust tests
 rebuild them: the uncropped split omni ear-position IRs
@@ -74,6 +91,35 @@ RC case names: `fl_both_mixed`, `fl_left_mixed`, `sl_both_linear`,
 `mixed_fsiso100_low40`. Guard lists have one value per tried scale
 (0, −3, −6, −9, −12 dB) up to the accepted one; the tail value is the oracle's
 scaled form (dB × 0.15, accepted at ≤ 0.15).
+
+## SECS against itself
+
+The same oracle, data and machine, exported once with NumPy's AVX-512
+dispatch and once with the baseline (C library) dispatch, i.e. differing
+only in the last bit of some `log10`/`exp` values:
+
+| Measure (61 per-speaker RC references) | AVX-512 vs baseline |
+| --- | --- |
+| largest magnitude change, 15–100 / 100–500 / 500–2000 / 2000–23000 Hz | 1.86 / 1.55 / 0.41 / 0.049 dB |
+| median of the per-channel maxima, same bands | 0.0066 / 0.0092 / 0.0012 / 0.00004 dB |
+| channels changed by more than 0.001 / 0.01 / 0.1 / 1 dB | 56 / 35 / 22 / 8 |
+| largest phase change (lift removed), same bands | 0.58 / 0.86 / 0.71 / 0.70 rad |
+| phase strength changed | 1 channel (two/FR/mixed: 0.9 → 0.7) |
+| PEQ band count changed | none |
+| MIMO (3 settings × 7 inputs) | bands identical; supports change up to 52 % (relative L2); the guard settles one step apart for 2 inputs |
+
+The cause is the PEQ refinement: it usually stops at its 150-evaluation cap,
+so the trust-region path is part of the answer, and a last-bit change early
+in the path ends in a different (equally good) set of bands. SECS's results on
+another computer differ from these references by this much. This sets what
+"equivalent" can mean end to end, and why the port is gated stage by stage:
+
+1. **Per stage**, fed the oracle's own inputs, the port reproduces the
+   oracle's outputs bit for bit or to floating-point noise (the fixtures).
+2. **End to end**, where FFT and factorization roundoff necessarily differ in
+   the last bit, the port's deviation from the oracle stays within the
+   oracle's own deviation above (per band, and in the count of channels
+   above 0.1 dB and 1 dB).
 
 ## Gates
 

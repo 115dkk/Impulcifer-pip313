@@ -43,7 +43,7 @@ def main():
                        lambda x: np.array([x[0]-3, 2*(x[1]+2), x[0]+x[1]])))
     grid = np.geomspace(15, 20000, 700)
     # An independent, deliberately overparameterized, irregular synthetic curve.
-    curve = (7*np.sin(9*np.log(grid/15)) + 3*np.cos(17*np.log(grid/15)))
+    curve = (7*np.sin(13*np.log(grid/15)) + 3*np.cos(23*np.log(grid/15)))
     curve *= np.clip((np.log2(grid)-np.log2(20/np.sqrt(2)))/.5, 0, 1)
     curve *= np.clip((np.log2(500*np.sqrt(2))-np.log2(grid))/.5, 0, 1)
     x0, lower, upper = [], [], []

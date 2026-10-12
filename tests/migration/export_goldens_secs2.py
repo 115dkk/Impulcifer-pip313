@@ -11,7 +11,15 @@ change is applied in memory, not to the checkout: `design_mimo`'s minimum of
 three positions is lowered to two (the BRIR is fixed at the two ears).
 
     cargo run --release -p impulcifer-dsp --example secs2_inputs -- <inputs>
-    SECS2_SRC=<checkout>/src SECS2_INPUTS=<inputs> python tests/migration/export_goldens_secs2.py
+    NPY_DISABLE_CPU_FEATURES="X86_V3 X86_V4 AVX512_ICL AVX512_SPR" \
+        SECS2_SRC=<checkout>/src SECS2_INPUTS=<inputs> python tests/migration/export_goldens_secs2.py
+
+NumPy's runtime SIMD dispatch above the X86-64-v2 baseline must be off (list
+the features `numpy.show_runtime()` finds): with AVX-512, NumPy's float64
+log10/exp come from SIMD kernels that differ from the C library in the last
+bit (12% of log10 values here), enough to move a 150-evaluation trust-region
+path, and Rust's f64 functions call the C library. `check_libm` refuses to run
+otherwise. The same exporter writes the two end-to-end references.
 
 Encoding as the other exporters (README.md): repr-precision float64 JSON,
 complex as [real, imaginary], nonfinite as strings, every file below 200 kB;
@@ -39,7 +47,8 @@ OUT = Path(__file__).with_name("goldens")
 SRC = Path(os.environ["SECS2_SRC"])
 INPUTS = Path(os.environ["SECS2_INPUTS"])
 META = {"scipy": scipy.__version__, "numpy": np.__version__, "python": platform.python_version(),
-        "oracle": "SECS 2 Beta 1.1.0 (ceac0ad)", "dtype": "float64/complex128"}
+        "oracle": "SECS 2 Beta 1.1.0 (ceac0ad)", "dtype": "float64/complex128",
+        "numpy_dispatch": "baseline X86-64-v2 (C library transcendental functions)"}
 WRITTEN = []
 LIMIT = 200_000
 CHUNK = 24_000
@@ -143,14 +152,17 @@ def mode_params(mode):
     return (dict(ce.MODES[mode]), mode) if isinstance(mode, str) else (cal.ultra_params(mode), f"ultra-{mode:g}")
 
 
-def make_engine(irs, mains, mode, target=flat, rc_range=(20.0, None), volume=None, weight=1.0):
+def make_engine(irs, mains, mode, target=flat, rc_range=(20.0, None), volume=None, weight=1.0, boost=None):
     m, _ = mode_params(mode)
     ce.MAIN_WEIGHT = float(weight)
     ce.MAIN_WEIGHT_LO = float(weight)
-    return ce.CorrectionEngine(irs, mains, [], {"front": list(mains)}, target, xo={}, main_position=min(irs),
-                               taps=m["taps"], lift_ms=m["lift_ms"], peq_bands=m.get("peq_bands"),
-                               max_latency_ms=m["max_latency_ms"], phase_frac=m.get("phase_frac", 6.0),
-                               rc_range=rc_range, room_volume_m3=volume)
+    e = ce.CorrectionEngine(irs, mains, [], {"front": list(mains)}, target, xo={}, main_position=min(irs),
+                            taps=m["taps"], lift_ms=m["lift_ms"], peq_bands=m.get("peq_bands"),
+                            max_latency_ms=m["max_latency_ms"], phase_frac=m.get("phase_frac", 6.0),
+                            rc_range=rc_range, room_volume_m3=volume)
+    if boost is not None:                     # the oracle's own boost setting caps the engine default
+        e.max_boost_db = min(float(e.max_boost_db), float(boost))
+    return e
 
 
 # ------------------------------------------------------------- interposition
@@ -586,8 +598,151 @@ def export_mimo():
             save(f"mimo_{name}_{i}", {"input": i}, data)
 
 
+# --------------------------------------------------------------- end to end
+def r10(values):
+    return [float(f"{v:.10g}") for v in np.asarray(values, float)]
+
+
+E2E_BINS = sorted(set(int(round(x / (FS / N))) for x in np.concatenate([
+    15 * 2 ** (np.arange(0, 48 * np.log2(1000 / 15)) / 48), 1000 * 2 ** (np.arange(0, 6 * np.log2(23000 / 1000) + 1) / 6)])
+    if x <= 23000))
+
+
+def write_reference(name, payload):
+    """The two end-to-end references are integration checks, not fixtures; they may exceed 200 kB."""
+    data = (json.dumps(plain(payload), allow_nan=False, separators=(",", ":")) + "\n").encode()
+    path = OUT / name
+    if not path.exists() or path.read_bytes() != data:
+        path.write_bytes(data)
+    print(f"wrote {name}, {len(data)} bytes")
+
+
+PROVENANCE = {
+    "tool": "Sound Equalization and Correction System 2 (SECS 2) Beta 1.1.0, Speaker Gallery (DCinside), GPL-3.0",
+    "source": "https://github.com/Kim-O-O/Sound-Equalization-and-Correction-System-2 (commit ceac0ad)",
+    "exporter": "tests/migration/export_goldens_secs2.py (no SECS code; calls the oracle and records its results)",
+    "numpy_dispatch": "SIMD above the X86-64-v2 baseline disabled: the oracle's float64 transcendental functions are the C library's",
+}
+
+
+def export_end_to_end_rc():
+    lift_of = {}
+    entries = {}
+
+    def run(speakers, sides, mode, weight=1.0, target="flat", rc_range=(20.0, None), volume=None, boost=None):
+        _, mname = mode_params(mode)
+        irs = {p + 1: {s: (omni(s, side), FS, 0.0) for s in speakers} for p, side in enumerate(sides)}
+        e = make_engine(irs, speakers, mode, target=flat if target == "flat" else demo_target(), rc_range=rc_range,
+                        volume=volume, weight=weight, boost=boost)
+        _FIT_LOG.clear()
+        res = e.compute()
+        lift = float(e.lift_ms) / 1000.0
+        lift_of[mname] = lift
+        fb = np.array(E2E_BINS) * (FS / N)
+        out = {"mode": mname, "speakers": speakers, "sides": sides, "main_weight": weight, "target": target,
+               "rc_lo": rc_range[0], "rc_hi_setting": rc_range[1], "room_volume_m3": volume,
+               "max_boost_db": float(e.max_boost_db), "rc_hi": float(e.rc_hi),
+               "schroeder_hz": None if volume is None else e.schroeder_hz(), "channels": {}}
+        for s in speakers:
+            Fs = e.chain[s]["F"][E2E_BINS]
+            ch = res.channels[s]
+            out["channels"][s] = {
+                "gain_db": float(ch.gain_db), "level_db": float(e._band_level(s, 300, 3000)),
+                "peq": [list(map(float, b)) for b in ch.peq], "phase_strength": float(e.phase_strength[s]),
+                "phase_frac_used": float(getattr(e, "phase_frac_used", {}).get(s, e.phase_frac)),
+                "fir_taps": int(np.asarray(ch.fir).size) if np.asarray(ch.fir).size > 1 else 0,
+                "mag_db": r10(20 * np.log10(np.abs(Fs) + 1e-12)),
+                "phase_rad": r10(np.angle(Fs * np.exp(2j * np.pi * fb * lift)))}
+        return out
+
+    for s in SPEAKERS:
+        for side in ("left", "right"):
+            entries[f"single/{s}/{side}/mixed"] = run([s], [side], "mixed")
+    for mode in ("zero", "mixed", "linear", "long", 60.0):
+        for s in SPEAKERS:
+            entries[f"two/{s}/{mode_params(mode)[1]}"] = run([s], ["left", "right"], mode)
+    for s in SPEAKERS:
+        entries[f"two-main5/{s}/mixed"] = run([s], ["left", "right"], "mixed", weight=5.0)
+    entries["two/FL/mixed/target"] = run(["FL"], ["left", "right"], "mixed", target="demo")
+    entries["two/SL/linear/target"] = run(["SL"], ["left", "right"], "linear", target="demo")
+    entries["two/FL/mixed/volume40"] = run(["FL"], ["left", "right"], "mixed", volume=40.0)
+    entries["two/BR/mixed/band30-300"] = run(["BR"], ["left", "right"], "mixed", rc_range=(30.0, 300.0))
+    entries["two/FC/mixed/boost6"] = run(["FC"], ["left", "right"], "mixed", boost=6.0)
+    entries["all/mixed"] = run(SPEAKERS, ["left", "right"], "mixed")
+    write_reference("room_tuning_secs2_rc.json", {
+        "provenance": {**PROVENANCE, "configuration": (
+            "mains = the listed speakers, no subwoofers, no crossover; positions = ear positions in order (position 1 "
+            "is SECS's listening position); main_weight sets SECS MAIN_WEIGHT and MAIN_WEIGHT_LO; modes from SECS "
+            "MODES, ultra-<ms> from its ultra mode; target flat (0 dB) or the demo room-target.csv interpolated "
+            "linearly in Hz with end values held. In all/mixed the oracle places every speaker on one time origin "
+            "(the earliest onset at position 1 over all seven); its responses therefore are not the per-speaker "
+            "responses and only its gains and levels are a reference.")},
+        "ir": {"estimator": "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav", "files": "data/demo/room-<speakers>-<side>.wav",
+               "construction": "examples/secs2_inputs omni/*: open_recording_samples(estimator, fs, tracks, speakers, side, 2.0), uncropped (391270 samples)"},
+        "n_fft": N, "bins": E2E_BINS, "lift_s": lift_of,
+        "fields": {"mag_db": "20*log10(|F|+1e-12) of the channel correction (FIR and PEQ) at bins, 10 significant digits",
+                   "phase_rad": "angle of F*exp(+j*2*pi*f*lift) at bins", "fir_taps": "0 = no FIR (zero mode)"},
+        "entries": entries})
+
+
+def export_end_to_end_mimo():
+    irs = {1: {s: (load_ir(f"brir/{s}__left.f64"), FS, 0.0) for s in SPEAKERS},
+           2: {s: (load_ir(f"brir/{s}__right.f64"), FS, 0.0) for s in SPEAKERS}}
+    entries = {}
+    for name, mode, fsiso, f_low in (("mixed/fsiso150/auto", "mixed", 150.0, None), ("mixed/fsiso100/low40", "mixed", 100.0, 40.0),
+                                     ("linear/fsiso150/auto", "linear", 150.0, None)):
+        e = make_engine(irs, SPEAKERS, mode)
+        res = e.compute()
+        e.align_delay_ms = {r: 0.0 for r in e.align_delay_ms}
+        d = mimo.design_mimo(e, fsiso=fsiso, positions=[1, 2], f_low=f_low)
+        H = e.long_spectra()
+        n = int(mimo.LEN_S * mimo.FS_LOW)
+        late = {}
+        for i in e.chain:
+            sup = d.supports.get(i, {})
+            if not sup:
+                late[i] = {"worst_band_db": None, "tail_change": None}
+                continue
+            xs, ys = zip(*(mimo.apply_mimo(e, d, i, H, p, n) for p in (1, 2)))
+            gs = [{j: mimo.to_low(mimo.support_path(e, d, j, H, p), e.f, n) for j in sup} for p in (1, 2)]
+            late[i] = {"worst_band_db": float(mimo._worst_band_db(list(xs), gs, sup, fsiso, n, None)),
+                       "tail_change": float(mimo.worst_t60_change(list(xs), list(ys)))}
+        entries[name] = {
+            "rc_mode": mode, "fsiso": fsiso, "f_low": f_low,
+            "gain_db": {s: float(res.channels[s].gain_db) for s in SPEAKERS},
+            "ranges": {r: (list(v) if v else None) for r, v in d.ranges.items()},
+            "level_db": {i: float(v) for i, v in d.level_db.items()},
+            "supports": {i: {j: list(map(float, s)) for j, s in v.items()} for i, v in d.supports.items()},
+            "late": late, "notes": [str(x) for x in d.notes]}
+    write_reference("room_tuning_secs2_mimo.json", {
+        "provenance": {**PROVENANCE, "configuration": (
+            "positions = left ear, right ear of the aligned in-ear BRIRs (t0 = 0 for all, common time base); mains = "
+            "all seven speakers, no subwoofers; MAIN_WEIGHT = MAIN_WEIGHT_LO = 1 (position 1 still drives the "
+            "listening-position-only steps); SECS arrival delays set to zero after compute(); design_mimo's "
+            "minimum-position rule lowered from 3 to 2 in memory")},
+        "ir": {"estimator": "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav", "files": "data/demo/FL,FR.wav, FC.wav, BL,SL.wav, SR,BR.wav",
+               "construction": "examples/secs2_inputs brir/*: open_recording_samples(…, None, 2.0) per file in that order, crop_heads(1.0), align_ipsilateral_all(IPSILATERAL_PAIRS, 30.0), align_onset_groups_peak_leftref(None), crop_tails(estimator) (24000 samples)"},
+        "fields": {"supports": "input -> support speaker -> 600 Hz FIR (support FIR convolved with the Fsiso low-pass, after the guard)",
+                   "level_db": "support level relative to the correction filter energy", "ranges": "support band (low, high) Hz or null",
+                   "late": "the oracle's guard measures at the accepted scale; tail_change is its scaled form (dB x 0.15)"},
+        "entries": entries})
+
+
+def check_libm():
+    """The oracle's float64 transcendental functions must be the C library's (NPY_DISABLE_CPU_FEATURES)."""
+    import math
+    x = np.linspace(1e-3, 1e3, 20001)
+    assert all(float(a) == math.log10(float(b)) for a, b in zip(np.log10(x), x)), (
+        "NumPy dispatches SIMD log10; run with NPY_DISABLE_CPU_FEATURES set to the found features above X86_V2")
+    y = np.linspace(-50.0, 50.0, 20001)
+    assert all(float(a) == math.exp(float(b)) for a, b in zip(np.exp(y), y))
+
+
 def main():
+    check_libm()
     OUT.mkdir(parents=True, exist_ok=True)
+    export_end_to_end_rc()
+    export_end_to_end_mimo()
     export_primitives()
     export_synthetic_fits()
     export_rc()
