@@ -545,6 +545,7 @@ pub(super) fn room_correction(
             responses_tracks: Vec::new(),
             diagnostics: None,
             tuning: Some(plan),
+            tuning2: None,
         });
     }
     let uncropped = rir.clone();
@@ -703,6 +704,7 @@ pub(super) fn room_correction(
     }
     Ok(RoomCorrection {
         tuning: None,
+        tuning2: None,
         frs,
         responses_tracks: tracks,
         diagnostics: Some(RoomDiagnostics {

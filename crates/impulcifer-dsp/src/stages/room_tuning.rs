@@ -1160,7 +1160,7 @@ pub fn pre_echo(ir: &ImpulseResponse) -> f64 {
 /// Side, then `pre_echo_parts` before and after tuning.
 type EarEcho = (Side, (f64, f64), (f64, f64));
 /// `(largest |h| before the guard, |h| at the direct sound)` of one ear.
-fn pre_echo_parts(ir: &ImpulseResponse) -> (f64, f64) {
+pub fn pre_echo_parts(ir: &ImpulseResponse) -> (f64, f64) {
     if ir.data.is_empty() {
         return (0., 0.);
     }
@@ -1171,7 +1171,7 @@ fn pre_echo_parts(ir: &ImpulseResponse) -> (f64, f64) {
     });
     (before, ir.data[p].abs())
 }
-fn level_db(value: f64, reference: f64) -> f64 {
+pub fn level_db(value: f64, reference: f64) -> f64 {
     if reference <= 0. {
         return -600.;
     }

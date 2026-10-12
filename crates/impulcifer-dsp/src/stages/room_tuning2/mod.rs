@@ -1,5 +1,14 @@
 //! Virtual room tuning v2 channel correction, independently implemented from
 //! docs/rust/ROOM_CORRECTION.md (ADR 0008); no SECS implementation is included.
+mod apply;
+pub use apply::{
+    PlannedSpeaker, Speaker2Report, Tuning2Options, Tuning2Plan, Tuning2Report, apply_tuning2,
+    prepare_tuning2,
+};
+pub mod mimo;
+pub use mimo::{
+    MimoDesign, MimoInput, MimoInputResult, MimoOptions, MimoSupport, design_mimo, support_response,
+};
 pub mod peq;
 pub mod primitives;
 pub mod profile;

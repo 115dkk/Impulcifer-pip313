@@ -59,6 +59,12 @@ pub trait StageObserver {
     ) -> Result<(), DspError> {
         Ok(())
     }
+    fn on_room_tuned2(
+        &mut self,
+        _report: &crate::stages::room_tuning2::Tuning2Report,
+    ) -> Result<(), DspError> {
+        Ok(())
+    }
     /// Read-only plot snapshot before any later resampling; no progress step added.
     fn on_plot(&mut self, _key: StageKey, _hrir: &Hrir) -> Result<(), DspError> {
         Ok(())
@@ -211,6 +217,7 @@ pub fn run_pipeline(
     let mut applied_gain_db = 0.0;
     let mut readme = None;
     let mut tuning_report = None;
+    let mut tuning2_report = None;
     let mut responses_tracks = Vec::new();
     let mut hrir_tracks = Vec::new();
     let mut hesuvi_tracks = Vec::new();
@@ -256,6 +263,14 @@ pub fn run_pipeline(
                     observer.on_room_tuned(&report)?;
                     tuning_report = Some(report);
                 }
+                if config.do_room_correction
+                    && config.room_mode == "tuning2"
+                    && let Some(plan) = room.as_ref().and_then(|r| r.tuning2.as_ref())
+                {
+                    let report = crate::stages::room_tuning2::apply_tuning2(&mut hrir, plan)?;
+                    observer.on_room_tuned2(&report)?;
+                    tuning2_report = Some(report);
+                }
             }
             StageKey::VirtualBass => {
                 let mode = VirtualBassMode::parse(&config.vbass_mode)
@@ -290,7 +305,7 @@ pub fn run_pipeline(
                                 room_gains: room
                                     .as_ref()
                                     .filter(|_| {
-                                        config.do_room_correction && config.room_mode != "tuning"
+                                        config.do_room_correction && config.room_mode == "eq"
                                     })
                                     .map(|r| &r.frs)
                                     .filter(|frs| frs.term == crate::stages::room::RoomTerm::Gain),
@@ -354,6 +369,7 @@ pub fn run_pipeline(
             StageKey::WriteReadme => {
                 let mut data = readme_data(&hrir, config.fs.unwrap_or(hrir.fs), applied_gain_db);
                 data.tuning = tuning_report.take();
+                data.tuning2 = tuning2_report.take();
                 readme = Some(data);
             }
             StageKey::Resample => {

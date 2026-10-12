@@ -292,6 +292,15 @@ pub fn smoke() {
         let result = design_rc(&points, &opts, &band, None, None).unwrap();
         assert_eq!(result.fir.len(), mode.params(48000).taps);
     }
+    let support = MimoSupport {
+        speaker: "FL".into(),
+        low: 50.,
+        fir: primitives::firwin(31, 150., 600.),
+    };
+    assert_eq!(
+        support_response(&support, 48000, analysis_len(48000)).len(),
+        65537
+    );
 }
 
 fn room_tuning2_bench() {
@@ -391,8 +400,89 @@ fn room_tuning2_bench() {
     }
 }
 
+fn mimo_bench() {
+    use impulcifer_dsp::{estimator::SweepEstimator, hrir::Hrir, stages::room_tuning2::*};
+    use impulcifer_io::read_wav;
+    use impulcifer_types::constants::IPSILATERAL_PAIRS;
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let wav = read_wav(&root.join("data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")).unwrap();
+    let estimator = SweepEstimator::from_samples(wav.sample_rate, &wav.tracks[0]).unwrap();
+    let mut h = Hrir {
+        fs: 48000,
+        speakers: vec![],
+    };
+    for file in ["FL,FR.wav", "FC.wav", "BL,SL.wav", "SR,BR.wav"] {
+        let wav = read_wav(&root.join("data/demo").join(file)).unwrap();
+        let names: Vec<_> = file.strip_suffix(".wav").unwrap().split(',').collect();
+        h.open_recording_samples(&estimator, wav.sample_rate, &wav.tracks, &names, None, 2.)
+            .unwrap();
+    }
+    h.crop_heads(1.).unwrap();
+    h.align_ipsilateral_all(&IPSILATERAL_PAIRS, 30.);
+    h.align_onset_groups_peak_leftref(None).unwrap();
+    h.crop_tails(&estimator).unwrap();
+    let opts = Tuning2Options {
+        rc: RcOptions::default(),
+        level_match: true,
+        mimo: Some(MimoOptions {
+            fsiso: 150.,
+            low: None,
+        }),
+        pairs: vec![],
+    };
+    let plan = prepare_tuning2(&h, &opts, None, None).unwrap();
+    let inputs: Vec<_> = plan
+        .speakers
+        .iter()
+        .map(|s| MimoInput {
+            speaker: &s.speaker,
+            gain_db: 0.,
+            response: &s.rc.response,
+        })
+        .collect();
+    let start = Instant::now();
+    black_box(design_mimo(&h, &inputs, opts.mimo.as_ref().unwrap()).unwrap());
+    let elapsed = start.elapsed().as_secs_f64();
+    println!(
+        "mimo/demo total={elapsed:.6}s per_input={:.6}s",
+        elapsed / 7.
+    );
+    let start = Instant::now();
+    black_box(apply_tuning2(&mut h.clone(), &plan).unwrap());
+    println!("mimo/apply_demo {:.6}s", start.elapsed().as_secs_f64());
+    let mut large = Hrir {
+        fs: 48000,
+        speakers: vec![],
+    };
+    for i in 0..24 {
+        let mut s = h.speakers[i % 7].clone();
+        s.speaker = format!("S{i}");
+        for ir in s.left.iter_mut().chain(&mut s.right) {
+            let mut data = vec![0.; i * 11];
+            data.extend_from_slice(&ir.data);
+            ir.data = data;
+        }
+        large.speakers.push(s);
+    }
+    let input = [MimoInput {
+        speaker: "S0",
+        gain_db: 0.,
+        response: &plan.speakers[0].rc.response,
+    }];
+    let start = Instant::now();
+    black_box(design_mimo(&large, &input, opts.mimo.as_ref().unwrap()).unwrap());
+    println!(
+        "mimo/24_speakers per_input={:.6}s R=23 m=4140",
+        start.elapsed().as_secs_f64()
+    );
+}
+
 #[allow(dead_code)]
 fn main() {
+    if std::env::args().any(|s| s == "mimo") {
+        mimo_bench();
+        return;
+    }
     if std::env::args().any(|s| s.contains("room_tuning2"))
         || std::env::var("PA02_FILTER").is_ok_and(|s| s.contains("room_tuning2"))
     {
