@@ -195,6 +195,36 @@ fn late_peaks() {
     e.finish("late_peaks");
 }
 #[test]
+fn late_peaks_include_band_edges() {
+    // SciPy 1.18.1 reference (2026-10-12): x=zeros(4096); x[0]=10;
+    // x[start:start+len(taps)]=taps; x[:90]=0; f=rfftfreq(4096, 1/600);
+    // power=abs(rfft(x))**2; find_peaks(power*((f>=20)&(f<=160)))[0]
+    // returns [1092], [137], [1024], [614] for the four cases below.
+    // The two-tap powers are 2-2*cos(w), 2+2*cos(w), 2-2*cos(2*w):
+    // respectively rising, falling, and an interior maximum at 150 Hz.
+    // An impulse at 2048 gives exactly unit power and tests the even plateau's
+    // rounded-down midpoint: (137+1092)/2 -> 614, not either band edge.
+    let mut e = Errors::default();
+    for (name, taps, start, bin) in [
+        ("rising", &[1., -1.][..], 128, 1092),
+        ("falling", &[1., 1.][..], 128, 137),
+        ("interior", &[1., 0., -1.][..], 128, 1024),
+        ("plateau", &[1.][..], 2048, 614),
+    ] {
+        let mut x = vec![0.; 4096];
+        x[0] = 10.;
+        x[start..start + taps.len()].copy_from_slice(taps);
+        let xs = [x];
+        let expected = [bin as f64 * 600. / 4096.];
+        assert_eq!(p::late_peaks(&xs, 0), Vec::<f64>::new());
+        assert_eq!(p::late_peaks(&xs, 1), expected, "{name}");
+        e.compare(name, &p::late_peaks(&xs, 8), &expected, 0., 0.);
+    }
+    assert!(p::late_peaks(&[vec![0.; 4096]], 8).is_empty());
+    assert!(p::late_peaks(&[], 8).is_empty());
+    e.finish("late_peaks_include_band_edges");
+}
+#[test]
 fn mode_t60() {
     let v = fixture("mode_t60");
     let x = array(&v["inputs"]["x"]);

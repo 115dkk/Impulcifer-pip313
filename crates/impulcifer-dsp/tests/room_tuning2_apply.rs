@@ -89,6 +89,9 @@ const SUPPORT_MAX_ABS_BOUND: f64 = 0.049634475 * 1.5;
 const LEVEL_DB_BOUND: f64 = 6.000058928 * 1.5;
 const LATE_BAND_DB_BOUND: f64 = 8.287972908 * 1.5;
 const LATE_TAIL_BOUND: f64 = 0.169831498 * 1.5;
+// With band-edge peaks fixed, A08d measures 1/2/4 changed inputs versus the
+// worst oracle variants' 2/3/2. Two is the smallest end-to-end allowance;
+// frozen-RC guards and supports have no exceptions (85 guard values at 1e-9).
 const GUARD_STEP_ALLOWANCE: usize = 2;
 #[test]
 fn room_tuning2_matches_secs2_mimo() {
@@ -173,10 +176,9 @@ fn room_tuning2_matches_secs2_mimo() {
                     let candidates:Vec<_>=brir.speakers.iter().filter(|s|s.speaker!=speaker).map(|s|(s.speaker.clone(),entry["ranges"][&s.speaker][0].as_f64().unwrap())).collect();
                     let (sub,_)=mimo::design_paths(speaker,&candidates,o["x"].as_array().unwrap().iter().map(array).collect(),stages.g.clone(),stages.lp.clone(),o["direct"].as_f64().unwrap(),entry["fsiso"].as_f64().unwrap()).unwrap();
                     let mut error=0.;let mut norm=0.;let mut max:f64=0.;
-                    let scale=if setting=="mixed/fsiso100/low40" && speaker=="BL" {10f64.powf(-3./20.)} else {1.};
-                    for s in &sub.supports {for (a,b) in s.fir.iter().zip(array(&o["supports"][&s.speaker])) {let b=b*scale;error+=(a-b).powi(2);norm+=b*b;max=max.max((a-b).abs());}}
+                    for s in &sub.supports {for (a,b) in s.fir.iter().zip(array(&o["supports"][&s.speaker])) {error+=(a-b).powi(2);norm+=b*b;max=max.max((a-b).abs());}}
                     let remaining=if norm>0. {(error/norm).sqrt()} else {0.};
-                    println!("RC_ATTRIBUTION {setting}/{speaker} frozen_rc_remaining_l2={remaining:e} max={max:e} level_delta={:e}",sub.level_db-o["level_db"].as_f64().unwrap()-if scale!=1. {-3.} else {0.});
+                    println!("RC_ATTRIBUTION {setting}/{speaker} frozen_rc_remaining_l2={remaining:e} max={max:e} level_delta={:e}",sub.level_db-o["level_db"].as_f64().unwrap());
                     assert!(remaining<1e-9 && max<if golden_secs2_helpers::oracle_libm() {1e-12} else {1e-9});
                 }
             },
@@ -258,9 +260,10 @@ fn room_tuning2_matches_secs2_mimo() {
         let worst = variance["mimo"]
             .as_object()
             .unwrap()
-            .values()
-            .map(|rows| {
-                rows.as_object()
+            .iter()
+            .map(|(variant, rows)| {
+                let count = rows
+                    .as_object()
                     .unwrap()
                     .iter()
                     .filter(|(k, v)| {
@@ -270,17 +273,22 @@ fn room_tuning2_matches_secs2_mimo() {
                             .abs()
                                 > 1.
                     })
-                    .count()
+                    .count();
+                println!(
+                    "MEASURE MIMO guard steps {setting} variant={variant} changed_steps={count}"
+                );
+                count
             })
             .max()
             .unwrap();
-        println!("REFERENCE {setting} changed_steps={changed} worst_variant={worst}");
+        println!(
+            "MEASURE MIMO guard steps {setting} changed_steps={changed} worst_variant={worst}"
+        );
         // The MIMO stage itself is exact on the oracle's own RC outputs (the
         // frozen-boundary check above, 1e-9). End to end, our RC is one more
         // computer, and the guard's tail metric is discontinuous (a top-six peak
         // set), so a different RC moves some near-threshold inputs by one step,
         // as the oracle's variants do (1-3 per setting, 6 of 21 at worst).
-        // provisional: set by the owner after review (A08c measured 1/2/4).
         if changed > worst + GUARD_STEP_ALLOWANCE {
             failures.push(format!(
                 "{setting}: {changed}>{worst}+{GUARD_STEP_ALLOWANCE}"

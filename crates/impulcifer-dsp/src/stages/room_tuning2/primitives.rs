@@ -174,15 +174,19 @@ pub fn late_peaks(xs: &[Vec<f64>], count: usize) -> Vec<f64> {
     let f = grid(4096, 600.);
     let start = f.partition_point(|f| *f < 20.);
     let end = f.partition_point(|f| *f <= 160.);
+    power[..start].fill(0.);
+    power[end..].fill(0.);
+    // Match find_peaks on the full masked array, including band-edge maxima
+    // and the rounded-down midpoint of each flat peak.
     let mut peaks = Vec::new();
-    let mut i = start + 1;
-    while i + 1 < end {
+    let mut i = 1;
+    while i + 1 < power.len() {
         if power[i] > power[i - 1] {
             let mut j = i;
-            while j + 1 < end && power[j + 1] == power[i] {
+            while j + 1 < power.len() && power[j + 1] == power[i] {
                 j += 1;
             }
-            if j + 1 < end && power[j] > power[j + 1] {
+            if j + 1 < power.len() && power[j] > power[j + 1] {
                 peaks.push((i + j) / 2);
             }
             i = j;
