@@ -59,6 +59,17 @@ pub struct MimoStages {
 }
 const N: usize = 720;
 const TAPS: usize = 180;
+/// Memory the parallel MIMO designs may hold at once.
+const MIMO_MEMORY_BUDGET: usize = 1 << 30;
+/// How many inputs may be designed in parallel. A design holds its normal
+/// matrix, the eigenvectors and the solver's scratch at once, about four n x n
+/// f64 arrays (n = 180 per candidate: 39 candidates make 394 MB each). The
+/// grouping does not change any result.
+fn designs_at_once(candidates: usize) -> usize {
+    let unknowns = candidates * TAPS;
+    let per_input = 4 * unknowns * unknowns * std::mem::size_of::<f64>();
+    (MIMO_MEMORY_BUDGET / per_input.max(1)).max(1)
+}
 fn convolution(a: &[f64], b: &[f64]) -> Vec<f64> {
     // Short low-rate filters: direct convolution avoids FFT roundoff at onset.
     let mut y = vec![0.; a.len() + b.len() - 1];
@@ -544,74 +555,82 @@ pub fn design_mimo_observed(
             })
         })
         .collect();
-    let results: Result<Vec<_>, _> = inputs
-        .par_iter()
-        .map(|input| {
-            let index = speakers
-                .iter()
-                .position(|s| s.speaker == input.speaker)
-                .ok_or_else(|| DspError::InvalidArgument("MIMO input requires both ears".into()))?;
-            let indices: Vec<_> = paths
-                .iter()
-                .enumerate()
-                .filter(|(i, p)| *i != index && p.is_some())
-                .map(|(i, _)| i)
-                .collect();
-            if indices.is_empty() {
-                return Ok(MimoInputResult {
-                    speaker: input.speaker.into(),
-                    candidates: vec![],
-                    supports: vec![],
-                    level_db: -300.,
-                    scale_db: None,
-                    band_change_db: -99.,
-                    tail_change_db: -99.,
-                });
-            }
-            let candidates: Vec<_> = indices
-                .iter()
-                .map(|i| (ranges[*i].0.clone(), ranges[*i].1.unwrap().0))
-                .collect();
-            let x = spectra[index]
-                .iter()
-                .map(|h| {
-                    low_rate(
-                        &h.iter()
-                            .zip(input.response)
-                            .map(|(h, r)| h * 10_f64.powf(input.gain_db / 20.) * r)
-                            .collect::<Vec<_>>(),
-                        &f,
-                        N,
-                    )
-                })
-                .collect();
-            let g = (0..2)
-                .map(|e| {
-                    indices
-                        .iter()
-                        .map(|i| paths[*i].as_ref().unwrap()[e].clone())
-                        .collect()
-                })
-                .collect();
-            let direct = low_rate(input.response, &f, N).iter().map(|v| v * v).sum();
-            design_paths(
-                input.speaker,
-                &candidates,
-                x,
-                g,
-                firwin(31, opts.fsiso, 600.),
-                direct,
-                opts.fsiso,
-            )
-            .map(|(result, stages)| {
-                observe(input.speaker, &stages);
-                result
+    let design_one = |input: &MimoInput| {
+        let index = speakers
+            .iter()
+            .position(|s| s.speaker == input.speaker)
+            .ok_or_else(|| DspError::InvalidArgument("MIMO input requires both ears".into()))?;
+        let indices: Vec<_> = paths
+            .iter()
+            .enumerate()
+            .filter(|(i, p)| *i != index && p.is_some())
+            .map(|(i, _)| i)
+            .collect();
+        if indices.is_empty() {
+            return Ok(MimoInputResult {
+                speaker: input.speaker.into(),
+                candidates: vec![],
+                supports: vec![],
+                level_db: -300.,
+                scale_db: None,
+                band_change_db: -99.,
+                tail_change_db: -99.,
+            });
+        }
+        let candidates: Vec<_> = indices
+            .iter()
+            .map(|i| (ranges[*i].0.clone(), ranges[*i].1.unwrap().0))
+            .collect();
+        let x = spectra[index]
+            .iter()
+            .map(|h| {
+                low_rate(
+                    &h.iter()
+                        .zip(input.response)
+                        .map(|(h, r)| h * 10_f64.powf(input.gain_db / 20.) * r)
+                        .collect::<Vec<_>>(),
+                    &f,
+                    N,
+                )
             })
+            .collect();
+        let g = (0..2)
+            .map(|e| {
+                indices
+                    .iter()
+                    .map(|i| paths[*i].as_ref().unwrap()[e].clone())
+                    .collect()
+            })
+            .collect();
+        let direct = low_rate(input.response, &f, N).iter().map(|v| v * v).sum();
+        design_paths(
+            input.speaker,
+            &candidates,
+            x,
+            g,
+            firwin(31, opts.fsiso, 600.),
+            direct,
+            opts.fsiso,
+        )
+        .map(|(result, stages)| {
+            observe(input.speaker, &stages);
+            result
         })
-        .collect();
+    };
+    let at_once = designs_at_once(
+        paths
+            .iter()
+            .filter(|p| p.is_some())
+            .count()
+            .saturating_sub(1),
+    );
+    let mut results = Vec::with_capacity(inputs.len());
+    for group in inputs.chunks(at_once) {
+        results.extend(group.par_iter().map(design_one).collect::<Vec<_>>());
+    }
     Ok(MimoDesign {
         ranges,
-        inputs: results?,
+        inputs: results.into_iter().collect::<Result<_, _>>()?,
     })
 }
 pub fn support_response(
@@ -650,4 +669,14 @@ pub fn support_response(
         })
         .collect();
     Ok(response)
+}
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn mimo_designs_in_parallel_stay_within_the_memory_budget() {
+        assert_eq!(super::designs_at_once(39), 1);
+        assert_eq!(super::designs_at_once(20), 2);
+        assert_eq!(super::designs_at_once(6), 28);
+        assert_eq!(super::designs_at_once(0), super::MIMO_MEMORY_BUDGET);
+    }
 }
