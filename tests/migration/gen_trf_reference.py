@@ -1,6 +1,9 @@
-#!/usr/bin/env python3
 """SciPy-only exact bounded TRF references (no SECS code or execution)."""
+import hashlib
+import importlib
 import json
+import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +36,68 @@ def peq_response(grid, x):
     return 20*np.log10(np.abs(p) + 1e-12)
 
 
+def audit_bumps():
+    """Read only frozen inputs; isolate SVD rounding with eight evaluations.
+
+    Run with --audit-bumps and the same NumPy/OpenBLAS environment as main.
+    No SECS source, binary, or exporter is used; no fixture is written.
+    """
+    from scipy.linalg import svd
+    from scipy.optimize._numdiff import approx_derivative
+
+    trf = importlib.import_module("scipy.optimize._lsq.trf")
+    root = Path(__file__).parent / "goldens"
+    fixture = json.loads((root / "s2_fit_synthetic_bumps.json").read_text())
+
+    def array(value):
+        if isinstance(value, dict):
+            raw = (root / value["file"]).read_bytes()
+            assert hashlib.sha256(raw).hexdigest() == value["sha256"]
+            result = np.frombuffer(raw, dtype="<f8")
+            assert result.size == value["length"]
+            return result
+        if isinstance(value, list) and value and isinstance(value[0], dict):
+            return np.concatenate([array(part) for part in value])
+        return np.asarray(value)
+
+    inputs, outputs = fixture["inputs"], fixture["outputs"]
+    grid, curve = array(inputs["g"]), array(inputs["corr_db"])
+    x, lower, upper = [array(outputs[k]) for k in ("x0", "lb", "ub")]
+    weight = np.where((grid >= 20) & (grid <= 500), 1., .15)
+    def fun(x):
+        return weight * (peq_response(grid, x) - curve)
+    def jac(x):
+        return approx_derivative(fun, x, method="2-point", bounds=(lower, upper))
+    f, j = fun(x), jac(x)
+    assert np.array_equal(j.ravel(), array(outputs["J0"]))
+    expected = array(outputs["main_x"]).reshape(-1, len(x))
+    original = trf.svd
+    try:
+        for driver in ("gesdd", "gesvd", "gesdd_ulp"):
+            points = []
+            def factor(a, full_matrices=False, driver=driver):
+                u, s, vt = svd(a, full_matrices=full_matrices,
+                               lapack_driver="gesvd" if driver == "gesvd" else "gesdd")
+                if driver == "gesdd_ulp":
+                    s = np.nextafter(s, np.inf)
+                return u, s, vt
+            def step(y, points=points):
+                points.append(y.copy())
+                return fun(y)
+            trf.svd = factor
+            trf.trf_bounds(step, jac, x, f, j, lower, upper,
+                           1e-8, 1e-8, 1e-8, 8, np.ones_like(x),
+                           None, "exact", {}, 0)
+            for evaluation, y in enumerate(points):
+                relative = np.abs((y - expected[evaluation]) / expected[evaluation])
+                outside = np.flatnonzero(relative > 1e-9)
+                print(driver, "evaluation", evaluation, "max_relative",
+                      float(relative.max()), "first_parameter",
+                      int(outside[0]) if len(outside) else None)
+    finally:
+        trf.svd = original
+
+
 def main():
     t = np.linspace(0, 3, 41)
     y = 2.3*np.exp(-1.4*t) + 0.35 + 0.01*np.sin(7*t)
@@ -62,10 +127,18 @@ def main():
                        grid=grid.tolist(), curve=curve.tolist()))
     assert cases[-1]["nfev"] == 150, cases[-1]["nfev"]
     output = Path(__file__).parent / "goldens/trf_scipy_reference.json"
-    output.write_text(json.dumps(dict(scipy=scipy.__version__, cases=cases), indent=2) + "\n")
+    output.write_text(json.dumps({
+        "scipy": scipy.__version__, "numpy": np.__version__,
+        "numpy_dispatch": os.environ.get("NPY_DISABLE_CPU_FEATURES", ""),
+        "openblas_num_threads": os.environ.get("OPENBLAS_NUM_THREADS", ""),
+        "cases": cases,
+    }, indent=2) + "\n")
     for case in cases:
         print(case["name"], "nfev", case["nfev"], "cost", case["cost"], "status", case["status"])
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--audit-bumps"]:
+        audit_bumps()
+    else:
+        main()

@@ -54,7 +54,7 @@ fn trf_matches_scipy() {
             .unwrap_or_default();
         let z: Vec<_> = grid
             .iter()
-            .map(|f| Complex64::from_polar(1., -2. * PI * f / 48000.))
+            .map(|f| Complex64::from_polar(1., (-2. * PI * f) * (1. / 48000.)))
             .collect();
         let r = least_squares(
             |x| match name {
@@ -88,7 +88,11 @@ fn trf_matches_scipy() {
                                 1.
                             } else {
                                 0.15
-                            }) * (20. * (p.norm() + 1e-12).log10() - curve[i])
+                            }) * (20.
+                                * (impulcifer_dsp::stages::room_tuning2::peq::magnitude(*p)
+                                    + 1e-12)
+                                    .log10()
+                                - curve[i])
                         })
                         .collect()
                 }

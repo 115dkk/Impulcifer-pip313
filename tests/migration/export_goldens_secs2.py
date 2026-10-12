@@ -39,6 +39,7 @@ import types
 
 import numpy as np
 import scipy
+import scipy.linalg
 import scipy.optimize
 import scipy.signal
 
@@ -398,7 +399,26 @@ def export_fit(name, entry, jacobian=False):
             "main_cost": ls["main_cost"],
             "jac_x": binary(f"fit_{name}_jac", np.array(ls["jac"]) if ls["jac"] else np.zeros(0)),
             "params": len(ls["x0"]), "result": ls["result"]})
+    if ls is not None:
+        outputs["oracle_gesvd"] = gesvd_trace(entry, ls)
     save(f"fit_{name}", inputs, outputs)
+
+
+def gesvd_trace(entry, reference):
+    """The oracle's own trace for the same inputs when only LAPACK's SVD driver changes (gesdd -> gesvd):
+    the evaluation index where the oracle stops agreeing with itself is the horizon of a deterministic path."""
+    use_gesvd(True)
+    try:
+        ce.fit_peq(entry["g"], entry["corr_db"], entry["n"], *entry["args"], **entry["kwargs"])
+    finally:
+        use_gesvd(False)
+    alt = _FIT_LOG.pop()["least_squares"]
+    count = min(len(alt["main"]), len(reference["main"]))
+    rel = [float(np.max(np.abs(alt["main"][i] - reference["main"][i])) / max(float(np.max(np.abs(reference["main"][i]))), 1e-300))
+           for i in range(count)]
+    first = next((i for i, r in enumerate(rel) if r > 1e-9), None)
+    return {"first_index_over_1e-9": first, "rel_distance": rel, "nfev": alt["result"]["nfev"],
+            "cost": alt["result"]["cost"], "evaluations": len(alt["main"])}
 
 
 def export_synthetic_fits():
@@ -625,7 +645,7 @@ PROVENANCE = {
 }
 
 
-def export_end_to_end_rc():
+def rc_reference_entries():
     lift_of = {}
     entries = {}
 
@@ -669,6 +689,11 @@ def export_end_to_end_rc():
     entries["two/BR/mixed/band30-300"] = run(["BR"], ["left", "right"], "mixed", rc_range=(30.0, 300.0))
     entries["two/FC/mixed/boost6"] = run(["FC"], ["left", "right"], "mixed", boost=6.0)
     entries["all/mixed"] = run(SPEAKERS, ["left", "right"], "mixed")
+    return entries, lift_of
+
+
+def export_end_to_end_rc():
+    entries, lift_of = rc_reference_entries()
     write_reference("room_tuning_secs2_rc.json", {
         "provenance": {**PROVENANCE, "configuration": (
             "mains = the listed speakers, no subwoofers, no crossover; positions = ear positions in order (position 1 "
@@ -683,9 +708,10 @@ def export_end_to_end_rc():
         "fields": {"mag_db": "20*log10(|F|+1e-12) of the channel correction (FIR and PEQ) at bins, 10 significant digits",
                    "phase_rad": "angle of F*exp(+j*2*pi*f*lift) at bins", "fir_taps": "0 = no FIR (zero mode)"},
         "entries": entries})
+    return entries
 
 
-def export_end_to_end_mimo():
+def mimo_reference_entries():
     irs = {1: {s: (load_ir(f"brir/{s}__left.f64"), FS, 0.0) for s in SPEAKERS},
            2: {s: (load_ir(f"brir/{s}__right.f64"), FS, 0.0) for s in SPEAKERS}}
     entries = {}
@@ -714,6 +740,11 @@ def export_end_to_end_mimo():
             "level_db": {i: float(v) for i, v in d.level_db.items()},
             "supports": {i: {j: list(map(float, s)) for j, s in v.items()} for i, v in d.supports.items()},
             "late": late, "notes": [str(x) for x in d.notes]}
+    return entries
+
+
+def export_end_to_end_mimo():
+    entries = mimo_reference_entries()
     write_reference("room_tuning_secs2_mimo.json", {
         "provenance": {**PROVENANCE, "configuration": (
             "positions = left ear, right ear of the aligned in-ear BRIRs (t0 = 0 for all, common time base); mains = "
@@ -726,6 +757,112 @@ def export_end_to_end_mimo():
                    "level_db": "support level relative to the correction filter energy", "ranges": "support band (low, high) Hz or null",
                    "late": "the oracle's guard measures at the accepted scale; tail_change is its scaled form (dB x 0.15)"},
         "entries": entries})
+    return entries
+
+
+# ------------------------------------------- the oracle against itself
+# Each variant is SECS 2 as another computer runs it: NumPy's AVX-512 kernels,
+# OpenBLAS kernels of older CPUs, or LAPACK's other SVD driver. Every variant
+# runs in its own process (the environment selects the kernels at load time).
+VARIANTS = {
+    "numpy_avx512": {"env": {"NPY_DISABLE_CPU_FEATURES": None}},
+    "openblas_haswell": {"env": {"OPENBLAS_CORETYPE": "Haswell"}},
+    "openblas_sandybridge": {"env": {"OPENBLAS_CORETYPE": "Sandybridge"}},
+    "openblas_nehalem": {"env": {"OPENBLAS_CORETYPE": "Nehalem"}},
+    "lapack_gesvd": {"env": {}, "gesvd": True},
+}
+TRF_MODULE = sys.modules["scipy.optimize._lsq.trf"]
+_ORIGINAL_SVD = TRF_MODULE.svd
+
+
+def use_gesvd(on):
+    TRF_MODULE.svd = ((lambda a, full_matrices=False: scipy.linalg.svd(a, full_matrices=full_matrices, lapack_driver="gesvd"))
+                      if on else _ORIGINAL_SVD)
+
+
+def band_maxima(f, a, b, wrap=False):
+    d = np.abs(np.asarray(a) - np.asarray(b))
+    if wrap:
+        d = np.abs(np.angle(np.exp(1j * (np.asarray(a) - np.asarray(b)))))
+    return [float(d[(f >= lo) & (f < hi)].max()) for lo, hi in ((15, 100), (100, 500), (500, 2000), (2000, 23000))]
+
+
+def compare_rc(reference, variant):
+    f = np.array(E2E_BINS) * (FS / N)
+    out = {}
+    for key, entry in reference.items():
+        if key == "all/mixed":
+            continue
+        for s, ch in entry["channels"].items():
+            other = variant[key]["channels"][s]
+            out[f"{key}/{s}"] = {"mag_db": band_maxima(f, ch["mag_db"], other["mag_db"]),
+                                 "phase_rad": band_maxima(f, ch["phase_rad"], other["phase_rad"], wrap=True),
+                                 "phase_strength": [ch["phase_strength"], other["phase_strength"]],
+                                 "peq_bands": [len(ch["peq"]), len(other["peq"])]}
+    return out
+
+
+def compare_mimo(reference, variant):
+    out = {}
+    for key, entry in reference.items():
+        other = variant[key]
+        for i, level in entry["level_db"].items():
+            sa, sb = entry["supports"].get(i, {}), other["supports"].get(i, {})
+            rel = [float(np.linalg.norm(np.subtract(sa.get(j, np.zeros(210)), sb.get(j, np.zeros(210))))
+                         / max(np.linalg.norm(sa.get(j, np.zeros(210))), 1e-30)) for j in sorted(set(sa) | set(sb))]
+            out[f"{key}/{i}"] = {"level_db": [level, other["level_db"][i]], "supports": [len(sa), len(sb)],
+                                 "support_rel_l2": max(rel) if rel else 0.0,
+                                 "ranges_equal": entry["ranges"] == other["ranges"]}
+    return out
+
+
+def summarize(per_channel):
+    mags = np.array([v["mag_db"] for v in per_channel.values()])
+    worst = mags.max(axis=1)
+    return {"max_mag_db": mags.max(axis=0).tolist(), "median_mag_db": np.median(mags, axis=0).tolist(),
+            "channels_over": {str(t): int((worst > t).sum()) for t in (0.001, 0.01, 0.1, 1.0)},
+            "strength_changes": sum(v["phase_strength"][0] != v["phase_strength"][1] for v in per_channel.values()),
+            "peq_count_changes": sum(v["peq_bands"][0] != v["peq_bands"][1] for v in per_channel.values())}
+
+
+def export_variance(rc_reference, mimo_reference):
+    import subprocess
+    import tempfile
+    variants = {}
+    for name, spec in VARIANTS.items():
+        env = dict(os.environ)
+        for key, value in spec["env"].items():
+            if value is None:
+                env.pop(key, None)
+            else:
+                env[key] = value
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "variant.json"
+            subprocess.run([sys.executable, "-I", __file__, "--variant", name, "--out", str(path)], env=env, check=True)
+            data = json.loads(path.read_text())
+        variants[name] = {"rc": compare_rc(rc_reference, data["rc"]), "mimo": compare_mimo(mimo_reference, data["mimo"])}
+        print(f"variant {name}: {summarize(variants[name]['rc'])}", flush=True)
+    keys = next(iter(variants.values()))["rc"].keys()
+    envelope = {k: {"mag_db": np.max([v["rc"][k]["mag_db"] for v in variants.values()], axis=0).tolist(),
+                    "phase_rad": np.max([v["rc"][k]["phase_rad"] for v in variants.values()], axis=0).tolist(),
+                    "phase_strength": [variants[n]["rc"][k]["phase_strength"][1] for n in variants],
+                    "peq_bands": [variants[n]["rc"][k]["peq_bands"][1] for n in variants]} for k in keys}
+    write_reference("room_tuning_secs2_variance.json", {
+        "provenance": {**PROVENANCE, "configuration": (
+            "SECS 2 against itself: the end-to-end references recomputed by the same oracle with one computational "
+            "difference each, as other computers run it, compared with the references per band (15-100, 100-500, "
+            "500-2000, 2000-23000 Hz). The envelope is the largest difference over the variants.")},
+        "variants": {n: {k: v for k, v in VARIANTS[n].items()} for n in VARIANTS},
+        "summary": {n: summarize(v["rc"]) for n, v in variants.items()} | {"envelope": summarize(envelope)},
+        "rc": {n: v["rc"] for n, v in variants.items()}, "rc_envelope": envelope,
+        "mimo": {n: v["mimo"] for n, v in variants.items()}})
+
+
+def run_variant(name, path):
+    use_gesvd(VARIANTS[name].get("gesvd", False))
+    rc, _lift = rc_reference_entries()
+    mimo_entries = mimo_reference_entries()
+    path.write_text(json.dumps(plain({"rc": rc, "mimo": mimo_entries}), allow_nan=False))
 
 
 def check_libm():
@@ -739,10 +876,14 @@ def check_libm():
 
 
 def main():
+    if "--variant" in sys.argv:
+        run_variant(sys.argv[sys.argv.index("--variant") + 1], Path(sys.argv[sys.argv.index("--out") + 1]))
+        return
     check_libm()
     OUT.mkdir(parents=True, exist_ok=True)
-    export_end_to_end_rc()
-    export_end_to_end_mimo()
+    rc_reference = export_end_to_end_rc()
+    mimo_reference = export_end_to_end_mimo()
+    export_variance(rc_reference, mimo_reference)
     export_primitives()
     export_synthetic_fits()
     export_rc()

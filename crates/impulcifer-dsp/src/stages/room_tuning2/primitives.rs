@@ -3,11 +3,11 @@ use crate::{
     filters,
 };
 use std::f64::consts::PI;
-pub(super) fn grid(n: usize, fs: f64) -> Vec<f64> {
+pub fn grid(n: usize, fs: f64) -> Vec<f64> {
     let step = 1. / (n as f64 * (1. / fs));
     (0..=n / 2).map(|k| k as f64 * step).collect()
 }
-pub(super) fn median(x: &[f64]) -> f64 {
+pub fn median(x: &[f64]) -> f64 {
     if x.is_empty() {
         return f64::NAN;
     }
@@ -15,7 +15,7 @@ pub(super) fn median(x: &[f64]) -> f64 {
     x.sort_by(f64::total_cmp);
     (x[(x.len() - 1) / 2] + x[x.len() / 2]) / 2.
 }
-pub(super) fn interp(x: f64, g: &[f64], v: &[f64]) -> f64 {
+pub fn interp(x: f64, g: &[f64], v: &[f64]) -> f64 {
     if x <= g[0] {
         return v[0];
     }
@@ -25,7 +25,7 @@ pub(super) fn interp(x: f64, g: &[f64], v: &[f64]) -> f64 {
     let k = g.partition_point(|a| *a <= x) - 1;
     v[k] + (v[k + 1] - v[k]) / (g[k + 1] - g[k]) * (x - g[k])
 }
-pub(super) fn geomspace(lo: f64, hi: f64, n: usize) -> Vec<f64> {
+pub fn geomspace(lo: f64, hi: f64, n: usize) -> Vec<f64> {
     let a = lo.log10();
     let d = (hi.log10() - a) / (n - 1) as f64;
     let mut g: Vec<_> = (0..n).map(|i| 10_f64.powf(a + i as f64 * d)).collect();
@@ -33,7 +33,7 @@ pub(super) fn geomspace(lo: f64, hi: f64, n: usize) -> Vec<f64> {
     g[n - 1] = hi;
     g
 }
-pub(super) fn smooth(x: &[f64], f: &[f64], b: &[f64]) -> Vec<f64> {
+pub fn smooth(x: &[f64], f: &[f64], b: &[f64]) -> Vec<f64> {
     let mut c = Vec::with_capacity(x.len() + 1);
     c.push(0.);
     for x in x {
@@ -53,7 +53,7 @@ pub(super) fn smooth(x: &[f64], f: &[f64], b: &[f64]) -> Vec<f64> {
         })
         .collect()
 }
-pub(super) fn smooth_complex(x: &[Complex64], f: &[f64], b: &[f64]) -> Vec<Complex64> {
+pub fn smooth_complex(x: &[Complex64], f: &[f64], b: &[f64]) -> Vec<Complex64> {
     let re = smooth(&x.iter().map(|v| v.re).collect::<Vec<_>>(), f, b);
     let im = smooth(&x.iter().map(|v| v.im).collect::<Vec<_>>(), f, b);
     re.into_iter()
@@ -61,7 +61,7 @@ pub(super) fn smooth_complex(x: &[Complex64], f: &[f64], b: &[f64]) -> Vec<Compl
         .map(|(re, im)| Complex64::new(re, im))
         .collect()
 }
-pub(super) fn resolution(f: &[f64]) -> Vec<f64> {
+pub fn resolution(f: &[f64]) -> Vec<f64> {
     f.iter()
         .map(|f| {
             24. * 0.25_f64.powf(
@@ -71,7 +71,7 @@ pub(super) fn resolution(f: &[f64]) -> Vec<f64> {
         })
         .collect()
 }
-pub(super) fn mp(a: &[f64], n: usize) -> Vec<Complex64> {
+pub fn mp(a: &[f64], n: usize) -> Vec<Complex64> {
     let mut c = fft::irfft(
         &a.iter()
             .map(|a| Complex64::new(a.max(1e-8).ln(), 0.))
@@ -84,20 +84,20 @@ pub(super) fn mp(a: &[f64], n: usize) -> Vec<Complex64> {
     c[n / 2 + 1..].fill(0.);
     fft::rfft(&c).into_iter().map(|x| x.exp()).collect()
 }
-pub(super) fn rfft(x: &[f64], n: usize) -> Vec<Complex64> {
+pub fn rfft(x: &[f64], n: usize) -> Vec<Complex64> {
     let mut p = vec![0.; n];
     let len = x.len().min(n);
     p[..len].copy_from_slice(&x[..len]);
     fft::rfft_owned(p)
 }
-pub(super) fn taper(x: &mut [f64], fraction: f64) {
+pub fn taper(x: &mut [f64], fraction: f64) {
     let k = (fraction * x.len() as f64) as usize;
     let start = x.len() - k;
     for i in 0..k {
         x[start + i] *= 0.5 * (1. + (PI * i as f64 / k as f64).cos());
     }
 }
-pub(super) fn argmax(x: &[f64]) -> usize {
+pub fn argmax(x: &[f64]) -> usize {
     let mut best = 0;
     for i in 1..x.len() {
         if x[i] > x[best] {
@@ -106,12 +106,12 @@ pub(super) fn argmax(x: &[f64]) -> usize {
     }
     best
 }
-pub(super) fn onset(x: &[f64]) -> usize {
+pub fn onset(x: &[f64]) -> usize {
     let a: Vec<_> = x.iter().map(|x| x.abs()).collect();
     let k = argmax(&a);
     a[..=k].iter().position(|x| *x >= 0.1 * a[k]).unwrap_or(0)
 }
-pub(super) fn unwrap(p: &[f64]) -> Vec<f64> {
+pub fn unwrap(p: &[f64]) -> Vec<f64> {
     let mut out = p.to_vec();
     let mut corr = 0.;
     for i in 1..p.len() {
@@ -127,7 +127,7 @@ pub(super) fn unwrap(p: &[f64]) -> Vec<f64> {
     }
     out
 }
-pub(super) fn gradient(y: &[f64], x: &[f64]) -> Vec<f64> {
+pub fn gradient(y: &[f64], x: &[f64]) -> Vec<f64> {
     let n = y.len();
     let mut out = vec![0.; n];
     out[0] = (y[1] - y[0]) / (x[1] - x[0]);
@@ -142,7 +142,7 @@ pub(super) fn gradient(y: &[f64], x: &[f64]) -> Vec<f64> {
     }
     out
 }
-pub(super) fn low_rate(x: &[Complex64], f: &[f64], n: usize) -> Vec<f64> {
+pub fn low_rate(x: &[Complex64], f: &[f64], n: usize) -> Vec<f64> {
     let re: Vec<_> = x.iter().map(|x| x.re).collect();
     let im: Vec<_> = x.iter().map(|x| x.im).collect();
     let spec: Vec<_> = grid(2 * n, 600.)
@@ -156,7 +156,7 @@ pub(super) fn low_rate(x: &[Complex64], f: &[f64], n: usize) -> Vec<f64> {
     out.truncate(n);
     out
 }
-pub(super) fn late_peaks(xs: &[Vec<f64>], count: usize) -> Vec<f64> {
+pub fn late_peaks(xs: &[Vec<f64>], count: usize) -> Vec<f64> {
     let mut power = vec![0.; 2049];
     for x in xs {
         let mut x = x.clone();
@@ -190,7 +190,60 @@ pub(super) fn late_peaks(xs: &[Vec<f64>], count: usize) -> Vec<f64> {
     peaks.truncate(count);
     peaks.iter().map(|k| f[*k]).collect()
 }
-pub(super) fn mode_decay(x: &[f64], fc: f64, half: f64) -> Option<f64> {
+/// Fourth-order high-pass response used by low-rate support paths.
+pub fn hp4(f: &[f64], fc: f64) -> Vec<Complex64> {
+    f.iter()
+        .map(|f| {
+            let s = Complex64::new(0., f / fc);
+            let h = s * s / (s * s + 2_f64.sqrt() * s + 1.);
+            h * h
+        })
+        .collect()
+}
+/// Symmetric Hamming-window low-pass, normalized to unit DC gain.
+pub fn firwin(taps: usize, cutoff: f64, fs: f64) -> Vec<f64> {
+    let fc = cutoff / (fs / 2.);
+    let mut h: Vec<_> = (0..taps)
+        .map(|i| {
+            let m = i as f64 - (taps - 1) as f64 / 2.;
+            let x = fc * m;
+            let sinc = if x == 0. {
+                1.
+            } else {
+                (PI * x).sin() / (PI * x)
+            };
+            fc * sinc * (0.54 - 0.46 * (2. * PI * i as f64 / (taps - 1) as f64).cos())
+        })
+        .collect();
+    let sum: f64 = h.iter().sum();
+    for v in &mut h {
+        *v /= sum;
+    }
+    h
+}
+/// Delay-removed, complex-smoothed group delay on an arbitrary frequency grid.
+pub fn gd_curve(h: &[Complex64], f: &[f64], g: &[f64], frac: f64, fs: f64) -> Vec<f64> {
+    let n = 2 * (h.len() - 1);
+    let t = argmax(&fft::irfft(h, n).iter().map(|x| x.abs()).collect::<Vec<_>>()) as f64 / fs;
+    let shifted: Vec<_> = h
+        .iter()
+        .zip(f)
+        .map(|(h, f)| *h * Complex64::from_polar(1., 2. * PI * f * t))
+        .collect();
+    let s = smooth_complex(&shifted, f, &[frac]);
+    let re: Vec<_> = s.iter().map(|x| x.re).collect();
+    let im: Vec<_> = s.iter().map(|x| x.im).collect();
+    let phase = unwrap(
+        &g.iter()
+            .map(|g| Complex64::new(interp(*g, f, &re), interp(*g, f, &im)).arg())
+            .collect::<Vec<_>>(),
+    );
+    gradient(&phase, &g.iter().map(|g| 2. * PI * g).collect::<Vec<_>>())
+        .iter()
+        .map(|x| -x * 1000.)
+        .collect()
+}
+pub fn mode_decay(x: &[f64], fc: f64, half: f64) -> Option<f64> {
     let sos = filters::butter_bandpass(2, (fc - half).max(1.) / 300., (fc + half).min(270.) / 300.);
     let mut input = vec![0.; 1200];
     input.extend_from_slice(x);

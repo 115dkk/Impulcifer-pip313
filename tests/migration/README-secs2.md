@@ -79,7 +79,7 @@ keyword arguments (lo, hi, boost, ring_ms, f_max). `outputs` holds the final
 bands, the start point `x0`, bounds `lb`/`ub`, `max_nfev`, the initial cost,
 `main_x` (every point where the solver evaluated the residual for a step, in
 order, `params` values each), `main_cost` (half the squared residual norm at
-those points), `jac_x` (every point where it formed a Jacobian), `result`
+those points), `jac_x` (every later point where it formed a Jacobian; the first one, at `x0`, is `J0`), `result`
 (`x`, `cost`, `nfev`, `njev`, `status`, `optimality`) and, for synthetic fits,
 the initial two-point Jacobian `J0` (`J0_shape`). A fit without bands has no
 trace.
@@ -131,15 +131,36 @@ and onset, bounds) is expected at the 1e-12 relative level; the fit traces and
 everything after the first fit are compared per evaluation, so a divergence
 is found at its first step instead of at the end.
 
-| Family | Starting budget |
-| --- | --- |
-| smoothing, frac_for, peaking, ring caps/boxes, firwin, hp4 | rel 1e-12 |
-| minimum phase | 1e-9 dB, 1e-9 rad above −100 dB |
-| fit traces | every `main_x` within rel 1e-9 of its index; same `nfev`, `njev`, `status`; final `x` rel 1e-9 |
-| RC stage spectra | 1e-6 dB / 1e-6 rad (after the first fit agrees) |
-| MIMO normal equations | rel 1e-12 (diagonal, block rows, Aᵀb); identical bisection decisions; u rel 1e-9 |
-| guard values | 1e-9 absolute |
-| integer results (onsets, bins, counts, chosen strength and resolution) | exact |
+| Family | Actual gate / pending budget | Observed maximum (absolute; relative L2 unless noted) |
+| --- | --- | --- |
+| smoothing | rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 0; 0 |
+| frac_for | rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 0; 0 |
+| peaking / PEQ response | rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 0; 0 |
+| ring caps / boxes | rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 0; 0 |
+| firwin / hp4 | rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 6.661338147750939e-16; 3.366572554664735e-16 |
+| butter_band | rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 6.439293542825908e-15; 1.467870505896583e-14 |
+| gd_curve | rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 3.463895836830488e-14; 3.335756460109128e-15 |
+| to_low | rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 4.263256414560601e-14; 4.956033304240086e-16 |
+| mode_t60 | rel 1e-12 / abs floor 1e-12; relative L2 1e-12; matching None | PASS: 5.151434834260726e-14; 3.624258339372087e-15 |
+| onset_window | exact onset/index; window rel 1e-12 / abs floor 1e-12; relative L2 1e-12 | PASS: 0; 0 |
+| late_peaks | exact | PASS: 0; 0 |
+| minimum phase | absolute 1e-9 dB; absolute 1e-9 rad above −100 dB | PASS: combined dB/rad max 6.394884621840902e-14; diagnostic relative L2 5.778793496074114e-14 |
+| levels_w1 | absolute 1e-12 | PASS: 7.105427357601002e-15; 9.293661446750417e-17 |
+| levels_w5 | absolute 1e-12 | PASS: 7.105427357601002e-15; 9.204617316077994e-17 |
+| RC pre-fit bands | absolute 1e-12; matching Schroeder presence | PASS: 0; 0 |
+| RC pre-fit levels | absolute 1e-12 | PASS: 1.421085471520200e-14; 1.530080109777270e-16 |
+| synthetic initial Jacobian J0 (five fixtures) | rel 1e-9, no absolute allowance | PASS: 0; 0 — bit-exact |
+| fit traces | FAIL; no accepted measured budget. Existing check: every `main_x` within rel 1e-9 of its index; same `nfev`, `njev`, `status`; final `x` rel 1e-9 | FAIL on full rerun: bumps first exceeds at evaluation 5, parameter 0, absolute error 7.922355e-9. Combined fit-field max absolute 4.826111812403349e1 (fc_both_long_s0_0), max relative L2 7.577253599902453 (synthetic_zero_low_part); these are diagnostics, not accepted budgets |
+| RC stage spectra / results after fitting | Not gated; starting 1e-6 dB / 1e-6 rad remains pending fit parity | Not measured in this partial run |
+| MIMO normal equations | Out of scope; starting rel 1e-12 (diagonal, block rows, Aᵀb), identical bisection decisions, u rel 1e-9 remain pending | Not measured |
+| MIMO guard values | Out of scope; starting 1e-9 absolute remains pending | Not measured |
+| downstream integer results (bins, counts, chosen strength and resolution) | Exact starting requirement; not gated here | Not measured |
+
+Measured on 2026-10-12 with `golden_secs2_primitives`, `golden_secs2_rc`,
+and `golden_secs2_fit synthetic_initial_jacobian`. Existing floors are kept:
+all passing observed maxima × 1.5 remain below their applicable floors.
+Relative L2 is diagnostic for minimum phase and levels, not an extra gate.
+This is a measured partial gate record, not completed fit, RC, or MIMO parity.
 
 The end-to-end references `room_tuning_secs2_rc.json` and
 `room_tuning_secs2_mimo.json` stay as the integration check on top of these.

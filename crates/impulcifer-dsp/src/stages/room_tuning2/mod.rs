@@ -1,7 +1,7 @@
 //! Virtual room tuning v2 channel correction, independently implemented from
 //! docs/rust/ROOM_CORRECTION.md (ADR 0008); no SECS implementation is included.
-mod peq;
-mod primitives;
+pub mod peq;
+pub mod primitives;
 mod rc;
 use crate::{DspError, fft::Complex64, filters, fr::FrequencyResponse, ir::ImpulseResponse};
 use primitives::*;
@@ -148,17 +148,12 @@ fn curve(fr: Option<&FrequencyResponse>, f: &[f64]) -> Vec<f64> {
 }
 fn spectra(
     points: &[ImpulseResponse],
-    policy: &PositionPolicy,
+    _policy: &PositionPolicy,
     calibration: Option<&FrequencyResponse>,
 ) -> (Vec<f64>, Vec<Vec<Complex64>>) {
     let fs = points[0].fs as f64;
     let n = analysis_len(points[0].fs);
     let f = grid(n, fs);
-    // Any common b is valid; use an order-invariant anchor for equal ears.
-    let b = match policy {
-        PositionPolicy::Symmetric => points.iter().map(|p| onset(&p.data)).min().unwrap(),
-        PositionPolicy::Listening { .. } => onset(&points[0].data),
-    };
     let cal = calibration.map(|c| {
         mp(
             &curve(Some(c), &f)
@@ -171,7 +166,9 @@ fn spectra(
     let h = points
         .iter()
         .map(|ir| {
-            let a = onset(&ir.data).saturating_sub((0.002 * fs) as usize);
+            // Recording latencies are unrelated, under either position policy.
+            let b = onset(&ir.data);
+            let a = b.saturating_sub((0.002 * fs) as usize);
             let end = (a + (0.5 * fs) as usize).min(ir.len());
             let mut w = ir.data[a..end].to_vec();
             taper(&mut w, 0.2);
@@ -211,46 +208,46 @@ fn level(p: &[f64], f: &[f64], target: Option<&FrequencyResponse>) -> f64 {
             .collect::<Vec<_>>(),
     )
 }
-/// Invalid inputs return NaN; use design_rc for the fallible entry point.
+/// Channel level in dB; invalid measurements, policies and curves are rejected.
 pub fn channel_level(
     points: &[ImpulseResponse],
     policy: &PositionPolicy,
     target: Option<&FrequencyResponse>,
     calibration: Option<&FrequencyResponse>,
-) -> f64 {
+) -> Result<f64, DspError> {
     let opts = RcOptions {
         policy: *policy,
         ..Default::default()
     };
-    if validate(points, &opts, target, calibration).is_err() {
-        return f64::NAN;
-    }
+    validate(points, &opts, target, calibration)?;
     let (f, h) = spectra(points, policy, calibration);
-    level(&power(&h, policy), &f, target)
+    Ok(level(&power(&h, policy), &f, target))
 }
-/// All measured speakers contribute to the automatic decay estimate. Invalid
-/// inputs produce a NaN high edge; design_rc rejects that band.
-pub fn correction_band(points: &[&[ImpulseResponse]], opts: &RcOptions) -> CorrectionBand {
-    if points.is_empty()
-        || points
-            .iter()
-            .any(|p| validate(p, opts, None, None).is_err())
-        || points.iter().any(|p| p[0].fs != points[0][0].fs)
-    {
-        return CorrectionBand {
-            low: opts.low,
-            high: f64::NAN,
-            source: BandSource::Default,
-            schroeder: None,
-        };
+/// All measured speakers contribute to the automatic decay estimate.
+pub fn correction_band(
+    points: &[&[ImpulseResponse]],
+    opts: &RcOptions,
+) -> Result<CorrectionBand, DspError> {
+    if points.is_empty() {
+        return Err(DspError::InvalidArgument(
+            "empty tuning2 measurements".into(),
+        ));
+    }
+    for p in points {
+        validate(p, opts, None, None)?;
+    }
+    if points.iter().any(|p| p[0].fs != points[0][0].fs) {
+        return Err(DspError::InvalidArgument(
+            "inconsistent tuning2 sample rates".into(),
+        ));
     }
     if let Some(high) = opts.high {
-        return CorrectionBand {
+        return Ok(CorrectionBand {
             low: opts.low,
             high,
             source: BandSource::Manual,
             schroeder: None,
-        };
+        });
     }
     let mut source = BandSource::Default;
     let mut schroeder = opts.schroeder;
@@ -293,7 +290,7 @@ pub fn correction_band(points: &[&[ImpulseResponse]], opts: &RcOptions) -> Corre
             source = BandSource::Volume;
         }
     }
-    CorrectionBand {
+    Ok(CorrectionBand {
         low: opts.low,
         high: schroeder
             .filter(|s| *s <= 500.)
@@ -301,7 +298,7 @@ pub fn correction_band(points: &[&[ImpulseResponse]], opts: &RcOptions) -> Corre
             .unwrap_or(500.),
         source,
         schroeder,
-    }
+    })
 }
 fn validate(
     points: &[ImpulseResponse],
@@ -352,4 +349,143 @@ fn validate(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn point(padding: usize, gain: f64) -> ImpulseResponse {
+        let mut data = vec![0.; padding + 48000];
+        data[padding] = gain;
+        for k in 1..24000 {
+            data[padding + k] = gain
+                * 0.09
+                * (-(k as f64) / 4000.).exp()
+                * (2. * PI * 73. * k as f64 / 48000.).cos();
+        }
+        ImpulseResponse {
+            fs: 48000,
+            data,
+            recording: None,
+        }
+    }
+
+    #[test]
+    fn independent_padding_preserves_spectra_levels_and_long_input() {
+        let points = [point(200, 1.), point(400, 0.7)];
+        // Reverse which position is earliest, without changing either measurement.
+        let shifted = [point(1200, 1.), point(500, 0.7)];
+        for policy in [
+            PositionPolicy::Symmetric,
+            PositionPolicy::Listening {
+                index: 0,
+                weight: 5.,
+            },
+            PositionPolicy::Listening {
+                index: 1,
+                weight: 5.,
+            },
+        ] {
+            let (f, h) = spectra(&points, &policy, None);
+            let (sf, sh) = spectra(&shifted, &policy, None);
+            assert_eq!(f, sf);
+            for (a, b) in h.iter().zip(&sh) {
+                assert_eq!(a, b, "each position must retain its own complex spectrum");
+                for n in [300, 720] {
+                    assert_eq!(low_rate(a, &f, n), low_rate(b, &f, n));
+                }
+            }
+            for (a, b) in points.iter().zip(&shifted) {
+                assert_eq!(
+                    channel_level(
+                        std::slice::from_ref(a),
+                        &PositionPolicy::Symmetric,
+                        None,
+                        None
+                    )
+                    .unwrap(),
+                    channel_level(
+                        std::slice::from_ref(b),
+                        &PositionPolicy::Symmetric,
+                        None,
+                        None
+                    )
+                    .unwrap()
+                );
+            }
+            assert_eq!(
+                channel_level(&points, &policy, None, None).unwrap(),
+                channel_level(&shifted, &policy, None, None).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn measurement_apis_reject_invalid_inputs() {
+        let opts = RcOptions::default();
+        let valid = point(200, 1.);
+        let mut nonfinite = valid.clone();
+        nonfinite.data[0] = f64::NAN;
+        let mut empty = valid.clone();
+        empty.data.clear();
+        let mut low_rate = valid.clone();
+        low_rate.fs = 32000;
+        let mut other_rate = valid.clone();
+        other_rate.fs = 44100;
+        for p in [
+            vec![],
+            vec![nonfinite],
+            vec![empty],
+            vec![low_rate],
+            vec![valid.clone(), other_rate.clone()],
+        ] {
+            assert!(matches!(
+                channel_level(&p, &opts.policy, None, None),
+                Err(DspError::InvalidArgument(_))
+            ));
+            assert!(matches!(
+                correction_band(&[&p], &opts),
+                Err(DspError::InvalidArgument(_))
+            ));
+        }
+        assert!(correction_band(&[], &opts).is_err());
+        assert!(correction_band(&[std::slice::from_ref(&valid), &[other_rate]], &opts).is_err());
+        for policy in [
+            PositionPolicy::Listening {
+                index: 1,
+                weight: 1.,
+            },
+            PositionPolicy::Listening {
+                index: 0,
+                weight: f64::NAN,
+            },
+            PositionPolicy::Listening {
+                index: 0,
+                weight: 0.,
+            },
+        ] {
+            assert!(channel_level(std::slice::from_ref(&valid), &policy, None, None).is_err());
+            assert!(
+                correction_band(
+                    &[std::slice::from_ref(&valid)],
+                    &RcOptions {
+                        policy,
+                        ..opts.clone()
+                    }
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            correction_band(
+                &[&[valid]],
+                &RcOptions {
+                    high: Some(f64::NAN),
+                    ..opts
+                }
+            )
+            .is_err()
+        );
+    }
 }

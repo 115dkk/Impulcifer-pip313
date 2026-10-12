@@ -10,10 +10,74 @@ use impulcifer_dsp::{
 use impulcifer_io::read_wav;
 use serde_json::Value;
 use std::{collections::BTreeMap, f64::consts::PI, path::PathBuf};
-// provisional: set by the owner after review
-const MAG_MAX_DB: [f64; 4] = [0.01; 4];
-// provisional: set by the owner after review
-const PHASE_MAX_RAD: [f64; 4] = [0.001; 4];
+// User-approved SECS self-variance acceptance caps, not measured fixture budgets.
+const MAG_MAX_DB: [f64; 4] = [1.86, 1.55, 0.41, 0.049];
+// Phase is reported for comparison, not an additional acceptance gate.
+const SECS_PHASE_RAD: [f64; 4] = [0.58, 0.86, 0.71, 0.70];
+const SECS_MEDIAN_DB: [f64; 4] = [0.0066, 0.0092, 0.0012, 0.00004];
+const THRESHOLDS_DB: [f64; 4] = [0.001, 0.01, 0.1, 1.];
+const SECS_COUNTS: [usize; 4] = [56, 35, 22, 8];
+
+fn rounding_allowance(reference: f64) -> f64 {
+    // Half a decimal unit at ten significant digits, plus floating-point noise.
+    let half_unit = if reference == 0. {
+        0.
+    } else {
+        0.5 * 10_f64.powf(reference.abs().log10().floor() - 9.)
+    };
+    half_unit + 1e-10
+}
+
+fn fit_references(root: &std::path::Path, entry: &Value, speaker: &str) -> Vec<Value> {
+    let dir = root.join("tests/migration/goldens");
+    // Intermediate fits live in per-channel s2 fixtures, not in the RC entry.
+    // These cases use the default boost; do not match the boost6 integration case.
+    if entry["max_boost_db"] != 10. {
+        return Vec::new();
+    }
+    for file in std::fs::read_dir(&dir).unwrap() {
+        let path = file.unwrap().path();
+        let name = path.file_name().unwrap().to_str().unwrap();
+        if !name.starts_with("s2_rc_") || !name.ends_with(".json") {
+            continue;
+        }
+        let fixture: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let input = &fixture["inputs"];
+        if input["speaker"] != speaker
+            || input["sides"] != entry["sides"]
+            || input["mode"] != entry["mode"]
+            || input["main_weight"] != entry["main_weight"]
+            || input["target"] != entry["target"]
+            || input["rc_range"][0] != entry["rc_lo"]
+            || input["rc_range"][1] != entry["rc_hi_setting"]
+            || input["room_volume_m3"] != entry["room_volume_m3"]
+        {
+            continue;
+        }
+        let mut fits = Vec::new();
+        for session in fixture["outputs"]["sessions"].as_array().unwrap() {
+            let session = session.as_str().unwrap();
+            let stage: Value = serde_json::from_str(
+                &std::fs::read_to_string(dir.join(format!("s2_{session}.json"))).unwrap(),
+            )
+            .unwrap();
+            for i in 0..stage["outputs"]["fits"].as_u64().unwrap() {
+                let fit: Value = serde_json::from_str(
+                    &std::fs::read_to_string(dir.join(format!(
+                        "s2_fit_{}_{i}.json",
+                        session.strip_prefix("rc_").unwrap()
+                    )))
+                    .unwrap(),
+                )
+                .unwrap();
+                fits.push(fit["outputs"]["bands"].clone());
+            }
+        }
+        return fits;
+    }
+    Vec::new()
+}
 fn values(v: &Value) -> Vec<f64> {
     v.as_array()
         .unwrap()
@@ -81,6 +145,9 @@ fn room_tuning2_matches_secs2_rc() {
     let mut failures = Vec::new();
     let mut maxima_mag = [0_f64; 4];
     let mut maxima_phase = [0_f64; 4];
+    let mut channel_maxima = Vec::new();
+    let mut above = [0_usize; 4];
+    let mut level_only_count = 0;
     let filter = std::env::var("RC_ENTRY").unwrap_or_default();
     for (entry, e) in golden["entries"].as_object().unwrap() {
         if !filter.is_empty() && !entry.contains(&filter) {
@@ -114,21 +181,6 @@ fn room_tuning2_matches_secs2_rc() {
                     .collect::<Vec<_>>(),
             ));
         }
-        let band = correction_band(
-            &inputs.iter().map(|(_, p)| p.as_slice()).collect::<Vec<_>>(),
-            &opts,
-        );
-        assert!(
-            (band.high - e["rc_hi"].as_f64().unwrap()).abs() < 1e-6,
-            "band {entry}: {}",
-            band.high
-        );
-        if let Some(s) = e["schroeder_hz"].as_f64() {
-            assert!(
-                (band.schroeder.unwrap() - s).abs() < 1e-6,
-                "Schroeder {entry}"
-            );
-        }
         let target = if e["target"] == "demo" {
             Some(&target)
         } else {
@@ -136,9 +188,40 @@ fn room_tuning2_matches_secs2_rc() {
         };
         let levels: Vec<_> = inputs
             .iter()
-            .map(|(_, p)| channel_level(p, &opts.policy, target, None))
+            .map(|(_, p)| channel_level(p, &opts.policy, target, None).unwrap())
             .collect();
         let min = levels.iter().copied().fold(f64::INFINITY, f64::min);
+        if entry == "all/mixed" {
+            for ((speaker, _), level) in inputs.iter().zip(&levels) {
+                let r = &e["channels"][*speaker];
+                let reference_level = r["level_db"].as_f64().unwrap();
+                let gain = (min - level - r["gain_db"].as_f64().unwrap()).abs();
+                let delta = (level - reference_level).abs();
+                println!("RC {entry}/{speaker} levels-only gain={gain:.9e} level={delta:.9e}");
+                if !gain.is_finite()
+                    || gain > 1e-8
+                    || !delta.is_finite()
+                    || delta > rounding_allowance(reference_level)
+                {
+                    failures.push(format!("{entry}/{speaker}: gain/level"));
+                }
+                level_only_count += 1;
+            }
+            continue;
+        }
+        let band = correction_band(
+            &inputs.iter().map(|(_, p)| p.as_slice()).collect::<Vec<_>>(),
+            &opts,
+        )
+        .unwrap();
+        if (band.high - e["rc_hi"].as_f64().unwrap()).abs() >= 1e-6 {
+            failures.push(format!("band {entry}: {}", band.high));
+        }
+        if let Some(s) = e["schroeder_hz"].as_f64()
+            && !band.schroeder.is_some_and(|ours| (ours - s).abs() < 1e-6)
+        {
+            failures.push(format!("Schroeder {entry}"));
+        }
         for (speaker, points) in inputs {
             let start = std::time::Instant::now();
             let out = design_rc(&points, &opts, &band, target, None).unwrap();
@@ -174,8 +257,12 @@ fn room_tuning2_matches_secs2_rc() {
                 }
             }
             let gain = (min - out.level_db - r["gain_db"].as_f64().unwrap()).abs();
+            let reference_level = r["level_db"].as_f64().unwrap();
+            let level = (out.level_db - reference_level).abs();
             let mut fit_diff = Vec::new();
-            if let Some(fits) = e["peq_fits"].as_array() {
+            let fits = fit_references(&root, e, speaker);
+            if !fits.is_empty() {
+                fit_diff.push(format!("fits={}/{}", out.peq_fits.len(), fits.len()));
                 for (i, (a, b)) in out.peq_fits.iter().zip(fits).enumerate() {
                     let mut delta = [0_f64; 3];
                     if a.len() != b.as_array().unwrap().len() {
@@ -195,8 +282,12 @@ fn room_tuning2_matches_secs2_rc() {
                 }
             }
             let count = out.peq.len() == r["peq"].as_array().unwrap().len();
+            let strength = out.phase_strength == r["phase_strength"].as_f64().unwrap();
+            let resolution =
+                e["mode"] == "zero" || out.phase_frac == r["phase_frac_used"].as_f64().unwrap();
+            let taps = out.fir.len() == r["fir_taps"].as_u64().unwrap() as usize;
             println!(
-                "RC {entry}/{speaker} mag={md:.6?} phase={pd:.6?} design={dd:.9} gain={gain:.9} count={count} strength={}/{} beta={}/{} taps={}/{} time={:.3}s SECS={}s {}",
+                "RC {entry}/{speaker} mag={md:.6?} phase={pd:.6?} design={dd:.9} gain={gain:.9e} level={level:.9e} count={count} strength={}/{} beta={}/{} (match={resolution}; ignored for zero) taps={}/{} time={:.3}s SECS={}s {}",
                 out.phase_strength,
                 r["phase_strength"],
                 out.phase_frac,
@@ -207,13 +298,25 @@ fn room_tuning2_matches_secs2_rc() {
                 e["secs_seconds"],
                 fit_diff.join("; ")
             );
-            let bad = (0..4).any(|i| md[i] > MAG_MAX_DB[i] || pd[i] > PHASE_MAX_RAD[i])
+            let bad = (0..4).any(|i| md[i] > MAG_MAX_DB[i])
+                || !gain.is_finite()
                 || gain > 1e-8
+                || !level.is_finite()
+                || level > rounding_allowance(reference_level)
                 || !count
-                || out.phase_strength != r["phase_strength"].as_f64().unwrap()
-                || out.phase_frac != r["phase_frac_used"].as_f64().unwrap()
-                || out.fir.len() != r["fir_taps"].as_u64().unwrap() as usize
+                || !strength
+                || !resolution
+                || !taps
+                || out
+                    .response
+                    .iter()
+                    .any(|v| !v.re.is_finite() || !v.im.is_finite())
                 || dd > 0.000051;
+            let maximum = md.into_iter().fold(0_f64, f64::max);
+            for (count, threshold) in above.iter_mut().zip(THRESHOLDS_DB) {
+                *count += usize::from(maximum > threshold);
+            }
+            channel_maxima.push(md);
             for i in 0..4 {
                 maxima_mag[i] = maxima_mag[i].max(md[i]);
                 maxima_phase[i] = maxima_phase[i].max(pd[i]);
@@ -223,7 +326,37 @@ fn room_tuning2_matches_secs2_rc() {
             }
         }
     }
-    println!("RC MAX magnitude={maxima_mag:?} phase={maxima_phase:?}");
+    println!(
+        "RC coverage: {} response references, {level_only_count} levels-only references; filter={filter:?}",
+        channel_maxima.len()
+    );
+    println!(
+        "RC band Hz | magnitude max / SECS cap dB | median / SECS dB | phase max / SECS rad (report only)"
+    );
+    for (i, band) in ["15-100", "100-500", "500-2000", "2000-23000"]
+        .iter()
+        .enumerate()
+    {
+        let mut sorted: Vec<_> = channel_maxima.iter().map(|v| v[i]).collect();
+        sorted.sort_by(f64::total_cmp);
+        let median = if sorted.is_empty() {
+            f64::NAN
+        } else {
+            (sorted[(sorted.len() - 1) / 2] + sorted[sorted.len() / 2]) / 2.
+        };
+        println!(
+            "RC {band} | {:.9} / {} | {median:.9} / {} | {:.9} / {}",
+            maxima_mag[i], MAG_MAX_DB[i], SECS_MEDIAN_DB[i], maxima_phase[i], SECS_PHASE_RAD[i]
+        );
+    }
+    println!("RC distribution thresholds={THRESHOLDS_DB:?} ours={above:?} SECS={SECS_COUNTS:?}");
+    if above[2] > SECS_COUNTS[2] || above[3] > SECS_COUNTS[3] {
+        failures.push(format!("distribution: {above:?}"));
+    }
+    if filter.is_empty() && (channel_maxima.len() != 61 || level_only_count != 7) {
+        failures.push("expected 61 response and 7 levels-only references".into());
+    }
+    println!("RC integration is not an equivalence proof until the solver trace fixtures pass.");
     assert!(failures.is_empty(), "RC divergences: {failures:?}");
 }
 use std::ops::Sub;
@@ -248,7 +381,7 @@ fn room_tuning2_symmetric_one_point_is_secs() {
         },
         ..a.clone()
     };
-    let band = correction_band(&[&p], &a);
+    let band = correction_band(&[&p], &a).unwrap();
     let a = design_rc(&p, &a, &band, None, None).unwrap();
     let b = design_rc(&p, &b, &band, None, None).unwrap();
     for (a, b) in a.response.iter().zip(b.response) {
@@ -263,7 +396,7 @@ fn room_tuning2_symmetric_is_order_free() {
         demo[&("FL".into(), "right".into())].clone(),
     ];
     let opts = RcOptions::default();
-    let band = correction_band(&[&p], &opts);
+    let band = correction_band(&[&p], &opts).unwrap();
     let a = design_rc(&p, &opts, &band, None, None).unwrap();
     p.swap(0, 1);
     let b = design_rc(&p, &opts, &band, None, None).unwrap();
@@ -303,18 +436,27 @@ fn room_tuning2_modes_have_their_latency() {
 fn room_tuning2_band_rules() {
     let p = [impulse(48000)];
     let mut o = RcOptions::default();
-    assert_eq!(correction_band(&[&p], &o).high, 500.);
+    assert_eq!(correction_band(&[&p], &o).unwrap().high, 500.);
     o.schroeder = Some(60.);
-    assert_eq!(correction_band(&[&p], &o).high, 100.);
+    assert_eq!(correction_band(&[&p], &o).unwrap().high, 100.);
     o.schroeder = Some(250.);
-    assert_eq!(correction_band(&[&p], &o).source, BandSource::Override);
-    assert_eq!(correction_band(&[&p], &o).high, 250.);
+    assert_eq!(
+        correction_band(&[&p], &o).unwrap().source,
+        BandSource::Override
+    );
+    assert_eq!(correction_band(&[&p], &o).unwrap().high, 250.);
     o.high = Some(300.);
-    assert_eq!(correction_band(&[&p], &o).source, BandSource::Manual);
+    assert_eq!(
+        correction_band(&[&p], &o).unwrap().source,
+        BandSource::Manual
+    );
     o.high = None;
     o.schroeder = None;
     o.room_volume = Some(40.);
-    assert_eq!(correction_band(&[&p], &o).source, BandSource::Volume);
+    assert_eq!(
+        correction_band(&[&p], &o).unwrap().source,
+        BandSource::Volume
+    );
 }
 #[test]
 fn room_tuning2_rejects_invalid_inputs() {

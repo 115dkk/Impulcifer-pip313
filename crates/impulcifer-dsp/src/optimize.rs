@@ -13,6 +13,20 @@ pub struct LeastSquaresResult {
     pub cost: f64,
     pub nfev: usize,
     pub status: i32,
+    pub njev: usize,
+    pub optimality: f64,
+}
+/// Optional diagnostics; main evaluations exclude the initial residual and
+/// Jacobian probes, matching SciPy's trf_bounds call boundary.
+#[derive(Debug, Default)]
+pub struct LeastSquaresTrace {
+    pub main_x: Vec<Vec<f64>>,
+    pub main_cost: Vec<f64>,
+    /// Jacobian points inside TRF; the separately supplied initial J0 is excluded.
+    pub jac_x: Vec<Vec<f64>>,
+    pub j0: Vec<f64>,
+    pub j0_shape: [usize; 2],
+    pub initial_cost: f64,
 }
 fn dot(a: &[f64], b: &[f64]) -> f64 {
     a.iter().zip(b).map(|(a, b)| a * b).sum()
@@ -44,8 +58,7 @@ fn feasible(x: &mut [f64], lb: &[f64], ub: &[f64], initial: bool) {
         } else {
             if *x <= l {
                 *x = l.next_up();
-            }
-            if *x >= u {
+            } else if *x >= u {
                 *x = u.next_down();
             }
         }
@@ -310,12 +323,26 @@ fn trust(
 /// SciPy's bounded exact-TRF subset. The closure may cache computations but
 /// must return the same residual at the same x. Bounds may be infinite.
 pub fn least_squares<F: FnMut(&[f64]) -> Vec<f64>>(
-    mut fun: F,
+    fun: F,
     x0: &[f64],
     lb: &[f64],
     ub: &[f64],
     max_nfev: usize,
 ) -> Result<LeastSquaresResult, DspError> {
+    least_squares_with_trace(fun, x0, lb, ub, max_nfev, None)
+}
+/// The production solver, with opt-in capture. None allocates no trace storage.
+pub fn least_squares_with_trace<F: FnMut(&[f64]) -> Vec<f64>>(
+    mut fun: F,
+    x0: &[f64],
+    lb: &[f64],
+    ub: &[f64],
+    max_nfev: usize,
+    mut trace: Option<&mut LeastSquaresTrace>,
+) -> Result<LeastSquaresResult, DspError> {
+    if let Some(t) = trace.as_deref_mut() {
+        *t = LeastSquaresTrace::default();
+    }
     let n = x0.len();
     if n == 0
         || lb.len() != n
@@ -343,6 +370,15 @@ pub fn least_squares<F: FnMut(&[f64]) -> Vec<f64>>(
     }
     let mut j = jacobian(&mut fun, &x, &f, lb, ub)?;
     let mut cost = 0.5 * dot(&f, &f);
+    let mut njev = 1;
+    if let Some(t) = trace.as_deref_mut() {
+        t.initial_cost = cost;
+        t.j0_shape = [m, n];
+        t.j0 = (0..m)
+            .flat_map(|i| (0..n).map(move |k| (i, k)))
+            .map(|(i, k)| j[(i, k)])
+            .collect();
+    }
     let mut g = grad(&j, &f);
     let (v, _) = scaling(&x, &g, lb, ub);
     let mut delta = norm(
@@ -429,6 +465,10 @@ pub fn least_squares<F: FnMut(&[f64]) -> Vec<f64>>(
             feasible(&mut xn, lb, ub, false);
             fnn = fun(&xn);
             nfev += 1;
+            if let Some(t) = trace.as_deref_mut() {
+                t.main_x.push(xn.clone());
+                t.main_cost.push(0.5 * dot(&fnn, &fnn));
+            }
             let shn = norm(&sh);
             if fnn.len() != m {
                 return Err(DspError::InvalidArgument("residual length changed".into()));
@@ -472,13 +512,39 @@ pub fn least_squares<F: FnMut(&[f64]) -> Vec<f64>>(
             f = fnn;
             cost = cn;
             j = jacobian(&mut fun, &x, &f, lb, ub)?;
+            njev += 1;
+            if let Some(t) = trace.as_deref_mut() {
+                t.jac_x.push(x.clone());
+            }
             g = grad(&j, &f);
         }
     }
+    let (v, _) = scaling(&x, &g, lb, ub);
+    let optimality = g
+        .iter()
+        .zip(v)
+        .map(|(g, v)| (g * v).abs())
+        .fold(0., f64::max);
     Ok(LeastSquaresResult {
         x,
         cost,
         nfev,
         status,
+        njev,
+        optimality,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn feasible_adjacent_bounds_uses_original_active_mask() {
+        let lower = 1.0_f64;
+        let upper = lower.next_up();
+        let mut x = [lower];
+        super::feasible(&mut x, &[lower], &[upper], false);
+        assert_eq!(x[0], upper);
+        super::feasible(&mut x, &[lower], &[upper], false);
+        assert_eq!(x[0], lower);
+    }
 }

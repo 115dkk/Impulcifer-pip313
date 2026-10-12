@@ -288,7 +288,7 @@ pub fn smoke() {
             mode,
             ..Default::default()
         };
-        let band = correction_band(&[&points], &opts);
+        let band = correction_band(&[&points], &opts).unwrap();
         let result = design_rc(&points, &opts, &band, None, None).unwrap();
         assert_eq!(result.fir.len(), mode.params(48000).taps);
     }
@@ -344,7 +344,7 @@ fn room_tuning2_bench() {
             },
             ..Default::default()
         };
-        let band = correction_band(&[&points], &opts);
+        let band = correction_band(&[&points], &opts).unwrap();
         black_box(design_rc(&points, &opts, &band, None, None).unwrap());
         let mut times = Vec::new();
         for _ in 0..3 {
@@ -353,11 +353,13 @@ fn room_tuning2_bench() {
             times.push(start.elapsed().as_secs_f64());
         }
         times.sort_by(f64::total_cmp);
+        let reference_seconds = golden["entries"][format!("two/FL/{name}")]["secs_seconds"]
+            .as_f64()
+            .map(|seconds| format!("{seconds}s"))
+            .unwrap_or_else(|| "timing not recorded in regenerated fixture".into());
         println!(
-            "room_tuning2/{name} FL two positions: median {:.6}s min {:.6}s SECS {}s",
-            times[1],
-            times[0],
-            golden["entries"][format!("two/FL/{name}")]["secs_seconds"]
+            "room_tuning2/{name} FL two positions: median {:.6}s min {:.6}s SECS {reference_seconds}",
+            times[1], times[0],
         );
     }
 }
