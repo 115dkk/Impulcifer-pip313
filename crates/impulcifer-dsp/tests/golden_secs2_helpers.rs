@@ -36,8 +36,8 @@ pub fn fixtures(prefix: &str) -> Vec<(String, Value)> {
 /// ulp, and the trust-region path leaves the oracle at once, exactly as the
 /// oracle's own AVX-512 variant does. Elsewhere the exact gates widen to
 /// `PLATFORM_RTOL` and the chaotic ones (fit traces) report without failing;
-/// the end-to-end comparison against SECS's spread across computers holds on
-/// every platform.
+/// the end-to-end comparisons against SECS's spread across computers hold on
+/// every platform, the RC band caps with a wider margin.
 pub fn oracle_libm() -> bool {
     static SAME: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *SAME.get_or_init(|| {
