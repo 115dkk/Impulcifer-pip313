@@ -238,7 +238,8 @@ fn impulse(fs: u32) -> ImpulseResponse {
 }
 #[test]
 fn room_tuning2_symmetric_one_point_is_secs() {
-    let p = [impulse(48000)];
+    let demo = demo();
+    let p = [demo[&("FL".into(), "left".into())].clone()];
     let a = RcOptions::default();
     let b = RcOptions {
         policy: PositionPolicy::Listening {
@@ -256,10 +257,11 @@ fn room_tuning2_symmetric_one_point_is_secs() {
 }
 #[test]
 fn room_tuning2_symmetric_is_order_free() {
-    let mut p = vec![impulse(48000), impulse(48000)];
-    p[1].data[100] = 0.;
-    p[1].data[200] = 1.;
-    p[1].data[600] = 0.2;
+    let demo = demo();
+    let mut p = vec![
+        demo[&("FL".into(), "left".into())].clone(),
+        demo[&("FL".into(), "right".into())].clone(),
+    ];
     let opts = RcOptions::default();
     let band = correction_band(&[&p], &opts);
     let a = design_rc(&p, &opts, &band, None, None).unwrap();

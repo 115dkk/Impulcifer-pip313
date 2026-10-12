@@ -269,6 +269,29 @@ pub fn smoke() {
     for case in cases {
         (case.run)();
     }
+    use impulcifer_dsp::{ir::ImpulseResponse, stages::room_tuning2::*};
+    let mut data = vec![0.; 4800];
+    data[100] = 1.;
+    let points = [ImpulseResponse {
+        fs: 48000,
+        data,
+        recording: None,
+    }];
+    for mode in [
+        Tuning2Mode::Zero,
+        Tuning2Mode::Mixed,
+        Tuning2Mode::Linear,
+        Tuning2Mode::Long,
+        Tuning2Mode::Ultra(60.),
+    ] {
+        let opts = RcOptions {
+            mode,
+            ..Default::default()
+        };
+        let band = correction_band(&[&points], &opts);
+        let result = design_rc(&points, &opts, &band, None, None).unwrap();
+        assert_eq!(result.fir.len(), mode.params(48000).taps);
+    }
 }
 
 fn room_tuning2_bench() {

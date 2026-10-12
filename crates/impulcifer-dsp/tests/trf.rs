@@ -2,6 +2,11 @@
 use impulcifer_dsp::{fft::Complex64, optimize::least_squares};
 use serde_json::Value;
 use std::f64::consts::PI;
+// Measured 0.008001162 and 0.022031750; rounded above 1.5 times these maxima.
+// provisional: set by the owner after review
+const PEQ_X_MAX: f64 = 0.013;
+// provisional: set by the owner after review
+const PEQ_COST_MAX: f64 = 0.034;
 fn arr(v: &Value) -> Vec<f64> {
     v.as_array()
         .unwrap()
@@ -12,12 +17,12 @@ fn arr(v: &Value) -> Vec<f64> {
 fn div(a: Complex64, b: Complex64) -> Complex64 {
     if b.re.abs() >= b.im.abs() {
         let r = b.im / b.re;
-        let d = b.re + b.im * r;
-        Complex64::new((a.re + a.im * r) / d, (a.im - a.re * r) / d)
+        let d = 1. / (b.re + b.im * r);
+        Complex64::new((a.re + a.im * r) * d, (a.im - a.re * r) * d)
     } else {
         let r = b.re / b.im;
-        let d = b.re * r + b.im;
-        Complex64::new((a.re * r + a.im) / d, (a.im * r - a.re) / d)
+        let d = 1. / (b.re * r + b.im);
+        Complex64::new((a.re * r + a.im) * d, (a.im * r - a.re) * d)
     }
 }
 #[test]
@@ -107,7 +112,7 @@ fn trf_matches_scipy() {
         );
         assert_eq!(r.nfev, case["nfev"].as_u64().unwrap() as usize);
         assert_eq!(r.status, case["status"].as_i64().unwrap() as i32);
-        assert!(dx < if name == "peq16" { 0.1 } else { 1e-7 });
-        assert!(dc < if name == "peq16" { 0.1 } else { 1e-10 });
+        assert!(dx < if name == "peq16" { PEQ_X_MAX } else { 1e-9 });
+        assert!(dc < if name == "peq16" { PEQ_COST_MAX } else { 1e-14 });
     }
 }
