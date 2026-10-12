@@ -119,14 +119,17 @@ The cause is the PEQ refinement: it usually stops at its 150-evaluation cap,
 and its trust-region path is determined only for the first few evaluations.
 Every fit fixture records, per variant, the oracle's own distance from the
 reference at each evaluation (`oracle_variants`) and the `horizon`: the first
-evaluation where any variant leaves the reference by more than 1e-9. Before
-the horizon the variants agree to about 1e-16; at the horizon they jump to
-1e-8–1e-4. On the demo the horizon is evaluation 1–15. This sets what
+evaluation where a variant that keeps the residual's arithmetic (another
+factorization or BLAS kernel) leaves the reference by more than 1e-9. Before
+the horizon those variants agree to about 1e-16; at the horizon they jump to
+1e-8–1e-4. On the demo the horizon is evaluation 1–12. The AVX-512 variant
+changes the residual itself (`log10`) and leaves at the first step; it is
+recorded but not part of the horizon. This sets what
 "equivalent" can mean, and why the port is gated stage by stage:
 
 1. **Per stage**, fed the oracle's own inputs, the port reproduces the
    oracle's outputs bit for bit or to floating-point noise; a fit's trace
-   matches up to its horizon.
+   matches up to its horizon (one evaluation of slack).
 2. **End to end**, the port is one more computer: its deviation from the
    reference stays within the envelope (per band, and in the count of
    channels above 0.1 dB and 1 dB).

@@ -765,7 +765,7 @@ def export_end_to_end_mimo():
 # OpenBLAS kernels of older CPUs, or LAPACK's other SVD driver. Every variant
 # runs in its own process (the environment selects the kernels at load time).
 VARIANTS = {
-    "numpy_avx512": {"env": {"NPY_DISABLE_CPU_FEATURES": None}},
+    "numpy_avx512": {"env": {"NPY_DISABLE_CPU_FEATURES": None}, "residual": True},
     "openblas_haswell": {"env": {"OPENBLAS_CORETYPE": "Haswell"}},
     "openblas_sandybridge": {"env": {"OPENBLAS_CORETYPE": "Sandybridge"}},
     "openblas_nehalem": {"env": {"OPENBLAS_CORETYPE": "Nehalem"}},
@@ -908,8 +908,9 @@ def first_over(rel, threshold=1e-9):
 
 
 def annotate_fits(per_variant):
-    """Add every variant's trace distance and the horizon (the earliest evaluation where any variant of the
-    oracle leaves the reference by more than 1e-9) to each fit fixture."""
+    """Add every variant's trace distance and the horizon to each fit fixture: the earliest evaluation where a
+    variant that keeps the residual's arithmetic (a different factorization or BLAS kernel) leaves the reference
+    by more than 1e-9. The AVX-512 variant changes the residual itself (log10), so it leaves at the first step."""
     for path in sorted(OUT.glob("s2_fit_*.json")):
         name = path.name[len("s2_fit_"):-len(".json")]
         data = json.loads(path.read_text())
@@ -923,7 +924,8 @@ def annotate_fits(per_variant):
         o["oracle_variants"] = {v: {"first_index_over_1e-9": firsts[v], "rel_distance": variants[v],
                                     "cost": (per_variant[v][name]["cost"] if v in per_variant else o["oracle_gesvd"]["cost"])}
                                 for v in variants}
-        o["horizon"] = min((f for f in firsts.values() if f is not None), default=evals)
+        o["horizon"] = min((f for v, f in firsts.items() if f is not None and not VARIANTS.get(v, {}).get("residual")),
+                           default=evals)
         payload = plain({"inputs": data["inputs"], "outputs": o, "meta": data["meta"]})
         write_bytes(path, (json.dumps(payload, allow_nan=False, separators=(",", ":")) + "\n").encode())
 
