@@ -26,5 +26,6 @@ thiserror = "2"
 toml = "0.8"
 rustfft = "6.4"
 realfft = "3.5"
+faer = { version = "0.24.4", default-features = false, features = ["std", "linalg"] }
 rayon = "1.11"
 clap = { version = "4", features = ["derive"] }
