@@ -1,8 +1,14 @@
 # A08 (ASTRA): virtual room tuning v2 — MIMO supports, applying to the BRIR, pipeline hook
 
-Work in `/home/user/Impulcifer-pip313` on the checked-out branch (do not switch branches, do not commit, do not stash). This continues A07 (`docs/rust/packets/A07-astra-room-tuning2-rc.md`), which you implemented: its rules, its clean-room rule (no SECS source, nothing under `/tmp/claude-0/`; numpy/scipy sources are fine) and its sequential-`faer` rule apply. The specification is `docs/rust/ROOM_CORRECTION.md`, section **"Virtual room tuning v2"**, subsections "MIMO supports", "Applying to the BRIR", "Diagnostics", and ADR 0008. Every command in the foreground.
+Work in `/home/user/wt-a08`, a git worktree of the repository on branch `wt-a08` (do not switch branches, do not commit, do not stash; do not touch `/home/user/Impulcifer-pip313`). Do not delegate to another agent. This continues A07 (`docs/rust/packets/A07-astra-room-tuning2-rc.md`), which you implemented: its rules, its clean-room rule (no SECS source, nothing under `/tmp/claude-0/`; numpy/scipy sources are fine) and its sequential-`faer` rule apply. The specification is `docs/rust/ROOM_CORRECTION.md`, section **"Virtual room tuning v2"**, subsections "MIMO supports", "Applying to the BRIR", "Diagnostics", and ADR 0008. Every command in the foreground.
 
-Allowed files: `tests/migration/README-secs2.md` (observed budgets only), `crates/impulcifer-dsp/src/stages/room_tuning2/**`, `crates/impulcifer-dsp/src/stages/room.rs`, `room_v2.rs` (only the new tuning-2 entry point and `RoomCorrection`'s new field), `crates/impulcifer-dsp/src/stages/room_tuning.rs` (only to make existing diagnostics reusable — v1 output must stay bit-identical), `crates/impulcifer-dsp/src/stages/readme.rs` (new data field), `crates/impulcifer-dsp/src/pipeline.rs`, `crates/impulcifer-dsp/benches/perf.rs` and its smoke test, new tests `crates/impulcifer-dsp/tests/room_tuning2_*.rs`, and in `impulcifer-service` only what is needed to keep it compiling (e.g. `tuning2: None` in struct literals). Everything else is a later packet: no config fields, no CLI, no service behaviour, no catalogue, no `features.toml`, no docs.
+Another worker is changing the RC solver at the same time (A07d, in the main checkout). Do **not** edit `crates/impulcifer-dsp/src/optimize.rs`, `room_tuning2/{peq.rs,rc.rs,primitives.rs,profile.rs}`, `tests/golden_secs2_{fit,rc,primitives,helpers}.rs`, `tests/room_tuning2_rc.rs`, `tests/trf.rs`, `tests/migration/gen_trf_reference.py`, or the existing `room_tuning2` function in `benches/perf.rs` (add new bench functions beside it). Call the RC through its public API; if you need something exposed from those files, add it in a new file or report it.
+
+**Build rule found in A07c.** faer stays without its `std` feature: `std` pulls `private-gemm-x86`, whose assembly leaves the upper AVX state dirty, and every later SSE instruction then stalls (the RC residual ran 8× slower after one SVD). `pulp`, `gemm` and `faer-traits` enable `std` for runtime SIMD detection; the policy gate `no_assembly_kernels_that_leave_avx_state_dirty` enforces it. Do not change faer's features and do not add crates that run hand-written SIMD assembly. If MIMO timings look far slower than their arithmetic, check for the same effect first: time a fixed scalar loop before and after the suspect call.
+
+Use `export CARGO_PROFILE_TEST_OPT_LEVEL=2 CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_TEST_INCREMENTAL=false` for tests. If the disk fills, delete this worktree's `target/debug` and rerun.
+
+Allowed files: `tests/migration/README-secs2.md` (MIMO rows of the gate table only), new files under `crates/impulcifer-dsp/src/stages/room_tuning2/` (e.g. `mimo.rs`, `apply.rs`) and `room_tuning2/mod.rs` (module declarations and re-exports only), `crates/impulcifer-dsp/src/stages/room.rs`, `room_v2.rs` (only the new tuning-2 entry point and `RoomCorrection`'s new field), `crates/impulcifer-dsp/src/stages/room_tuning.rs` (only to make existing diagnostics reusable — v1 output must stay bit-identical), `crates/impulcifer-dsp/src/stages/readme.rs` (new data field), `crates/impulcifer-dsp/src/pipeline.rs`, `crates/impulcifer-dsp/benches/perf.rs` and its smoke test, new tests `crates/impulcifer-dsp/tests/room_tuning2_*.rs`, and in `impulcifer-service` only what is needed to keep it compiling (e.g. `tuning2: None` in struct literals). Everything else is a later packet: no config fields, no CLI, no service behaviour, no catalogue, no `features.toml`, no docs.
 
 ## MIMO design
 
@@ -72,7 +78,7 @@ Add cases to `benches/perf.rs`: MIMO design for the demo (7 inputs), and a synth
 ## Verification (foreground; paste tails)
 
 ```
-cd /home/user/Impulcifer-pip313
+cd /home/user/wt-a08
 cargo fmt --all -- --check
 cargo clippy -p impulcifer-dsp -p impulcifer-service --all-targets -- --no-deps -D warnings
 cargo test -p impulcifer-dsp --no-fail-fast
