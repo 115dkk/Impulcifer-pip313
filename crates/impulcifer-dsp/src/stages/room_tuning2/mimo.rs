@@ -75,7 +75,11 @@ fn first(x: &[f64]) -> usize {
 }
 /// Build truncated convolution Gram blocks along diagonals. Both prefix sums
 /// start at zero; no entry is a difference between long accumulated sums.
-pub fn normal_equations(x: &[Vec<f64>], c: &[Vec<Vec<f64>>]) -> (Mat<f64>, Vec<f64>) {
+pub fn normal_equations(
+    x: &[Vec<f64>],
+    c: &[Vec<Vec<f64>>],
+) -> Result<(Mat<f64>, Vec<f64>), DspError> {
+    validate_paths(x, c)?;
     let r = c[0].len();
     let m = r * TAPS;
     let mut a = Mat::zeros(m, m);
@@ -110,7 +114,26 @@ pub fn normal_equations(x: &[Vec<f64>], c: &[Vec<Vec<f64>>]) -> (Mat<f64>, Vec<f
             a[(i, j)] = a[(j, i)];
         }
     }
-    (a, b)
+    Ok((a, b))
+}
+fn validate_paths(x: &[Vec<f64>], g: &[Vec<Vec<f64>>]) -> Result<(), DspError> {
+    if x.len() != 2
+        || g.len() != 2
+        || g[0].is_empty()
+        || x.iter()
+            .any(|x| x.len() != N || x.iter().any(|v| !v.is_finite()))
+        || g.iter().any(|ear| {
+            ear.len() != g[0].len()
+                || ear
+                    .iter()
+                    .any(|p| p.len() != N || p.iter().any(|v| !v.is_finite()))
+        })
+    {
+        return Err(DspError::InvalidArgument(
+            "inconsistent MIMO path lengths or values".into(),
+        ));
+    }
+    Ok(())
 }
 fn matvec(a: &Mat<f64>, x: &[f64]) -> Vec<f64> {
     let mut result = vec![0.; a.nrows()];
@@ -132,6 +155,20 @@ pub fn bisect(
     direct: f64,
 ) -> Result<BisectionResult, DspError> {
     let m = b.len();
+    if m == 0
+        || !m.is_multiple_of(TAPS)
+        || a.nrows() != m
+        || a.ncols() != m
+        || lp.len() != 31
+        || lp.iter().chain(b).any(|v| !v.is_finite())
+        || !direct.is_finite()
+        || direct <= 0.
+        || a.col_iter().any(|c| c.iter().any(|v| !v.is_finite()))
+    {
+        return Err(DspError::InvalidArgument(
+            "invalid MIMO solve dimensions or values".into(),
+        ));
+    }
     let sigma = (0..m).map(|i| a[(i, i)]).sum::<f64>() / m as f64;
     let mut vectors = Mat::zeros(m, m);
     let mut values = Diag::zeros(m);
@@ -287,6 +324,22 @@ pub fn design_paths(
     direct: f64,
     fsiso: f64,
 ) -> Result<(MimoInputResult, MimoStages), DspError> {
+    validate_paths(&x, &g)?;
+    if candidates.len() != g[0].len()
+        || candidates
+            .iter()
+            .any(|(_, low)| !low.is_finite() || *low <= 0.)
+        || lp.len() != 31
+        || lp.iter().any(|v| !v.is_finite())
+        || !fsiso.is_finite()
+        || !(50. ..=150.).contains(&fsiso)
+        || !direct.is_finite()
+        || direct <= 0.
+    {
+        return Err(DspError::InvalidArgument(
+            "invalid MIMO design dimensions or values".into(),
+        ));
+    }
     let c: Vec<Vec<_>> = g
         .iter()
         .map(|ear| {
@@ -299,7 +352,7 @@ pub fn design_paths(
                 .collect()
         })
         .collect();
-    let (normal, rhs) = normal_equations(&x, &c);
+    let (normal, rhs) = normal_equations(&x, &c)?;
     let (logs, ratios, kept, u) = bisect(&normal, &rhs, &lp, direct)?;
     let supports: Vec<_> = u.chunks(TAPS).map(|u| convolution(&lp, u)).collect();
     let mut result = MimoInputResult {
@@ -378,6 +431,16 @@ pub fn design_mimo(
     brirs: &Hrir,
     inputs: &[MimoInput<'_>],
     opts: &MimoOptions,
+) -> Result<MimoDesign, DspError> {
+    design_mimo_observed(brirs, inputs, opts, &|_, _| {})
+}
+/// Observe frozen-input stage boundaries without retaining all normal matrices.
+/// Called in input workers; observers must not change the design.
+pub fn design_mimo_observed(
+    brirs: &Hrir,
+    inputs: &[MimoInput<'_>],
+    opts: &MimoOptions,
+    observe: &(impl Fn(&str, &MimoStages) + Sync),
 ) -> Result<MimoDesign, DspError> {
     let n = analysis_len(brirs.fs);
     let f = grid(n, brirs.fs as f64);
@@ -540,7 +603,10 @@ pub fn design_mimo(
                 direct,
                 opts.fsiso,
             )
-            .map(|v| v.0)
+            .map(|(result, stages)| {
+                observe(input.speaker, &stages);
+                result
+            })
         })
         .collect();
     Ok(MimoDesign {
@@ -548,10 +614,26 @@ pub fn design_mimo(
         inputs: results?,
     })
 }
-pub fn support_response(support: &MimoSupport, fs: u32, n: usize) -> Vec<Complex64> {
+pub fn support_response(
+    support: &MimoSupport,
+    fs: u32,
+    n: usize,
+) -> Result<Vec<Complex64>, DspError> {
+    if fs < 44100
+        || n < 2
+        || !n.is_multiple_of(2)
+        || support.fir.len() != 210
+        || support.fir.iter().any(|v| !v.is_finite())
+        || !support.low.is_finite()
+        || support.low <= 0.
+    {
+        return Err(DspError::InvalidArgument(
+            "invalid MIMO support dimensions or values".into(),
+        ));
+    }
     let f = grid(n, fs as f64);
     let hp = hp4(&f, support.low);
-    f.iter()
+    Ok(f.iter()
         .zip(hp)
         .map(|(f, hp)| {
             if *f >= 285. {
@@ -565,5 +647,5 @@ pub fn support_response(support: &MimoSupport, fs: u32, n: usize) -> Vec<Complex
                 .sum::<Complex64>();
             hp * s * ((285. - f) / 60.).clamp(0., 1.)
         })
-        .collect()
+        .collect())
 }

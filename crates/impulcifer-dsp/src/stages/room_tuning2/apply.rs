@@ -105,6 +105,14 @@ pub fn prepare_tuning2(
     })
 }
 pub fn apply_tuning2(hrir: &mut Hrir, plan: &Tuning2Plan) -> Result<Tuning2Report, DspError> {
+    apply_impl(hrir, plan, false)
+}
+/// Full convolution boundary before output-length cropping and the terminal fade.
+/// Useful for checking the support sum without windowing leakage.
+pub fn apply_tuning2_full(hrir: &mut Hrir, plan: &Tuning2Plan) -> Result<Tuning2Report, DspError> {
+    apply_impl(hrir, plan, true)
+}
+fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2Report, DspError> {
     if hrir.fs != plan.fs {
         return Err(DspError::InvalidArgument(
             "tuning2 sample rate differs".into(),
@@ -230,13 +238,14 @@ pub fn apply_tuning2(hrir: &mut Hrir, plan: &Tuning2Plan) -> Result<Tuning2Repor
                     i.supports
                         .iter()
                         .map(|support| {
-                            (
+                            Ok((
                                 support.speaker.clone(),
-                                fft::irfft(&support_response(support, fs, n), n),
-                            )
+                                fft::irfft(&support_response(support, fs, n)?, n),
+                            ))
                         })
-                        .collect()
+                        .collect::<Result<Vec<_>, DspError>>()
                 })
+                .transpose()?
                 .unwrap_or_default();
             let mut echoes = vec![];
             let mut before = [0.; 7];
@@ -278,7 +287,7 @@ pub fn apply_tuning2(hrir: &mut Hrir, plan: &Tuning2Plan) -> Result<Tuning2Repor
                 }
                 let gain = 10_f64.powf(r.trim_db / 20.);
                 let mut data = conv::convolve(&old.data, &filter, conv::Mode::Full);
-                data.resize(old.len() + delay, 0.);
+                if !full { data.resize(old.len() + delay, 0.); }
                 for v in &mut data {
                     *v *= gain;
                 }
@@ -300,8 +309,10 @@ pub fn apply_tuning2(hrir: &mut Hrir, plan: &Tuning2Plan) -> Result<Tuning2Repor
                 }
                 let len = (0.005 * fs as f64).round() as usize;
                 let start = data.len().saturating_sub(len);
-                for (i, v) in data[start..].iter_mut().enumerate() {
-                    *v *= 0.5 * (1. + (PI * i as f64 / len as f64).cos());
+                if !full {
+                    for (i, v) in data[start..].iter_mut().enumerate() {
+                        *v *= 0.5 * (1. + (PI * i as f64 / len as f64).cos());
+                    }
                 }
                 ir.data = data;
                 r.excess_median_after_ms += v1::excess_group_delay_median(ir);

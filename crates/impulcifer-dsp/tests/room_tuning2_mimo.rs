@@ -1,7 +1,46 @@
+#![forbid(unsafe_code)]
 mod golden_secs2_helpers;
 use faer::{Mat, linalg::solvers::Solve};
 use golden_secs2_helpers::*;
 use impulcifer_dsp::stages::room_tuning2::mimo::{bisect, normal_equations};
+#[test]
+fn diagnostic_inputs_are_checked() {
+    use impulcifer_dsp::{DspError, stages::room_tuning2::mimo::*};
+    let invalid = |r: Result<(), DspError>| assert!(matches!(r, Err(DspError::InvalidArgument(_))));
+    invalid(normal_equations(&[], &[]).map(|_| ()));
+    invalid(
+        normal_equations(
+            &vec![vec![0.; 720]; 2],
+            &[vec![vec![0.; 719]], vec![vec![0.; 720]]],
+        )
+        .map(|_| ()),
+    );
+    invalid(bisect(&Mat::zeros(2, 3), &[0.; 180], &[0.; 31], 1.).map(|_| ()));
+    invalid(
+        design_paths(
+            "FL",
+            &[],
+            vec![vec![0.; 720]; 2],
+            vec![vec![vec![0.; 720]]; 2],
+            vec![0.; 31],
+            1.,
+            150.,
+        )
+        .map(|_| ()),
+    );
+    invalid(
+        support_response(
+            &MimoSupport {
+                speaker: "FR".into(),
+                low: 50.,
+                fir: vec![0.; 209],
+            },
+            48000,
+            131072,
+        )
+        .map(|_| ()),
+    );
+}
 #[test]
 fn room_tuning2_mimo_fast_normal_equations() {
     let v = fixture("mimo_mixed_fsiso150_auto_FL");
@@ -34,7 +73,7 @@ fn room_tuning2_mimo_fast_normal_equations() {
         })
         .collect();
     let m = 1080;
-    let (fast, rhs) = normal_equations(&x, &c);
+    let (fast, rhs) = normal_equations(&x, &c).unwrap();
     let mut a = Mat::<f64>::zeros(2880, m);
     let mut b = vec![0.; 2880];
     for e in 0..2 {

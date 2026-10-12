@@ -295,10 +295,12 @@ pub fn smoke() {
     let support = MimoSupport {
         speaker: "FL".into(),
         low: 50.,
-        fir: primitives::firwin(31, 150., 600.),
+        fir: primitives::firwin(210, 150., 600.),
     };
     assert_eq!(
-        support_response(&support, 48000, analysis_len(48000)).len(),
+        support_response(&support, 48000, analysis_len(48000))
+            .unwrap()
+            .len(),
         65537
     );
 }
@@ -400,6 +402,95 @@ fn room_tuning2_bench() {
     }
 }
 
+fn mimo_scalar_probe(label: &str) {
+    let start = Instant::now();
+    for _ in 0..10000 {
+        for i in 1..=700 {
+            black_box(black_box(i as f64 / 100.).log10());
+        }
+    }
+    println!(
+        "MIMO_SCALAR {label} ns/point={:.6}",
+        start.elapsed().as_secs_f64() * 1e9 / 7_000_000.
+    );
+}
+fn mimo_solver_compare(s: &impulcifer_dsp::stages::room_tuning2::mimo::MimoStages) {
+    use faer::{
+        Mat, Par,
+        dyn_stack::{MemBuffer, MemStack},
+        linalg::cholesky::llt,
+    };
+    use impulcifer_dsp::stages::room_tuning2::mimo::bisect;
+    let start = Instant::now();
+    let (logs, ratios, kept, u) = bisect(&s.normal, &s.rhs, &s.lp, s.direct).unwrap();
+    let evd_seconds = start.elapsed().as_secs_f64();
+    let m = s.rhs.len();
+    let sigma = (0..m).map(|i| s.normal[(i, i)]).sum::<f64>() / m as f64;
+    let start = Instant::now();
+    let (mut lo, mut hi) = (-8., 4.);
+    let mut chosen = 0;
+    let mut best = vec![];
+    let mut memory = MemBuffer::new(llt::factor::cholesky_in_place_scratch::<f64>(
+        m,
+        Par::Seq,
+        Default::default(),
+    ));
+    for trial in 0..19 {
+        let log = if trial == 0 { 4. } else { (lo + hi) / 2. };
+        assert_eq!(log, logs[trial]);
+        let mut a = s.normal.clone();
+        for i in 0..m {
+            a[(i, i)] += sigma * 10f64.powf(log);
+        }
+        llt::factor::cholesky_in_place(
+            a.as_mut(),
+            Default::default(),
+            Par::Seq,
+            MemStack::new(&mut memory),
+            Default::default(),
+        )
+        .unwrap();
+        let mut b = Mat::from_fn(m, 1, |i, _| s.rhs[i]);
+        llt::solve::solve_in_place(a.as_ref(), b.as_mut(), Par::Seq, MemStack::new(&mut memory));
+        let values: Vec<_> = (0..m).map(|i| b[(i, 0)]).collect();
+        let ratio = values
+            .chunks(180)
+            .map(|u| {
+                let mut q = vec![0.; 210];
+                for (i, a) in u.iter().enumerate() {
+                    for (j, b) in s.lp.iter().enumerate() {
+                        q[i + j] += a * b;
+                    }
+                }
+                q.iter().map(|v| v * v).sum::<f64>()
+            })
+            .sum::<f64>()
+            / s.direct;
+        assert_eq!(ratio > 10f64.powf(-1.2), ratios[trial] > 10f64.powf(-1.2));
+        if trial == 0 || ratio <= 10f64.powf(-1.2) {
+            best = values;
+            chosen = trial;
+            if trial > 0 {
+                hi = log;
+            }
+        } else {
+            lo = log;
+        }
+    }
+    let chol_seconds = start.elapsed().as_secs_f64();
+    let rel = (u
+        .iter()
+        .zip(&best)
+        .map(|(a, b)| (a - b).powi(2))
+        .sum::<f64>()
+        / best.iter().map(|v| v * v).sum::<f64>())
+    .sqrt();
+    assert_eq!(kept, chosen);
+    assert!(rel < 1e-9);
+    println!(
+        "SOLVER m={m} evd={evd_seconds:.6}s cholesky19={chol_seconds:.6}s decisions=19/19 kept={kept}/{chosen} relative_u={rel:e}"
+    );
+}
 fn mimo_bench() {
     use impulcifer_dsp::{estimator::SweepEstimator, hrir::Hrir, stages::room_tuning2::*};
     use impulcifer_io::read_wav;
@@ -440,16 +531,55 @@ fn mimo_bench() {
             response: &s.rc.response,
         })
         .collect();
+    mimo_scalar_probe("before-demo");
     let start = Instant::now();
     black_box(design_mimo(&h, &inputs, opts.mimo.as_ref().unwrap()).unwrap());
     let elapsed = start.elapsed().as_secs_f64();
+    mimo_scalar_probe("after-demo");
     println!(
         "mimo/demo total={elapsed:.6}s per_input={:.6}s",
         elapsed / 7.
     );
-    let start = Instant::now();
-    black_box(apply_tuning2(&mut h.clone(), &plan).unwrap());
-    println!("mimo/apply_demo {:.6}s", start.elapsed().as_secs_f64());
+    let mut omni = Hrir {
+        fs: 48000,
+        speakers: vec![],
+    };
+    for file in [
+        "room-FL,FR-left.wav",
+        "room-FL,FR-right.wav",
+        "room-FC-left.wav",
+        "room-FC-right.wav",
+        "room-BL,SL-left.wav",
+        "room-BL,SL-right.wav",
+        "room-SR,BR-left.wav",
+        "room-SR,BR-right.wav",
+    ] {
+        let wav = read_wav(&root.join("data/demo").join(file)).unwrap();
+        let parsed = impulcifer_dsp::stages::room::parse_room_measurement_name(file).unwrap();
+        let names: Vec<_> = parsed.speakers.iter().map(String::as_str).collect();
+        omni.open_recording_samples(
+            &estimator,
+            wav.sample_rate,
+            &wav.tracks,
+            &names,
+            parsed.side,
+            2.,
+        )
+        .unwrap();
+    }
+    for enabled in [false, true] {
+        let mut opts = opts.clone();
+        if !enabled {
+            opts.mimo = None;
+        }
+        let start = Instant::now();
+        let plan = prepare_tuning2(&omni, &opts, None, None).unwrap();
+        black_box(apply_tuning2(&mut h.clone(), &plan).unwrap());
+        println!(
+            "mimo/whole_prepare_apply enabled={enabled} seconds={:.6}",
+            start.elapsed().as_secs_f64()
+        );
+    }
     let mut large = Hrir {
         fs: 48000,
         speakers: vec![],
@@ -475,6 +605,11 @@ fn mimo_bench() {
         "mimo/24_speakers per_input={:.6}s R=23 m=4140",
         start.elapsed().as_secs_f64()
     );
+    mimo_scalar_probe("after-24");
+    mimo::design_mimo_observed(&large, &input, opts.mimo.as_ref().unwrap(), &|_, s| {
+        mimo_solver_compare(s)
+    })
+    .unwrap();
 }
 
 #[allow(dead_code)]

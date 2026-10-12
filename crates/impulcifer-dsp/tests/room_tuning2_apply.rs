@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     fft,
@@ -8,6 +9,14 @@ use impulcifer_io::read_wav;
 use impulcifer_types::constants::IPSILATERAL_PAIRS;
 use std::{path::PathBuf, sync::OnceLock};
 fn demo() -> (Hrir, Hrir) {
+    let (omni, brir, _) = demo_with_pairs();
+    (omni, brir)
+}
+fn demo_with_pairs() -> (
+    Hrir,
+    Hrir,
+    Vec<impulcifer_dsp::stages::room_tuning::PairMeasurement>,
+) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let wav = read_wav(&root.join("data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")).unwrap();
     let estimator = SweepEstimator::from_samples(wav.sample_rate, &wav.tracks[0]).unwrap();
@@ -22,6 +31,7 @@ fn demo() -> (Hrir, Hrir) {
         brir.open_recording_samples(&estimator, wav.sample_rate, &wav.tracks, &names, None, 2.)
             .unwrap();
     }
+    let mut pairs = vec![];
     for file in [
         "room-FL,FR-left.wav",
         "room-FL,FR-right.wav",
@@ -44,12 +54,17 @@ fn demo() -> (Hrir, Hrir) {
             2.,
         )
         .unwrap();
+        pairs.extend(impulcifer_dsp::stages::room_tuning::recording_pairs(
+            &omni,
+            &parsed.speakers,
+            parsed.side,
+        ));
     }
     brir.crop_heads(1.).unwrap();
     brir.align_ipsilateral_all(&IPSILATERAL_PAIRS, 30.);
     brir.align_onset_groups_peak_leftref(None).unwrap();
     brir.crop_tails(&estimator).unwrap();
-    (omni, brir)
+    (omni, brir, pairs)
 }
 fn options() -> Tuning2Options {
     Tuning2Options {
@@ -67,6 +82,12 @@ fn cached() -> &'static (Hrir, Tuning2Plan) {
         (brir, plan)
     })
 }
+// provisional: set by the owner after review (A08c measured maxima × 1.5).
+const SUPPORT_REL_L2_BOUND: f64 = 0.997751334 * 1.5;
+const SUPPORT_MAX_ABS_BOUND: f64 = 0.049634475 * 1.5;
+const LEVEL_DB_BOUND: f64 = 6.000058928 * 1.5;
+const LATE_BAND_DB_BOUND: f64 = 8.287972908 * 1.5;
+const LATE_TAIL_BOUND: f64 = 0.169831498 * 1.5;
 #[test]
 fn room_tuning2_matches_secs2_mimo() {
     use rayon::prelude::*;
@@ -176,6 +197,11 @@ fn room_tuning2_matches_secs2_mimo() {
                 0.15 * i.tail_change_db,
                 entry["late"][&i.speaker]
             );
+            assert!(rel <= SUPPORT_REL_L2_BOUND && max <= SUPPORT_MAX_ABS_BOUND && delta.abs() <= LEVEL_DB_BOUND);
+            if let Some(band) = entry["late"][&i.speaker]["worst_band_db"].as_f64() {
+                assert!((i.band_change_db-band).abs() <= LATE_BAND_DB_BOUND);
+                assert!((i.tail_change_db*0.15-entry["late"][&i.speaker]["tail_change"].as_f64().unwrap()).abs() <= LATE_TAIL_BOUND);
+            }
             for (variant, rows) in variance["mimo"].as_object().unwrap() {
                 let row = &rows[format!("{setting}/{}", i.speaker)];
                 println!(
@@ -334,6 +360,54 @@ fn room_tuning2_latency() {
     }
 }
 #[test]
+fn room_tuning2_geometry() {
+    let (_, brir, pairs) = demo_with_pairs();
+    let mut plan = cached().1.clone();
+    plan.options.pairs = pairs;
+    let report = apply_tuning2(&mut brir.clone(), &plan).unwrap();
+    assert_eq!(report.pair_checks.len(), 6);
+    assert!(report.pair_checks.iter().all(|p| !p.mismatch));
+    assert!(report.speakers.iter().all(|s| !s.mismatch));
+    let p = &mut plan.options.pairs[0];
+    p.irs[0].data = vec![0.; 1000];
+    p.irs[0].data[800] = 1.;
+    p.irs[1].data = vec![0.; 1000];
+    p.irs[1].data[100] = 1.;
+    let report = apply_tuning2(&mut brir.clone(), &plan).unwrap();
+    assert!(report.pair_checks[0].mismatch);
+    assert!(
+        report
+            .speakers
+            .iter()
+            .filter(|s| ["FL", "FR"].contains(&s.speaker.as_str()))
+            .all(|s| s.mismatch)
+    );
+}
+#[test]
+fn room_tuning2_zero_latency() {
+    let (mut omni, brir) = demo();
+    omni.speakers.truncate(1);
+    let mut opts = options();
+    opts.rc.mode = Tuning2Mode::Zero;
+    let plan = prepare_tuning2(&omni, &opts, None, None).unwrap();
+    let mut tuned = brir.clone();
+    let report = apply_tuning2(&mut tuned, &plan).unwrap();
+    assert_eq!(report.latency_samples, 0);
+    for (a, b) in tuned.speakers.iter().zip(&brir.speakers) {
+        for (a, b) in a
+            .left
+            .iter()
+            .chain(&a.right)
+            .zip(b.left.iter().chain(&b.right))
+        {
+            assert_eq!(a.len(), b.len());
+        }
+    }
+    for (a, b) in tuned.speakers.iter().zip(&brir.speakers).skip(1) {
+        assert_eq!(a.left.as_ref().unwrap().data, b.left.as_ref().unwrap().data);
+    }
+}
+#[test]
 fn room_tuning2_level_rules() {
     let (brir, plan) = cached();
     let mut h = brir.clone();
@@ -466,7 +540,7 @@ fn room_tuning2_supports_are_band_limited() {
         low: 50.,
         fir: primitives::firwin(210, 150., 600.),
     };
-    let response = support_response(&support, 48000, 131072);
+    let response = support_response(&support, 48000, 131072).unwrap();
     assert!(
         response
             .iter()
