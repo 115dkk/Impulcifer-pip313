@@ -626,10 +626,14 @@ p0 only) for the reference tests; it is not an option.
   `X_l = interp(fl, f, Re X) + j*interp(fl, f, Im X)`;
   `X_l *= clip((285 − fl)/60, 0, 1)`; `x = irfft_(2n)(X_l)[:n]`.
 - **Late peaks** `LP(xs, count)`: for each x, `k = first index with |x| > 0.1*max|x|`,
-  zero x before `k+90`, add `|rfft_4096|²`; on `rfftfreq(4096, 1/600)` take the
-  local maxima (`scipy.signal.find_peaks` without conditions) of the sum masked to
-  20–160 Hz, sort by height descending (stable), keep `count`, return their
-  frequencies.
+  zero x before `k+90`, add `|rfft_4096|²`; on `rfftfreq(4096, 1/600)` multiply
+  the sum by the 20–160 Hz mask over the whole grid (0 outside, the sum inside)
+  and take the local maxima of that masked array (`scipy.signal.find_peaks`
+  without conditions). Because the bins outside the band are zero, the first
+  bin at or above 20 Hz and the last bin at or below 160 Hz (159.96 Hz) are
+  maxima whenever the sum falls away from, or rises toward, the band edge;
+  searching only inside the band would miss them. Sort by height descending
+  (stable), keep `count`, return their frequencies.
 - **Mode decay** `T60(x, fc, half)` at 600 Hz: band `[max(fc−half, 1), min(fc+half, 270)]`,
   order-2 Butterworth band-pass SOS; prepend 1200 zeros, filter the reversed
   signal and reverse again, square → e; from `s = argmax e`, the reversed
@@ -891,17 +895,16 @@ itself").
 MIMO follows the same split. Fed the oracle's own RC outputs (`x` per ear and
 the direct correction energy), the paths, normal equations, bisection, guard
 and supports reproduce it to floating-point noise (supports within 6e-13
-relative). Two guard values are exceptions: the first tail change of BL and FC
-in the `mixed`/100 Hz/40 Hz setting. In both, the oracle leaves out the sixth
-late peak of `y_e`, near 44 Hz, which the rule above includes. No variant of
-the rule tested (onset, frequency floor, peak count) reproduces all 85
-recorded guard values, so the rule stays as written and those two values are
-named exceptions. End to end, the tail change is a maximum over a top-six peak
-set and so is discontinuous: a slightly different RC can move a
-near-threshold input by one guard step (3 dB of support level). The oracle's
-own variants do so for 1–3 of 7 inputs per setting. Impulcifer is allowed two
-more than the worst variant per setting (measured: 1, 2 and 4 against 2, 3
-and 2).
+relative). Two guard values (the first tail change of BL and FC in the
+`mixed`/100 Hz/40 Hz setting) first disagreed: the port looked for late peaks
+only inside 20–160 Hz, while the oracle masks the whole grid, so its 159.96 Hz
+band-edge bin is a peak (see "Late peaks" above). With the edge bin, the
+oracle's own late-peak function reproduces both recorded values exactly.
+End to end, the tail change is a maximum over a top-six peak set and so is
+discontinuous: a slightly different RC can move a near-threshold input by one
+guard step (3 dB of support level). The oracle's own variants do so for 1–3 of
+7 inputs per setting; the allowance over the worst variant is recorded next to
+`room_tuning2_matches_secs2_mimo`.
 
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of
