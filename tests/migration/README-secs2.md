@@ -163,10 +163,10 @@ is found at its first step instead of at the end.
 | RC pre-fit bands | absolute 1e-12; matching Schroeder presence | PASS: 0; 0 |
 | RC pre-fit levels | absolute 1e-12 | PASS: 1.421085471520200e-14; 1.530080109777270e-16 |
 | synthetic initial Jacobian J0 (five fixtures) | rel 1e-9, no absolute allowance | PASS: 0; 0 — bit-exact |
-| fit traces | max absolute parameter difference / max absolute reference parameter ≤ 1e-9 at each evaluation before horizon − 1; prefix counts enforced; later evaluations and final costs report-only | 26/27 traced fixtures pass. `sr_both_ultra60_s0_1` fails at evaluation 1 (horizon 5): 1.2477142515202155e-6; prefix maximum 1.6303774481388997e-4. Its initial Jacobian also matches a separate SciPy calculation exactly; cause after J0 remains unresolved. Ripple first differs at 1, equal to its horizon, and passes. |
+| fit traces | max absolute parameter difference / max absolute reference parameter ≤ 1e-9 at each evaluation before horizon − 1; prefix counts enforced; later evaluations and final costs report-only | A07d: 27/27 traced fixtures pass; maximum gated relative distance 2.3398629199314537e-14. `sr_both_ultra60_s0_1` first differs at evaluation 5, equal to horizon 5; its gated maximum is 1.8283410237449714e-16. Synthetic J0 remains bit-exact. |
 | RC pre-fit production-chain spectra | relative 1e-12 / absolute floor 1e-12; relative L2 1e-12; exact long-mode bins | PASS across 11 sessions: power max 5.421010862427522e-19; smoothings max 8.673617379884035e-19; design max 5.684341886080802e-14; first fit input max 4.352074256530614e-14 |
 | RC stage spectra / results after fitting | All 11 sessions have oracle factorization divergence: M, phasors, delays, realization sequences, touch-up minimum phases, final FIR/response and PEQ compared report-only on the production chain | First observed downstream differences are M (1e-4 to 0.1766 in complex components), or the zero-mode response (2.934e-4). No downstream equivalence claim. |
-| RC end-to-end envelope | band caps = ceil(envelope max × 1.25 × 100)/100; >0.1 and >1 dB channel counts ≤ envelope | PASS: maxima 1.799838979 / 2.662352472 / 0.239375377 / 0.040506483 dB versus caps 2.91 / 3.33 / 0.93 / 0.08; counts 25 / 9 versus 32 / 15. Strength changes 1, PEQ count changes 0. |
+| RC end-to-end envelope | band caps = ceil(envelope max × 1.25 × 100)/100; >0.1 and >1 dB channel counts ≤ envelope | A07d PASS: maxima 1.994235049 / 1.919082892 / 0.765318729 / 0.057842253 dB versus caps 2.91 / 3.33 / 0.93 / 0.08. Counts above 0.001/0.01/0.1/1 dB: 56/36/19/7 versus envelope 61/39/32/15. Strength changes 2, PEQ count changes 0. |
 | MIMO normal equations | Out of scope; starting rel 1e-12 (diagonal, block rows, Aᵀb), identical bisection decisions, u rel 1e-9 remain pending | Not measured |
 | MIMO guard values | Out of scope; starting 1e-9 absolute remains pending | Not measured |
 | downstream integer results (bins, counts, chosen strength and resolution) | Exact starting requirement; not gated here | Not measured |
@@ -177,8 +177,8 @@ all passing observed maxima × 1.5 remain below their applicable floors.
 Relative L2 is diagnostic for minimum phase and levels, not an extra gate.
 A07c updates the fit and RC rows above. The synthetic J0 arrays stay exact;
 the independent SciPy PEQ16 reference now carries a gesvd horizon (1), and
-smooth/active-bound tests retain their previous gates. One fit-prefix gate
-still fails, so this remains a partial record, not completed parity.
+smooth/active-bound tests retain their previous gates. The former remaining fit-prefix failure is closed by A07d below; downstream
+stage spectra remain report-only as described in the table.
 
 A07c release-profile FL/two-position medians (seconds): mixed 1.144080,
 zero 2.344558, linear 2.790939, long 1.053549, ultra-60 2.505206.
@@ -189,7 +189,64 @@ be summed. Residual output, Jacobian probe and band-response buffers are
 reused; cached exact-order prefixes skip unchanged earlier bands without
 regrouping products. Scalar smoothing powers are computed once per call.
 FFT plans and scratch buffers were already cached in the shared FFT module.
-The SVD remains sequential on the original augmented matrix.
+That A07c SVD was sequential on the original augmented matrix.
+
+## Specification-only TRF replay (A07d)
+
+`replay_trf_fixture.py` reads only a fit fixture and its checked sidecars, builds
+the RBJ residual from the specification, and calls SciPy 1.18.1. It does not
+load the oracle or its exporter:
+
+```sh
+NPY_DISABLE_CPU_FEATURES="X86_V3 X86_V4 AVX512_ICL AVX512_SPR" OPENBLAS_NUM_THREADS=1 \
+  python tests/migration/replay_trf_fixture.py \
+  tests/migration/goldens/s2_fit_sr_both_ultra60_s0_1.json \
+  --out tests/migration/goldens/trf_replay_sr_both_ultra60_s0_1.json
+```
+
+The replay reproduces every recorded trial point and cost exactly (final cost
+186.51429844881537). Its first-iteration JSON is 19,947 bytes; `--all-iterations`
+retains every accepted/rejected trial. Wrappers observe SciPy module globals,
+with return-frame capture for branch-local quantities. `replay_first_iteration`
+compares the Rust diagnostics with that JSON; U's arbitrary column signs are
+ignored only for `uf`, not for steps or trial points.
+
+Before the fix the first quantity exceeding 1e-12 relative was actual reduction
+(6.866091888814059e-12); the anti-gradient branch and the step already agreed
+within 3e-15. Thus the identical divergence under two SVD builds did not imply
+a different TRF formula: this branch does not use the SVD step. Replacing the
+long scalar dot accumulator with eight independent accumulators and a balanced
+merge closes the prefix gate, without changing residual arithmetic. The new
+first-iteration maximum is 2.346391645408361e-13 (`uf`); actual reduction differs
+by 4.655293164834266e-16. Final fit costs are still report-only, not constrained
+to the range of the oracle variants.
+
+A07d retains sequential Householder QR of the augmented Jacobian, applies Qᵀ
+to the augmented residual, then takes the small R SVD; no tall U is formed.
+Measured release-profile SVD-call averages (including QR) were approximately
+1.03 ms at 748×48 and 1.39 ms at 948×48, versus 1.53 and 1.80 ms for the
+original thin-U path. Runtime-dispatched band/product/magnitude loops retain
+bit-exact synthetic J0; scalar libm log10 is separate. Mixed-mode residual
+averages dropped from 28.0 to 19.8 µs (measurements vary under host load).
+Linear/ultra sessions use `rayon::join`; a 1-thread/4-thread linear test compares
+FIR and complex response bits and the chosen result. Profiling follows both
+sessions and merges inclusive durations in fixed session order.
+
+Final measured FL/two-position medians, seconds (2026-10-12):
+
+| mode | one thread | default (4 threads) | oracle | one-thread speedup |
+| --- | ---: | ---: | ---: | ---: |
+| mixed | 0.358733 | 0.340503 | 0.88 | 2.453× |
+| zero | 0.612948 | 0.631765 | 1.55 | 2.529× |
+| linear | 0.591165 | 0.329069 | 2.22 | 3.755× |
+| long | 0.228424 | 0.283438 | 0.73 | 3.196× |
+| ultra-60 | 0.606082 | 0.348594 | 1.91 | 3.151× |
+
+The requested 4× **one-thread** target remains unmet in every mode. At measured
+log10 cost 7.707877 ns/point, residual-evaluation count × grid points × log10
+cost plus measured total SVD time gives floors of 0.150577 / 0.342577 / 0.235500 /
+0.115938 / 0.266405 s (mixed/zero/linear/long/ultra). These exclude all other work;
+profiling timers are inclusive and must not be added together.
 
 The end-to-end references `room_tuning_secs2_rc.json` and
 `room_tuning_secs2_mimo.json` stay as the integration check on top of these.

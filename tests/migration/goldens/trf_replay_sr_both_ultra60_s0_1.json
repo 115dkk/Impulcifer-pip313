@@ -9,6 +9,7 @@
     "first_divergence": null,
     "horizon": 5,
     "prefix_max_relative": 0.0,
+    "prefix_count_ok": true,
     "cost": 186.51429844881537,
     "reference_cost": 186.51429844881537
   },

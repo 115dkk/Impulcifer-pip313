@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #![allow(dead_code)]
 use impulcifer_dsp::fft::Complex64;
 use serde_json::Value;

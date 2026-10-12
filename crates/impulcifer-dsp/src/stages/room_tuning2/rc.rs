@@ -516,26 +516,70 @@ pub fn design_rc_with_stages(
             vec![blo, bhi],
         )
     } else {
-        let mut run = fir_run(
-            &h,
-            &f,
-            &u0,
-            opts,
-            band,
-            params,
-            params.phase_frac,
-            fs,
-            session.as_mut(),
-        )?;
+        let dual = matches!(opts.mode, Tuning2Mode::Linear | Tuning2Mode::Ultra(_));
+        let mut other_session = capture.as_ref().map(|_| RcSession::default());
+        let (first, other) = if dual {
+            let profiling = profile::enabled();
+            let ((first, first_times), (other, times)) = rayon::join(
+                || {
+                    profile::capture(profiling, || {
+                        fir_run(
+                            &h,
+                            &f,
+                            &u0,
+                            opts,
+                            band,
+                            params,
+                            params.phase_frac,
+                            fs,
+                            session.as_mut(),
+                        )
+                    })
+                },
+                || {
+                    profile::capture(profiling, || {
+                        fir_run(
+                            &h,
+                            &f,
+                            &u0,
+                            opts,
+                            band,
+                            params,
+                            6.,
+                            fs,
+                            other_session.as_mut(),
+                        )
+                    })
+                },
+            );
+            profile::merge(first_times);
+            profile::merge(times);
+            (first, Some(other))
+        } else {
+            (
+                fir_run(
+                    &h,
+                    &f,
+                    &u0,
+                    opts,
+                    band,
+                    params,
+                    params.phase_frac,
+                    fs,
+                    session.as_mut(),
+                ),
+                None,
+            )
+        };
+        let mut run = first?;
         if let Some(t) = capture.as_deref_mut() {
             t.sessions.push(session.take().unwrap());
         }
         let mut fits = run.fits.clone();
-        if matches!(opts.mode, Tuning2Mode::Linear | Tuning2Mode::Ultra(_)) {
-            let mut session = capture.as_ref().map(|_| RcSession::default());
-            let other = fir_run(&h, &f, &u0, opts, band, params, 6., fs, session.as_mut())?;
+        if let Some(other) = other {
+            let other = other?;
             if let Some(t) = capture.as_deref_mut() {
-                t.sessions.push(session.unwrap());
+                t.sessions.push(other_session.unwrap());
             }
             fits.extend(other.fits.clone());
             if score(&other, &h, &f, band, &opts.policy, fs)

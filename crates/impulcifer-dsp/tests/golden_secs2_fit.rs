@@ -1,8 +1,96 @@
+#![forbid(unsafe_code)]
 mod golden_secs2_helpers;
 use golden_secs2_helpers::*;
 use impulcifer_dsp::stages::room_tuning2::peq::fit_with_trace;
 
 const REL: f64 = 1e-9;
+#[test]
+fn replay_first_iteration() {
+    let v = fixture("fit_sr_both_ultra60_s0_1");
+    let i = &v["inputs"];
+    let mut trace = None;
+    fit_with_trace(
+        &array(&i["g"]),
+        &array(&i["corr_db"]),
+        integer(&i["n"]),
+        20.,
+        500.,
+        10.,
+        Some(500.),
+        48000.,
+        Some(&mut trace),
+    )
+    .unwrap();
+    let trace = trace.unwrap();
+    let reference: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/migration/goldens/trf_replay_sr_both_ultra60_s0_1.json"
+    ))
+    .unwrap();
+    let actual = serde_json::to_value(&trace.solver.trials[0]).unwrap();
+    let expected = &reference["trials"][0];
+    let mut first = None;
+    for key in [
+        "g_norm",
+        "v",
+        "dv",
+        "Delta",
+        "s",
+        "uf",
+        "alpha_in",
+        "alpha_out",
+        "n_iter",
+        "p_h",
+        "step",
+        "x_new",
+        "actual_reduction",
+        "predicted_reduction",
+        "ratio",
+        "Delta_new",
+    ] {
+        let a = if actual[key].is_array() {
+            array(&actual[key])
+        } else {
+            vec![number(&actual[key])]
+        };
+        let b = if expected[key].is_array() {
+            array(&expected[key])
+        } else {
+            vec![number(&expected[key])]
+        };
+        let error = a
+            .iter()
+            .zip(&b)
+            .map(|(a, b)| {
+                if key == "uf" {
+                    (a.abs() - b.abs()).abs()
+                } else {
+                    (a - b).abs()
+                }
+            })
+            .fold(0., f64::max)
+            / b.iter().map(|b| b.abs()).fold(f64::MIN_POSITIVE, f64::max);
+        println!("REPLAY_INTERNAL {key}: relative={error:.17e}");
+        if error > 1e-12 && first.is_none() {
+            first = Some(key);
+        }
+    }
+    println!("FIRST_INTERNAL {first:?}");
+    assert_eq!(actual["full_rank"], expected["full_rank"]);
+    assert_eq!(actual["select"]["branch"], expected["select"]["branch"]);
+    for key in [
+        "p_value",
+        "ag_value",
+        "p_stride",
+        "r_stride_l",
+        "r_stride_u",
+        "ag_stride",
+    ] {
+        let a = number(&actual["select"][key]);
+        let b = number(&expected["select"][key]);
+        assert!((a - b).abs() <= 1e-12 * b.abs(), "select/{key}: {a} != {b}");
+    }
+    assert!(first.is_none());
+}
 fn run(synthetic: bool) {
     let mut failures = Vec::new();
     for (name, v) in fixtures("fit_") {

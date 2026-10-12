@@ -13,6 +13,38 @@ pub fn start() {
 pub fn finish() -> BTreeMap<&'static str, (Duration, usize)> {
     TIMES.with(|t| t.borrow_mut().take().unwrap_or_default())
 }
+pub fn enabled() -> bool {
+    TIMES.with(|t| t.borrow().is_some())
+}
+type Timings = BTreeMap<&'static str, (Duration, usize)>;
+/// Save thread-local state: a one-thread join may execute inline.
+pub fn capture<T>(enabled: bool, f: impl FnOnce() -> T) -> (T, Timings) {
+    if !enabled {
+        return (f(), BTreeMap::new());
+    }
+    struct Restore(Option<Timings>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TIMES.with(|t| *t.borrow_mut() = self.0.take());
+        }
+    }
+    let previous = Restore(TIMES.with(|t| t.borrow_mut().replace(BTreeMap::new())));
+    let result = f();
+    let times = finish();
+    drop(previous);
+    (result, times)
+}
+pub fn merge(times: Timings) {
+    TIMES.with(|t| {
+        if let Some(all) = t.borrow_mut().as_mut() {
+            for (key, (duration, count)) in times {
+                let entry = all.entry(key).or_default();
+                entry.0 += duration;
+                entry.1 += count;
+            }
+        }
+    });
+}
 pub struct Timer {
     name: &'static str,
     start: Option<Instant>,

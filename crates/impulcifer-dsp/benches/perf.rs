@@ -325,16 +325,25 @@ fn room_tuning2_bench() {
         let s = h.get("FL").unwrap();
         points.push(s.left.as_ref().or(s.right.as_ref()).unwrap().clone());
     }
-    let golden: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../tests/migration/goldens/room_tuning_secs2_rc.json"
-    ))
-    .unwrap();
-    for (name, mode) in [
-        ("zero", Tuning2Mode::Zero),
-        ("mixed", Tuning2Mode::Mixed),
-        ("linear", Tuning2Mode::Linear),
-        ("long", Tuning2Mode::Long),
-        ("ultra-60", Tuning2Mode::Ultra(60.)),
+    let logarithms: Vec<_> = (1..=700).map(|i| i as f64 / 100.).collect();
+    let start = Instant::now();
+    for _ in 0..10000 {
+        for x in &logarithms {
+            black_box(black_box(*x).log10());
+        }
+    }
+    let log_seconds = start.elapsed().as_secs_f64() / 7_000_000.;
+    println!(
+        "LOG10 ns/point={:.6} threads={}",
+        log_seconds * 1e9,
+        rayon::current_num_threads()
+    );
+    for (name, mode, reference_seconds) in [
+        ("zero", Tuning2Mode::Zero, 1.55),
+        ("mixed", Tuning2Mode::Mixed, 0.88),
+        ("linear", Tuning2Mode::Linear, 2.22),
+        ("long", Tuning2Mode::Long, 0.73),
+        ("ultra-60", Tuning2Mode::Ultra(60.), 1.91),
     ] {
         let opts = RcOptions {
             mode,
@@ -348,12 +357,24 @@ fn room_tuning2_bench() {
         black_box(design_rc(&points, &opts, &band, None, None).unwrap());
         profile::start();
         black_box(design_rc(&points, &opts, &band, None, None).unwrap());
-        for (step, (elapsed, count)) in profile::finish() {
+        let timings = profile::finish();
+        for (step, (elapsed, count)) in &timings {
             println!(
-                "PROFILE {name}/{step}: ms={:.6} count={count}",
-                elapsed.as_secs_f64() * 1000.
+                "PROFILE {name}/{step}: ms={:.6} count={count} us/call={:.6}",
+                elapsed.as_secs_f64() * 1000.,
+                elapsed.as_secs_f64() * 1e6 / *count as f64
             );
         }
+        let residuals = timings.get("residual").unwrap().1;
+        let grid_points = if mode == Tuning2Mode::Zero { 900 } else { 700 };
+        let svd = timings.get("svd").unwrap();
+        println!(
+            "FLOOR {name}: {residuals} evaluations * {grid_points} points * {:.6}ns log10 + {} svd * {:.6}ms = {:.6}s",
+            log_seconds * 1e9,
+            svd.1,
+            svd.0.as_secs_f64() * 1000. / svd.1 as f64,
+            residuals as f64 * grid_points as f64 * log_seconds + svd.0.as_secs_f64()
+        );
         let mut times = Vec::new();
         for _ in 0..3 {
             let start = Instant::now();
@@ -361,13 +382,11 @@ fn room_tuning2_bench() {
             times.push(start.elapsed().as_secs_f64());
         }
         times.sort_by(f64::total_cmp);
-        let reference_seconds = golden["entries"][format!("two/FL/{name}")]["secs_seconds"]
-            .as_f64()
-            .map(|seconds| format!("{seconds}s"))
-            .unwrap_or_else(|| "timing not recorded in regenerated fixture".into());
         println!(
-            "room_tuning2/{name} FL two positions: median {:.6}s min {:.6}s SECS {reference_seconds}",
-            times[1], times[0],
+            "room_tuning2/{name} FL two positions: median {:.6}s min {:.6}s SECS {reference_seconds}s speedup {:.3}x target=4x",
+            times[1],
+            times[0],
+            reference_seconds / times[1],
         );
     }
 }

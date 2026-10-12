@@ -27,9 +27,64 @@ pub struct LeastSquaresTrace {
     pub j0: Vec<f64>,
     pub j0_shape: [usize; 2],
     pub initial_cost: f64,
+    pub trials: Vec<TrfTrial>,
 }
+#[derive(Debug, Default, serde::Serialize)]
+pub struct TrfTrial {
+    pub iteration: usize,
+    pub g_norm: f64,
+    pub v: Vec<f64>,
+    pub dv: Vec<f64>,
+    #[serde(rename = "Delta")]
+    pub delta: f64,
+    pub s: Vec<f64>,
+    pub uf: Vec<f64>,
+    pub alpha_in: f64,
+    pub alpha_out: f64,
+    pub n_iter: usize,
+    pub full_rank: bool,
+    pub p_h: Vec<f64>,
+    pub select: SelectTrace,
+    pub step: Vec<f64>,
+    pub step_h: Vec<f64>,
+    pub x_new: Vec<f64>,
+    pub actual_reduction: f64,
+    pub predicted_reduction: f64,
+    pub ratio: f64,
+    #[serde(rename = "Delta_new")]
+    pub delta_new: f64,
+}
+#[derive(Debug, Default, serde::Serialize)]
+pub struct SelectTrace {
+    pub branch: &'static str,
+    pub p_value: Option<f64>,
+    pub r_value: Option<f64>,
+    pub ag_value: Option<f64>,
+    pub p_stride: Option<f64>,
+    pub r_stride: Option<f64>,
+    pub r_stride_l: Option<f64>,
+    pub r_stride_u: Option<f64>,
+    pub ag_stride: Option<f64>,
+    pub to_tr: Option<f64>,
+    pub to_bound: Option<f64>,
+}
+// A single long accumulator perturbs the anti-gradient line minimum enough
+// to change its next finite-difference Jacobian (the replay pins that case).
+// Independent lanes and a balanced merge reduce that error without FMA or BLAS.
 fn dot(a: &[f64], b: &[f64]) -> f64 {
-    a.iter().zip(b).map(|(a, b)| a * b).sum()
+    let mut sums = [0.; 8];
+    let chunks = a.len() / 8 * 8;
+    for i in (0..chunks).step_by(8) {
+        for k in 0..8 {
+            sums[k] += a[i + k] * b[i + k];
+        }
+    }
+    let mut sum =
+        ((sums[0] + sums[1]) + (sums[2] + sums[3])) + ((sums[4] + sums[5]) + (sums[6] + sums[7]));
+    for i in chunks..a.len() {
+        sum += a[i] * b[i];
+    }
+    sum
 }
 fn norm(a: &[f64]) -> f64 {
     dot(a, a).sqrt()
@@ -179,9 +234,14 @@ fn select(
     lb: &[f64],
     ub: &[f64],
     theta: f64,
+    mut trace: Option<&mut SelectTrace>,
 ) -> (Vec<f64>, Vec<f64>, f64) {
     if (0..x.len()).all(|i| x[i] + p[i] >= lb[i] && x[i] + p[i] <= ub[i]) {
         let q = quadratic(j, g, diag, &ph);
+        if let Some(t) = trace {
+            t.branch = "p";
+            t.p_value = Some(q);
+        }
         return (p, ph, -q);
     }
     let (stride, hits) = bound_step(x, &p, lb, ub);
@@ -214,10 +274,19 @@ fn select(
     } else {
         (0., -1.)
     };
+    if let Some(t) = trace.as_deref_mut() {
+        t.p_stride = Some(stride);
+        t.r_stride_l = Some(lo);
+        t.r_stride_u = Some(hi);
+        t.r_stride = Some(rs);
+    }
     let mut rv = f64::INFINITY;
     if lo <= hi {
         let (t, v) = minimize(quadratic_line(j, g, diag, &rh, Some(&ph)), lo, hi);
         rv = v;
+        if let Some(trace) = trace.as_deref_mut() {
+            trace.r_stride = Some(t);
+        }
         for i in 0..rh.len() {
             rh[i] = rh[i] * t + ph[i];
         }
@@ -241,6 +310,21 @@ fn select(
     for v in &mut ag {
         *v *= stride;
     }
+    if let Some(t) = trace {
+        t.p_value = Some(pv);
+        t.r_value = Some(rv);
+        t.ag_value = Some(av);
+        t.ag_stride = Some(stride);
+        t.to_tr = Some(tr);
+        t.to_bound = Some(bound);
+        t.branch = if pv < rv && pv < av {
+            "p"
+        } else if rv < pv && rv < av {
+            "reflected"
+        } else {
+            "anti-gradient"
+        };
+    }
     if pv < rv && pv < av {
         (p, ph, -pv)
     } else if rv < pv && rv < av {
@@ -257,7 +341,7 @@ fn trust(
     v: &Mat<f64>,
     delta: f64,
     mut alpha: f64,
-) -> (Vec<f64>, f64) {
+) -> (Vec<f64>, f64, usize, bool) {
     let suf: Vec<_> = s.iter().zip(uf).map(|(a, b)| a * b).collect();
     let full = m >= n && s[n - 1] > f64::EPSILON * m as f64 * s[0];
     if full {
@@ -266,7 +350,7 @@ fn trust(
             &uf.iter().zip(s).map(|(a, b)| -a / b).collect::<Vec<_>>(),
         );
         if norm(&p) <= delta {
-            return (p, 0.);
+            return (p, 0., 0, full);
         }
     }
     let phi = |a: f64| {
@@ -295,7 +379,9 @@ fn trust(
     if !full && alpha == 0. {
         alpha = (0.001 * upper).max((lower * upper).sqrt());
     }
+    let mut n_iter = 0;
     for _ in 0..10 {
+        n_iter += 1;
         if alpha < lower || alpha > upper {
             alpha = (0.001 * upper).max((lower * upper).sqrt());
         }
@@ -321,7 +407,7 @@ fn trust(
     for v in &mut p {
         *v *= scale;
     }
-    (p, alpha)
+    (p, alpha, n_iter, full)
 }
 /// SciPy's bounded exact-TRF subset. The closure may cache computations but
 /// must return the same residual at the same x. Bounds may be infinite.
@@ -410,6 +496,7 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
     let mut alpha = 0.;
     let mut nfev = 1;
     let mut status = 0;
+    let mut iteration = 0;
     loop {
         let (v, dv) = scaling(&x, &g, lb, ub);
         let gn = g
@@ -424,10 +511,10 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
             break;
         }
         let d: Vec<_> = v.iter().map(|v| v.sqrt()).collect();
-        let diag: Vec<_> = g.iter().zip(dv).map(|(g, v)| g * v).collect();
+        let diag: Vec<_> = g.iter().zip(&dv).map(|(g, v)| g * v).collect();
         let gh: Vec<_> = d.iter().zip(&g).map(|(d, g)| d * g).collect();
         let jh = Mat::from_fn(m, n, |i, k| j[(i, k)] * d[k]);
-        let aug = Mat::from_fn(m + n, n, |i, k| {
+        let mut aug = Mat::from_fn(m + n, n, |i, k| {
             if i < m {
                 jh[(i, k)]
             } else if i - m == k {
@@ -444,11 +531,43 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
             linalg::svd::{self, ComputeSvdVectors},
         };
         let svd_timer = crate::stages::room_tuning2::profile::timer("svd");
-        let mut u = Mat::zeros(m + n, n);
+        use faer::linalg::{householder, qr::no_pivoting::factor};
+        let block = factor::recommended_block_size::<f64>(m + n, n);
+        let mut coeff = Mat::zeros(block, n);
+        let mut qr_scratch = MemBuffer::new(factor::qr_in_place_scratch::<f64>(
+            m + n,
+            n,
+            block,
+            Par::Seq,
+            Default::default(),
+        ));
+        factor::qr_in_place(
+            aug.as_mut(),
+            coeff.as_mut(),
+            Par::Seq,
+            MemStack::new(&mut qr_scratch),
+            Default::default(),
+        );
+        let mut c = Mat::from_fn(m + n, 1, |i, _| if i < m { f[i] } else { 0. });
+        let mut q_scratch = MemBuffer::new(
+            householder::apply_block_householder_sequence_transpose_on_the_left_in_place_scratch::<
+                f64,
+            >(m + n, block, 1),
+        );
+        householder::apply_block_householder_sequence_transpose_on_the_left_in_place_with_conj(
+            aug.as_ref(),
+            coeff.as_ref(),
+            faer::Conj::No,
+            c.as_mut(),
+            Par::Seq,
+            MemStack::new(&mut q_scratch),
+        );
+        let r = Mat::from_fn(n, n, |i, k| if i <= k { aug[(i, k)] } else { 0. });
+        let mut u = Mat::zeros(n, n);
         let mut vv = Mat::zeros(n, n);
         let mut singular = Diag::zeros(n);
         let mut scratch = MemBuffer::new(svd::svd_scratch::<f64>(
-            m + n,
+            n,
             n,
             ComputeSvdVectors::Thin,
             ComputeSvdVectors::Thin,
@@ -456,7 +575,7 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
             Default::default(),
         ));
         svd::svd(
-            aug.as_ref(),
+            r.as_ref(),
             singular.as_mut(),
             Some(u.as_mut()),
             Some(vv.as_mut()),
@@ -468,7 +587,7 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
         drop(svd_timer);
         let s: Vec<_> = (0..n).map(|i| singular.column_vector()[i]).collect();
         let uf: Vec<_> = (0..n)
-            .map(|k| (0..m).map(|i| u[(i, k)] * f[i]).sum())
+            .map(|k| (0..n).map(|i| u[(i, k)] * c[(i, 0)]).sum())
             .collect();
         let theta = 0.995_f64.max(1. - gn);
         let mut actual = -1.;
@@ -476,10 +595,38 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
         let mut fnn = f.clone();
         let mut cn = cost;
         while actual <= 0. && nfev < max_nfev {
-            let (ph, a) = trust(n, m, &uf, &s, &vv, delta, alpha);
+            let (ph, a, n_iter, full_rank) = trust(n, m, &uf, &s, &vv, delta, alpha);
+            let mut trial = trace.as_ref().map(|_| TrfTrial {
+                iteration,
+                g_norm: gn,
+                v: v.clone(),
+                dv: dv.clone(),
+                delta,
+                s: s.clone(),
+                uf: uf.clone(),
+                alpha_in: alpha,
+                alpha_out: a,
+                n_iter,
+                full_rank,
+                p_h: ph.clone(),
+                ..Default::default()
+            });
             alpha = a;
             let p = ph.iter().zip(&d).map(|(a, b)| a * b).collect();
-            let (step, sh, pred) = select(&x, &jh, &diag, &gh, p, ph, &d, delta, lb, ub, theta);
+            let (step, sh, pred) = select(
+                &x,
+                &jh,
+                &diag,
+                &gh,
+                p,
+                ph,
+                &d,
+                delta,
+                lb,
+                ub,
+                theta,
+                trial.as_mut().map(|t| &mut t.select),
+            );
             xn = x.iter().zip(&step).map(|(a, b)| a + b).collect();
             feasible(&mut xn, lb, ub, false);
             fun(&xn, None, &mut fnn);
@@ -493,6 +640,16 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
                 return Err(DspError::InvalidArgument("residual length changed".into()));
             }
             if fnn.iter().any(|v| !v.is_finite()) {
+                if let (Some(t), Some(mut trial)) = (trace.as_deref_mut(), trial) {
+                    trial.step = step;
+                    trial.step_h = sh;
+                    trial.x_new = xn.clone();
+                    trial.actual_reduction = f64::NAN;
+                    trial.predicted_reduction = pred;
+                    trial.ratio = f64::NAN;
+                    trial.delta_new = 0.25 * shn;
+                    t.trials.push(trial);
+                }
                 delta = 0.25 * shn;
                 continue;
             }
@@ -512,6 +669,16 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
             } else {
                 delta
             };
+            if let (Some(t), Some(mut trial)) = (trace.as_deref_mut(), trial) {
+                trial.step = step.clone();
+                trial.step_h = sh.clone();
+                trial.x_new = xn.clone();
+                trial.actual_reduction = actual;
+                trial.predicted_reduction = pred;
+                trial.ratio = ratio;
+                trial.delta_new = dn;
+                t.trials.push(trial);
+            }
             let ft = actual < 1e-8 * cost && ratio > 0.25;
             let xt = norm(&step) < 1e-8 * (1e-8 + norm(&x));
             status = match (ft, xt) {
@@ -537,6 +704,7 @@ pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
             }
             g = grad(&j, &f);
         }
+        iteration += 1;
     }
     let (v, _) = scaling(&x, &g, lb, ub);
     let optimality = g

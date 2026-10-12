@@ -12,6 +12,47 @@ use serde_json::Value;
 use std::{collections::BTreeMap, f64::consts::PI, path::PathBuf};
 const THRESHOLDS_DB: [f64; 4] = [0.001, 0.01, 0.1, 1.];
 
+#[test]
+fn linear_sessions_are_bit_identical_across_thread_counts() {
+    let measurements = demo();
+    let points: Vec<_> = ["left", "right"]
+        .iter()
+        .map(|side| measurements[&("FL".into(), (*side).into())].clone())
+        .collect();
+    let opts = RcOptions {
+        mode: Tuning2Mode::Linear,
+        ..Default::default()
+    };
+    let band = correction_band(&[&points], &opts).unwrap();
+    let run = |threads| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .build()
+            .unwrap()
+            .install(|| design_rc(&points, &opts, &band, None, None).unwrap())
+    };
+    let one = run(1);
+    let four = run(4);
+    assert_eq!(
+        one.fir.iter().map(|x| x.to_bits()).collect::<Vec<_>>(),
+        four.fir.iter().map(|x| x.to_bits()).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        one.response
+            .iter()
+            .map(|x| (x.re.to_bits(), x.im.to_bits()))
+            .collect::<Vec<_>>(),
+        four.response
+            .iter()
+            .map(|x| (x.re.to_bits(), x.im.to_bits()))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(one.peq, four.peq);
+    assert_eq!(one.peq_fits, four.peq_fits);
+    assert_eq!(one.phase_strength.to_bits(), four.phase_strength.to_bits());
+    assert_eq!(one.phase_frac.to_bits(), four.phase_frac.to_bits());
+}
+
 fn rounding_allowance(reference: f64) -> f64 {
     // Half a decimal unit at ten significant digits, plus floating-point noise.
     let half_unit = if reference == 0. {

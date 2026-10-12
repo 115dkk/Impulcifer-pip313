@@ -68,12 +68,14 @@ fn band_into(z: &[Complex64], f: f64, q: f64, g: f64, fs: f64, out: &mut [Comple
     let alpha = w.sin() / (2. * q);
     let b = [1. + alpha * a, -2. * w.cos(), 1. - alpha * a];
     let a = [1. + alpha / a, -2. * w.cos(), 1. - alpha / a];
-    for (out, z) in out.iter_mut().zip(z) {
-        *out = divide(
-            b[0] + b[1] * z + b[2] * z * z,
-            a[0] + a[1] * z + a[2] * z * z,
-        );
-    }
+    pulp::Arch::new().dispatch(|| {
+        for (out, z) in out.iter_mut().zip(z) {
+            *out = divide(
+                b[0] + b[1] * z + b[2] * z * z,
+                a[0] + a[1] * z + a[2] * z * z,
+            );
+        }
+    });
 }
 pub fn response(f: &[f64], bands: &[(f64, f64, f64)], fs: f64) -> Vec<Complex64> {
     let z: Vec<_> = f
@@ -194,50 +196,55 @@ pub fn fit_with_trace(
     let result = optimize::least_squares_in_place(
         |x, column, out| {
             let _timer = super::profile::timer("residual");
-            if let Some(column) = column {
-                let k = column / 3;
-                band_into(
-                    &z,
-                    x[k * 3].exp(),
-                    x[k * 3 + 1].exp(),
-                    x[k * 3 + 2],
-                    fs,
-                    &mut changed,
-                );
-                product.copy_from_slice(&prefix[k]);
-                for (p, b) in product.iter_mut().zip(&changed) {
-                    *p *= b;
-                }
-                for band in &cache[k + 1..] {
-                    for (p, b) in product.iter_mut().zip(band) {
-                        *p *= b;
-                    }
-                }
-            } else {
-                for k in 0..cache.len() {
+            pulp::Arch::new().dispatch(|| {
+                if let Some(column) = column {
+                    let k = column / 3;
                     band_into(
                         &z,
                         x[k * 3].exp(),
                         x[k * 3 + 1].exp(),
                         x[k * 3 + 2],
                         fs,
-                        &mut cache[k],
+                        &mut changed,
                     );
-                    let (before, after) = prefix.split_at_mut(k + 1);
-                    after[0].copy_from_slice(&before[k]);
-                    for (p, b) in after[0].iter_mut().zip(&cache[k]) {
+                    product.copy_from_slice(&prefix[k]);
+                    for (p, b) in product.iter_mut().zip(&changed) {
                         *p *= b;
                     }
+                    for band in &cache[k + 1..] {
+                        for (p, b) in product.iter_mut().zip(band) {
+                            *p *= b;
+                        }
+                    }
+                } else {
+                    for k in 0..cache.len() {
+                        band_into(
+                            &z,
+                            x[k * 3].exp(),
+                            x[k * 3 + 1].exp(),
+                            x[k * 3 + 2],
+                            fs,
+                            &mut cache[k],
+                        );
+                        let (before, after) = prefix.split_at_mut(k + 1);
+                        after[0].copy_from_slice(&before[k]);
+                        for (p, b) in after[0].iter_mut().zip(&cache[k]) {
+                            *p *= b;
+                        }
+                    }
+                    product.copy_from_slice(prefix.last().unwrap());
                 }
-                product.copy_from_slice(prefix.last().unwrap());
-            }
-            out.resize(grid.len(), 0.);
-            for (i, p) in product.iter().enumerate() {
-                out[i] = (if grid[i] >= lo && grid[i] <= hi {
+                out.resize(grid.len(), 0.);
+                for (o, p) in out.iter_mut().zip(&product) {
+                    *o = magnitude(*p) + 1e-12;
+                }
+            });
+            for (i, o) in out.iter_mut().enumerate() {
+                *o = (if grid[i] >= lo && grid[i] <= hi {
                     1.
                 } else {
                     0.15
-                }) * (20. * (magnitude(*p) + 1e-12).log10() - curve[i]);
+                }) * (20. * o.log10() - curve[i]);
             }
         },
         &x,
