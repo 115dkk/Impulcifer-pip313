@@ -858,6 +858,14 @@ level and guard scale.
 
 ### Reference acceptance
 
+The port is gated like the 2.x migration: `tests/migration/export_goldens_secs2.py`
+runs SECS 2 on fixed inputs and freezes every function and stage boundary as an
+`s2_*` fixture (primitives, every PEQ fit with its full trust-region trace,
+each correction run's intermediate spectra and FIR realizations, MIMO paths,
+normal equations, bisection, guard and supports). `tests/migration/README-secs2.md`
+documents the families, the encoding and the measured budgets. The end-to-end
+references below sit on top of them.
+
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of
 N = 131072) for 62 runs on the demo omni files: every file/speaker as one
