@@ -21,7 +21,7 @@ EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * len(ADV_TABS)
-                  + 2 * 2 * 2)
+                  + 2 * 2 * 2 + 2 * 2 * 2)
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -630,6 +630,97 @@ def room_phase_checks(browser):
           "skin carry-over OK", flush=True)
 
 
+def room_tuning2_checks(browser):
+    """Virtual room tuning 2 (ADR 0008): its rows replace the other modes' rows,
+    the filter shows the latency row only for a custom latency, an empty upper
+    band end shows the room facts and sends them, MIMO shows and sends its
+    limits, the tooltips follow the choices, bootstrap defaults apply, and only
+    tuning 2 sends room_tuning2_* fields. Both skins send the same request."""
+    t2_rows = ("#bf-room-tuning2-mode-row", "#bf-room-tuning2-max-boost-row", "#bf-room-tuning2-low-row",
+               "#bf-room-tuning2-high-row", "#bf-room-tuning-level-match-row", "#bf-room-tuning2-mimo-row")
+    others = ("#bf-room-range-row", "#bf-room-max-boost-row", "#bf-fr-combination-row", "#bf-room-tuning-max-boost-row",
+              "#bf-room-tuning-curtain-row", "#bf-room-tuning-delay-row", "#bf-room-phase-limit-row",
+              "#bf-room-phase-schroeder-row")
+    facts = ("#bf-room-volume-row", "#bf-schroeder-freq-row")
+    mimo_rows = ("#bf-room-tuning2-fsiso-row", "#bf-room-tuning2-mimo-low-row")
+    latency = "#bf-room-tuning2-latency-row"
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "en", "idle")
+        navigate(page, "processing")
+        disclosure(page, "room", True)
+
+        def shown(selectors):
+            return [page.locator(selector).is_visible() for selector in selectors]
+
+        def tip(name):
+            return page.locator(f"#{name}").text_content()
+
+        def request():
+            return page.evaluate("gatherBrirPayload()")
+
+        for mode in ("eq", "tuning"):
+            page.locator(f"#bf-room-mode-{mode}").click()
+            assert not any(key.startswith("room_tuning2") for key in request()), (skin, mode)
+            assert not any(shown(("#bf-room-tuning2-mode-row", "#bf-room-tuning2-high-row", "#bf-room-tuning2-mimo-row")
+                                 + mimo_rows + (latency,))), (skin, mode)
+        page.locator("#bf-room-mode-tuning2").click()
+        assert tip("bf-room-mode-tip") == page.evaluate("t('tooltip_room_mode_tuning2')")
+        assert tip("bf-room-tuning-level-match-tip") == page.evaluate("t('tooltip_room_tuning2_level_match')")
+        assert tip("bf-room-tuning2-mode-tip") == page.evaluate("t('tooltip_room_tuning2_mode_mixed')")
+        assert all(shown(t2_rows + facts)) and not any(shown(others + mimo_rows + (latency,))), skin
+        sent = request()
+        assert sent["room_mode"] == "tuning2" and sent["room_tuning2_mode"] == "mixed", sent
+        assert sent["room_tuning2_max_boost"] == 10 and sent["room_tuning2_low"] == 20, sent
+        assert sent["room_tuning2_high"] == "auto" and sent["room_tuning2_mimo"] is False, sent
+        assert sent["room_tuning_level_match"] is True and {"room_volume", "schroeder_freq"} <= sent.keys(), sent
+        assert not {"room_tuning2_fsiso", "room_tuning2_mimo_low", "room_range", "room_max_boost", "fr_combination_method",
+                    "room_tuning_delay", "room_tuning_phase_limit", "room_tuning_max_boost", "room_tuning_curtain"} & sent.keys(), sent
+        mode = page.locator("#bf-room-tuning2-mode")
+        for value in ("zero", "linear", "long"):
+            mode.select_option(value)
+            assert request()["room_tuning2_mode"] == value and not page.locator(latency).is_visible(), (skin, value)
+            assert tip("bf-room-tuning2-mode-tip") == page.evaluate(f"t('tooltip_room_tuning2_mode_{value}')"), value
+        mode.select_option("custom")
+        assert page.locator(latency).is_visible()
+        assert tip("bf-room-tuning2-mode-tip") == page.evaluate("t('tooltip_room_tuning2_mode_custom')")
+        assert request()["room_tuning2_mode"] == 200
+        page.locator("#bf-room-tuning2-latency").fill("60")
+        assert request()["room_tuning2_mode"] == 60
+        # A manual upper end hides the room facts and stops sending them.
+        page.locator("#bf-room-tuning2-high").fill("300")
+        assert not any(shown(facts))
+        sent = request()
+        assert sent["room_tuning2_high"] == 300 and not {"room_volume", "schroeder_freq"} & sent.keys(), sent
+        page.locator("#bf-room-tuning2-high").fill("")
+        assert all(shown(facts))
+        page.locator("#bf-room-tuning2-mimo").check()
+        assert all(shown(mimo_rows))
+        sent = request()
+        assert sent["room_tuning2_mimo"] is True and sent["room_tuning2_fsiso"] == 150, sent
+        assert sent["room_tuning2_mimo_low"] == "auto", sent
+        page.locator("#bf-room-tuning2-fsiso").fill("100")
+        page.locator("#bf-room-tuning2-mimo-low").fill("40")
+        sent = request()
+        assert sent["room_tuning2_fsiso"] == 100 and sent["room_tuning2_mimo_low"] == 40, sent
+        assert page.locator("#bf-room-tuning2-high").get_attribute("placeholder") == page.evaluate(
+            "t('placeholder_room_tuning2_auto')")
+        page.evaluate("state.brirDefaults = {room_mode: 'tuning2', room_tuning2_mode: '60', room_tuning2_high: '250',"
+                      " room_tuning2_mimo: true, room_tuning2_mimo_low: 'auto', room_tuning2_fsiso: 120}; applyRoomDefaults()")
+        assert mode.input_value() == "custom" and page.locator("#bf-room-tuning2-latency").input_value() == "60"
+        assert page.locator("#bf-room-tuning2-high").input_value() == "250" and not any(shown(facts))
+        assert page.locator("#bf-room-tuning2-mimo").is_checked()
+        assert page.locator("#bf-room-tuning2-mimo-low").input_value() == ""
+        assert page.locator("#bf-room-tuning2-fsiso").input_value() == "120"
+        page.evaluate("state.brirDefaults = {}; applyRoomDefaults()")
+        assert page.locator("#bf-room-mode-eq").get_attribute("aria-checked") == "true"
+        assert mode.input_value() == "mixed" and page.locator("#bf-room-tuning2-high").input_value() == ""
+        assert not page.locator("#bf-room-tuning2-mimo").is_checked()
+        assert not errors, errors
+        context.close()
+    print("Gallery room tuning 2 checks: rows per mode, filters and latency, automatic band facts, MIMO limits, "
+          "tooltips, defaults, both skins OK", flush=True)
+
+
 def vbass_checks(browser):
     """Virtual bass crossover modes: Automatic hides the frequency and sends no
     vbass_freq, Manual and Legacy show and send it, the tooltip follows the
@@ -685,8 +776,10 @@ def tooltip_checks(browser):
         disclosure(page, "vbass", True)
         page.locator("#bf-vbass-mode").select_option("manual")  # shows the crossover frequency and its tooltip
         seen = set()
-        for mode in ("eq", "tuning"):
+        for mode in ("eq", "tuning", "tuning2"):
             page.locator(f"#bf-room-mode-{mode}").click()
+            if mode == "tuning2":
+                page.locator("#bf-room-tuning2-mimo").check()  # shows MIMO's tooltip
             for button in page.locator("#dis-room button.info-tip, #dis-vbass button.info-tip").all():
                 if not button.is_visible():
                     continue
@@ -707,6 +800,7 @@ def tooltip_checks(browser):
                 assert bubble.get_attribute("data-open") is None, (skin, tip)
                 assert page.evaluate("document.activeElement.getAttribute('aria-describedby')") == tip, (skin, tip)
         expected = {"bf-room-mode-tip", "bf-room-range-tip", "bf-room-tuning-curtain-tip", "bf-room-tuning-level-match-tip",
+                    "bf-room-tuning2-mode-tip", "bf-room-tuning2-high-tip", "bf-room-tuning2-mimo-tip",
                     "bf-vbass-mode-tip", "bf-vbass-freq-tip",
                     "bf-room-phase-limit-tip" if skin == "studio" else "bf-room-phase-schroeder-tip"}
         assert seen == expected, (skin, seen)
@@ -780,6 +874,7 @@ def render_gallery(output):
         advanced_checks(browser)
         layout_checks(browser)
         room_phase_checks(browser)
+        room_tuning2_checks(browser)
         vbass_checks(browser)
         tooltip_checks(browser)
         shell_checks(browser)
@@ -863,6 +958,14 @@ def render_gallery(output):
                 page.locator(f"#adv-tab-{tab}").click()
                 page.locator("#adv-studio").scroll_into_view_if_needed()
                 shots.append(shoot(page, output, f"processing-advanced-studio-{language}-{theme}-{tab}", errors))
+            context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "idle")
+            navigate(page, "processing")
+            disclosure(page, "room", True)
+            page.locator("#bf-room-mode-tuning2").click()
+            page.locator("#bf-room-tuning2-mimo").check()
+            shots.append(shoot(page, output, f"processing-room-tuning2-{skin}-{language}-{theme}", errors))
             context.close()
         for theme, language in itertools.product(THEMES, LANGUAGES):
             context, page, errors = open_page(browser, "studio", theme, language, "update")

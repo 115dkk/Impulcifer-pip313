@@ -1617,15 +1617,16 @@ function wireTips() {
 
 /* ------------------------------------------- room correction mode & rows
    Room EQ (ADR 0004) corrects the magnitude at each ear position. Virtual
-   room tuning (ADR 0005) is a separate mode with its own settings, so while
-   it is chosen the Room EQ rows (range, boost cap, legacy limits, FR
-   combination) are hidden and not sent. Of the room facts, tuning reads the
-   volume and the Schroeder frequency only at the Schroeder timing limit.
+   room tuning (ADR 0005) and virtual room tuning 2 (ADR 0008) are separate
+   modes with their own settings, so while one is chosen the Room EQ rows
+   (range, boost cap, legacy limits, FR combination) are hidden and not sent.
+   Of the room facts, tuning reads the volume and the Schroeder frequency
+   only at the Schroeder timing limit, tuning 2 only for an automatic band.
    Rows are hidden, not cleared, so switching the mode, the range or the
    limit keeps what was typed. */
 
 /** @type {readonly RoomMode[]} */
-const ROOM_MODES = ["eq", "tuning"];
+const ROOM_MODES = ["eq", "tuning", "tuning2"];
 
 /** @param {unknown} value @returns {value is RoomMode} */
 function isRoomMode(value) {
@@ -1634,7 +1635,7 @@ function isRoomMode(value) {
 
 /** @returns {RoomMode} */
 function roomMode() {
-  return $("bf-room-mode-tuning").getAttribute("aria-checked") === "true" ? "tuning" : "eq";
+  return ROOM_MODES.find((mode) => $(`bf-room-mode-${mode}`).getAttribute("aria-checked") === "true") ?? "eq";
 }
 
 /** @param {RoomMode} mode @param {boolean} [focus] */
@@ -1650,7 +1651,60 @@ function setRoomMode(mode, focus = false) {
 
 /** @param {RoomMode} mode */
 function roomModeHint(mode) {
-  return mode === "tuning" ? t("tooltip_room_mode_tuning") : t("tooltip_room_mode_eq");
+  switch (mode) {
+    case "tuning": return t("tooltip_room_mode_tuning");
+    case "tuning2": return t("tooltip_room_mode_tuning2");
+    default: return t("tooltip_room_mode_eq");
+  }
+}
+
+/* Tuning 2's filter is one of SECS 2's four structures or a latency of
+   30–200 ms ("custom", sent as the number). Its tooltip names the choice. */
+
+/** @type {readonly Tuning2Filter[]} */
+const TUNING2_FILTERS = ["zero", "mixed", "linear", "long", "custom"];
+
+/** @param {unknown} value @returns {value is Tuning2Filter} */
+function isTuning2Filter(value) {
+  return typeof value === "string" && TUNING2_FILTERS.some((filter) => filter === value);
+}
+
+/** @returns {Tuning2Filter} */
+function tuning2Filter() {
+  const value = val("bf-room-tuning2-mode");
+  return isTuning2Filter(value) ? value : "mixed";
+}
+
+/** @param {Tuning2Filter} filter */
+function tuning2FilterHint(filter) {
+  return t(`tooltip_room_tuning2_mode_${filter}`);
+}
+
+/** @returns {Exclude<Tuning2Filter, "custom"> | number} */
+function tuning2Mode() {
+  const filter = tuning2Filter();
+  return filter === "custom" ? numOr("bf-room-tuning2-latency", 200) : filter;
+}
+
+/* Sets the filter from bootstrap's spec: a structure name, or a latency in
+   ms (number or numeric string), which selects "custom" with that value. */
+/** @param {unknown} spec */
+function setTuning2Mode(spec) {
+  const ms = typeof spec === "number" || (typeof spec === "string" && spec.trim() !== "") ? Number(spec) : NaN;
+  if (isTuning2Filter(spec) && spec !== "custom") {
+    el("bf-room-tuning2-mode", HTMLSelectElement).value = spec;
+  } else if (Number.isFinite(ms)) {
+    el("bf-room-tuning2-mode", HTMLSelectElement).value = "custom";
+    el("bf-room-tuning2-latency", HTMLInputElement).value = String(ms);
+  } else {
+    el("bf-room-tuning2-mode", HTMLSelectElement).value = "mixed";
+  }
+}
+
+/** "auto" or a number in a JSON field that takes both, as an input's text. @param {unknown} spec */
+function autoOrNumberText(spec) {
+  const value = typeof spec === "number" || (typeof spec === "string" && spec.trim() !== "") ? Number(spec) : NaN;
+  return Number.isFinite(value) ? String(value) : "";
 }
 
 /* How far up tuning corrects timing. "off" corrects the magnitude only and
@@ -1794,26 +1848,37 @@ function roomRangeHint(range) {
 function updateRoomRows() {
   const mode = roomMode();
   const tuning = mode === "tuning";
+  const tuning2 = mode === "tuning2";
+  const eq = mode === "eq";
   const range = roomRange();
   const legacy = range === "legacy";
   const limit = roomPhaseLimit();
-  const roomFacts = tuning ? limit === "schroeder" : !legacy;
+  const mimo = checked("bf-room-tuning2-mimo");
+  const roomFacts = tuning ? limit === "schroeder" : tuning2 ? val("bf-room-tuning2-high").trim() === "" : !legacy;
   /** @type {Record<string, boolean>} row id -> shown */
   const rows = {
-    "bf-room-range-row": !tuning,
+    "bf-room-range-row": eq,
     "bf-room-volume-row": roomFacts,
     "bf-schroeder-freq-row": roomFacts,
-    "bf-room-max-boost-row": !tuning && !legacy,
-    "bf-specific-limit-row": !tuning && legacy,
-    "bf-generic-limit-row": !tuning && legacy,
-    "bf-fr-combination-row": !tuning,
+    "bf-room-max-boost-row": eq && !legacy,
+    "bf-specific-limit-row": eq && legacy,
+    "bf-generic-limit-row": eq && legacy,
+    "bf-fr-combination-row": eq,
     // Both phase-limit controls follow the mode; the styles show each in its own skin.
     "bf-room-tuning-max-boost-row": tuning,
     "bf-room-tuning-curtain-row": tuning,
-    "bf-room-tuning-level-match-row": tuning,
+    "bf-room-tuning-level-match-row": tuning || tuning2,
     "bf-room-phase-limit-row": tuning,
     "bf-room-phase-schroeder-row": tuning,
     "bf-room-tuning-delay-row": tuning && limit !== "off",
+    "bf-room-tuning2-mode-row": tuning2,
+    "bf-room-tuning2-latency-row": tuning2 && tuning2Filter() === "custom",
+    "bf-room-tuning2-max-boost-row": tuning2,
+    "bf-room-tuning2-low-row": tuning2,
+    "bf-room-tuning2-high-row": tuning2,
+    "bf-room-tuning2-mimo-row": tuning2,
+    "bf-room-tuning2-fsiso-row": tuning2 && mimo,
+    "bf-room-tuning2-mimo-low-row": tuning2 && mimo,
   };
   for (const [id, shown] of Object.entries(rows)) $(id).hidden = !shown;
   // Stable's checkbox shows only Schroeder or the full band; name any other
@@ -1826,7 +1891,13 @@ function updateRoomRows() {
   updateRoomPhaseReadout();
   $("bf-room-mode-tip").textContent = roomModeHint(mode);
   $("bf-room-range-tip").textContent = roomRangeHint(range);
+  $("bf-room-tuning2-mode-tip").textContent = tuning2FilterHint(tuning2Filter());
+  // The two tunings match levels differently (±6 dB around the median, or down to the quietest).
+  $("bf-room-tuning-level-match-tip").textContent = t(tuning2 ? "tooltip_room_tuning2_level_match" : "tooltip_room_tuning_level_match");
   el("bf-schroeder-freq", HTMLInputElement).placeholder = t("placeholder_schroeder_freq");
+  for (const id of ["bf-room-tuning2-high", "bf-room-tuning2-mimo-low"]) {
+    el(id, HTMLInputElement).placeholder = t("placeholder_room_tuning2_auto");
+  }
 }
 
 /* Every room setting starts from the service's defaults. The room volume
@@ -1842,6 +1913,13 @@ function applyRoomDefaults() {
   el("bf-room-tuning-delay", HTMLInputElement).value = String(defaultTuningDelay());
   el("bf-room-tuning-delay-auto", HTMLInputElement).checked = defaults.room_tuning_delay === "auto";
   setRoomPhaseLimit(defaults.room_tuning_phase_limit);
+  setTuning2Mode(defaults.room_tuning2_mode);
+  el("bf-room-tuning2-max-boost", HTMLInputElement).value = String(brirDefault("room_tuning2_max_boost", 10));
+  el("bf-room-tuning2-low", HTMLInputElement).value = String(brirDefault("room_tuning2_low", 20));
+  el("bf-room-tuning2-high", HTMLInputElement).value = autoOrNumberText(defaults.room_tuning2_high);
+  el("bf-room-tuning2-mimo", HTMLInputElement).checked = defaults.room_tuning2_mimo === true;
+  el("bf-room-tuning2-fsiso", HTMLInputElement).value = String(brirDefault("room_tuning2_fsiso", 150));
+  el("bf-room-tuning2-mimo-low", HTMLInputElement).value = autoOrNumberText(defaults.room_tuning2_mimo_low);
   setRoomMode(isRoomMode(defaults.room_mode) ? defaults.room_mode : "eq");
 }
 
@@ -1913,6 +1991,29 @@ function addRoomTuningArgs(args) {
   args.room_tuning_level_match = checked("bf-room-tuning-level-match");
 }
 
+/* Tuning 2 sends its own fields and the shared level match. An empty upper
+   band end or support floor is "auto"; the room facts go only with an
+   automatic band, the MIMO limits only with MIMO on. */
+/** @param {ProcessingRequest} args */
+function addRoomTuning2Args(args) {
+  args.room_tuning2_mode = tuning2Mode();
+  args.room_tuning2_max_boost = numOr("bf-room-tuning2-max-boost", brirDefault("room_tuning2_max_boost", 10));
+  args.room_tuning2_low = numOr("bf-room-tuning2-low", brirDefault("room_tuning2_low", 20));
+  const high = numOrNull("bf-room-tuning2-high");
+  args.room_tuning2_high = high ?? "auto";
+  if (high === null) {
+    args.room_volume = numOrNull("bf-room-volume");
+    args.schroeder_freq = numOrNull("bf-schroeder-freq");
+  }
+  args.room_tuning_level_match = checked("bf-room-tuning-level-match");
+  const mimo = checked("bf-room-tuning2-mimo");
+  args.room_tuning2_mimo = mimo;
+  if (mimo) {
+    args.room_tuning2_fsiso = numOr("bf-room-tuning2-fsiso", brirDefault("room_tuning2_fsiso", 150));
+    args.room_tuning2_mimo_low = numOrNull("bf-room-tuning2-mimo-low") ?? "auto";
+  }
+}
+
 function gatherBrirPayload() {
   /** @type {ProcessingRequest} */
   const args = {
@@ -1929,6 +2030,7 @@ function gatherBrirPayload() {
     args.room_mic_calibration = val("bf-mic-calibration") || null;
     args.room_mode = mode;
     if (mode === "tuning") addRoomTuningArgs(args);
+    else if (mode === "tuning2") addRoomTuning2Args(args);
     else addRoomEqArgs(args);
   }
   if (isOpen("dis-headphone")) {
@@ -2677,6 +2779,10 @@ function wireEvents() {
   el("bf-room-phase-limit", HTMLInputElement).addEventListener("input", updateRoomRows);
   el("bf-room-phase-schroeder", HTMLInputElement).addEventListener("change", onRoomPhaseCheckbox);
   el("bf-room-tuning-delay-auto", HTMLInputElement).addEventListener("change", updateRoomRows);
+  // Tuning 2: the filter shows the latency row, an empty upper end the room facts, MIMO its limits.
+  el("bf-room-tuning2-mode", HTMLSelectElement).addEventListener("change", updateRoomRows);
+  el("bf-room-tuning2-high", HTMLInputElement).addEventListener("input", updateRoomRows);
+  el("bf-room-tuning2-mimo", HTMLInputElement).addEventListener("change", updateRoomRows);
   el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
   // The preview is drawn at its rendered width; redraw when that changes
   // (window resize, or the disclosure opening from display: none).

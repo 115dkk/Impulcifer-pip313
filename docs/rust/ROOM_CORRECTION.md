@@ -11,7 +11,7 @@ The Rust room stage defaults to `schroeder`. The Python 2.x implementation is un
 | `schroeder_freq` | unset | override in Hz, 50–1000 inclusive |
 | `room_max_boost` | 12 | dB, 0–24 inclusive |
 
-`room_mode` defaults to `eq` (`eq` or `tuning`). Tuning is independent of the range and accepts `legacy`; see the processor specification below.
+`room_mode` defaults to `eq` (`eq`, `tuning` or `tuning2`). Both tunings are independent of the range and accept `legacy`; see the processor specifications below (v1 under "Virtual room tuning", v2 under "Virtual room tuning v2").
 
 These are extension fields, not additions to the frozen 33-field 2.x list. CLI defaults are suppressed: omitting the flags preserves the old kwargs object. The service bootstrap includes all eleven extension defaults (the eleventh, `vbass_mode`, is described under "Virtual bass v2"). Service validation returns `INVALID_REQUEST` with `details.field`; CLI validation exits 2. `specific_limit` and `generic_limit` apply only in legacy mode.
 
@@ -480,6 +480,414 @@ shifts, stereo gain pre-scaling, and low-latency output (which leaves a near-emp
 channel on three of the four demo pairs in the owner's black-box observation).
 
 Virtual room tuning reproduces the correction method of SECS by 한플 (DCinside speaker minor gallery, 2026). Impulcifer's implementation is independent; SECS was used only as a black box to produce the reference numbers.
+
+## Virtual room tuning v2
+
+`room_mode=tuning2` reproduces the channel correction (RC) of SECS 2 and, as an
+option, its MIMO low-frequency supports. It is a third member of the room
+family, next to `eq` (ADR 0004) and `tuning` (v1, SECS 1.41, ADR 0005), and
+shares no rule with either. The decisions are recorded in ADR 0008. This
+section is the clean-room specification: the implementation was written from
+it, and SECS 2 (GPL-3.0) was run only as a black box to produce the reference
+numbers in `tests/migration/goldens/room_tuning_secs2_*.json`.
+
+### Model and placement
+
+SECS 2 designs, per loudspeaker, one correction filter in front of the
+loudspeaker (minimum-phase PEQ plus an FIR that also undoes part of the room's
+excess phase), and optionally adds to each input low-pass "support" copies of
+that input sent to other loudspeakers, chosen to cancel the late
+low-frequency energy at the measurement positions. A processor in the speaker
+feed during recording commutes with every later linear path, so the tuned
+BRIR of measured speaker i at ear e is
+
+`BRIR'_i,e = g_i * F_i ⊛ BRIR_i,e + Σ_j Q_ij ⊛ BRIR_j,e`
+
+with F_i the correction filter, g_i its level trim and Q_ij the support from
+input i to speaker j (MIMO only). BRIR_j,e are the untuned responses. F_i is
+designed from the speaker's omni ear-position measurements, exactly as v1
+uses them; the supports are designed on the aligned in-ear BRIRs, because
+only they share one time base across recordings and because the ears are the
+exact reproduction points.
+
+Placement is v1's: the plan is prepared by the room stage, which returns an
+empty `RoomFrs` (equalize gets no room term), and applied at the end of
+`CropAndAlign` after `crop_tails`, before `VirtualBass`. No stage row, no
+progress increment. `room_range`, `room_max_boost` and every v1 option
+(`room_tuning_delay`, `room_tuning_phase_limit`, `room_tuning_max_boost`,
+`room_tuning_curtain`) are inert in this mode. `room_tuning_level_match`,
+`room_volume` and `schroeder_freq` apply as described below.
+
+### Options
+
+| Field / CLI option | Default | Values |
+| --- | --- | --- |
+| `room_tuning2_mode` | `"mixed"` | `zero`, `mixed`, `linear`, `long`, or 30–200 (ms, SECS's ultra mode) |
+| `room_tuning2_max_boost` | 10 | 0–10 dB |
+| `room_tuning2_low` | 20 | 10–200 Hz |
+| `room_tuning2_high` | `"auto"` | `auto` or 100–20000 Hz |
+| `room_tuning2_mimo` | false | true / false |
+| `room_tuning2_fsiso` | 150 | 50–150 Hz |
+| `room_tuning2_mimo_low` | `"auto"` | `auto` or 15–150 Hz |
+
+`room_tuning2_mode`, `room_tuning2_high` and `room_tuning2_mimo_low` accept
+strings or numbers in JSON and are stored as decimal strings, like v1's
+delay. Values outside the ranges are rejected naming the field (SECS clamps;
+Impulcifer validates). These are extension fields and CLI extension options.
+
+Modes (FIR taps at 48 kHz, PEQ bands, lift = design delay, phase resolution β):
+
+| Mode | Taps | PEQ | Lift (ms) | β |
+| --- | --- | --- | --- | --- |
+| `zero` | none | 32 | 0 | — |
+| `mixed` | 2048 | 16 | 8 | 6 |
+| `linear` | 2048 | 16 | 28 | 24 or 6 (chosen, below) |
+| `long` | 32768 | 16 | 200 | 6 |
+| x ms (30–200) | 2048·2^k | 16 | x − 2 | 24 or 6 (chosen) |
+
+For x ms, start at 2048 taps and double while taps < 16384 and
+`0.7*taps/48 < x-2` (60 ms → 4096, 200 ms → 16384). In every mode the lift is
+capped at `0.7*taps/fs*1000` ms; the listed modes never reach the cap at
+48 kHz.
+
+Other sample rates keep times and frequencies: the analysis length is
+`N = 2^17*fs/48000` rounded to the nearest even integer and the tap count is
+`round(taps*fs/48000)`. Every millisecond quantity becomes a sample count by
+truncation, `int(ms*fs/1000)`, as SECS does. Only 48 kHz is checked against
+SECS. Sample rates below 44.1 kHz are rejected.
+
+### Measurements and spectra
+
+For each speaker the positions are its ear-position omni measurements in the
+order left, right (one or two). Use the room stage's uncropped split IR
+(`open_recording_samples(…, 2.0)`); there is no head crop and no length cut.
+`room.wav` is never used (log `cli_room_tuning_room_wav_ignored` once if
+present). No ear-position measurement for any speaker: log
+`cli_room_tuning_no_data` and leave the BRIR unchanged. One position: log
+`cli_room_tuning_single_point` and run the single-position chain.
+
+The grid is `f_k = k*fs/N`, k = 0…N/2, computed as `numpy.fft.rfftfreq(N, 1/fs)`;
+Δ = f_1 − f_0. For an IR h:
+
+- onset o: the first index at or before the first maximum of |h| with
+  `|h| ≥ 0.1*max|h|`;
+- RC window: `a = max(0, o − int(0.002*fs))`, `w = h[a : a+int(0.5*fs)]`
+  (shorter if h ends), the last `K = int(0.2*len(w))` samples multiplied by
+  `0.5*(1+cos(π*k/K))`, k = 0…K−1;
+- spectrum `H = rfft_N(w)*exp(−j*2π*f*(a−b)/fs)`, where b is the onset at the
+  speaker's first position. Any common b gives the same RC up to rounding.
+
+Microphone calibration, when configured, divides every H by the minimum-phase
+response whose magnitude is `10^(c(f)/20)`, c interpolated linearly in Hz with
+end values held. (SECS receives calibrated responses from REW; this is not part
+of its chain.) The room target T(f), when configured, is the target file
+interpolated the same way; without one T = 0. Bass boost and tilt stay in the
+downstream target stage, as in v1.
+
+### Position policy
+
+SECS weights its listening position 5× and runs three steps on it alone. Both
+ears are listening positions here, so the weights are equal (w_p = 1) and each
+single-position step runs on every position and combines as stated where it
+appears: the long-mode mask is the union, the phase-resolution score is the
+worst position, the Schroeder decay pools all positions. With one position the
+chain is SECS's exactly. The implementation also carries SECS's own policy
+(listening position p0 with weight w, all other weights 1, the three steps on
+p0 only) for the reference tests; it is not an option.
+
+### Shared numerical primitives
+
+- **Smoothing** `S_b(X)`, b a scalar or one value per bin: `h_k = 2^(0.5/b_k)`,
+  `lo_k = clip(floor((f_k/h_k)/Δ), 0, N/2)`, `hi_k = clip(ceil((f_k*h_k)/Δ), 0, N/2)`,
+  then `hi_k = max(hi_k, lo_k+1)`; `S = (C[hi+1] − C[lo]) / (hi+1−lo)` with C the
+  sequential float64 cumulative sum, C[0] = 0. Complex input: real and
+  imaginary parts separately. It is not v1's primitive.
+- **Variable resolution** `b(f) = 24*(6/24)^t`,
+  `t = clip((log10(max(f,1e-3)) − log10 200)/(log10 2000 − log10 200), 0, 1)`:
+  1/24 octave below 200 Hz, 1/6 octave above 2 kHz.
+- **Minimum phase** `MP(A)`: `L = ln(max(A, 1e-8))`, `c = irfft_N(L)`, fold to
+  `[c_0, 2c_1 … 2c_(N/2−1), c_(N/2), 0 …]`, `MP = exp(rfft_N(fold))`. (v1 uses a
+  different floor.)
+- **Peaking (RBJ)** `P(f; f0, Q, G)`: `A = 10^(G/40)`, `w0 = 2π*f0/fs`,
+  `α = sin(w0)/(2Q)`, numerator `(1+αA, −2cos w0, 1−αA)`, denominator
+  `(1+α/A, −2cos w0, 1−α/A)`, `z = exp(−j*2π*f/fs)`,
+  `P = (b0 + b1*z + b2*z*z)/(a0 + a1*z + a2*z*z)`. A PEQ is the product of its
+  bands in order, starting from 1.
+- **HP4** `(s²/(s²+√2 s+1))²`, `s = j*f/fc`.
+- **Low rate** `LR(X, n)`: `fl = rfftfreq(2n, 1/600)`;
+  `X_l = interp(fl, f, Re X) + j*interp(fl, f, Im X)`;
+  `X_l *= clip((285 − fl)/60, 0, 1)`; `x = irfft_(2n)(X_l)[:n]`.
+- **Late peaks** `LP(xs, count)`: for each x, `k = first index with |x| > 0.1*max|x|`,
+  zero x before `k+90`, add `|rfft_4096|²`; on `rfftfreq(4096, 1/600)` take the
+  local maxima (`scipy.signal.find_peaks` without conditions) of the sum masked to
+  20–160 Hz, sort by height descending (stable), keep `count`, return their
+  frequencies.
+- **Mode decay** `T60(x, fc, half)` at 600 Hz: band `[max(fc−half, 1), min(fc+half, 270)]`,
+  order-2 Butterworth band-pass SOS; prepend 1200 zeros, filter the reversed
+  signal and reverse again, square → e; from `s = argmax e`, the reversed
+  cumulative sum EDC; none if `EDC_0 ≤ 0`; `D = 10*log10(max(EDC/EDC_0, 1e-30))`;
+  i5 / i25 the first indices with D ≤ −5 / ≤ −25 (0 if none); none if
+  `i25 ≤ i5+2`; least-squares slope of D over `t = (i5 … i25−1)/600`;
+  `T60 = −60/slope` if the slope is negative, else none.
+- Conventions where the chain uses them: inverse real FFTs discard the
+  imaginary parts of the DC and Nyquist bins; `interp` holds end values;
+  `geomspace` has exact end points; `gradient` is `numpy.gradient` with a
+  coordinate array and first-order edges; `unwrap` uses period 2π; medians
+  average the two middle values; `round(x, 1)` is Python's; Butterworth SOS and
+  filtering follow `scipy.signal.butter(..., output='sos')` and `sosfilt`.
+
+### Channel level
+
+`P_i = Σ_p w_p |H_p|² / Σ_p w_p`.
+`L_i = median over 300 ≤ f ≤ 3000 of (10*log10(P_i + 1e-30) − T(f))`.
+SECS cuts every channel to the quietest: `g_i = min_j L_j − L_i` dB over the
+measured speakers. With `room_tuning_level_match=false` every g_i is 0.
+Impulcifer keeps v1's consistency check: with d_i the omni level minus the
+median omni level, and e_i the aligned in-ear BRIR level (both ears' power
+summed over 100–500 Hz, dB) minus its median, a speaker with
+`|d_i − e_i| > 2 dB` gets g_i = 0, is left out of the minimum, and logs
+`cli_room_tuning_level_inconsistent` with the signed difference to one decimal.
+The correction filter itself never depends on g_i or on the other speakers.
+
+### Correction band
+
+`lo = room_tuning2_low`. `hi = room_tuning2_high` when numeric. Automatic:
+`f_S = schroeder_freq` when set; otherwise, with `room_volume = V` set, SECS's
+estimate: for every omni IR (position policy: all positions; SECS: the
+listening position) and fc ∈ {500, 1000} Hz, filter the whole uncropped IR with
+an order-4 Butterworth band-pass `[fc/√2, fc*√2]` (SOS), take the reversed
+cumulative energy E, `D = 10*log10(E/(E_0+1e-30) + 1e-30)`, i5 / i25 the first
+indices with D < −5 / < −25 (0 if none), and keep `3*(i25−i5)/fs` when
+`i25 > i5 > 0`. `T60 = median`, `f_S = 2000*sqrt(T60/V)`. Then `hi = 500` when
+there is no f_S or `f_S > 500`, else `max(f_S, 100)`.
+
+### Design curve
+
+For each measured speaker. The channel trim does not enter the design (in SECS
+it cancels): the "comb" response at position p is `comb_p = H_p` and L is the
+speaker's own level L_i.
+
+1. `S = 10*log10(S_b(f)(P) + 1e-30)`, `S3 = 10*log10(S_3(P) + 1e-30)`,
+   `S = max(S, S3 − 3)` — narrow dips are filled by at most 3 dB.
+2. `U = clip(T(max(f,1)) + L − S, −25, cap)` with `cap = max_boost`, or
+   `min(2, max_boost)` above 16 kHz.
+3. Long-mode limit: `U = min(U, 3)` inside the long-mode mask.
+4. Band fade: `ℓ = log2(max(f,1e-3))`, `e = min(hi*√2, 0.99*fs/2)`,
+   `U0 = U * clip((ℓ − log2(lo/√2))/0.5, 0, 1) * clip((log2 e − ℓ)/max(log2(e/hi), 1e-3), 0, 1)`.
+   U0 is the design curve.
+
+Long-mode mask of one position's comb response X: `x = LR(X, 300)`; peaks
+`LP([x], 8)` within `lo ≤ p ≤ min(hi, 160)`; `T60(x, p, 1.5)` for each, dropping
+none and zero; fewer than two left → empty. With `r` their median, mark the bins
+`p*2^(−1/24) ≤ f ≤ p*2^(1/24)` of every peak with `T60 ≥ max(0.3, 1.3*r)`.
+SECS reports the marked peaks in its notes; Impulcifer lists them in the README.
+SECS's "no boost at excess group-delay peaks" mask is off by default and is not
+reproduced.
+
+### PEQ fit
+
+`Fit(g, c, n, lo=20, hi=500, boost, fmax)` fits n peaking bands to the dB curve c
+on the log grid g. Every call uses a ring limit τ = 30 ms with
+`Qring(f0, G) = π*f0*τ/1000 / 10^(G/40)`.
+
+Greedy start, at most n times: `cur = 20*log10(|PEQ(g; bands)| + 1e-12)`;
+`r = c − cur` inside `[lo, hi]`, 0 outside; k the first `argmax|r|`; stop when
+`|r_k| < 0.5`; `G = clip(r_k, −25, boost)`; widen `i0 ≤ k ≤ i1` while the next
+neighbour has `|r| ≥ |r_k|/2` and the same sign as r_k;
+`Q = clip(g_k / max(g_i1 − g_i0, 0.02*g_k), 0.5, 15)`, then
+`Q = max(min(Q, Qring(g_k, G)), 0.31)`; append `(g_k, Q, G)`. No band → empty
+result.
+
+Refinement over `(ln f0, ln Q, G)` per band. Bounds start at
+`(ln 15, ln 0.3, −25)` … `(ln f_top, ln 20, boost)`, `f_top = fmax` if given, else
+`max(2000, 1.2*hi)`. Each band then narrows from its greedy values (f0, Q, G):
+`ln f0 ∈ [max(lower, ln(f0/1.2)), max(min(upper, ln(1.2 f0)), lower' + 1e-3)]`;
+for `G > 0` the gain range is `[0, min(G+3, boost)]`, else its upper bound is
+`min(G/2, −0.25)` (lower stays −25); the upper ln Q becomes
+`ln(max(min(e^upper, Qring(f0/1.2, G_upper)), 0.31))`. The start point is the
+greedy result clipped to `[lower + 1e-6, upper − 1e-6]`. Residual:
+`ω*(20*log10(|Π_bands P(g; e^lnf, e^lnQ, G)| + 1e-12) − c)`, ω = 1 in `[lo, hi]`,
+0.15 elsewhere. Minimize half its squared norm with the semantics of
+`scipy.optimize.least_squares` (scipy 1.18.1): `method='trf'`, `jac='2-point'`
+(default step), bounds above, `x_scale=1`, linear loss, `ftol = xtol = gtol = 1e-8`,
+`tr_solver='exact'`, `max_nfev=150`. The iteration often stops at max_nfev, so
+the trust-region path is part of the result: port `trf_bounds`, its helpers and
+the bounded two-point difference from scipy (BSD-3, credited in
+THIRD_PARTY_LICENSES). Output `(e^lnf, min(e^lnQ, Qring(e^lnf, G)), G)` per band,
+in order.
+
+### IIR-only mode (`zero`)
+
+`g = geomspace(15, 20000, 900)`, `c = interp(g, f, U0)`.
+`B_lo = Fit(g, c·[g ≤ 500], 16, lo = max(15, lo/1.4), hi = 400)`;
+`rest = c − 20*log10(|PEQ(g; B_lo)| + 1e-12)`;
+`B_hi = Fit(g, rest·[g ≥ 300], 16, lo = 400, hi = min(20000, hi))`.
+`F = PEQ(f; B_lo ++ B_hi)`, no FIR, no lift, phase strength 0. (`·[cond]` keeps
+the value where the condition holds and puts 0 elsewhere.)
+
+### FIR modes
+
+Let `g = geomspace(15, 20000, 700)`, `f_F = 1.5*fs/taps`,
+`ramp(f) = clip((f − f_F/2)/(f_F/2), 0, 1)`, `f_e = hi*√2`, λ = lift in seconds.
+
+1. **First PEQ.** `B1 = Fit(g, interp(g, f, U0), 16, fmax = hi)`, `P1 = PEQ(f; B1)`,
+   `U1 = (U0 − 20*log10(|P1| + 1e-12)) * ramp`; `M = MP(10^(U1/20))`.
+2. **Excess phase common to the positions.** For each position:
+   `R = comb_p*P1*M`; `t = argmax|irfft_N(R)|/fs`; `R *= exp(+j*2π*f*t)`;
+   `E = R/(MP(sqrt(S_b(f)(|R|²)) + 1e-12) + 1e-30)`; `V += w_p*E/(|E| + 1e-30)`.
+   `V /= Σw_p`; `φ = unwrap(angle(nan_to_num(S_β(V))))`.
+3. **Delay budget.** `γ = clip((log2 f_e − log2 max(f,1e-3))/0.5, 0, 1)`, and
+   `γ = clip(f/15, 0, 1)` below 15 Hz.
+   `τ = −gradient(φ, 2π*max(f, Δ))`, non-finite values set to 0, `τ = S_β(τ)`;
+   `x = (τ − median(τ over 3–6 kHz)) * γ`.
+4. **Realize(s, M′):** `adv = clip(x, −0.005, λ*s)`,
+   `ψ = −2π*cumsum(λ − adv)*Δ`, `h = irfft_N(M′*exp(jψ))[:taps]`, the last
+   `K = int(0.1*taps)` samples multiplied by `0.5*(1+cos(π*k/K))`,
+   `F = rfft_N(h)`; error `20*log10(|F|+1e-12) − 20*log10(|M′|+1e-12)` over
+   `max(20, f_F) ≤ f ≤ f_e`; return h, F, its RMS and maximum absolute value.
+5. **Strength.** `(h, F, rms0, max0) = Realize(0, M)`, `s* = 0`. For s in
+   0.9, 0.7, 0.5, 0.3 take the first Realize(s, M) with
+   `rms ≤ max(0.5, rms0+0.3)` and `max ≤ max(2, max0+1)`; s* = s. s* is the
+   reported phase strength.
+6. **Second PEQ.** `B2 = Fit(g, interp(g, f, U0 − 20*log10(|F|+1e-12)), 16, fmax = hi)`,
+   `P2 = PEQ(f; B2)`.
+7. **Broad touch-up**, at most two rounds. ρ: bins with
+   `max(lo,20) ≤ f ≤ hi`. `err(F′)`: with
+   `e = 10*log10(S_24(|F′*P2|²) + 1e-30) − U0` on ρ, `sqrt(mean((e − median e)²))`.
+   Round: `r = ρ·(U0 − 20*log10(|F*P2| + 1e-12))`; `ζ = S_3(r)*ramp*ρ`;
+   `M2 = MP(|M|*10^(ζ/20))`; `(h2, F2) = Realize(s*, M2)`; stop if
+   `err(F2) ≥ err(F)`, else `h, F, M ← h2, F2, M2`.
+8. The correction is `F_total = F*P2`: FIR h and PEQ B2.
+
+**Phase resolution (linear, x ms).** Run steps 1–8 with β = 24 and with β = 6.
+Score each by `GD − median(GD)`'s maximum, where
+`GD = GroupDelay(comb_p*F_total)` on `geomspace(max(lo,20), hi, 1200)` and the
+position policy takes the worst position. Keep the lower score, β = 24 on a tie.
+`GroupDelay(X)`: `t = argmax|irfft_N(X)|/fs`, `Xs = S_24(X*exp(j*2π*f*t))`,
+`c = interp(grid, f, Re Xs) + j*interp(grid, f, Im Xs)`,
+`GD = −gradient(unwrap(angle(c)), 2π*grid)*1000` ms.
+
+### MIMO supports
+
+Run after the RC, on the aligned in-ear BRIRs before any tuning. Positions are
+the left and right ear, equally weighted. Inputs are the measured speakers (they
+have an RC), in speaker order; every speaker with a BRIR may support.
+
+- **Long spectra.** As the RC window but 2 s long with a 10% taper:
+  `w = h[a : a+2*fs]`, last `int(0.1*len(w))` samples half-Hann tapered;
+  `B = rfft_N(w)*exp(−j*2π*f*(a−b)/fs)`, b the earliest left-ear onset over all
+  speakers (any common b gives the same supports).
+- **Support bands.** For each speaker: `D = 10*log10(S_3(mean_e |B_e|²) + 1e-30)`,
+  `ref = median D over 200–1000 Hz`, `start = min(200, Fsiso)`. Walking
+  `geomspace(start, 15, 200)` (D interpolated), `low` is the first point below
+  `ref − 10` (15 if none), raised to at least 50; walking
+  `geomspace(start, Fsiso, 200)`, `high` is the first point below `ref − 10`
+  (Fsiso if none). The band is `(round(low,1), round(high,1))` if
+  `low < 0.8*min(high, Fsiso)`, else the speaker does not support. A configured
+  `room_tuning2_mimo_low` raises low to at least itself and drops the band when
+  that low is not below `0.8*high`.
+- **Paths at 600 Hz.** `n = 720`. Input `x_e = LR(B_e,i * 10^(g_i/20) * F_total,i, n)`;
+  support path `G_e,j = B_e,j * HP4(f; low_j)`, `γ_e,j = LR(G_e,j, n)`;
+  `ℓ = firwin(31, Fsiso, fs=600)` (Hamming, unit DC gain). Candidates C for input
+  i: the supporting speakers except i, R = |C|.
+- **Least squares.** Per ear: `k_e = first index with |x_e| > 0.1*max|x_e|`,
+  late window `L_e[t] = 1` for `t ≥ k_e + 36` (60 ms), else 0. For each
+  candidate `c_e,j = (γ_e,j ⊛ ℓ)[:n]` and the n × 180 convolution matrix
+  `C(c)[t, k] = c[t−k]` (t ≥ k). Stack `A_e = [C(c_e,1) … C(c_e,R)]`. Rows: the
+  late blocks `L_e·A_e` for left then right, then the early blocks
+  `√10·(1−L_e)·A_e`; right side `−[L_left·x_left; L_right·x_right; 0; 0]`.
+  Solve `(AᵀA + λI) u = Aᵀb`. The solver is free as long as it solves this
+  system: the normal matrix has Toeplitz-like blocks that may be built directly,
+  and any accurate symmetric factorization may be used.
+- **Strength by bisection.** Split u into R blocks of 180 taps; support FIRs
+  `s_j = ℓ ⊛ u_j` (210 taps); `ratio = Σ_j ||s_j||² / max(||LR(F_total,i, n)||², 1e-30)`.
+  With `σ = mean(diag AᵀA)`, start `lo = −8`, `hi = 4` (log10 of λ/σ) and the
+  solution at hi; 18 times take `mid = (lo+hi)/2`; if `ratio(σ*10^mid) > 10^(−1.2)`
+  set lo = mid, else set hi = mid and keep that solution.
+- **Guard.** Try scales 1, then −3, −6, −9, −12 dB. With
+  `y_e = x_e + Σ_j (γ_e,j ⊛ scale*s_j)[:n]`, accept the first scale whose band
+  change and tail change are both at most 1 dB; none accepted → this input has
+  no supports (`cli_room_tuning2_mimo_off`).
+  *Band change:* on `rfftfreq(1440, 1/600)`, bands `[e_m, e_(m+1))` between
+  consecutive edges `e = 20*2^a`, a the elements of
+  `numpy.arange(0, log2(Fsiso/20) + 1e-9, 1/3)` (20–127 Hz for 150 Hz), plus `[p − 1.5, p + 1.5)` for each p in `LP({x_e}, 6)`. Sum the band energy of
+  `|rfft_1440(L_e*x_e)|²` (before) and `|rfft_1440(L_e*y_e)|²` (after) over both
+  ears; the change is the largest `10*log10((after + 1e-30)/before)` over bands
+  with energy before (−99 if none).
+  *Tail change:* modes = sorted set of `round(p, 1)` over `LP({x_e}, 6)` and
+  `LP({y_e}, 6)`. For each mode, order-2 Butterworth band-pass
+  `[max(p−1.5, 1), p+1.5]` at 600 Hz; a = Σ_e Σ_(t ≥ k_e+180) of the filtered
+  x_e squared, b the same for y_e (same k_e). Over modes with `a > 0` and
+  `a ≥ 0.01*max a`, the largest `10*log10((b + 1e-30)/a)` (−99 if none).
+- **Result.** `s_ij = scale*s_j`, level `10*log10(max(ratio*scale², 1e-30))` dB,
+  logged per input as `cli_room_tuning2_mimo`.
+
+SECS realizes these supports as IIR chains fitted to the FIR result (its
+low-latency DSP cannot run long FIRs); that fit dominated its run time. The
+BRIR has no tap or latency limit, so the FIR supports are used directly. SECS's
+three-position minimum does not apply either: it exists because a loudspeaker
+room must be sampled to generalize, while the BRIR is fixed at the ears.
+
+### Applying to the BRIR
+
+`D_s = round(lift*fs/1000)` (0 for `zero`). For measured speaker i, ear e:
+`f_i = irfft_N(F_total,i)`; for each support
+`q_ij = irfft_N(HP4(f; low_j) * S_ij(f) * clip((285 − f)/60, 0, 1))` with
+`S_ij(f) = Σ_n s_ij[n]*exp(−j*2π*f*n/600)`. The tuned response is the first
+`len(BRIR_i,e) + D_s` samples of the linear convolution
+`10^(g_i/20)*(BRIR_i,e ⊛ f_i) + Σ_j BRIR_j,e ⊛ q_ij` (all BRIR_j,e untuned), with
+the last 5 ms faded by a falling half-Hann. Unmeasured speakers are only shifted
+by D_s. The frequency-domain taper reproduces the band limit the design saw;
+its small non-causal part wraps to the end of q_ij and falls outside the kept
+samples.
+
+### Diagnostics
+
+Log `cli_room_tuning2` once with mode, latency (ms), lo and hi (Hz, rounded).
+v1's geometry check (`cli_room_tuning_mismatch`), representativeness
+(`cli_room_tuning_weak`), pre-echo and the information-only LF EDT and median
+excess group delay apply unchanged to the v2 result (with MIMO included). The
+pre-echo warning uses its own key, `cli_room_tuning2_preecho`, because the cure
+is a lower-latency mode rather than a shorter delay. Per input with MIMO log
+`cli_room_tuning2_mimo` (speaker, number of supports, level in dB to one
+decimal) or `cli_room_tuning2_mimo_off`. The README section lists mode, latency, band
+and its source, per speaker points, level, trim and source, PEQ band count,
+phase strength and resolution, long modes, representativeness, pre-echo,
+EDT and excess group delay before/after, and with MIMO each input's supports,
+level and guard scale.
+
+### Reference acceptance
+
+`tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
+responses (|F_total| dB and phase with the lift removed, at FFT bins of
+N = 131072) for 62 runs on the demo omni files: every file/speaker as one
+position (`mixed`), every speaker with both ears in all five modes (60 ms for
+ultra), both ears with SECS's own listening-position weight 5, the demo room
+target, an automatic band from V = 40 m³, a manual 30–300 Hz band, a 6 dB
+boost limit, and all seven speakers in one run for the channel levels. Each
+entry stores SECS's PEQ bands, every intermediate PEQ fit, phase strength and
+resolution and, for one-position entries, the design curve. Tests use SECS's
+position policy (listening position 1, its weight) to compare.
+`tests/migration/goldens/room_tuning_secs2_mimo.json` holds SECS's support
+bands, support FIRs, levels and guard results for three settings on the
+aligned demo BRIRs, after an RC on the same BRIRs. Bounds are set from the
+measured agreement and recorded with the tests.
+
+### Deliberately not reproduced
+
+Subwoofer alignment (BA), subwoofer bundles and DBA, two-way subwoofers,
+bass-management crossovers and their PEQ, the subwoofer bus, GD cuts and the
+no-boost mask (both off by default in SECS), the IIR realization of the
+supports, the per-input support limit (a DSP budget), SECS's arrival-delay
+alignment (Impulcifer's alignment already places the speakers),
+REW/CamillaDSP export, and SECS's environment knobs (fixed at their defaults:
+ring 30 ms, common-phase positions, long-mode boost 3 dB, guard 1 dB, 180
+support taps).
+
+Virtual room tuning v2 reproduces the correction method of SECS 2 by the
+Speaker Gallery (DCinside), released under GPL-3.0. Impulcifer's implementation
+is independent and contains no SECS code; SECS 2 was used only as a black box
+to produce the reference numbers.
 
 ## Why not invert everything?
 
