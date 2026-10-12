@@ -4,6 +4,28 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.5.0 - 2026-10-12
+### 가상 룸 튜닝 2: SECS 2(스피커 갤러리)의 채널 보정과 MIMO 서포트
+
+#### ⭐ 새로운 기능 / 개선
+- **가상 룸 튜닝 2(`--room_mode tuning2`)**: SECS 2의 채널 보정을 BRIR에 겁니다. 스피커마다 무지향 귀 위치 측정(자르지 않은 룸 측정)으로 PEQ와 FIR을 설계하고, 그 필터 하나를 두 귀에 같게 겁니다. 저음 응답과 방의 저역 시간 응답 일부를 함께 고칩니다. v1(`tuning`)이나 룸 EQ v2의 규칙과 섞지 않는 세 번째 모드입니다.
+- **필터 모드 다섯(`--room_tuning2_mode`)**: `zero`(PEQ만, 지연 없음), `mixed`(8 ms, 기본), `linear`(28 ms), `long`(200 ms), 또는 30~200 ms 사이의 지연입니다. 지연이 있는 모드에서는 모든 채널이 그만큼 늦게 시작합니다. `mixed`처럼 지연이 짧은 모드는 직접음 앞에 약한 울림이 생길 수 있고, −30 dB를 넘으면 로그와 출력 README가 알려 줍니다(데모의 BL 왼쪽 귀 −29 dB).
+- **보정 범위와 부스트**: `--room_tuning2_low`(기본 20 Hz), `--room_tuning2_high`(기본 `auto`: `--schroeder_freq`나 `--room_volume`로 구한 슈레더 주파수, 최대 500 Hz), `--room_tuning2_max_boost`(기본 10 dB). 스피커 레벨 맞춤은 v1과 같은 `--room_tuning_level_match`를 쓰며, SECS 2처럼 가장 작은 스피커에 맞춥니다.
+- **MIMO 서포트(`--room_tuning2_mimo`, 기본 끔)**: 각 스피커 신호의 저역 사본을 다른 스피커로 보내 귀에 남는 늦은 저음을 상쇄합니다. 어느 대역이나 꼬리가 1 dB 넘게 나빠지면 서포트를 3 dB씩 줄이고, 끝까지 안 되면 그 스피커는 MIMO를 쓰지 않습니다. 데모에서 서포트가 붙은 여섯 스피커의 늦은 저음(직접음 60 ms 뒤, 두 귀 합)이 1.4~8.3 dB 줄었습니다. 서포트는 SECS 2가 계산하는 이상적인 FIR을 그대로 씁니다. SECS 2는 저지연 DSP에 맞추려고 이를 IIR로 근사하는데, BRIR에는 탭 수 제한이 없어서 그 단계가 필요 없습니다. 범위는 `--room_tuning2_fsiso`(위 끝 50~150 Hz, 기본 150)와 `--room_tuning2_mimo_low`(아래 끝, 기본 `auto`)로 정합니다.
+- **화면**: 룸 보정 카드의 보정 모드에 '가상 룸 튜닝 2'를 더했습니다. 필터, 최대 부스트, 보정 하한·상한, 레벨 맞춤, MIMO와 그 범위를 고를 수 있습니다.
+- **출력 README**: `## Virtual room tuning v2` 절에 모드, 지연, 보정 범위를 적습니다. 스피커별로는 레벨·트림·PEQ 밴드 수·위상 강도와 해상도·롱 모드·대표성, LF EDT와 초과 군지연(전후), 귀별 프리에코를 적습니다. MIMO를 켜면 입력마다 서포트, 레벨, 가드 단계, 대역·꼬리 변화를 적습니다.
+
+#### ⚡ 성능 개선
+- **SECS 2보다 빠름**: 같은 컨테이너에서 스피커 하나의 채널 보정이 한 스레드로 SECS 2보다 2.4~3.5배 빠르고(mixed 0.37 s 대 0.88 s, linear 0.64 s 대 2.22 s), linear·ultra는 두 위상 해상도 세션을 병렬로 돌려 4스레드에서 4.4~6.3배입니다. 데모 일곱 스피커의 MIMO 설계는 한 스레드 3.0 s, 4스레드 0.9 s입니다(SECS 2의 FIR 단계 약 6 s; 그 뒤의 IIR 근사는 30분 안에 끝나지 않았고 Impulcifer에는 필요 없음). 데모 전체 처리는 tuning2가 4.0 s, MIMO를 켜면 4.8 s입니다(룸 EQ 2.0 s).
+- **AVX 상태 오염 제거**: faer의 `std` 기능이 끌어오던 `private-gemm-x86`의 어셈블리 커널은 `vzeroupper` 없이 zmm/ymm 레지스터를 씁니다. 그래서 첫 행렬곱 뒤로 그 스레드의 모든 SSE 명령이 지연됐습니다(같은 루프가 점당 17 ns에서 190 ns로 느려짐). faer를 `std` 없이 빌드하고 pulp·gemm·faer-traits의 `std`만 켜서, 실행 중 SIMD 감지는 유지합니다. 정책 테스트가 이 크레이트가 다시 들어오는 것을 막습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **3.x BRIR 무결성 검사 시나리오 추가**: `room_tuning2`, `room_tuning2_zero`, `room_tuning2_linear`, `room_tuning2_mimo`, `virtual_bass_tuning2`를 더해 22개가 됐습니다. 모두 3.5.0부터 있는 옵션이라 기준 커밋에서는 '기준 없음' 경고로 끝나고, 스레드 수 검사는 그대로 받습니다. 데모의 MIMO 출력은 1스레드와 4스레드에서 SHA-256이 같습니다.
+
+#### 📝 문서
+- ADR 0008(가상 룸 튜닝 v2), `docs/rust/ROOM_CORRECTION.md`의 "Virtual room tuning v2" 절, README의 옵션과 출처 표기, 성능 보고서 `docs/rust/perf/room-tuning2.md`를 더했습니다.
+- **등가 검증**: SECS 2(GPL-3.0) 소스는 저장소에 넣지 않았고, 이식한 워커에게도 보여 주지 않았습니다. `tests/migration/export_goldens_secs2.py`가 SECS 2를 오라클로 돌려 함수·단계 경계마다 픽스처(`s2_*`)를 남기고, Rust는 의존 순서대로 픽스처를 하나씩 맞춥니다. PEQ 맞춤은 SciPy `least_squares`(TRF)를 옮긴 것입니다. 반복 경로는 오라클 자신이 다른 BLAS·LAPACK에서 갈라지기 시작하는 지점까지 27개 맞춤 모두 1e-9 안에서 같습니다(최대 2.3e-14). 끝단 결과는 SECS 2를 다섯 가지 연산 환경(NumPy AVX-512, OpenBLAS 커널 셋, LAPACK gesvd)으로 돌렸을 때의 흩어짐 안에 있습니다. 61채널 중 0.1 dB 넘게 다른 채널은 19개, 1 dB 넘게 다른 채널은 7개이고, SECS 2끼리는 각각 최대 32개, 15개입니다. MIMO는 오라클의 채널 보정 출력을 넣으면 서포트가 6e-13 안에서 같습니다. 가드 값 85개 중 2개는 명세의 규칙으로 재현되지 않아 이름을 붙인 예외로 두었습니다.
+
 ## 3.4.0 - 2026-10-10
 ### NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10, DTS:X Pro 30.2의 녹음, BRIR 합성, 출력 복원
 
