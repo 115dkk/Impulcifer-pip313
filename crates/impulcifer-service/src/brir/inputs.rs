@@ -208,7 +208,8 @@ pub fn load_inputs(
             .transpose()?;
         let target = room::prepare_room_target(target_csv.as_ref(), fs)?;
         if let Some(plan) = &mut vbass_plan
-            && (config.room_mode == "tuning" || config.room_range != "legacy")
+            && (matches!(config.room_mode.as_str(), "tuning" | "tuning2")
+                || config.room_range != "legacy")
         {
             plan.room_target = Some(target.clone());
         }
@@ -259,7 +260,7 @@ pub fn load_inputs(
         for ((_, names), incoming) in dir.room.recordings.iter().zip(room_recordings) {
             events.check_cancelled()?;
             rir.merge_recording(incoming);
-            if config.room_mode == "tuning" {
+            if matches!(config.room_mode.as_str(), "tuning" | "tuning2") {
                 room_pairs.extend(impulcifer_dsp::stages::room_tuning::recording_pairs(
                     &rir,
                     &names.speakers,
@@ -267,7 +268,7 @@ pub fn load_inputs(
                 ));
             }
         }
-        let generic = if config.room_mode == "tuning" {
+        let generic = if matches!(config.room_mode.as_str(), "tuning" | "tuning2") {
             if dir.room.generic.is_some() {
                 events.log("info", "cli_room_tuning_room_wav_ignored", json!({}));
             }
@@ -300,7 +301,40 @@ pub fn load_inputs(
                 Some(config.vbass_freq as f64)
             },
         };
-        room_result = if config.room_mode == "tuning" {
+        room_result = if config.room_mode == "tuning2" {
+            use impulcifer_dsp::stages::room_tuning2::{
+                MimoOptions, PositionPolicy, RcOptions, Tuning2Options,
+            };
+            Some(room::room_correction_tuning2(
+                &rir,
+                &target,
+                calibration.as_ref(),
+                &Tuning2Options {
+                    rc: RcOptions {
+                        mode: impulcifer_types::config::Tuning2Mode::parse(
+                            &config.room_tuning2_mode,
+                        )
+                        .ok_or_else(|| {
+                            impulcifer_dsp::DspError::InvalidArgument(
+                                "invalid room_tuning2_mode".into(),
+                            )
+                        })?,
+                        max_boost: config.room_tuning2_max_boost,
+                        low: config.room_tuning2_low,
+                        high: config.room_tuning2_high.parse().ok(),
+                        schroeder: config.schroeder_freq,
+                        room_volume: config.room_volume,
+                        policy: PositionPolicy::Symmetric,
+                    },
+                    level_match: config.room_tuning_level_match,
+                    mimo: config.room_tuning2_mimo.then(|| MimoOptions {
+                        fsiso: config.room_tuning2_fsiso,
+                        low: config.room_tuning2_mimo_low.parse().ok(),
+                    }),
+                    pairs: room_pairs,
+                },
+            )?)
+        } else if config.room_mode == "tuning" {
             Some(room::room_correction_tuning(
                 &mut rir,
                 &generic,
@@ -407,7 +441,7 @@ pub fn load_inputs(
             }
         }
         if config.plot
-            && config.room_mode != "tuning"
+            && !matches!(config.room_mode.as_str(), "tuning" | "tuning2")
             && let Some(room) = &room_result
         {
             let token = events.cancel_token();

@@ -3,11 +3,18 @@ resolver = "2"
 members = ["crates/*", "apps/impulcifer-app"]
 
 [workspace.package]
-version = "3.4.0"
+version = "3.5.0"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT"
 repository = "https://github.com/115dkk/Impulcifer-pip313"
+
+# Tests run optimized: at opt-level 0 one virtual room tuning 2 pipeline (its
+# SECS 2 fits and MIMO designs) outlasts the service tests' 240 s job timeout.
+# Optimization does not relax float semantics in Rust (no fast-math), and
+# overflow checks and debug assertions stay on.
+[profile.test]
+opt-level = 2
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -26,5 +33,13 @@ thiserror = "2"
 toml = "0.8"
 rustfft = "6.4"
 realfft = "3.5"
+# faer without `std`: its `std` pulls private-gemm-x86, whose assembly leaves
+# the upper AVX state dirty and slows every later SSE instruction (policy gate
+# `no_assembly_kernels_that_leave_avx_state_dirty`). pulp, gemm and
+# faer-traits get `std` here only so faer keeps runtime SIMD detection.
+faer = { version = "0.24.4", default-features = false, features = ["linalg"] }
+pulp = { version = "0.22.3", default-features = false, features = ["std", "x86-v3"] }
+gemm = { version = "0.19.0", default-features = false, features = ["std"] }
+faer-traits = { version = "0.24.0", default-features = false, features = ["std"] }
 rayon = "1.11"
 clap = { version = "4", features = ["derive"] }

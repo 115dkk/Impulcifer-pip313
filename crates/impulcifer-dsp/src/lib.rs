@@ -25,6 +25,7 @@ pub mod hrir;
 pub mod interp;
 pub mod ir;
 pub mod mic_deviation;
+pub mod optimize;
 pub mod peaks;
 pub mod pipeline;
 pub mod resample;

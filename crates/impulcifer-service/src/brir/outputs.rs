@@ -95,6 +95,106 @@ fn missing_channels(channels: &[&impulcifer_types::layouts::FormatChannel]) -> S
         .join(", ")
 }
 
+pub(super) fn tuning2_mode_name(mode: impulcifer_types::config::Tuning2Mode) -> String {
+    use impulcifer_types::config::Tuning2Mode;
+    match mode {
+        Tuning2Mode::Zero => "zero".into(),
+        Tuning2Mode::Mixed => "mixed".into(),
+        Tuning2Mode::Linear => "linear".into(),
+        Tuning2Mode::Long => "long".into(),
+        Tuning2Mode::Ultra(ms) => format!("{ms:.0}"),
+    }
+}
+pub(super) fn tuning2_representation(
+    s: &impulcifer_dsp::stages::room_tuning2::Speaker2Report,
+) -> Option<f64> {
+    (!s.representation_rms_db.is_empty()).then(|| {
+        s.representation_rms_db.iter().map(|(_, v)| v).sum::<f64>()
+            / s.representation_rms_db.len() as f64
+    })
+}
+fn tuning2_readme(report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report) -> String {
+    use impulcifer_dsp::stages::room_tuning2::BandSource;
+    let mut out = format!(
+        "## Virtual room tuning v2\n\nMode: {}. Latency: {:.2} ms.",
+        tuning2_mode_name(report.mode),
+        report.latency_samples as f64 * 1000.0 / report.fs as f64
+    );
+    if let Some(band) = &report.band {
+        let source = match band.source {
+            BandSource::Manual => "manual",
+            BandSource::Override => "Schroeder override",
+            BandSource::Volume => "room volume",
+            BandSource::Default => "default",
+        };
+        out.push_str(&format!(
+            " Band: {:.0}–{:.0} Hz ({source}).",
+            band.low, band.high
+        ));
+    }
+    out.push_str("\n\n| Speaker | Points | Level (dB) | Trim (dB) | Source | PEQ bands | Phase strength | Phase resolution | Long modes (Hz) | Representation RMS (dB) | LF EDT before / after (ms, information) | Median excess GD before / after (ms, information) | Weak |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+    for s in &report.speakers {
+        let resolution = if s.phase_frac == 0.0 {
+            "—".into()
+        } else {
+            format!("1/{:.0} oct", s.phase_frac)
+        };
+        let modes = if s.long_modes.is_empty() {
+            "—".into()
+        } else {
+            s.long_modes
+                .iter()
+                .map(|(hz, _)| format!("{hz:.1}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let rms = tuning2_representation(s).map_or_else(|| "—".into(), |v| format!("{v:.2}"));
+        out.push_str(&format!("| {} | {} | {:.2} | {:.2} | {} | {} | {:.1} | {} | {} | {} | {:.2} / {:.2} | {:.2} / {:.2} | {} |\n", s.speaker, s.points, s.level_db, s.trim_db, s.trim_source, s.peq_bands, s.phase_strength, resolution, modes, rms, s.lf_edt_before_ms, s.lf_edt_after_ms, s.excess_median_before_ms, s.excess_median_after_ms, s.weak));
+    }
+    out.push_str("\nPre-echo uses the first −18 dB direct peak and a 2 ms guard, against the louder of the speaker's two direct sounds. Warn only above −30 dB and at least 6 dB above the same untuned ear. Weak means mean omni/in-ear magnitude RMS exceeds 4 dB (30–300 Hz, level matched at 100–300 Hz); EDT and excess GD are information only.\n\n| Speaker | Ear | Pre-echo untuned / tuned (dB) | Warning |\n| --- | --- | --- | --- |\n");
+    for s in &report.speakers {
+        for p in &s.pre_echo_channels {
+            out.push_str(&format!(
+                "| {} | {} | {:.2} / {:.2} | {} |\n",
+                s.speaker,
+                side(p.side),
+                p.before_db,
+                p.after_db,
+                p.warns()
+            ));
+        }
+    }
+    if let Some(mimo) = &report.mimo {
+        out.push_str("\n### MIMO supports\n\n| Input | Supports | Support level (dB) | Guard | Band change (dB) | Tail change (dB) |\n| --- | --- | --- | --- | --- | --- |\n");
+        for input in &mimo.inputs {
+            let supports = if input.supports.is_empty() {
+                "—".into()
+            } else {
+                input
+                    .supports
+                    .iter()
+                    .map(|s| s.speaker.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let guard = input
+                .scale_db
+                .map_or_else(|| "off".into(), |v| format!("{v:.0} dB").replace('-', "−"));
+            out.push_str(&format!(
+                "| {} | {} | {:.1} | {} | {:.2} | {:.2} |\n",
+                input.speaker,
+                supports,
+                input.level_db,
+                guard,
+                input.band_change_db,
+                input.tail_change_db
+            ));
+        }
+    }
+    out.push_str("\nVirtual room tuning v2 reproduces the correction method of SECS 2 by the Speaker Gallery (DCinside), released under GPL-3.0. Impulcifer's implementation is independent and contains no SECS code; SECS 2 was used only as a black box to produce the reference numbers.\n\n");
+    out
+}
+
 pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String {
     render_readme_with_layouts(data, catalog, date, &[])
 }
@@ -189,6 +289,9 @@ fn render_readme_with_layouts(
             }
         }
         out.push('\n');
+    }
+    if let Some(report) = &data.tuning2 {
+        out.push_str(&tuning2_readme(report));
     }
     if !data.reflections.is_empty() {
         out.push_str(&format!("## {}\n", t("cli_readme_reflection_title")));

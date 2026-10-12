@@ -250,7 +250,36 @@
                     <div class="seg" role="radiogroup" aria-labelledby="bf-room-mode-label" aria-describedby="bf-room-mode-tip">
                       <button type="button" class="seg-btn" role="radio" id="bf-room-mode-eq" aria-checked="true" tabindex="0" data-i18n="option_room_mode_eq">Room EQ</button>
                       <button type="button" class="seg-btn" role="radio" id="bf-room-mode-tuning" aria-checked="false" tabindex="-1" data-i18n="option_room_mode_tuning">Virtual room tuning</button>
+                      <button type="button" class="seg-btn" role="radio" id="bf-room-mode-tuning2" aria-checked="false" tabindex="-1" data-i18n="option_room_mode_tuning2">Virtual room tuning 2</button>
                     </div>
+                  </div>
+                  <!-- Virtual room tuning 2 (ADR 0008). The filter decides whether the latency row shows,
+                       so that row sits right under it; the band's upper end decides the room facts below. -->
+                  <div class="field-row" id="bf-room-tuning2-mode-row" hidden>
+                    <span class="field-label"><label for="bf-room-tuning2-mode" data-i18n="label_room_tuning2_mode">Filter:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mode-tip" class="tip-bubble">PEQ and an FIR with 8 ms latency. The FIR corrects part of the room's bass timing within that latency.</span></span></span>
+                    <select id="bf-room-tuning2-mode" aria-describedby="bf-room-tuning2-mode-tip">
+                      <option value="zero" data-i18n="option_room_tuning2_mode_zero">PEQ only (no latency)</option>
+                      <option value="mixed" selected data-i18n="option_room_tuning2_mode_mixed">Low latency (8 ms)</option>
+                      <option value="linear" data-i18n="option_room_tuning2_mode_linear">Standard (28 ms)</option>
+                      <option value="long" data-i18n="option_room_tuning2_mode_long">Long filter (200 ms)</option>
+                      <option value="custom" data-i18n="option_room_tuning2_mode_custom">Custom latency</option>
+                    </select>
+                  </div>
+                  <div class="field-row" id="bf-room-tuning2-latency-row" hidden>
+                    <label for="bf-room-tuning2-latency" data-i18n="label_room_tuning2_latency">Latency (ms):</label>
+                    <input type="number" id="bf-room-tuning2-latency" class="num mono" value="200" min="30" max="200" step="1">
+                  </div>
+                  <div class="field-row" id="bf-room-tuning2-max-boost-row" hidden>
+                    <label for="bf-room-tuning2-max-boost" data-i18n="label_room_max_boost">Max boost (dB):</label>
+                    <input type="number" id="bf-room-tuning2-max-boost" class="num mono" value="10" min="0" max="10" step="0.5">
+                  </div>
+                  <div class="field-row" id="bf-room-tuning2-low-row" hidden>
+                    <label for="bf-room-tuning2-low" data-i18n="label_room_tuning2_low">Correct from (Hz):</label>
+                    <input type="number" id="bf-room-tuning2-low" class="num mono" value="20" min="10" max="200" step="1">
+                  </div>
+                  <div class="field-row" id="bf-room-tuning2-high-row" hidden>
+                    <span class="field-label"><label for="bf-room-tuning2-high" data-i18n="label_room_tuning2_high">Correct up to (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-high-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-high-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_high">Auto uses the Schroeder frequency from the room volume or the Schroeder frequency below, at most 500 Hz. Without either it is 500 Hz.</span></span></span>
+                    <input type="number" id="bf-room-tuning2-high" class="num mono" min="100" max="20000" step="any" placeholder="auto" aria-describedby="bf-room-tuning2-high-tip">
                   </div>
                   <!-- app.js updateRoomRows shows the rows of the chosen mode. A row that the timing
                        limit shows or hides sits below it, so changing the limit never moves the slider. -->
@@ -275,6 +304,19 @@
                     <input type="checkbox" id="bf-room-tuning-level-match" checked aria-describedby="bf-room-tuning-level-match-tip">
                     <label for="bf-room-tuning-level-match" data-i18n="checkbox_room_tuning_level_match">Match speaker levels</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning-level-match-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning-level-match-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_level_match">Matches the speakers' levels at the listening position within ±6 dB, as a room-correction processor does. Turn it off to keep the levels as recorded.</span></span>
+                  </div>
+                  <div class="check-row" id="bf-room-tuning2-mimo-row" hidden>
+                    <input type="checkbox" id="bf-room-tuning2-mimo" aria-describedby="bf-room-tuning2-mimo-tip">
+                    <label for="bf-room-tuning2-mimo" data-i18n="checkbox_room_tuning2_mimo">Cancel late bass with the other speakers (MIMO)</label>
+                    <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo">Adds to each speaker low-frequency copies played by the other speakers, designed to cancel the bass that lingers at the ears after the first 60 ms. Works only below the upper limit, and a check keeps every band from getting worse.</span></span>
+                  </div>
+                  <div class="field-row" id="bf-room-tuning2-fsiso-row" hidden>
+                    <label for="bf-room-tuning2-fsiso" data-i18n="label_room_tuning2_fsiso">MIMO up to (Hz):</label>
+                    <input type="number" id="bf-room-tuning2-fsiso" class="num mono" value="150" min="50" max="150" step="1">
+                  </div>
+                  <div class="field-row" id="bf-room-tuning2-mimo-low-row" hidden>
+                    <label for="bf-room-tuning2-mimo-low" data-i18n="label_room_tuning2_mimo_low">MIMO from (Hz):</label>
+                    <input type="number" id="bf-room-tuning2-mimo-low" class="num mono" min="15" max="150" step="any" placeholder="auto">
                   </div>
                   <div class="field-row" id="bf-room-phase-limit-row" hidden>
                     <span class="field-label"><label for="bf-room-phase-limit" data-i18n="label_room_tuning_phase_limit">Timing correction up to:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-phase-limit-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-phase-limit-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_phase_limit">Up to the Schroeder frequency, the room's bass timing is corrected. Higher limits also correct the speaker's own timing, for example around its crossover, where the room measurements at both ear positions agree. Off corrects the frequency response only and adds no delay.</span></span></span>

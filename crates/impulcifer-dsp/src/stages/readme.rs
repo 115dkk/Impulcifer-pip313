@@ -26,6 +26,7 @@ pub struct ReadmeData {
     pub applied_gain_db: f64,
     pub fs: u32,
     pub tuning: Option<super::room_tuning::TuningReport>,
+    pub tuning2: Option<super::room_tuning2::Tuning2Report>,
 }
 /// Python write_readme, core/pipeline_stages.py:525-687; p10_readme.
 pub fn readme_data(hrir: &Hrir, fs: u32, applied_gain: f64) -> ReadmeData {
@@ -107,5 +108,6 @@ pub fn readme_data(hrir: &Hrir, fs: u32, applied_gain: f64) -> ReadmeData {
         applied_gain_db: applied_gain,
         fs,
         tuning: None,
+        tuning2: None,
     }
 }

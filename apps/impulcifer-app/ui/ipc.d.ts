@@ -67,6 +67,15 @@ interface ProcessingRequest {
      room_tuning_curtain (Hz) is where the detailed correction stops. */
   room_mode?: RoomMode; room_tuning_phase_limit?: RoomPhaseLimit; room_tuning_delay?: "auto" | number;
   room_tuning_max_boost?: number; room_tuning_curtain?: number; room_tuning_level_match?: boolean;
+  /* 3.x only. "tuning2" (ADR 0008) is SECS 2's channel correction with optional MIMO supports; it
+     reads the room_tuning2_* fields and room_tuning_level_match, and ignores the other room_tuning_*
+     fields and the Room EQ fields. room_tuning2_mode is "zero", "mixed", "linear", "long" or a
+     latency in ms (30–200). room_tuning2_high is "auto" or Hz (100–20000); room_volume and
+     schroeder_freq apply only when it is "auto". room_tuning2_fsiso (50–150 Hz) and
+     room_tuning2_mimo_low ("auto" or 15–150 Hz) are read only with room_tuning2_mimo. */
+  room_tuning2_mode?: Exclude<Tuning2Filter, "custom"> | number; room_tuning2_max_boost?: number;
+  room_tuning2_low?: number; room_tuning2_high?: "auto" | number; room_tuning2_mimo?: boolean;
+  room_tuning2_fsiso?: number; room_tuning2_mimo_low?: "auto" | number;
   /* 3.x only (ADR 0006). "auto" finds the crossover in the measurements and ignores vbass_freq;
      "manual" uses vbass_freq; "legacy" is the 2.x method. Without vbass_mode, a given vbass_freq
      means "manual". */
@@ -79,11 +88,16 @@ interface ProcessingRequest {
 }
 type VbassMode = "auto" | "manual" | "legacy";
 type RoomRange = "legacy" | "modes" | "schroeder" | "extreme";
-type RoomMode = "eq" | "tuning";
+type RoomMode = "eq" | "tuning" | "tuning2";
+/* Tuning 2's filter choice in the form; "custom" is sent as its latency in ms. */
+type Tuning2Filter = "zero" | "mixed" | "linear" | "long" | "custom";
 type RoomPhaseLimit = "off" | "schroeder" | "full" | number;
-/* bootstrap's defaults carry the CLI spec for the tuning delay and limit, e.g. "10" or "auto". */
-type BrirDefaults = Omit<ProcessingRequest, "room_tuning_delay" | "room_tuning_phase_limit"> &
-  { room_tuning_delay?: string | number; room_tuning_phase_limit?: string | number | null };
+/* bootstrap's defaults carry the CLI spec for the tuning delay and limit, e.g. "10" or "auto",
+   and for tuning 2's filter, band end and support floor, e.g. "mixed", "60" or "auto". */
+type BrirDefaults = Omit<ProcessingRequest, "room_tuning_delay" | "room_tuning_phase_limit" | "room_tuning2_mode"
+  | "room_tuning2_high" | "room_tuning2_mimo_low"> &
+  { room_tuning_delay?: string | number; room_tuning_phase_limit?: string | number | null;
+    room_tuning2_mode?: string | number; room_tuning2_high?: string | number; room_tuning2_mimo_low?: string | number };
 type EqSlotName = "both" | "left" | "right";
 type EqChoice = { mode: "folder" } | { mode: "off" } | { mode: "file"; path: string };
 interface EqRequest extends Pick<ProcessingRequest, "eq_file" | "eq_left_file" | "eq_right_file"> { dir_path: string }

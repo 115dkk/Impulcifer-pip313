@@ -1,0 +1,269 @@
+#![forbid(unsafe_code)]
+mod golden_secs2_helpers;
+use golden_secs2_helpers::*;
+use impulcifer_dsp::stages::room_tuning2::peq::fit_with_trace;
+
+const REL: f64 = 1e-9;
+#[test]
+fn replay_first_iteration() {
+    let v = fixture("fit_sr_both_ultra60_s0_1");
+    let i = &v["inputs"];
+    let mut trace = None;
+    fit_with_trace(
+        &array(&i["g"]),
+        &array(&i["corr_db"]),
+        integer(&i["n"]),
+        20.,
+        500.,
+        10.,
+        Some(500.),
+        48000.,
+        Some(&mut trace),
+    )
+    .unwrap();
+    let trace = trace.unwrap();
+    let reference: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../tests/migration/goldens/trf_replay_sr_both_ultra60_s0_1.json"
+    ))
+    .unwrap();
+    let actual = serde_json::to_value(&trace.solver.trials[0]).unwrap();
+    let expected = &reference["trials"][0];
+    let mut first = None;
+    for key in [
+        "g_norm",
+        "v",
+        "dv",
+        "Delta",
+        "s",
+        "uf",
+        "alpha_in",
+        "alpha_out",
+        "n_iter",
+        "p_h",
+        "step",
+        "x_new",
+        "actual_reduction",
+        "predicted_reduction",
+        "ratio",
+        "Delta_new",
+    ] {
+        let a = if actual[key].is_array() {
+            array(&actual[key])
+        } else {
+            vec![number(&actual[key])]
+        };
+        let b = if expected[key].is_array() {
+            array(&expected[key])
+        } else {
+            vec![number(&expected[key])]
+        };
+        let error = a
+            .iter()
+            .zip(&b)
+            .map(|(a, b)| {
+                if key == "uf" {
+                    (a.abs() - b.abs()).abs()
+                } else {
+                    (a - b).abs()
+                }
+            })
+            .fold(0., f64::max)
+            / b.iter().map(|b| b.abs()).fold(f64::MIN_POSITIVE, f64::max);
+        println!("REPLAY_INTERNAL {key}: relative={error:.17e}");
+        if error > 1e-12 && first.is_none() {
+            first = Some(key);
+        }
+    }
+    println!("FIRST_INTERNAL {first:?}");
+    if !oracle_libm() {
+        // The replay pins the oracle's arithmetic; another libm starts the
+        // iteration an ulp away (see `oracle_libm`).
+        return;
+    }
+    assert_eq!(actual["full_rank"], expected["full_rank"]);
+    assert_eq!(actual["select"]["branch"], expected["select"]["branch"]);
+    for key in [
+        "p_value",
+        "ag_value",
+        "p_stride",
+        "r_stride_l",
+        "r_stride_u",
+        "ag_stride",
+    ] {
+        let a = number(&actual["select"][key]);
+        let b = number(&expected["select"][key]);
+        assert!((a - b).abs() <= 1e-12 * b.abs(), "select/{key}: {a} != {b}");
+    }
+    assert!(first.is_none());
+}
+fn run(synthetic: bool) {
+    let mut failures = Vec::new();
+    for (name, v) in fixtures("fit_") {
+        if name.starts_with("fit_synthetic_") != synthetic {
+            continue;
+        }
+        let i = &v["inputs"];
+        let o = &v["outputs"];
+        let kw = &i["kwargs"];
+        assert_eq!(kw["ring_ms"].as_f64().unwrap_or(30.), 30.);
+        let mut trace = None;
+        let got = fit_with_trace(
+            &array(&i["g"]),
+            &array(&i["corr_db"]),
+            integer(&i["n"]),
+            kw["lo"].as_f64().unwrap_or(20.),
+            kw["hi"].as_f64().unwrap_or(500.),
+            kw["boost"].as_f64().unwrap_or(10.),
+            kw["f_max"].as_f64(),
+            48000.,
+            Some(&mut trace),
+        )
+        .unwrap();
+        if bands(&o["bands"]).is_empty() {
+            assert!(got.is_empty() && trace.is_none());
+            continue;
+        }
+        let t = trace.unwrap();
+        let mut errors = Errors::default();
+        for (field, values) in [("x0", &t.x0), ("lb", &t.lb), ("ub", &t.ub)] {
+            errors.real(&format!("{name}/{field}"), values, &array(&o[field]));
+            assert_same(&format!("{name}/{field}"), values, &array(&o[field]));
+        }
+        errors.real(
+            "initial cost",
+            &[t.solver.initial_cost],
+            &[number(&o["f0_cost"])],
+        );
+        if !o["J0"].is_null() {
+            assert_eq!(
+                t.solver.j0_shape,
+                [integer(&o["J0_shape"][0]), integer(&o["J0_shape"][1])]
+            );
+            // Exact residual arithmetic, not an optimizer-path tolerance. A
+            // two-point Jacobian divides residual rounding by its ~1.5e-8 step,
+            // so another libm moves it by ~1e-8 relative: report it there.
+            if oracle_libm() {
+                assert_eq!(t.solver.j0, array(&o["J0"]), "{name}/J0");
+            } else {
+                let mut j0 = Errors::default();
+                j0.compare(
+                    &format!("{name}/J0"),
+                    &t.solver.j0,
+                    &array(&o["J0"]),
+                    f64::INFINITY,
+                    0.,
+                );
+                j0.finish(&format!("{name}/J0 (report only)"));
+            }
+        }
+        let n = integer(&o["params"]);
+        let expected = array(&o["main_x"]);
+        assert_eq!(expected.len() % n, 0);
+        let count = expected.len() / n;
+        let horizon = o["horizon"].as_u64().map(|v| v as usize);
+        let gated = horizon.map_or(count, |h| h.saturating_sub(1));
+        assert!(gated <= count, "{name}: invalid horizon");
+        if t.solver.main_x.len() < gated && oracle_libm() {
+            failures.push(format!(
+                "{name}: only {} evaluations, need {gated}",
+                t.solver.main_x.len()
+            ));
+        }
+        let mut first = None;
+        let mut max_prefix = 0_f64;
+        for (k, (a, b)) in t
+            .solver
+            .main_x
+            .iter()
+            .zip(expected.chunks_exact(n))
+            .enumerate()
+        {
+            assert_eq!(a.len(), n);
+            assert!(a.iter().all(|v| v.is_finite()));
+            let distance = a
+                .iter()
+                .zip(b)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0., f64::max)
+                / b.iter()
+                    .map(|b| b.abs())
+                    .fold(0., f64::max)
+                    .max(f64::MIN_POSITIVE);
+            if distance > REL && first.is_none() {
+                first = Some(k);
+            }
+            if k < gated {
+                max_prefix = max_prefix.max(distance);
+                // The horizon holds for the oracle's residual arithmetic only.
+                if distance > REL && oracle_libm() {
+                    failures.push(format!(
+                        "{name}: evaluation {k} distance {distance:e}, horizon {horizon:?}"
+                    ));
+                }
+            }
+        }
+        if first.is_none() && t.solver.main_x.len() != count {
+            first = Some(t.solver.main_x.len().min(count));
+        }
+        if horizon.is_none() && oracle_libm() {
+            assert_eq!(
+                t.solver.main_x.len(),
+                count,
+                "{name}: horizon-free trace count"
+            );
+        }
+        println!(
+            "MEASURE {name}/prefix: max_relative={max_prefix:.17e}, evaluations={gated}, budget={REL:e}"
+        );
+        println!(
+            "FIT {name}: first={first:?} horizon={horizon:?} cost={:.17e} reference={:.17e} variants={} nfev={}/{}",
+            t.result.cost,
+            number(&o["result"]["cost"]),
+            serde_json::to_string(
+                &o["oracle_variants"]
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(k, v)| (k, &v["cost"]))
+                    .collect::<std::collections::BTreeMap<_, _>>()
+            )
+            .unwrap(),
+            t.result.nfev,
+            o["result"]["nfev"]
+        );
+        assert_eq!(t.solver.main_x.len() + 1, t.result.nfev);
+        assert_eq!(t.solver.jac_x.len() + 1, t.result.njev);
+        if std::panic::catch_unwind(|| errors.finish(&name)).is_err() {
+            failures.push(name);
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+#[test]
+fn a_synthetic_fit_gates() {
+    run(true);
+}
+#[test]
+fn b_actual_fit_gates() {
+    run(false);
+}
+#[test]
+fn empty_fit_has_no_trace() {
+    let mut trace = None;
+    assert!(
+        fit_with_trace(
+            &[20., 100., 500.],
+            &[0.; 3],
+            16,
+            20.,
+            500.,
+            10.,
+            None,
+            48000.,
+            Some(&mut trace)
+        )
+        .unwrap()
+        .is_empty()
+    );
+    assert!(trace.is_none());
+}

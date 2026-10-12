@@ -64,6 +64,7 @@ pub struct RoomCorrection {
     pub responses_tracks: Vec<Vec<f64>>,
     pub diagnostics: Option<RoomDiagnostics>,
     pub tuning: Option<super::room_tuning::TuningPlan>,
+    pub tuning2: Option<super::room_tuning2::Tuning2Plan>,
 }
 
 /// Python discover_room_measurements, core/room_correction.py:36-75; p10_generic_room.
@@ -363,6 +364,7 @@ pub fn room_correction(
         responses_tracks,
         diagnostics: None,
         tuning: None,
+        tuning2: None,
     }))
 }
 
@@ -385,6 +387,26 @@ pub fn room_correction_tuning(
         options,
         Some(tuning_options),
     )
+}
+
+/// Tuning 2 consumes uncropped split omni measurements; it never creates EQ gains.
+pub fn room_correction_tuning2(
+    rir: &Hrir,
+    target: &FrequencyResponse,
+    mic: Option<&FrequencyResponse>,
+    options: &super::room_tuning2::Tuning2Options,
+) -> Result<RoomCorrection, DspError> {
+    let plan = super::room_tuning2::prepare_tuning2(rir, options, mic, Some(target))?;
+    Ok(RoomCorrection {
+        frs: RoomFrs {
+            term: RoomTerm::Gain,
+            entries: Vec::new(),
+        },
+        responses_tracks: Vec::new(),
+        diagnostics: None,
+        tuning: None,
+        tuning2: Some(plan),
+    })
 }
 
 #[cfg(test)]

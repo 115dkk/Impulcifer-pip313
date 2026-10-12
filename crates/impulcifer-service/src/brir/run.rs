@@ -184,6 +184,77 @@ impl StageObserver for Observer<'_, '_> {
         }
         Ok(())
     }
+    fn on_room_tuned2(
+        &mut self,
+        report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report,
+    ) -> Result<(), DspError> {
+        if report.speakers.is_empty() {
+            self.events
+                .log("info", "cli_room_tuning_no_data", json!({}));
+        } else if let Some(band) = &report.band {
+            self.events.log("info", "cli_room_tuning2", json!({
+                "mode": super::outputs::tuning2_mode_name(report.mode),
+                "delay": (report.latency_samples as f64 * 1000.0 / report.fs as f64).round() as i64,
+                "low": band.low.round() as i64, "high": band.high.round() as i64,
+            }));
+        }
+        for speaker in &report.speakers {
+            if speaker.points == 1 {
+                self.events.log(
+                    "info",
+                    "cli_room_tuning_single_point",
+                    json!({"speaker":speaker.speaker}),
+                );
+            }
+            if self.config.room_tuning_level_match && speaker.level_difference_db.abs() > 2.0 {
+                self.events.log("warning", "cli_room_tuning_level_inconsistent", json!({"speaker":speaker.speaker,"db":format!("{:.1}",speaker.level_difference_db)}));
+            }
+            if speaker.mismatch {
+                self.events.log(
+                    "warning",
+                    "cli_room_tuning_mismatch",
+                    json!({"speaker":speaker.speaker}),
+                );
+            }
+            if speaker.weak {
+                let db = super::outputs::tuning2_representation(speaker).unwrap_or_default();
+                self.events.log(
+                    "warning",
+                    "cli_room_tuning_weak",
+                    json!({"speaker":speaker.speaker,"db":format!("{db:.1}")}),
+                );
+            }
+            if let Some(db) = speaker
+                .pre_echo_channels
+                .iter()
+                .filter(|p| p.warns())
+                .map(|p| p.after_db)
+                .reduce(f64::max)
+            {
+                self.events.log(
+                    "warning",
+                    "cli_room_tuning2_preecho",
+                    json!({"speaker":speaker.speaker,"db":format!("{db:.1}")}),
+                );
+            }
+            if self.config.room_tuning2_mimo {
+                let input = report
+                    .mimo
+                    .as_ref()
+                    .and_then(|m| m.inputs.iter().find(|i| i.speaker == speaker.speaker));
+                if let Some(input) = input.filter(|i| !i.supports.is_empty()) {
+                    self.events.log("info", "cli_room_tuning2_mimo", json!({"speaker":speaker.speaker,"supports":input.supports.len(),"db":format!("{:.1}",input.level_db)}));
+                } else {
+                    self.events.log(
+                        "info",
+                        "cli_room_tuning2_mimo_off",
+                        json!({"speaker":speaker.speaker}),
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
     fn on_equalized(&mut self, applied: &[AppliedEqualization]) -> Result<(), DspError> {
         self.check_cancelled()?;
         if let (Some((headphone_left, headphone_right)), Some((applied_left, applied_right))) = (

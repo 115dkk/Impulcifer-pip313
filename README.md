@@ -197,12 +197,19 @@ sweep 파일을 따로 준비하지 않아도 됩니다. 녹음 화면은 기본
 | `--room_volume M3` | 50으로 가정 | 슈레더 주파수를 계산할 방 부피(m³)입니다. |
 | `--schroeder_freq HZ` | 측정에서 추정 | 슈레더 주파수를 직접 지정합니다. |
 | `--room_max_boost DB` | `12` | 스피커·귀별 룸 측정으로 딥을 메울 때 쓰는 최대 부스트입니다. `--room_mode eq`에서만 씁니다. |
-| `--room_mode eq\|tuning` | `eq` | 룸 보정 모드입니다. `eq`는 귀 위치마다 주파수 응답을 보정합니다(위의 범위 옵션). `tuning`(가상 룸 튜닝)은 녹음할 때 스피커 신호 경로에 룸 보정 프로세서(SECS 방식)가 있었다면 걸었을 보정을 스피커마다 두 귀에 같게 겁니다. 주파수 응답, 스피커 레벨, 시간 응답을 보정하고 모든 채널을 `--room_tuning_delay`만큼 늦춥니다. 보정의 기준은 룸 측정 지점이므로, 결과 BRIR의 저역 잔향(EDT)이나 초과 군지연이 줄어든다는 뜻은 아닙니다(데모에서는 둘 다 늘었습니다). 귀 위치 룸 측정(`room-<스피커>-left.wav`, `room-<스피커>-right.wav`)을 쓰고 `room.wav`는 쓰지 않습니다. 결정 근거는 ADR 0005입니다. |
+| `--room_mode eq\|tuning\|tuning2` | `eq` | 룸 보정 모드입니다. `eq`는 귀 위치마다 주파수 응답을 보정합니다(위의 범위 옵션). `tuning`(가상 룸 튜닝)은 녹음할 때 스피커 신호 경로에 룸 보정 프로세서(SECS 방식)가 있었다면 걸었을 보정을 스피커마다 두 귀에 같게 겁니다. 주파수 응답, 스피커 레벨, 시간 응답을 보정하고 모든 채널을 `--room_tuning_delay`만큼 늦춥니다. 보정의 기준은 룸 측정 지점이므로, 결과 BRIR의 저역 잔향(EDT)이나 초과 군지연이 줄어든다는 뜻은 아닙니다(데모에서는 둘 다 늘었습니다). 귀 위치 룸 측정(`room-<스피커>-left.wav`, `room-<스피커>-right.wav`)을 쓰고 `room.wav`는 쓰지 않습니다. 결정 근거는 ADR 0005입니다. `tuning2`(가상 룸 튜닝 2)는 SECS 2(스피커 갤러리)의 채널 보정을 스피커마다 두 귀에 같게 겁니다. 스피커 앞의 PEQ와 FIR이 저역 주파수 응답과, 필터 지연 안에서 방의 저역 시간 응답 일부를 보정하고, 스피커 레벨을 가장 작은 스피커에 맞춥니다. MIMO를 켜면 다른 스피커가 저역 서포트를 더해 귀에 남는 늦은 저음을 줄입니다. 같은 귀 위치 룸 측정을 쓰고, 결정 근거는 ADR 0008입니다. |
 | `--room_tuning_delay MS\|auto` | `10` | 튜닝 지연(2~20 ms)입니다. `auto`는 SECS와 같은 기준으로 2~10 ms 가운데 하나를 골라 모든 채널에 씁니다. |
 | `--room_tuning_phase_limit off\|schroeder\|full\|HZ` | `full` | 시간 응답 보정의 상한입니다. `off`는 주파수 응답과 레벨만 보정하고 지연을 더하지 않습니다. `schroeder`는 슈레더 주파수(최대 300 Hz)까지, 숫자는 그 주파수(300~20000 Hz)까지 보정합니다. |
 | `--room_tuning_max_boost DB` | `6` | 가상 룸 튜닝의 최대 부스트(0~12 dB)입니다. |
 | `--room_tuning_curtain HZ` | `300` | 정밀 보정의 상한(100~5000 Hz)입니다. 그 위 한 옥타브에 걸쳐 풀리고, 더 위로는 넓은 음색 보정만 합니다. |
-| `--room_tuning_level_match true\|false` | `true` | 청취 위치에서 스피커 레벨을 ±6 dB 안에서 맞춥니다. |
+| `--room_tuning_level_match true\|false` | `true` | 청취 위치에서 스피커 레벨을 맞춥니다. `tuning`은 ±6 dB 안에서 중앙값에, `tuning2`는 SECS 2처럼 가장 작은 스피커에 맞춥니다. |
+| `--room_tuning2_mode zero\|mixed\|linear\|long\|MS` | `mixed` | 가상 룸 튜닝 2의 필터 구조와 지연입니다. `zero`는 PEQ만 쓰고 지연이 없습니다. `mixed`는 8 ms, `linear`는 28 ms, `long`은 200 ms이고, 숫자(30~200)는 그 지연의 초고지연 모드입니다. 지연이 길수록 저역 시간 응답을 더 많이 보정하고 출력도 그만큼 늦게 시작합니다. |
+| `--room_tuning2_max_boost DB` | `10` | 가상 룸 튜닝 2의 최대 부스트(0~10 dB)입니다. |
+| `--room_tuning2_low HZ` | `20` | 가상 룸 튜닝 2 보정 대역의 아래 끝(10~200 Hz)입니다. |
+| `--room_tuning2_high HZ\|auto` | `auto` | 보정 대역의 위 끝(100~20000 Hz)입니다. `auto`는 `--schroeder_freq`나 `--room_volume`로 구한 슈레더 주파수(최대 500 Hz)이고, 둘 다 없으면 500 Hz입니다. |
+| `--room_tuning2_mimo true\|false` | `false` | MIMO 서포트를 더합니다. 다른 스피커가 각 스피커의 저역 신호를 함께 내서, 처음 60 ms 뒤 귀에 남는 저음을 줄입니다. 어느 대역도 나빠지지 않게 검사하며, 나빠지면 그 스피커는 MIMO를 쓰지 않습니다. |
+| `--room_tuning2_fsiso HZ` | `150` | MIMO 서포트의 위 끝(50~150 Hz)입니다. |
+| `--room_tuning2_mimo_low HZ\|auto` | `auto` | MIMO 서포트의 아래 끝(15~150 Hz)입니다. `auto`는 스피커마다 측정에서 찾습니다. |
 | `--specific_limit HZ` | `400` | 스피커·귀별 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. `--room_range legacy`에서만 씁니다. |
 | `--generic_limit HZ` | `300` | 공통 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. `--room_range legacy`에서만 씁니다. |
 | `--bass_boost DB` | 사용 안 함 | 저역 셸프 부스트입니다. `6`처럼 게인만 주거나(Fc 105 Hz, Q 0.76) `6,150,0.69`처럼 게인, Fc, Q를 줍니다. |
@@ -324,6 +331,8 @@ cargo run -p impulcifer-cli --release -- --dir_path data/demo   # CLI
 * Copyright (c) 2024- 115dkk
 * Copyright (c) 2025- LionLion123
 * Copyright (c) 2025- SDC (DCinside)
+
+가상 룸 튜닝 2는 스피커 갤러리(DCinside)의 SECS 2(GPL-3.0)가 하는 보정을 재현합니다. 구현은 명세와 SECS 2를 블랙박스로 돌린 기준값만 보고 따로 만들었고, SECS 2의 코드는 들어 있지 않습니다. 같은 방식으로 가상 룸 튜닝은 한플의 SECS를 재현합니다.
 
 ## 기여와 문의
 
