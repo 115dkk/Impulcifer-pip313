@@ -888,6 +888,21 @@ evaluations. Equivalence is therefore stage by stage on the oracle's own inputs
 own spread across computers (`tests/migration/README-secs2.md`, "SECS against
 itself").
 
+MIMO follows the same split. Fed the oracle's own RC outputs (`x` per ear and
+the direct correction energy), the paths, normal equations, bisection, guard
+and supports reproduce it to floating-point noise (supports within 6e-13
+relative). Two guard values are exceptions: the first tail change of BL and FC
+in the `mixed`/100 Hz/40 Hz setting. In both, the oracle leaves out the sixth
+late peak of `y_e`, near 44 Hz, which the rule above includes. No variant of
+the rule tested (onset, frequency floor, peak count) reproduces all 85
+recorded guard values, so the rule stays as written and those two values are
+named exceptions. End to end, the tail change is a maximum over a top-six peak
+set and so is discontinuous: a slightly different RC can move a
+near-threshold input by one guard step (3 dB of support level). The oracle's
+own variants do so for 1–3 of 7 inputs per setting. Impulcifer is allowed two
+more than the worst variant per setting (measured: 1, 2 and 4 against 2, 3
+and 2).
+
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of
 N = 131072) for 62 runs on the demo omni files: every file/speaker as one

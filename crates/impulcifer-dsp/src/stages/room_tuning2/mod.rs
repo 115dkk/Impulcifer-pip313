@@ -3,7 +3,7 @@
 mod apply;
 pub use apply::{
     PlannedSpeaker, Speaker2Report, Tuning2Options, Tuning2Plan, Tuning2Report, apply_tuning2,
-    prepare_tuning2,
+    apply_tuning2_full, prepare_tuning2,
 };
 pub mod mimo;
 pub use mimo::{

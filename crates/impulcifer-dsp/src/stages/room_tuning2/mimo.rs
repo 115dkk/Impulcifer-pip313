@@ -633,7 +633,8 @@ pub fn support_response(
     }
     let f = grid(n, fs as f64);
     let hp = hp4(&f, support.low);
-    Ok(f.iter()
+    let response: Vec<_> = f
+        .iter()
         .zip(hp)
         .map(|(f, hp)| {
             if *f >= 285. {
@@ -647,5 +648,6 @@ pub fn support_response(
                 .sum::<Complex64>();
             hp * s * ((285. - f) / 60.).clamp(0., 1.)
         })
-        .collect())
+        .collect();
+    Ok(response)
 }

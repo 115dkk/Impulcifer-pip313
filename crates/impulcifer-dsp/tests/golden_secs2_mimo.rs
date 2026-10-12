@@ -373,7 +373,11 @@ fn golden_secs2_mimo() {
             array(&o["guard_band_db"]),
             array(&o["guard_tail"])
         );
-        let count = s.guard_band.len().min(array(&o["guard_band_db"]).len());
+        let count = array(&o["guard_band_db"]).len();
+        assert_eq!(
+            s.guard_band.len(),
+            count + usize::from(name == "mimo_mixed_fsiso100_low40_BL")
+        );
         guard.compare(
             &format!("{name}/band"),
             &s.guard_band[..count],
@@ -389,7 +393,11 @@ fn golden_secs2_mimo() {
             .map(|(v, _)| v * 0.15)
             .collect();
         let expected = array(&o["guard_tail"]);
-        let count = tails.len().min(expected.len());
+        let count = expected.len();
+        assert_eq!(
+            tails.len(),
+            count + usize::from(name == "mimo_mixed_fsiso100_low40_BL")
+        );
         for index in 0..count {
             if index == 0
                 && matches!(

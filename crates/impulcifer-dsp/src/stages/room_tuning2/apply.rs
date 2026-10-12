@@ -287,7 +287,9 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
                 }
                 let gain = 10_f64.powf(r.trim_db / 20.);
                 let mut data = conv::convolve(&old.data, &filter, conv::Mode::Full);
-                if !full { data.resize(old.len() + delay, 0.); }
+                if !full {
+                    data.resize(old.len() + delay, 0.);
+                }
                 for v in &mut data {
                     *v *= gain;
                 }
