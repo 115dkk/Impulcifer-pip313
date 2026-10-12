@@ -34,16 +34,18 @@ pub fn geomspace(lo: f64, hi: f64, n: usize) -> Vec<f64> {
     g
 }
 pub fn smooth(x: &[f64], f: &[f64], b: &[f64]) -> Vec<f64> {
+    let _timer = super::profile::timer("smoothing");
     let mut c = Vec::with_capacity(x.len() + 1);
     c.push(0.);
     for x in x {
         c.push(c.last().unwrap() + x);
     }
     let delta = f[1] - f[0];
+    let scalar_h = (b.len() == 1).then(|| 2_f64.powf(0.5 / b[0]));
     f.iter()
         .enumerate()
         .map(|(k, f)| {
-            let h = 2_f64.powf(0.5 / b[if b.len() == 1 { 0 } else { k }]);
+            let h = scalar_h.unwrap_or_else(|| 2_f64.powf(0.5 / b[k]));
             let lo = ((f / h / delta).floor() as usize).min(x.len() - 1);
             let hi = ((f * h / delta).ceil() as usize)
                 .min(x.len() - 1)
@@ -72,6 +74,7 @@ pub fn resolution(f: &[f64]) -> Vec<f64> {
         .collect()
 }
 pub fn mp(a: &[f64], n: usize) -> Vec<Complex64> {
+    let _timer = super::profile::timer("minimum_phase");
     let mut c = fft::irfft(
         &a.iter()
             .map(|a| Complex64::new(a.max(1e-8).ln(), 0.))

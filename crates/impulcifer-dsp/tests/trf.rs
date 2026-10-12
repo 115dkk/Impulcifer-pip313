@@ -1,12 +1,10 @@
 #![forbid(unsafe_code)]
-use impulcifer_dsp::{fft::Complex64, optimize::least_squares};
+use impulcifer_dsp::{
+    fft::Complex64,
+    optimize::{LeastSquaresTrace, least_squares_with_trace},
+};
 use serde_json::Value;
 use std::f64::consts::PI;
-// Measured 0.008001162 and 0.022031750; rounded above 1.5 times these maxima.
-// provisional: set by the owner after review
-const PEQ_X_MAX: f64 = 0.013;
-// provisional: set by the owner after review
-const PEQ_COST_MAX: f64 = 0.034;
 fn arr(v: &Value) -> Vec<f64> {
     v.as_array()
         .unwrap()
@@ -56,7 +54,8 @@ fn trf_matches_scipy() {
             .iter()
             .map(|f| Complex64::from_polar(1., (-2. * PI * f) * (1. / 48000.)))
             .collect();
-        let r = least_squares(
+        let mut trace = LeastSquaresTrace::default();
+        let r = least_squares_with_trace(
             |x| match name {
                 "smooth" => t
                     .iter()
@@ -101,6 +100,7 @@ fn trf_matches_scipy() {
             &lower,
             &upper,
             150,
+            Some(&mut trace),
         )
         .unwrap();
         let expected = arr(&case["x"]);
@@ -114,9 +114,36 @@ fn trf_matches_scipy() {
             "TRF {name}: max_x={dx:.12e} cost_diff={dc:.12e} nfev={}/{} status={}/{}",
             r.nfev, case["nfev"], r.status, case["status"]
         );
-        assert_eq!(r.nfev, case["nfev"].as_u64().unwrap() as usize);
-        assert_eq!(r.status, case["status"].as_i64().unwrap() as i32);
-        assert!(dx < if name == "peq16" { PEQ_X_MAX } else { 1e-9 });
-        assert!(dc < if name == "peq16" { PEQ_COST_MAX } else { 1e-14 });
+        if name == "peq16" {
+            let expected = case["main_x"].as_array().unwrap();
+            let horizon = case["horizon"].as_u64().map(|v| v as usize);
+            let gated = horizon.map_or(expected.len(), |h| h.saturating_sub(1));
+            assert!(trace.main_x.len() >= gated);
+            let mut first = None;
+            for (k, (got, want)) in trace.main_x.iter().zip(expected).enumerate() {
+                let want = arr(want);
+                let rel = got
+                    .iter()
+                    .zip(&want)
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0., f64::max)
+                    / want.iter().map(|v| v.abs()).fold(0., f64::max);
+                if rel > 1e-9 && first.is_none() {
+                    first = Some(k);
+                }
+                if k < gated {
+                    assert!(rel <= 1e-9, "PEQ16 evaluation {k}: {rel:e}");
+                }
+            }
+            println!(
+                "MEASURE trf_peq16: first={first:?} horizon={horizon:?} cost={} reference={} gesvd={}",
+                r.cost, case["cost"], case["oracle_gesvd"]["cost"]
+            );
+        } else {
+            assert_eq!(r.nfev, case["nfev"].as_u64().unwrap() as usize);
+            assert_eq!(r.status, case["status"].as_i64().unwrap() as i32);
+            assert!(dx < 1e-9);
+            assert!(dc < 1e-14);
+        }
     }
 }

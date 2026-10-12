@@ -346,6 +346,14 @@ fn room_tuning2_bench() {
         };
         let band = correction_band(&[&points], &opts).unwrap();
         black_box(design_rc(&points, &opts, &band, None, None).unwrap());
+        profile::start();
+        black_box(design_rc(&points, &opts, &band, None, None).unwrap());
+        for (step, (elapsed, count)) in profile::finish() {
+            println!(
+                "PROFILE {name}/{step}: ms={:.6} count={count}",
+                elapsed.as_secs_f64() * 1000.
+            );
+        }
         let mut times = Vec::new();
         for _ in 0..3 {
             let start = Instant::now();

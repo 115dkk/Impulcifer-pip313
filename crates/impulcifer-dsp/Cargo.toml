@@ -16,6 +16,9 @@ thiserror.workspace = true
 rustfft.workspace = true
 realfft.workspace = true
 faer.workspace = true
+pulp.workspace = true
+gemm.workspace = true
+faer-traits.workspace = true
 rayon.workspace = true
 regex.workspace = true
 

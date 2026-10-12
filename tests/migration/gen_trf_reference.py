@@ -12,12 +12,22 @@ from scipy.optimize import least_squares
 
 
 def solve(name, x0, lower, upper, residual, **data):
+    trace = []
+    trf = importlib.import_module("scipy.optimize._lsq.trf")
+    original_bounds = trf.trf_bounds
+    def traced(fun, *args, **kwargs):
+        def step(x):
+            trace.append(x.copy().tolist())
+            return fun(x)
+        return original_bounds(step, *args, **kwargs)
+    trf.trf_bounds = traced
     result = least_squares(
         residual, x0, bounds=(lower, upper), method="trf", jac="2-point",
         x_scale=1, loss="linear", ftol=1e-8, xtol=1e-8, gtol=1e-8,
         tr_solver="exact", max_nfev=150,
     )
-    return dict(name=name, x0=list(x0), lower=list(lower), upper=list(upper),
+    trf.trf_bounds = original_bounds
+    return dict(name=name, main_x=trace, x0=list(x0), lower=list(lower), upper=list(upper),
                 x=result.x.tolist(), cost=result.cost, nfev=result.nfev,
                 status=result.status, **data)
 
@@ -126,6 +136,22 @@ def main():
                        lambda x: weight*(peq_response(grid, x)-curve),
                        grid=grid.tolist(), curve=curve.tolist()))
     assert cases[-1]["nfev"] == 150, cases[-1]["nfev"]
+    from scipy.linalg import svd
+    trf = importlib.import_module("scipy.optimize._lsq.trf")
+    original_svd = trf.svd
+    try:
+        trf.svd = lambda a, full_matrices=False: svd(a, full_matrices=full_matrices, lapack_driver="gesvd")
+        variant = solve("peq16", x0, lower, upper,
+                        lambda x: weight*(peq_response(grid, x)-curve))
+    finally:
+        trf.svd = original_svd
+    reference = np.asarray(cases[-1]["main_x"])
+    other = np.asarray(variant["main_x"])
+    count = min(len(reference), len(other))
+    distance = np.max(np.abs(other[:count]-reference[:count]), axis=1) / np.max(np.abs(reference[:count]), axis=1)
+    outside = np.flatnonzero(distance > 1e-9)
+    cases[-1]["horizon"] = int(outside[0]) if len(outside) else None
+    cases[-1]["oracle_gesvd"] = dict(main_x=variant["main_x"], cost=variant["cost"], rel_distance=distance.tolist())
     output = Path(__file__).parent / "goldens/trf_scipy_reference.json"
     output.write_text(json.dumps({
         "scipy": scipy.__version__, "numpy": np.__version__,

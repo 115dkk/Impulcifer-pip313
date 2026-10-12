@@ -58,19 +58,22 @@ pub fn magnitude(z: Complex64) -> f64 {
     (ratio * ratio + 1.).sqrt() * larger
 }
 fn band(z: &[Complex64], f: f64, q: f64, g: f64, fs: f64) -> Vec<Complex64> {
+    let mut out = vec![Complex64::new(0., 0.); z.len()];
+    band_into(z, f, q, g, fs, &mut out);
+    out
+}
+fn band_into(z: &[Complex64], f: f64, q: f64, g: f64, fs: f64, out: &mut [Complex64]) {
     let a = 10_f64.powf(g / 40.);
     let w = 2. * PI * f / fs;
     let alpha = w.sin() / (2. * q);
     let b = [1. + alpha * a, -2. * w.cos(), 1. - alpha * a];
     let a = [1. + alpha / a, -2. * w.cos(), 1. - alpha / a];
-    z.iter()
-        .map(|z| {
-            divide(
-                b[0] + b[1] * z + b[2] * z * z,
-                a[0] + a[1] * z + a[2] * z * z,
-            )
-        })
-        .collect()
+    for (out, z) in out.iter_mut().zip(z) {
+        *out = divide(
+            b[0] + b[1] * z + b[2] * z * z,
+            a[0] + a[1] * z + a[2] * z * z,
+        );
+    }
 }
 pub fn response(f: &[f64], bands: &[(f64, f64, f64)], fs: f64) -> Vec<Complex64> {
     let z: Vec<_> = f
@@ -181,35 +184,61 @@ pub fn fit_with_trace(
         // NumPy divides the complex exponent by fs via its reciprocal.
         .map(|f| Complex64::from_polar(1., (-2. * PI * f) * (1. / fs)))
         .collect();
-    let mut old = vec![f64::NAN; x.len()];
-    let mut cache = vec![Vec::new(); bands.len()];
+    let mut cache = vec![vec![Complex64::new(1., 0.); grid.len()]; bands.len()];
+    let mut prefix = vec![vec![Complex64::new(1., 0.); grid.len()]; bands.len() + 1];
+    let mut changed = vec![Complex64::new(0., 0.); grid.len()];
+    let mut product = vec![Complex64::new(1., 0.); grid.len()];
     let mut solver_trace = trace
         .as_ref()
         .map(|_| optimize::LeastSquaresTrace::default());
-    let result = optimize::least_squares_with_trace(
-        |x| {
-            for k in 0..cache.len() {
-                if x[k * 3..k * 3 + 3] != old[k * 3..k * 3 + 3] {
-                    cache[k] = band(&z, x[k * 3].exp(), x[k * 3 + 1].exp(), x[k * 3 + 2], fs);
-                    old[k * 3..k * 3 + 3].copy_from_slice(&x[k * 3..k * 3 + 3]);
-                }
-            }
-            let mut p = vec![Complex64::new(1., 0.); grid.len()];
-            for band in &cache {
-                for (p, b) in p.iter_mut().zip(band) {
+    let result = optimize::least_squares_in_place(
+        |x, column, out| {
+            let _timer = super::profile::timer("residual");
+            if let Some(column) = column {
+                let k = column / 3;
+                band_into(
+                    &z,
+                    x[k * 3].exp(),
+                    x[k * 3 + 1].exp(),
+                    x[k * 3 + 2],
+                    fs,
+                    &mut changed,
+                );
+                product.copy_from_slice(&prefix[k]);
+                for (p, b) in product.iter_mut().zip(&changed) {
                     *p *= b;
                 }
+                for band in &cache[k + 1..] {
+                    for (p, b) in product.iter_mut().zip(band) {
+                        *p *= b;
+                    }
+                }
+            } else {
+                for k in 0..cache.len() {
+                    band_into(
+                        &z,
+                        x[k * 3].exp(),
+                        x[k * 3 + 1].exp(),
+                        x[k * 3 + 2],
+                        fs,
+                        &mut cache[k],
+                    );
+                    let (before, after) = prefix.split_at_mut(k + 1);
+                    after[0].copy_from_slice(&before[k]);
+                    for (p, b) in after[0].iter_mut().zip(&cache[k]) {
+                        *p *= b;
+                    }
+                }
+                product.copy_from_slice(prefix.last().unwrap());
             }
-            p.iter()
-                .enumerate()
-                .map(|(i, p)| {
-                    (if grid[i] >= lo && grid[i] <= hi {
-                        1.
-                    } else {
-                        0.15
-                    }) * (20. * (magnitude(*p) + 1e-12).log10() - curve[i])
-                })
-                .collect()
+            out.resize(grid.len(), 0.);
+            for (i, p) in product.iter().enumerate() {
+                out[i] = (if grid[i] >= lo && grid[i] <= hi {
+                    1.
+                } else {
+                    0.15
+                }) * (20. * (magnitude(*p) + 1e-12).log10() - curve[i]);
+            }
         },
         &x,
         &lb,

@@ -7,7 +7,7 @@
 - **Project:** https://codeberg.org/sarah-quinones/faer
 - **Version:** 0.24.4
 - **License:** MIT
-- **Distribution:** Rust DSP library; dense thin SVD, sequential execution. Default features disabled; only `std` and `linalg` enabled (no rayon).
+- **Distribution:** Rust DSP library; dense thin SVD, sequential execution. Default features disabled; only `linalg` enabled (no `std`, no rayon). Its SIMD dependencies pulp 0.22.3, gemm 0.19.0 and faer-traits 0.24.0 (all MIT, same author) are named directly only to enable their `std` feature for runtime CPU detection.
 
 ## SciPy bounded least-squares port
 

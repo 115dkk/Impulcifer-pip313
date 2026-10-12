@@ -1072,12 +1072,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "defer"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "930c7171c8df9fb1782bdf9b918ed9ed2d33d1d22300abb754f9085bc48bf8e8"
-
-[[package]]
 name = "defmt"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1499,7 +1493,6 @@ dependencies = [
  "nano-gemm",
  "num-complex",
  "num-traits",
- "private-gemm-x86",
  "pulp",
  "reborrow",
 ]
@@ -2498,8 +2491,11 @@ name = "impulcifer-dsp"
 version = "3.4.0"
 dependencies = [
  "faer",
+ "faer-traits",
+ "gemm",
  "impulcifer-io",
  "impulcifer-types",
+ "pulp",
  "rayon",
  "realfft",
  "regex",
@@ -2646,17 +2642,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
 dependencies = [
  "cfb",
-]
-
-[[package]]
-name = "interpol"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb58032ba748f4010d15912a1855a8a0b1ba9eaad3395b0c171c09b3b356ae50"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -3263,16 +3248,6 @@ checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
  "libm",
-]
-
-[[package]]
-name = "num_cpus"
-version = "1.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
-dependencies = [
- "hermit-abi",
- "libc",
 ]
 
 [[package]]
@@ -3958,18 +3933,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0d895b311e3af9902528fbb8f928688abbd95872819320517cc24ca6b2bd08"
 dependencies = [
  "num-integer",
-]
-
-[[package]]
-name = "private-gemm-x86"
-version = "0.1.22"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bba0a7831d1297712e7e7b33759b0c837941e79196dd05df506d5f36f7f78619"
-dependencies = [
- "defer",
- "interpol",
- "num_cpus",
- "raw-cpuid",
 ]
 
 [[package]]

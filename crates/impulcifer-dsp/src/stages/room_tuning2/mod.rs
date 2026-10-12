@@ -2,10 +2,11 @@
 //! docs/rust/ROOM_CORRECTION.md (ADR 0008); no SECS implementation is included.
 pub mod peq;
 pub mod primitives;
+pub mod profile;
 mod rc;
 use crate::{DspError, fft::Complex64, filters, fr::FrequencyResponse, ir::ImpulseResponse};
 use primitives::*;
-pub use rc::design_rc;
+pub use rc::{RcSession, RcStages, design_rc, design_rc_with_stages};
 use std::f64::consts::PI;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

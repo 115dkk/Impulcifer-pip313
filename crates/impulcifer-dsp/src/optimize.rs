@@ -67,14 +67,17 @@ fn feasible(x: &mut [f64], lb: &[f64], ub: &[f64], initial: bool) {
         }
     }
 }
-fn jacobian<F: FnMut(&[f64]) -> Vec<f64>>(
+fn jacobian<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
     fun: &mut F,
     x: &[f64],
     f: &[f64],
     lb: &[f64],
     ub: &[f64],
 ) -> Result<Mat<f64>, DspError> {
+    let _timer = crate::stages::room_tuning2::profile::timer("jacobian");
     let mut j = Mat::zeros(f.len(), x.len());
+    let mut y = x.to_vec();
+    let mut fy = vec![0.; f.len()];
     for k in 0..x.len() {
         let mut h = f64::EPSILON.sqrt() * if x[k] >= 0. { 1. } else { -1. } * x[k].abs().max(1.);
         let lower = x[k] - lb[k];
@@ -86,10 +89,10 @@ fn jacobian<F: FnMut(&[f64]) -> Vec<f64>>(
         if !fitting {
             h = if upper >= lower { upper } else { -lower };
         }
-        let mut y = x.to_vec();
         y[k] += h;
         let dx = y[k] - x[k];
-        let fy = fun(&y);
+        fun(&y, Some(k), &mut fy);
+        y[k] = x[k];
         if fy.len() != f.len() || fy.iter().any(|x| !x.is_finite()) {
             return Err(DspError::InvalidArgument(
                 "nonfinite or inconsistent residual Jacobian".into(),
@@ -338,6 +341,18 @@ pub fn least_squares_with_trace<F: FnMut(&[f64]) -> Vec<f64>>(
     lb: &[f64],
     ub: &[f64],
     max_nfev: usize,
+    trace: Option<&mut LeastSquaresTrace>,
+) -> Result<LeastSquaresResult, DspError> {
+    least_squares_in_place(|x, _, out| *out = fun(x), x0, lb, ub, max_nfev, trace)
+}
+/// Allocation-reusing residual interface. A column hint denotes a two-point
+/// probe of the most recent accepted/main evaluation, not a new base point.
+pub fn least_squares_in_place<F: FnMut(&[f64], Option<usize>, &mut Vec<f64>)>(
+    mut fun: F,
+    x0: &[f64],
+    lb: &[f64],
+    ub: &[f64],
+    max_nfev: usize,
     mut trace: Option<&mut LeastSquaresTrace>,
 ) -> Result<LeastSquaresResult, DspError> {
     if let Some(t) = trace.as_deref_mut() {
@@ -361,9 +376,11 @@ pub fn least_squares_with_trace<F: FnMut(&[f64]) -> Vec<f64>>(
             "invalid least-squares start/bounds/budget".into(),
         ));
     }
+    let _timer = crate::stages::room_tuning2::profile::timer("fit_total");
     let mut x = x0.to_vec();
     feasible(&mut x, lb, ub, true);
-    let mut f = fun(&x);
+    let mut f = Vec::new();
+    fun(&x, None, &mut f);
     let m = f.len();
     if m == 0 || f.iter().any(|v| !v.is_finite()) {
         return Err(DspError::InvalidArgument("invalid initial residual".into()));
@@ -426,6 +443,7 @@ pub fn least_squares_with_trace<F: FnMut(&[f64]) -> Vec<f64>>(
             dyn_stack::{MemBuffer, MemStack},
             linalg::svd::{self, ComputeSvdVectors},
         };
+        let svd_timer = crate::stages::room_tuning2::profile::timer("svd");
         let mut u = Mat::zeros(m + n, n);
         let mut vv = Mat::zeros(n, n);
         let mut singular = Diag::zeros(n);
@@ -447,6 +465,7 @@ pub fn least_squares_with_trace<F: FnMut(&[f64]) -> Vec<f64>>(
             Default::default(),
         )
         .map_err(|_| DspError::InvalidArgument("TRF SVD did not converge".into()))?;
+        drop(svd_timer);
         let s: Vec<_> = (0..n).map(|i| singular.column_vector()[i]).collect();
         let uf: Vec<_> = (0..n)
             .map(|k| (0..m).map(|i| u[(i, k)] * f[i]).sum())
@@ -463,7 +482,7 @@ pub fn least_squares_with_trace<F: FnMut(&[f64]) -> Vec<f64>>(
             let (step, sh, pred) = select(&x, &jh, &diag, &gh, p, ph, &d, delta, lb, ub, theta);
             xn = x.iter().zip(&step).map(|(a, b)| a + b).collect();
             feasible(&mut xn, lb, ub, false);
-            fnn = fun(&xn);
+            fun(&xn, None, &mut fnn);
             nfev += 1;
             if let Some(t) = trace.as_deref_mut() {
                 t.main_x.push(xn.clone());

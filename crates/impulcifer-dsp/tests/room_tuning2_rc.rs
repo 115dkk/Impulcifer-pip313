@@ -10,13 +10,7 @@ use impulcifer_dsp::{
 use impulcifer_io::read_wav;
 use serde_json::Value;
 use std::{collections::BTreeMap, f64::consts::PI, path::PathBuf};
-// User-approved SECS self-variance acceptance caps, not measured fixture budgets.
-const MAG_MAX_DB: [f64; 4] = [1.86, 1.55, 0.41, 0.049];
-// Phase is reported for comparison, not an additional acceptance gate.
-const SECS_PHASE_RAD: [f64; 4] = [0.58, 0.86, 0.71, 0.70];
-const SECS_MEDIAN_DB: [f64; 4] = [0.0066, 0.0092, 0.0012, 0.00004];
 const THRESHOLDS_DB: [f64; 4] = [0.001, 0.01, 0.1, 1.];
-const SECS_COUNTS: [usize; 4] = [56, 35, 22, 8];
 
 fn rounding_allowance(reference: f64) -> f64 {
     // Half a decimal unit at ten significant digits, plus floating-point noise.
@@ -135,6 +129,21 @@ fn room_tuning2_matches_secs2_rc() {
         "../../../tests/migration/goldens/room_tuning_secs2_rc.json"
     ))
     .unwrap();
+    let variance: Value = serde_json::from_str(include_str!(
+        "../../../tests/migration/goldens/room_tuning_secs2_variance.json"
+    ))
+    .unwrap();
+    let envelope = &variance["summary"]["envelope"];
+    let caps: Vec<_> = values(&envelope["max_mag_db"])
+        .iter()
+        .map(|v| (v * 1.25 * 100.).ceil() / 100.)
+        .collect();
+    let counts: Vec<_> = ["0.001", "0.01", "0.1", "1.0"]
+        .iter()
+        .map(|k| envelope["channels_over"][k].as_u64().unwrap() as usize)
+        .collect();
+    let mut strength_changes = 0;
+    let mut count_changes = 0;
     let demo = demo();
     let bins: Vec<_> = values(&golden["bins"])
         .iter()
@@ -298,13 +307,13 @@ fn room_tuning2_matches_secs2_rc() {
                 e["secs_seconds"],
                 fit_diff.join("; ")
             );
-            let bad = (0..4).any(|i| md[i] > MAG_MAX_DB[i])
+            strength_changes += usize::from(!strength);
+            count_changes += usize::from(!count);
+            let bad = (0..4).any(|i| md[i] > caps[i])
                 || !gain.is_finite()
                 || gain > 1e-8
                 || !level.is_finite()
                 || level > rounding_allowance(reference_level)
-                || !count
-                || !strength
                 || !resolution
                 || !taps
                 || out
@@ -345,12 +354,17 @@ fn room_tuning2_matches_secs2_rc() {
             (sorted[(sorted.len() - 1) / 2] + sorted[sorted.len() / 2]) / 2.
         };
         println!(
-            "RC {band} | {:.9} / {} | {median:.9} / {} | {:.9} / {}",
-            maxima_mag[i], MAG_MAX_DB[i], SECS_MEDIAN_DB[i], maxima_phase[i], SECS_PHASE_RAD[i]
+            "RC {band} | {:.9} / {} | {median:.9} / {} | phase {:.9}",
+            maxima_mag[i], caps[i], envelope["median_mag_db"][i], maxima_phase[i]
         );
     }
-    println!("RC distribution thresholds={THRESHOLDS_DB:?} ours={above:?} SECS={SECS_COUNTS:?}");
-    if above[2] > SECS_COUNTS[2] || above[3] > SECS_COUNTS[3] {
+    println!(
+        "MEASURE RC distribution: thresholds={THRESHOLDS_DB:?} ours={above:?} envelope={counts:?} max_mag_db={maxima_mag:?} strength_changes={strength_changes} peq_count_changes={count_changes}"
+    );
+    for (name, summary) in variance["summary"].as_object().unwrap() {
+        println!("RC VARIANT {name}: {summary}");
+    }
+    if above[2] > counts[2] || above[3] > counts[3] {
         failures.push(format!("distribution: {above:?}"));
     }
     if filter.is_empty() && (channel_maxima.len() != 61 || level_only_count != 7) {

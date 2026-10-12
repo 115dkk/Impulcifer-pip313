@@ -163,8 +163,10 @@ is found at its first step instead of at the end.
 | RC pre-fit bands | absolute 1e-12; matching Schroeder presence | PASS: 0; 0 |
 | RC pre-fit levels | absolute 1e-12 | PASS: 1.421085471520200e-14; 1.530080109777270e-16 |
 | synthetic initial Jacobian J0 (five fixtures) | rel 1e-9, no absolute allowance | PASS: 0; 0 — bit-exact |
-| fit traces | FAIL; no accepted measured budget. Existing check: every `main_x` within rel 1e-9 of its index; same `nfev`, `njev`, `status`; final `x` rel 1e-9 | FAIL on full rerun: bumps first exceeds at evaluation 5, parameter 0, absolute error 7.922355e-9. Combined fit-field max absolute 4.826111812403349e1 (fc_both_long_s0_0), max relative L2 7.577253599902453 (synthetic_zero_low_part); these are diagnostics, not accepted budgets |
-| RC stage spectra / results after fitting | Not gated; starting 1e-6 dB / 1e-6 rad remains pending fit parity | Not measured in this partial run |
+| fit traces | max absolute parameter difference / max absolute reference parameter ≤ 1e-9 at each evaluation before horizon − 1; prefix counts enforced; later evaluations and final costs report-only | 26/27 traced fixtures pass. `sr_both_ultra60_s0_1` fails at evaluation 1 (horizon 5): 1.2477142515202155e-6; prefix maximum 1.6303774481388997e-4. Its initial Jacobian also matches a separate SciPy calculation exactly; cause after J0 remains unresolved. Ripple first differs at 1, equal to its horizon, and passes. |
+| RC pre-fit production-chain spectra | relative 1e-12 / absolute floor 1e-12; relative L2 1e-12; exact long-mode bins | PASS across 11 sessions: power max 5.421010862427522e-19; smoothings max 8.673617379884035e-19; design max 5.684341886080802e-14; first fit input max 4.352074256530614e-14 |
+| RC stage spectra / results after fitting | All 11 sessions have oracle factorization divergence: M, phasors, delays, realization sequences, touch-up minimum phases, final FIR/response and PEQ compared report-only on the production chain | First observed downstream differences are M (1e-4 to 0.1766 in complex components), or the zero-mode response (2.934e-4). No downstream equivalence claim. |
+| RC end-to-end envelope | band caps = ceil(envelope max × 1.25 × 100)/100; >0.1 and >1 dB channel counts ≤ envelope | PASS: maxima 1.799838979 / 2.662352472 / 0.239375377 / 0.040506483 dB versus caps 2.91 / 3.33 / 0.93 / 0.08; counts 25 / 9 versus 32 / 15. Strength changes 1, PEQ count changes 0. |
 | MIMO normal equations | Out of scope; starting rel 1e-12 (diagonal, block rows, Aᵀb), identical bisection decisions, u rel 1e-9 remain pending | Not measured |
 | MIMO guard values | Out of scope; starting 1e-9 absolute remains pending | Not measured |
 | downstream integer results (bins, counts, chosen strength and resolution) | Exact starting requirement; not gated here | Not measured |
@@ -173,7 +175,21 @@ Measured on 2026-10-12 with `golden_secs2_primitives`, `golden_secs2_rc`,
 and `golden_secs2_fit synthetic_initial_jacobian`. Existing floors are kept:
 all passing observed maxima × 1.5 remain below their applicable floors.
 Relative L2 is diagnostic for minimum phase and levels, not an extra gate.
-This is a measured partial gate record, not completed fit, RC, or MIMO parity.
+A07c updates the fit and RC rows above. The synthetic J0 arrays stay exact;
+the independent SciPy PEQ16 reference now carries a gesvd horizon (1), and
+smooth/active-bound tests retain their previous gates. One fit-prefix gate
+still fails, so this remains a partial record, not completed parity.
+
+A07c release-profile FL/two-position medians (seconds): mixed 1.144080,
+zero 2.344558, linear 2.790939, long 1.053549, ultra-60 2.505206.
+These do **not** meet the 0.1× oracle targets (0.088 / 0.155 / 0.222 /
+0.073 / 0.191 s). Residual/Jacobian work still dominates. Opt-in per-thread
+profiling is printed by the RC benchmark; timers are inclusive and must not
+be summed. Residual output, Jacobian probe and band-response buffers are
+reused; cached exact-order prefixes skip unchanged earlier bands without
+regrouping products. Scalar smoothing powers are computed once per call.
+FFT plans and scratch buffers were already cached in the shared FFT module.
+The SVD remains sequential on the original augmented matrix.
 
 The end-to-end references `room_tuning_secs2_rc.json` and
 `room_tuning_secs2_mimo.json` stay as the integration check on top of these.

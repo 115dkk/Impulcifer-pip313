@@ -1,5 +1,31 @@
 use super::*;
 use crate::fft;
+/// Optional full-grid capture of the production chain, in execution order.
+#[derive(Default, Debug)]
+pub struct RcStages {
+    pub power: Vec<f64>,
+    pub smoothed_variable: Vec<f64>,
+    pub smoothed_third: Vec<f64>,
+    pub design_db: Vec<f64>,
+    pub long_mode_bins: Vec<usize>,
+    pub sessions: Vec<RcSession>,
+}
+#[derive(Default, Debug)]
+pub struct RcSession {
+    pub fit_inputs: Vec<Vec<f64>>,
+    pub m: Vec<Complex64>,
+    pub v: Vec<Complex64>,
+    pub v_smoothed: Vec<Complex64>,
+    pub tau: Vec<f64>,
+    pub tau_smoothed: Vec<f64>,
+    pub firs: Vec<Vec<f64>>,
+    pub touchup_m: Vec<Vec<Complex64>>,
+    pub fir: Vec<f64>,
+    pub response: Vec<Complex64>,
+    pub peq: Vec<(f64, f64, f64)>,
+    pub strength: f64,
+    pub beta: f64,
+}
 fn db(x: &[Complex64]) -> Vec<f64> {
     x.iter().map(|x| 20. * (x.norm() + 1e-12).log10()).collect()
 }
@@ -12,6 +38,7 @@ fn long_modes(
     band: &CorrectionBand,
     policy: &PositionPolicy,
 ) -> Vec<(f64, f64)> {
+    let _timer = profile::timer("long_modes");
     let mut out = Vec::new();
     for i in chosen(policy, h.len()) {
         let x = low_rate(&h[i], f, 300);
@@ -53,6 +80,7 @@ struct Realizer<'a> {
 }
 impl Realizer<'_> {
     fn run(&self, s: f64, m: &[Complex64]) -> (Vec<f64>, Vec<Complex64>, f64, f64) {
+        let _timer = profile::timer("realization");
         let delta = self.f[1] - self.f[0];
         let mut sum = 0.;
         let spec: Vec<_> = m
@@ -90,6 +118,7 @@ fn fir_run(
     params: ModeParams,
     beta: f64,
     fs: f64,
+    mut capture: Option<&mut RcSession>,
 ) -> Result<FirRun, DspError> {
     let n = (f.len() - 1) * 2;
     let g = geomspace(15., 20000., 700);
@@ -99,16 +128,11 @@ fn fir_run(
         .map(|f| ((f - ff / 2.) / (ff / 2.)).clamp(0., 1.))
         .collect();
     let fe = band.high * 2_f64.sqrt();
-    let b1 = peq::fit(
-        &g,
-        &sample(&g, f, u0),
-        16,
-        20.,
-        500.,
-        opts.max_boost,
-        Some(band.high),
-        fs,
-    )?;
+    let c = sample(&g, f, u0);
+    if let Some(t) = capture.as_deref_mut() {
+        t.fit_inputs.push(c.clone());
+    }
+    let b1 = peq::fit(&g, &c, 16, 20., 500., opts.max_boost, Some(band.high), fs)?;
     let p1 = peq::response(f, &b1, fs);
     let pdb = db(&p1);
     let mut m = mp(
@@ -118,6 +142,9 @@ fn fir_run(
             .collect::<Vec<_>>(),
         n,
     );
+    if let Some(t) = capture.as_deref_mut() {
+        t.m = m.clone();
+    }
     let weights = weights(&opts.policy, h.len());
     let total = weights.iter().sum::<f64>();
     let mut v = vec![Complex64::new(0., 0.); f.len()];
@@ -154,9 +181,13 @@ fn fir_run(
     for v in &mut v {
         *v /= total;
     }
+    let vs = smooth_complex(&v, f, &[beta]);
+    if let Some(t) = capture.as_deref_mut() {
+        t.v = v.clone();
+        t.v_smoothed = vs.clone();
+    }
     let phi = unwrap(
-        &smooth_complex(&v, f, &[beta])
-            .iter()
+        &vs.iter()
             .map(|v| {
                 if v.re.is_finite() && v.im.is_finite() {
                     v.arg()
@@ -177,7 +208,13 @@ fn fir_run(
     .iter()
     .map(|v| if v.is_finite() { -v } else { 0. })
     .collect();
+    if let Some(t) = capture.as_deref_mut() {
+        t.tau = tau.clone();
+    }
     let tau = smooth(&tau, f, &[beta]);
+    if let Some(t) = capture.as_deref_mut() {
+        t.tau_smoothed = tau.clone();
+    }
     let med = median(
         &f.iter()
             .enumerate()
@@ -207,9 +244,15 @@ fn fir_run(
         fe,
     };
     let (mut fir, mut response, rms0, max0) = realizer.run(0., &m);
+    if let Some(t) = capture.as_deref_mut() {
+        t.firs.push(fir.clone());
+    }
     let mut strength = 0.;
     for s in [0.9, 0.7, 0.5, 0.3] {
         let (h, f, rms, max) = realizer.run(s, &m);
+        if let Some(t) = capture.as_deref_mut() {
+            t.firs.push(h.clone());
+        }
         if rms <= 0.5_f64.max(rms0 + 0.3) && max <= 2_f64.max(max0 + 1.) {
             fir = h;
             response = f;
@@ -218,20 +261,15 @@ fn fir_run(
         }
     }
     let fd = db(&response);
-    let b2 = peq::fit(
+    let c = sample(
         &g,
-        &sample(
-            &g,
-            f,
-            &u0.iter().zip(fd).map(|(u, f)| u - f).collect::<Vec<_>>(),
-        ),
-        16,
-        20.,
-        500.,
-        opts.max_boost,
-        Some(band.high),
-        fs,
-    )?;
+        f,
+        &u0.iter().zip(fd).map(|(u, f)| u - f).collect::<Vec<_>>(),
+    );
+    if let Some(t) = capture.as_deref_mut() {
+        t.fit_inputs.push(c.clone());
+    }
+    let b2 = peq::fit(&g, &c, 16, 20., 500., opts.max_boost, Some(band.high), fs)?;
     let p2 = peq::response(f, &b2, fs);
     let rho: Vec<_> = f
         .iter()
@@ -254,6 +292,7 @@ fn fir_run(
         let med = median(&e);
         (e.iter().map(|e| (e - med).powi(2)).sum::<f64>() / e.len() as f64).sqrt()
     };
+    let touchup_timer = profile::timer("touchup");
     for _ in 0..2 {
         let r: Vec<_> = (0..f.len())
             .map(|i| {
@@ -273,7 +312,13 @@ fn fir_run(
                 .collect::<Vec<_>>(),
             n,
         );
+        if let Some(t) = capture.as_deref_mut() {
+            t.touchup_m.push(m2.clone());
+        }
         let (h2, f2, _, _) = realizer.run(strength, &m2);
+        if let Some(t) = capture.as_deref_mut() {
+            t.firs.push(h2.clone());
+        }
         if err(&f2) >= err(&response) {
             break;
         }
@@ -281,8 +326,16 @@ fn fir_run(
         response = f2;
         m = m2;
     }
+    drop(touchup_timer);
     for (r, p) in response.iter_mut().zip(p2) {
         *r *= p;
+    }
+    if let Some(t) = capture {
+        t.fir = fir.clone();
+        t.response = response.clone();
+        t.peq = b2.clone();
+        t.strength = strength;
+        t.beta = beta;
     }
     Ok(FirRun {
         fir,
@@ -340,6 +393,19 @@ pub fn design_rc(
     target: Option<&FrequencyResponse>,
     calibration: Option<&FrequencyResponse>,
 ) -> Result<SpeakerRc, DspError> {
+    design_rc_with_stages(points, opts, band, target, calibration, None)
+}
+pub fn design_rc_with_stages(
+    points: &[ImpulseResponse],
+    opts: &RcOptions,
+    band: &CorrectionBand,
+    target: Option<&FrequencyResponse>,
+    calibration: Option<&FrequencyResponse>,
+    mut capture: Option<&mut RcStages>,
+) -> Result<SpeakerRc, DspError> {
+    if let Some(t) = capture.as_deref_mut() {
+        *t = RcStages::default();
+    }
     validate(points, opts, target, calibration)?;
     let fs = points[0].fs as f64;
     if !band.low.is_finite()
@@ -350,7 +416,9 @@ pub fn design_rc(
     {
         return Err(DspError::InvalidArgument("invalid correction band".into()));
     }
+    let spectra_timer = profile::timer("spectra");
     let (f, h) = spectra(points, &opts.policy, calibration);
+    drop(spectra_timer);
     let p = power(&h, &opts.policy);
     let level_db = level(&p, &f, target);
     let res = resolution(&f);
@@ -381,10 +449,35 @@ pub fn design_rc(
                 * ((end.log2() - l) / (end / band.high).log2().max(1e-3)).clamp(0., 1.)
         })
         .collect();
+    if let Some(t) = capture.as_deref_mut() {
+        t.power = p;
+        t.smoothed_variable = s;
+        t.smoothed_third = s3;
+        t.design_db = u0.clone();
+        t.long_mode_bins = f
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| {
+                long_modes.iter().any(|(p, _)| {
+                    **f >= p * 2_f64.powf(-1. / 24.) && **f <= p * 2_f64.powf(1. / 24.)
+                })
+            })
+            .map(|(k, _)| k)
+            .collect();
+    }
+    let mut session = capture.as_ref().map(|_| RcSession::default());
     let params = opts.mode.params(points[0].fs);
     let (fir, response, peq, strength, beta, fits) = if opts.mode == Tuning2Mode::Zero {
         let g = geomspace(15., 20000., 900);
         let c = sample(&g, &f, &u0);
+        if let Some(t) = session.as_mut() {
+            t.fit_inputs.push(
+                g.iter()
+                    .zip(&c)
+                    .map(|(g, c)| if *g <= 500. { *c } else { 0. })
+                    .collect(),
+            );
+        }
         let blo = peq::fit(
             &g,
             &g.iter()
@@ -423,10 +516,27 @@ pub fn design_rc(
             vec![blo, bhi],
         )
     } else {
-        let mut run = fir_run(&h, &f, &u0, opts, band, params, params.phase_frac, fs)?;
+        let mut run = fir_run(
+            &h,
+            &f,
+            &u0,
+            opts,
+            band,
+            params,
+            params.phase_frac,
+            fs,
+            session.as_mut(),
+        )?;
+        if let Some(t) = capture.as_deref_mut() {
+            t.sessions.push(session.take().unwrap());
+        }
         let mut fits = run.fits.clone();
         if matches!(opts.mode, Tuning2Mode::Linear | Tuning2Mode::Ultra(_)) {
-            let other = fir_run(&h, &f, &u0, opts, band, params, 6., fs)?;
+            let mut session = capture.as_ref().map(|_| RcSession::default());
+            let other = fir_run(&h, &f, &u0, opts, band, params, 6., fs, session.as_mut())?;
+            if let Some(t) = capture.as_deref_mut() {
+                t.sessions.push(session.unwrap());
+            }
             fits.extend(other.fits.clone());
             if score(&other, &h, &f, band, &opts.policy, fs)
                 < score(&run, &h, &f, band, &opts.policy, fs)
@@ -436,6 +546,14 @@ pub fn design_rc(
         }
         (run.fir, run.response, run.peq, run.strength, run.beta, fits)
     };
+    if let (Some(t), Some(mut s)) = (capture, session) {
+        s.fir = fir.clone();
+        s.response = response.clone();
+        s.peq = peq.clone();
+        s.strength = strength;
+        s.beta = beta;
+        t.sessions.push(s);
+    }
     Ok(SpeakerRc {
         points: points.len(),
         level_db,
