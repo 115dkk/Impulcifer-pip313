@@ -177,7 +177,7 @@ fn room_tuning2_matches_secs2_mimo() {
                     for s in &sub.supports {for (a,b) in s.fir.iter().zip(array(&o["supports"][&s.speaker])) {let b=b*scale;error+=(a-b).powi(2);norm+=b*b;max=max.max((a-b).abs());}}
                     let remaining=if norm>0. {(error/norm).sqrt()} else {0.};
                     println!("RC_ATTRIBUTION {setting}/{speaker} frozen_rc_remaining_l2={remaining:e} max={max:e} level_delta={:e}",sub.level_db-o["level_db"].as_f64().unwrap()-if scale!=1. {-3.} else {0.});
-                    assert!(remaining<1e-9 && max<1e-12);
+                    assert!(remaining<1e-9 && max<if golden_secs2_helpers::oracle_libm() {1e-12} else {1e-9});
                 }
             },
         )

@@ -30,6 +30,71 @@ pub fn fixtures(prefix: &str) -> Vec<(String, Value)> {
         })
         .collect()
 }
+/// Whether Rust's f64 math here is the oracle's C library bit for bit
+/// (glibc on Linux; `secs2_libm_probe.json`). The oracle's fit paths and
+/// last-bit equalities only hold there: another libm moves the residual by an
+/// ulp, and the trust-region path leaves the oracle at once, exactly as the
+/// oracle's own AVX-512 variant does. Elsewhere the exact gates widen to
+/// `PLATFORM_RTOL` and the chaotic ones (fit traces) report without failing;
+/// the end-to-end comparison against SECS's spread across computers holds on
+/// every platform.
+pub fn oracle_libm() -> bool {
+    static SAME: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SAME.get_or_init(|| {
+        // Lets the platform paths be exercised on the oracle's own libm.
+        if std::env::var_os("SECS2_ASSUME_FOREIGN_LIBM").is_some() {
+            println!("PLATFORM libm treated as foreign (SECS2_ASSUME_FOREIGN_LIBM)");
+            return false;
+        }
+        let probe: Value = serde_json::from_slice(
+            &fs::read(root().join("secs2_libm_probe.json")).unwrap(),
+        )
+        .unwrap();
+        let cases = &probe["cases"];
+        let unary = |name: &str, f: fn(f64) -> f64| {
+            cases[name].as_array().unwrap().iter().all(|c| {
+                f(c[0].as_f64().unwrap()).to_bits() == c[1].as_f64().unwrap().to_bits()
+            })
+        };
+        let same = unary("ln", f64::ln)
+            && unary("log10", f64::log10)
+            && unary("exp", f64::exp)
+            && unary("sin", f64::sin)
+            && unary("cos", f64::cos)
+            && cases["pow"].as_array().unwrap().iter().all(|c| {
+                c[0].as_f64().unwrap().powf(c[1].as_f64().unwrap()).to_bits()
+                    == c[2].as_f64().unwrap().to_bits()
+            });
+        if !same {
+            println!("PLATFORM libm differs from the oracle's: exact gates widen to {PLATFORM_RTOL:e}, fit traces report only");
+        }
+        same
+    })
+}
+/// Relative budget for stages that are exact on the oracle's libm.
+pub const PLATFORM_RTOL: f64 = 1e-9;
+/// `rtol` on the oracle's libm, at least `PLATFORM_RTOL` elsewhere.
+pub fn rtol(exact: f64) -> f64 {
+    if oracle_libm() {
+        exact
+    } else {
+        exact.max(PLATFORM_RTOL)
+    }
+}
+/// Bit equality on the oracle's libm, `PLATFORM_RTOL` elsewhere.
+pub fn assert_same(name: &str, got: &[f64], expected: &[f64]) {
+    if oracle_libm() {
+        assert_eq!(got, expected, "{name}");
+        return;
+    }
+    assert_eq!(got.len(), expected.len(), "{name}: shape");
+    for (i, (g, e)) in got.iter().zip(expected).enumerate() {
+        assert!(
+            (g - e).abs() <= PLATFORM_RTOL * e.abs().max(1.),
+            "{name}[{i}]: got={g:e} expected={e:e}"
+        );
+    }
+}
 pub fn number(v: &Value) -> f64 {
     match v.as_str() {
         Some("nan") => f64::NAN,
@@ -110,6 +175,7 @@ pub struct Errors {
 impl Errors {
     pub fn compare(&mut self, name: &str, got: &[f64], expected: &[f64], rtol: f64, atol: f64) {
         assert_eq!(got.len(), expected.len(), "{name}: shape");
+        let rtol = self::rtol(rtol);
         let (mut se, mut sr) = (0., 0.);
         let mut first = None;
         for (i, (&g, &e)) in got.iter().zip(expected).enumerate() {
@@ -143,9 +209,9 @@ impl Errors {
         let finite: Vec<_> = g.iter().zip(e).filter(|(_, e)| e.is_finite()).collect();
         let energy: f64 = finite.iter().map(|(_, e)| **e * **e).sum();
         let error: f64 = finite.iter().map(|(g, e)| (**g - **e).powi(2)).sum();
-        if energy > 0. && (error / energy).sqrt() > 1e-12 {
+        if energy > 0. && (error / energy).sqrt() > rtol(1e-12) {
             self.failures
-                .push(format!("{name}: relative L2 exceeds 1e-12"));
+                .push(format!("{name}: relative L2 exceeds {:e}", rtol(1e-12)));
         }
     }
     pub fn complex(&mut self, name: &str, g: &[Complex64], e: &[Complex64]) {

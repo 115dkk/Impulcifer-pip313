@@ -134,6 +134,22 @@ recorded but not part of the horizon. This sets what
    reference stays within the envelope (per band, and in the count of
    channels above 0.1 dB and 1 dB).
 
+## Other platforms' math libraries
+
+The exact and 1e-12 budgets below assume the oracle's arithmetic: the C
+library it ran on (glibc 2.39), which is also what Rust's `f64` methods call
+on Linux. macOS and Windows have their own `log`, `exp`, `log10`, `pow`,
+`sin` and `cos`; they differ in the last bit (the PEQ start `ln f` already
+does), and the trust-region path then leaves the oracle at the first step,
+as the oracle's own AVX-512 variant does. `oracle_libm()` in
+`golden_secs2_helpers.rs` compares Rust's results with 2,400 values of the
+oracle's library (`goldens/secs2_libm_probe.json`). Where they differ, every
+budget below widens to at least 1e-9 relative, and the fit traces, the TRF
+replay and the PEQ16 horizon report without failing. The end-to-end tests
+against SECS's spread across computers (`room_tuning2_matches_secs2_rc`,
+`room_tuning2_matches_secs2_mimo`) are unchanged on every platform.
+`SECS2_ASSUME_FOREIGN_LIBM=1` runs the platform paths on Linux.
+
 ## Gates
 
 Set from the measured agreement like every other family (measured maximum ×

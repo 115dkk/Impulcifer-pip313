@@ -70,6 +70,12 @@ fn measure(name: &str, pairs: &[(f64, f64)], budget: f64) {
         pairs.len()
     );
     assert!(pairs.iter().all(|(a, b)| a.is_finite() && b.is_finite()));
+    let budget = if golden_secs2_helpers::oracle_libm() {
+        budget
+    } else {
+        let scale = pairs.iter().map(|(_, b)| b.abs()).fold(1., f64::max);
+        budget.max(golden_secs2_helpers::PLATFORM_RTOL * scale)
+    };
     assert!(max <= budget, "{name}: {max:e} > {budget:e}");
 }
 #[test]
