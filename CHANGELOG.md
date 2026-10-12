@@ -16,7 +16,7 @@ been fixed and old features improved.
 - **출력 README**: "Virtual room tuning v2" 절에 모드, 지연, 보정 범위를 적습니다. 스피커별로는 레벨·트림·PEQ 밴드 수·위상 강도와 해상도·롱 모드·대표성, LF EDT와 초과 군지연(전후), 귀별 프리에코를 적습니다. MIMO를 켜면 입력마다 서포트, 레벨, 가드 단계, 대역·꼬리 변화를 적습니다.
 
 #### ⚡ 성능 개선
-- **SECS 2보다 빠름**: 같은 컨테이너에서 스피커 하나의 채널 보정이 한 스레드로 SECS 2보다 2.4~3.5배 빠르고(mixed 0.37 s 대 0.88 s, linear 0.64 s 대 2.22 s), linear·ultra는 두 위상 해상도 세션을 병렬로 돌려 4스레드에서 4.4~6.3배입니다. 데모 일곱 스피커의 MIMO 설계는 한 스레드 3.0 s, 4스레드 0.9 s입니다(SECS 2의 FIR 단계 약 6 s; 그 뒤의 IIR 근사는 30분 안에 끝나지 않았고 Impulcifer에는 필요 없음). 데모 전체 처리는 tuning2가 4.0 s, MIMO를 켜면 4.8 s입니다(룸 EQ 2.0 s).
+- **SECS 2보다 빠름**: 같은 컨테이너에서 같은 조건으로 쟀습니다. 스피커 하나의 채널 보정은 SECS 2의 가장 빠른 설정보다 한 스레드로 2.3~3.8배 빠릅니다(mixed 0.35 s 대 0.83 s, linear 0.62 s 대 2.38 s). 4스레드에서는 linear·ultra가 두 위상 해상도 세션을 병렬로 돌려 최대 7.0배입니다. 데모 일곱 스피커의 MIMO 설계는 한 스레드 3.3 s, 4스레드 1.1 s입니다(SECS 2는 한 스레드 6.2 s, 기본 3.9 s). SECS 2가 그 뒤에 하는 IIR 근사는 30분 안에 끝나지 않았는데, Impulcifer에는 필요 없습니다. 데모 전체 처리는 tuning2가 4.0 s, MIMO를 켜면 4.8 s입니다(룸 EQ 2.0 s). 차이가 어디서 오는지는 `docs/rust/provenance/room-tuning2-secs2.md`에 정리했습니다.
 - **AVX 상태 오염 제거**: faer의 `std` 기능이 끌어오던 `private-gemm-x86`의 어셈블리 커널은 `vzeroupper` 없이 zmm/ymm 레지스터를 씁니다. 그래서 첫 행렬곱 뒤로 그 스레드의 모든 SSE 명령이 지연됐습니다(같은 루프가 점당 17 ns에서 190 ns로 느려짐). faer를 `std` 없이 빌드하고 pulp·gemm·faer-traits의 `std`만 켜서, 실행 중 SIMD 감지는 유지합니다. 정책 테스트가 이 크레이트가 다시 들어오는 것을 막습니다.
 
 #### 🔧 빌드 / 설정 변경
@@ -24,7 +24,8 @@ been fixed and old features improved.
 
 #### 📝 문서
 - ADR 0008(가상 룸 튜닝 v2), `docs/rust/ROOM_CORRECTION.md`의 "Virtual room tuning v2" 절, README의 옵션과 출처 표기, 성능 보고서 `docs/rust/perf/room-tuning2.md`를 더했습니다.
-- **등가 검증**: SECS 2(GPL-3.0) 소스는 저장소에 넣지 않았고, 이식한 워커에게도 보여 주지 않았습니다. `tests/migration/export_goldens_secs2.py`가 SECS 2를 오라클로 돌려 함수·단계 경계마다 픽스처(`s2_*`)를 남기고, Rust는 의존 순서대로 픽스처를 하나씩 맞춥니다. PEQ 맞춤은 SciPy `least_squares`(TRF)를 옮긴 것입니다. 반복 경로는 오라클 자신이 다른 BLAS·LAPACK에서 갈라지기 시작하는 지점까지 27개 맞춤 모두 1e-9 안에서 같습니다(최대 2.3e-14). 끝단 결과는 SECS 2를 다섯 가지 연산 환경(NumPy AVX-512, OpenBLAS 커널 셋, LAPACK gesvd)으로 돌렸을 때의 흩어짐 안에 있습니다. 61채널 중 0.1 dB 넘게 다른 채널은 19개, 1 dB 넘게 다른 채널은 7개이고, SECS 2끼리는 각각 최대 32개, 15개입니다. MIMO는 오라클의 채널 보정 출력을 넣으면 서포트가 6e-13 안에서 같습니다. 가드 값 85개 중 2개는 명세의 규칙으로 재현되지 않아 이름을 붙인 예외로 두었습니다.
+- **출처 기록**: `docs/rust/provenance/room-tuning2-secs2.md`에 SECS 2와 무엇이 같고 무엇이 다른지, 누가 SECS 2 소스를 보았고 누가 보지 않았는지, 남는 위험과 crates.io 공개 전에 할 일을 정리했습니다. 구현 워커의 보고서 원문도 함께 남겼습니다.
+- **등가 검증**: SECS 2(GPL-3.0) 소스는 저장소에 넣지 않았고, 이식한 워커에게도 보여 주지 않았습니다. `tests/migration/export_goldens_secs2.py`가 SECS 2를 오라클로 돌려 함수·단계 경계마다 픽스처(`s2_*`)를 남기고, Rust는 의존 순서대로 픽스처를 하나씩 맞춥니다. PEQ 맞춤은 SciPy `least_squares`(TRF)를 옮긴 것입니다. 반복 경로는 오라클 자신이 다른 BLAS·LAPACK에서 갈라지기 시작하는 지점까지 27개 맞춤 모두 1e-9 안에서 같습니다(최대 2.3e-14). 끝단 결과는 SECS 2를 다섯 가지 연산 환경(NumPy AVX-512, OpenBLAS 커널 셋, LAPACK gesvd)으로 돌렸을 때의 흩어짐 안에 있습니다. 61채널 중 0.1 dB 넘게 다른 채널은 19개, 1 dB 넘게 다른 채널은 7개이고, SECS 2끼리는 각각 최대 32개, 15개입니다. MIMO는 오라클의 채널 보정 출력을 넣으면 서포트가 6e-13 안에서, 가드 값 85개가 모두 2e-12 안에서 같습니다.
 
 ## 3.4.0 - 2026-10-10
 ### NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10, DTS:X Pro 30.2의 녹음, BRIR 합성, 출력 복원
