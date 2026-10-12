@@ -334,7 +334,7 @@ tests = ["impulcifer-service::config_room_range_defaults_and_validation", "impul
 id = "config.room_mode"
 kind = "config"
 status = "implemented"
-tests = ["impulcifer-service::room_tuning_accepts_legacy_range", "impulcifer-cli::cli_room_v2_options_parse_and_validate"]
+tests = ["impulcifer-service::room_tuning_accepts_legacy_range", "impulcifer-cli::cli_room_v2_options_parse_and_validate", "impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
 
 [[feature]]
 id = "config.room_tuning_delay"
@@ -1524,3 +1524,70 @@ kind = "package"
 status = "implemented"
 tests = ["impulcifer-app::velopack_upgrade_from_2x_windows"]
 note = "Verified on the release runner on 2026-09-09 (release-3x.yml run 34288342432, upgrade-windows job): a fresh Windows runner installed 2.x v2.14.1 silently, Update.exe applied the 3.0.0-alpha.0 full package with its normal restart, the smoke harness attached to the relaunched app by executable path and drove first-run, bootstrap, BRIR, recovery, settings (ko/en) and the real update check; sq.version named 3.0.0-alpha.0 afterwards and the install was uninstalled. The local SDK simulation stays as the ignored test; the ignored local test proves check + download + apply plan for a simulated 2.13.3 locator against the packed 3.x feed without touching the live install; the real Update.exe apply and relaunch run on a fresh CI Windows runner in the 3.x release workflow (pending)"
+
+[[feature]]
+id = "config.room_tuning2_mode"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_max_boost"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_low"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_high"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_mimo"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_fsiso"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_mimo_low"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "room.virtual_tuning2"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_modes_have_their_latency", "impulcifer-dsp::room_tuning2_one_filter_per_speaker", "impulcifer-service::room_tuning2_runs_on_the_demo", "impulcifer-service::room_tuning2_modes_on_the_demo", "impulcifer-service::room_tuning2_ignores_v1_options", "impulcifer-service::room_tuning2_level_match_off"]
+
+[[feature]]
+id = "room.tuning2_mimo"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_mimo_fast_normal_equations", "impulcifer-dsp::room_tuning2_mimo_reduces_late_energy_at_the_ears", "impulcifer-service::room_tuning2_mimo_on_the_demo"]
+
+[[feature]]
+id = "room.tuning2_secs2_reference"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_matches_secs2_rc", "impulcifer-dsp::room_tuning2_matches_secs2_mimo", "impulcifer-dsp::trf_matches_scipy"]
+
+[[feature]]
+id = "perf.room-tuning2"
+kind = "perf"
+status = "implemented"
+tests = ["impulcifer-dsp::bench_smoke_impulcifer_dsp"]
+note = "Room tuning2 RC and MIMO performance path: cargo bench -p impulcifer-dsp --bench perf -- room_tuning2; the existing DSP bench smoke verifies the benchmark target. No new performance comparison is claimed by this wiring packet."

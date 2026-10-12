@@ -18,58 +18,7 @@ use primitives::*;
 pub use rc::{RcSession, RcStages, design_rc, design_rc_with_stages};
 use std::f64::consts::PI;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Tuning2Mode {
-    Zero,
-    Mixed,
-    Linear,
-    Long,
-    Ultra(f64),
-}
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ModeParams {
-    pub taps: usize,
-    pub peq_bands: usize,
-    pub lift_ms: f64,
-    pub phase_frac: f64,
-}
-impl Tuning2Mode {
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "zero" => Some(Self::Zero),
-            "mixed" => Some(Self::Mixed),
-            "linear" => Some(Self::Linear),
-            "long" => Some(Self::Long),
-            _ => s
-                .parse::<f64>()
-                .ok()
-                .filter(|x| x.is_finite() && (30. ..=200.).contains(x))
-                .map(Self::Ultra),
-        }
-    }
-    pub fn params(&self, fs: u32) -> ModeParams {
-        let (taps, bands, lift, beta) = match *self {
-            Self::Zero => (0, 32, 0., 0.),
-            Self::Mixed => (2048, 16, 8., 6.),
-            Self::Linear => (2048, 16, 28., 24.),
-            Self::Long => (32768, 16, 200., 6.),
-            Self::Ultra(ms) => {
-                let mut n = 2048;
-                while n < 16384 && 0.7 * n as f64 / 48. < ms - 2. {
-                    n *= 2;
-                }
-                (n, 16, ms - 2., 24.)
-            }
-        };
-        let taps = (taps as f64 * fs as f64 / 48000.).round_ties_even() as usize;
-        ModeParams {
-            taps,
-            peq_bands: bands,
-            lift_ms: lift.min(0.7 * taps as f64 / fs as f64 * 1000.),
-            phase_frac: beta,
-        }
-    }
-}
+pub use impulcifer_types::config::{ModeParams, Tuning2Mode};
 #[derive(Clone, Copy, Debug)]
 pub enum PositionPolicy {
     Symmetric,

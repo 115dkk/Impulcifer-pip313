@@ -430,7 +430,7 @@ const CANONICAL_IPC: [&str; 25] = [
     "select_directory",
     "open_url",
 ];
-const CANONICAL_CONFIG: [&str; 43] = [
+const CANONICAL_CONFIG: [&str; 50] = [
     "dir_path",
     "test_signal",
     "room_target",
@@ -455,6 +455,13 @@ const CANONICAL_CONFIG: [&str; 43] = [
     "room_tuning_max_boost",
     "room_tuning_curtain",
     "room_tuning_level_match",
+    "room_tuning2_mode",
+    "room_tuning2_max_boost",
+    "room_tuning2_low",
+    "room_tuning2_high",
+    "room_tuning2_mimo",
+    "room_tuning2_fsiso",
+    "room_tuning2_mimo_low",
     "bass_boost_gain",
     "bass_boost_fc",
     "bass_boost_q",

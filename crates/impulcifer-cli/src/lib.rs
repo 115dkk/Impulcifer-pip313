@@ -96,7 +96,13 @@ pub fn parse(argv: &[String]) -> Result<Parsed, CliError> {
                             }
                             finite(number)?
                         }
-                        _ if option.dest == "room_tuning_level_match" => json!(raw == "true"),
+                        _ if matches!(
+                            option.dest,
+                            "room_tuning_level_match" | "room_tuning2_mimo"
+                        ) =>
+                        {
+                            json!(raw == "true")
+                        }
                         _ => json!(raw),
                     })
                 }
