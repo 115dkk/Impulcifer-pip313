@@ -1,13 +1,13 @@
 # A09 (ASTRA): virtual room tuning v2 — config, CLI, service, registry
 
-Work in `/home/user/Impulcifer-pip313` on the checked-out branch (do not switch branches, do not commit, do not stash). This wires the library you built in A07/A08 (`crates/impulcifer-dsp/src/stages/room_tuning2/`) into the product. Same rules as A07/A08 (clean-room: no SECS source, nothing under `/tmp/claude-0/`). Specification: `docs/rust/ROOM_CORRECTION.md` "Virtual room tuning v2" (Options, Measurements and spectra, Channel level, Correction band, Diagnostics), ADR 0008, and `CLAUDE.md` "3.x Rust 워크스페이스" (extension fields go to `EXTENSION_FIELD_NAMES`/`EXTENSION_OPTIONS`, never to the 2.x parity lists; every feature in `features.toml`). Every command in the foreground. Do not delegate to another agent.
+Work in `/home/user/wt-a09`, a git worktree of the repository on branch `wt-a09` (do not switch branches, do not commit, do not stash; do not touch `/home/user/Impulcifer-pip313`, where another worker is finishing the MIMO guard and gates in `crates/impulcifer-dsp` (A08b) at the same time). This wires the library you built in A07/A08 (`crates/impulcifer-dsp/src/stages/room_tuning2/`) into the product. Same rules as A07/A08 (clean-room: no SECS source, nothing under `/tmp/claude-0/`). Specification: `docs/rust/ROOM_CORRECTION.md` "Virtual room tuning v2" (Options, Measurements and spectra, Channel level, Correction band, Diagnostics), ADR 0008, and `CLAUDE.md` "3.x Rust 워크스페이스" (extension fields go to `EXTENSION_FIELD_NAMES`/`EXTENSION_OPTIONS`, never to the 2.x parity lists; every feature in `features.toml`). Every command in the foreground. Do not delegate to another agent.
 
 Already in the tree and not yours to change, but your wiring must serve them exactly:
 - The 3.x screen (`apps/impulcifer-app/ui/app.js`, `ipc.d.ts`) sends `room_mode: "tuning2"`, `room_tuning2_mode` (one of the four names, or the latency as a number), `room_tuning2_max_boost`, `room_tuning2_low`, `room_tuning2_high` (`"auto"` or a number), `room_tuning_level_match`, `room_tuning2_mimo`, and `room_tuning2_fsiso`/`room_tuning2_mimo_low` (`"auto"` or a number) only when MIMO is on; `room_volume`/`schroeder_freq` only when the high end is `auto`. It reads the defaults of all seven fields from `brir_defaults` under these names. Run `cd apps/impulcifer-app && npm ci && npm run typecheck && npm run test:contracts` and report the tail.
 - `.github/scripts/brir_3x_integrity.py` runs the release CLI with `--room_mode=tuning2`, `--room_tuning2_mode=zero|linear`, `--room_tuning2_mimo=true --room_tuning2_fsiso=120`, and `--vbass --room_mode=tuning2`. Those exact spellings must parse.
 - The 3.x overlay catalogue (`crates/impulcifer-service/locales/*.json`) already has the log keys below in all nine languages; `cargo test -p impulcifer-service --lib settings --test ui_catalog` must pass.
 
-Allowed files: `crates/impulcifer-types/**`, `crates/impulcifer-cli/**`, `crates/impulcifer-service/src/**` and `crates/impulcifer-service/tests/**` (not `locales/`), `crates/impulcifer-python/**` only where it lists config fields or defaults, `crates/impulcifer-policy/**` (canonical names), `features.toml`, `crates/impulcifer-dsp/**` only for small fixes the wiring needs (report them). Do not touch `apps/**`, `crates/impulcifer-service/locales/**` (another packet writes the catalogue — use exactly the keys below), `.github/**`, versions, `CHANGELOG.md`, `README.md`, `docs/**`, the 2.x Python tree.
+Allowed files: `crates/impulcifer-types/**`, `crates/impulcifer-cli/**`, `crates/impulcifer-service/src/**` and `crates/impulcifer-service/tests/**` (not `locales/`), `crates/impulcifer-python/**` only where it lists config fields or defaults, `crates/impulcifer-policy/**` (canonical names), `features.toml`, in `crates/impulcifer-dsp` only `room_tuning2/mod.rs` to move `Tuning2Mode` into `impulcifer-types` (re-export it from the dsp module so existing paths keep working); anything else the wiring needs from the dsp crate goes into the report instead (A08b owns those files right now). Use `export CARGO_PROFILE_TEST_OPT_LEVEL=2 CARGO_PROFILE_TEST_DEBUG=0 CARGO_PROFILE_TEST_INCREMENTAL=false`; if the disk fills, delete this worktree's `target/debug` and rerun. Do not touch `apps/**`, `crates/impulcifer-service/locales/**` (another packet writes the catalogue — use exactly the keys below), `.github/**`, versions, `CHANGELOG.md`, `README.md`, `docs/**`, the 2.x Python tree.
 
 ## Config (impulcifer-types)
 
@@ -71,7 +71,7 @@ New features, `status = "implemented"` with existing test names (the policy test
 ## Verification (foreground; paste tails)
 
 ```
-cd /home/user/Impulcifer-pip313
+cd /home/user/wt-a09
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- --no-deps -D warnings
 cargo test -p impulcifer-types -p impulcifer-dsp -p impulcifer-cli -p impulcifer-policy --no-fail-fast
