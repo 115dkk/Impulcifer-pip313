@@ -632,8 +632,11 @@ p0 only) for the reference tests; it is not an option.
   without conditions). Because the bins outside the band are zero, the first
   bin at or above 20 Hz and the last bin at or below 160 Hz (159.96 Hz) are
   maxima whenever the sum falls away from, or rises toward, the band edge;
-  searching only inside the band would miss them. Sort by height descending
-  (stable), keep `count`, return their frequencies.
+  searching only inside the band would miss them. Such an edge bin is an
+  artifact of the masking, not a room mode, but it is kept: the MIMO guard's
+  modes and the RC's long-mode list depend on it, and on the demo it decides
+  two guard values. Sort by height descending (stable), keep `count`, return
+  their frequencies.
 - **Mode decay** `T60(x, fc, half)` at 600 Hz: band `[max(fc−half, 1), min(fc+half, 270)]`,
   order-2 Butterworth band-pass SOS; prepend 1200 zeros, filter the reversed
   signal and reverse again, square → e; from `s = argmax e`, the reversed
@@ -896,9 +899,10 @@ MIMO follows the same split. Fed the oracle's own RC outputs (`x` per ear and
 the direct correction energy), the paths, normal equations, bisection, guard
 and supports reproduce it to floating-point noise (supports within 6e-13
 relative). Two guard values (the first tail change of BL and FC in the
-`mixed`/100 Hz/40 Hz setting) first disagreed: the port looked for late peaks
-only inside 20–160 Hz, while the oracle masks the whole grid, so its 159.96 Hz
-band-edge bin is a peak (see "Late peaks" above). With the edge bin, the
+`mixed`/100 Hz/40 Hz setting) first disagreed: the port read "the sum masked
+to 20–160 Hz" as a search restricted to that band, while the oracle multiplies
+the whole grid by the mask, so its 159.96 Hz band-edge bin is a peak (see
+"Late peaks" above, now stated explicitly). With the edge bin, the
 oracle's own late-peak function reproduces both recorded values exactly.
 End to end, the tail change is a maximum over a top-six peak set and so is
 discontinuous: a slightly different RC can move a near-threshold input by one
