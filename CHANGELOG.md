@@ -28,6 +28,12 @@ been fixed and old features improved.
 - **출처 기록**: `docs/rust/provenance/room-tuning2-secs2.md`에 SECS 2와 무엇이 같고 무엇이 다른지, 누가 SECS 2 소스를 보았고 누가 보지 않았는지, 남는 위험과 crates.io 공개 전에 할 일을 정리했습니다. 구현 워커의 보고서 원문도 함께 남겼습니다. 명세 쪽 이름이 넘어와 SECS 2의 함수 이름과 같던 식별자 여섯 개(`late_peaks` 등)는 우리 이름(`late_mode_frequencies` 등)으로 바꿨습니다.
 - **등가 검증**: SECS 2(GPL-3.0) 소스는 저장소에 넣지 않았고, 이식한 워커에게도 보여 주지 않았습니다. `tests/migration/export_goldens_secs2.py`가 SECS 2를 오라클로 돌려 함수·단계 경계마다 픽스처(`s2_*`)를 남기고, Rust는 의존 순서대로 픽스처를 하나씩 맞춥니다. PEQ 맞춤은 SciPy `least_squares`(TRF)를 옮긴 것입니다. 반복 경로는 오라클 자신이 다른 BLAS·LAPACK에서 갈라지기 시작하는 지점까지 27개 맞춤 모두 1e-9 안에서 같습니다(최대 2.3e-14). 끝단 결과는 SECS 2를 다섯 가지 연산 환경(NumPy AVX-512, OpenBLAS 커널 셋, LAPACK gesvd)으로 돌렸을 때의 흩어짐 안에 있습니다. 61채널 중 0.1 dB 넘게 다른 채널은 19개, 1 dB 넘게 다른 채널은 7개이고, SECS 2끼리는 각각 최대 32개, 15개입니다. MIMO는 오라클의 채널 보정 출력을 넣으면 서포트가 6e-13 안에서, 가드 값 85개가 모두 2e-12 안에서 같습니다. macOS·Windows처럼 수학 라이브러리가 glibc와 마지막 비트에서 다른 플랫폼에서는 맞춤 경로가 첫 단계부터 오라클과 달라지므로, 정확 게이트를 상대 1e-9로 넓히고 끝단의 대역별 한도를 SECS 2 흩어짐의 1.25배에서 1.5배로 넓힙니다.
 
+#### 📝 문서 (릴리스 후 추가, 출하물 변화 없음)
+- **README에 '구걸' 단락**: 지금 모으는 돈(새 Atmos 앱의 드라이버를 Microsoft 서명으로 내기 위한 EV 인증서, 한 번 $359)과 초과분의 쓰임새, GitHub Sponsors 링크를 README 끝에 더했습니다. 그 앱의 저장소([spatial-audio-softreceiver](https://github.com/115dkk/spatial-audio-softreceiver))도 함께 링크해 개발 중인 것을 바로 볼 수 있게 했습니다.
+
+#### 🔧 빌드 / 설정 변경 (릴리스 후 추가, 출하물 변화 없음)
+- **Sponsor 버튼**: `.github/FUNDING.yml`을 더해 저장소 상단에 Sponsor 버튼이 뜹니다.
+
 ## 3.4.0 - 2026-10-10
 ### NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10, DTS:X Pro 30.2의 녹음, BRIR 합성, 출력 복원
 
@@ -60,10 +66,6 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **UI 갤러리 검사 추가**: 두 스킨의 모든 화면에서(처리 화면은 모든 카드와 고급 옵션 탭을 연 상태까지) 기본 창 크기부터 작은 창까지 문서가 창보다 커지지 않는지 확인합니다. 고치기 전 코드에서는 이 검사가 실패합니다.
-- **Sponsor 버튼** (2026-10-11): `.github/FUNDING.yml`을 더해 저장소 상단에 Sponsor 버튼이 뜹니다.
-
-#### 📝 문서
-- **README에 '구걸' 단락** (2026-10-11): 지금 모으는 돈(새 Atmos 앱의 드라이버를 Microsoft 서명으로 내기 위한 EV 인증서, 한 번 $359)과 초과분의 쓰임새, GitHub Sponsors 링크를 README 끝에 더했습니다.
 
 ## 3.3.0 - 2026-10-10
 ### 가상 베이스가 크로스오버를 측정에서 찾고, 룸 보정과 맞춰 저음을 합성합니다
