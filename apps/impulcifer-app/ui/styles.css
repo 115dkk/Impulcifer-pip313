@@ -1292,3 +1292,37 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .file-grid { grid-template-columns: 1fr; }
   .ch-grid { grid-template-columns: repeat(3, max-content); }
 }
+
+/* ------------------------------------------------- immersive layouts (ADR 0007) */
+
+/* The device-channel map of an immersive recording layout: channel number,
+   the format's label, the speaker code it plays. Up to 35 channels, so the
+   cells flow into as many columns as fit. */
+.layout-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.layout-ch {
+  display: grid;
+  grid-template-columns: 2ch 5ch 2ch auto;
+  align-items: baseline;
+  gap: 4px;
+}
+.layout-ch-num { color: var(--fg-3); text-align: right; }
+.layout-ch-label { color: var(--fg-2); }
+.layout-ch-arrow { color: var(--fg-3); text-align: center; }
+.layout-ch-slot { color: var(--fg-0); font-weight: 700; }
+.layout-ch[data-lfe="true"] .layout-ch-slot { color: var(--fg-3); font-weight: 400; }
+
+.layout-force { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.file-grid.layout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 900px) {
+  .file-grid.layout-grid { grid-template-columns: 1fr; }
+}

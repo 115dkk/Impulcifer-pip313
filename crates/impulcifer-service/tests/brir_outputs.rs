@@ -64,6 +64,8 @@ fn outputs(compact: bool) -> (PipelineOutputs, SweepEstimator) {
         responses_tracks: hrir
             .stack_tracks(&HEXADECAGONAL_TRACK_ORDER, false)
             .unwrap(),
+        layouts: Vec::new(),
+        layout_notices: Vec::new(),
         truehd: [
             ("11ch", TRUEHD_11CH_ORDER.as_slice()),
             ("13ch", TRUEHD_13CH_ORDER.as_slice()),
@@ -123,7 +125,9 @@ fn output_variants_preserve_pcm32_tracks_names_and_write_order() {
                 temp.0.join("hesuvi.wav")
             ]
         );
-        assert_eq!(written.files.len(), 22);
+        // responses, README, hrir, hesuvi, two TrueHD files, jamesdsp, and one
+        // Hangloose file per speaker of the fixture (every slot, ADR 0007).
+        assert_eq!(written.files.len(), 7 + SPEAKER_NAMES.len());
         for (filename, expected) in [
             ("responses.wav", &output.responses_tracks),
             ("hrir.wav", &output.hrir_tracks),

@@ -42,7 +42,18 @@ pub struct ProcessingConfig {
     pub room_tuning_max_boost: f64,
     pub room_tuning_curtain: f64,
     pub room_tuning_level_match: bool,
+    #[serde(deserialize_with = "string_or_number")]
+    pub room_tuning2_mode: String,
+    pub room_tuning2_max_boost: f64,
+    pub room_tuning2_low: f64,
+    #[serde(deserialize_with = "string_or_number")]
+    pub room_tuning2_high: String,
+    pub room_tuning2_mimo: bool,
+    pub room_tuning2_fsiso: f64,
+    #[serde(deserialize_with = "string_or_number")]
+    pub room_tuning2_mimo_low: String,
     pub vbass_mode: String,
+    pub layout_files: String,
     pub bass_boost_gain: f64,
     pub bass_boost_fc: f64,
     pub bass_boost_q: f64,
@@ -91,7 +102,15 @@ impl Default for ProcessingConfig {
             room_tuning_max_boost: 6.0,
             room_tuning_curtain: 300.0,
             room_tuning_level_match: true,
+            room_tuning2_mode: "mixed".into(),
+            room_tuning2_max_boost: 10.0,
+            room_tuning2_low: 20.0,
+            room_tuning2_high: "auto".into(),
+            room_tuning2_mimo: false,
+            room_tuning2_fsiso: 150.0,
+            room_tuning2_mimo_low: "auto".into(),
             vbass_mode: "auto".into(),
+            layout_files: "auto".into(),
             bass_boost_gain: 0.0,
             bass_boost_fc: 105.0,
             bass_boost_q: 0.76,
@@ -154,7 +173,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 11] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 19] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -165,7 +184,15 @@ pub const EXTENSION_FIELD_NAMES: [&str; 11] = [
     "room_tuning_max_boost",
     "room_tuning_curtain",
     "room_tuning_level_match",
+    "room_tuning2_mode",
+    "room_tuning2_max_boost",
+    "room_tuning2_low",
+    "room_tuning2_high",
+    "room_tuning2_mimo",
+    "room_tuning2_fsiso",
+    "room_tuning2_mimo_low",
     "vbass_mode",
+    "layout_files",
 ];
 
 fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
@@ -223,6 +250,59 @@ impl PhaseLimit {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Tuning2Mode {
+    Zero,
+    Mixed,
+    Linear,
+    Long,
+    Ultra(f64),
+}
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ModeParams {
+    pub taps: usize,
+    pub peq_bands: usize,
+    pub lift_ms: f64,
+    pub phase_frac: f64,
+}
+impl Tuning2Mode {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "zero" => Some(Self::Zero),
+            "mixed" => Some(Self::Mixed),
+            "linear" => Some(Self::Linear),
+            "long" => Some(Self::Long),
+            _ => s
+                .parse::<f64>()
+                .ok()
+                .filter(|x| x.is_finite() && (30. ..=200.).contains(x))
+                .map(Self::Ultra),
+        }
+    }
+    pub fn params(&self, fs: u32) -> ModeParams {
+        let (taps, bands, lift, beta) = match *self {
+            Self::Zero => (0, 32, 0., 0.),
+            Self::Mixed => (2048, 16, 8., 6.),
+            Self::Linear => (2048, 16, 28., 24.),
+            Self::Long => (32768, 16, 200., 6.),
+            Self::Ultra(ms) => {
+                let mut n = 2048;
+                while n < 16384 && 0.7 * n as f64 / 48. < ms - 2. {
+                    n *= 2;
+                }
+                (n, 16, ms - 2., 24.)
+            }
+        };
+        let taps = (taps as f64 * fs as f64 / 48000.).round_ties_even() as usize;
+        ModeParams {
+            taps,
+            peq_bands: bands,
+            lift_ms: lift.min(0.7 * taps as f64 / fs as f64 * 1000.),
+            phase_frac: beta,
+        }
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
     #[error("invalid value for {field}: {reason}")]
@@ -251,12 +331,14 @@ impl ProcessingConfig {
                 "must be legacy, modes, schroeder or extreme",
             ));
         }
-        if !["eq", "tuning"].contains(&self.room_mode.as_str()) {
-            return Err(invalid("room_mode", "must be eq or tuning"));
+        if !["eq", "tuning", "tuning2"].contains(&self.room_mode.as_str()) {
+            return Err(invalid("room_mode", "must be eq, tuning or tuning2"));
         }
         if !["auto", "manual", "legacy"].contains(&self.vbass_mode.as_str()) {
             return Err(invalid("vbass_mode", "must be auto, manual or legacy"));
         }
+        crate::layouts::LayoutFiles::parse(&self.layout_files)
+            .map_err(|reason| invalid("layout_files", &reason))?;
         if TuningDelay::parse(&self.room_tuning_delay).is_none() {
             return Err(invalid("room_tuning_delay", "must be auto or 2–20 ms"));
         }
@@ -266,7 +348,54 @@ impl ProcessingConfig {
                 "must be off, schroeder, full or 300–20000 Hz",
             ));
         }
+        if Tuning2Mode::parse(&self.room_tuning2_mode).is_none() {
+            return Err(invalid(
+                "room_tuning2_mode",
+                "must be zero, mixed, linear, long or 30–200 ms",
+            ));
+        }
+        for (field, value, lo, hi) in [
+            ("room_tuning2_high", &self.room_tuning2_high, 100.0, 20000.0),
+            (
+                "room_tuning2_mimo_low",
+                &self.room_tuning2_mimo_low,
+                15.0,
+                150.0,
+            ),
+        ] {
+            if value != "auto" {
+                let v = value
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|v| v.is_finite() && (lo..=hi).contains(v))
+                    .ok_or_else(|| invalid(field, "must be auto or within supported range"))?;
+                if field == "room_tuning2_high" && v <= self.room_tuning2_low {
+                    return Err(invalid(field, "must be above room_tuning2_low"));
+                }
+            }
+        }
         for (field, value, lo, hi, exclusive) in [
+            (
+                "room_tuning2_max_boost",
+                Some(self.room_tuning2_max_boost),
+                0.0,
+                10.0,
+                false,
+            ),
+            (
+                "room_tuning2_low",
+                Some(self.room_tuning2_low),
+                10.0,
+                200.0,
+                false,
+            ),
+            (
+                "room_tuning2_fsiso",
+                Some(self.room_tuning2_fsiso),
+                50.0,
+                150.0,
+                false,
+            ),
             (
                 "room_tuning_max_boost",
                 Some(self.room_tuning_max_boost),

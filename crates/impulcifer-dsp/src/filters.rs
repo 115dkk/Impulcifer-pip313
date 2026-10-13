@@ -115,6 +115,68 @@ pub fn butter(order: usize, wn: f64, btype: BType) -> Sos {
     Sos(rows)
 }
 
+/// Butterworth band-pass, normalized edges (1 is Nyquist), SciPy nearest SOS.
+/// The analog low-pass prototype is transformed before the bilinear map.
+pub fn butter_bandpass(order: usize, low: f64, high: f64) -> Sos {
+    assert!(
+        order > 0 && low.is_finite() && high.is_finite() && 0. < low && low < high && high < 1.
+    );
+    let lo = 4. * (PI * low / 2.).tan();
+    let hi = 4. * (PI * high / 2.).tan();
+    let bw = hi - lo;
+    let wo = (lo * hi).sqrt();
+    let mut analog = Vec::with_capacity(2 * order);
+    let mut roots = Vec::with_capacity(order);
+    for i in 0..order {
+        let m = -(order as isize - 1) + 2 * i as isize;
+        roots.push(-Complex64::from_polar(1., PI * m as f64 / (2. * order as f64)) * bw / 2.);
+    }
+    for sign in [1., -1.] {
+        for p in &roots {
+            analog.push(*p + sign * (*p * *p - wo * wo).sqrt());
+        }
+    }
+    let mut denom = Complex64::new(1., 0.);
+    for p in &analog {
+        denom *= 4. - p;
+    }
+    let gain = bw.powi(order as i32) * (Complex64::new(4_f64.powi(order as i32), 0.) / denom).re;
+    let mut poles: Vec<_> = analog
+        .iter()
+        .map(|p| (4. + p) / (4. - p))
+        .filter(|p| p.im > 0.)
+        .collect();
+    poles.sort_by(|a, b| a.re.total_cmp(&b.re).then(a.im.total_cmp(&b.im)));
+    let mut zeros = vec![1.; order];
+    zeros.extend(vec![-1.; order]);
+    let mut rows = vec![[0.; 6]; order];
+    for row in rows.iter_mut().rev() {
+        let k = poles
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| (1. - a.norm()).abs().total_cmp(&(1. - b.norm()).abs()))
+            .unwrap()
+            .0;
+        let p = poles.remove(k);
+        let mut take = || {
+            let k = zeros
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| (p - **a).norm().total_cmp(&(p - **b).norm()))
+                .unwrap()
+                .0;
+            zeros.remove(k)
+        };
+        let z1 = take();
+        let z2 = take();
+        *row = [1., -(z1 + z2), z1 * z2, 1., -2. * p.re, p.norm_sqr()];
+    }
+    for b in &mut rows[0][..3] {
+        *b *= gain;
+    }
+    Sos(rows)
+}
+
 /// Direct form II transposed, sections in the supplied order, fresh zero state.
 /// Panics for empty samples or empty/malformed SOS (nonfinite coefficients
 /// or a0 != 1). Nonfinite samples propagate arithmetically.

@@ -1,6 +1,6 @@
 //! File-free Farina sweep estimator, ported from core/impulse_response_estimator.py.
 use crate::{DspError, conv, fft, windows};
-use impulcifer_types::constants::{SEQUENCE_TRACK_ORDERS, SPEAKER_NAMES};
+use impulcifer_types::constants::{SPEAKER_NAMES, sweep_track_order};
 use std::f64::consts::PI;
 
 #[derive(Clone, Debug)]
@@ -130,10 +130,8 @@ impl SweepEstimator {
         tracks: &str,
     ) -> Result<Vec<Vec<f64>>, DspError> {
         let mono = ["FL"];
-        let (speakers, order, count): (&[&str], &[&str], usize) = if let Some((_, order)) =
-            SEQUENCE_TRACK_ORDERS
-                .iter()
-                .find(|(name, _)| *name == tracks)
+        let layout_order = sweep_track_order(tracks);
+        let (speakers, order, count): (&[&str], &[&str], usize) = if let Some(order) = &layout_order
         {
             (speakers, order, order.len())
         } else if tracks == "stereo" {

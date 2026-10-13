@@ -266,7 +266,20 @@ fn golden_cli_parsing_matches_python() {
             .collect();
         match parse(&argv) {
             Ok(Parsed::Kwargs(kwargs)) => {
-                assert_eq!(json!(kwargs), oracle["kwargs"], "{}", file.display());
+                // A single --decay value reaches every slot; the slots 3.x
+                // added (ADR 0007) are not in the 2.x oracle.
+                let mut parsed = json!(kwargs);
+                if let Some(decay) = parsed
+                    .get_mut("decay")
+                    .and_then(Value::as_object_mut)
+                    .filter(|d| d.len() == impulcifer_types::constants::SPEAKER_NAMES.len())
+                {
+                    let uniform = decay["FL"].clone();
+                    for added in &impulcifer_types::constants::SPEAKER_NAMES[15..] {
+                        assert_eq!(decay.remove(*added), Some(uniform.clone()), "{added}");
+                    }
+                }
+                assert_eq!(parsed, oracle["kwargs"], "{}", file.display());
                 assert_eq!(oracle["exit_code"], 0);
                 ProcessingConfig::from_kwargs(&kwargs).unwrap();
             }
@@ -484,4 +497,45 @@ fn cli_reports_service_failure_with_exit_1() {
     // IPC validation wrapper uses a different message and is not called here.
     assert_eq!(err, format!("{}\n", path.display()));
     assert!(!path.exists());
+}
+
+/// ADR 0007: --layout_files is a 3.x extension option; the value reaches
+/// ProcessingConfig and is validated at parse time with the other extension
+/// options (auto, none or format ids).
+#[test]
+fn cli_layout_files_option_parses_and_validates() {
+    let Parsed::Kwargs(baseline) =
+        parse(&args(&["impulcifer", "--dir_path", "measurements"])).unwrap()
+    else {
+        panic!()
+    };
+    assert!(!baseline.contains_key("layout_files"));
+    for value in ["auto", "none", "22.2", "24.1.10,30.2"] {
+        let Parsed::Kwargs(mut kwargs) = parse(&args(&[
+            "impulcifer",
+            "--dir_path",
+            "measurements",
+            "--layout_files",
+            value,
+        ]))
+        .unwrap() else {
+            panic!()
+        };
+        let config = ProcessingConfig::from_kwargs(&kwargs).unwrap();
+        assert_eq!(config.layout_files, value);
+        config.validate_room_options().unwrap();
+        assert_eq!(kwargs.remove("layout_files"), Some(json!(value)));
+        assert_eq!(kwargs, baseline);
+    }
+    // An unknown format is a usage error, like the other extension options.
+    let error = parse(&args(&[
+        "impulcifer",
+        "--dir_path",
+        "measurements",
+        "--layout_files",
+        "7.1.4",
+    ]))
+    .unwrap_err();
+    assert_eq!(error.exit_code, 2);
+    assert!(error.message.contains("layout_files"), "{}", error.message);
 }

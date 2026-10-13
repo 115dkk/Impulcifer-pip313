@@ -69,11 +69,20 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         ("--room_mode=tuning", "--room_tuning_phase_limit=off", "--room_tuning_level_match=false"),
         "3.2.0",
     ),
+    ("room_tuning2", ("--room_mode=tuning2",), "3.5.0"),
+    ("room_tuning2_zero", ("--room_mode=tuning2", "--room_tuning2_mode=zero"), "3.5.0"),
+    ("room_tuning2_linear", ("--room_mode=tuning2", "--room_tuning2_mode=linear"), "3.5.0"),
+    (
+        "room_tuning2_mimo",
+        ("--room_mode=tuning2", "--room_tuning2_mimo=true", "--room_tuning2_fsiso=120"),
+        "3.5.0",
+    ),
     ("no_room_correction", ("--no_room_correction",), "3.0.0"),
     ("virtual_bass", ("--vbass", "--vbass_freq=250"), "3.0.0"),
     ("virtual_bass_auto", ("--vbass",), "3.0.0"),
     ("virtual_bass_legacy", ("--vbass", "--vbass_mode=legacy"), "3.3.0"),
     ("virtual_bass_tuning", ("--vbass", "--room_mode=tuning"), "3.2.0"),
+    ("virtual_bass_tuning2", ("--vbass", "--room_mode=tuning2"), "3.5.0"),
     ("dsp_shaping", ("--decay=100", "--channel_balance=trend", "--bass_boost=4"), "3.0.0"),
     (
         "resample_and_extra_outputs",
@@ -81,6 +90,9 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "3.0.0",
     ),
     ("no_headphone_compensation", ("--no_headphone_compensation",), "3.0.0"),
+    # ADR 0007: the demo's seven speakers write every channel-order file with
+    # the missing speakers silent.
+    ("layout_files_listed", ("--layout_files=13.1,22.2,24.1.10,30.2",), "3.4.0"),
 )
 
 

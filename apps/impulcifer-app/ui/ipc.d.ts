@@ -11,7 +11,13 @@ interface UiSettings {
   language: string; theme: string; skin: string; frontend: string;
   first_run: boolean; languages: Language[]; strings: Record<string, string>;
 }
-interface SweepDefaults { layouts: string[]; default_fs: number; default_duration: number; speaker_names: string[] }
+/* ADR 0007: a format whose BRIR is also written in its own channel order. Each channel reads one
+   Impulcifer speaker code (slot); LFE channels read "LFE"/"LFE2" and are never measured. */
+interface ImmersiveLayoutInfo { id: string; name: string; file_name: string; channels: { label: string; slot: string }[] }
+interface SweepDefaults {
+  layouts: string[]; default_fs: number; default_duration: number; speaker_names: string[];
+  immersive: ImmersiveLayoutInfo[];
+}
 interface Bootstrap {
   version: string; platform: string; install_kind: string; webview_backend: string;
   brir_defaults: BrirDefaults; sweep: SweepDefaults; ui: UiSettings; active_job: Job | null;
@@ -61,19 +67,37 @@ interface ProcessingRequest {
      room_tuning_curtain (Hz) is where the detailed correction stops. */
   room_mode?: RoomMode; room_tuning_phase_limit?: RoomPhaseLimit; room_tuning_delay?: "auto" | number;
   room_tuning_max_boost?: number; room_tuning_curtain?: number; room_tuning_level_match?: boolean;
+  /* 3.x only. "tuning2" (ADR 0008) is SECS 2's channel correction with optional MIMO supports; it
+     reads the room_tuning2_* fields and room_tuning_level_match, and ignores the other room_tuning_*
+     fields and the Room EQ fields. room_tuning2_mode is "zero", "mixed", "linear", "long" or a
+     latency in ms (30–200). room_tuning2_high is "auto" or Hz (100–20000); room_volume and
+     schroeder_freq apply only when it is "auto". room_tuning2_fsiso (50–150 Hz) and
+     room_tuning2_mimo_low ("auto" or 15–150 Hz) are read only with room_tuning2_mimo. */
+  room_tuning2_mode?: Exclude<Tuning2Filter, "custom"> | number; room_tuning2_max_boost?: number;
+  room_tuning2_low?: number; room_tuning2_high?: "auto" | number; room_tuning2_mimo?: boolean;
+  room_tuning2_fsiso?: number; room_tuning2_mimo_low?: "auto" | number;
   /* 3.x only (ADR 0006). "auto" finds the crossover in the measurements and ignores vbass_freq;
      "manual" uses vbass_freq; "legacy" is the 2.x method. Without vbass_mode, a given vbass_freq
      means "manual". */
   vbass_mode?: VbassMode;
+  /* 3.x only (ADR 0007). "auto" writes a format's channel-order file when all its speakers are
+     measured, "none" writes none, and a comma-separated list of format ids ("22.2,30.2") also
+     writes those formats with missing speakers silent. */
+  layout_files?: string;
   confirm_warnings?: boolean;
 }
 type VbassMode = "auto" | "manual" | "legacy";
 type RoomRange = "legacy" | "modes" | "schroeder" | "extreme";
-type RoomMode = "eq" | "tuning";
+type RoomMode = "eq" | "tuning" | "tuning2";
+/* Tuning 2's filter choice in the form; "custom" is sent as its latency in ms. */
+type Tuning2Filter = "zero" | "mixed" | "linear" | "long" | "custom";
 type RoomPhaseLimit = "off" | "schroeder" | "full" | number;
-/* bootstrap's defaults carry the CLI spec for the tuning delay and limit, e.g. "10" or "auto". */
-type BrirDefaults = Omit<ProcessingRequest, "room_tuning_delay" | "room_tuning_phase_limit"> &
-  { room_tuning_delay?: string | number; room_tuning_phase_limit?: string | number | null };
+/* bootstrap's defaults carry the CLI spec for the tuning delay and limit, e.g. "10" or "auto",
+   and for tuning 2's filter, band end and support floor, e.g. "mixed", "60" or "auto". */
+type BrirDefaults = Omit<ProcessingRequest, "room_tuning_delay" | "room_tuning_phase_limit" | "room_tuning2_mode"
+  | "room_tuning2_high" | "room_tuning2_mimo_low"> &
+  { room_tuning_delay?: string | number; room_tuning_phase_limit?: string | number | null;
+    room_tuning2_mode?: string | number; room_tuning2_high?: string | number; room_tuning2_mimo_low?: string | number };
 type EqSlotName = "both" | "left" | "right";
 type EqChoice = { mode: "folder" } | { mode: "off" } | { mode: "file"; path: string };
 interface EqRequest extends Pick<ProcessingRequest, "eq_file" | "eq_left_file" | "eq_right_file"> { dir_path: string }
@@ -88,13 +112,13 @@ interface EqInspection {
   curves: { frequency: number[]; left: number[] | null; right: number[] | null };
 }
 interface RecoveryRequest { dir_path: string; include_hangloose?: boolean; remove_silent_channels?: boolean; confirm_warnings?: boolean }
-type RecoverySource = "hrir" | "hesuvi" | "hrir+hesuvi" | "hangloose";
+type RecoverySource = "hrir" | "hesuvi" | "hrir+hesuvi" | "hangloose" | "layout";
 interface RecoveryMetadata {
   source_kind: RecoverySource; source_path: string; output_dir: string; sample_rate: number;
   sample_count: number; speakers: string[]; existing_files: string[];
 }
 interface RecoveryPlan extends RecoveryMetadata {
-  planned_files: { path: string; kind: "hrir" | "hesuvi" | "hangloose"; channels: number; speaker: string | null }[];
+  planned_files: { path: string; kind: "hrir" | "hesuvi" | "hangloose" | "layout"; channels: number; speaker: string | null }[];
   hangloose_dir: string | null;
 }
 interface RecoveryResult extends RecoveryMetadata { created_files: string[] }

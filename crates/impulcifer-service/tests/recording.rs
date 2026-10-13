@@ -36,8 +36,18 @@ impl Drop for Temp {
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/migration/goldens")
 }
+/// The 2.x recording golden, with the layout list 3.x accepts: ADR 0007 adds
+/// the immersive formats to the "Supported:" list of an unknown layout.
 fn golden() -> Value {
-    serde_json::from_slice(&std::fs::read(fixtures().join("p16_recording.json")).unwrap()).unwrap()
+    let text = std::fs::read_to_string(fixtures().join("p16_recording.json")).unwrap();
+    let text = text.replace(
+        "Supported: mono, stereo, 5.1, 7.1, 7.1.4, 7.1.6.",
+        &format!(
+            "Supported: {}.",
+            impulcifer_types::constants::SWEEP_TRACK_LAYOUTS.join(", ")
+        ),
+    );
+    serde_json::from_str(&text).unwrap()
 }
 fn map_strings(value: &Value, f: &impl Fn(&str) -> String) -> Value {
     match value {

@@ -4,7 +4,7 @@ use super::{
     progress::SweepSegment,
 };
 use impulcifer_dsp::estimator::SweepEstimator;
-use impulcifer_types::constants::{SEQUENCE_TRACK_ORDERS, SWEEP_TRACK_LAYOUTS};
+use impulcifer_types::constants::{SWEEP_TRACK_LAYOUTS, sweep_track_order};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -42,10 +42,7 @@ pub fn validate_sweep_spec(mut spec: SweepSpec) -> Result<SweepSpec, String> {
     if spec.tracks == "stereo" && spec.speakers.len() > 2 {
         return Err("\"stereo\" track configuration requires one or two speakers.".into());
     }
-    if let Some((_, order)) = SEQUENCE_TRACK_ORDERS
-        .iter()
-        .find(|(layout, _)| *layout == spec.tracks)
-    {
+    if let Some(order) = sweep_track_order(&spec.tracks) {
         for speaker in &spec.speakers {
             if !order.contains(&speaker.as_str()) {
                 return Err(format!(

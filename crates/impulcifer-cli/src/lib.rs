@@ -96,7 +96,13 @@ pub fn parse(argv: &[String]) -> Result<Parsed, CliError> {
                             }
                             finite(number)?
                         }
-                        _ if option.dest == "room_tuning_level_match" => json!(raw == "true"),
+                        _ if matches!(
+                            option.dest,
+                            "room_tuning_level_match" | "room_tuning2_mimo"
+                        ) =>
+                        {
+                            json!(raw == "true")
+                        }
                         _ => json!(raw),
                     })
                 }
@@ -217,7 +223,9 @@ pub fn config(
     {
         kwargs.remove("vbass_freq");
     }
-    ProcessingConfig::from_kwargs(&kwargs)
+    let config = ProcessingConfig::from_kwargs(&kwargs)?;
+    config.validate_room_options()?;
+    Ok(config)
 }
 
 /// Run synchronously. Diagnostics and job failures never terminate the embedding process.

@@ -1204,10 +1204,19 @@ fn golden_generic_room_matches_python() {
             .unwrap()
             .unwrap();
             let expected = fixture("manifest")["generic_limit_room"].clone();
+            // ADR 0007: the slots added in 3.x are unmeasured here and get the
+            // generic correction, like every unmeasured 2.x speaker.
+            let (legacy, added): (Vec<_>, Vec<_>) = generic
+                .frs
+                .entries
+                .iter()
+                .partition(|(s, _, _)| SPEAKER_NAMES_2X.contains(&s.as_str()));
+            assert_eq!(legacy.len(), expected.as_array().unwrap().len());
             assert_eq!(
-                generic.frs.entries.len(),
-                expected.as_array().unwrap().len()
+                added.len(),
+                2 * (SPEAKER_NAMES.len() - SPEAKER_NAMES_2X.len())
             );
+            assert!(added.iter().all(|(_, _, fr)| fr.name == "generic_room"));
             check_room(&generic.frs, &expected);
         }
     }

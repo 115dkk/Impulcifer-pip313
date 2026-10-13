@@ -12,7 +12,7 @@ impl BrirEvents for Silent {
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     hrir::compact_tracks,
-    pipeline::PipelineOutputs,
+    pipeline::{LayoutOutput, PipelineOutputs},
     stages::readme::{ReadmeData, ReverbKind},
 };
 use impulcifer_io::{brir_layout::append_track_names, write_wav};
@@ -87,7 +87,124 @@ fn local_date() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
+fn missing_channels(channels: &[&impulcifer_types::layouts::FormatChannel]) -> String {
+    channels
+        .iter()
+        .map(|c| format!("{} ({})", c.label, c.slot))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+pub(super) fn tuning2_mode_name(mode: impulcifer_types::config::Tuning2Mode) -> String {
+    use impulcifer_types::config::Tuning2Mode;
+    match mode {
+        Tuning2Mode::Zero => "zero".into(),
+        Tuning2Mode::Mixed => "mixed".into(),
+        Tuning2Mode::Linear => "linear".into(),
+        Tuning2Mode::Long => "long".into(),
+        Tuning2Mode::Ultra(ms) => format!("{ms:.0}"),
+    }
+}
+pub(super) fn tuning2_representation(
+    s: &impulcifer_dsp::stages::room_tuning2::Speaker2Report,
+) -> Option<f64> {
+    (!s.representation_rms_db.is_empty()).then(|| {
+        s.representation_rms_db.iter().map(|(_, v)| v).sum::<f64>()
+            / s.representation_rms_db.len() as f64
+    })
+}
+fn tuning2_readme(report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report) -> String {
+    use impulcifer_dsp::stages::room_tuning2::BandSource;
+    let mut out = format!(
+        "## Virtual room tuning v2\n\nMode: {}. Latency: {:.2} ms.",
+        tuning2_mode_name(report.mode),
+        report.latency_samples as f64 * 1000.0 / report.fs as f64
+    );
+    if let Some(band) = &report.band {
+        let source = match band.source {
+            BandSource::Manual => "manual",
+            BandSource::Override => "Schroeder override",
+            BandSource::Volume => "room volume",
+            BandSource::Default => "default",
+        };
+        out.push_str(&format!(
+            " Band: {:.0}–{:.0} Hz ({source}).",
+            band.low, band.high
+        ));
+    }
+    out.push_str("\n\n| Speaker | Points | Level (dB) | Trim (dB) | Source | PEQ bands | Phase strength | Phase resolution | Long modes (Hz) | Representation RMS (dB) | LF EDT before / after (ms, information) | Median excess GD before / after (ms, information) | Weak |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+    for s in &report.speakers {
+        let resolution = if s.phase_frac == 0.0 {
+            "—".into()
+        } else {
+            format!("1/{:.0} oct", s.phase_frac)
+        };
+        let modes = if s.long_modes.is_empty() {
+            "—".into()
+        } else {
+            s.long_modes
+                .iter()
+                .map(|(hz, _)| format!("{hz:.1}"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        let rms = tuning2_representation(s).map_or_else(|| "—".into(), |v| format!("{v:.2}"));
+        out.push_str(&format!("| {} | {} | {:.2} | {:.2} | {} | {} | {:.1} | {} | {} | {} | {:.2} / {:.2} | {:.2} / {:.2} | {} |\n", s.speaker, s.points, s.level_db, s.trim_db, s.trim_source, s.peq_bands, s.phase_strength, resolution, modes, rms, s.lf_edt_before_ms, s.lf_edt_after_ms, s.excess_median_before_ms, s.excess_median_after_ms, s.weak));
+    }
+    out.push_str("\nPre-echo uses the first −18 dB direct peak and a 2 ms guard, against the louder of the speaker's two direct sounds. Warn only above −30 dB and at least 6 dB above the same untuned ear. Weak means mean omni/in-ear magnitude RMS exceeds 4 dB (30–300 Hz, level matched at 100–300 Hz); EDT and excess GD are information only.\n\n| Speaker | Ear | Pre-echo untuned / tuned (dB) | Warning |\n| --- | --- | --- | --- |\n");
+    for s in &report.speakers {
+        for p in &s.pre_echo_channels {
+            out.push_str(&format!(
+                "| {} | {} | {:.2} / {:.2} | {} |\n",
+                s.speaker,
+                side(p.side),
+                p.before_db,
+                p.after_db,
+                p.warns()
+            ));
+        }
+    }
+    if let Some(mimo) = &report.mimo {
+        out.push_str("\n### MIMO supports\n\n| Input | Supports | Support level (dB) | Guard | Band change (dB) | Tail change (dB) |\n| --- | --- | --- | --- | --- | --- |\n");
+        for input in &mimo.inputs {
+            let supports = if input.supports.is_empty() {
+                "—".into()
+            } else {
+                input
+                    .supports
+                    .iter()
+                    .map(|s| s.speaker.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let guard = input
+                .scale_db
+                .map_or_else(|| "off".into(), |v| format!("{v:.0} dB").replace('-', "−"));
+            out.push_str(&format!(
+                "| {} | {} | {:.1} | {} | {:.2} | {:.2} |\n",
+                input.speaker,
+                supports,
+                input.level_db,
+                guard,
+                input.band_change_db,
+                input.tail_change_db
+            ));
+        }
+    }
+    out.push_str("\nVirtual room tuning v2 reproduces the correction method of SECS 2 by the Speaker Gallery (DCinside), released under GPL-3.0. Impulcifer's implementation is independent and contains no SECS code; SECS 2 was used only as a black box to produce the reference numbers.\n\n");
+    out
+}
+
 pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String {
+    render_readme_with_layouts(data, catalog, date, &[])
+}
+
+fn render_readme_with_layouts(
+    data: &ReadmeData,
+    catalog: &Catalog,
+    date: &str,
+    layouts: &[LayoutOutput],
+) -> String {
     let t = |key: &str| catalog.translate(key, &json!({}));
     let mut out = format!(
         "# {}\n\n{}\n\n## {}\n{}\n\n",
@@ -173,6 +290,9 @@ pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String
         }
         out.push('\n');
     }
+    if let Some(report) = &data.tuning2 {
+        out.push_str(&tuning2_readme(report));
+    }
     if !data.reflections.is_empty() {
         out.push_str(&format!("## {}\n", t("cli_readme_reflection_title")));
         let mut previous = "";
@@ -191,6 +311,50 @@ pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String
             ));
         }
         out.push('\n');
+    }
+    if !layouts.is_empty() {
+        out.push_str(&format!("## {}\n\n", t("cli_readme_layouts_title")));
+        for output in layouts {
+            let layout = output.layout;
+            out.push_str(&format!("### {} ({})\n\n", layout.file_name, layout.name));
+            out.push_str(&format!("{}\n\n", t("cli_readme_layouts_note")));
+            let order_note = match layout.id {
+                "24.1.10" => Some("cli_readme_layouts_atmos_order"),
+                "30.2" => Some("cli_readme_layouts_dts_order"),
+                _ => None,
+            };
+            if let Some(key) = order_note {
+                out.push_str(&format!("{}\n\n", t(key)));
+            }
+            if !output.missing.is_empty() {
+                out.push_str(&catalog.translate(
+                    "cli_readme_layouts_partial",
+                    &json!({"missing":missing_channels(&output.missing)}),
+                ));
+                out.push_str("\n\n");
+            }
+            out.push_str(&format!(
+                "| {} | {} | {} |\n| --- | --- | --- |\n",
+                t("cli_readme_layouts_header_tracks"),
+                t("cli_readme_layouts_header_channel"),
+                t("cli_readme_layouts_header_speaker"),
+            ));
+            for (i, channel) in layout.channels.iter().enumerate() {
+                let slot = if channel.layer == impulcifer_types::layouts::Layer::Lfe {
+                    "—"
+                } else {
+                    channel.slot
+                };
+                out.push_str(&format!(
+                    "| {}–{} | {} | {} |\n",
+                    2 * i + 1,
+                    2 * i + 2,
+                    channel.label,
+                    slot,
+                ));
+            }
+            out.push('\n');
+        }
     }
     out
 }
@@ -220,7 +384,7 @@ pub(crate) fn write_outputs_checked(
     let date = i18n.readme_date.clone().unwrap_or_else(local_date);
     let readme = dir.join("README.md");
     // Python open(..., "w") uses the host's native text-mode newline.
-    let content = render_readme(&outputs.readme, i18n, &date);
+    let content = render_readme_with_layouts(&outputs.readme, i18n, &date, &outputs.layouts);
     let content = if cfg!(windows) {
         content.replace('\n', "\r\n")
     } else {
@@ -250,6 +414,34 @@ pub(crate) fn write_outputs_checked(
             append_track_names(&path, &names.iter().map(String::as_str).collect::<Vec<_>>())?;
         }
         files.push(path);
+    }
+    for output in &outputs.layouts {
+        let layout = output.layout;
+        let path = dir.join(layout.file_name);
+        events.check_cancelled()?;
+        write_wav(&path, outputs.hrir.fs, &output.tracks, 32)?;
+        let names = layout.label_track_names();
+        append_track_names(&path, &names.iter().map(String::as_str).collect::<Vec<_>>())?;
+        events.log(
+            "success",
+            "cli_success_layout_file",
+            json!({"layout":layout.name,"path":path}),
+        );
+        if !output.missing.is_empty() {
+            events.log(
+                "warning",
+                "cli_warning_layout_partial",
+                json!({"layout":layout.name,"file":layout.file_name,"missing":missing_channels(&output.missing)}),
+            );
+        }
+        files.push(path);
+    }
+    for (layout, missing) in &outputs.layout_notices {
+        events.log(
+            "info",
+            "cli_info_layout_missing",
+            json!({"layout":layout.name,"count":missing.len(),"missing":missing_channels(missing)}),
+        );
     }
     if config.output_truehd_layouts || !outputs.truehd.is_empty() {
         for (label, order, minimum) in [

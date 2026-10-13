@@ -6,7 +6,7 @@ use impulcifer_service::{
     ImpulciferService, NoopHost,
     recovery::{RecoveryOptions, plan_brir_outputs, recover_brir_outputs},
 };
-use impulcifer_types::constants::{HEXADECAGONAL_TRACK_ORDER, SPEAKER_NAMES};
+use impulcifer_types::constants::{HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, SPEAKER_NAMES};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -355,6 +355,10 @@ fn golden_recovery_errors_match_python() {
         .iter()
         .filter(|c| c.get("error").is_some() && c.get("fault").is_none())
     {
+        // ADR 0007 extends the valid orders beyond these two 2.x limits.
+        if case["name"] == "wrong_count_hrir_34" || case["name"] == "wrong_count_hesuvi_32" {
+            continue;
+        }
         let temp = Temp::new();
         let original = setup(&temp.0, case);
         let options: RecoveryOptions = serde_json::from_value(case["options"].clone()).unwrap();
@@ -377,13 +381,68 @@ fn golden_recovery_errors_match_python() {
                 case["name"], actual["details"]["reason"], case["error"]["details"]["reason"]
             );
         } else {
-            assert_eq!(actual, case["error"], "{}", case["name"]);
+            let mut expected = case["error"].clone();
+            // ADR 0007 expands combined-file counts; keep the oracle path and actual count.
+            if expected["code"] == "INVALID_CHANNEL_COUNT" {
+                let path = expected["details"]["path"].as_str().unwrap();
+                let name = path.rsplit('/').next().unwrap();
+                let range = match name {
+                    "hrir.wav" => Some((16, HEXADECAGONAL_TRACK_ORDER.len())),
+                    "hesuvi.wav" => Some((14, HESUVI_TRACK_ORDER.len())),
+                    _ => None,
+                };
+                if let Some((minimum, maximum)) = range {
+                    expected["message"] = json!(format!(
+                        "{name} must contain {minimum}–{maximum} channels in complete stereo pairs."
+                    ));
+                    expected["details"]["expected"] =
+                        json!((minimum..=maximum).step_by(2).collect::<Vec<_>>());
+                }
+            }
+            assert_eq!(actual, expected, "{}", case["name"]);
         }
         preserve(&original);
         no_temps(&temp.0);
         count += 1;
     }
     assert!(count >= 40, "only {count} error scenarios");
+}
+// ADR 0007 makes these formerly oversized 2.x files valid silent 3.x extensions.
+#[test]
+fn wrong_counts_of_2x_are_valid_3x_extensions() {
+    let g = golden();
+    for name in ["wrong_count_hrir_34", "wrong_count_hesuvi_32"] {
+        let case = g["scenarios"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["name"] == name)
+            .unwrap();
+        let temp = Temp::new();
+        let original = setup(&temp.0, case);
+        let selected = temp.0.join(case["selected"].as_str().unwrap());
+        let options: RecoveryOptions = serde_json::from_value(case["options"].clone()).unwrap();
+        let plan = plan_brir_outputs(&selected, &options).unwrap();
+        let result = recover_brir_outputs(&selected, &options).unwrap();
+        assert!(plan.speakers.is_empty());
+        assert!(result.speakers.is_empty());
+        assert!(!plan.planned_files.is_empty());
+        assert_eq!(
+            plan.planned_files
+                .iter()
+                .map(|f| &f.path)
+                .collect::<Vec<_>>(),
+            result.created_files.iter().collect::<Vec<_>>()
+        );
+        for file in &plan.planned_files {
+            assert!(Path::new(&file.path).is_file());
+        }
+        for file in &result.created_files {
+            assert!(Path::new(file).is_file());
+        }
+        preserve(&original);
+        no_temps(&temp.0);
+    }
 }
 fn service(temp: &Temp) -> ImpulciferService {
     ImpulciferService::with_dependencies(

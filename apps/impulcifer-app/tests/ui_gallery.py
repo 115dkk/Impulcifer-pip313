@@ -8,8 +8,8 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 SKINS = ("studio", "stable")
@@ -20,11 +20,20 @@ RECOVERY_STATES = ("empty", "planning", "ready", "nothing", "error", "succeeded"
 EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
-EXPECTED_SHOTS = 2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * len(ADV_TABS)
+EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * len(ADV_TABS)
+                  + 2 * 2 * 2 + 2 * 2 * 2)
+# NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
+# speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
+NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
+            ("FLc", "FL"), ("FRc", "FR"), ("BC", "BC"), ("LFE2", "LFE2"), ("SiL", "SL"), ("SiR", "SR"),
+            ("TpFL", "HFL"), ("TpFR", "HFR"), ("TpFC", "HFC"), ("TpC", "TC"), ("TpBL", "HBL"), ("TpBR", "HBR"),
+            ("TpSiL", "TSL"), ("TpSiR", "TSR"), ("TpBC", "HBC"), ("BtFC", "DFC"), ("BtFL", "DFL"), ("BtFR", "DFR")]
+IMMERSIVE = [{"id": "22.2", "name": "NHK 22.2", "file_name": "nhk_22.2.wav",
+              "channels": [{"label": label, "slot": slot} for label, slot in NHK_22_2]}]
 ADVANCED_KEYS = {"fs", "target_level", "channel_balance", "bass_boost_gain", "bass_boost_fc", "bass_boost_q", "tilt",
                  "decay", "head_ms", "jamesdsp", "hangloose", "remove_silent_channels", "interactive_plots",
                  "microphone_deviation_correction", "mic_deviation_strength", "mic_deviation_debug_plots",
-                 "output_truehd_layouts"}
+                 "output_truehd_layouts", "layout_files"}
 
 
 def catalog(language):
@@ -51,7 +60,7 @@ def mock_script(skin, theme, language, scenario):
     version, notes = release_notes() if scenario == "update" else (None, None)
     fixture = json.dumps({"skin": skin, "theme": theme, "language": language,
                          "scenario": scenario, "strings": catalog(language),
-                         "release": {"version": version, "notes": notes},
+                         "release": {"version": version, "notes": notes}, "immersive": IMMERSIVE,
                          "catalogs": {code: catalog(code) for code in LANGUAGES}}, ensure_ascii=False)
     return "const fixture = " + fixture + ";\n" + r"""
 (() => {
@@ -82,7 +91,8 @@ def mock_script(skin, theme, language, scenario):
     languages: [{code: "en", name: "English"}, {code: "ko", name: "한국어"}]};
   const methods = {
     bootstrap: () => ok({version: "3.0.0-alpha.1", platform: "windows", install_kind: "dev", webview_backend: "edgechromium",
-      brir_defaults: {}, sweep: {layouts: ["stereo", "7.1"], default_fs: 48000, default_duration: 5, speaker_names: ["FL", "FR"]},
+      brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "22.2"], default_fs: 48000, default_duration: 5,
+        speaker_names: ["FL", "FR"], immersive: fixture.immersive},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
         brir_cancel: true, output_recovery_cancel: false, share_modes: scenario === "disabled" ? ["auto"] : ["auto", "exclusive", "shared"]},
       active_job: null, ui: settings}),
@@ -441,6 +451,47 @@ def advanced_checks(browser):
     print("Gallery advanced checks: per-tab requests, locks, reset, keyboard, skin carry-over, 9-language layout OK", flush=True)
 
 
+def layout_checks(browser):
+    """Immersive layouts (ADR 0007): the recorder shows which speaker code each
+    device channel plays and fills them in on request; the output options send
+    layout_files as auto, none or the formats forced with missing speakers."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "recorder")
+    assert not page.locator("#rf-layout-row").is_visible()
+    layout = page.locator("#rf-sweep-layout")
+    assert layout.locator('option[value="22.2"]').inner_text() == "NHK 22.2"
+    layout.select_option("22.2")
+    assert page.locator("#rf-layout-row").is_visible()
+    items = page.locator("#rf-layout-map .layout-ch")
+    assert items.count() == len(NHK_22_2)
+    first = items.nth(0)
+    assert [first.locator(cls).inner_text() for cls in (".layout-ch-num", ".layout-ch-label", ".layout-ch-slot")] == ["1", "FL", "WL"]
+    assert items.nth(3).get_attribute("data-lfe") == "true" and items.nth(3).locator(".layout-ch-slot").inner_text() == "—"
+    assert items.nth(6).locator(".layout-ch-slot").inner_text() == "FL"
+    page.locator("#rf-layout-use-all").click()
+    expected = ",".join(slot for _, slot in NHK_22_2 if not slot.startswith("LFE"))
+    assert page.locator("#rf-sweep-speakers").input_value() == expected
+    layout.select_option("stereo")
+    assert not page.locator("#rf-layout-row").is_visible()
+
+    navigate(page, "processing")
+    assert "layout_files" not in brir_request(page)
+    adv_switch(page, "output", True)
+    assert brir_request(page)["layout_files"] == "auto"
+    page.locator("#adv-panel-output .file-opt", has_text="atmos_24.1.10.wav").click()
+    page.locator("#adv-panel-output .file-opt", has_text="dtsx_30.2.wav").click()
+    assert brir_request(page)["layout_files"] == "24.1.10,30.2"
+    page.locator("#ba-layout-files").select_option("none")
+    assert disabled(page, "#ba-layout-force-2")
+    assert brir_request(page)["layout_files"] == "none"
+    page.locator("#adv-reset-output").click()
+    assert not disabled(page, "#ba-layout-force-2") and not page.locator("#ba-layout-force-2").is_checked()
+    assert brir_request(page)["layout_files"] == "auto"
+    assert not errors, errors
+    context.close()
+    print("Gallery layout checks: recorder channel map, use-all, layout_files auto/none/forced OK", flush=True)
+
+
 def room_phase_checks(browser):
     """Virtual room tuning: its own rows replace the Room EQ rows, the timing
     limit is an eight-stop slider in Studio and one checkbox in Stable, the
@@ -579,6 +630,97 @@ def room_phase_checks(browser):
           "skin carry-over OK", flush=True)
 
 
+def room_tuning2_checks(browser):
+    """Virtual room tuning 2 (ADR 0008): its rows replace the other modes' rows,
+    the filter shows the latency row only for a custom latency, an empty upper
+    band end shows the room facts and sends them, MIMO shows and sends its
+    limits, the tooltips follow the choices, bootstrap defaults apply, and only
+    tuning 2 sends room_tuning2_* fields. Both skins send the same request."""
+    t2_rows = ("#bf-room-tuning2-mode-row", "#bf-room-tuning2-max-boost-row", "#bf-room-tuning2-low-row",
+               "#bf-room-tuning2-high-row", "#bf-room-tuning-level-match-row", "#bf-room-tuning2-mimo-row")
+    others = ("#bf-room-range-row", "#bf-room-max-boost-row", "#bf-fr-combination-row", "#bf-room-tuning-max-boost-row",
+              "#bf-room-tuning-curtain-row", "#bf-room-tuning-delay-row", "#bf-room-phase-limit-row",
+              "#bf-room-phase-schroeder-row")
+    facts = ("#bf-room-volume-row", "#bf-schroeder-freq-row")
+    mimo_rows = ("#bf-room-tuning2-fsiso-row", "#bf-room-tuning2-mimo-low-row")
+    latency = "#bf-room-tuning2-latency-row"
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "en", "idle")
+        navigate(page, "processing")
+        disclosure(page, "room", True)
+
+        def shown(selectors, page=page):
+            return [page.locator(selector).is_visible() for selector in selectors]
+
+        def tip(name, page=page):
+            return page.locator(f"#{name}").text_content()
+
+        def request(page=page):
+            return page.evaluate("gatherBrirPayload()")
+
+        for mode in ("eq", "tuning"):
+            page.locator(f"#bf-room-mode-{mode}").click()
+            assert not any(key.startswith("room_tuning2") for key in request()), (skin, mode)
+            assert not any(shown(("#bf-room-tuning2-mode-row", "#bf-room-tuning2-high-row", "#bf-room-tuning2-mimo-row")
+                                 + mimo_rows + (latency,))), (skin, mode)
+        page.locator("#bf-room-mode-tuning2").click()
+        assert tip("bf-room-mode-tip") == page.evaluate("t('tooltip_room_mode_tuning2')")
+        assert tip("bf-room-tuning-level-match-tip") == page.evaluate("t('tooltip_room_tuning2_level_match')")
+        assert tip("bf-room-tuning2-mode-tip") == page.evaluate("t('tooltip_room_tuning2_mode_mixed')")
+        assert all(shown(t2_rows + facts)) and not any(shown(others + mimo_rows + (latency,))), skin
+        sent = request()
+        assert sent["room_mode"] == "tuning2" and sent["room_tuning2_mode"] == "mixed", sent
+        assert sent["room_tuning2_max_boost"] == 10 and sent["room_tuning2_low"] == 20, sent
+        assert sent["room_tuning2_high"] == "auto" and sent["room_tuning2_mimo"] is False, sent
+        assert sent["room_tuning_level_match"] is True and {"room_volume", "schroeder_freq"} <= sent.keys(), sent
+        assert not {"room_tuning2_fsiso", "room_tuning2_mimo_low", "room_range", "room_max_boost", "fr_combination_method",
+                    "room_tuning_delay", "room_tuning_phase_limit", "room_tuning_max_boost", "room_tuning_curtain"} & sent.keys(), sent
+        mode = page.locator("#bf-room-tuning2-mode")
+        for value in ("zero", "linear", "long"):
+            mode.select_option(value)
+            assert request()["room_tuning2_mode"] == value and not page.locator(latency).is_visible(), (skin, value)
+            assert tip("bf-room-tuning2-mode-tip") == page.evaluate(f"t('tooltip_room_tuning2_mode_{value}')"), value
+        mode.select_option("custom")
+        assert page.locator(latency).is_visible()
+        assert tip("bf-room-tuning2-mode-tip") == page.evaluate("t('tooltip_room_tuning2_mode_custom')")
+        assert request()["room_tuning2_mode"] == 200
+        page.locator("#bf-room-tuning2-latency").fill("60")
+        assert request()["room_tuning2_mode"] == 60
+        # A manual upper end hides the room facts and stops sending them.
+        page.locator("#bf-room-tuning2-high").fill("300")
+        assert not any(shown(facts))
+        sent = request()
+        assert sent["room_tuning2_high"] == 300 and not {"room_volume", "schroeder_freq"} & sent.keys(), sent
+        page.locator("#bf-room-tuning2-high").fill("")
+        assert all(shown(facts))
+        page.locator("#bf-room-tuning2-mimo").check()
+        assert all(shown(mimo_rows))
+        sent = request()
+        assert sent["room_tuning2_mimo"] is True and sent["room_tuning2_fsiso"] == 150, sent
+        assert sent["room_tuning2_mimo_low"] == "auto", sent
+        page.locator("#bf-room-tuning2-fsiso").fill("100")
+        page.locator("#bf-room-tuning2-mimo-low").fill("40")
+        sent = request()
+        assert sent["room_tuning2_fsiso"] == 100 and sent["room_tuning2_mimo_low"] == 40, sent
+        assert page.locator("#bf-room-tuning2-high").get_attribute("placeholder") == page.evaluate(
+            "t('placeholder_room_tuning2_auto')")
+        page.evaluate("state.brirDefaults = {room_mode: 'tuning2', room_tuning2_mode: '60', room_tuning2_high: '250',"
+                      " room_tuning2_mimo: true, room_tuning2_mimo_low: 'auto', room_tuning2_fsiso: 120}; applyRoomDefaults()")
+        assert mode.input_value() == "custom" and page.locator("#bf-room-tuning2-latency").input_value() == "60"
+        assert page.locator("#bf-room-tuning2-high").input_value() == "250" and not any(shown(facts))
+        assert page.locator("#bf-room-tuning2-mimo").is_checked()
+        assert page.locator("#bf-room-tuning2-mimo-low").input_value() == ""
+        assert page.locator("#bf-room-tuning2-fsiso").input_value() == "120"
+        page.evaluate("state.brirDefaults = {}; applyRoomDefaults()")
+        assert page.locator("#bf-room-mode-eq").get_attribute("aria-checked") == "true"
+        assert mode.input_value() == "mixed" and page.locator("#bf-room-tuning2-high").input_value() == ""
+        assert not page.locator("#bf-room-tuning2-mimo").is_checked()
+        assert not errors, errors
+        context.close()
+    print("Gallery room tuning 2 checks: rows per mode, filters and latency, automatic band facts, MIMO limits, "
+          "tooltips, defaults, both skins OK", flush=True)
+
+
 def vbass_checks(browser):
     """Virtual bass crossover modes: Automatic hides the frequency and sends no
     vbass_freq, Manual and Legacy show and send it, the tooltip follows the
@@ -634,8 +776,10 @@ def tooltip_checks(browser):
         disclosure(page, "vbass", True)
         page.locator("#bf-vbass-mode").select_option("manual")  # shows the crossover frequency and its tooltip
         seen = set()
-        for mode in ("eq", "tuning"):
+        for mode in ("eq", "tuning", "tuning2"):
             page.locator(f"#bf-room-mode-{mode}").click()
+            if mode == "tuning2":
+                page.locator("#bf-room-tuning2-mimo").check()  # shows MIMO's tooltip
             for button in page.locator("#dis-room button.info-tip, #dis-vbass button.info-tip").all():
                 if not button.is_visible():
                     continue
@@ -656,6 +800,7 @@ def tooltip_checks(browser):
                 assert bubble.get_attribute("data-open") is None, (skin, tip)
                 assert page.evaluate("document.activeElement.getAttribute('aria-describedby')") == tip, (skin, tip)
         expected = {"bf-room-mode-tip", "bf-room-range-tip", "bf-room-tuning-curtain-tip", "bf-room-tuning-level-match-tip",
+                    "bf-room-tuning2-mode-tip", "bf-room-tuning2-high-tip", "bf-room-tuning2-mimo-tip",
                     "bf-vbass-mode-tip", "bf-vbass-freq-tip",
                     "bf-room-phase-limit-tip" if skin == "studio" else "bf-room-phase-schroeder-tip"}
         assert seen == expected, (skin, seen)
@@ -727,7 +872,9 @@ def render_gallery(output):
         browser = playwright.chromium.launch()
         behavior_checks(browser)
         advanced_checks(browser)
+        layout_checks(browser)
         room_phase_checks(browser)
+        room_tuning2_checks(browser)
         vbass_checks(browser)
         tooltip_checks(browser)
         shell_checks(browser)
@@ -768,6 +915,14 @@ def render_gallery(output):
                     assert page.evaluate("galleryDialogs.length") == 2
             shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-{scenario}", errors))
             context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "idle")
+            navigate(page, "recorder")
+            page.locator("#rf-sweep-layout").select_option("22.2")
+            page.locator("#rf-layout-use-all").click()
+            page.locator("#rf-layout-row").scroll_into_view_if_needed()
+            shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-layout-22.2", errors))
+            context.close()
         for skin, theme, language, scenario in itertools.product(SKINS, THEMES, LANGUAGES, EQ_SCENARIOS):
             context, page, errors = open_page(browser, skin, theme, language, scenario)
             navigate(page, "processing")
@@ -803,6 +958,14 @@ def render_gallery(output):
                 page.locator(f"#adv-tab-{tab}").click()
                 page.locator("#adv-studio").scroll_into_view_if_needed()
                 shots.append(shoot(page, output, f"processing-advanced-studio-{language}-{theme}-{tab}", errors))
+            context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "idle")
+            navigate(page, "processing")
+            disclosure(page, "room", True)
+            page.locator("#bf-room-mode-tuning2").click()
+            page.locator("#bf-room-tuning2-mimo").check()
+            shots.append(shoot(page, output, f"processing-room-tuning2-{skin}-{language}-{theme}", errors))
             context.close()
         for theme, language in itertools.product(THEMES, LANGUAGES):
             context, page, errors = open_page(browser, "studio", theme, language, "update")

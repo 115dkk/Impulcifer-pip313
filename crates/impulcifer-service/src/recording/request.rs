@@ -172,7 +172,7 @@ fn boolean(o: &serde_json::Map<String, Value>, name: &str) -> Result<bool, Value
 }
 // Python re.search(SPEAKER_LIST_PATTERN, basename), not a known-speaker lookup:
 // names of two or three capitals or a lone X (skipped sweep), with at least one
-// real name ahead (core/constants.py, 2.14.3).
+// real name ahead (core/constants.py, 2.14.3), extended with known digit slots.
 fn filename_speakers(path: &str) -> Option<Vec<String>> {
     let name = path.rsplit(std::path::is_separator).next().unwrap_or("");
     let b = name.as_bytes();
@@ -180,6 +180,12 @@ fn filename_speakers(path: &str) -> Option<Vec<String>> {
     let element = |pos: usize| -> Option<usize> {
         let mut end = pos;
         while end < b.len() && end - pos < 3 && b[end].is_ascii_uppercase() {
+            end += 1;
+        }
+        if end - pos == 2
+            && b.get(end).is_some_and(u8::is_ascii_digit)
+            && impulcifer_types::constants::SPEAKER_NAMES.contains(&&name[pos..end + 1])
+        {
             end += 1;
         }
         if end - pos >= 2 {
@@ -367,6 +373,23 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
 #[cfg(test)]
 mod tests {
     use super::filename_speakers;
+
+    #[test]
+    fn filename_speakers_read_digit_slot_codes_whole() {
+        assert_eq!(
+            filename_speakers("SL1,SR1.wav"),
+            Some(vec!["SL1".to_owned(), "SR1".to_owned()])
+        );
+        assert_eq!(
+            filename_speakers("take BL1,BR1,BL2,BR2.wav"),
+            Some(vec!["BL1".into(), "BR1".into(), "BL2".into(), "BR2".into()])
+        );
+        // An unknown digit code is not a slot: only its capitals match, as before.
+        assert_eq!(
+            filename_speakers("FC,XY1.wav"),
+            Some(vec!["FC".into(), "XY".into()])
+        );
+    }
 
     /// Expected values are `re.search(SPEAKER_LIST_PATTERN, name).group(1)` of
     /// the 2.14.3 pattern in core/constants.py.

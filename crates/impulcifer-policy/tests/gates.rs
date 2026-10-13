@@ -72,6 +72,31 @@ fn python_wheel_builds_without_a_native_audio_backend() {
     );
 }
 
+/// faer's `std` feature brings private-gemm-x86, whose generated assembly
+/// kernels leave the upper AVX state dirty (no `vzeroupper`). Every SSE
+/// instruction after the first matrix product then stalls: the tuning 2 PEQ
+/// residual ran 8x slower after one SVD. faer stays without `std`; pulp,
+/// gemm and faer-traits enable their own `std` for runtime SIMD detection.
+#[test]
+fn no_assembly_kernels_that_leave_avx_state_dirty() {
+    let lock = fs::read_to_string(repo_root().join("Cargo.lock")).expect("Cargo.lock");
+    assert!(
+        !lock.contains("name = \"private-gemm-x86\""),
+        "private-gemm-x86 is back in Cargo.lock; keep faer's `std` feature off"
+    );
+    let workspace = manifest("Cargo.toml");
+    let faer = &workspace["workspace"]["dependencies"]["faer"];
+    assert_eq!(faer["default-features"].as_bool(), Some(false));
+    assert!(
+        faer["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|feature| feature.as_str() != Some("std")),
+        "faer's `std` feature pulls in private-gemm-x86"
+    );
+}
+
 fn crate_name(dir: &Path) -> String {
     dir.file_name().unwrap().to_string_lossy().to_string()
 }
@@ -405,7 +430,7 @@ const CANONICAL_IPC: [&str; 25] = [
     "select_directory",
     "open_url",
 ];
-const CANONICAL_CONFIG: [&str; 43] = [
+const CANONICAL_CONFIG: [&str; 50] = [
     "dir_path",
     "test_signal",
     "room_target",
@@ -430,6 +455,13 @@ const CANONICAL_CONFIG: [&str; 43] = [
     "room_tuning_max_boost",
     "room_tuning_curtain",
     "room_tuning_level_match",
+    "room_tuning2_mode",
+    "room_tuning2_max_boost",
+    "room_tuning2_low",
+    "room_tuning2_high",
+    "room_tuning2_mimo",
+    "room_tuning2_fsiso",
+    "room_tuning2_mimo_low",
     "bass_boost_gain",
     "bass_boost_fc",
     "bass_boost_q",
