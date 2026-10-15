@@ -34,6 +34,7 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경 (릴리스 후 추가, 출하물 변화 없음)
 - **Sponsor 버튼** (2026-10-11): `.github/FUNDING.yml`을 더해 저장소 상단에 Sponsor 버튼이 뜹니다.
+- **월간 감사 모델 변경** (2026-10-16): CI 자동감사(`monthly-audit.yml`)가 쓰는 모델을 `claude-fable-5`에서 `claude-mythos-5-1`로 바꿨습니다. 10월 15일에 이 감사와 EqualizerAPO-XT의 격주 감사가 같은 시각에 돌았고, 뒤쪽이 구독의 세션 한도에 걸려 실패했습니다. 이 저장소의 감사는 정상 종료했지만, 세 저장소의 감사를 같은 모델로 맞춥니다.
 
 ## 3.4.0 - 2026-10-10
 ### NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10, DTS:X Pro 30.2의 녹음, BRIR 합성, 출력 복원
