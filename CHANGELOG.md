@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.5.0 - 2026-10-16
+### 월간 감사 모델을 Mythos 5.1로
+
+#### 🔧 빌드 / 설정 변경
+- **월간 감사 모델 변경**: CI 자동감사(`monthly-audit.yml`)가 쓰는 모델을 `claude-fable-5`에서 `claude-mythos-5-1`로 바꿨습니다. 10월 15일에 이 감사와 EqualizerAPO-XT의 격주 감사가 같은 시각에 돌았고, 뒤쪽이 구독의 세션 한도에 걸려 실패했습니다. 이 저장소의 감사는 정상 종료했지만, 세 저장소의 감사를 같은 모델로 맞춥니다. (CI 설정 변경 → 버전 bump 없음.)
+
 ## 3.5.0 - 2026-10-12
 ### 가상 룸 튜닝 2: SECS 2(스피커 갤러리)의 채널 보정과 MIMO 서포트
 
