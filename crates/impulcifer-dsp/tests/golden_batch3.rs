@@ -48,8 +48,10 @@ fn array(v: &Value) -> Vec<f64> {
     let bytes = fs::read(root().join(name)).unwrap();
     assert_eq!(bytes.len(), integer(&v["length"]) * 8);
     let values: Vec<_> = bytes
-        .chunks_exact(8)
-        .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|b| f64::from_le_bytes(*b))
         .collect();
     assert_eq!(&values[..values.len().min(256)], array(&v["first"]));
     assert_eq!(

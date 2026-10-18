@@ -378,8 +378,10 @@ mod tests {
             descriptor["length"].as_u64().unwrap() as usize * 8
         );
         let data: Vec<_> = bytes
-            .chunks_exact(8)
-            .map(|x| f64::from_le_bytes(x.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|x| f64::from_le_bytes(*x))
             .collect();
         let mut observed = false;
         super::decay_params_with_first_pass(

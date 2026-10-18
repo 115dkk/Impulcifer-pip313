@@ -10,7 +10,7 @@
 pip install impulcifer-py313
 ```
 
-Python 3.9 이상이 필요합니다. Windows x64, macOS(Apple Silicon), Linux x86_64(glibc 2.28 이상)에서는 미리 빌드한 휠이 설치됩니다. 그 밖의 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 빌드하므로 Rust 1.97 이상이 있어야 합니다. Rust가 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
+Python 3.9 이상이 필요합니다. Windows x64, macOS(Apple Silicon), Linux x86_64(glibc 2.28 이상)에서는 미리 빌드한 휠이 설치됩니다. 그 밖의 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 빌드하므로 Rust 1.99 이상이 있어야 합니다. Rust가 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
 
 ## 앱 (`impulcifer_gui`)
 

@@ -132,7 +132,9 @@ fn measure(backend: &dyn AudioBackend) {
     let rms = |channel: usize| {
         let mean = recording
             .interleaved
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|f| f64::from(f[channel]).powi(2))
             .sum::<f64>()
             / recording.capture.frames as f64;

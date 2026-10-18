@@ -553,7 +553,12 @@ fn graphic_nodes(parameters: &str) -> Vec<(f64, f64)> {
         .find_iter(&value)
         .map(|m| parse_double(m.as_str()))
         .collect();
-    let mut nodes: Vec<_> = numbers.chunks_exact(2).map(|p| (p[0], p[1])).collect();
+    let mut nodes: Vec<_> = numbers
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|p| (p[0], p[1]))
+        .collect();
     nodes.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     nodes
 }

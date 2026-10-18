@@ -68,8 +68,8 @@ fn verify(path: &Path, tracks: &[Vec<f64>]) {
     for track in tracks {
         let mut bytes = vec![0; track.len() * 8];
         file.read_exact(&mut bytes).unwrap();
-        for (sample, bytes) in track.iter().zip(bytes.chunks_exact(8)) {
-            let expected = f64::from_le_bytes(bytes.try_into().unwrap());
+        for (sample, bytes) in track.iter().zip(bytes.as_chunks::<8>().0.iter()) {
+            let expected = f64::from_le_bytes(*bytes);
             assert_eq!(sample.to_bits(), expected.to_bits(), "{}", path.display());
             checksum = checksum.wrapping_add(sample.to_bits());
         }

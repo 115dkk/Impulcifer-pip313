@@ -423,7 +423,9 @@ pub fn run(backend: &dyn AudioBackend) -> Result<(), String> {
                     .map(|ch| {
                         playback
                             .interleaved
-                            .chunks_exact(2)
+                            .as_chunks::<2>()
+                            .0
+                            .iter()
                             .map(|f| f[ch] as f64)
                             .collect()
                     })

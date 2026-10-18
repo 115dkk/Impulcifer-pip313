@@ -67,7 +67,7 @@ fn trf_matches_scipy() {
                 "active" => vec![x[0] - 3., 2. * (x[1] + 2.), x[0] + x[1]],
                 _ => {
                     let mut p = vec![Complex64::new(1., 0.); grid.len()];
-                    for x in x.chunks_exact(3) {
+                    for x in x.as_chunks::<3>().0.iter() {
                         let f = x[0].exp();
                         let q = x[1].exp();
                         let a = 10_f64.powf(x[2] / 40.);

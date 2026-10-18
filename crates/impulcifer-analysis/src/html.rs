@@ -341,14 +341,14 @@ const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 /// Standard base64 with padding, straight into `out`.
 fn base64_into(bytes: &[u8], out: &mut String) {
     out.reserve(bytes.len().div_ceil(3) * 4);
-    let mut chunks = bytes.chunks_exact(3);
-    for c in &mut chunks {
+    let (chunks, remainder) = bytes.as_chunks::<3>();
+    for c in chunks {
         let n = u32::from(c[0]) << 16 | u32::from(c[1]) << 8 | u32::from(c[2]);
         for shift in [18, 12, 6, 0] {
             out.push(BASE64[(n >> shift & 63) as usize] as char);
         }
     }
-    match *chunks.remainder() {
+    match *remainder {
         [a] => {
             let n = u32::from(a) << 16;
             out.push(BASE64[(n >> 18 & 63) as usize] as char);

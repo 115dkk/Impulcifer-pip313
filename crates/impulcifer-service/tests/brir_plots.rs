@@ -154,8 +154,10 @@ fn results_from_python_ir_meet_strict_fr_budget() {
     for (side, raw_index, smooth_index) in [("left", 0, 2), ("right", 1, 3)] {
         let bytes = std::fs::read(golden(&format!("p19_results_{side}.f64"))).unwrap();
         let ir: Vec<_> = bytes
-            .chunks_exact(8)
-            .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|b| f64::from_le_bytes(*b))
             .collect();
         let s = plot_data::series(&ir, 48000, true).unwrap();
         compare(

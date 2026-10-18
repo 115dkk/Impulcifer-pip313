@@ -17,7 +17,7 @@ PyPI 패키지 `impulcifer-py313`도 3.x로 계속 올라갑니다. 3.x 패키�
 | 앱 | Linux x86_64 (AppImage) | FUSE 2(`libfuse2`)가 있어야 합니다. Ubuntu 22.04에서 빌드하므로 그보다 오래된 배포판에서는 실행되지 않을 수 있습니다. |
 | PyPI 패키지 | Python 3.9 이상 | Windows x64, macOS(Apple Silicon), Linux x86_64(glibc 2.28 이상)에서는 미리 빌드한 휠을 받습니다. |
 
-PyPI 휠이 없는 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 받아 직접 빌드하므로 Rust 1.97 이상이 있어야 합니다([rustup](https://rustup.rs)으로 설치). Rust가 아예 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
+PyPI 휠이 없는 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 받아 직접 빌드하므로 Rust 1.99 이상이 있어야 합니다([rustup](https://rustup.rs)으로 설치). Rust가 아예 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
 
 ## 설치
 
@@ -297,7 +297,7 @@ impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 
 ## 소스에서 빌드하고 테스트하기
 
-3.x는 저장소 루트의 Cargo 워크스페이스(`crates/`, `apps/impulcifer-app`)이고, 툴체인 버전은 `rust-toolchain.toml`(1.97)에 고정돼 있습니다. 구조는 [docs/rust/ARCHITECTURE.md](docs/rust/ARCHITECTURE.md)에 있습니다.
+3.x는 저장소 루트의 Cargo 워크스페이스(`crates/`, `apps/impulcifer-app`)이고, Rust 1.99.0(`rust-toolchain.toml` 고정), edition 2024, Cargo resolver 3을 사용합니다. 구조는 [docs/rust/ARCHITECTURE.md](docs/rust/ARCHITECTURE.md)에 있습니다.
 
 ```bash
 cargo test --workspace                                    # 전체 테스트

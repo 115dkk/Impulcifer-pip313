@@ -200,8 +200,10 @@ fn golden_sweep_playback_matches_python() {
             // Reconstruct every silent and active sample, not just a sparse probe.
             let raw = std::fs::read(fixtures().join(case["signal"].as_str().unwrap())).unwrap();
             let signal: Vec<_> = raw
-                .chunks_exact(4)
-                .map(|b| i32::from_le_bytes(b.try_into().unwrap()) as f64 / 2147483648.0)
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| i32::from_le_bytes(*b) as f64 / 2147483648.0)
                 .collect();
             assert_eq!(signal.len(), p.estimator.test_signal.len());
             let mut estimator = p.estimator.clone();
@@ -799,10 +801,10 @@ fn sha256(bytes: &[u8]) -> String {
         data.push(0);
     }
     data.extend_from_slice(&((bytes.len() as u64) * 8).to_be_bytes());
-    for chunk in data.chunks_exact(64) {
+    for chunk in data.as_chunks::<64>().0 {
         let mut w = [0u32; 64];
-        for (i, word) in chunk.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes(word.try_into().unwrap());
+        for (i, word) in chunk.as_chunks::<4>().0.iter().enumerate() {
+            w[i] = u32::from_be_bytes(*word);
         }
         for i in 16..64 {
             let x = w[i - 15];

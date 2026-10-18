@@ -11,16 +11,31 @@ pub struct TemporaryRoot(pub PathBuf);
 
 impl TemporaryRoot {
     pub fn new() -> Self {
-        let root = std::env::temp_dir().join(format!(
-            "impulcifer-p21-upgrade-{}-{}",
-            std::process::id(),
+        Self::new_at(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir(&root).unwrap();
-        Self(root)
+                .as_nanos(),
+        )
+    }
+
+    fn new_at(timestamp: u128) -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        loop {
+            // Windows clock resolution can give parallel tests the same timestamp.
+            let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "impulcifer-p21-upgrade-{}-{timestamp}-{sequence}",
+                std::process::id(),
+            ));
+            match std::fs::create_dir(&root) {
+                Ok(()) => return Self(root),
+                // Never adopt or remove an existing directory, including leftovers
+                // from a prior process that happened to have the same PID.
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("TEMP creation failed at {}: {error}", root.display()),
+            }
+        }
     }
 }
 
@@ -30,6 +45,40 @@ impl Drop for TemporaryRoot {
             eprintln!("TEMP cleanup failed at {}: {error}", self.0.display());
         }
     }
+}
+
+#[test]
+fn temporary_roots_are_isolated_with_identical_timestamps() {
+    // Exercise the ordinary constructor too, including on non-Windows hosts.
+    let ordinary = TemporaryRoot::new();
+    assert!(ordinary.0.is_dir());
+    let barrier = std::sync::Barrier::new(16);
+    let roots: Vec<_> = std::thread::scope(|scope| {
+        let threads: Vec<_> = (0..16)
+            .map(|i| {
+                let barrier = &barrier;
+                scope.spawn(move || {
+                    barrier.wait();
+                    let root = TemporaryRoot::new_at(0);
+                    std::fs::write(root.0.join("owner"), i.to_string()).unwrap();
+                    (i, root)
+                })
+            })
+            .collect();
+        threads.into_iter().map(|t| t.join().unwrap()).collect()
+    });
+    let paths: std::collections::BTreeSet<_> =
+        roots.iter().map(|(_, root)| root.0.clone()).collect();
+    assert_eq!(paths.len(), roots.len());
+    for (i, root) in &roots {
+        assert_eq!(
+            std::fs::read_to_string(root.0.join("owner")).unwrap(),
+            i.to_string()
+        );
+    }
+    drop(roots);
+    assert!(paths.iter().all(|path| !path.exists()));
+    assert!(ordinary.0.is_dir());
 }
 
 pub struct LocalFeed {

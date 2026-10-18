@@ -126,8 +126,10 @@ fn bytes_to_f32(bytes: &[u8]) -> Result<Vec<f32>, AudioError> {
         )));
     }
     Ok(bytes
-        .chunks_exact(size_of::<f32>())
-        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&chunk| f32::from_le_bytes(chunk))
         .collect())
 }
 
@@ -189,9 +191,11 @@ fn append_packet<S: PacketSource>(
             for frame in
                 scratch[..byte_count].chunks_exact(size_of::<f32>() * usize::from(channels))
             {
-                let all_zero = frame.chunks_exact(4).all(|b| {
-                    f32::from_le_bytes([b[0], b[1], b[2], b[3]]).to_bits() & 0x7fff_ffff == 0
-                });
+                let all_zero = frame
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .all(|&b| f32::from_le_bytes(b).to_bits() & 0x7fff_ffff == 0);
                 if all_zero {
                     zero_frames += 1;
                     if !in_zero_run {
@@ -205,8 +209,10 @@ fn append_packet<S: PacketSource>(
         }
         pending.extend(
             scratch[..byte_count]
-                .chunks_exact(4)
-                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|&b| f32::from_le_bytes(b)),
         );
         (zero_runs, zero_frames, 0)
     };

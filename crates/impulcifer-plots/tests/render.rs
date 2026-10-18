@@ -113,7 +113,7 @@ fn png_is_not_blank() {
     }
     plot_results(&d.join("results.png"), &l, &r).unwrap();
     let (_, _, pixels) = decode(&d.join("results.png"));
-    let colors: HashSet<_> = pixels.chunks_exact(3).map(|p| [p[0], p[1], p[2]]).collect();
+    let colors: HashSet<_> = pixels.as_chunks::<3>().0.iter().copied().collect();
     let mean = pixels.iter().map(|v| f64::from(*v)).sum::<f64>() / pixels.len() as f64;
     let variance = pixels
         .iter()
@@ -277,8 +277,8 @@ fn check_picture(path: &std::path::Path, size: (u32, u32)) {
     assert!(path.is_file());
     let (w, h, pixels) = decode(path);
     assert_eq!((w, h), size);
-    assert!(pixels.chunks_exact(3).any(|p| p == [251, 251, 252]));
-    assert!(pixels.chunks_exact(3).any(|p| p == [27, 31, 36]));
+    assert!(pixels.as_chunks::<3>().0.contains(&[251, 251, 252]));
+    assert!(pixels.as_chunks::<3>().0.contains(&[27, 31, 36]));
     // The top title region must contain ink, not only an axis or legend.
     assert!(
         (64..160).any(|y| (64..w as usize - 64).any(|x| pixels
@@ -314,7 +314,7 @@ fn headphones_chart_draws_the_applied_correction_when_supplied() {
     let measured_path = d.join("headphones-measured.png");
     plot_headphones(&measured_path, &left, &right, 0., 0.).unwrap();
     let (_, _, measured_pixels) = decode(&measured_path);
-    assert!(!measured_pixels.chunks_exact(3).any(|p| p == [124, 58, 237]));
+    assert!(!measured_pixels.as_chunks::<3>().0.contains(&[124, 58, 237]));
 
     left.equalization = left
         .frequency
@@ -331,7 +331,7 @@ fn headphones_chart_draws_the_applied_correction_when_supplied() {
     for path in [&measured_path, &applied_path] {
         check_picture(path, (1600, 1000));
         let (_, _, pixels) = decode(path);
-        let colors: HashSet<_> = pixels.chunks_exact(3).map(|p| [p[0], p[1], p[2]]).collect();
+        let colors: HashSet<_> = pixels.as_chunks::<3>().0.iter().copied().collect();
         for token in [[37, 99, 235], [220, 38, 38], [156, 163, 175]] {
             assert!(colors.contains(&token), "missing token {token:?}");
         }
@@ -527,7 +527,7 @@ fn chart_kinds_use_their_actual_tokens() {
         ("overlay", vec![blue, red]),
     ] {
         let (_, _, pixels) = decode(&d.join(format!("{name}.png")));
-        let colors: HashSet<_> = pixels.chunks_exact(3).map(|p| [p[0], p[1], p[2]]).collect();
+        let colors: HashSet<_> = pixels.as_chunks::<3>().0.iter().copied().collect();
         for token in expected.into_iter().chain([[251, 251, 252], [27, 31, 36]]) {
             assert!(colors.contains(&token), "{name}: missing token {token:?}");
         }

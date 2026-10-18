@@ -100,7 +100,7 @@ def mock_script(skin, theme, language, scenario):
       devices: [{index: 0, name: "Speakers (USB Audio)", host_api: "Windows WASAPI", max_input_channels: 0, max_output_channels: 2},
         {index: 1, name: "Binaural microphones (USB Audio)", host_api: "Windows WASAPI", max_input_channels: 2, max_output_channels: 0}]}),
     get_system_info: () => ok({version: "3.0.0-alpha.1", install_kind: "dev", os: "Windows 11", cpu_count: 16,
-      runtime: {language: "Rust", toolchain: "rustc 1.97.0", audio_backend: "WASAPI", shell: "Tauri 2.11.5", webview: "WebView2 152.0.4191.66"},
+      runtime: {language: "Rust", toolchain: "rustc 1.99.0", audio_backend: "WASAPI", shell: "Tauri 2.11.5", webview: "WebView2 152.0.4191.66"},
       paths: {data_dir: "C:/Impulcifer/data", settings_path: "C:/Users/Listener/.impulcifer/settings.json"}, update_channel: "prerelease"}),
     get_ui_settings: () => ok(settings),
     set_language: code => ok({...settings, language: code, strings: fixture.catalogs[code]}),
