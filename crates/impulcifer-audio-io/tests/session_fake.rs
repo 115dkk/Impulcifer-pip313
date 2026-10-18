@@ -73,7 +73,7 @@ fn bench_playback_set_preserves_transport_and_segment_routing() {
     let set = bench_support::playback_set(&mono, 7);
     assert_eq!(set.sample_rate, 48000);
     assert_eq!(set.channels, 2);
-    for (index, segment) in set.interleaved.chunks_exact(4).enumerate() {
+    for (index, segment) in set.interleaved.as_chunks::<4>().0.iter().enumerate() {
         assert_eq!(
             segment,
             if index % 2 == 0 {

@@ -50,6 +50,33 @@ fn first_party_crate_dirs() -> Vec<PathBuf> {
 }
 
 #[test]
+fn rust_toolchain_and_workspace_edition_stay_in_sync() {
+    let workspace = manifest("Cargo.toml");
+    let package = &workspace["workspace"]["package"];
+    let toolchain = manifest("rust-toolchain.toml");
+    let minimum = package["rust-version"].as_str().expect("workspace MSRV");
+    assert_eq!(package["edition"].as_str(), Some("2024"));
+    assert_eq!(workspace["workspace"]["resolver"].as_str(), Some("3"));
+    assert_eq!(
+        toolchain["toolchain"]["channel"].as_str(),
+        Some(format!("{minimum}.0").as_str()),
+        "CI toolchain must exercise the minimum supported Rust release"
+    );
+    for dir in first_party_crate_dirs() {
+        let text = fs::read_to_string(dir.join("Cargo.toml")).unwrap();
+        let member: toml::Value = toml::from_str(&text).unwrap();
+        for field in ["edition", "rust-version"] {
+            assert_eq!(
+                member["package"][field]["workspace"].as_bool(),
+                Some(true),
+                "{} must inherit {field}",
+                dir.display()
+            );
+        }
+    }
+}
+
+#[test]
 fn python_wheel_builds_without_a_native_audio_backend() {
     let python = manifest("crates/impulcifer-python/Cargo.toml");
     let dependencies = python["dependencies"].as_table().unwrap();

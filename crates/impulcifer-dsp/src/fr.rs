@@ -128,8 +128,8 @@ pub fn round_half_even(x: f64) -> i64 {
 pub fn window_size(frequency: &[f64], octaves: f64) -> usize {
     assert!(frequency.len() >= 2 && octaves.is_finite() && octaves >= 0.0);
     let mut sum = 0.0;
-    for pair in frequency.windows(2) {
-        sum += pair[1] / pair[0];
+    for &[previous, next] in frequency.array_windows() {
+        sum += next / previous;
     }
     let ratio = sum / (frequency.len() - 1) as f64;
     assert!(ratio.is_finite() && ratio > 1.0);
@@ -268,10 +268,10 @@ impl FrequencyResponse {
         let mut order: Vec<_> = (0..n).collect();
         order.sort_by(|&a, &b| self.frequency[a].total_cmp(&self.frequency[b]));
         self.frequency = order.iter().map(|&i| self.frequency[i]).collect();
-        if let Some(pair) = self.frequency.windows(2).find(|p| p[0] == p[1]) {
+        if let Some([_, duplicate]) = self.frequency.array_windows().find(|[a, b]| a == b) {
             return Err(DspError::InvalidArgument(format!(
                 "Duplicate values found at frequency {}. Remove duplicates manually.",
-                pair[1]
+                duplicate
             )));
         }
         for values in [

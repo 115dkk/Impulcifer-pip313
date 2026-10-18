@@ -137,8 +137,10 @@ fn scenario(name: &str) {
     );
     let samples: Vec<f64> = std::fs::read(golden(spec["windows"].as_str().unwrap()))
         .unwrap()
-        .chunks_exact(8)
-        .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|b| f64::from_le_bytes(*b))
         .collect();
     let budget = ratio_budget(spec);
     let mut failures = Vec::new();

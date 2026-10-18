@@ -13,9 +13,22 @@
 
 ## 2. 워크스페이스
 
+Rust 최소 버전은 1.99이며 개발·CI·릴리스는 1.99.0으로 고정합니다. 모든
+크레이트가 루트의 edition 2024와 `rust-version`을 상속합니다. 가상
+워크스페이스는 resolver 3을 명시해 의존성 해석에 Rust 버전을 반영하고,
+`Cargo.lock`으로 검증한 의존성 버전을 유지합니다. 정책 게이트가 툴체인과
+최소 버전, edition·resolver 및 각 크레이트의 상속 설정을 함께 검사합니다.
+
+edition 2024의 let-chain을 사용하는 기존 코드에 더해, FFmpeg 오류 처리에는
+Rust 1.99의 소유권 기반 UTF-8 변환을, 룸 파일명 검사에는 1.98의
+`strip_circumfix`를 사용합니다. DSP의 고정 길이 이웃 순회는 `array_windows`,
+고정 길이 묶음 처리는 `as_chunks`와 배열 패턴을 쓰며, 나머지 데이터 처리와
+수치 연산 순서를 유지합니다. 부동소수점 재결합을 허용하는
+`algebraic_*` 연산은 BRIR 바이트 보존 계약에 맞지 않아 사용하지 않습니다.
+
 ```text
 Cargo.toml                      워크스페이스 루트 (lints, 공용 의존성 버전)
-rust-toolchain.toml             1.97.0 고정
+rust-toolchain.toml             1.99.0 고정 (edition 2024, resolver 3)
 features.toml                   기능 등록부 (게이트의 입력)
 crates/
   impulcifer-types/             설정·상수·IPC 봉투·잡 모델·오디오 트레이트. 의존성 없음(serde만)

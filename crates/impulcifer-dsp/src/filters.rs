@@ -193,8 +193,8 @@ pub fn sosfilt(sos: &Sos, x: &[f64]) -> Vec<f64> {
     let mut output = x.to_vec();
     // Process four sections together: independent section states let the CPU
     // overlap their feedback arithmetic, without changing per-section ordering.
-    let mut groups = sos.0.chunks_exact(4);
-    for group in groups.by_ref() {
+    let (groups, remainder) = sos.0.as_chunks::<4>();
+    for group in groups {
         let mut state = [[0.0; 2]; 4];
         for sample in &mut output {
             let mut value = *sample;
@@ -207,7 +207,7 @@ pub fn sosfilt(sos: &Sos, x: &[f64]) -> Vec<f64> {
             *sample = value;
         }
     }
-    for s in groups.remainder() {
+    for s in remainder {
         let mut z1 = 0.0;
         let mut z2 = 0.0;
         for x in &mut output {

@@ -24,7 +24,7 @@ impl Spline {
             || x.len() <= k
             || x.len() != y.len()
             || !x.iter().chain(y).all(|v| v.is_finite())
-            || x.windows(2).any(|v| v[0] >= v[1])
+            || x.array_windows().any(|[a, b]| a >= b)
         {
             return Err(DspError::InvalidArgument(
                 "spline requires k=1/2/3, finite matching samples, strictly increasing x and n > k"

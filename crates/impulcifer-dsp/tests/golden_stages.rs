@@ -84,8 +84,10 @@ fn array(v: &Value) -> Vec<f64> {
         )
         .unwrap();
         assert_eq!(b.len(), v["length"].as_u64().unwrap() as usize * 8);
-        b.chunks_exact(8)
-            .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+        b.as_chunks::<8>()
+            .0
+            .iter()
+            .map(|b| f64::from_le_bytes(*b))
             .collect()
     }
 }

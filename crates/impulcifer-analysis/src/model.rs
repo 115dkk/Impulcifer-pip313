@@ -227,14 +227,10 @@ impl Iacf {
 fn dot(a: &[f64], b: &[f64]) -> f64 {
     debug_assert_eq!(a.len(), b.len());
     let mut lanes = [0.0; 8];
-    let (chunks_a, chunks_b) = (a.chunks_exact(8), b.chunks_exact(8));
-    let tail: f64 = chunks_a
-        .remainder()
-        .iter()
-        .zip(chunks_b.remainder())
-        .map(|(x, y)| x * y)
-        .sum();
-    for (x, y) in chunks_a.zip(chunks_b) {
+    let (chunks_a, tail_a) = a.as_chunks::<8>();
+    let (chunks_b, tail_b) = b.as_chunks::<8>();
+    let tail: f64 = tail_a.iter().zip(tail_b).map(|(x, y)| x * y).sum();
+    for (x, y) in chunks_a.iter().zip(chunks_b) {
         for ((lane, x), y) in lanes.iter_mut().zip(x).zip(y) {
             *lane += x * y;
         }

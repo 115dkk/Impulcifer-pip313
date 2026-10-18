@@ -60,8 +60,10 @@ fn array(v: &Value) -> Vec<f64> {
     let bytes = fs::read(root().join(name)).unwrap();
     assert_eq!(bytes.len(), v["length"].as_u64().unwrap() as usize * 8);
     let result: Vec<_> = bytes
-        .chunks_exact(8)
-        .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|b| f64::from_le_bytes(*b))
         .collect();
     assert_eq!(&result[..256], array(&v["first"]));
     assert_eq!(&result[result.len() - 256..], array(&v["last"]));

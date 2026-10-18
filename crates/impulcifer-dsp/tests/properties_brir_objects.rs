@@ -268,8 +268,10 @@ fn zero_decay_target_panics_without_modifying_data() {
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/migration/goldens");
     let bytes = std::fs::read(root.join("p08_decay_synthetic_input.f64")).unwrap();
     let data: Vec<_> = bytes
-        .chunks_exact(8)
-        .map(|x| f64::from_le_bytes(x.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|x| f64::from_le_bytes(*x))
         .collect();
     for target in [0.0, -0.0] {
         for data in [data.clone(), vec![0.0; 32]] {

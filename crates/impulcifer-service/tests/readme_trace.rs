@@ -74,8 +74,10 @@ fn readme_numerical_trace_on_identical_oracle_samples() {
             let bytes =
                 std::fs::read(golden(&format!("p11_{scenario}_{name}_FR-left.f64"))).unwrap();
             let reference: Vec<_> = bytes
-                .chunks_exact(8)
-                .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|b| f64::from_le_bytes(*b))
                 .collect();
             let values = &hrir.get("FR").unwrap().left.as_ref().unwrap().data;
             assert_eq!(values.len(), reference.len());
@@ -182,8 +184,10 @@ fn readme_numerical_trace_on_identical_oracle_samples() {
             fs: 48000,
             recording: None,
             data: bytes
-                .chunks_exact(8)
-                .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+                .as_chunks::<8>()
+                .0
+                .iter()
+                .map(|b| f64::from_le_bytes(*b))
                 .collect(),
         };
         let p = ir.decay_params();

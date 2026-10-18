@@ -123,8 +123,10 @@ pub fn array(v: &Value) -> Vec<f64> {
             "{name}: SHA256"
         );
         return bytes
-            .chunks_exact(8)
-            .map(|c| f64::from_le_bytes(c.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| f64::from_le_bytes(*c))
             .collect();
     }
     let a = v.as_array().expect("array or sidecar descriptor");
@@ -273,10 +275,10 @@ fn sha256(bytes: &[u8]) -> String {
         data.push(0);
     }
     data.extend_from_slice(&((bytes.len() as u64) * 8).to_be_bytes());
-    for chunk in data.chunks_exact(64) {
+    for chunk in data.as_chunks::<64>().0 {
         let mut w = [0u32; 64];
-        for (i, word) in chunk.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes(word.try_into().unwrap());
+        for (i, word) in chunk.as_chunks::<4>().0.iter().enumerate() {
+            w[i] = u32::from_be_bytes(*word);
         }
         for i in 16..64 {
             let x = w[i - 15];

@@ -69,8 +69,8 @@ pub fn firwin2(
     let nyq = fs / 2.0;
     if freq[0] != 0.0
         || freq[freq.len() - 1] != nyq
-        || freq.windows(2).any(|v| v[0] > v[1])
-        || freq.windows(3).any(|v| v[0] == v[2])
+        || freq.array_windows().any(|[a, b]| a > b)
+        || freq.array_windows().any(|[a, _, c]| a == c)
         || freq[1] == 0.0
         || freq[freq.len() - 2] == nyq
     {
@@ -102,7 +102,7 @@ pub fn firwin2(
             f[i + 1] += eps;
         }
     }
-    if f.windows(2).any(|v| v[0] >= v[1]) {
+    if f.array_windows().any(|[a, b]| a >= b) {
         return Err(invalid(
             "frequencies collide after duplicate epsilon adjustment",
         ));
@@ -296,8 +296,10 @@ mod tests {
     fn binary(root: &std::path::Path, descriptor: &Value) -> Vec<f64> {
         fs::read(root.join(descriptor["file"].as_str().unwrap()))
             .unwrap()
-            .chunks_exact(8)
-            .map(|b| f64::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .map(|b| f64::from_le_bytes(*b))
             .collect()
     }
 

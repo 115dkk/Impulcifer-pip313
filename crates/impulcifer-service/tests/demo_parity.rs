@@ -84,8 +84,8 @@ fn scenario(name: &str) {
             if let Some(file) = expected["file"].as_str() {
                 let bytes = std::fs::read(golden(file)).unwrap();
                 assert_eq!(bytes.len(), track.len() * 8);
-                for (a, b) in track.iter().zip(bytes.chunks_exact(8)) {
-                    error = error.max((a - f64::from_le_bytes(b.try_into().unwrap())).abs());
+                for (a, b) in track.iter().zip(bytes.as_chunks::<8>().0.iter()) {
+                    error = error.max((a - f64::from_le_bytes(*b)).abs());
                 }
             }
             let ratio = |v: f64, r: f64| {

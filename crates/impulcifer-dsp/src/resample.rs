@@ -151,15 +151,15 @@ pub fn resample_poly(
             let coefficients = &phase[start..start + last - first + 1];
             let samples = &x[first..=last];
             let mut sums = [0.0; 4];
-            let mut a = samples.chunks_exact(4);
-            let mut b = coefficients.chunks_exact(4);
-            for (a, b) in a.by_ref().zip(b.by_ref()) {
+            let (a, tail_a) = samples.as_chunks::<4>();
+            let (b, tail_b) = coefficients.as_chunks::<4>();
+            for (a, b) in a.iter().zip(b) {
                 for k in 0..4 {
                     sums[k] += a[k] * b[k];
                 }
             }
             *output = (sums[0] + sums[1]) + (sums[2] + sums[3]);
-            for (a, b) in a.remainder().iter().zip(b.remainder()) {
+            for (a, b) in tail_a.iter().zip(tail_b) {
                 *output += a * b;
             }
         }

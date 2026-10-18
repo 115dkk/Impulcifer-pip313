@@ -50,8 +50,10 @@ fn array(v: &Value) -> Vec<f64> {
     .unwrap();
     assert_eq!(bytes.len(), v["length"].as_u64().unwrap() as usize * 8);
     bytes
-        .chunks_exact(8)
-        .map(|x| f64::from_le_bytes(x.try_into().unwrap()))
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .map(|x| f64::from_le_bytes(*x))
         .collect()
 }
 /// Absolute error for P08 comparisons; unmatched nonfinite values count as infinity.

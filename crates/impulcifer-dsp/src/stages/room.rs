@@ -69,7 +69,7 @@ pub struct RoomCorrection {
 
 /// Python discover_room_measurements, core/room_correction.py:36-75; p10_generic_room.
 pub fn parse_room_measurement_name(file_name: &str) -> Option<RoomMeasurementName> {
-    let stem = file_name.strip_prefix("room-")?.strip_suffix(".wav")?;
+    let stem = file_name.strip_circumfix("room-", ".wav")?;
     let (names, side) = if let Some(s) = stem.strip_suffix("-left") {
         (s, Some(Side::Left))
     } else if let Some(s) = stem.strip_suffix("-right") {
@@ -412,6 +412,38 @@ pub fn room_correction_tuning2(
 #[cfg(test)]
 mod skip_placeholder_tests {
     use super::parse_room_measurement_name;
+    use impulcifer_types::constants::Side;
+
+    #[test]
+    fn room_measurement_names_require_exact_nonoverlapping_affixes() {
+        for name in [
+            "",
+            "room-",
+            ".wav",
+            "room-.wav",
+            "room.wav",
+            "FL.wav",
+            "room-FL",
+            "Room-FL.wav",
+            "room-FL.WAV",
+            "room-room-FL.wav",
+            "room-FL.wav.wav",
+            "room-FL.wav/extra",
+            "room-한글.wav",
+            "room-FL-left-right.wav",
+        ] {
+            assert!(parse_room_measurement_name(name).is_none(), "{name}");
+        }
+        for (name, side) in [
+            ("room-FL,FR.wav", None),
+            ("room-FL,FR-left.wav", Some(Side::Left)),
+            ("room-FL,FR-right.wav", Some(Side::Right)),
+        ] {
+            let parsed = parse_room_measurement_name(name).unwrap();
+            assert_eq!(parsed.speakers, ["FL", "FR"]);
+            assert_eq!(parsed.side, side);
+        }
+    }
 
     #[test]
     fn room_measurement_names_accept_the_skip_placeholder() {

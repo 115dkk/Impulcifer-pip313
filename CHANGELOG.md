@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.5.1 - 2026-10-18
+### 🔧 Rust 1.99와 edition 2024에 맞춘 코드 정비
+
+#### 🔧 빌드 / 설정 변경
+- **Rust 1.99.0 / edition 2024 / resolver 3**: 개발·CI·릴리스 툴체인을 1.99.0으로 올리고 소스 빌드 최소 버전을 1.99로 맞췄습니다. 기존 edition 2024 선언에 맞춰 가상 워크스페이스의 resolver도 3으로 바꿔 의존성을 고를 때 Rust 최소 버전을 고려하게 했습니다. 기존 의존성 버전은 유지합니다.
+
+#### ⭐ 새로운 기능 / 개선
+- **실제 표준 API 적용**: FFmpeg 오류 문자열은 1.99의 `String::from_utf8_lossy_owned`로 버퍼를 넘겨 변환하고, 마지막 20줄만 모아 긴 오류 로그의 임시 메모리를 줄입니다. 잘못된 UTF-8 대체 문자와 줄바꿈 처리는 유지합니다. 룸 측정 파일명은 `strip_circumfix`로 접두사·접미사를 함께 검사하고, FIR·보간·주파수 응답의 이웃 샘플 순회는 `array_windows`와 배열 패턴으로 길이를 타입에 담습니다. 부동소수점 계산 순서와 오류 메시지는 유지합니다.
+- **고정 길이 데이터 처리**: 1.99 Clippy의 권고에 맞춰 필터·리샘플러, 분석·인코딩, Windows 오디오 샘플과 테스트 픽스처의 고정 길이 순회를 `as_chunks`로 옮깁니다. 배열 크기가 타입으로 보장되어 수동 인덱싱과 길이 변환을 줄이며, 남은 데이터와 샘플 순서는 그대로 처리합니다.
+
 ## 3.5.0 - 2026-10-12
 ### 가상 룸 튜닝 2: SECS 2(스피커 갤러리)의 채널 보정과 MIMO 서포트
 

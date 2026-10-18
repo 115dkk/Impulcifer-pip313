@@ -41,15 +41,22 @@ fn run(mut cmd: Command) -> Result<Output, IoError> {
     // output() drains both pipes concurrently, including stderr on failure.
     let output = cmd.output()?;
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let lines: Vec<_> = stderr.lines().collect();
         return Err(IoError::Process {
             executable,
             status: output.status,
-            stderr: lines[lines.len().saturating_sub(20)..].join("\n"),
+            stderr: stderr_tail(output.stderr),
         });
     }
     Ok(output)
+}
+
+// Consume the process buffer, reusing valid UTF-8 storage. Keep only the final
+// twenty line references even when a decoder emits a large diagnostic stream.
+fn stderr_tail(bytes: Vec<u8>) -> String {
+    let text = String::from_utf8_lossy_owned(bytes);
+    let mut lines: Vec<_> = text.lines().rev().take(20).collect();
+    lines.reverse();
+    lines.join("\n")
 }
 
 fn binary_name(name: &str) -> String {
@@ -273,6 +280,30 @@ pub fn truehd_channel_names(channels: usize) -> Option<Vec<&'static str>> {
 mod tests {
     use super::*;
     use crate::test_support::TempDir;
+
+    #[test]
+    fn ffmpeg_stderr_tail_preserves_decoding_and_line_endings() {
+        for (bytes, expected) in [
+            (b"".as_slice(), ""),
+            (b"\n", ""),
+            (b"first\r\n\r\nlast\n", "first\n\nlast"),
+            (b"first\rlast\r", "first\rlast\r"),
+            (b"bad: \xff\xe2\x82\n", "bad: \u{fffd}\u{fffd}"),
+            ("한글 diagnostic\n".as_bytes(), "한글 diagnostic"),
+        ] {
+            assert_eq!(stderr_tail(bytes.to_vec()), expected);
+        }
+        for count in [19_usize, 20, 21, 1000] {
+            let lines: Vec<_> = (0..count).map(|i| format!("line {i}")).collect();
+            let expected = lines[count.saturating_sub(20)..].join("\n");
+            for ending in ["\n", "\r\n"] {
+                for trailing in ["", ending] {
+                    let text = format!("{}{trailing}", lines.join(ending));
+                    assert_eq!(stderr_tail(text.into_bytes()), expected);
+                }
+            }
+        }
+    }
     #[test]
     fn ffmpeg_discovery_prefers_bundled_dir() {
         let tmp = TempDir::new();

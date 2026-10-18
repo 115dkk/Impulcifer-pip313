@@ -109,7 +109,7 @@ fn parallel_float_decode_preserves_samples_and_ignores_trailing_chunks() {
                 let patterns = [
                     0u32, 0x80000000, 0x3f000000, 0xbf000000, 0x7f800000, 0xff800000,
                 ];
-                for (i, sample) in bytes[44..].chunks_exact_mut(4).enumerate() {
+                for (i, sample) in bytes[44..].as_chunks_mut::<4>().0.iter_mut().enumerate() {
                     sample.copy_from_slice(&patterns[i % patterns.len()].to_le_bytes());
                 }
             }
@@ -144,7 +144,7 @@ fn float_blocks_preserve_ieee_widening_and_special_values() {
         let frames = 262144 / (channels * 4) + 257;
         perf::float_fixture_sized(&path, channels, frames);
         let mut bytes = std::fs::read(&path).unwrap();
-        for (i, sample) in bytes[44..].chunks_exact_mut(4).enumerate() {
+        for (i, sample) in bytes[44..].as_chunks_mut::<4>().0.iter_mut().enumerate() {
             sample.copy_from_slice(&patterns[i % patterns.len()].to_le_bytes());
         }
         std::fs::write(&path, bytes).unwrap();

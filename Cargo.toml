@@ -1,11 +1,11 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["crates/*", "apps/impulcifer-app"]
 
 [workspace.package]
-version = "3.5.0"
+version = "3.5.1"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.99"
 license = "MIT"
 repository = "https://github.com/115dkk/Impulcifer-pip313"
 

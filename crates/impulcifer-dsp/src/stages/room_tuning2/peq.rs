@@ -255,7 +255,9 @@ pub fn fit_with_trace(
     )?;
     let bands: Vec<_> = result
         .x
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|x| {
             let f = x[0].exp();
             (f, x[1].exp().min(ring(f, x[2])), x[2])
