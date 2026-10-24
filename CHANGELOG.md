@@ -17,6 +17,7 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경 (릴리스 후 추가, 출하물 변화 없음)
 - **월간 감사가 감사 스킬을 플러그인에서 받음** (2026-10-24): `.claude/skills`에 넣어 두던 감사 스킬 셋(`improve-codebase-architecture`, 그것이 용어집을 얻으려고 부르던 `codebase-design`, `tech-debt-audit`)을 지웠습니다. 월간 감사는 실행할 때마다 `115dkk-skills` 플러그인(`115dkk/agent-skills`)을 기본 브랜치에서 설치하고 `/115dkk-skills:improve-codebase-architecture`와 `/115dkk-skills:tech-debt-audit`를 부릅니다. 대화형 세션과 감사가 같은 판을 쓰고, 어느 커밋으로 돌았는지는 감사 이슈 본문에 남깁니다. 두 스킬은 혼자 돌고 `disable-model-invocation`이 없으므로 설치본의 잠금을 풀던 단계도 없앴습니다. 이 잠금이 플러그인에 들어오면 설치 단계가 실패합니다.
+- **월간 감사가 기술 부채 감사 결과를 저장소에 남김** (2026-10-24): 감사가 끝나면 새 `commit-baseline` 잡이 그 실행의 `TECH_DEBT_AUDIT.md`를 master에 커밋합니다(`[skip ci]`, 배포 키 push). 다음 감사의 `tech-debt-audit`는 저장소 루트의 이 파일을 지난 감사로 읽어 TD 번호를 유지하고, 그 뒤에 해결된 항목을 따로 적습니다. 세션이 새 보고서를 쓰지 않고 옛 파일만 남기면 감사 단계가 실패합니다. `.gitignore`에서 `TECH_DEBT_AUDIT.md`를 뺐습니다.
 - **자동 bump 커밋을 배포 키로 푸시** (2026-10-25): 2.x(`publish.yml`)와 3.x(`release-3x.yml`) 게이트가 자동 bump 커밋을 쓰기 배포 키(`RELEASE_DEPLOY_KEY`)로 master에 푸시합니다. master에 PR 검사를 필수로 거는 룰셋이 켜지면 검사 결과가 없는 bump 커밋은 배포 키로만 들어갈 수 있고, GitHub은 개인 저장소 룰셋에 GitHub Actions를 우회 주체로 받지 않기 때문입니다. bump 커밋은 지금처럼 `[skip ci]`를 달아 새 실행을 시작하지 않으며, 게이트 잡의 토큰 권한은 읽기로 줄였습니다.
 
 ## 3.5.0 - 2026-10-12
