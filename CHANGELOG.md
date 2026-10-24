@@ -4,6 +4,13 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.5.1 - 2026-10-24
+### 🔧 월간 감사가 아키텍처 스킬을 플러그인에서 받습니다
+
+#### 🔧 빌드 / 설정 변경
+- **아키텍처 스킬을 저장소에 두지 않습니다**: `.claude/skills`에 넣어 두던 `improve-codebase-architecture`와 그것이 용어집을 얻으려고 부르던 `codebase-design`을 지웠습니다. 월간 감사는 실행할 때마다 `115dkk-skills` 플러그인(`115dkk/agent-skills`)을 기본 브랜치에서 설치하고 `/115dkk-skills:improve-codebase-architecture`로 부릅니다. 대화형 세션과 감사가 같은 판을 쓰게 되고, 저장소 사본이 상류와 어긋나는 일이 없어집니다. 어느 커밋으로 돌았는지는 감사 이슈 본문에 남깁니다.
+- **플러그인 판은 혼자 돕니다**: 용어집(`LANGUAGE.md`)과 보고서 규칙을 스스로 들고 있어 다른 스킬을 부르지 않고, `disable-model-invocation`도 없어 잠금을 풀 필요가 없습니다. 이 잠금이 플러그인에 들어오면 Part 1이 스킬 없이 돌게 되므로 설치 단계가 실패합니다. `tech-debt-audit`는 지금처럼 저장소에서 복사하고 설치본의 잠금만 풉니다.
+
 ## 3.5.1 - 2026-10-18
 ### 🔧 Rust 1.99와 edition 2024에 맞춘 코드 정비
 
