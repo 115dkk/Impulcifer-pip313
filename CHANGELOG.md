@@ -15,6 +15,9 @@ been fixed and old features improved.
 - **실제 표준 API 적용**: FFmpeg 오류 문자열은 1.99의 `String::from_utf8_lossy_owned`로 버퍼를 넘겨 변환하고, 마지막 20줄만 모아 긴 오류 로그의 임시 메모리를 줄입니다. 잘못된 UTF-8 대체 문자와 줄바꿈 처리는 유지합니다. 룸 측정 파일명은 `strip_circumfix`로 접두사·접미사를 함께 검사하고, FIR·보간·주파수 응답의 이웃 샘플 순회는 `array_windows`와 배열 패턴으로 길이를 타입에 담습니다. 부동소수점 계산 순서와 오류 메시지는 유지합니다.
 - **고정 길이 데이터 처리**: 1.99 Clippy의 권고에 맞춰 필터·리샘플러, 분석·인코딩, Windows 오디오 샘플과 테스트 픽스처의 고정 길이 순회를 `as_chunks`로 옮깁니다. 배열 크기가 타입으로 보장되어 수동 인덱싱과 길이 변환을 줄이며, 남은 데이터와 샘플 순서는 그대로 처리합니다.
 
+#### 🔧 빌드 / 설정 변경 (릴리스 후 추가, 출하물 변화 없음)
+- **월간 감사가 감사 스킬을 플러그인에서 받음** (2026-10-24): `.claude/skills`에 넣어 두던 감사 스킬 셋(`improve-codebase-architecture`, 그것이 용어집을 얻으려고 부르던 `codebase-design`, `tech-debt-audit`)을 지웠습니다. 월간 감사는 실행할 때마다 `115dkk-skills` 플러그인(`115dkk/agent-skills`)을 기본 브랜치에서 설치하고 `/115dkk-skills:improve-codebase-architecture`와 `/115dkk-skills:tech-debt-audit`를 부릅니다. 대화형 세션과 감사가 같은 판을 쓰고, 어느 커밋으로 돌았는지는 감사 이슈 본문에 남깁니다. 두 스킬은 혼자 돌고 `disable-model-invocation`이 없으므로 설치본의 잠금을 풀던 단계도 없앴습니다. 이 잠금이 플러그인에 들어오면 설치 단계가 실패합니다.
+
 ## 3.5.0 - 2026-10-12
 ### 가상 룸 튜닝 2: SECS 2(스피커 갤러리)의 채널 보정과 MIMO 서포트
 

@@ -14,13 +14,14 @@
 #      Settings > Secrets에 CLAUDE_CODE_OAUTH_TOKEN 등록
 #   2. Settings > Actions > Workflow permissions를
 #      "Read and write permissions"로 설정
-#   3. 세 스킬은 이 repo의 .claude/skills에서 CI가 설치합니다.
-#      improve-codebase-architecture는 더 이상 자체 용어집을 들고 있지
-#      않습니다. 상류가 깊은 모듈 어휘(module, interface, depth, seam,
-#      adapter, leverage, locality)와 삭제 시험을 codebase-design이라는
-#      별도 스킬로 옮겼고, 아키텍처 스킬은 그것을 Skill 도구로 부릅니다.
-#      codebase-design이 설치되어 있지 않으면 Part 1은 돌긴 하지만
-#      모든 제안을 담아야 할 용어를 잃습니다.
+#   3. 감사 스킬은 저장소에 두지 않습니다. 실행할 때마다
+#      115dkk-skills 플러그인(마켓플레이스 115dkk/agent-skills, 공개
+#      저장소라 토큰 없이 받음)을 기본 브랜치에서 설치하고, 프롬프트는
+#      /115dkk-skills:improve-codebase-architecture와
+#      /115dkk-skills:tech-debt-audit를 부릅니다. 플러그인 매니페스트도
+#      버전을 고정하지 않으므로 대화형 세션과 같은 판으로 감사하고, 어느
+#      커밋으로 돌았는지는 이슈 본문에 남습니다. 두 스킬 모두 혼자 돌고
+#      모델이 부를 수 있어, 실행 전에 잠금을 풀 필요가 없습니다.
 #
 # 주의:
 #   ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN이 있으면 Claude Code는
@@ -141,39 +142,35 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
 
       - name: Install audit skills
+        id: skills
         run: |
-          install -d "$HOME/.claude/skills"
-          cp -R .claude/skills/improve-codebase-architecture "$HOME/.claude/skills/"
-          cp -R .claude/skills/tech-debt-audit "$HOME/.claude/skills/"
-          # improve-codebase-architecture가 아키텍처 용어를 얻으려고
-          # Skill 도구로 부르는 스킬이라 함께 설치해야 합니다.
-          cp -R .claude/skills/codebase-design "$HOME/.claude/skills/"
+          set -euo pipefail
 
-          test -f "$HOME/.claude/skills/improve-codebase-architecture/SKILL.md"
-          test -f "$HOME/.claude/skills/tech-debt-audit/SKILL.md"
-          test -f "$HOME/.claude/skills/codebase-design/SKILL.md"
+          # 두 감사 스킬 모두 115dkk-skills 플러그인에서 그때그때 받습니다
+          # (머리말 필요 사항 3).
+          claude plugin marketplace add 115dkk/agent-skills
+          claude plugin install 115dkk-skills@115dkk
+          PLUGIN_PATH=$(claude plugin list --json | jq -er '.[] | select(.id == "115dkk-skills@115dkk" and .enabled) | .installPath')
 
-          # 상류의 improve-codebase-architecture는 disable-model-invocation을
-          # 달고 옵니다. 이 실행의 프롬프트는 "Run /improve-codebase-architecture"
-          # 라고 지시하는데, 모델은 Skill 도구로만 그렇게 할 수 있고 그 잠금이
-          # 바로 그 도구를 막습니다. 설치본만 풀고 repo의 사본은 잠긴 채 둡니다.
-          # codebase-design은 목록에 없습니다. 아키텍처 스킬이 불러야 하므로
-          # 잠금이 있으면 안 됩니다.
-          for locked in tech-debt-audit improve-codebase-architecture; do
-            sed -i '/^disable-model-invocation:/d' "$HOME/.claude/skills/$locked/SKILL.md"
-            if grep -q "disable-model-invocation" "$HOME/.claude/skills/$locked/SKILL.md"; then
-              echo "::error::$locked SKILL.md still carries disable-model-invocation after the unlock"
+          # 프롬프트가 두 스킬을 실행하라고 지시하는데, 모델은 Skill 도구로만
+          # 그렇게 할 수 있습니다. 플러그인 갱신과 함께
+          # disable-model-invocation이 들어오면 그 Part가 스킬 없이 즉흥으로
+          # 돌게 되므로 여기서 멈춥니다.
+          for skill in improve-codebase-architecture tech-debt-audit; do
+            SKILL_MD="$PLUGIN_PATH/skills/$skill/SKILL.md"
+            test -f "$SKILL_MD"
+            if grep -q "^disable-model-invocation:" "$SKILL_MD"; then
+              echo "::error::115dkk-skills:$skill carries disable-model-invocation, so the audit cannot invoke it."
               exit 1
             fi
           done
 
-          if grep -q "^disable-model-invocation:" "$HOME/.claude/skills/codebase-design/SKILL.md"; then
-            echo "::error::codebase-design must stay invocable; improve-codebase-architecture calls it."
-            exit 1
-          fi
+          PLUGIN_SHA=$(jq -r '.plugins["115dkk-skills@115dkk"][0].gitCommitSha // "unknown"' \
+            "$HOME/.claude/plugins/installed_plugins.json" 2>/dev/null || echo unknown)
+          echo "plugin_ref=115dkk/agent-skills@${PLUGIN_SHA:0:12}" >> "$GITHUB_OUTPUT"
 
-          echo "Installed Claude audit skills:"
-          find "$HOME/.claude/skills" -maxdepth 2 -name SKILL.md -print
+          echo "Installed audit skills from 115dkk/agent-skills@${PLUGIN_SHA}:"
+          find "$PLUGIN_PATH/skills" -maxdepth 2 -name SKILL.md -print
 
       - name: Verify Claude subscription credentials
         run: |
@@ -232,12 +229,12 @@ jobs:
           - Do not pad categories with filler findings.
 
           ── PART 1: Architecture Analysis ──
-          Run /improve-codebase-architecture.
-          That skill holds no glossary of its own any more. It will tell
-          you to call the codebase-design skill for the architecture
-          vocabulary (module, interface, depth, seam, adapter, leverage,
-          locality) and for the deletion test. Do call it, and phrase
-          every candidate in those exact terms rather than drifting into
+          Run /115dkk-skills:improve-codebase-architecture.
+          This is an existing codebase, so use its review report, not the
+          foundation or stack report. The skill carries its own glossary
+          (module, interface, depth, seam, adapter, leverage, locality)
+          and the deletion test in its LANGUAGE.md. Phrase every
+          candidate in those exact terms rather than drifting into
           component, service, API, or boundary.
           Identify specific consolidation and deepening opportunities.
           Because this is CI, write the complete architecture analysis to
@@ -245,17 +242,15 @@ jobs:
           detailed report only in a temp file or browser-opened HTML file.
           Stop there. The skill's step 3 is a grilling loop that asks the
           user which candidate to pursue, and this session has no user, so
-          do not ask, do not call the grilling or domain-modeling skills,
-          and do not let that step's side effects happen: leave CONTEXT.md
-          and docs/adr/ untouched.
+          do not ask and do not let that step's side effects happen: leave
+          CONTEXT.md and docs/adr/ untouched.
           When done, print a Markdown horizontal rule (---) as a
           separator, then proceed immediately to Part 2.
 
           ── PART 2: Tech Debt Audit ──
-          Run /tech-debt-audit.
+          Run /115dkk-skills:tech-debt-audit.
           Produce the full TECH_DEBT_AUDIT.md content with severity,
-          effort estimates, and the required 'looks bad but is
-          actually fine' section.
+          effort estimates, and its 'looks bad but is fine' section.
           " > "$REPORT" 2>&1
           CLAUDE_EXIT=$?
           set -e
@@ -318,6 +313,7 @@ jobs:
             echo ""
             echo "변경된 코드 파일: **${COUNT}개**"
             echo "모델: claude-mythos-5-1 · Effort: xhigh"
+            echo "감사 스킬: 115dkk-skills (${{ steps.skills.outputs.plugin_ref }})"
             echo ""
             echo "이 이슈 본문은 artifact의 \`issue-body.md\`에 해당합니다."
             echo "나머지 감사 산출물은 아래 댓글에 파일별로 전체 게시됩니다."
