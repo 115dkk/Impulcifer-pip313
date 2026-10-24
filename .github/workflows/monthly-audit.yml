@@ -458,6 +458,10 @@ jobs:
     # 커밋합니다(머리말 필요 사항 4). audit 잡이 산출물 검사, 이슈 등록,
     # 체크포인트 태그까지 마친 뒤에만 돕니다.
     needs: audit
+    # 기능 브랜치에서 수동 실행한 감사는 master의 기준 결과가 아닙니다. 그
+    # 브랜치를 체크아웃해 rebase하면 머지되지 않은 커밋까지 배포 키로 master에
+    # 올라가므로, master에서 돈 실행만 커밋하고 체크아웃도 master로 고정합니다.
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     # push는 RELEASE_DEPLOY_KEY 배포 키로 하므로 토큰은 읽기만 합니다.
     permissions:
@@ -465,6 +469,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: master
           # 그사이 master가 움직였을 때 rebase할 기준이 있도록 전체 기록을 받습니다.
           fetch-depth: 0
           ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
