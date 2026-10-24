@@ -16,7 +16,7 @@ been fixed and old features improved.
 - **고정 길이 데이터 처리**: 1.99 Clippy의 권고에 맞춰 필터·리샘플러, 분석·인코딩, Windows 오디오 샘플과 테스트 픽스처의 고정 길이 순회를 `as_chunks`로 옮깁니다. 배열 크기가 타입으로 보장되어 수동 인덱싱과 길이 변환을 줄이며, 남은 데이터와 샘플 순서는 그대로 처리합니다.
 
 #### 🔧 빌드 / 설정 변경 (릴리스 후 추가, 출하물 변화 없음)
-- **월간 감사가 아키텍처 스킬을 플러그인에서 받음** (2026-10-24): `.claude/skills`에 넣어 두던 `improve-codebase-architecture`와, 그것이 용어집을 얻으려고 부르던 `codebase-design`을 지웠습니다. 월간 감사는 실행할 때마다 `115dkk-skills` 플러그인(`115dkk/agent-skills`)을 기본 브랜치에서 설치하고 `/115dkk-skills:improve-codebase-architecture`로 부릅니다. 대화형 세션과 감사가 같은 판을 쓰고, 어느 커밋으로 돌았는지는 감사 이슈 본문에 남깁니다. 플러그인 판은 용어집(`LANGUAGE.md`)과 보고서 규칙을 스스로 들고 있고 `disable-model-invocation`이 없으므로 잠금 해제가 필요 없습니다. 이 잠금이 플러그인에 들어오면 설치 단계가 실패합니다. `tech-debt-audit`는 지금처럼 저장소에서 복사하고 설치본의 잠금만 풉니다.
+- **월간 감사가 감사 스킬을 플러그인에서 받음** (2026-10-24): `.claude/skills`에 넣어 두던 감사 스킬 셋(`improve-codebase-architecture`, 그것이 용어집을 얻으려고 부르던 `codebase-design`, `tech-debt-audit`)을 지웠습니다. 월간 감사는 실행할 때마다 `115dkk-skills` 플러그인(`115dkk/agent-skills`)을 기본 브랜치에서 설치하고 `/115dkk-skills:improve-codebase-architecture`와 `/115dkk-skills:tech-debt-audit`를 부릅니다. 대화형 세션과 감사가 같은 판을 쓰고, 어느 커밋으로 돌았는지는 감사 이슈 본문에 남깁니다. 두 스킬은 혼자 돌고 `disable-model-invocation`이 없으므로 설치본의 잠금을 풀던 단계도 없앴습니다. 이 잠금이 플러그인에 들어오면 설치 단계가 실패합니다.
 
 ## 3.5.0 - 2026-10-12
 ### 가상 룸 튜닝 2: SECS 2(스피커 갤러리)의 채널 보정과 MIMO 서포트
