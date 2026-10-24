@@ -145,10 +145,11 @@ webview-gallery/
 # Local Superloopy planning and evidence state
 .superloopy/
 
-# Biweekly-audit outputs (published to the audit issue, never committed;
-# change-summary.txt is .txt so the release gate would treat it as shippable)
+# Monthly-audit outputs (published to the audit issue, never committed;
+# change-summary.txt is .txt so the release gate would treat it as shippable).
+# TECH_DEBT_AUDIT.md is not listed: the audit commits it as the next run's
+# baseline (monthly-audit.yml, commit-baseline job).
 ARCHITECTURE_AUDIT.md
-TECH_DEBT_AUDIT.md
 combined-audit-report.md
 change-summary.txt
 issue-body.md

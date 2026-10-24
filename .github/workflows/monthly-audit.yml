@@ -22,6 +22,13 @@
 #      버전을 고정하지 않으므로 대화형 세션과 같은 판으로 감사하고, 어느
 #      커밋으로 돌았는지는 이슈 본문에 남습니다. 두 스킬 모두 혼자 돌고
 #      모델이 부를 수 있어, 실행 전에 잠금을 풀 필요가 없습니다.
+#   4. RELEASE_DEPLOY_KEY(릴리스 게이트가 이미 쓰는 쓰기 배포 키).
+#      TECH_DEBT_AUDIT.md는 감사가 끝날 때마다 master에 커밋되고 다음
+#      감사의 기준 결과가 됩니다. tech-debt-audit는 저장소 루트의 이 파일을
+#      지난 감사로 읽어 TD-NN 번호를 유지하고 그 뒤에 해결된 항목을 적습니다.
+#      commit-baseline 잡이 이 키로 SSH push합니다. master의 'Required
+#      checks' 룰셋은 배포 키만 통과시키고 이 커밋에는 자체 검사가 없기
+#      때문입니다. 키는 Claude 세션이 셸을 쓰는 audit 잡에는 주지 않습니다.
 #
 # 주의:
 #   ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN이 있으면 Claude Code는
@@ -211,6 +218,12 @@ jobs:
           unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
           REPORT="$RUNNER_TEMP/audit/combined-audit-report.md"
 
+          # 체크아웃에 있는 TECH_DEBT_AUDIT.md는 commit-baseline 잡이 커밋한
+          # 지난 감사입니다(필요 사항 4). 스킬이 이것을 기준 결과로 읽고 덮어
+          # 쓰므로 blob을 기억해 둡니다. 새 보고서를 쓰지 않은 세션이 옛
+          # 파일로 통과하면 안 됩니다.
+          BASELINE_BLOB=$(git hash-object TECH_DEBT_AUDIT.md 2>/dev/null || echo none)
+
           set +e
           claude \
             --model claude-mythos-5-1 \
@@ -249,8 +262,11 @@ jobs:
 
           ── PART 2: Tech Debt Audit ──
           Run /115dkk-skills:tech-debt-audit.
-          Produce the full TECH_DEBT_AUDIT.md content with severity,
-          effort estimates, and its 'looks bad but is fine' section.
+          TECH_DEBT_AUDIT.md in the repository root, when present, is
+          the previous audit, committed by this workflow: read it as
+          the skill's baseline. Write the full new TECH_DEBT_AUDIT.md
+          over it with severity, effort estimates, and its 'looks bad
+          but is fine' section.
           " > "$REPORT" 2>&1
           CLAUDE_EXIT=$?
           set -e
@@ -263,6 +279,12 @@ jobs:
 
           if [ "$CLAUDE_EXIT" -eq 0 ] && [ ! -s TECH_DEBT_AUDIT.md ]; then
             echo "::error::Claude audit completed without TECH_DEBT_AUDIT.md."
+            cat "$REPORT"
+            exit 1
+          fi
+
+          if [ "$CLAUDE_EXIT" -eq 0 ] && [ "$(git hash-object TECH_DEBT_AUDIT.md)" = "$BASELINE_BLOB" ]; then
+            echo "::error::Claude audit left the baseline TECH_DEBT_AUDIT.md unchanged."
             cat "$REPORT"
             exit 1
           fi
@@ -429,3 +451,64 @@ jobs:
           git tag "$AUDIT_TAG"
           git push origin "$AUDIT_TAG"
           echo "Tagged: $AUDIT_TAG"
+
+  # ── 3단계: 다음 감사의 기준 결과 커밋 ─────────────────────
+  commit-baseline:
+    # 이번 실행의 TECH_DEBT_AUDIT.md를 다음 감사의 기준 결과로 master에
+    # 커밋합니다(머리말 필요 사항 4). audit 잡이 산출물 검사, 이슈 등록,
+    # 체크포인트 태그까지 마친 뒤에만 돕니다.
+    needs: audit
+    # 기능 브랜치에서 수동 실행한 감사는 master의 기준 결과가 아닙니다. 그
+    # 브랜치를 체크아웃해 rebase하면 머지되지 않은 커밋까지 배포 키로 master에
+    # 올라가므로, master에서 돈 실행만 커밋하고 체크아웃도 master로 고정합니다.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    # push는 RELEASE_DEPLOY_KEY 배포 키로 하므로 토큰은 읽기만 합니다.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: master
+          # 그사이 master가 움직였을 때 rebase할 기준이 있도록 전체 기록을 받습니다.
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+          persist-credentials: true
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: "audit-report-${{ github.run_id }}"
+          path: ${{ runner.temp }}/audit-report
+
+      - name: Commit TECH_DEBT_AUDIT.md as the next baseline
+        run: |
+          set -euo pipefail
+
+          cp "$RUNNER_TEMP/audit-report/TECH_DEBT_AUDIT.md" TECH_DEBT_AUDIT.md
+          if git ls-files --error-unmatch TECH_DEBT_AUDIT.md >/dev/null 2>&1 \
+            && git diff --quiet -- TECH_DEBT_AUDIT.md; then
+            echo "TECH_DEBT_AUDIT.md is unchanged; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add TECH_DEBT_AUDIT.md
+          # [skip ci]는 이 보고서만 바꾸는 커밋의 배포 키 push가 워크플로를
+          # 시작하지 않게 합니다. 감사의 변경 감지도 *.md를 빼므로 다음 감사를
+          # 일으키지 않고, 릴리스 게이트도 *.md를 출하물로 보지 않습니다.
+          git commit -m "docs(audit): 기술 부채 감사 기준 결과를 갱신 [skip ci]" \
+            -m "월간 감사(실행 ${{ github.run_id }})의 TECH_DEBT_AUDIT.md를 다음 감사의 기준 결과로 커밋합니다."
+
+          for attempt in 1 2 3; do
+            git fetch origin master
+            if git rebase FETCH_HEAD && git push origin HEAD:master; then
+              echo "Committed the baseline as $(git rev-parse HEAD)."
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            echo "::warning::Baseline push attempt ${attempt} failed; retrying."
+            sleep 5
+          done
+          echo "::error::Could not push TECH_DEBT_AUDIT.md to master after 3 attempts."
+          exit 1
