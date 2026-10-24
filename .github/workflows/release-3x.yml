@@ -63,8 +63,9 @@ jobs:
   gate:
     name: Release gate (auto-bump + decision)
     runs-on: ubuntu-latest
+    # The bump push authenticates with the deploy key, not the workflow token.
     permissions:
-      contents: write
+      contents: read
     outputs:
       should_release: ${{ steps.gate.outputs.should_release }}
       version: ${{ steps.gate.outputs.version }}
@@ -75,6 +76,12 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          # The auto-bump is pushed over SSH with the RELEASE_DEPLOY_KEY deploy key:
+          # master's "Required checks" ruleset lets only deploy keys through (the
+          # bump commit has no checks of its own, and GitHub does not accept GitHub
+          # Actions as a bypass actor on a personal repository). The bump commit
+          # carries [skip ci], so this push starts no workflow.
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
