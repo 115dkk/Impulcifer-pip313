@@ -218,7 +218,7 @@
   "cli_readme_layouts_header_channel": "チャンネル",
   "cli_readme_layouts_header_speaker": "スピーカー",
   "label_sweep_channel_map": "デバイスのチャンネル:",
-  "hint_sweep_layout_codes": "各矢印の後のコードを「Speakers」欄に入力してください。フォーマットのラベルは別の位置を指すことがあります。22.2のチャンネル1（FL, 60°）は、ここではWLです。",
+  "hint_sweep_layout_codes": "「Speakers」欄には、各矢印の後のコードがすべて入力されています。測定しないスピーカーは削除してください。フォーマットのラベルは別の位置を指すことがあります。22.2のチャンネル1（FL, 60°）は、ここではWLです。",
   "button_sweep_use_layout": "この配置のすべてのスピーカーを使う",
   "label_layout_files": "チャンネル順のファイル:",
   "option_layout_files_auto": "すべてのスピーカーを測定した場合",

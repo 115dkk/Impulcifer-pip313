@@ -1347,6 +1347,13 @@ tests = ["impulcifer-service::every_immersive_format_is_a_recorder_layout", "imp
 note = "ADR 0007: recorder layouts 13.1, 22.2, 24.1.10, 30.2 put each slot's sweep on the device channel of the format's official order (22.2: FL on channel 7, WL on channel 1) with LFE channels silent; bootstrap sweep.immersive lists each format's channel labels and slots for the recorder's channel map; SL1/SR1/SL2/SR2/BL1/BR1/BL2/BR2 name recordings and room recordings"
 
 [[feature]]
+id = "recording.layout_speakers"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-service::a_layout_fills_in_its_speakers_and_processing_reads_the_recording_name", "impulcifer-service::bootstrap_layout_speakers_name_the_recording_after_every_speaker", "impulcifer-service::ipc_bootstrap_shape"]
+note = "choosing a recorder track layout fills Speakers with every speaker the layout sweeps (device-channel order, LFE left out; bootstrap sweep.layout_speakers), so a 7.1 run is saved as FL,FR,FC,BL,BR,SL,SR.wav without typing and processing reads the same seven speakers from that name; the 3.x UI gallery checks the fill-in for stereo, 7.1 and 22.2"
+
+[[feature]]
 id = "recording.progress"
 kind = "recording"
 status = "implemented"

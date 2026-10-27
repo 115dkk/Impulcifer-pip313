@@ -11,7 +11,9 @@ use impulcifer_service::{
     },
 };
 use impulcifer_types::{
-    constants::{SPEAKER_NAMES, SWEEP_TRACK_LAYOUTS, Side},
+    constants::{
+        SPEAKER_NAMES, SWEEP_TRACK_LAYOUTS, Side, sweep_layout_speakers, sweep_track_order,
+    },
     layouts::{IMMERSIVE_LAYOUTS, Layer},
 };
 
@@ -84,6 +86,76 @@ fn each_slot_sweeps_on_its_official_device_channel() {
         .map(|(i, _)| i + 1)
         .collect();
     assert_eq!(active, [1, 7]);
+}
+
+/// Choosing a layout fills in every speaker it sweeps, without LFE. Recorded as
+/// filled in, each speaker sweeps on a device channel of its own, the file is
+/// named after all of them, and processing reads the same speakers back.
+#[test]
+fn a_layout_fills_in_its_speakers_and_processing_reads_the_recording_name() {
+    for layout in SWEEP_TRACK_LAYOUTS {
+        let speakers: Vec<String> = sweep_layout_speakers(layout)
+            .unwrap()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let spec = SweepSpec {
+            fs: 8000,
+            duration: 0.2,
+            speakers: speakers.clone(),
+            tracks: layout.to_owned(),
+        };
+        // Every device channel but LFE is in the list: none is left unmeasured.
+        if let Some(order) = sweep_track_order(layout) {
+            let lfe = order.iter().filter(|slot| slot.starts_with("LFE")).count();
+            assert_eq!(speakers.len(), order.len() - lfe, "{layout}");
+        }
+        let playback = build_sweep_playback(&spec).unwrap();
+        let swept: Vec<_> = playback.segments.iter().map(|s| &s.speaker).collect();
+        assert_eq!(swept, speakers.iter().collect::<Vec<_>>(), "{layout}");
+        let active = playback
+            .tracks
+            .iter()
+            .filter(|t| t.iter().any(|x| *x != 0.0))
+            .count();
+        assert_eq!(active, speakers.len(), "{layout}");
+        assert_eq!(
+            recording_speakers(&playback.record_filename),
+            Some(speakers),
+            "{layout}"
+        );
+    }
+    // The speaker count each format's name gives (13.1: 13, 22.2: 22, 24.1.10: 24 + 10).
+    let counts: Vec<_> = SWEEP_TRACK_LAYOUTS
+        .iter()
+        .map(|layout| (*layout, sweep_layout_speakers(layout).unwrap().len()))
+        .collect();
+    assert_eq!(
+        counts,
+        [
+            ("mono", 1),
+            ("stereo", 2),
+            ("5.1", 5),
+            ("7.1", 7),
+            ("7.1.4", 11),
+            ("7.1.6", 13),
+            ("13.1", 13),
+            ("22.2", 22),
+            ("24.1.10", 34),
+            ("30.2", 30)
+        ]
+    );
+    let names = |layout| sweep_layout_speakers(layout).unwrap().join(",");
+    assert_eq!(names("mono"), "FL");
+    assert_eq!(names("stereo"), "FL,FR");
+    assert_eq!(names("5.1"), "FL,FR,FC,BL,BR");
+    assert_eq!(names("7.1"), "FL,FR,FC,BL,BR,SL,SR");
+    assert_eq!(names("7.1.4"), "FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR");
+    assert_eq!(
+        names("7.1.6"),
+        "FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TSL,TSR,TBL,TBR"
+    );
+    assert_eq!(sweep_layout_speakers("9.1.6"), None);
 }
 
 #[test]

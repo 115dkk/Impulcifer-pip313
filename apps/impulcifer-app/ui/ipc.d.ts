@@ -16,6 +16,8 @@ interface UiSettings {
 interface ImmersiveLayoutInfo { id: string; name: string; file_name: string; channels: { label: string; slot: string }[] }
 interface SweepDefaults {
   layouts: string[]; default_fs: number; default_duration: number; speaker_names: string[];
+  /* Every speaker a full measurement with each layout sweeps, in device-channel order without LFE. */
+  layout_speakers: Record<string, string[]>;
   immersive: ImmersiveLayoutInfo[];
 }
 interface Bootstrap {

@@ -4,6 +4,13 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.5.2 - 2026-10-27
+### 녹음할 레이아웃을 고르면 스피커 목록과 파일 이름이 저절로 정해짐
+
+#### ⭐ 새로운 기능 / 개선
+- **트랙 레이아웃이 스피커 칸을 채움**: 녹음 화면에서 트랙 레이아웃을 고르면 '스피커(순서대로)' 칸이 그 레이아웃의 스피커 전체로 바뀝니다. LFE는 빼고 장치 채널 순서를 따르며, 7.1은 `FL,FR,FC,BL,BR,SL,SR`, 5.1은 `FL,FR,FC,BL,BR`, 7.1.4는 `FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR`입니다. 지금까지는 레이아웃을 7.1로 바꿔도 칸이 `FL,FR`로 남아 FL과 FR만 녹음됐고, 나머지 스피커 코드는 손으로 입력해야 했습니다. 녹음 파일 이름은 이 목록을 따르므로(`FL,FR,FC,BL,BR,SL,SR.wav`) 처리 단계가 일곱 스피커를 모두 읽습니다. 일부만 측정하려면 칸에서 지우면 되고, 몰입형 레이아웃의 '이 배치의 스피커 모두 쓰기' 버튼은 고친 목록을 다시 전체로 되돌립니다. 장치 채널 표 아래의 안내 문구도 이에 맞춰 아홉 언어 모두 고쳤습니다.
+- **서비스가 레이아웃별 스피커 목록을 보냄**: `bootstrap` 응답의 `sweep.layout_speakers`에 녹음기가 받는 모든 레이아웃의 스피커 목록이 들어갑니다(`impulcifer_types::constants::sweep_layout_speakers`). 화면에 목록을 따로 적어 두지 않으므로 레이아웃 정의와 어긋날 일이 없습니다. 모든 레이아웃에서 이 목록으로 녹음하면 스피커마다 자기 장치 채널로 sweep이 나가고, 파일 이름에서 처리 단계가 같은 스피커를 읽는다는 것을 테스트로 고정했습니다.
+
 ## 3.5.1 - 2026-10-18
 ### 🔧 Rust 1.99와 edition 2024에 맞춘 코드 정비
 

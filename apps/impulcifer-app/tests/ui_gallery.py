@@ -30,6 +30,9 @@ NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "B
             ("TpSiL", "TSL"), ("TpSiR", "TSR"), ("TpBC", "HBC"), ("BtFC", "DFC"), ("BtFL", "DFL"), ("BtFR", "DFR")]
 IMMERSIVE = [{"id": "22.2", "name": "NHK 22.2", "file_name": "nhk_22.2.wav",
               "channels": [{"label": label, "slot": slot} for label, slot in NHK_22_2]}]
+# bootstrap sweep.layout_speakers: every speaker a layout sweeps, without LFE.
+LAYOUT_SPEAKERS = {"stereo": ["FL", "FR"], "7.1": ["FL", "FR", "FC", "BL", "BR", "SL", "SR"],
+                   "22.2": [slot for _, slot in NHK_22_2 if not slot.startswith("LFE")]}
 ADVANCED_KEYS = {"fs", "target_level", "channel_balance", "bass_boost_gain", "bass_boost_fc", "bass_boost_q", "tilt",
                  "decay", "head_ms", "jamesdsp", "hangloose", "remove_silent_channels", "interactive_plots",
                  "microphone_deviation_correction", "mic_deviation_strength", "mic_deviation_debug_plots",
@@ -61,6 +64,7 @@ def mock_script(skin, theme, language, scenario):
     fixture = json.dumps({"skin": skin, "theme": theme, "language": language,
                          "scenario": scenario, "strings": catalog(language),
                          "release": {"version": version, "notes": notes}, "immersive": IMMERSIVE,
+                         "layoutSpeakers": LAYOUT_SPEAKERS,
                          "catalogs": {code: catalog(code) for code in LANGUAGES}}, ensure_ascii=False)
     return "const fixture = " + fixture + ";\n" + r"""
 (() => {
@@ -92,7 +96,7 @@ def mock_script(skin, theme, language, scenario):
   const methods = {
     bootstrap: () => ok({version: "3.0.0-alpha.1", platform: "windows", install_kind: "dev", webview_backend: "edgechromium",
       brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "22.2"], default_fs: 48000, default_duration: 5,
-        speaker_names: ["FL", "FR"], immersive: fixture.immersive},
+        speaker_names: ["FL", "FR"], layout_speakers: fixture.layoutSpeakers, immersive: fixture.immersive},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
         brir_cancel: true, output_recovery_cancel: false, share_modes: scenario === "disabled" ? ["auto"] : ["auto", "exclusive", "shared"]},
       active_job: null, ui: settings}),
@@ -105,7 +109,8 @@ def mock_script(skin, theme, language, scenario):
     get_ui_settings: () => ok(settings),
     set_language: code => ok({...settings, language: code, strings: fixture.catalogs[code]}),
     set_skin: skin => ok({skin}), set_theme: theme => ok({theme}), set_frontend: frontend => ok({frontend}),
-    resolve_recording_paths: (dir, play, mode) => ok({record_path: `${dir}/${mode === "headphones" ? "headphones" : "FL,FR"}.wav`}),
+    resolve_recording_paths: (dir, play, mode, sweep) =>
+      ok({record_path: `${dir}/${mode === "headphones" ? "headphones" : sweep ? sweep.speakers : "FL,FR"}.wav`}),
     plan_output_recovery: async request => {
       if (scenario === "planning") return new Promise(() => {});
       if (scenario === "error") return error("NO_RECOVERY_SOURCE", strings.recovery_inventory_error);
@@ -453,7 +458,8 @@ def advanced_checks(browser):
 
 def layout_checks(browser):
     """Immersive layouts (ADR 0007): the recorder shows which speaker code each
-    device channel plays and fills them in on request; the output options send
+    device channel plays; choosing any layout fills in its speakers, which name
+    the recording; the output options send
     layout_files as auto, none or the formats forced with missing speakers."""
     context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
     navigate(page, "recorder")
@@ -468,11 +474,21 @@ def layout_checks(browser):
     assert [first.locator(cls).inner_text() for cls in (".layout-ch-num", ".layout-ch-label", ".layout-ch-slot")] == ["1", "FL", "WL"]
     assert items.nth(3).get_attribute("data-lfe") == "true" and items.nth(3).locator(".layout-ch-slot").inner_text() == "—"
     assert items.nth(6).locator(".layout-ch-slot").inner_text() == "FL"
+    # Choosing a layout fills Speakers with all of it; the button restores that after an edit.
+    speakers = page.locator("#rf-sweep-speakers")
+    expected = ",".join(LAYOUT_SPEAKERS["22.2"])
+    assert speakers.input_value() == expected
+    speakers.fill("WL,WR")
     page.locator("#rf-layout-use-all").click()
-    expected = ",".join(slot for _, slot in NHK_22_2 if not slot.startswith("LFE"))
-    assert page.locator("#rf-sweep-speakers").input_value() == expected
+    assert speakers.input_value() == expected
+    # 7.1 has no channel map, and still names the recording after its seven speakers.
+    layout.select_option("7.1")
+    assert not page.locator("#rf-layout-row").is_visible()
+    assert speakers.input_value() == "FL,FR,FC,BL,BR,SL,SR"
+    page.wait_for_function("document.getElementById('rf-resolved-path').textContent.includes('FL,FR,FC,BL,BR,SL,SR.wav')")
     layout.select_option("stereo")
     assert not page.locator("#rf-layout-row").is_visible()
+    assert speakers.input_value() == "FL,FR"
 
     navigate(page, "processing")
     assert "layout_files" not in brir_request(page)
@@ -489,7 +505,7 @@ def layout_checks(browser):
     assert brir_request(page)["layout_files"] == "auto"
     assert not errors, errors
     context.close()
-    print("Gallery layout checks: recorder channel map, use-all, layout_files auto/none/forced OK", flush=True)
+    print("Gallery layout checks: recorder channel map, layout speakers, use-all, layout_files auto/none/forced OK", flush=True)
 
 
 def room_phase_checks(browser):

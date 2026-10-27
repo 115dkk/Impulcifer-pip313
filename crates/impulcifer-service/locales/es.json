@@ -218,7 +218,7 @@
   "cli_readme_layouts_header_channel": "Canal",
   "cli_readme_layouts_header_speaker": "Altavoz",
   "label_sweep_channel_map": "Canales del dispositivo:",
-  "hint_sweep_layout_codes": "Introduce el código que aparece después de cada flecha en el campo «Speakers». Las etiquetas del formato pueden indicar otras posiciones: el canal 1 de 22.2 (FL, 60°) aquí es WL.",
+  "hint_sweep_layout_codes": "El campo «Speakers» ya contiene todos los códigos que aparecen después de las flechas. Elimina los altavoces que no vayas a medir. Las etiquetas del formato pueden indicar otras posiciones: el canal 1 de 22.2 (FL, 60°) aquí es WL.",
   "button_sweep_use_layout": "Usar todos los altavoces de esta disposición",
   "label_layout_files": "Archivos en orden de canales:",
   "option_layout_files_auto": "Cuando se hayan medido todos los altavoces",
