@@ -370,6 +370,17 @@ fn ipc_bootstrap_shape() {
             "layouts":["mono","stereo","5.1","7.1","7.1.4","7.1.6","13.1","22.2","24.1.10","30.2"],
             "default_fs":48000,"default_duration":5.0,
             "speaker_names":impulcifer_types::constants::SPEAKER_NAMES.as_slice(),
+            "guided": {
+                "mono": {"outputs":[0.0],"plans": {
+                    "stereo": impulcifer_types::guided::guided_plan("mono", "stereo").unwrap(),
+                    "5.1": impulcifer_types::guided::guided_plan("mono", "5.1").unwrap(),
+                    "7.1": impulcifer_types::guided::guided_plan("mono", "7.1").unwrap()
+                }},
+                "stereo": {"outputs":[30.0,-30.0],"plans": {
+                    "5.1": impulcifer_types::guided::guided_plan("stereo", "5.1").unwrap(),
+                    "7.1": impulcifer_types::guided::guided_plan("stereo", "7.1").unwrap()
+                }}
+            },
             "layout_speakers":impulcifer_types::constants::SWEEP_TRACK_LAYOUTS.iter().map(|layout| (
                 layout.to_string(), json!(impulcifer_types::constants::sweep_layout_speakers(layout).unwrap())
             )).collect::<serde_json::Map<_, _>>(),

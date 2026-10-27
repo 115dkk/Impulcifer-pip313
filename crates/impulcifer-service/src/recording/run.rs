@@ -1,5 +1,6 @@
 use super::{
     RecordingError,
+    checks::check_recording,
     devices::resolve_devices,
     progress::{RecorderProgressEvent, SweepSegment, event_for_elapsed, infer_sweep_segments},
     request::{Mode, ValidatedRecording},
@@ -339,7 +340,7 @@ fn run(
             ..Default::default()
         },
     );
-    let tracks = (0..usize::from(v.channels))
+    let tracks: Vec<Vec<f64>> = (0..usize::from(v.channels))
         .map(|ch| {
             captured
                 .interleaved
@@ -348,7 +349,16 @@ fn run(
                 .collect()
         })
         .collect();
-    save_recording(record, fs, tracks, v.append)?;
+    save_recording(record, fs, tracks.clone(), v.append)?;
+    let check_results = (v.mode == Mode::Speakers).then(|| {
+        check_recording(
+            &tracks,
+            fs,
+            &segments,
+            generated.as_ref().map(|playback| &playback.estimator),
+            v.expected_azimuths.as_ref(),
+        )
+    });
     emit(
         ctx,
         RecorderProgressEvent {
@@ -372,6 +382,10 @@ fn run(
         None
     };
     let mut result = json!({"mode":v.mode,"record_path":v.record_path,"summary":analyze_recording(record),"sweep":generated.as_ref().map(|p|&p.display_name),"sidecar_path":sidecar,"share":share});
+    if let Some(check_results) = check_results {
+        result["measurements"] = json!(check_results.measurements);
+        result["checks"] = json!(check_results.checks);
+    }
     if !warnings.is_empty() {
         result["warnings"] = json!(warnings);
     }

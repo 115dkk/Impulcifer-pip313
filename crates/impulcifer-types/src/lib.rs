@@ -9,6 +9,7 @@
 pub mod audio;
 pub mod config;
 pub mod constants;
+pub mod guided;
 pub mod ipc;
 pub mod job;
 pub mod layouts;

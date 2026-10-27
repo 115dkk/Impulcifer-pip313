@@ -93,6 +93,7 @@ fn golden_recording_validation_matches_python() {
             Ok(v) => {
                 let mut data = serde_json::to_value(v).unwrap();
                 data.as_object_mut().unwrap().remove("share");
+                data.as_object_mut().unwrap().remove("expected_azimuths");
                 json!({"ok":true,"data":data})
             }
             Err(e) => e,
@@ -176,6 +177,40 @@ fn share_mode_request_validation() {
             json!({"share_mode":invalid_share})
         );
     }
+}
+
+#[test]
+fn expected_azimuths_validate_against_the_sweep() {
+    let valid = request::validate(&json!({
+        "record_dir":"missing",
+        "sweep":{"speakers":["FL","FR"]},
+        "expected_azimuths":{"fl":30,"FR":-30.5}
+    }))
+    .unwrap();
+    assert_eq!(
+        valid.expected_azimuths,
+        Some([(String::from("FL"), 30.0), (String::from("FR"), -30.5)].into())
+    );
+    for expected in [json!([]), json!({"FL":"30"}), json!({"FL":181})] {
+        let error = request::validate(&json!({
+            "record_dir":"missing","sweep":{"speakers":["FL"]},
+            "expected_azimuths":expected
+        }))
+        .unwrap_err();
+        assert_eq!(error["error"]["code"], "INVALID_REQUEST");
+    }
+    let outside = request::validate(&json!({
+        "record_dir":"missing","sweep":{"speakers":["FL"]},
+        "expected_azimuths":{"FR":-30}
+    }))
+    .unwrap_err();
+    assert_eq!(outside["error"]["code"], "INVALID_REQUEST");
+    let headphones = request::validate(&json!({
+        "mode":"headphones","record_dir":"missing","sweep":{},
+        "expected_azimuths":"ignored"
+    }))
+    .unwrap();
+    assert!(headphones.expected_azimuths.is_none());
 }
 
 #[test]
@@ -505,7 +540,9 @@ fn recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32() {
         assert_eq!(e.payload.as_object().unwrap().len(), 10);
     }
     let result = p.job.result.unwrap();
-    assert_eq!(result.as_object().unwrap().len(), 6);
+    assert_eq!(result.as_object().unwrap().len(), 8);
+    assert!(result["measurements"].is_array());
+    assert!(result["checks"].is_array());
     assert_eq!(result["mode"], "speakers");
     assert!(
         result["sidecar_path"]

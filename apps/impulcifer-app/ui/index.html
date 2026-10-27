@@ -137,9 +137,53 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" id="guided-card">
             <div class="card-head">
               <span class="card-num mono">03</span>
+              <span class="card-title" data-i18n="section_guided">Head-turn measurement</span>
+            </div>
+            <div class="card-body">
+              <p class="hint" data-i18n="hint_guided_intro">Measure more speaker positions than you have speakers: sit in a swivel chair and turn between recordings as each step shows.</p>
+              <div class="field-row">
+                <label for="gd-setup" data-i18n="label_guided_setup">Speakers:</label>
+                <select id="gd-setup">
+                  <option value="" data-i18n="option_guided_off">Off: every speaker stays in place</option>
+                  <option value="mono" data-i18n="option_guided_mono">One speaker on the left output</option>
+                  <option value="stereo" data-i18n="option_guided_stereo">Two speakers, 60° apart</option>
+                </select>
+              </div>
+              <div id="gd-body" hidden>
+                <div class="field-row">
+                  <label for="gd-target" data-i18n="label_guided_target">Measure for:</label>
+                  <select id="gd-target"></select>
+                </div>
+                <p class="hint" data-i18n="hint_guided_distance">Sit at least 1.5 m from the speakers.</p>
+                <ol class="gd-steps" id="gd-steps"></ol>
+                <div class="gd-stage">
+                  <svg class="gd-diagram" id="gd-diagram" viewBox="-130 -130 260 260" role="img"></svg>
+                  <div class="gd-text">
+                    <div class="gd-step-label mono" id="gd-step-label"></div>
+                    <p class="gd-turn" id="gd-turn"></p>
+                    <p class="gd-ear" id="gd-ear"></p>
+                    <p class="gd-plays"><span data-i18n="label_guided_plays">This step measures:</span> <span class="mono" id="gd-plays"></span></p>
+                    <p class="hint mono" id="gd-file"></p>
+                    <p class="gd-countdown" id="gd-countdown" aria-live="assertive" hidden></p>
+                    <div class="actions-row">
+                      <button class="btn btn-secondary" id="btn-gd-prev" data-i18n="button_guided_previous">Previous step</button>
+                      <button class="btn btn-danger" id="btn-gd-record" data-start data-i18n="button_guided_record">Record this step</button>
+                      <button class="btn btn-secondary" id="btn-gd-cancel" data-i18n="button_cancel" hidden>Cancel</button>
+                      <button class="btn btn-secondary" id="btn-gd-next" data-i18n="button_guided_next">Next step</button>
+                    </div>
+                    <ul class="gd-checks" id="gd-checks" aria-live="polite"></ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <span class="card-num mono">04</span>
               <span class="card-title" data-i18n="section_recording_options">Recording Options</span>
             </div>
             <div class="card-body">
@@ -165,7 +209,7 @@
 
           <div class="card" data-activity-card>
             <div class="card-head">
-              <span class="card-num mono">04</span>
+              <span class="card-num mono">05</span>
               <span class="card-title" data-i18n="webview_card_activity">Activity</span>
               <span class="card-meta mono" data-job-state data-i18n="webview_job_idle">Idle</span>
             </div>

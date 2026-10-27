@@ -21,7 +21,7 @@ EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * len(ADV_TABS)
-                  + 2 * 2 * 2 + 2 * 2 * 2)
+                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2)
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -30,6 +30,31 @@ NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "B
             ("TpSiL", "TSL"), ("TpSiR", "TSR"), ("TpBC", "HBC"), ("BtFC", "DFC"), ("BtFL", "DFL"), ("BtFR", "DFR")]
 IMMERSIVE = [{"id": "22.2", "name": "NHK 22.2", "file_name": "nhk_22.2.wav",
               "channels": [{"label": label, "slot": slot} for label, slot in NHK_22_2]}]
+
+
+def wrap(azimuth):
+    wrapped = (azimuth + 180) % 360 - 180
+    return 180.0 if wrapped == -180 else float(wrapped)
+
+
+def guided_take(speakers, yaw, outputs):
+    return {"speakers": speakers, "tracks": "stereo", "yaw": float(yaw),
+            "sources": [{"speaker": s, "azimuth": wrap(outputs[i] - yaw), "output": i} for i, s in enumerate(speakers)]}
+
+
+# bootstrap sweep.guided as the service sends it (impulcifer-types guided.rs): ITU angles,
+# positive left; a step's yaw is the listener's turn, positive left.
+STEREO_OUT, MONO_OUT = [30.0, -30.0], [0.0]
+GUIDED = {
+    "mono": {"outputs": MONO_OUT, "plans": {"7.1": [guided_take([s], -az, MONO_OUT) for s, az in
+             [("FC", 0), ("FL", 30), ("FR", -30), ("SL", 90), ("SR", -90), ("BL", 135), ("BR", -135)]]}},
+    "stereo": {"outputs": STEREO_OUT, "plans": {
+        "7.1": [guided_take(["FL", "FR"], 0, STEREO_OUT), guided_take(["BR", "BL"], 180, STEREO_OUT),
+                guided_take(["SL"], -60, STEREO_OUT), guided_take(["SR"], 120, STEREO_OUT),
+                guided_take(["FC"], 30, STEREO_OUT)],
+        "5.1": [guided_take(["FL", "FR"], 0, STEREO_OUT), guided_take(["BR", "BL"], 180, STEREO_OUT),
+                guided_take(["FC"], 30, STEREO_OUT)]}},
+}
 # bootstrap sweep.layout_speakers: every speaker a layout sweeps, without LFE.
 LAYOUT_SPEAKERS = {"stereo": ["FL", "FR"], "7.1": ["FL", "FR", "FC", "BL", "BR", "SL", "SR"],
                    "22.2": [slot for _, slot in NHK_22_2 if not slot.startswith("LFE")]}
@@ -64,7 +89,7 @@ def mock_script(skin, theme, language, scenario):
     fixture = json.dumps({"skin": skin, "theme": theme, "language": language,
                          "scenario": scenario, "strings": catalog(language),
                          "release": {"version": version, "notes": notes}, "immersive": IMMERSIVE,
-                         "layoutSpeakers": LAYOUT_SPEAKERS,
+                         "layoutSpeakers": LAYOUT_SPEAKERS, "guided": GUIDED,
                          "catalogs": {code: catalog(code) for code in LANGUAGES}}, ensure_ascii=False)
     return "const fixture = " + fixture + ";\n" + r"""
 (() => {
@@ -96,7 +121,8 @@ def mock_script(skin, theme, language, scenario):
   const methods = {
     bootstrap: () => ok({version: "3.0.0-alpha.1", platform: "windows", install_kind: "dev", webview_backend: "edgechromium",
       brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "22.2"], default_fs: 48000, default_duration: 5,
-        speaker_names: ["FL", "FR"], layout_speakers: fixture.layoutSpeakers, immersive: fixture.immersive},
+        speaker_names: ["FL", "FR"], layout_speakers: fixture.layoutSpeakers, immersive: fixture.immersive,
+        guided: fixture.guided},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
         brir_cancel: true, output_recovery_cancel: false, share_modes: scenario === "disabled" ? ["auto"] : ["auto", "exclusive", "shared"]},
       active_job: null, ui: settings}),
@@ -134,8 +160,12 @@ def mock_script(skin, theme, language, scenario):
         if (scenario === "refused") return ok({job: {...job("failed"), error: error("DEVICE_ERROR", "device refused exclusive",
           {kind: "share_mode_refused", share_mode: "exclusive", reason: "AUDCLNT_E_DEVICE_IN_USE"}).error}, events: [], next_seq: 1});
         const share = {requested: lastRequest.share_mode, output: "exclusive", input: "shared_auto_convert"};
+        // A guided step that turned too far: the rear pair's BR reads 170° instead of 150°.
+        const checks = (lastRequest.expected_azimuths || {}).BR === undefined ? []
+          : [{key: "record_check_angle_too_far", speaker: "BR", severity: "warning",
+              values: {itd_us: 89, measured: 170, expected: 150}}];
         return ok({job: {...job("succeeded"), result: {mode: lastRequest.mode, record_path: "C:/recording/headphones.wav", summary: null,
-          sweep: null, sidecar_path: null, share}}, events: [{seq: 1, timestamp_ms: 0, type: "log",
+          sweep: null, sidecar_path: null, share, checks}}, events: [{seq: 1, timestamp_ms: 0, type: "log",
             payload: {level: "info", key: "recording_share_mode_opened", message: "untranslated fixture", share}}], next_seq: 1});
       }
       const result = {...meta, created_files: plan(lastRequest).planned_files.map(file => file.path)};
@@ -506,6 +536,62 @@ def layout_checks(browser):
     assert not errors, errors
     context.close()
     print("Gallery layout checks: recorder channel map, layout speakers, use-all, layout_files auto/none/forced OK", flush=True)
+
+
+def guided_checks(browser):
+    """Head-turn measurement: each step's turn, ear and diagram; a step records
+    its speakers with the angles it expects after a countdown; a clean step moves
+    on, a warned one stays with the service's warning; the countdown cancels."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "recorder")
+    assert not page.locator("#gd-body").is_visible()
+    page.locator("#gd-setup").select_option("stereo")
+    assert page.locator("#gd-target").input_value() == "7.1"
+    steps = page.locator("#gd-steps .gd-step")
+    assert steps.count() == 5
+    assert page.locator("#gd-turn").inner_text() == "Face the point midway between the two speakers."
+    assert page.locator('#gd-diagram .gd-spk[data-on="true"]').count() == 2
+    assert page.locator("#gd-diagram .gd-spk-label").all_text_contents() == ["FL", "FR"]
+    page.evaluate("document.getElementById('guided-card').dataset.countdown = '0'")
+    starts = "galleryCalls.filter(c => c.method === 'start_recording')"
+    page.locator("#btn-gd-record").click()
+    page.wait_for_function(f"{starts}.length === 1")
+    request = page.evaluate(f"{starts}.at(-1).args[0]")
+    assert request["sweep"]["speakers"] == "FL,FR" and request["sweep"]["tracks"] == "stereo", request
+    assert request["expected_azimuths"] == {"FL": 30, "FR": -30} and request["append"] is False, request
+    assert "play_path" not in request, request
+    page.wait_for_function("document.querySelectorAll('#gd-steps .gd-step')[0].dataset.status === 'ok'")
+    assert steps.nth(1).get_attribute("aria-current") == "step"
+    assert page.locator("#gd-turn").inner_text() == "Turn around so the speakers are behind you."
+    assert sorted(page.locator("#gd-diagram .gd-spk-label").all_text_contents()) == ["BL", "BR"]
+    page.locator("#btn-gd-record").click()
+    page.wait_for_function("document.querySelectorAll('#gd-steps .gd-step')[1].dataset.status === 'warning'")
+    assert steps.nth(1).get_attribute("aria-current") == "step"
+    warning = page.locator('#gd-checks .gd-check[data-severity="warning"]')
+    assert "170°" in warning.inner_text() and "150°" in warning.inner_text(), warning.inner_text()
+    assert "170°" in page.locator("#view-recorder [data-log]").inner_text()
+    page.locator("#btn-gd-next").click()
+    assert page.locator("#gd-turn").inner_text() == "Turn 60° to your right."
+    assert page.locator("#gd-ear").inner_text() == "Turn so your left ear points toward the left speaker."
+    assert page.locator('#gd-diagram .gd-spk[data-on="true"]').count() == 1
+    page.evaluate("document.getElementById('guided-card').dataset.countdown = '3'")
+    page.locator("#btn-gd-record").click()
+    assert page.locator("#gd-countdown").is_visible() and "3" in page.locator("#gd-countdown").inner_text()
+    page.locator("#btn-gd-cancel").click()
+    assert not page.locator("#gd-countdown").is_visible() and page.locator("#btn-gd-record").is_visible()
+    page.wait_for_timeout(1200)
+    assert page.evaluate(f"{starts}.length") == 2
+    page.locator("#gd-setup").select_option("mono")
+    assert page.locator("#gd-steps .gd-step").count() == 7
+    assert page.locator("#gd-turn").inner_text() == "Face the speaker."
+    page.locator("#btn-gd-next").click()
+    assert page.locator("#gd-turn").inner_text() == "Turn 30° to your right."
+    assert page.locator("#gd-plays").inner_text() == "FL (30° left)"
+    page.locator("#gd-setup").select_option("")
+    assert not page.locator("#gd-body").is_visible()
+    assert not errors, errors
+    context.close()
+    print("Gallery guided checks: steps, turn and ear text, diagram, request angles, countdown, warnings OK", flush=True)
 
 
 def room_phase_checks(browser):
@@ -889,6 +975,7 @@ def render_gallery(output):
         behavior_checks(browser)
         advanced_checks(browser)
         layout_checks(browser)
+        guided_checks(browser)
         room_phase_checks(browser)
         room_tuning2_checks(browser)
         vbass_checks(browser)
@@ -993,6 +1080,13 @@ def render_gallery(output):
             assert notes.locator("strong").count() > 0
             assert "**" not in notes.inner_text() and "## " not in notes.inner_text()
             shots.append(shoot(page, output, f"update-studio-{language}-{theme}", errors))
+            context.close()
+        for theme, language in itertools.product(THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, "studio", theme, language, "idle")
+            navigate(page, "recorder")
+            page.locator("#gd-setup").select_option("stereo")
+            page.locator("#gd-steps .gd-step").nth(3).click()
+            shots.append(shoot(page, output, f"recorder-guided-{language}-{theme}", errors))
             context.close()
         browser.close()
     assert len(shots) == EXPECTED_SHOTS, f"expected {EXPECTED_SHOTS}, got {len(shots)}"

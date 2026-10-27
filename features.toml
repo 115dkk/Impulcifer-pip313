@@ -1354,6 +1354,20 @@ tests = ["impulcifer-service::a_layout_fills_in_its_speakers_and_processing_read
 note = "choosing a recorder track layout fills Speakers with every speaker the layout sweeps (device-channel order, LFE left out; bootstrap sweep.layout_speakers), so a 7.1 run is saved as FL,FR,FC,BL,BR,SL,SR.wav without typing and processing reads the same seven speakers from that name; the 3.x UI gallery checks the fill-in for stereo, 7.1 and 22.2"
 
 [[feature]]
+id = "recording.guided_plans"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-types::guided_plans_match_the_measurement_table", "impulcifer-types::guided_sources_follow_output_minus_yaw_and_valid_stereo_rules", "impulcifer-service::ipc_bootstrap_shape"]
+note = "mono and stereo head-turn measurement plans are derived from ITU speaker slots and exposed through bootstrap sweep.guided"
+
+[[feature]]
+id = "recording.take_checks"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-service::take_checks_measure_expected_and_excessive_itd", "impulcifer-service::take_checks_direction_rules_and_optional_angle_gate", "impulcifer-service::take_checks_level_noise_and_missing_signal_rules", "impulcifer-service::expected_azimuths_validate_against_the_sweep", "impulcifer-service::recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32", "impulcifer-service::centre_slots_are_never_on_the_wrong_side", "impulcifer-service::digital_silence_is_no_signal", "impulcifer-service::the_first_arrival_decides_the_side_over_a_louder_reflection"]
+note = "speaker takes report peak, SNR and deconvolved low-pass ITD measurements plus level, noise, side and guided-angle findings"
+
+[[feature]]
 id = "recording.progress"
 kind = "recording"
 status = "implemented"
