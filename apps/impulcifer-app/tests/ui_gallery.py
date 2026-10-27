@@ -578,6 +578,20 @@ def guided_checks(browser):
     warning = page.locator('#gd-checks .gd-check[data-severity="warning"]')
     assert "170°" in warning.inner_text() and "150°" in warning.inner_text(), warning.inner_text()
     assert "170°" in page.locator("#view-recorder [data-log]").inner_text()
+    # Steps belong to their folder: another folder starts with nothing recorded.
+    page.locator("#rf-record-dir").fill("data/other_hrir")
+    assert steps.nth(0).get_attribute("data-status") == "todo"
+    page.locator("#rf-record-dir").fill("data/my_hrir")
+    assert steps.nth(0).get_attribute("data-status") == "ok"
+    # A recording started by hand during the countdown is not taken for the step.
+    page.evaluate("document.getElementById('guided-card').dataset.countdown = '1'")
+    page.locator("#btn-gd-record").click()
+    page.evaluate("state.jobId = 'started-by-hand'")
+    page.wait_for_timeout(1500)
+    assert page.evaluate(f"{starts}.length") == 2
+    assert page.evaluate("state.guided.pending") is None
+    page.evaluate("state.jobId = null")
+    assert steps.nth(1).get_attribute("data-status") == "warning"
     page.locator("#btn-gd-next").click()
     assert page.locator("#gd-turn").inner_text() == "Turn 60° to your right."
     assert page.locator("#gd-ear").inner_text() == "Turn so your left ear points toward the left speaker."

@@ -1467,9 +1467,10 @@ function guidedTakes() {
   return guidedSetup()?.plans[val("gd-target")] || [];
 }
 
+/* A step's outcome belongs to the folder it was recorded into. */
 /** @param {number} index */
 function guidedKey(index) {
-  return `${val("gd-setup")}|${val("gd-target")}|${index}`;
+  return `${folderKey(val("rf-record-dir"))}|${val("gd-setup")}|${val("gd-target")}|${index}`;
 }
 
 function populateGuidedTargets() {
@@ -1717,6 +1718,9 @@ async function startGuidedRecording(take) {
   delete payload.play_path;
   Object.assign(payload, { sweep, force_channels: false, channels: 2, append: false,
     expected_azimuths: Object.fromEntries(take.sources.map((source) => [source.speaker, source.azimuth])) });
+  // Another recording started during the countdown: this step did not start,
+  // and that recording's result must not be taken for it.
+  if (state.startPending || state.jobId) return;
   state.guided.pending = guidedKey(state.guided.index);
   await begin((request) => api().start_recording(request), payload, "recording");
   if (!state.jobId) state.guided.pending = null;
@@ -3047,7 +3051,10 @@ function wireEvents() {
   el("rf-host-api", HTMLSelectElement).addEventListener("change", () => loadDevices(val("rf-host-api")));
 
   el("rf-play", HTMLInputElement).addEventListener("input", refreshResolvedPath);
-  el("rf-record-dir", HTMLInputElement).addEventListener("input", refreshResolvedPath);
+  el("rf-record-dir", HTMLInputElement).addEventListener("input", () => {
+    refreshResolvedPath();
+    renderGuided();
+  });
   el("rf-sweep-source", HTMLSelectElement).addEventListener("change", () => {
     updateSweepSourceVisibility();
     refreshResolvedPath();
