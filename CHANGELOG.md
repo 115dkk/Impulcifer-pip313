@@ -4,6 +4,13 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.6.2 - 2026-10-27
+### 녹음 검사의 비교 기준 바로잡기
+
+#### 🐛 버그 수정
+- **쓸 수 없는 녹음의 ITD를 보내지 않음**: 신호가 없거나 한쪽 마이크가 무음인 녹음은 측정값의 ITD를 비웁니다. 무음인 귀에서는 상호상관이 모든 지연에서 0이라 약 1000 µs가 나왔고, 화면이 이 값을 같은 폴더의 비교 기준으로 기억해 두었다가 다음의 정상 녹음에 '같은 각도인데 시간차가 다르다'는 경고를 냈습니다.
+- **마이크 교환 판정에서 옛 측정 제외**: 지금 다시 녹음하는 스피커의 옛 측정값은 다른 비교처럼 마이크 교환 판정에서도 뺍니다. 정상이던 FL·FR을 마이크를 바꾼 채 다시 녹음하면 옛 정상값이 섞여 교환을 알리지 못했습니다.
+
 ## 3.6.1 - 2026-10-27
 ### 녹음 검사 보강: 같은 각도끼리 비교하고 마이크·스피커 문제도 잡기
 

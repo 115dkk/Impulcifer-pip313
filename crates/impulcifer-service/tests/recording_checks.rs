@@ -331,6 +331,7 @@ fn take_checks_ear_silence_suppresses_itd_findings() {
             | "record_check_polarity"
             | "record_check_itd_mismatch"
     )));
+    assert_eq!(result.measurements[0].itd_us, None);
 }
 
 #[test]
@@ -524,5 +525,38 @@ fn take_checks_detect_level_change_and_swapped_microphones() {
         has(&rerecorded, "record_check_mics_swapped"),
         "{:?}",
         rerecorded.checks
+    );
+}
+
+/// Retaking FL and FR with the microphones swapped is diagnosed even though
+/// this folder's earlier, correct FL and FR are among the references.
+#[test]
+fn superseded_references_do_not_hide_swapped_microphones() {
+    let reference = [
+        ReferenceMeasurement {
+            speaker: "FL".into(),
+            itd_us: Some(250.0),
+            lf_db: Some(-20.0),
+            azimuth: Some(30.0),
+        },
+        ReferenceMeasurement {
+            speaker: "FR".into(),
+            itd_us: Some(-250.0),
+            lf_db: Some(-20.0),
+            azimuth: Some(-30.0),
+        },
+    ];
+    let expected = BTreeMap::from([("FL".into(), 30.0), ("FR".into(), -30.0)]);
+    let result = custom_take(
+        &["FL", "FR"],
+        &[(12, 0), (0, 12)],
+        &[(0.2, 0.2), (0.2, 0.2)],
+        Some(&expected),
+        Some(&reference),
+    );
+    assert!(
+        has(&result, "record_check_mics_swapped"),
+        "{:?}",
+        result.checks
     );
 }
