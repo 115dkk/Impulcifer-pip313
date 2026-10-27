@@ -427,7 +427,11 @@ pub fn check_recording(
             speaker: segment.speaker.clone(),
             peak_db: rounded(peak_db, 1),
             snr_db: rounded(snr_db, 1),
-            itd_us: itd.map(|value| rounded(value.itd_us, 0)),
+            // A take with no signal or a silent ear has no usable time difference;
+            // reporting one would make a bad reference for later takes.
+            itd_us: itd
+                .filter(|_| snr_db >= 6.0 && !ear_silent)
+                .map(|value| rounded(value.itd_us, 0)),
             lf_db,
             azimuth,
         };
@@ -693,7 +697,8 @@ pub fn check_recording(
         .iter()
         .filter(|take| !take.ear_silent)
         .map(|take| &take.measurement)
-        .chain(references.iter())
+        // A speaker recorded again now replaces its earlier reference here too.
+        .chain(comparison_references.iter().copied())
         .filter_map(|measurement| {
             let itd = measurement.itd_us?;
             let expected = direction(&measurement.speaker, measurement.azimuth)?;
