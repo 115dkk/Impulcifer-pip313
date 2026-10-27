@@ -218,7 +218,7 @@
   "cli_readme_layouts_header_channel": "채널",
   "cli_readme_layouts_header_speaker": "스피커",
   "label_sweep_channel_map": "장치 채널:",
-  "hint_sweep_layout_codes": "화살표 뒤의 코드를 스피커 칸에 입력하세요. 포맷의 라벨은 다른 위치를 가리킬 수 있습니다. 22.2의 1번 채널(FL, 60°)은 여기서 WL입니다.",
+  "hint_sweep_layout_codes": "스피커 칸에는 화살표 뒤의 코드가 이미 모두 들어 있습니다. 측정하지 않을 스피커는 지우세요. 포맷의 라벨은 다른 위치를 가리킬 수 있습니다. 22.2의 1번 채널(FL, 60°)은 여기서 WL입니다.",
   "button_sweep_use_layout": "이 배치의 스피커 모두 쓰기",
   "label_layout_files": "채널 순서 파일:",
   "option_layout_files_auto": "모든 스피커를 측정했을 때",

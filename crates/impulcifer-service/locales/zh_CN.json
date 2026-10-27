@@ -218,7 +218,7 @@
   "cli_readme_layouts_header_channel": "声道",
   "cli_readme_layouts_header_speaker": "扬声器",
   "label_sweep_channel_map": "设备声道：",
-  "hint_sweep_layout_codes": "请将每个箭头后的代码输入“Speakers”栏。格式标签可能指向其他位置：22.2 的第 1 声道（FL, 60°）在这里是 WL。",
+  "hint_sweep_layout_codes": "“Speakers”栏中已填入所有箭头后的代码。请删除不需要测量的扬声器。格式标签可能指向其他位置：22.2 的第 1 声道（FL, 60°）在这里是 WL。",
   "button_sweep_use_layout": "使用此布局中的所有扬声器",
   "label_layout_files": "声道顺序文件：",
   "option_layout_files_auto": "测量所有扬声器后",

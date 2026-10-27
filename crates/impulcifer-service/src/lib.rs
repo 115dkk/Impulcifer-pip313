@@ -16,7 +16,7 @@ use args::Args;
 use impulcifer_jobs::registry::{JobRegistry, panic_message};
 use impulcifer_types::audio::{AudioBackend, ShareMode};
 use impulcifer_types::config::ProcessingConfig;
-use impulcifer_types::constants::{SPEAKER_NAMES, SWEEP_TRACK_LAYOUTS};
+use impulcifer_types::constants::{SPEAKER_NAMES, SWEEP_TRACK_LAYOUTS, sweep_layout_speakers};
 use impulcifer_types::ipc::{self, ErrorCode, IpcMethod};
 use impulcifer_types::job::JobSnapshot;
 use serde_json::{Value, json};
@@ -160,6 +160,9 @@ impl ImpulciferService {
                     "brir_defaults": defaults,
                     "sweep": {"layouts": SWEEP_TRACK_LAYOUTS, "default_fs": paths::DEFAULT_SWEEP_FS,
                         "default_duration": paths::DEFAULT_SWEEP_DURATION, "speaker_names": SPEAKER_NAMES.as_slice(),
+                        "layout_speakers": SWEEP_TRACK_LAYOUTS.iter()
+                            .map(|layout| (layout.to_string(), json!(sweep_layout_speakers(layout))))
+                            .collect::<serde_json::Map<_, _>>(),
                         "immersive": impulcifer_types::layouts::IMMERSIVE_LAYOUTS.iter().map(|layout| json!({
                             "id": layout.id, "name": layout.name, "file_name": layout.file_name,
                             "channels": layout.channels.iter().map(|channel| json!({

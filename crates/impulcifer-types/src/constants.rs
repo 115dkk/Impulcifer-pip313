@@ -45,6 +45,22 @@ pub fn sweep_track_order(layout: &str) -> Option<Vec<&'static str>> {
     }
 }
 
+/// The speakers a full measurement with `layout` sweeps, in device-channel order
+/// without the LFE channels: what the recorder fills in when the layout is chosen,
+/// so the recording is named after every speaker it holds. Mono sweeps FL alone.
+pub fn sweep_layout_speakers(layout: &str) -> Option<Vec<&'static str>> {
+    match layout {
+        "mono" => Some(vec!["FL"]),
+        "stereo" => Some(vec!["FL", "FR"]),
+        _ => sweep_track_order(layout).map(|order| {
+            order
+                .into_iter()
+                .filter(|slot| SPEAKER_NAMES.contains(slot))
+                .collect()
+        }),
+    }
+}
+
 /// Exact copies of core.constants.CHANNEL_LAYOUT_MAP (7.0.4 and 7.0.6).
 pub const TRUEHD_11CH_ORDER: [&str; 11] = [
     "FL", "FR", "FC", "BL", "BR", "SL", "SR", "TFL", "TFR", "TBL", "TBR",

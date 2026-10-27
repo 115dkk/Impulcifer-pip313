@@ -298,6 +298,45 @@ fn finish(fixture: &Fixture, id: &str) {
 }
 
 #[test]
+fn bootstrap_layout_speakers_name_the_recording_after_every_speaker() {
+    // The recorder fills Speakers from sweep.layout_speakers when a layout is
+    // chosen; sent back unedited, the list names the recording, so a 7.1 run
+    // needs no typing to give processing FL,FR,FC,BL,BR,SL,SR.wav.
+    let f = Fixture::new();
+    let boot = data(f.call("bootstrap", vec![]));
+    let lists = boot["sweep"]["layout_speakers"].as_object().unwrap();
+    assert_eq!(
+        lists
+            .keys()
+            .map(String::as_str)
+            .collect::<std::collections::BTreeSet<_>>(),
+        impulcifer_types::constants::SWEEP_TRACK_LAYOUTS
+            .into_iter()
+            .collect()
+    );
+    assert_eq!(
+        lists["7.1"],
+        json!(["FL", "FR", "FC", "BL", "BR", "SL", "SR"])
+    );
+    for (layout, speakers) in lists {
+        let names: Vec<_> = speakers
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s.as_str().unwrap())
+            .collect();
+        let sweep = json!({"mode":"default","speakers":speakers,"tracks":layout});
+        assert_eq!(
+            data(f.call(
+                "resolve_recording_paths",
+                vec![json!("out"), Value::Null, json!("speakers"), sweep]
+            ))["record_path"],
+            json!(Path::new("out").join(format!("{}.wav", names.join(","))))
+        );
+    }
+}
+
+#[test]
 fn ipc_bootstrap_shape() {
     let f = Fixture::new();
     let boot = data(f.call("bootstrap", vec![]));
@@ -331,6 +370,9 @@ fn ipc_bootstrap_shape() {
             "layouts":["mono","stereo","5.1","7.1","7.1.4","7.1.6","13.1","22.2","24.1.10","30.2"],
             "default_fs":48000,"default_duration":5.0,
             "speaker_names":impulcifer_types::constants::SPEAKER_NAMES.as_slice(),
+            "layout_speakers":impulcifer_types::constants::SWEEP_TRACK_LAYOUTS.iter().map(|layout| (
+                layout.to_string(), json!(impulcifer_types::constants::sweep_layout_speakers(layout).unwrap())
+            )).collect::<serde_json::Map<_, _>>(),
             "immersive":impulcifer_types::layouts::IMMERSIVE_LAYOUTS.iter().map(|layout| json!({
                 "id":layout.id,"name":layout.name,"file_name":layout.file_name,
                 "channels":layout.channels.iter().map(|channel| json!({

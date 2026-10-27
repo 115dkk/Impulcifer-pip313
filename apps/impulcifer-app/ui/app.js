@@ -1302,13 +1302,12 @@ function renderLayoutMap() {
   }));
 }
 
+/* Choosing a layout means measuring all of it: Speakers takes every speaker the
+   layout sweeps, so the recording is named after them (7.1: FL,FR,FC,BL,BR,SL,SR.wav)
+   and processing reads each one without the list being typed. */
 function useLayoutSpeakers() {
-  const layout = immersiveLayout(val("rf-sweep-layout"));
-  if (!layout) return;
-  el("rf-sweep-speakers", HTMLInputElement).value = layout.channels
-    .filter((channel) => !channel.slot.startsWith("LFE"))
-    .map((channel) => channel.slot)
-    .join(",");
+  const speakers = state.sweepDefaults?.layout_speakers?.[val("rf-sweep-layout")];
+  if (speakers) el("rf-sweep-speakers", HTMLInputElement).value = speakers.join(",");
   refreshResolvedPath();
 }
 
@@ -2751,7 +2750,7 @@ function wireEvents() {
   el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", refreshResolvedPath);
   el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", () => {
     renderLayoutMap();
-    refreshResolvedPath();
+    useLayoutSpeakers();
   });
   el("rf-layout-use-all", HTMLButtonElement).addEventListener("click", useLayoutSpeakers);
   for (const p of ["bf", "ba"]) {
