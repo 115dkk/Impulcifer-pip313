@@ -17,6 +17,7 @@ use impulcifer_jobs::registry::{JobRegistry, panic_message};
 use impulcifer_types::audio::{AudioBackend, ShareMode};
 use impulcifer_types::config::ProcessingConfig;
 use impulcifer_types::constants::{SPEAKER_NAMES, SWEEP_TRACK_LAYOUTS, sweep_layout_speakers};
+use impulcifer_types::guided::{GUIDED_SETUPS, guided_plan};
 use impulcifer_types::ipc::{self, ErrorCode, IpcMethod};
 use impulcifer_types::job::JobSnapshot;
 use serde_json::{Value, json};
@@ -154,12 +155,32 @@ impl ImpulciferService {
                     .as_object_mut()
                     .expect("config is an object")
                     .remove("dir_path");
+                let guided = GUIDED_SETUPS
+                    .iter()
+                    .map(|setup| {
+                        let plans = setup
+                            .targets
+                            .iter()
+                            .map(|target| {
+                                (
+                                    (*target).to_owned(),
+                                    json!(guided_plan(setup.id, target).expect("guided target")),
+                                )
+                            })
+                            .collect::<serde_json::Map<_, _>>();
+                        (
+                            setup.id.to_owned(),
+                            json!({"outputs":setup.outputs,"plans":plans}),
+                        )
+                    })
+                    .collect::<serde_json::Map<_, _>>();
                 Ok(json!({
                     "version": env!("CARGO_PKG_VERSION"), "platform": platform(),
                     "install_kind": self.update_options.install_kind.as_str(),
                     "brir_defaults": defaults,
                     "sweep": {"layouts": SWEEP_TRACK_LAYOUTS, "default_fs": paths::DEFAULT_SWEEP_FS,
                         "default_duration": paths::DEFAULT_SWEEP_DURATION, "speaker_names": SPEAKER_NAMES.as_slice(),
+                        "guided": guided,
                         "layout_speakers": SWEEP_TRACK_LAYOUTS.iter()
                             .map(|layout| (layout.to_string(), json!(sweep_layout_speakers(layout))))
                             .collect::<serde_json::Map<_, _>>(),

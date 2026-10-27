@@ -1,4 +1,5 @@
 //! Recording request, playback and progress adapters for the frozen 2.x IPC.
+pub mod checks;
 pub mod devices;
 pub mod naming;
 pub mod progress;

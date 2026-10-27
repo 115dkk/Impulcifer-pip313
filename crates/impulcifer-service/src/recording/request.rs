@@ -10,7 +10,7 @@ use impulcifer_types::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::path::Path;
+use std::{collections::BTreeMap, path::Path};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -35,6 +35,7 @@ pub struct RecordingRequest {
     pub debug_plots: Value,
     pub confirm_warnings: Value,
     pub sweep: Value,
+    pub expected_azimuths: Value,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct ValidatedRecording {
@@ -49,6 +50,7 @@ pub struct ValidatedRecording {
     pub channels: u16,
     pub append: bool,
     pub debug_plots: bool,
+    pub expected_azimuths: Option<BTreeMap<String, f64>>,
 }
 pub fn python_string(v: &Value) -> String {
     match v {
@@ -244,6 +246,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
             "debug_plots",
             "confirm_warnings",
             "sweep",
+            "expected_azimuths",
         ],
         "Unknown recording fields.",
     )?;
@@ -275,6 +278,37 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
         return Err(invalid("record_dir is required."));
     }
     let sweep_spec = validate_sweep(&request["sweep"], mode)?;
+    let expected_azimuths =
+        if mode == Mode::Headphones || o.get("expected_azimuths").is_none_or(Value::is_null) {
+            None
+        } else {
+            let values = o["expected_azimuths"]
+                .as_object()
+                .ok_or_else(|| invalid("expected_azimuths must be an object."))?;
+            let speakers = sweep_spec
+                .as_ref()
+                .map(|spec| spec.speakers.as_slice())
+                .unwrap_or(&[]);
+            let mut expected = BTreeMap::new();
+            for (speaker, value) in values {
+                let speaker = speaker.to_ascii_uppercase();
+                if !speakers.contains(&speaker) {
+                    return Err(invalid(format!(
+                        "expected_azimuths speaker {speaker} is not in the sweep speaker list."
+                    )));
+                }
+                let angle = value
+                    .as_f64()
+                    .filter(|angle| angle.is_finite() && (-180.0..=180.0).contains(angle))
+                    .ok_or_else(|| {
+                        invalid(format!(
+                            "expected_azimuths.{speaker} must be a finite number from -180 to 180."
+                        ))
+                    })?;
+                expected.insert(speaker, angle);
+            }
+            Some(expected)
+        };
     let play_path = if sweep_spec.is_some() {
         None
     } else {
@@ -367,6 +401,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
         channels,
         append,
         debug_plots,
+        expected_azimuths,
     })
 }
 

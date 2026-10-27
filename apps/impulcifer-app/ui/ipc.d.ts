@@ -19,7 +19,15 @@ interface SweepDefaults {
   /* Every speaker a full measurement with each layout sweeps, in device-channel order without LFE. */
   layout_speakers: Record<string, string[]>;
   immersive: ImmersiveLayoutInfo[];
+  /* Head-turn measurement plans by setup ("mono", "stereo"), then by target layout. */
+  guided: Record<string, GuidedSetupInfo>;
 }
+/* ITU angles in degrees, positive to the listener's left. outputs: where each output's
+   speaker stands in the room; yaw: the turn for the step, positive left; a source plays
+   speaker code `speaker` from output `output`, heard at `azimuth` after the turn. */
+interface GuidedSource { speaker: string; azimuth: number; output: number }
+interface GuidedTake { speakers: string[]; tracks: string; yaw: number; sources: GuidedSource[] }
+interface GuidedSetupInfo { outputs: number[]; plans: Record<string, GuidedTake[]> }
 interface Bootstrap {
   version: string; platform: string; install_kind: string; webview_backend: string;
   brir_defaults: BrirDefaults; sweep: SweepDefaults; ui: UiSettings; active_job: Job | null;
@@ -39,11 +47,17 @@ interface RecordingRequest {
   input_device: string | null; output_device: string | null; host_api: string | null;
   share_mode?: SharePreference | null; force_channels?: boolean; channels?: number;
   append?: boolean; debug_plots?: boolean; confirm_warnings?: boolean;
+  /* The azimuth each speaker should be heard at (ITU degrees); enables the turn-angle checks. */
+  expected_azimuths?: Record<string, number>;
 }
+/* A finding of the post-recording checks; `key` is a catalog key, `values` its placeholders. */
+interface RecordingCheck { key: string; speaker: string; severity: "error" | "warning"; values: Record<string, number> }
+interface RecordingMeasurement { speaker: string; peak_db: number; snr_db: number; itd_us: number | null }
 interface RecordingResult {
   record_path: string; summary: { sample_rate: number; channels: number; duration: number; peak_db: number; active_channels: number } | null;
   mode: "speakers" | "headphones"; sweep: string | null; sidecar_path: string | null;
   share: RecordingShare; warnings?: string[];
+  checks?: RecordingCheck[]; measurements?: RecordingMeasurement[];
 }
 interface ProcessingRequest {
   dir_path?: string | null; test_signal?: string | null; fs?: number | null;
@@ -184,6 +198,10 @@ interface AppState {
   sweepDefaults?: Partial<SweepDefaults>; language: string; theme: string; skin: string;
   jobId: string | null; jobKind: JobKind | null; lastJob: Job | null; lastRecoveryJob: JobOf<"output_recovery"> | null;
   startPending: boolean; nextSeq: number; pollTimer: number | undefined; resolvedRecordPath: string;
+  /* Head-turn measurement: the step shown, each step's outcome by "setup|target|index",
+     the step being recorded, and the countdown before it starts. */
+  guided: { index: number; results: Record<string, { status: string; checks: RecordingCheck[] }>;
+    pending: string | null; timer: number | undefined; remaining: number };
   lastOutputDir: string | null; lastRecoveryOutputDir: string | null; systemThemeQuery: MediaQueryList | null;
   stageIndex: number; stageAbort: string | null; modalDismissed: boolean; recPhase: string | null;
   recDoneSpeakers: Set<string>; shareModes: SharePreference[]; systemInfo: SystemInfo | null;
