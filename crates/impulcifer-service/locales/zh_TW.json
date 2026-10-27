@@ -269,5 +269,12 @@
   "record_check_off_center": "{speaker}：聲音到達一側耳朵的時間比另一側早 {itd_us} µs，相當於偏離正前方約 {measured}°。請面向本步驟指示的方向，然後重新錄音。",
   "record_check_angle_too_far": "{speaker}：聲音到達雙耳的時間相差 {itd_us} µs，對應約 {measured}°，而非 {expected}°。轉動角度過大，請稍微轉回一些，然後重新錄音。",
   "record_check_angle_too_little": "{speaker}：聲音到達雙耳的時間相差 {itd_us} µs，對應約 {measured}°，而非 {expected}°。轉動角度不足，請再多轉一些，然後重新錄音。",
-  "record_check_angle_off": "{speaker}：聲音到達雙耳的時間相差 {itd_us} µs，對應約 {measured}°，而非 {expected}°。請確認耳朵朝向喇叭，然後重新錄音。"
+  "record_check_angle_off": "{speaker}：聲音到達雙耳的時間相差 {itd_us} µs，對應約 {measured}°，而非 {expected}°。請確認耳朵朝向喇叭，然後重新錄音。",
+  "record_check_ear_silent_left": "{speaker}：左側麥克風拾取到的聲音比右側低 {db_diff} dB。請檢查左側麥克風是否已放入耳內並連接，然後重新錄音。",
+  "record_check_ear_silent_right": "{speaker}：右側麥克風拾取到的聲音比左側低 {db_diff} dB。請檢查右側麥克風是否已放入耳內並連接，然後重新錄音。",
+  "record_check_polarity": "{speaker}：一側麥克風訊號的極性與另一側相反。請檢查麥克風接線或音訊介面的極性設定，然後重新錄音。",
+  "record_check_mics_swapped": "左右麥克風似乎接反了：喇叭的聲音先到達了錯誤的一側耳朵。請對調麥克風或輸入聲道，然後重新錄音。",
+  "record_check_distortion": "{speaker}：喇叭的聲音出現失真（諧波位準 {distortion_db} dB）。請降低播放音量，然後重新錄音。",
+  "record_check_itd_mismatch": "{speaker}：聲音到達雙耳的時間差為 {itd_us} µs，但同一角度下測得的 {reference} 為 {reference_itd_us} µs（相差 {diff_us} µs）。兩次測量中有一次轉動的角度不對，請重新錄製角度有偏差的那一次。",
+  "record_check_level_changed": "{speaker}：位準與之前的步驟相差 {db_diff} dB。請保持相同的播放音量和與喇叭的距離，然後重新錄音。"
 }

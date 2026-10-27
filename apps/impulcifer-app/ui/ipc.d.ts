@@ -49,10 +49,15 @@ interface RecordingRequest {
   append?: boolean; debug_plots?: boolean; confirm_warnings?: boolean;
   /* The azimuth each speaker should be heard at (ITU degrees); enables the turn-angle checks. */
   expected_azimuths?: Record<string, number>;
+  /* Earlier takes in the same folder, compared with speakers that should share their angle. */
+  reference_measurements?: { speaker: string; itd_us: number | null; lf_db: number | null; azimuth: number | null }[];
 }
 /* A finding of the post-recording checks; `key` is a catalog key, `values` its placeholders. */
-interface RecordingCheck { key: string; speaker: string; severity: "error" | "warning"; values: Record<string, number> }
-interface RecordingMeasurement { speaker: string; peak_db: number; snr_db: number; itd_us: number | null }
+interface RecordingCheck { key: string; speaker: string; severity: "error" | "warning"; values: Record<string, number | string> }
+interface RecordingMeasurement {
+  speaker: string; peak_db: number; snr_db: number; itd_us: number | null;
+  lf_db?: number | null; azimuth?: number | null;
+}
 interface RecordingResult {
   record_path: string; summary: { sample_rate: number; channels: number; duration: number; peak_db: number; active_channels: number } | null;
   mode: "speakers" | "headphones"; sweep: string | null; sidecar_path: string | null;
@@ -202,6 +207,8 @@ interface AppState {
      the step being recorded, and the countdown before it starts. */
   guided: { index: number; results: Record<string, { status: string; checks: RecordingCheck[] }>;
     pending: string | null; timer: number | undefined; remaining: number };
+  /* Each recording folder's latest measurement per speaker in this session. */
+  takeMeasurements: Record<string, RecordingMeasurement[]>;
   lastOutputDir: string | null; lastRecoveryOutputDir: string | null; systemThemeQuery: MediaQueryList | null;
   stageIndex: number; stageAbort: string | null; modalDismissed: boolean; recPhase: string | null;
   recDoneSpeakers: Set<string>; shareModes: SharePreference[]; systemInfo: SystemInfo | null;

@@ -26,6 +26,7 @@ const state = {
   pollTimer: undefined,
   resolvedRecordPath: "",
   guided: { index: 0, results: {}, pending: null, timer: undefined, remaining: 0 },
+  takeMeasurements: {},
   lastOutputDir: null,
   lastRecoveryOutputDir: null,
   systemThemeQuery: null,
@@ -553,6 +554,7 @@ function finishRecorderStatus(job) {
     setRecorderStatus(t("recording_status_complete"), detail);
     appendLog(detail);
     (job.result.checks || []).forEach((check) => appendLog(checkMessage(check)));
+    rememberMeasurements(job.result);
   } else if (job.status === "failed") {
     const message = job.error ? errorSentence(job.error) : "";
     setRecorderStatus(t("recording_status_error"), message);
@@ -1380,6 +1382,11 @@ function gatherRecordingPayload(mode) {
     payload.play_path = val("rf-play");
   }
   if (mode === "speakers") {
+    // Earlier takes in this folder, so the service can compare speakers that
+    // should share an angle (FL against FR) across separate recordings.
+    payload.reference_measurements = (state.takeMeasurements[folderKey(payload.record_dir)] || []).map((item) => ({
+      speaker: item.speaker, itd_us: item.itd_us, lf_db: item.lf_db ?? null, azimuth: item.azimuth ?? null,
+    }));
     payload.force_channels = checked("rf-force-channels");
     payload.channels = payload.force_channels ? Math.trunc(numOr("rf-channels", 2)) : 2;
     payload.append = checked("rf-append");
@@ -1581,9 +1588,28 @@ function checkMessage(check) {
   /** @type {Record<string, unknown>} */
   const values = { speaker: check.speaker };
   Object.entries(check.values || {}).forEach(([name, value]) => {
-    values[name] = name.endsWith("_db") ? Number(value).toFixed(1) : Math.round(Number(value));
+    values[name] = typeof value === "string" ? value
+      : name.endsWith("_db") ? Number(value).toFixed(1) : Math.round(Number(value));
   });
   return fmt(t(check.key), values);
+}
+
+/** @param {string} dir */
+function folderKey(dir) {
+  return dir.replace(/[\\/]+$/, "");
+}
+
+/* Keep each speaker's latest measurement per recording folder for this session;
+   a retake replaces the speaker's earlier entry. */
+/** @param {RecordingResult} result */
+function rememberMeasurements(result) {
+  if (result.mode !== "speakers" || !result.measurements?.length) return;
+  const dir = folderKey(String(result.record_path || "").replace(/[\\/][^\\/]*$/, ""));
+  const fresh = new Set(result.measurements.map((item) => item.speaker));
+  state.takeMeasurements[dir] = [
+    ...(state.takeMeasurements[dir] || []).filter((item) => !fresh.has(item.speaker)),
+    ...result.measurements,
+  ];
 }
 
 function renderGuided() {

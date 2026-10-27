@@ -1,5 +1,6 @@
 //! Ordered Python request validation. Do not deserialize before checking errors.
 use super::{
+    checks::ReferenceMeasurement,
     naming,
     sweep::{SweepSpec, validate_sweep_spec},
 };
@@ -36,6 +37,7 @@ pub struct RecordingRequest {
     pub confirm_warnings: Value,
     pub sweep: Value,
     pub expected_azimuths: Value,
+    pub reference_measurements: Value,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct ValidatedRecording {
@@ -51,6 +53,7 @@ pub struct ValidatedRecording {
     pub append: bool,
     pub debug_plots: bool,
     pub expected_azimuths: Option<BTreeMap<String, f64>>,
+    pub reference_measurements: Option<Vec<ReferenceMeasurement>>,
 }
 pub fn python_string(v: &Value) -> String {
     match v {
@@ -247,6 +250,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
             "confirm_warnings",
             "sweep",
             "expected_azimuths",
+            "reference_measurements",
         ],
         "Unknown recording fields.",
     )?;
@@ -308,6 +312,67 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
                 expected.insert(speaker, angle);
             }
             Some(expected)
+        };
+    let reference_measurements =
+        if mode == Mode::Headphones || o.get("reference_measurements").is_none_or(Value::is_null) {
+            None
+        } else {
+            let values = o["reference_measurements"]
+                .as_array()
+                .ok_or_else(|| invalid("reference_measurements must be an array."))?;
+            if values.len() > 64 {
+                return Err(invalid(
+                    "reference_measurements may contain at most 64 entries.",
+                ));
+            }
+            let mut references = Vec::with_capacity(values.len());
+            for value in values {
+                let object = value
+                    .as_object()
+                    .ok_or_else(|| invalid("reference_measurements entries must be objects."))?;
+                unknown(
+                    object,
+                    &["speaker", "itd_us", "lf_db", "azimuth"],
+                    "Unknown reference_measurements fields.",
+                )?;
+                let speaker = object
+                    .get("speaker")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| invalid("reference_measurements speaker must be a string."))?
+                    .to_ascii_uppercase();
+                if !impulcifer_types::constants::SPEAKER_NAMES.contains(&speaker.as_str()) {
+                    return Err(invalid(format!(
+                        "reference_measurements speaker {speaker} is not recognised."
+                    )));
+                }
+                let optional_number = |name: &str| -> Result<Option<f64>, Value> {
+                    match object.get(name) {
+                        None | Some(Value::Null) => Ok(None),
+                        Some(value) => value
+                            .as_f64()
+                            .filter(|number| number.is_finite())
+                            .map(Some)
+                            .ok_or_else(|| {
+                                invalid(format!(
+                                    "reference_measurements.{name} must be a finite number or null."
+                                ))
+                            }),
+                    }
+                };
+                let azimuth = optional_number("azimuth")?;
+                if azimuth.is_some_and(|value| !(-180.0..=180.0).contains(&value)) {
+                    return Err(invalid(
+                        "reference_measurements.azimuth must be from -180 to 180.",
+                    ));
+                }
+                references.push(ReferenceMeasurement {
+                    speaker,
+                    itd_us: optional_number("itd_us")?,
+                    lf_db: optional_number("lf_db")?,
+                    azimuth,
+                });
+            }
+            Some(references)
         };
     let play_path = if sweep_spec.is_some() {
         None
@@ -402,6 +467,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
         append,
         debug_plots,
         expected_azimuths,
+        reference_measurements,
     })
 }
 

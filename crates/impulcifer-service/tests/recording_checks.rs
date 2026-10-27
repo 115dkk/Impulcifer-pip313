@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use impulcifer_service::recording::{
-    checks::{CheckResults, check_recording},
+    checks::{CheckResults, ReferenceMeasurement, check_recording},
     sweep::{SweepSpec, build_sweep_playback},
 };
 use std::collections::BTreeMap;
@@ -52,6 +52,7 @@ fn signal(
         std::slice::from_ref(&segment),
         Some(&playback.estimator),
         Some(&expected),
+        None,
     )
 }
 
@@ -101,7 +102,14 @@ fn take_checks_direction_rules_and_optional_angle_gate() {
         tracks[0][i] += sample * 0.2;
         tracks[1][i + 21] += sample * 0.2;
     }
-    let no_expected = check_recording(&tracks, FS, &[segment], Some(&playback.estimator), None);
+    let no_expected = check_recording(
+        &tracks,
+        FS,
+        &[segment],
+        Some(&playback.estimator),
+        None,
+        None,
+    );
     assert!(
         !no_expected
             .checks
@@ -151,6 +159,7 @@ fn take_checks_level_noise_and_missing_signal_rules() {
         &estimator.segments,
         Some(&estimator.estimator),
         Some(&BTreeMap::from([("FL".to_owned(), 30.0)])),
+        None,
     );
     assert!(has(&silent, "record_check_no_signal"));
     assert_eq!(silent.checks.len(), 1);
@@ -179,6 +188,7 @@ fn centre_slots_are_never_on_the_wrong_side() {
         FS,
         &playback.segments,
         Some(&playback.estimator),
+        None,
         None,
     );
     assert!(
@@ -210,6 +220,7 @@ fn digital_silence_is_no_signal() {
         &playback.segments,
         Some(&playback.estimator),
         Some(&BTreeMap::from([("FR".to_owned(), -30.0)])),
+        None,
     );
     let keys: Vec<_> = result
         .checks
@@ -247,8 +258,271 @@ fn the_first_arrival_decides_the_side_over_a_louder_reflection() {
         &playback.segments,
         Some(&playback.estimator),
         Some(&expected),
+        None,
     );
     let itd = result.measurements[0].itd_us.unwrap();
     assert!((itd - 250.0).abs() <= 25.0, "{itd}");
     assert!(result.checks.is_empty(), "{:?}", result.checks);
+}
+
+fn custom_take(
+    speakers: &[&str],
+    delays: &[(usize, usize)],
+    gains: &[(f64, f64)],
+    expected: Option<&BTreeMap<String, f64>>,
+    references: Option<&[ReferenceMeasurement]>,
+) -> CheckResults {
+    let playback = build_sweep_playback(&SweepSpec {
+        fs: FS,
+        duration: 0.1,
+        speakers: speakers
+            .iter()
+            .map(|speaker| (*speaker).to_owned())
+            .collect(),
+        tracks: "stereo".into(),
+    })
+    .unwrap();
+    let n = playback.tracks[0].len() + 128;
+    let mut tracks = vec![vec![0.0; n], vec![0.0; n]];
+    for (segment_index, segment) in playback.segments.iter().enumerate() {
+        let source_start = (segment.start * FS as f64).round() as usize;
+        let source_end = (segment.end * FS as f64).round() as usize;
+        let source = &playback.tracks[segment_index.min(playback.tracks.len() - 1)]
+            [source_start..source_end];
+        for (i, sample) in source.iter().enumerate() {
+            tracks[0][source_start + i + delays[segment_index].0] +=
+                sample * gains[segment_index].0;
+            tracks[1][source_start + i + delays[segment_index].1] +=
+                sample * gains[segment_index].1;
+        }
+    }
+    check_recording(
+        &tracks,
+        FS,
+        &playback.segments,
+        Some(&playback.estimator),
+        expected,
+        references,
+    )
+}
+
+#[test]
+fn take_checks_ear_silence_suppresses_itd_findings() {
+    let result = custom_take(
+        &["FL"],
+        &[(0, 12)],
+        &[(0.2 * 10_f64.powf(-30.0 / 20.0), 0.2)],
+        Some(&BTreeMap::from([("FL".into(), 30.0)])),
+        None,
+    );
+    assert!(
+        has(&result, "record_check_ear_silent_left"),
+        "{:?}",
+        result.checks
+    );
+    assert!(!result.checks.iter().any(|check| matches!(
+        check.key,
+        "record_check_wrong_side_left"
+            | "record_check_wrong_side_right"
+            | "record_check_off_center"
+            | "record_check_angle_too_far"
+            | "record_check_angle_too_little"
+            | "record_check_angle_off"
+            | "record_check_polarity"
+            | "record_check_itd_mismatch"
+    )));
+}
+
+#[test]
+fn take_checks_detect_reversed_microphone_polarity_without_changing_itd() {
+    let playback = build_sweep_playback(&SweepSpec {
+        fs: FS,
+        duration: 0.1,
+        speakers: vec!["FL".into()],
+        tracks: "stereo".into(),
+    })
+    .unwrap();
+    let source = &playback.tracks[0];
+    let mut tracks = vec![vec![0.0; source.len() + 64], vec![0.0; source.len() + 64]];
+    for (i, sample) in source.iter().enumerate() {
+        tracks[0][i] = sample * 0.2;
+        tracks[1][i + 12] = -sample * 0.2;
+    }
+    let result = check_recording(
+        &tracks,
+        FS,
+        &playback.segments,
+        Some(&playback.estimator),
+        Some(&BTreeMap::from([("FL".into(), 30.0)])),
+        None,
+    );
+    assert!(has(&result, "record_check_polarity"), "{:?}", result.checks);
+    assert!((result.measurements[0].itd_us.unwrap() - 250.0).abs() <= 25.0);
+}
+
+#[test]
+fn take_checks_compare_same_angle_current_and_reference_measurements() {
+    let expected = BTreeMap::from([("FL".into(), 30.0), ("FR".into(), -30.0)]);
+    let normal = custom_take(
+        &["FL", "FR"],
+        &[(0, 12), (12, 0)],
+        &[(0.2, 0.2); 2],
+        Some(&expected),
+        None,
+    );
+    assert!(
+        !has(&normal, "record_check_itd_mismatch"),
+        "{:?}",
+        normal.checks
+    );
+    let mismatch = custom_take(
+        &["FL", "FR"],
+        &[(0, 12), (21, 0)],
+        &[(0.2, 0.2); 2],
+        Some(&expected),
+        None,
+    );
+    let warning = mismatch
+        .checks
+        .iter()
+        .find(|check| check.key == "record_check_itd_mismatch")
+        .unwrap();
+    assert_eq!(warning.values["reference"], "FL");
+
+    let references = [
+        ReferenceMeasurement {
+            speaker: "FL".into(),
+            itd_us: Some(250.0),
+            lf_db: None,
+            azimuth: Some(30.0),
+        },
+        ReferenceMeasurement {
+            speaker: "FR".into(),
+            itd_us: Some(-250.0),
+            lf_db: None,
+            azimuth: Some(-30.0),
+        },
+    ];
+    let result = custom_take(
+        &["FR"],
+        &[(21, 0)],
+        &[(0.2, 0.2)],
+        Some(&BTreeMap::from([("FR".into(), -30.0)])),
+        Some(&references),
+    );
+    let warning = result
+        .checks
+        .iter()
+        .find(|check| check.key == "record_check_itd_mismatch")
+        .unwrap();
+    assert_eq!(warning.values["reference"], "FL");
+
+    let no_expected = custom_take(
+        &["FL", "SL"],
+        &[(0, 12), (0, 21)],
+        &[(0.2, 0.2); 2],
+        None,
+        None,
+    );
+    assert!(!has(&no_expected, "record_check_itd_mismatch"));
+}
+
+fn nonlinear_take(nonlinearity: f64) -> CheckResults {
+    let playback = build_sweep_playback(&SweepSpec {
+        fs: FS,
+        duration: 1.0,
+        speakers: vec!["FL".into()],
+        tracks: "stereo".into(),
+    })
+    .unwrap();
+    let source = &playback.tracks[0];
+    let mut tracks = vec![vec![0.0; source.len() + 64], vec![0.0; source.len() + 64]];
+    for (i, sample) in source.iter().enumerate() {
+        let transformed = 0.2 * (sample + nonlinearity * sample * sample);
+        tracks[0][i] += transformed;
+        tracks[1][i + 12] += transformed;
+    }
+    check_recording(
+        &tracks,
+        FS,
+        &playback.segments,
+        Some(&playback.estimator),
+        Some(&BTreeMap::from([("FL".into(), 30.0)])),
+        None,
+    )
+}
+
+#[test]
+fn take_checks_detect_speaker_distortion() {
+    let distorted = nonlinear_take(0.4);
+    let distortion_db = distorted
+        .checks
+        .iter()
+        .find(|check| check.key == "record_check_distortion")
+        .and_then(|check| check.values["distortion_db"].as_f64())
+        .expect("nonlinear sweep must report distortion");
+    let clean = nonlinear_take(0.0);
+    assert!(
+        !has(&clean, "record_check_distortion"),
+        "{:?}",
+        clean.checks
+    );
+    eprintln!("recording impulse checks: distortion_db={distortion_db}, clean_distortion=none");
+}
+
+#[test]
+fn take_checks_detect_level_change_and_swapped_microphones() {
+    let reference = [
+        ReferenceMeasurement {
+            speaker: "FR".into(),
+            itd_us: Some(250.0),
+            lf_db: Some(-20.0),
+            azimuth: Some(-30.0),
+        },
+        ReferenceMeasurement {
+            speaker: "FL".into(),
+            itd_us: Some(-250.0),
+            lf_db: Some(-20.0),
+            azimuth: Some(30.0),
+        },
+    ];
+    let expected = BTreeMap::from([("FC".into(), 0.0)]);
+    let level = custom_take(
+        &["FC"],
+        &[(0, 0)],
+        &[(0.025, 0.025)],
+        Some(&expected),
+        Some(&reference),
+    );
+    assert!(
+        has(&level, "record_check_level_changed"),
+        "{:?}",
+        level.checks
+    );
+    assert!(
+        has(&level, "record_check_mics_swapped"),
+        "{:?}",
+        level.checks
+    );
+    assert_eq!(
+        level
+            .checks
+            .iter()
+            .filter(|check| check.key == "record_check_mics_swapped")
+            .count(),
+        1
+    );
+
+    let rerecorded = custom_take(
+        &["FR"],
+        &[(0, 12)],
+        &[(0.2, 0.2)],
+        Some(&BTreeMap::from([("FR".into(), -30.0)])),
+        Some(&reference),
+    );
+    assert!(
+        has(&rerecorded, "record_check_mics_swapped"),
+        "{:?}",
+        rerecorded.checks
+    );
 }

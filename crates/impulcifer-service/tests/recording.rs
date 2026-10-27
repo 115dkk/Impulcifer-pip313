@@ -94,6 +94,9 @@ fn golden_recording_validation_matches_python() {
                 let mut data = serde_json::to_value(v).unwrap();
                 data.as_object_mut().unwrap().remove("share");
                 data.as_object_mut().unwrap().remove("expected_azimuths");
+                data.as_object_mut()
+                    .unwrap()
+                    .remove("reference_measurements");
                 json!({"ok":true,"data":data})
             }
             Err(e) => e,
@@ -211,6 +214,49 @@ fn expected_azimuths_validate_against_the_sweep() {
     }))
     .unwrap();
     assert!(headphones.expected_azimuths.is_none());
+}
+
+#[test]
+fn reference_measurements_validate_shape_limit_and_speakers() {
+    let valid = request::validate(&json!({
+        "record_dir":"missing",
+        "sweep":{"speakers":["FR"]},
+        "reference_measurements":[{
+            "speaker":"fl","itd_us":250,"lf_db":-20.5,"azimuth":30
+        }]
+    }))
+    .unwrap();
+    let reference = &valid.reference_measurements.unwrap()[0];
+    assert_eq!(reference.speaker, "FL");
+    assert_eq!(reference.itd_us, Some(250.0));
+    assert_eq!(reference.lf_db, Some(-20.5));
+    assert_eq!(reference.azimuth, Some(30.0));
+
+    let invalid = [
+        json!({}),
+        json!([{"speaker":"FL","itd_us":"250","lf_db":null,"azimuth":null}]),
+        json!([{"speaker":"NOPE","itd_us":null,"lf_db":null,"azimuth":null}]),
+        json!([{"speaker":"FL","itd_us":null,"lf_db":null,"azimuth":181}]),
+        Value::Array(
+            (0..65)
+                .map(|_| json!({"speaker":"FL","itd_us":null,"lf_db":null,"azimuth":null}))
+                .collect(),
+        ),
+    ];
+    for reference_measurements in invalid {
+        let error = request::validate(&json!({
+            "record_dir":"missing","sweep":{"speakers":["FL"]},
+            "reference_measurements":reference_measurements
+        }))
+        .unwrap_err();
+        assert_eq!(error["error"]["code"], "INVALID_REQUEST");
+    }
+    let headphones = request::validate(&json!({
+        "mode":"headphones","record_dir":"missing","sweep":{},
+        "reference_measurements":"ignored"
+    }))
+    .unwrap();
+    assert!(headphones.reference_measurements.is_none());
 }
 
 #[test]
