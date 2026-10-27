@@ -269,5 +269,12 @@
   "record_check_off_center": "{speaker}：声音到达一侧耳朵的时间比另一侧早 {itd_us} µs，相当于偏离正前方约 {measured}°。请面向本步骤指示的方向，然后重新录音。",
   "record_check_angle_too_far": "{speaker}：声音到达双耳的时间相差 {itd_us} µs，对应约 {measured}°，而非 {expected}°。转动角度过大，请稍微转回一些，然后重新录音。",
   "record_check_angle_too_little": "{speaker}：声音到达双耳的时间相差 {itd_us} µs，对应约 {measured}°，而非 {expected}°。转动角度不足，请再多转一些，然后重新录音。",
-  "record_check_angle_off": "{speaker}：声音到达双耳的时间相差 {itd_us} µs，对应约 {measured}°，而非 {expected}°。请确认耳朵朝向扬声器，然后重新录音。"
+  "record_check_angle_off": "{speaker}：声音到达双耳的时间相差 {itd_us} µs，对应约 {measured}°，而非 {expected}°。请确认耳朵朝向扬声器，然后重新录音。",
+  "record_check_ear_silent_left": "{speaker}：左侧麦克风拾取到的声音比右侧低 {db_diff} dB。请检查左侧麦克风是否已放入耳内并连接，然后重新录音。",
+  "record_check_ear_silent_right": "{speaker}：右侧麦克风拾取到的声音比左侧低 {db_diff} dB。请检查右侧麦克风是否已放入耳内并连接，然后重新录音。",
+  "record_check_polarity": "{speaker}：一侧麦克风信号的极性与另一侧相反。请检查麦克风接线或音频接口的极性设置，然后重新录音。",
+  "record_check_mics_swapped": "左右麦克风似乎接反了：扬声器的声音先到达了错误的一侧耳朵。请对调麦克风或输入通道，然后重新录音。",
+  "record_check_distortion": "{speaker}：扬声器的声音出现失真（谐波电平 {distortion_db} dB）。请降低播放音量，然后重新录音。",
+  "record_check_itd_mismatch": "{speaker}：声音到达双耳的时间差为 {itd_us} µs，但同一角度下测得的 {reference} 为 {reference_itd_us} µs（相差 {diff_us} µs）。两次测量中有一次转动的角度不对，请重新录制角度有偏差的那一次。",
+  "record_check_level_changed": "{speaker}：电平与之前的步骤相差 {db_diff} dB。请保持相同的播放音量和与扬声器的距离，然后重新录音。"
 }

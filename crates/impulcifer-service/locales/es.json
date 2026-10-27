@@ -269,5 +269,12 @@
   "record_check_off_center": "{speaker}: el sonido llegó a un oído {itd_us} µs antes que al otro, lo que equivale a unos {measured}° de desviación respecto al centro. Mira en la dirección indicada en este paso y vuelve a grabar.",
   "record_check_angle_too_far": "{speaker}: el sonido llegó a tus oídos con una diferencia de {itd_us} µs, que corresponde a unos {measured}° en lugar de {expected}°. Has girado demasiado; retrocede un poco y vuelve a grabar.",
   "record_check_angle_too_little": "{speaker}: el sonido llegó a tus oídos con una diferencia de {itd_us} µs, que corresponde a unos {measured}° en lugar de {expected}°. No has girado lo suficiente; gira un poco más y vuelve a grabar.",
-  "record_check_angle_off": "{speaker}: el sonido llegó a tus oídos con una diferencia de {itd_us} µs, que corresponde a unos {measured}° en lugar de {expected}°. Comprueba que tu oído apunte hacia el altavoz y vuelve a grabar."
+  "record_check_angle_off": "{speaker}: el sonido llegó a tus oídos con una diferencia de {itd_us} µs, que corresponde a unos {measured}° en lugar de {expected}°. Comprueba que tu oído apunte hacia el altavoz y vuelve a grabar.",
+  "record_check_ear_silent_left": "{speaker}: el micrófono izquierdo captó un nivel {db_diff} dB menor que el derecho. Comprueba que el micrófono izquierdo esté colocado en el oído y conectado, y vuelve a grabar.",
+  "record_check_ear_silent_right": "{speaker}: el micrófono derecho captó un nivel {db_diff} dB menor que el izquierdo. Comprueba que el micrófono derecho esté colocado en el oído y conectado, y vuelve a grabar.",
+  "record_check_polarity": "{speaker}: la señal de un micrófono tiene la polaridad invertida respecto a la del otro. Comprueba el cableado de los micrófonos o el ajuste de polaridad de la interfaz de audio y vuelve a grabar.",
+  "record_check_mics_swapped": "Los micrófonos izquierdo y derecho parecen estar intercambiados: el sonido de los altavoces llegó primero al oído equivocado. Intercambia los micrófonos o los canales de entrada y vuelve a grabar.",
+  "record_check_distortion": "{speaker}: el altavoz está distorsionando (armónicos a {distortion_db} dB). Baja el volumen de reproducción y vuelve a grabar.",
+  "record_check_itd_mismatch": "{speaker}: la diferencia de tiempo entre tus oídos es de {itd_us} µs, pero en {reference}, con el mismo ángulo, se midieron {reference_itd_us} µs ({diff_us} µs de diferencia). En una de las dos mediciones giraste a un ángulo distinto; vuelve a grabar la que tenga el ángulo incorrecto.",
+  "record_check_level_changed": "{speaker}: el nivel difiere en {db_diff} dB respecto a los pasos anteriores. Mantén el mismo volumen de reproducción y la misma distancia a los altavoces, y vuelve a grabar."
 }

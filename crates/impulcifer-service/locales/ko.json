@@ -269,5 +269,12 @@
   "record_check_off_center": "{speaker}: 소리가 한쪽 귀에 {itd_us} µs 먼저 도착했습니다. 정면에서 약 {measured}° 벗어나 있습니다. 이번 단계에서 안내한 방향을 바라보고 다시 녹음하세요.",
   "record_check_angle_too_far": "{speaker}: 소리가 두 귀에 도착한 시간 차이는 {itd_us} µs로, {expected}°가 아닌 약 {measured}°에 해당합니다. 너무 많이 돌아섰습니다. 조금 되돌아간 뒤 다시 녹음하세요.",
   "record_check_angle_too_little": "{speaker}: 소리가 두 귀에 도착한 시간 차이는 {itd_us} µs로, {expected}°가 아닌 약 {measured}°에 해당합니다. 아직 덜 돌아섰습니다. 조금 더 돌아선 뒤 다시 녹음하세요.",
-  "record_check_angle_off": "{speaker}: 소리가 두 귀에 도착한 시간 차이는 {itd_us} µs로, {expected}°가 아닌 약 {measured}°에 해당합니다. 귀가 스피커를 향하는지 확인한 뒤 다시 녹음하세요."
+  "record_check_angle_off": "{speaker}: 소리가 두 귀에 도착한 시간 차이는 {itd_us} µs로, {expected}°가 아닌 약 {measured}°에 해당합니다. 귀가 스피커를 향하는지 확인한 뒤 다시 녹음하세요.",
+  "record_check_ear_silent_left": "{speaker}: 왼쪽 마이크에 잡힌 소리가 오른쪽보다 {db_diff} dB 작습니다. 왼쪽 마이크가 귀에 꽂혀 있고 연결되어 있는지 확인한 뒤 다시 녹음하세요.",
+  "record_check_ear_silent_right": "{speaker}: 오른쪽 마이크에 잡힌 소리가 왼쪽보다 {db_diff} dB 작습니다. 오른쪽 마이크가 귀에 꽂혀 있고 연결되어 있는지 확인한 뒤 다시 녹음하세요.",
+  "record_check_polarity": "{speaker}: 한쪽 마이크 신호의 극성이 다른 쪽과 반대로 되어 있습니다. 마이크 배선이나 오디오 인터페이스의 극성 설정을 확인한 뒤 다시 녹음하세요.",
+  "record_check_mics_swapped": "좌우 마이크가 뒤바뀐 것으로 보입니다. 스피커 소리가 반대쪽 귀에 먼저 도착했습니다. 마이크나 입력 채널의 좌우를 바꾼 뒤 다시 녹음하세요.",
+  "record_check_distortion": "{speaker}: 스피커 소리에 왜곡이 발생했습니다(고조파 {distortion_db} dB). 재생 음량을 낮춘 뒤 다시 녹음하세요.",
+  "record_check_itd_mismatch": "{speaker}: 소리가 두 귀에 도착한 시간 차이는 {itd_us} µs이지만, 같은 각도에서 측정한 {reference}에서는 {reference_itd_us} µs로 두 측정값이 {diff_us} µs 차이 납니다. 둘 중 한 번은 돌아선 각도가 달랐습니다. 각도가 어긋난 쪽을 다시 녹음하세요.",
+  "record_check_level_changed": "{speaker}: 이전 단계와 음량이 {db_diff} dB 차이 납니다. 재생 음량과 스피커까지의 거리를 같게 유지한 뒤 다시 녹음하세요."
 }

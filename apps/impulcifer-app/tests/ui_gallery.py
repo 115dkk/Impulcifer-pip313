@@ -164,8 +164,13 @@ def mock_script(skin, theme, language, scenario):
         const checks = (lastRequest.expected_azimuths || {}).BR === undefined ? []
           : [{key: "record_check_angle_too_far", speaker: "BR", severity: "warning",
               values: {itd_us: 89, measured: 170, expected: 150}}];
-        return ok({job: {...job("succeeded"), result: {mode: lastRequest.mode, record_path: "C:/recording/headphones.wav", summary: null,
-          sweep: null, sidecar_path: null, share, checks}}, events: [{seq: 1, timestamp_ms: 0, type: "log",
+        return ok({job: {...job("succeeded"), result: {mode: lastRequest.mode,
+          record_path: `${lastRequest.record_dir}/${lastRequest.mode === "headphones" ? "headphones" : lastRequest.sweep?.speakers || "FL,FR"}.wav`,
+          summary: null,
+          sweep: null, sidecar_path: null, share, checks,
+          measurements: Object.entries(lastRequest.expected_azimuths || {}).map(([speaker, azimuth]) => ({
+            speaker, peak_db: -12, snr_db: 60, itd_us: Math.sign(azimuth) * 250, lf_db: -20, azimuth}))}},
+          events: [{seq: 1, timestamp_ms: 0, type: "log",
             payload: {level: "info", key: "recording_share_mode_opened", message: "untranslated fixture", share}}], next_seq: 1});
       }
       const result = {...meta, created_files: plan(lastRequest).planned_files.map(file => file.path)};
@@ -565,11 +570,28 @@ def guided_checks(browser):
     assert page.locator("#gd-turn").inner_text() == "Turn around so the speakers are behind you."
     assert sorted(page.locator("#gd-diagram .gd-spk-label").all_text_contents()) == ["BL", "BR"]
     page.locator("#btn-gd-record").click()
+    page.wait_for_function(f"{starts}.length === 2")
+    references = page.evaluate(f"{starts}.at(-1).args[0]")["reference_measurements"]
+    assert [(item["speaker"], item["azimuth"]) for item in references] == [("FL", 30), ("FR", -30)], references
     page.wait_for_function("document.querySelectorAll('#gd-steps .gd-step')[1].dataset.status === 'warning'")
     assert steps.nth(1).get_attribute("aria-current") == "step"
     warning = page.locator('#gd-checks .gd-check[data-severity="warning"]')
     assert "170°" in warning.inner_text() and "150°" in warning.inner_text(), warning.inner_text()
     assert "170°" in page.locator("#view-recorder [data-log]").inner_text()
+    # Steps belong to their folder: another folder starts with nothing recorded.
+    page.locator("#rf-record-dir").fill("data/other_hrir")
+    assert steps.nth(0).get_attribute("data-status") == "todo"
+    page.locator("#rf-record-dir").fill("data/my_hrir")
+    assert steps.nth(0).get_attribute("data-status") == "ok"
+    # A recording started by hand during the countdown is not taken for the step.
+    page.evaluate("document.getElementById('guided-card').dataset.countdown = '1'")
+    page.locator("#btn-gd-record").click()
+    page.evaluate("state.jobId = 'started-by-hand'")
+    page.wait_for_timeout(1500)
+    assert page.evaluate(f"{starts}.length") == 2
+    assert page.evaluate("state.guided.pending") is None
+    page.evaluate("state.jobId = null")
+    assert steps.nth(1).get_attribute("data-status") == "warning"
     page.locator("#btn-gd-next").click()
     assert page.locator("#gd-turn").inner_text() == "Turn 60° to your right."
     assert page.locator("#gd-ear").inner_text() == "Turn so your left ear points toward the left speaker."

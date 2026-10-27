@@ -357,6 +357,7 @@ fn run(
             &segments,
             generated.as_ref().map(|playback| &playback.estimator),
             v.expected_azimuths.as_ref(),
+            v.reference_measurements.as_deref(),
         )
     });
     emit(

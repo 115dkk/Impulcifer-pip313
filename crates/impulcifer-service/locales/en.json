@@ -269,5 +269,12 @@
   "record_check_off_center": "{speaker}: the sound reached one ear {itd_us} µs before the other, about {measured}° off center. Face the direction the step shows, then record again.",
   "record_check_angle_too_far": "{speaker}: the sound reached your ears {itd_us} µs apart, which matches about {measured}° instead of {expected}°. You turned too far; turn back a little and record again.",
   "record_check_angle_too_little": "{speaker}: the sound reached your ears {itd_us} µs apart, which matches about {measured}° instead of {expected}°. You did not turn far enough; turn a little further and record again.",
-  "record_check_angle_off": "{speaker}: the sound reached your ears {itd_us} µs apart, which matches about {measured}° instead of {expected}°. Make sure your ear points toward the speaker, then record again."
+  "record_check_angle_off": "{speaker}: the sound reached your ears {itd_us} µs apart, which matches about {measured}° instead of {expected}°. Make sure your ear points toward the speaker, then record again.",
+  "record_check_ear_silent_left": "{speaker}: your left microphone picked up {db_diff} dB less than the right one. Check that the left microphone is inserted and connected, then record again.",
+  "record_check_ear_silent_right": "{speaker}: your right microphone picked up {db_diff} dB less than the left one. Check that the right microphone is inserted and connected, then record again.",
+  "record_check_polarity": "{speaker}: one microphone's signal is inverted relative to the other. Check the microphone wiring or the interface's polarity setting, then record again.",
+  "record_check_mics_swapped": "The left and right microphones look swapped: the speakers reached the wrong ear first. Swap the microphones or the input channels, then record again.",
+  "record_check_distortion": "{speaker}: the speaker is distorting (harmonics at {distortion_db} dB). Lower the playback volume, then record again.",
+  "record_check_itd_mismatch": "{speaker}: the time difference between your ears is {itd_us} µs, but {reference} at the same angle measured {reference_itd_us} µs ({diff_us} µs apart). One of them was turned differently; record the one that is off again.",
+  "record_check_level_changed": "{speaker}: the level differs by {db_diff} dB from the earlier steps. Keep the playback volume and your distance to the speakers the same, then record again."
 }
