@@ -6,7 +6,10 @@ use impulcifer_service::{
     ImpulciferService, NoopHost,
     recovery::{RecoveryOptions, plan_brir_outputs, recover_brir_outputs},
 };
-use impulcifer_types::constants::{HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, SPEAKER_NAMES};
+use impulcifer_types::{
+    constants::{HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, SPEAKER_NAMES},
+    layouts::layout_for_file,
+};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -75,6 +78,30 @@ fn normalize(value: &Value, root: &Path) -> Value {
         }
         s.replace('\\', "/")
     })
+}
+/// 3.x also writes the channel-order file of every format a recovery measures
+/// completely (ADR 0007, ADR 0009: the 15 slots of 2.x are Dolby Atmos 9.1.6).
+/// 2.x has no such files, so the comparison leaves them out once each one is
+/// checked to be a complete format.
+fn without_format_files(mut result: Value) -> Value {
+    let speakers: Vec<String> = serde_json::from_value(result["speakers"].clone()).unwrap();
+    result["created_files"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|file| {
+            let name = file.as_str().unwrap().rsplit(['/', '\\']).next().unwrap();
+            let Some(format) = layout_for_file(name) else {
+                return true;
+            };
+            assert!(
+                format
+                    .missing(|slot| speakers.iter().any(|s| s == slot))
+                    .is_empty(),
+                "{name} written for an incomplete format"
+            );
+            false
+        });
+    result
 }
 fn signal(name: &str, count: usize) -> Vec<f64> {
     match name {
@@ -270,7 +297,7 @@ fn golden_recovery_scenarios_match_python() {
             recover_brir_outputs(&temp.0.join(case["selected"].as_str().unwrap()), &options)
                 .unwrap_or_else(|e| panic!("{}: {e:?}", case["name"]));
         assert_eq!(
-            normalize(&json!(result), &temp.0),
+            without_format_files(normalize(&json!(result), &temp.0)),
             case["result"],
             "{}",
             case["name"]
@@ -625,14 +652,25 @@ fn recovery_never_overwrites_existing_outputs() {
         .unwrap();
     let temp = Temp::new();
     let originals = setup(&temp.0, case);
-    for _ in 0..2 {
-        assert!(
-            recover_brir_outputs(&temp.0, &RecoveryOptions::default())
-                .unwrap()
-                .created_files
-                .is_empty()
-        );
-    }
+    // The first run may add the 3.x channel-order file of a complete format
+    // (the case's 15 slots are 9.1.6); after that there is nothing to create.
+    let first = recover_brir_outputs(&temp.0, &RecoveryOptions::default()).unwrap();
+    assert!(
+        first
+            .created_files
+            .iter()
+            .all(
+                |f| layout_for_file(&Path::new(f).file_name().unwrap().to_string_lossy()).is_some()
+            ),
+        "{:?}",
+        first.created_files
+    );
+    assert!(
+        recover_brir_outputs(&temp.0, &RecoveryOptions::default())
+            .unwrap()
+            .created_files
+            .is_empty()
+    );
     preserve(&originals);
 }
 #[test]

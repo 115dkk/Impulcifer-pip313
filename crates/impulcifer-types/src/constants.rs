@@ -21,8 +21,9 @@ pub const SPEAKER_NAMES: [&str; 40] = {
 };
 
 /// Named sweep track layouts accepted by the recorder: 2.x plus immersive formats.
-pub const SWEEP_TRACK_LAYOUTS: [&str; 10] = [
-    "mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6", "13.1", "22.2", "24.1.10", "30.2",
+pub const SWEEP_TRACK_LAYOUTS: [&str; 13] = [
+    "mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6", "9.1", "9.1.4", "9.1.6", "13.1", "22.2",
+    "24.1.10", "30.2",
 ];
 
 /// Two or three ASCII capitals (the 2.x pattern), or a known speaker slot code.

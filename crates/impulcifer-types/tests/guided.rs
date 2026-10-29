@@ -48,6 +48,21 @@ fn guided_plans_match_the_measurement_table() {
             ],
         ),
         (
+            "mono",
+            "9.1",
+            vec![
+                (vec!["FC"], 0.0),
+                (vec!["FL"], -30.0),
+                (vec!["FR"], 30.0),
+                (vec!["WL"], -60.0),
+                (vec!["WR"], 60.0),
+                (vec!["SL"], -90.0),
+                (vec!["SR"], 90.0),
+                (vec!["BL"], -135.0),
+                (vec!["BR"], 135.0),
+            ],
+        ),
+        (
             "stereo",
             "5.1",
             vec![
@@ -65,6 +80,18 @@ fn guided_plans_match_the_measurement_table() {
                 (vec!["SL"], -60.0),
                 (vec!["SR"], 120.0),
                 (vec!["FC"], 30.0),
+            ],
+        ),
+        (
+            "stereo",
+            "9.1",
+            vec![
+                (vec!["FL", "FR"], 0.0),
+                (vec!["BR", "BL"], 180.0),
+                (vec!["SL"], -60.0),
+                (vec!["SR"], 120.0),
+                (vec!["FC", "WR"], 30.0),
+                (vec!["WL"], -30.0),
             ],
         ),
     ];

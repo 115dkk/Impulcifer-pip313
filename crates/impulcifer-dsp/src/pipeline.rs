@@ -26,7 +26,7 @@ use impulcifer_types::{
         HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS, SPEAKER_NAMES,
         TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER,
     },
-    layouts::{FormatChannel, IMMERSIVE_LAYOUTS, ImmersiveLayout, Layer, LayoutFiles},
+    layouts::{FormatChannel, IMMERSIVE_LAYOUTS, ImmersiveLayout, LayoutFiles},
     stages::StageKey,
 };
 #[derive(Clone, Debug)]
@@ -389,23 +389,16 @@ pub fn run_pipeline(
                 let selection =
                     LayoutFiles::parse(&config.layout_files).map_err(DspError::InvalidArgument)?;
                 for layout in &IMMERSIVE_LAYOUTS {
-                    let missing = layout.missing(|s| hrir.get(s).is_some());
-                    if selection.writes(layout.id, missing.is_empty()) {
+                    let measured = |s: &str| hrir.get(s).is_some();
+                    let missing = layout.missing(measured);
+                    if selection.writes(layout.id, layout.written_automatically(measured)) {
                         layouts.push(LayoutOutput {
                             layout,
                             tracks: layout_tracks(&hrir, layout)?,
                             missing,
                         });
-                    } else if selection != LayoutFiles::None {
-                        let channels = layout.channels.iter().filter(|c| c.layer != Layer::Lfe);
-                        let count = channels.clone().count();
-                        let outside_7_1 = channels.clone().any(|c| {
-                            !["FL", "FR", "FC", "SL", "SR", "BL", "BR"].contains(&c.slot)
-                                && hrir.get(c.slot).is_some()
-                        });
-                        if 2 * (count - missing.len()) >= count && outside_7_1 {
-                            layout_notices.push((layout, missing));
-                        }
+                    } else if selection != LayoutFiles::None && layout.near_miss(measured) {
+                        layout_notices.push((layout, missing));
                     }
                 }
             }

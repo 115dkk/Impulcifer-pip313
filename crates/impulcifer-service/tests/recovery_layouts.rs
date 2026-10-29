@@ -100,7 +100,8 @@ fn strings(order: &[&str]) -> Vec<String> {
 
 /// Only nhk_22.2.wav survives: hrir.wav and hesuvi.wav come back with every
 /// slot at its own tracks (WL is tracks 1–2 of the 22.2 file but 17–18 of
-/// hrir.wav), and Auro 13.1, which the same slots cover, is written too.
+/// hrir.wav), and Auro 13.1 and Atmos 9.1, whose channels the same slots
+/// hold, are written too.
 #[test]
 fn a_format_file_alone_restores_hrir_hesuvi_and_covered_formats() {
     let temp = Temp::new();
@@ -127,11 +128,20 @@ fn a_format_file_alone_restores_hrir_hesuvi_and_covered_formats() {
                 .into_owned()
         })
         .collect();
-    assert_eq!(names, ["hrir.wav", "hesuvi.wav", "auro_13.1.wav"]);
+    assert_eq!(
+        names,
+        ["hrir.wav", "hesuvi.wav", "auro_13.1.wav", "atmos_9.1.wav"]
+    );
     let kinds: Vec<_> = plan.planned_files.iter().map(|f| f.kind.as_str()).collect();
-    assert_eq!(kinds, ["hrir", "hesuvi", "layout"]);
+    assert_eq!(kinds, ["hrir", "hesuvi", "layout", "layout"]);
     let result = recover_brir_outputs(&temp.0, &options).unwrap();
-    assert_eq!(result.created_files.len(), 3);
+    assert_eq!(result.created_files.len(), 4);
+    let atmos = layout("9.1").unwrap();
+    assert_tracks(
+        &temp.0.join(atmos.file_name),
+        &atmos.track_names(),
+        &measured,
+    );
     assert_tracks(
         &temp.0.join("hrir.wav"),
         &strings(&HEXADECAGONAL_TRACK_ORDER),
@@ -151,6 +161,33 @@ fn a_format_file_alone_restores_hrir_hesuvi_and_covered_formats() {
         read_track_names(&file, &refs, refs.len()).unwrap(),
         Some(labels)
     );
+}
+
+/// A 9.1.4 hrir.wav also covers 9.1; recovery writes only the larger file
+/// of the family, as processing does (ADR 0009).
+#[test]
+fn a_9_1_4_hrir_restores_only_the_largest_complete_family_file() {
+    let temp = Temp::new();
+    let measured = slots(layout("9.1.4").unwrap());
+    let tracks: Vec<_> = HEXADECAGONAL_TRACK_ORDER
+        .iter()
+        .map(|name| {
+            if measured.contains(&name.rsplit_once('-').unwrap().0) {
+                track(name)
+            } else {
+                vec![0.0; COUNT]
+            }
+        })
+        .collect();
+    write_wav(&temp.0.join("hrir.wav"), 48000, &tracks, 32).unwrap();
+    let plan = plan_brir_outputs(&temp.0, &RecoveryOptions::default()).unwrap();
+    let names: Vec<_> = plan
+        .planned_files
+        .iter()
+        .map(|file| Path::new(&file.path).file_name().unwrap().to_string_lossy())
+        .collect();
+    assert!(names.iter().any(|name| name == "atmos_9.1.4.wav"));
+    assert!(!names.iter().any(|name| name == "atmos_9.1.wav"));
 }
 
 /// hrir.wav with the community's 21 slots: the missing hesuvi.wav and the
@@ -190,9 +227,15 @@ fn hrir_restores_the_complete_format_files_only() {
                 .into_owned()
         })
         .collect();
-    assert_eq!(names, ["hesuvi.wav", "auro_13.1.wav"]);
+    assert_eq!(names, ["hesuvi.wav", "auro_13.1.wav", "atmos_9.1.6.wav"]);
     let auro = layout("13.1").unwrap();
     assert_tracks(&temp.0.join(auro.file_name), &auro.track_names(), &measured);
+    let atmos = layout("9.1.6").unwrap();
+    assert_tracks(
+        &temp.0.join(atmos.file_name),
+        &atmos.track_names(),
+        &measured,
+    );
 }
 
 /// A format file that disagrees with hrir.wav stops the recovery and names

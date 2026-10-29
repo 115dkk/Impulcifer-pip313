@@ -267,6 +267,10 @@ pub struct ImmersiveLayout {
     /// Output file written next to hrir.wav.
     pub file_name: &'static str,
     pub channels: &'static [FormatChannel],
+    /// The next larger layout of the same family that holds every channel of
+    /// this one (`9.1` → `9.1.4` → `9.1.6`); `auto` writes only the largest
+    /// complete layout of a family (ADR 0009).
+    pub within: Option<&'static str>,
 }
 
 fn ears(name: &str) -> [String; 2] {
@@ -294,6 +298,44 @@ impl ImmersiveLayout {
             .iter()
             .filter(|c| c.layer != Layer::Lfe && !measured(c.slot))
             .collect()
+    }
+    /// Whether `auto` writes this layout's file: every channel is measured and
+    /// the larger layout of its family (`within`) is not complete as well.
+    pub fn written_automatically(&self, measured: impl Fn(&str) -> bool + Copy) -> bool {
+        self.missing(measured).is_empty()
+            && self
+                .within
+                .and_then(layout)
+                .is_none_or(|larger| !larger.missing(measured).is_empty())
+    }
+    /// Whether an incomplete measurement is close enough to report, unless its
+    /// measured slots exactly form another recorder layout (ADR 0007, ADR 0009).
+    pub fn near_miss(&self, measured: impl Fn(&str) -> bool + Copy) -> bool {
+        let channels: Vec<_> = self
+            .channels
+            .iter()
+            .filter(|c| c.layer != Layer::Lfe)
+            .collect();
+        let measured_slots: Vec<_> = channels
+            .iter()
+            .filter(|c| measured(c.slot))
+            .map(|c| c.slot)
+            .collect();
+        if measured_slots.len() == channels.len()
+            || 2 * measured_slots.len() < channels.len()
+            || !measured_slots
+                .iter()
+                .any(|slot| !["FL", "FR", "FC", "SL", "SR", "BL", "BR"].contains(slot))
+        {
+            return false;
+        }
+        !crate::constants::SWEEP_TRACK_LAYOUTS.iter().any(|id| {
+            !["mono", "stereo", self.id].contains(id)
+                && crate::constants::sweep_layout_speakers(id).is_some_and(|other| {
+                    other.len() == measured_slots.len()
+                        && other.iter().all(|slot| measured_slots.contains(slot))
+                })
+        })
     }
 }
 
@@ -329,13 +371,13 @@ impl LayoutFiles {
         }
         Ok(Self::Listed(listed))
     }
-    /// Whether the format's file is written, given whether all its channels
-    /// are measured.
-    pub fn writes(&self, id: &str, complete: bool) -> bool {
+    /// Whether the format's file is written: `auto` uses `automatic`, `none`
+    /// never writes, and a list uses `automatic` or an explicitly listed id.
+    pub fn writes(&self, id: &str, automatic: bool) -> bool {
         match self {
-            Self::Auto => complete,
+            Self::Auto => automatic,
             Self::None => false,
-            Self::Listed(ids) => complete || ids.contains(&id),
+            Self::Listed(ids) => automatic || ids.contains(&id),
         }
     }
     /// The formats written even when channels are missing.
@@ -506,31 +548,109 @@ const ATMOS_24_1_10: [FormatChannel; 35] = [
     ch("Rrh", -150.0, 35.0, Height, "HBR"),
 ];
 
+/// Dolby Atmos 9.1.6 in the interchange order used by Apple
+/// `kAudioChannelLayoutTag_Atmos_9_1_6` and AWS MediaConvert's Dolby Digital
+/// Plus JOC input. Dolby publishes no order for 9.1.4 or 9.1, so those tables
+/// use this order without the channels their layouts lack (ADR 0009).
+const ATMOS_9_1_6: [FormatChannel; 16] = [
+    ch("L", 30.0, 0.0, Ear, "FL"),
+    ch("R", -30.0, 0.0, Ear, "FR"),
+    ch("C", 0.0, 0.0, Ear, "FC"),
+    lfe("LFE", "LFE"),
+    ch("Ls", 90.0, 0.0, Ear, "SL"),
+    ch("Rs", -90.0, 0.0, Ear, "SR"),
+    ch("Lrs", 135.0, 0.0, Ear, "BL"),
+    ch("Rrs", -135.0, 0.0, Ear, "BR"),
+    ch("Lw", 60.0, 0.0, Ear, "WL"),
+    ch("Rw", -60.0, 0.0, Ear, "WR"),
+    ch("Ltf", 45.0, 45.0, Top, "TFL"),
+    ch("Rtf", -45.0, 45.0, Top, "TFR"),
+    ch("Ltm", 90.0, 65.0, Top, "TSL"),
+    ch("Rtm", -90.0, 65.0, Top, "TSR"),
+    ch("Ltr", 135.0, 45.0, Top, "TBL"),
+    ch("Rtr", -135.0, 45.0, Top, "TBR"),
+];
+
+const ATMOS_9_1_4: [FormatChannel; 14] = [
+    ch("L", 30.0, 0.0, Ear, "FL"),
+    ch("R", -30.0, 0.0, Ear, "FR"),
+    ch("C", 0.0, 0.0, Ear, "FC"),
+    lfe("LFE", "LFE"),
+    ch("Ls", 90.0, 0.0, Ear, "SL"),
+    ch("Rs", -90.0, 0.0, Ear, "SR"),
+    ch("Lrs", 135.0, 0.0, Ear, "BL"),
+    ch("Rrs", -135.0, 0.0, Ear, "BR"),
+    ch("Lw", 60.0, 0.0, Ear, "WL"),
+    ch("Rw", -60.0, 0.0, Ear, "WR"),
+    ch("Ltf", 45.0, 45.0, Top, "TFL"),
+    ch("Rtf", -45.0, 45.0, Top, "TFR"),
+    ch("Ltr", 135.0, 45.0, Top, "TBL"),
+    ch("Rtr", -135.0, 45.0, Top, "TBR"),
+];
+
+const ATMOS_9_1: [FormatChannel; 10] = [
+    ch("L", 30.0, 0.0, Ear, "FL"),
+    ch("R", -30.0, 0.0, Ear, "FR"),
+    ch("C", 0.0, 0.0, Ear, "FC"),
+    lfe("LFE", "LFE"),
+    ch("Ls", 90.0, 0.0, Ear, "SL"),
+    ch("Rs", -90.0, 0.0, Ear, "SR"),
+    ch("Lrs", 135.0, 0.0, Ear, "BL"),
+    ch("Rrs", -135.0, 0.0, Ear, "BR"),
+    ch("Lw", 60.0, 0.0, Ear, "WL"),
+    ch("Rw", -60.0, 0.0, Ear, "WR"),
+];
+
 /// Every format Impulcifer writes in its own channel order.
-pub const IMMERSIVE_LAYOUTS: [ImmersiveLayout; 4] = [
+pub const IMMERSIVE_LAYOUTS: [ImmersiveLayout; 7] = [
     ImmersiveLayout {
         id: "22.2",
         name: "NHK 22.2",
         file_name: "nhk_22.2.wav",
         channels: &NHK_22_2,
+        within: None,
     },
     ImmersiveLayout {
         id: "13.1",
         name: "Auro-3D 13.1",
         file_name: "auro_13.1.wav",
         channels: &AURO_13_1,
+        within: None,
     },
     ImmersiveLayout {
         id: "30.2",
         name: "DTS:X Pro 30.2",
         file_name: "dtsx_30.2.wav",
         channels: &DTSX_30_2,
+        within: None,
     },
     ImmersiveLayout {
         id: "24.1.10",
         name: "Dolby Atmos 24.1.10",
         file_name: "atmos_24.1.10.wav",
         channels: &ATMOS_24_1_10,
+        within: None,
+    },
+    ImmersiveLayout {
+        id: "9.1",
+        name: "Dolby Atmos 9.1",
+        file_name: "atmos_9.1.wav",
+        channels: &ATMOS_9_1,
+        within: Some("9.1.4"),
+    },
+    ImmersiveLayout {
+        id: "9.1.4",
+        name: "Dolby Atmos 9.1.4",
+        file_name: "atmos_9.1.4.wav",
+        channels: &ATMOS_9_1_4,
+        within: Some("9.1.6"),
+    },
+    ImmersiveLayout {
+        id: "9.1.6",
+        name: "Dolby Atmos 9.1.6",
+        file_name: "atmos_9.1.6.wav",
+        channels: &ATMOS_9_1_6,
+        within: None,
     },
 ];
 

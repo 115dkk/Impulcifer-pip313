@@ -1,0 +1,12 @@
+# 번역투 판정 훅(good-korean-claude)과 화면 문구 판정 훅(make-interfaces-feel-better)이
+# 판정하지 않을 파일입니다. 문법은 .gitignore와 같고, em-dash 금지 훅과 답변 검사는
+# 이 목록과 상관없이 돌아갑니다.
+
+# 저장소 규칙(CLAUDE.md 작업 완료 규칙 3)이 범주 제목에 이모지를 붙이게 합니다.
+CHANGELOG.md
+
+# 2.x와 SECS를 오라클로 돌려 얻은 골든입니다. 2.x가 낸 문장을 그대로 담습니다.
+tests/migration/goldens/
+
+# 프로그램이 데모 처리 결과로 쓴 README입니다.
+data/demo/README.md

@@ -13,11 +13,14 @@ use impulcifer_types::{
 use serde_json::{Value, json};
 use std::path::Path;
 
-const FORMAT_FILES: [&str; 4] = [
+const FORMAT_FILES: [&str; 7] = [
     "nhk_22.2.wav",
     "auro_13.1.wav",
-    "atmos_24.1.10.wav",
     "dtsx_30.2.wav",
+    "atmos_24.1.10.wav",
+    "atmos_9.1.wav",
+    "atmos_9.1.4.wav",
+    "atmos_9.1.6.wav",
 ];
 /// The Korean community's 21-direction measurement in slot codes: 7.1, the
 /// Auro height layer (HBL/HBR for HLs/HRs), the Atmos tops, the zenith and
@@ -127,7 +130,7 @@ fn assert_format_file(dir: &Path, id: &str, measured: &[&str]) {
 
 /// The highest-risk mapping: 22.2's FL is ±60° (WL), FLc ±30° (FL), LFE2
 /// sits at channel 10, and the upper ring is the height layer. The same slots
-/// cover Auro 13.1, which is written too.
+/// cover Auro 13.1 and Atmos 9.1, which are written too.
 #[test]
 fn nhk_22_2_file_puts_every_slot_and_ear_on_its_smpte_channel() {
     let temp = Temp::demo();
@@ -142,17 +145,24 @@ fn nhk_22_2_file_puts_every_slot_and_ear_on_its_smpte_channel() {
     let poll = run(&temp, json!({}));
     assert_format_file(&temp.0, "22.2", &speakers);
     assert_format_file(&temp.0, "13.1", &speakers);
+    assert_format_file(&temp.0, "9.1", &speakers);
     let written = events(&poll, "cli_success_layout_file");
-    assert_eq!(written.len(), 2, "{written:?}");
+    assert_eq!(written.len(), 3, "{written:?}");
     assert!(written.iter().all(|e| e["level"] == "SUCCESS"));
-    for other in &FORMAT_FILES[2..] {
+    for other in [
+        "dtsx_30.2.wav",
+        "atmos_24.1.10.wav",
+        "atmos_9.1.4.wav",
+        "atmos_9.1.6.wav",
+    ] {
         assert!(!temp.0.join(other).exists(), "{other}");
     }
 }
 
-/// The community set covers Auro 13.1 completely and the other formats only
-/// in part: Auro is written automatically, the listed Atmos file is written
-/// with silent missing channels, 22.2 and DTS are reported as near misses.
+/// The community set covers Auro 13.1 and Atmos 9.1.6 completely and the
+/// other formats only in part: those two are written automatically (9.1.6
+/// alone of its family), the listed Atmos 24.1.10 file is written with silent
+/// missing channels, 22.2 and DTS are reported as near misses.
 #[test]
 fn complete_formats_are_written_and_listed_ones_are_filled_with_silence() {
     let temp = Temp::demo();
@@ -160,9 +170,12 @@ fn complete_formats_are_written_and_listed_ones_are_filled_with_silence() {
     let poll = run(&temp, json!({"layout_files":"24.1.10"}));
     assert_format_file(&temp.0, "13.1", &COMMUNITY_21);
     assert_format_file(&temp.0, "24.1.10", &COMMUNITY_21);
+    assert_format_file(&temp.0, "9.1.6", &COMMUNITY_21);
     assert!(!temp.0.join("nhk_22.2.wav").exists());
     assert!(!temp.0.join("dtsx_30.2.wav").exists());
-    assert_eq!(events(&poll, "cli_success_layout_file").len(), 2);
+    assert!(!temp.0.join("atmos_9.1.wav").exists());
+    assert!(!temp.0.join("atmos_9.1.4.wav").exists());
+    assert_eq!(events(&poll, "cli_success_layout_file").len(), 3);
     let partial = events(&poll, "cli_warning_layout_partial");
     assert_eq!(partial.len(), 1, "{partial:?}");
     assert_eq!(partial[0]["level"], "WARNING");
@@ -186,6 +199,48 @@ fn complete_formats_are_written_and_listed_ones_are_filled_with_silence() {
     assert!(readme.contains("auro_13.1.wav"), "{readme}");
     assert!(readme.contains("| 25–26 | HLs | HBL |"), "{readme}");
     assert!(readme.contains("atmos_24.1.10.wav"), "{readme}");
+}
+
+/// With all 40 slots measured every format is complete: each file's tracks
+/// are the hrir.wav tracks of their slots, and 9.1 and 9.1.4 are written
+/// only when listed, since 9.1.6 holds them.
+#[test]
+fn every_format_file_maps_every_slot_when_all_are_measured() {
+    let temp = Temp::demo();
+    measurements(&temp, &SPEAKER_NAMES);
+    run(&temp, json!({}));
+    for id in ["22.2", "13.1", "30.2", "24.1.10", "9.1.6"] {
+        assert_format_file(&temp.0, id, &SPEAKER_NAMES);
+    }
+    assert!(!temp.0.join("atmos_9.1.wav").exists());
+    assert!(!temp.0.join("atmos_9.1.4.wav").exists());
+
+    run(&temp, json!({"layout_files":"9.1,9.1.4"}));
+    assert_format_file(&temp.0, "9.1", &SPEAKER_NAMES);
+    assert_format_file(&temp.0, "9.1.4", &SPEAKER_NAMES);
+}
+
+/// A 9.1.4 measurement also covers 9.1 and is 9.1.6 without its top middle
+/// pair: only atmos_9.1.4.wav is written and nothing is reported missing.
+#[test]
+fn a_9_1_4_measurement_writes_only_its_file_and_no_near_miss() {
+    let temp = Temp::demo();
+    let speakers: Vec<_> = layout("9.1.4")
+        .unwrap()
+        .channels
+        .iter()
+        .filter(|channel| channel.layer != Layer::Lfe)
+        .map(|channel| channel.slot)
+        .collect();
+    measurements(&temp, &speakers);
+    let poll = run(&temp, json!({}));
+    assert_format_file(&temp.0, "9.1.4", &speakers);
+    for name in FORMAT_FILES {
+        if name != "atmos_9.1.4.wav" {
+            assert!(!temp.0.join(name).exists(), "{name}");
+        }
+    }
+    assert!(events(&poll, "cli_info_layout_missing").is_empty());
 }
 
 #[test]

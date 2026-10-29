@@ -321,6 +321,8 @@ fn render_readme_with_layouts(
             let order_note = match layout.id {
                 "24.1.10" => Some("cli_readme_layouts_atmos_order"),
                 "30.2" => Some("cli_readme_layouts_dts_order"),
+                "9.1.6" => Some("cli_readme_layouts_atmos_916_order"),
+                "9.1" | "9.1.4" => Some("cli_readme_layouts_atmos_subset_order"),
                 _ => None,
             };
             if let Some(key) = order_note {

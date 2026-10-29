@@ -1455,7 +1455,9 @@ async function generateSweepSet() {
    from the ears' time difference whether the turn was right. Angles are ITU:
    degrees, positive to the listener's left; yaw is the turn, positive left. */
 const GUIDED_COUNTDOWN = 8;
-const GUIDED_TARGET_ORDER = ["stereo", "5.1", "7.1"];
+const GUIDED_TARGET_ORDER = ["stereo", "5.1", "7.1", "9.1"];
+/* 9.1 adds the wides; most rooms are measured for 7.1, so it stays the default. */
+const GUIDED_DEFAULT_TARGET = "7.1";
 
 function guidedSetup() {
   const setup = val("gd-setup");
@@ -1481,7 +1483,8 @@ function populateGuidedTargets() {
   const targets = [...GUIDED_TARGET_ORDER.filter((id) => plans.includes(id)),
     ...plans.filter((id) => !GUIDED_TARGET_ORDER.includes(id))];
   select.replaceChildren(...targets.map((id) => new Option(id, id)));
-  select.value = targets.includes(previous) ? previous : targets[targets.length - 1] || "";
+  const fallback = targets.includes(GUIDED_DEFAULT_TARGET) ? GUIDED_DEFAULT_TARGET : targets[targets.length - 1] || "";
+  select.value = targets.includes(previous) ? previous : fallback;
   state.guided.index = 0;
   renderGuided();
 }
@@ -2415,28 +2418,35 @@ function addOutputArgs(args, p) {
   args.layout_files = layoutFilesValue(p);
 }
 
-/* The four formats a channel-order file can be forced for, in the order of
-   the checkboxes `${p}-layout-force-0..3` (their data-layout holds the id). */
-const LAYOUT_FORCE_COUNT = 4;
+/* The seven formats a channel-order file can be forced for, in page order:
+   checkboxes `${p}-layout-force-0..6`, whose data-layout holds the id. */
+const LAYOUT_FORCE_COUNT = 7;
 
 /** @param {string} p */
 function layoutForceBoxes(p) {
   return Array.from({ length: LAYOUT_FORCE_COUNT }, (_, index) => el(`${p}-layout-force-${index}`, HTMLInputElement));
 }
 
-/* "none" writes no channel-order file; otherwise the checked formats are
-   written even when speakers are missing and the rest stay automatic. */
+/* The mode says what is written: complete formats only ("auto"), those plus
+   the picked formats with silent missing speakers ("listed"), or nothing.
+   Picks only count in "listed"; picking none there is "auto". */
 /** @param {string} p */
 function layoutFilesValue(p) {
-  if (val(`${p}-layout-files`) === "none") return "none";
+  const mode = val(`${p}-layout-files`);
+  if (mode !== "listed") return mode === "none" ? "none" : "auto";
   const forced = layoutForceBoxes(p).filter((box) => box.checked).map((box) => box.dataset.layout || "");
   return forced.length ? forced.join(",") : "auto";
 }
 
+/* Each mode shows its own explanation, and the format list opens only when
+   the user asks for formats with speakers missing. */
 /** @param {string} p */
 function updateLayoutForce(p) {
-  const off = val(`${p}-layout-files`) === "none";
-  for (const box of layoutForceBoxes(p)) box.disabled = off;
+  const mode = val(`${p}-layout-files`);
+  for (const node of $(`${p}-layout-files-row`).querySelectorAll("[data-layout-mode]")) {
+    if (node instanceof HTMLElement) node.hidden = node.dataset.layoutMode !== mode;
+  }
+  for (const box of layoutForceBoxes(p)) box.disabled = mode !== "listed";
 }
 
 /** @param {ProcessingRequest} args @param {string} p */
@@ -2466,7 +2476,7 @@ const ADV_FIELDS = {
   tone: ["bass-gain", "bass-fc", "bass-q", "tilt", "target-level", "balance", "balance-db"],
   time: ["head-ms", "decay", "decay-per-channel", ...DECAY_CHANNELS.map((channel) => `decay-${channel}`)],
   output: ["resample", "fs", "jamesdsp", "hangloose", "truehd", "remove-silent-channels", "layout-files",
-    ...Array.from({ length: 4 }, (_, index) => `layout-force-${index}`)],
+    ...Array.from({ length: LAYOUT_FORCE_COUNT }, (_, index) => `layout-force-${index}`)],
   correction: ["mic-deviation", "mic-strength", "mic-debug", "interactive-plots"],
 };
 
