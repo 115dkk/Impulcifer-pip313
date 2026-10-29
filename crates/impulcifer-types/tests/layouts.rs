@@ -52,6 +52,34 @@ fn dtsx_30_2_lists_the_ts_103_491_channel_mask_order() {
     );
 }
 
+/// 9.1.6 is the interchange order (ADR 0009); 9.1.4 and 9.1 are that order
+/// without the channels they lack.
+#[test]
+fn atmos_9_1_family_follows_the_9_1_6_interchange_order() {
+    let full = layout("24.1.10").unwrap();
+    let nine_six = layout("9.1.6").unwrap();
+    assert_eq!(nine_six.channels.len(), 16);
+    for (actual, expected) in nine_six.channels.iter().zip(&full.channels[..16]) {
+        assert_eq!(actual.label, expected.label);
+        assert_eq!(actual.slot, expected.slot);
+        assert_eq!(actual.azimuth, expected.azimuth);
+        assert_eq!(actual.elevation, expected.elevation);
+        assert_eq!(actual.layer, expected.layer);
+    }
+    let nine_four = layout("9.1.4").unwrap();
+    let expected: Vec<_> = nine_six
+        .channels
+        .iter()
+        .filter(|c| !["Ltm", "Rtm"].contains(&c.label))
+        .map(|c| c.label)
+        .collect();
+    assert_eq!(nine_four.labels(), expected);
+    assert_eq!(layout("9.1").unwrap().labels(), nine_six.labels()[..10]);
+    assert_eq!(layout("9.1").unwrap().within, Some("9.1.4"));
+    assert_eq!(nine_four.within, Some("9.1.6"));
+    assert_eq!(nine_six.within, None);
+}
+
 /// Dolby publishes no order above 9.1.6 (ADR 0007): channels 1-16 are the
 /// 9.1.6 interchange order (Apple kAudioChannelLayoutTag_Atmos_9_1_6, AWS
 /// MediaConvert DD+ JOC input), then the additional speakers in the order of
@@ -351,6 +379,64 @@ mod files {
     }
 
     #[test]
+    fn only_the_largest_complete_layout_of_a_family_is_written_automatically() {
+        let complete = |id: &str, measured: &[&str]| {
+            layout(id)
+                .unwrap()
+                .written_automatically(|s| measured.contains(&s))
+        };
+        let nine_four: Vec<_> = layout("9.1.4")
+            .unwrap()
+            .channels
+            .iter()
+            .filter(|c| c.layer != impulcifer_types::layouts::Layer::Lfe)
+            .map(|c| c.slot)
+            .collect();
+        assert!(!complete("9.1", &nine_four));
+        assert!(complete("9.1.4", &nine_four));
+        assert!(!complete("9.1.6", &nine_four));
+        let nine_six: Vec<_> = layout("9.1.6")
+            .unwrap()
+            .channels
+            .iter()
+            .filter(|c| c.layer != impulcifer_types::layouts::Layer::Lfe)
+            .map(|c| c.slot)
+            .collect();
+        assert!(!complete("9.1", &nine_six));
+        assert!(!complete("9.1.4", &nine_six));
+        assert!(complete("9.1.6", &nine_six));
+        let all = impulcifer_types::constants::SPEAKER_NAMES;
+        for id in ["9.1.6", "24.1.10", "22.2", "13.1", "30.2"] {
+            assert!(complete(id, &all), "{id}");
+        }
+        assert!(!complete("9.1", &all));
+        assert!(!complete("9.1.4", &all));
+    }
+
+    #[test]
+    fn a_measurement_that_is_another_recorder_layout_is_no_near_miss() {
+        let near =
+            |id: &str, measured: &[&str]| layout(id).unwrap().near_miss(|s| measured.contains(&s));
+        for recorder in ["7.1.4", "7.1.6"] {
+            let measured = impulcifer_types::constants::sweep_layout_speakers(recorder).unwrap();
+            assert!(!near("9.1.4", &measured));
+            assert!(!near("9.1.6", &measured));
+        }
+        let nine_four = impulcifer_types::constants::sweep_layout_speakers("9.1.4").unwrap();
+        assert!(!near("9.1.6", &nine_four));
+        let nine_six = impulcifer_types::constants::sweep_layout_speakers("9.1.6").unwrap();
+        assert!(!near("30.2", &nine_six));
+        let without_tbr: Vec<_> = nine_four.into_iter().filter(|s| *s != "TBR").collect();
+        assert!(near("9.1.4", &without_tbr));
+        let community = [
+            "FL", "FC", "FR", "SL", "SR", "BL", "BR", "HFL", "HFR", "HFC", "HBL", "HBR", "TFL",
+            "TFR", "TSL", "TSR", "TBL", "TBR", "TC", "WL", "WR",
+        ];
+        assert!(near("22.2", &community));
+        assert!(near("30.2", &community));
+    }
+
+    #[test]
     fn missing_lists_unmeasured_channels_and_never_lfe() {
         let l = layout("13.1").unwrap();
         let measured = [
@@ -373,6 +459,8 @@ mod files {
         assert!(auto.writes("22.2", true) && !auto.writes("22.2", false));
         let none = LayoutFiles::parse("none").unwrap();
         assert!(!none.writes("22.2", true));
+        let family = LayoutFiles::parse("9.1,9.1.4,9.1.6").unwrap();
+        assert_eq!(family.forced(), ["9.1", "9.1.4", "9.1.6"]);
         let listed = LayoutFiles::parse(" 24.1.10 , 30.2").unwrap();
         assert!(listed.writes("24.1.10", false) && listed.writes("30.2", false));
         assert!(listed.writes("22.2", true) && !listed.writes("22.2", false));

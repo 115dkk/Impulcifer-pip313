@@ -925,9 +925,7 @@ fn prepare(dir: &Path, options: &RecoveryOptions) -> Result<PreparedRecovery, Re
     }
     for layout in &IMMERSIVE_LAYOUTS {
         if layouts.iter().any(|(_, found)| found.id == layout.id)
-            || !layout
-                .missing(|s| set.speakers.iter().any(|measured| measured == s))
-                .is_empty()
+            || !layout.written_automatically(|s| set.speakers.iter().any(|measured| measured == s))
         {
             continue;
         }

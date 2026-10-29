@@ -276,7 +276,7 @@ pub static EXTENSION_OPTIONS: &[CliOption] = &[
         kind: CliType::Str,
         choices: &[],
         default: CliDefault::Suppressed,
-        help: "Write the BRIR again in the official channel order of an immersive format: \"auto\" (default) writes NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10 or DTS:X Pro 30.2 when all of its channels are measured; \"none\" writes none; a comma-separated list of 22.2, 13.1, 24.1.10, 30.2 also writes those formats when channels are missing (silent).",
+        help: "Write the BRIR again in the official channel order of an immersive format: \"auto\" (default) writes NHK 22.2, Auro-3D 13.1, DTS:X Pro 30.2, Dolby Atmos 24.1.10, 9.1, 9.1.4 or 9.1.6 when all of its channels are measured, but only the largest complete one of 9.1/9.1.4/9.1.6; \"none\" writes none; a comma-separated list of 22.2, 13.1, 30.2, 24.1.10, 9.1, 9.1.4, 9.1.6 also writes those formats when channels are missing (silent).",
     },
 ];
 

@@ -1322,6 +1322,11 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .layout-ch[data-lfe="true"] .layout-ch-slot { color: var(--fg-3); font-weight: 400; }
 
 .layout-force { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+/* The formats to write anyway open under the channel-order mode that asks for them. */
+.layout-force-pick { display: grid; gap: 4px; margin-top: 4px; }
+.layout-force-caption { margin: 4px 0 2px; color: var(--fg-1); }
+.layout-files-row { align-items: start; }
+.layout-files-row > label { padding-top: 8px; }
 
 /* Head-turn measurement: step chips, a top-view diagram and the step's text. */
 .gd-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; padding: 0; list-style: none; }

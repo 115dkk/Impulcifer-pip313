@@ -20,7 +20,7 @@ RECOVERY_STATES = ("empty", "planning", "ready", "nothing", "error", "succeeded"
 EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
-EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * len(ADV_TABS)
+EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
                   + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2)
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
@@ -53,7 +53,10 @@ GUIDED = {
                 guided_take(["SL"], -60, STEREO_OUT), guided_take(["SR"], 120, STEREO_OUT),
                 guided_take(["FC"], 30, STEREO_OUT)],
         "5.1": [guided_take(["FL", "FR"], 0, STEREO_OUT), guided_take(["BR", "BL"], 180, STEREO_OUT),
-                guided_take(["FC"], 30, STEREO_OUT)]}},
+                guided_take(["FC"], 30, STEREO_OUT)],
+        "9.1": [guided_take(["FL", "FR"], 0, STEREO_OUT), guided_take(["BR", "BL"], 180, STEREO_OUT),
+                guided_take(["SL"], -60, STEREO_OUT), guided_take(["SR"], 120, STEREO_OUT),
+                guided_take(["FC", "WR"], 30, STEREO_OUT), guided_take(["WL"], -30, STEREO_OUT)]}},
 }
 # bootstrap sweep.layout_speakers: every speaker a layout sweeps, without LFE.
 LAYOUT_SPEAKERS = {"stereo": ["FL", "FR"], "7.1": ["FL", "FR", "FC", "BL", "BR", "SL", "SR"],
@@ -529,14 +532,27 @@ def layout_checks(browser):
     assert "layout_files" not in brir_request(page)
     adv_switch(page, "output", True)
     assert brir_request(page)["layout_files"] == "auto"
-    page.locator("#adv-panel-output .file-opt", has_text="atmos_24.1.10.wav").click()
-    page.locator("#adv-panel-output .file-opt", has_text="dtsx_30.2.wav").click()
+    # Each mode explains what it writes; the format list opens only when the
+    # user asks for formats with speakers missing, and its picks count only there.
+    row = page.locator("#ba-layout-files-row")
+    pick = row.locator(".layout-force-pick")
+    mode = page.locator("#ba-layout-files")
+    assert row.locator('[data-layout-mode="auto"]').is_visible() and not pick.is_visible()
+    mode.select_option("listed")
+    assert pick.is_visible() and not row.locator('[data-layout-mode="auto"]').is_visible()
+    assert brir_request(page)["layout_files"] == "auto"
+    pick.locator(".file-opt", has_text="atmos_24.1.10.wav").click()
+    pick.locator(".file-opt", has_text="dtsx_30.2.wav").click()
     assert brir_request(page)["layout_files"] == "24.1.10,30.2"
-    page.locator("#ba-layout-files").select_option("none")
-    assert disabled(page, "#ba-layout-force-2")
+    mode.select_option("auto")
+    assert not pick.is_visible() and brir_request(page)["layout_files"] == "auto"
+    mode.select_option("none")
+    assert row.locator('[data-layout-mode="none"]').is_visible() and not pick.is_visible()
+    assert disabled(page, "#ba-layout-force-5")
     assert brir_request(page)["layout_files"] == "none"
     page.locator("#adv-reset-output").click()
-    assert not disabled(page, "#ba-layout-force-2") and not page.locator("#ba-layout-force-2").is_checked()
+    assert mode.input_value() == "auto" and not pick.is_visible()
+    assert not page.locator("#ba-layout-force-5").is_checked()
     assert brir_request(page)["layout_files"] == "auto"
     assert not errors, errors
     context.close()
@@ -551,7 +567,12 @@ def guided_checks(browser):
     navigate(page, "recorder")
     assert not page.locator("#gd-body").is_visible()
     page.locator("#gd-setup").select_option("stereo")
+    # 7.1 stays the default target although 9.1 comes after it.
+    assert page.locator("#gd-target option").all_text_contents() == ["5.1", "7.1", "9.1"]
     assert page.locator("#gd-target").input_value() == "7.1"
+    page.locator("#gd-target").select_option("9.1")
+    assert page.locator("#gd-steps .gd-step").count() == 6
+    page.locator("#gd-target").select_option("7.1")
     steps = page.locator("#gd-steps .gd-step")
     assert steps.count() == 5
     assert page.locator("#gd-turn").inner_text() == "Face the point midway between the two speakers."
@@ -1079,6 +1100,11 @@ def render_gallery(output):
             adv_switch(page, "output", True)
             page.locator("#ba-jamesdsp").check()
             page.locator("#ba-resample").check()
+            page.locator("#adv-tab-output").click()
+            page.locator("#adv-studio").scroll_into_view_if_needed()
+            shots.append(shoot(page, output, f"processing-advanced-studio-{language}-{theme}-output-auto", errors))
+            page.locator("#ba-layout-files").select_option("listed")
+            page.locator("#ba-layout-force-2").check()
             for tab in ADV_TABS:
                 page.locator(f"#adv-tab-{tab}").click()
                 page.locator("#adv-studio").scroll_into_view_if_needed()

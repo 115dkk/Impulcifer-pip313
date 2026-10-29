@@ -819,6 +819,13 @@ status = "implemented"
 tests = ["impulcifer-sys-win::silent_packet_is_zero_filled"]
 
 [[feature]]
+id = "audio.cpal_device_channels"
+kind = "audio"
+status = "implemented"
+tests = ["impulcifer-audio-io::config_exact_channels_win_over_larger_float", "impulcifer-audio-io::config_twelve_channels_open_sixteen_channel_device", "impulcifer-audio-io::config_smallest_sufficient_channel_count_wins", "impulcifer-audio-io::config_float_is_preferred_within_channel_count", "impulcifer-audio-io::config_fewer_channels_are_rejected", "impulcifer-audio-io::config_non_native_rate_is_rejected", "impulcifer-audio-io::callback_output_pads_device_channels_and_counts_source_samples", "impulcifer-audio-io::callback_output_non_frame_tail_uses_equilibrium", "impulcifer-audio-io::callback_output_short_device_frame_does_not_consume_source", "impulcifer-audio-io::callback_capture_keeps_first_channels_of_each_device_frame", "impulcifer-audio-io::callback_capture_adapted_overflow_drops_whole_kept_frames", "impulcifer-audio-io::callback_capture_silence_ignores_discarded_channels", "impulcifer-audio-io::callback_capture_validates_device_alignment_and_kept_capacity"]
+note = "cpal (macOS, Linux) opens a device at its own channel count: CoreAudio reports only a device's current total, so a 12-channel 7.1.4 sweep on a 16-output interface, a stereo sweep on 8-channel HDMI or 2 microphone channels on a multi-input interface used to fail; playback now silences the extra device channels and capture keeps the first ones"
+
+[[feature]]
 id = "output.hrir_wav"
 kind = "output"
 status = "implemented"
@@ -890,6 +897,13 @@ kind = "objects"
 status = "implemented"
 tests = ["impulcifer-types::nhk_22_2_lists_the_smpte_st_2036_2_order", "impulcifer-types::auro_13_1_lists_the_auro_wav_white_paper_order", "impulcifer-types::dtsx_30_2_lists_the_ts_103_491_channel_mask_order", "impulcifer-types::atmos_24_1_10_starts_with_the_9_1_6_interchange_order", "impulcifer-types::a_layout_file_reads_both_ears_of_each_slot_in_official_order", "impulcifer-types::format_tables_match_the_official_orders", "impulcifer-types::added_slot_table_matches_the_track_orders"]
 note = "NHK 22.2 = SMPTE ST 2036-2; Auro 13.1 = Auro WAV white paper (0x2FE3F); DTS:X Pro 30.2 = ETSI TS 103 491 Table B-5; Atmos 24.1.10 has no Dolby order above 9.1.6 (9.1.6 interchange order, then the installation guidelines' listing); docs/brir-channel-order.md tables are checked row by row"
+
+[[feature]]
+id = "layouts.atmos_9_family"
+kind = "objects"
+status = "implemented"
+tests = ["impulcifer-types::atmos_9_1_family_follows_the_9_1_6_interchange_order", "impulcifer-types::only_the_largest_complete_layout_of_a_family_is_written_automatically", "impulcifer-types::a_measurement_that_is_another_recorder_layout_is_no_near_miss", "impulcifer-types::format_tables_match_the_official_orders", "impulcifer-types::guided_plans_match_the_measurement_table", "impulcifer-service::every_format_file_maps_every_slot_when_all_are_measured", "impulcifer-service::a_9_1_4_measurement_writes_only_its_file_and_no_near_miss", "impulcifer-service::each_slot_sweeps_on_its_official_device_channel", "impulcifer-service::ipc_bootstrap_shape", "impulcifer-service::a_9_1_4_hrir_restores_only_the_largest_complete_family_file", "impulcifer-cli::cli_layout_files_option_parses_and_validates"]
+note = "ADR 0009: Dolby Atmos 9.1, 9.1.4 and 9.1.6 sweep in the 9.1.6 interchange order (Apple, AWS MediaConvert) and write atmos_9.1*.wav; auto writes only the largest complete layout of the family, and a measurement that is exactly another recorder layout is no near miss"
 
 [[feature]]
 id = "output.immersive_layout_files"
@@ -1344,7 +1358,7 @@ id = "recording.immersive_layouts"
 kind = "recording"
 status = "implemented"
 tests = ["impulcifer-service::every_immersive_format_is_a_recorder_layout", "impulcifer-service::each_slot_sweeps_on_its_official_device_channel", "impulcifer-service::a_slot_outside_the_layout_is_refused", "impulcifer-service::digit_slot_codes_name_recordings", "impulcifer-service::filename_speakers_read_digit_slot_codes_whole", "impulcifer-service::ipc_bootstrap_shape"]
-note = "ADR 0007: recorder layouts 13.1, 22.2, 24.1.10, 30.2 put each slot's sweep on the device channel of the format's official order (22.2: FL on channel 7, WL on channel 1) with LFE channels silent; bootstrap sweep.immersive lists each format's channel labels and slots for the recorder's channel map; SL1/SR1/SL2/SR2/BL1/BR1/BL2/BR2 name recordings and room recordings"
+note = "ADR 0007 and 0009: recorder layouts 9.1, 9.1.4, 9.1.6, 13.1, 22.2, 24.1.10, 30.2 put each slot's sweep on the device channel of the format's official order (22.2: FL on channel 7, WL on channel 1) with LFE channels silent; bootstrap sweep.immersive lists each format's channel labels and slots for the recorder's channel map; SL1/SR1/SL2/SR2/BL1/BR1/BL2/BR2 name recordings and room recordings"
 
 [[feature]]
 id = "recording.layout_speakers"
@@ -1357,7 +1371,7 @@ note = "choosing a recorder track layout fills Speakers with every speaker the l
 id = "recording.guided_plans"
 kind = "recording"
 status = "implemented"
-tests = ["impulcifer-types::guided_plans_match_the_measurement_table", "impulcifer-types::guided_sources_follow_output_minus_yaw_and_valid_stereo_rules", "impulcifer-service::ipc_bootstrap_shape"]
+tests = ["impulcifer-types::guided_plans_match_the_measurement_table", "impulcifer-types::guided_sources_follow_output_minus_yaw_and_valid_stereo_rules", "impulcifer-types::mono_guided_sources_use_slot_azimuths", "impulcifer-service::ipc_bootstrap_shape"]
 note = "mono and stereo head-turn measurement plans are derived from ITU speaker slots and exposed through bootstrap sweep.guided"
 
 [[feature]]

@@ -93,6 +93,8 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     # ADR 0007: the demo's seven speakers write every channel-order file with
     # the missing speakers silent.
     ("layout_files_listed", ("--layout_files=13.1,22.2,24.1.10,30.2",), "3.4.0"),
+    # ADR 0009: the demo writes the three 9.1 family files with missing speakers silent.
+    ("layout_files_atmos_9", ("--layout_files=9.1,9.1.4,9.1.6",), "3.7.0"),
 )
 
 

@@ -86,6 +86,22 @@ fn each_slot_sweeps_on_its_official_device_channel() {
         .map(|(i, _)| i + 1)
         .collect();
     assert_eq!(active, [1, 7]);
+
+    let speakers = ["SL", "BL", "WL", "TSL"];
+    let spec = SweepSpec {
+        fs: 8000,
+        duration: 0.2,
+        speakers: speakers.iter().map(|s| (*s).to_owned()).collect(),
+        tracks: "9.1.6".into(),
+    };
+    let tracks = build_sweep_playback(&spec).unwrap().tracks;
+    let active: Vec<_> = tracks
+        .iter()
+        .enumerate()
+        .filter(|(_, track)| track.iter().any(|x| *x != 0.0))
+        .map(|(i, _)| i + 1)
+        .collect();
+    assert_eq!(active, [5, 7, 9, 13]);
 }
 
 /// Choosing a layout fills in every speaker it sweeps, without LFE. Recorded as
@@ -139,6 +155,9 @@ fn a_layout_fills_in_its_speakers_and_processing_reads_the_recording_name() {
             ("7.1", 7),
             ("7.1.4", 11),
             ("7.1.6", 13),
+            ("9.1", 9),
+            ("9.1.4", 13),
+            ("9.1.6", 15),
             ("13.1", 13),
             ("22.2", 22),
             ("24.1.10", 34),
@@ -151,11 +170,16 @@ fn a_layout_fills_in_its_speakers_and_processing_reads_the_recording_name() {
     assert_eq!(names("5.1"), "FL,FR,FC,BL,BR");
     assert_eq!(names("7.1"), "FL,FR,FC,BL,BR,SL,SR");
     assert_eq!(names("7.1.4"), "FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR");
+    // 9.1 family: the Dolby order puts the side pair before the rear pair.
+    assert_eq!(
+        names("9.1.6"),
+        "FL,FR,FC,SL,SR,BL,BR,WL,WR,TFL,TFR,TSL,TSR,TBL,TBR"
+    );
     assert_eq!(
         names("7.1.6"),
         "FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TSL,TSR,TBL,TBR"
     );
-    assert_eq!(sweep_layout_speakers("9.1.6"), None);
+    assert_eq!(sweep_layout_speakers("5.1.2"), None);
 }
 
 #[test]

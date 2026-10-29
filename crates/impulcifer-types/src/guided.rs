@@ -28,12 +28,12 @@ pub const GUIDED_SETUPS: [GuidedSetup; 2] = [
     GuidedSetup {
         id: "mono",
         outputs: &[0.0],
-        targets: &["stereo", "5.1", "7.1"],
+        targets: &["stereo", "5.1", "7.1", "9.1"],
     },
     GuidedSetup {
         id: "stereo",
         outputs: &[30.0, -30.0],
-        targets: &["5.1", "7.1"],
+        targets: &["5.1", "7.1", "9.1"],
     },
 ];
 
@@ -70,7 +70,8 @@ pub fn guided_plan(setup: &str, target: &str) -> Option<Vec<GuidedTake>> {
         let speakers: &[&str] = match target {
             "stereo" => &["FL", "FR"],
             "5.1" => &["FC", "FL", "FR", "BL", "BR"],
-            _ => &["FC", "FL", "FR", "SL", "SR", "BL", "BR"],
+            "7.1" => &["FC", "FL", "FR", "SL", "SR", "BL", "BR"],
+            _ => &["FC", "FL", "FR", "WL", "WR", "SL", "SR", "BL", "BR"],
         };
         Some(
             speakers
@@ -89,11 +90,16 @@ pub fn guided_plan(setup: &str, target: &str) -> Option<Vec<GuidedTake>> {
             take(setup, &["FL", "FR"], 0.0),
             take(setup, &["BR", "BL"], 180.0),
         ];
-        if target == "7.1" {
+        if target != "5.1" {
             plan.push(take(setup, &["SL"], -60.0));
             plan.push(take(setup, &["SR"], 120.0));
         }
-        plan.push(take(setup, &["FC"], 30.0));
+        if target == "9.1" {
+            plan.push(take(setup, &["FC", "WR"], 30.0));
+            plan.push(take(setup, &["WL"], -30.0));
+        } else {
+            plan.push(take(setup, &["FC"], 30.0));
+        }
         Some(plan)
     }
 }

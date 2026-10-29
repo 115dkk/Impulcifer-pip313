@@ -566,23 +566,29 @@
                     <input type="checkbox" id="bf-truehd">
                     <label for="bf-truehd" data-i18n="checkbox_truehd_layouts">TrueHD layouts</label>
                   </div>
-                  <div class="field-row">
+                  <div class="field-row top layout-files-row" id="bf-layout-files-row">
                     <label for="bf-layout-files" data-i18n="label_layout_files">Channel-order files:</label>
-                    <select id="bf-layout-files">
-                      <option value="auto" selected data-i18n="option_layout_files_auto">When every speaker is measured</option>
-                      <option value="none" data-i18n="option_layout_files_none">Off</option>
-                    </select>
-                  </div>
-                  <div class="field-row top">
-                    <span data-i18n="label_layout_files_force">Write even with missing speakers:</span>
                     <div class="adv-stack">
-                      <div class="layout-force">
-                        <div class="check-row"><input type="checkbox" id="bf-layout-force-0" data-layout="13.1"><label for="bf-layout-force-0">Auro-3D 13.1</label></div>
-                        <div class="check-row"><input type="checkbox" id="bf-layout-force-1" data-layout="22.2"><label for="bf-layout-force-1">NHK 22.2</label></div>
-                        <div class="check-row"><input type="checkbox" id="bf-layout-force-2" data-layout="24.1.10"><label for="bf-layout-force-2">Dolby Atmos 24.1.10</label></div>
-                        <div class="check-row"><input type="checkbox" id="bf-layout-force-3" data-layout="30.2"><label for="bf-layout-force-3">DTS:X Pro 30.2</label></div>
+                      <select id="bf-layout-files">
+                        <option value="auto" selected data-i18n="option_layout_files_auto">Formats with every speaker measured</option>
+                        <option value="listed" data-i18n="option_layout_files_listed">Also the formats I pick, with speakers missing</option>
+                        <option value="none" data-i18n="option_layout_files_none">Off</option>
+                      </select>
+                      <p class="hint" data-layout-mode="auto" data-i18n="hint_layout_files_auto">When the measured speakers cover every channel of a format, the BRIR is saved again in that format's channel order (for example atmos_9.1.6.wav). Of 9.1, 9.1.4 and 9.1.6 only the largest is saved.</p>
+                      <div class="layout-force-pick" data-layout-mode="listed" hidden>
+                        <p class="layout-force-caption" data-i18n="label_layout_files_force">Formats to save even with speakers missing:</p>
+                        <div class="layout-force">
+                          <div class="check-row"><input type="checkbox" id="bf-layout-force-0" data-layout="9.1"><label for="bf-layout-force-0">Dolby Atmos 9.1</label></div>
+                          <div class="check-row"><input type="checkbox" id="bf-layout-force-1" data-layout="9.1.4"><label for="bf-layout-force-1">Dolby Atmos 9.1.4</label></div>
+                          <div class="check-row"><input type="checkbox" id="bf-layout-force-2" data-layout="9.1.6"><label for="bf-layout-force-2">Dolby Atmos 9.1.6</label></div>
+                          <div class="check-row"><input type="checkbox" id="bf-layout-force-3" data-layout="13.1"><label for="bf-layout-force-3">Auro-3D 13.1</label></div>
+                          <div class="check-row"><input type="checkbox" id="bf-layout-force-4" data-layout="22.2"><label for="bf-layout-force-4">NHK 22.2</label></div>
+                          <div class="check-row"><input type="checkbox" id="bf-layout-force-5" data-layout="24.1.10"><label for="bf-layout-force-5">Dolby Atmos 24.1.10</label></div>
+                          <div class="check-row"><input type="checkbox" id="bf-layout-force-6" data-layout="30.2"><label for="bf-layout-force-6">DTS:X Pro 30.2</label></div>
+                        </div>
+                        <p class="hint" data-i18n="hint_layout_files">Missing speakers get silent tracks. Formats you leave unchecked are still saved when every speaker is measured.</p>
                       </div>
-                      <p class="hint" data-i18n="hint_layout_files">Tracks of missing speakers are silent.</p>
+                      <p class="hint" data-layout-mode="none" data-i18n="hint_layout_files_none" hidden>Only hrir.wav and hesuvi.wav are saved.</p>
                     </div>
                   </div>
                   <div class="check-row">
@@ -694,23 +700,29 @@
                       <label class="file-opt"><input type="checkbox" id="ba-truehd"><span class="file-name" data-i18n="studio_adv_truehd">TrueHD layouts</span><span class="file-path mono">truehd_11ch · truehd_13ch</span></label>
                     </div>
                   </div>
-                  <div class="field-row">
+                  <div class="field-row top layout-files-row" id="ba-layout-files-row">
                     <label for="ba-layout-files" data-i18n="label_layout_files">Channel-order files:</label>
-                    <select id="ba-layout-files">
-                      <option value="auto" selected data-i18n="option_layout_files_auto">When every speaker is measured</option>
-                      <option value="none" data-i18n="option_layout_files_none">Off</option>
-                    </select>
-                  </div>
-                  <div class="field-row top">
-                    <span data-i18n="label_layout_files_force">Write even with missing speakers:</span>
                     <div class="adv-stack">
-                      <div class="file-grid layout-grid">
-                        <label class="file-opt"><input type="checkbox" id="ba-layout-force-0" data-layout="13.1"><span class="file-name">Auro-3D 13.1</span><span class="file-path mono">auro_13.1.wav</span></label>
-                        <label class="file-opt"><input type="checkbox" id="ba-layout-force-1" data-layout="22.2"><span class="file-name">NHK 22.2</span><span class="file-path mono">nhk_22.2.wav</span></label>
-                        <label class="file-opt"><input type="checkbox" id="ba-layout-force-2" data-layout="24.1.10"><span class="file-name">Dolby Atmos 24.1.10</span><span class="file-path mono">atmos_24.1.10.wav</span></label>
-                        <label class="file-opt"><input type="checkbox" id="ba-layout-force-3" data-layout="30.2"><span class="file-name">DTS:X Pro 30.2</span><span class="file-path mono">dtsx_30.2.wav</span></label>
+                      <select id="ba-layout-files">
+                        <option value="auto" selected data-i18n="option_layout_files_auto">Formats with every speaker measured</option>
+                        <option value="listed" data-i18n="option_layout_files_listed">Also the formats I pick, with speakers missing</option>
+                        <option value="none" data-i18n="option_layout_files_none">Off</option>
+                      </select>
+                      <p class="hint" data-layout-mode="auto" data-i18n="hint_layout_files_auto">When the measured speakers cover every channel of a format, the BRIR is saved again in that format's channel order (for example atmos_9.1.6.wav). Of 9.1, 9.1.4 and 9.1.6 only the largest is saved.</p>
+                      <div class="layout-force-pick" data-layout-mode="listed" hidden>
+                        <p class="layout-force-caption" data-i18n="label_layout_files_force">Formats to save even with speakers missing:</p>
+                        <div class="file-grid layout-grid">
+                          <label class="file-opt"><input type="checkbox" id="ba-layout-force-0" data-layout="9.1"><span class="file-name">Dolby Atmos 9.1</span><span class="file-path mono">atmos_9.1.wav</span></label>
+                          <label class="file-opt"><input type="checkbox" id="ba-layout-force-1" data-layout="9.1.4"><span class="file-name">Dolby Atmos 9.1.4</span><span class="file-path mono">atmos_9.1.4.wav</span></label>
+                          <label class="file-opt"><input type="checkbox" id="ba-layout-force-2" data-layout="9.1.6"><span class="file-name">Dolby Atmos 9.1.6</span><span class="file-path mono">atmos_9.1.6.wav</span></label>
+                          <label class="file-opt"><input type="checkbox" id="ba-layout-force-3" data-layout="13.1"><span class="file-name">Auro-3D 13.1</span><span class="file-path mono">auro_13.1.wav</span></label>
+                          <label class="file-opt"><input type="checkbox" id="ba-layout-force-4" data-layout="22.2"><span class="file-name">NHK 22.2</span><span class="file-path mono">nhk_22.2.wav</span></label>
+                          <label class="file-opt"><input type="checkbox" id="ba-layout-force-5" data-layout="24.1.10"><span class="file-name">Dolby Atmos 24.1.10</span><span class="file-path mono">atmos_24.1.10.wav</span></label>
+                          <label class="file-opt"><input type="checkbox" id="ba-layout-force-6" data-layout="30.2"><span class="file-name">DTS:X Pro 30.2</span><span class="file-path mono">dtsx_30.2.wav</span></label>
+                        </div>
+                        <p class="hint" data-i18n="hint_layout_files">Missing speakers get silent tracks. Formats you leave unchecked are still saved when every speaker is measured.</p>
                       </div>
-                      <p class="hint" data-i18n="hint_layout_files">Tracks of missing speakers are silent.</p>
+                      <p class="hint" data-layout-mode="none" data-i18n="hint_layout_files_none" hidden>Only hrir.wav and hesuvi.wav are saved.</p>
                     </div>
                   </div>
                   <div class="field-row">

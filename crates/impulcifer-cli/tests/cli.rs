@@ -510,7 +510,7 @@ fn cli_layout_files_option_parses_and_validates() {
         panic!()
     };
     assert!(!baseline.contains_key("layout_files"));
-    for value in ["auto", "none", "22.2", "24.1.10,30.2"] {
+    for value in ["auto", "none", "22.2", "24.1.10,30.2", "9.1,9.1.4,9.1.6"] {
         let Parsed::Kwargs(mut kwargs) = parse(&args(&[
             "impulcifer",
             "--dir_path",
