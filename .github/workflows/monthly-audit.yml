@@ -6,12 +6,36 @@
 # 단일 claude -p 세션에서 실행합니다.
 # 직전 감사 이후 코드 변경이 없으면(문서 등 제외) 실행하지 않습니다.
 #
-# 모델: claude-mythos-5-1
+# 모델: claude-fable-5-1
 # Effort: xhigh
+# 인증: Workload Identity Federation(Claude API 크레딧)
 #
 # 필요 사항:
-#   1. `claude setup-token`으로 구독 OAuth 토큰을 생성한 뒤
-#      Settings > Secrets에 CLAUDE_CODE_OAUTH_TOKEN 등록
+#   1. Workload Identity Federation. 이 실행의 GitHub OIDC 토큰을 수명이
+#      짧은 Anthropic 토큰으로 교환하므로 저장해 두는 키가 없습니다.
+#      (가) Claude Console의 페더레이션 규칙(Settings > Workload identity >
+#      Connect workload). 규칙은 이 파일에만 맞추고 더 넓히지 마십시오.
+#        제목 접두사(subject)
+#          repo:115dkk/Impulcifer-pip313:ref:refs/heads/master
+#        필수 클레임
+#          ref = refs/heads/master
+#          workflow_ref = 115dkk/Impulcifer-pip313/.github/workflows/monthly-audit.yml@refs/heads/master
+#          repository_owner = 115dkk
+#          repository = 115dkk/Impulcifer-pip313
+#          repository_owner_id = 33408534
+#        CEL 조건
+#          claims.event_name in ["schedule", "workflow_dispatch"]
+#        audience는 비워 두십시오(https://api.anthropic.com).
+#      토큰 유효 기간은 기본값(600초)으로 두십시오. GitHub 토큰은 약 5분,
+#      Anthropic 토큰은 그 두 배까지만 유효하므로 감사 단계가 토큰 파일을
+#      3분마다 갱신합니다. 규칙이 master만 받으므로 기능 브랜치에서 수동
+#      실행한 감사는 첫 단계의 토큰 교환에서 멈춥니다.
+#      (나) 저장소 Actions 변수(식별자라 secret이 아닙니다).
+#      ANTHROPIC_FEDERATION_RULE_ID(fdrl_...), ANTHROPIC_ORGANIZATION_ID
+#      (조직 UUID), ANTHROPIC_SERVICE_ACCOUNT_ID(svac_...).
+#      ANTHROPIC_WORKSPACE_ID는 규칙이 워크스페이스를 둘 이상 가리킬 때만
+#      설정하십시오. 구독 토큰 secret(CLAUDE_CODE_OAUTH_TOKEN)은 더 이상
+#      읽지 않습니다.
 #   2. Settings > Actions > Workflow permissions를
 #      "Read and write permissions"로 설정
 #   3. 감사 스킬은 저장소에 두지 않습니다. 실행할 때마다
@@ -31,13 +55,16 @@
 #      때문입니다. 키는 Claude 세션이 셸을 쓰는 audit 잡에는 주지 않습니다.
 #
 # 주의:
-#   ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN이 있으면 Claude Code는
-#   구독 OAuth보다 API 인증을 우선합니다. 이 workflow는 구독 할당을
-#   쓰기 위해 Claude 실행 직전에 해당 변수를 제거합니다.
+#   ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_OAUTH_TOKEN 중
+#   하나라도 있으면 Claude Code는 페더레이션보다 그것을 우선해 다른 계정에
+#   청구합니다. 이 workflow는 Claude 실행 직전에 세 변수를 제거합니다.
+#   그리고 availableModels로 감사 모델 하나만 허용합니다. Fable 5.1의
+#   안전장치에 걸린 요청을 Claude Code가 다른 모델로 다시 돌리지 못하게
+#   하려는 것이라, 걸리면 세션이 오류로 끝나고 감사가 실패합니다.
 #
 # Codex 전환 시:
 #   claude 명령을 codex -q로 교체하고,
-#   CLAUDE_CODE_OAUTH_TOKEN을 OPENAI_API_KEY로 변경하십시오.
+#   페더레이션 변수 대신 OPENAI_API_KEY를 쓰십시오.
 # ──────────────────────────────────────────────────────────────
 
 name: Monthly Audit
@@ -133,9 +160,86 @@ jobs:
     needs: check-changes
     if: needs.check-changes.outputs.should_audit == 'true'
     runs-on: ubuntu-latest
+    # OIDC 토큰은 이 잡만 요청합니다. 잡 수준 permissions는 워크플로 수준의
+    # 것을 대신하므로, 원래 필요했던 두 권한을 다시 적습니다.
+    permissions:
+      contents: write
+      issues: write
+      id-token: write
     env:
-      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+      ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+      ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+      AUDIT_MODEL: claude-fable-5-1
     steps:
+      # 변수 누락, 이 실행과 맞지 않는 규칙, 조직이 쓸 수 없는 모델을 세션을
+      # 띄우기 전에 몇 초 만에 잡습니다. 여기서 한 번 교환하면 Console의
+      # 연결 테스트도 통과합니다.
+      - name: Verify workload identity federation
+        run: |
+          set -euo pipefail
+
+          for name in ANTHROPIC_FEDERATION_RULE_ID ANTHROPIC_ORGANIZATION_ID ANTHROPIC_SERVICE_ACCOUNT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Repository variable $name is not set. See 필요 사항 1 at the top of monthly-audit.yml."
+              exit 1
+            fi
+          done
+
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::GitHub offered no OIDC token. The audit job needs the id-token: write permission."
+            exit 1
+          fi
+
+          # JWT와 불투명 액세스 토큰에만 쓰며, 둘 다 따옴표나 이스케이프를
+          # 담을 수 없습니다.
+          json_string() {
+            tr -d '\r\n' | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p"
+          }
+
+          identity_token=$(curl -fsS --retry 3 \
+            -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" | json_string value)
+          if [ -z "$identity_token" ]; then
+            echo "::error::GitHub's OIDC response carried no token."
+            exit 1
+          fi
+          echo "::add-mask::$identity_token"
+
+          workspace_field=""
+          if [ -n "${ANTHROPIC_WORKSPACE_ID:-}" ]; then
+            workspace_field=$(printf ', "workspace_id": "%s"' "$ANTHROPIC_WORKSPACE_ID")
+          fi
+          response=$(mktemp)
+          status=$(curl -sS -o "$response" -w '%{http_code}' https://api.anthropic.com/v1/oauth/token \
+            -H "content-type: application/json" \
+            -d "$(printf '{"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": "%s", "federation_rule_id": "%s", "organization_id": "%s", "service_account_id": "%s"%s}' \
+              "$identity_token" "$ANTHROPIC_FEDERATION_RULE_ID" "$ANTHROPIC_ORGANIZATION_ID" \
+              "$ANTHROPIC_SERVICE_ACCOUNT_ID" "$workspace_field")")
+          access_token=$(json_string access_token < "$response")
+          if [ "$status" != 200 ] || [ -z "$access_token" ]; then
+            echo "::error::The federation exchange was refused (HTTP $status). The rule accepts only scheduled and manual runs of this file on master. The Console records the reason under Workload identity > Authentication events."
+            cat "$response"
+            exit 1
+          fi
+          echo "::add-mask::$access_token"
+
+          # 감사 모델에 한 줄짜리 요청을 보내, 조직이 그 모델을 쓸 수 없으면
+          # 여기서 알게 합니다. 비용은 1센트도 되지 않습니다.
+          status=$(curl -sS -o "$response" -w '%{http_code}' https://api.anthropic.com/v1/messages \
+            -H "authorization: Bearer $access_token" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$(printf '{"model": "%s", "max_tokens": 128, "output_config": {"effort": "low"}, "messages": [{"role": "user", "content": "Reply with OK."}]}' "$AUDIT_MODEL")")
+          if [ "$status" != 200 ]; then
+            echo "::error::$AUDIT_MODEL refused a one-line request (HTTP $status)."
+            cat "$response"
+            exit 1
+          fi
+          rm -f "$response"
+          echo "Federation exchange succeeded and $AUDIT_MODEL answered."
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -179,19 +283,6 @@ jobs:
           echo "Installed audit skills from 115dkk/agent-skills@${PLUGIN_SHA}:"
           find "$PLUGIN_PATH/skills" -maxdepth 2 -name SKILL.md -print
 
-      - name: Verify Claude subscription credentials
-        run: |
-          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-            echo "::error::CLAUDE_CODE_OAUTH_TOKEN secret is not configured."
-            echo "Generate a subscription OAuth token with 'claude setup-token'."
-            echo "Add it under Settings > Secrets and variables > Actions."
-            exit 1
-          fi
-
-          if [ -n "${ANTHROPIC_API_KEY:-}" ] || [ -n "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
-            echo "::warning::Ignoring ANTHROPIC_* credentials so Claude Code uses CLAUDE_CODE_OAUTH_TOKEN."
-          fi
-
       # 워크플로 자체 산출물은 $RUNNER_TEMP/audit에 쓴다 — 체크아웃 작업
       # 트리에 남으면 감사 세션이 untracked 파일로 오인해 finding으로 잡거나
       # 실수로 커밋될 수 있다(특히 .txt는 release gate의 EXCLUDE에 없음).
@@ -215,7 +306,9 @@ jobs:
 
       - name: Run combined audit
         run: |
-          unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
+          # 셋 중 하나라도 남아 있으면 CLI가 페더레이션보다 그것을 우선해
+          # 페더레이션된 서비스 계정이 아닌 곳에 청구합니다.
+          unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN
           REPORT="$RUNNER_TEMP/audit/combined-audit-report.md"
 
           # 체크아웃에 있는 TECH_DEBT_AUDIT.md는 commit-baseline 잡이 커밋한
@@ -224,10 +317,51 @@ jobs:
           # 파일로 통과하면 안 됩니다.
           BASELINE_BLOB=$(git hash-object TECH_DEBT_AUDIT.md 2>/dev/null || echo none)
 
+          # CLI는 이 파일의 GitHub OIDC 토큰을 직접 교환하고, Anthropic 토큰을
+          # 갱신할 때마다(길어야 10분 뒤) 파일을 다시 읽습니다. GitHub 토큰은
+          # 약 5분 유효하고 한 번만 받아 주므로, 세션이 도는 동안 백그라운드
+          # 루프가 3분마다 새 토큰으로 바꿉니다. 루프의 출력은 이 단계의 로그
+          # 파이프가 아니라 파일로 보냅니다. 남은 sleep이 파이프를 붙들고 있으면
+          # 단계가 끝나지 않기 때문입니다.
+          token_dir="$RUNNER_TEMP/anthropic-wif"
+          mkdir -p "$token_dir"
+          export ANTHROPIC_IDENTITY_TOKEN_FILE="$token_dir/identity-token"
+
+          write_identity_token() {
+            curl -fsS --retry 3 \
+              -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+              | tr -d '\r\n' \
+              | sed -n 's/.*"value"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+              > "$token_dir/identity-token.next" || return 1
+            [ -s "$token_dir/identity-token.next" ] || return 1
+            mv -f "$token_dir/identity-token.next" "$token_dir/identity-token"
+          }
+
+          write_identity_token
+          (
+            while sleep 180; do
+              write_identity_token ||
+                echo "::warning::Could not refresh the GitHub OIDC token; the next attempt is in three minutes."
+            done
+          ) > "$token_dir/refresh.log" 2>&1 &
+          refresh_pid=$!
+          stop_identity_refresh() {
+            kill "$refresh_pid" 2>/dev/null || true
+            cat "$token_dir/refresh.log" 2>/dev/null || true
+          }
+          trap stop_identity_refresh EXIT
+
+          # Fable 5.1의 안전장치는 걸린 요청을 다른 모델(Opus 4.8)로 조용히
+          # 다시 돌리고 세션을 거기 머물게 할 수 있습니다. availableModels에
+          # 감사 모델 하나만 두면 모델을 바꿔야 하는 순간 세션이 오류로
+          # 끝나므로, 다른 모델로 감사하거나 다른 모델에 토큰을 쓰는 일이
+          # 없습니다. 가용성 폴백은 --fallback-model로만 켜지며 두지 않습니다.
           set +e
           claude \
-            --model claude-mythos-5-1 \
+            --model "$AUDIT_MODEL" \
             --effort xhigh \
+            --settings "{\"availableModels\": [\"$AUDIT_MODEL\"]}" \
             --permission-mode auto \
             --max-turns 50 \
             -p "
@@ -334,7 +468,7 @@ jobs:
             echo "# Biweekly Audit: ${DATE}"
             echo ""
             echo "변경된 코드 파일: **${COUNT}개**"
-            echo "모델: claude-mythos-5-1 · Effort: xhigh"
+            echo "모델: ${AUDIT_MODEL} · Effort: xhigh"
             echo "감사 스킬: 115dkk-skills (${{ steps.skills.outputs.plugin_ref }})"
             echo ""
             echo "이 이슈 본문은 artifact의 \`issue-body.md\`에 해당합니다."
