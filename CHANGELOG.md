@@ -21,6 +21,9 @@ been fixed and old features improved.
 - **포맷 파일 검증 보강**: 40개 슬롯을 모두 측정했을 때 모든 포맷 파일의 트랙이 hrir.wav의 같은 슬롯·같은 귀 트랙과 같은지 확인하는 테스트를 더했습니다. 지금까지 DTS:X Pro 30.2 파일과 빠짐없이 측정한 24.1.10 파일은 이 검사를 받지 않았습니다. brir-3x 무결성 검사에는 `layout_files_atmos_9` 시나리오(3.7.0부터)를 더했습니다.
 - **문체 판정 훅 제외 목록**: 저장소 루트에 `.hookignore`를 두어, 한국어 문체 판정 훅이 `CHANGELOG.md`(규칙상 범주 제목에 이모지를 붙임), 2.x 오라클 골든(`tests/migration/goldens/`), 데모 처리 결과 `data/demo/README.md`를 건너뛰게 했습니다.
 
+#### 🔧 빌드 / 설정 변경 (릴리스 후 추가, 출하물 변화 없음)
+- **월간 감사를 API 크레딧과 Fable 5.1로 전환** (2026-10-30): `monthly-audit.yml`이 구독 OAuth 토큰(`CLAUDE_CODE_OAUTH_TOKEN`) 대신 Workload Identity Federation으로 인증합니다. 감사 잡이 GitHub OIDC 토큰을 받아 Claude Console의 페더레이션 규칙으로 수명이 짧은 Anthropic 토큰과 교환하므로 저장해 두는 키가 없고, 비용은 Claude API 크레딧에서 나갑니다. 모델은 `claude-mythos-5-1`에서 `claude-fable-5-1`로 바꾸고 `availableModels`로 이 모델 하나만 허용해, 안전장치에 걸린 요청이 다른 모델로 넘어가지 않고 오류로 끝나게 했습니다. 첫 단계가 변수, 규칙, 모델을 한 번 확인하고, 감사 중에는 GitHub 토큰 파일을 3분마다 갱신합니다. 규칙은 master에서 이 파일을 정기·수동 실행할 때만 받습니다. Mythos 5.1은 CVP 구독 계정으로 도는 mactype_tauri 감사가 씁니다.
+
 ## 3.6.2 - 2026-10-27
 ### 녹음 검사의 비교 기준 바로잡기
 
