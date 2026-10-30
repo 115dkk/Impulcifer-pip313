@@ -308,6 +308,7 @@ jobs:
           fi
 
       - name: Run combined audit
+        id: audit
         run: |
           # 셋 중 하나라도 남아 있으면 CLI가 페더레이션보다 그것을 우선해
           # 페더레이션된 서비스 계정이 아닌 곳에 청구합니다.
@@ -459,6 +460,34 @@ jobs:
             cat "$REPORT"
             exit "$CLAUDE_EXIT"
           fi
+
+      # 세션이 늦게 실패하면(턴 한도, 거부된 요청, 잡 시간 초과) 크레딧은
+      # 이미 거의 다 쓴 뒤이고 아래 단계는 모두 건너뛰므로, 세션이 저장한
+      # 파일이 러너와 함께 사라집니다. 이름을 따로 붙여 보관하며
+      # commit-baseline은 이 아티팩트를 보지 않습니다. 체크아웃의
+      # TECH_DEBT_AUDIT.md는 세션이 다시 저장하기 전까지 지난 기준 결과이므로
+      # HEAD와 다를 때만 넣습니다.
+      - name: Keep partial audit output
+        if: always() && (steps.audit.outcome == 'failure' || steps.audit.outcome == 'cancelled')
+        run: |
+          out="$RUNNER_TEMP/audit"
+          mkdir -p "$out"
+          if [ -s ARCHITECTURE_AUDIT.md ]; then cp ARCHITECTURE_AUDIT.md "$out/"; fi
+          if [ -s TECH_DEBT_AUDIT.md ] &&
+             { ! git ls-files --error-unmatch TECH_DEBT_AUDIT.md >/dev/null 2>&1 ||
+               ! git diff --quiet HEAD -- TECH_DEBT_AUDIT.md; }; then
+            cp TECH_DEBT_AUDIT.md "$out/"
+          fi
+          ls -l "$out"
+
+      - name: Upload partial audit output
+        if: always() && (steps.audit.outcome == 'failure' || steps.audit.outcome == 'cancelled')
+        uses: actions/upload-artifact@v4
+        with:
+          name: "audit-partial-${{ github.run_id }}"
+          path: ${{ runner.temp }}/audit/
+          if-no-files-found: ignore
+          retention-days: 90
 
       - name: Create GitHub Issue
         env:
