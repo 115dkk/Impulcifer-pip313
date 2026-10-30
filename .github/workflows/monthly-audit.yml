@@ -15,17 +15,20 @@
 #      짧은 Anthropic 토큰으로 교환하므로 저장해 두는 키가 없습니다.
 #      (가) Claude Console의 페더레이션 규칙(Settings > Workload identity >
 #      Connect workload). 규칙은 이 파일에만 맞추고 더 넓히지 마십시오.
-#        제목 접두사(subject)
-#          repo:115dkk/Impulcifer-pip313:ref:refs/heads/master
-#        필수 클레임
-#          ref = refs/heads/master
-#          workflow_ref = 115dkk/Impulcifer-pip313/.github/workflows/monthly-audit.yml@refs/heads/master
-#          repository_owner = 115dkk
-#          repository = 115dkk/Impulcifer-pip313
-#          repository_owner_id = 33408534
-#        CEL 조건
-#          claims.event_name in ["schedule", "workflow_dispatch"]
-#        audience는 비워 두십시오(https://api.anthropic.com).
+#      Console은 CEL 조건과 제목 접두사·필수 클레임을 함께 받지 않으므로,
+#      일치 조건은 아래 CEL 식 하나에 모두 넣으십시오. GitHub OIDC 토큰의
+#      repository_owner_id는 문자열이라 따옴표가 있어야 하고, 없으면 타입
+#      오류로 한 번도 통과하지 못합니다.
+#        claims.sub.startsWith("repo:115dkk/Impulcifer-pip313:ref:refs/heads/master")
+#          && claims.ref == "refs/heads/master"
+#          && claims.workflow_ref == "115dkk/Impulcifer-pip313/.github/workflows/monthly-audit.yml@refs/heads/master"
+#          && claims.repository_owner_id == "33408534"
+#          && claims.repository_owner == "115dkk"
+#          && claims.repository == "115dkk/Impulcifer-pip313"
+#          && claims.event_name in ["schedule", "workflow_dispatch"]
+#      대상 서비스 계정은 auto-audit, 워크스페이스는 Default, OAuth 범위는
+#      workspace:developer입니다. audience는 비워 두십시오
+#      (https://api.anthropic.com).
 #      토큰 유효 기간은 기본값(600초)으로 두십시오. GitHub 토큰은 약 5분,
 #      Anthropic 토큰은 그 두 배까지만 유효하므로 감사 단계가 토큰 파일을
 #      3분마다 갱신합니다. 규칙이 master만 받으므로 기능 브랜치에서 수동
