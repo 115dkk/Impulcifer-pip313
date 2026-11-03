@@ -831,6 +831,7 @@ fn ipc_select_file_shape() {
         (vec![json!("unknown")], "audio"),
         (vec![json!("text")], "text"),
         (vec![json!("wav")], "wav"),
+        (vec![json!("measurement")], "measurement"),
     ] {
         assert_eq!(
             data(f.call("select_file", args)),

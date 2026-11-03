@@ -16,6 +16,7 @@ pub enum IpcMethod {
     StartOutputRecovery,
     PlanOutputRecovery,
     InspectEq,
+    InspectRoomMeasurements,
     PollJob,
     CancelJob,
     GetUiSettings,
@@ -37,7 +38,7 @@ pub enum IpcMethod {
 }
 
 impl IpcMethod {
-    pub const ALL: [IpcMethod; 25] = [
+    pub const ALL: [IpcMethod; 26] = [
         IpcMethod::Bootstrap,
         IpcMethod::ListAudioDevices,
         IpcMethod::StartRecording,
@@ -45,6 +46,7 @@ impl IpcMethod {
         IpcMethod::StartOutputRecovery,
         IpcMethod::PlanOutputRecovery,
         IpcMethod::InspectEq,
+        IpcMethod::InspectRoomMeasurements,
         IpcMethod::PollJob,
         IpcMethod::CancelJob,
         IpcMethod::GetUiSettings,
@@ -75,6 +77,7 @@ impl IpcMethod {
             IpcMethod::StartOutputRecovery => "start_output_recovery",
             IpcMethod::PlanOutputRecovery => "plan_output_recovery",
             IpcMethod::InspectEq => "inspect_eq",
+            IpcMethod::InspectRoomMeasurements => "inspect_room_measurements",
             IpcMethod::PollJob => "poll_job",
             IpcMethod::CancelJob => "cancel_job",
             IpcMethod::GetUiSettings => "get_ui_settings",
@@ -154,7 +157,7 @@ mod tests {
         for method in IpcMethod::ALL {
             assert_eq!(IpcMethod::from_wire_name(method.wire_name()), Some(method));
         }
-        assert_eq!(IpcMethod::ALL.len(), 25);
+        assert_eq!(IpcMethod::ALL.len(), 26);
     }
 
     #[test]

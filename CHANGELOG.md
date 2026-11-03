@@ -4,6 +4,18 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.8.0 - 2026-11-03
+### REW 측정 파일과 Dirac Live 프로젝트를 룸 측정으로 읽기
+
+#### ⭐ 새로운 기능 / 개선
+- **REW `.mdat`과 Dirac Live `.liveproject`를 룸 측정으로 사용**: 합성 화면의 룸 보정 칸 첫 줄에서 룸 측정의 출처를 고릅니다. 지금처럼 녹음 폴더의 `room-*.wav`를 쓰거나, REW 측정 파일이나 Dirac Live 프로젝트 하나를 고르면 그 안의 측정 마이크 응답을 룸 EQ와 가상 룸 튜닝 1·2의 룸 측정으로 씁니다. 이미 임펄스 응답이므로 Impulcifer의 sweep으로 다시 잴 필요가 없습니다. AV 리시버의 Dirac Live로 다채널 스피커를 울린 측정을 그대로 쓸 수 있어, macOS의 HDMI 8채널 한계를 거치지 않습니다. CLI에서는 `--room_measurement_file`과 `--room_measurement_map`을 씁니다(ADR 0010).
+- **측정과 스피커의 대응**: 파일을 고르면 무엇이 들어 있는지와 자동으로 정한 대응이 표에 나옵니다. REW는 측정 이름(`FL left`, `L P1` 등)에서 스피커와 귀 위치를 읽고, Dirac Live는 스피커 이름(`Left`, `LeftSurround` 등)에서 스피커를 읽어 두 귀 위치에 위치 1(주 청취 위치)을 씁니다. 표에서 스피커, 귀 위치, Dirac의 측정 위치를 바꿀 수 있고, 같은 귀 위치에 측정이 둘 이상 정해지면 그 줄이 빨갛게 바뀌며 처리를 시작하지 않습니다. 임펄스 응답이 없는 REW 측정과 서브우퍼 측정은 쓰지 않습니다.
+- **Dirac Live 프로젝트의 마이크 보정**: 프로젝트에 마이크 보정 곡선이 들어 있으면, 마이크 보정 파일을 따로 정하지 않았을 때 그 곡선을 씁니다.
+
+#### 🔧 빌드 / 설정 변경
+- **형식은 공개 명세와 파일로 정함**: REW 파일은 Java 객체 직렬화 스트림으로, Dirac Live 프로젝트는 Qt `QDataStream` 머리말과 protobuf 측정 블록으로 읽습니다. 필드의 뜻은 REW 5.40 beta를 API로 돌려 만든 파일과 유지보수자의 Dirac Live 프로젝트 11개로 확인했고, 두 프로그램을 디컴파일하지 않았습니다. Dirac 응답 행렬의 μ-law 값(255)은 피크 앞 잡음의 분포와 감쇠 곡선으로 정했습니다. 파일은 믿지 않는 입력으로 읽어 길이·깊이·핸들 수에 상한을 두고, 새 의존성은 없습니다.
+- **테스트 픽스처**: REW가 직접 쓴 `.mdat`(합성 임펄스 응답 둘과 주파수 응답만 있는 측정 하나)을 `crates/impulcifer-io/tests/fixtures/`에 두었고, Dirac 프로젝트는 테스트에서 관찰한 배치대로 만듭니다. brir-3x 무결성 검사에 `room_measurement_file_rew` 시나리오(3.8.0부터)를 더했습니다.
+
 ## 3.7.0 - 2026-10-29
 ### Dolby Atmos 9.1·9.1.4·9.1.6 지원, macOS 다채널 장치에서 녹음을 시작하지 못하던 문제 수정
 

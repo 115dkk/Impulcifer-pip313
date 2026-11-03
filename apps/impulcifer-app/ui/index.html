@@ -289,6 +289,25 @@
                   <span class="caret" aria-hidden="true"></span>
                 </div>
                 <div class="disclosure-body">
+                  <!-- Room measurements come from the recording folder's room-*.wav files or from
+                       one REW (.mdat) or Dirac Live (.liveproject) file (ADR 0010). The file's
+                       measurements are assigned to speakers and ear positions in the table that
+                       inspect_room_measurements fills; the job receives that assignment as is. -->
+                  <div class="field-row" id="bf-room-source-row">
+                    <label for="bf-room-source" data-i18n="label_room_measurements">Room measurements:</label>
+                    <select id="bf-room-source">
+                      <option value="folder" selected data-i18n="option_room_measurements_folder">room-*.wav in the recording folder</option>
+                      <option value="file" data-i18n="option_room_measurements_file">A REW or Dirac Live file</option>
+                    </select>
+                  </div>
+                  <div class="room-file" id="bf-room-file-block" hidden>
+                    <div class="field-row">
+                      <label for="bf-room-file" data-i18n="label_room_measurement_file">Measurement file:</label>
+                      <input id="bf-room-file" class="mono" spellcheck="false" placeholder="measurements.mdat">
+                      <button class="btn-link" data-browse="measurement" data-target="bf-room-file" data-i18n="button_browse">Browse</button>
+                    </div>
+                    <div class="room-file-result" id="bf-room-file-result" aria-live="polite"></div>
+                  </div>
                   <div class="field-row" id="bf-room-mode-row">
                     <span class="field-label"><span id="bf-room-mode-label" data-i18n="label_room_mode">Correction mode:</span><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-mode-tip" class="tip-bubble">Corrects the frequency response at each ear position; the timing of the bass stays as recorded.</span></span></span>
                     <div class="seg" role="radiogroup" aria-labelledby="bf-room-mode-label" aria-describedby="bf-room-mode-tip">

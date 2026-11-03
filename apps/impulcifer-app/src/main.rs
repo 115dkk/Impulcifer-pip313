@@ -28,6 +28,7 @@ fn dialog_filters(kind: &str) -> (&'static str, &'static [&'static str]) {
     match kind {
         "text" => ("EQ / CSV files", &["csv", "txt"]),
         "wav" => ("WAV files", &["wav"]),
+        "measurement" => ("REW / Dirac Live files", &["mdat", "liveproject"]),
         _ => ("Audio files", &["wav", "mlp", "thd", "truehd"]),
     }
 }

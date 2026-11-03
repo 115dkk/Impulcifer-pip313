@@ -213,59 +213,95 @@ pub fn load_inputs(
         {
             plan.room_target = Some(target.clone());
         }
-        let calibration = dir
-            .room
-            .calibration
-            .as_deref()
-            .map(csv)
-            .transpose()?
-            .as_ref()
-            .map(|fr| room::prepare_mic_calibration(fr, fs))
-            .transpose()?;
-        let mut rir = empty(fs);
-        let mut room_pairs = Vec::new();
         events.check_cancelled()?;
-        // Each worker consults the job before its decode, so a cancel still
-        // stops at the next recording instead of after the whole batch.
-        let token = events.cancel_token();
-        let room_recordings: Vec<_> = dir
-            .room
-            .recordings
-            .par_iter()
-            .map(|(path, names)| {
-                if token.as_ref().is_some_and(|t| t.is_cancelled()) {
-                    return Err(BrirError::Cancelled);
+        let mut project_calibration = None;
+        let mut rir = if let Some(path) = &config.room_measurement_file {
+            // Read in place like room_target and room_mic_calibration, so the
+            // job and inspect_room_measurements open the same file.
+            let path = std::path::PathBuf::from(path);
+            let (rir, calibration, format) = super::room_file::load(
+                &path,
+                config.room_measurement_map.as_deref().unwrap_or(""),
+                fs,
+            )?;
+            project_calibration = calibration;
+            if !dir.room.recordings.is_empty() {
+                events.log(
+                    "info",
+                    "cli_room_measurement_file_replaces_folder",
+                    json!({"count":dir.room.recordings.len()}),
+                );
+            }
+            let count: usize = rir
+                .speakers
+                .iter()
+                .map(|s| usize::from(s.left.is_some()) + usize::from(s.right.is_some()))
+                .sum();
+            events.log("info", "cli_room_measurement_file_loaded", json!({"file":path.file_name().unwrap_or_default().to_string_lossy(),"format":match format { impulcifer_io::external::ExternalFormat::Rew => "REW", impulcifer_io::external::ExternalFormat::Dirac => "Dirac Live" },"count":count}));
+            rir
+        } else {
+            empty(fs)
+        };
+        let calibration = match dir.room.calibration.as_deref() {
+            Some(path) => Some(csv(path)?),
+            None => {
+                if project_calibration.is_some() {
+                    events.log(
+                        "info",
+                        "cli_room_measurement_file_mic_calibration",
+                        json!({}),
+                    );
                 }
-                let wav = read_wav(path)?;
-                let speakers = names
-                    .speakers
-                    .iter()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>();
-                let incoming = ingest_recording(
-                    estimator,
-                    fs,
-                    wav.sample_rate,
-                    &wav.tracks,
-                    &speakers,
-                    names.side,
-                    2.0,
-                )?;
-                Ok(incoming)
-            })
-            .collect();
-        let room_recordings = room_recordings
-            .into_iter()
-            .collect::<Result<Vec<_>, BrirError>>()?;
-        for ((_, names), incoming) in dir.room.recordings.iter().zip(room_recordings) {
-            events.check_cancelled()?;
-            rir.merge_recording(incoming);
-            if matches!(config.room_mode.as_str(), "tuning" | "tuning2") {
-                room_pairs.extend(impulcifer_dsp::stages::room_tuning::recording_pairs(
-                    &rir,
-                    &names.speakers,
-                    names.side,
-                ));
+                project_calibration
+            }
+        }
+        .as_ref()
+        .map(|fr| room::prepare_mic_calibration(fr, fs))
+        .transpose()?;
+        let mut room_pairs = Vec::new();
+        if config.room_measurement_file.is_none() {
+            // Each worker consults the job before its decode, so a cancel still
+            // stops at the next recording instead of after the whole batch.
+            let token = events.cancel_token();
+            let room_recordings: Vec<_> = dir
+                .room
+                .recordings
+                .par_iter()
+                .map(|(path, names)| {
+                    if token.as_ref().is_some_and(|t| t.is_cancelled()) {
+                        return Err(BrirError::Cancelled);
+                    }
+                    let wav = read_wav(path)?;
+                    let speakers = names
+                        .speakers
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>();
+                    let incoming = ingest_recording(
+                        estimator,
+                        fs,
+                        wav.sample_rate,
+                        &wav.tracks,
+                        &speakers,
+                        names.side,
+                        2.0,
+                    )?;
+                    Ok(incoming)
+                })
+                .collect();
+            let room_recordings = room_recordings
+                .into_iter()
+                .collect::<Result<Vec<_>, BrirError>>()?;
+            for ((_, names), incoming) in dir.room.recordings.iter().zip(room_recordings) {
+                events.check_cancelled()?;
+                rir.merge_recording(incoming);
+                if matches!(config.room_mode.as_str(), "tuning" | "tuning2") {
+                    room_pairs.extend(impulcifer_dsp::stages::room_tuning::recording_pairs(
+                        &rir,
+                        &names.speakers,
+                        names.side,
+                    ));
+                }
             }
         }
         let generic = if matches!(config.room_mode.as_str(), "tuning" | "tuning2") {

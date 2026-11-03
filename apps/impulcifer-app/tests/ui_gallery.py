@@ -21,7 +21,7 @@ EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
-                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2)
+                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2)
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -58,6 +58,11 @@ GUIDED = {
                 guided_take(["SL"], -60, STEREO_OUT), guided_take(["SR"], 120, STEREO_OUT),
                 guided_take(["FC", "WR"], 30, STEREO_OUT), guided_take(["WL"], -30, STEREO_OUT)]}},
 }
+# bootstrap sweep.speaker_names: the 40 slot codes in slot order (ADR 0007), as
+# crates/impulcifer-types/src/layouts.rs SLOTS lists them.
+SPEAKER_NAMES = ["FL", "FR", "FC", "BL", "BR", "SL", "SR", "WL", "WR", "TFL", "TFR", "TSL", "TSR", "TBL", "TBR",
+                 "FCL", "FCR", "SCL", "SCR", "SL1", "SR1", "SL2", "SR2", "BL1", "BR1", "BL2", "BR2", "BCL", "BCR",
+                 "BC", "HFL", "HFR", "HFC", "HBL", "HBR", "HBC", "TC", "DFL", "DFR", "DFC"]
 # bootstrap sweep.layout_speakers: every speaker a layout sweeps, without LFE.
 LAYOUT_SPEAKERS = {"stereo": ["FL", "FR"], "7.1": ["FL", "FR", "FC", "BL", "BR", "SL", "SR"],
                    "22.2": [slot for _, slot in NHK_22_2 if not slot.startswith("LFE")]}
@@ -92,7 +97,7 @@ def mock_script(skin, theme, language, scenario):
     fixture = json.dumps({"skin": skin, "theme": theme, "language": language,
                          "scenario": scenario, "strings": catalog(language),
                          "release": {"version": version, "notes": notes}, "immersive": IMMERSIVE,
-                         "layoutSpeakers": LAYOUT_SPEAKERS, "guided": GUIDED,
+                         "layoutSpeakers": LAYOUT_SPEAKERS, "speakerNames": SPEAKER_NAMES, "guided": GUIDED,
                          "catalogs": {code: catalog(code) for code in LANGUAGES}}, ensure_ascii=False)
     return "const fixture = " + fixture + ";\n" + r"""
 (() => {
@@ -124,7 +129,7 @@ def mock_script(skin, theme, language, scenario):
   const methods = {
     bootstrap: () => ok({version: "3.0.0-alpha.1", platform: "windows", install_kind: "dev", webview_backend: "edgechromium",
       brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "22.2"], default_fs: 48000, default_duration: 5,
-        speaker_names: ["FL", "FR"], layout_speakers: fixture.layoutSpeakers, immersive: fixture.immersive,
+        speaker_names: fixture.speakerNames, layout_speakers: fixture.layoutSpeakers, immersive: fixture.immersive,
         guided: fixture.guided},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
         brir_cancel: true, output_recovery_cancel: false, share_modes: scenario === "disabled" ? ["auto"] : ["auto", "exclusive", "shared"]},
@@ -189,7 +194,39 @@ def mock_script(skin, theme, language, scenario):
     start_update: () => {kind = "update"; return ok({job: job("running")});},
     apply_pending_update: () => ok({restarting: true}),
     select_directory: () => ok({path: directory}),
-    select_file: kind => ok({path: kind === "text" ? "D:/EQ presets/HD800S left.csv" : null}),
+    select_file: kind => ok({path: kind === "text" ? "D:/EQ presets/HD800S left.csv"
+      : kind === "measurement" ? "D:/Measurements/living room.mdat" : null}),
+    // ADR 0010: a REW file like the io crate's fixture (two impulse responses and a
+    // frequency-response-only measurement) and a Dirac Live 4.2 project.
+    inspect_room_measurements: request => {
+      const path = request.path;
+      if (path.includes("missing")) return Promise.resolve(error("FILE_NOT_FOUND", "file not found", {path}));
+      if (path.includes("broken")) return Promise.resolve(error("INVALID_REQUEST", "not a REW measurement file", {path}));
+      // A path with "slow" answers after 1.5 s, so a check can act while it is pending.
+      const answer = response => path.includes("slow")
+        ? new Promise(resolve => setTimeout(() => resolve(response), 1500)) : response;
+      if (path.endsWith(".liveproject")) {
+        const names = ["Left", "Right", "LeftSurround", "RightSurround", "Subwoofer", "Subwoofer"];
+        const slots = ["FL", "FR", "SL", "SR", null, null];
+        const positions = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        return answer(ok({format: "dirac", path, title: "Living room", sample_rate: 48000,
+          microphone: "Umik-1  Gain: 18dB", mic_calibration: true, positions,
+          speakers: names.map((name, i) => ({index: i + 1, name, subwoofer: i >= 4, slot: slots[i]})),
+          measurements: positions.flatMap(position => names.map((name, i) => ({id: `${i + 1}@${position}`, name,
+            speaker: i + 1, position, samples: 32769, skipped: null}))),
+          mapping: slots.flatMap((slot, i) => slot ? [{slot, side: "left", id: `${i + 1}@1`}, {slot, side: "right", id: `${i + 1}@1`}] : []),
+          map: "FL=1@1,FR=2@1,SL=3@1,SR=4@1", auto: true}));
+      }
+      return ok({format: "rew", path, title: null, sample_rate: 48000, microphone: null, mic_calibration: false,
+        positions: [], speakers: [],
+        measurements: [
+          {id: "1", name: "FL left", speaker: null, position: null, samples: 8192, skipped: null},
+          {id: "2", name: "FL 오른쪽 🎧", speaker: null, position: null, samples: 8192, skipped: null},
+          {id: "3", name: "FR only", speaker: null, position: null, samples: 0, skipped: "no_impulse_response"},
+          {id: "4", name: "secs aver", speaker: null, position: null, samples: 131072, skipped: null}],
+        mapping: [{slot: "FL", side: "left", id: "1"}, {slot: "FL", side: "right", id: "2"}],
+        map: "FL.left=1,FL.right=2", auto: true});
+    },
     open_path: path => ok({path}), open_url: url => ok({url}),
     generate_sweep_set: () => ok({files: [], play_path: null}), detect_sweep: () => ok({found: false, sidecar: false}),
     inspect_eq: request => {
@@ -866,6 +903,98 @@ def room_tuning2_checks(browser):
           "tooltips, defaults, both skins OK", flush=True)
 
 
+def room_file_checks(browser):
+    """Room measurements from a REW or Dirac Live file (ADR 0010): the file row
+    shows only for the file source, Browse asks for the measurement kind, the
+    table starts from the file's automatic assignment, a slot and ear claimed
+    twice turns both rows red and keeps the job from starting, the request
+    carries the table's map, Dirac's ear positions apply to every speaker, a
+    missing or unreadable file says so (the reader's message only under
+    Details), and the folder source sends no file. Both skins send the same."""
+    def request_brir(page):
+        request = brir_request(page)
+        if page.locator("#job-modal").is_visible():  # Stable shows the job in its dialog
+            page.locator("#job-modal-close").click()
+        return request
+
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "en", "idle")
+        navigate(page, "processing")
+        disclosure(page, "room", True)
+        assert not page.locator("#bf-room-file-block").is_visible()
+        request = request_brir(page)
+        assert "room_measurement_file" not in request, request
+
+        page.locator("#bf-room-source").select_option("file")
+        assert page.locator("#bf-room-file-block").is_visible()
+        assert page.locator("#bf-room-file-result").inner_text() == "Choose a .mdat or .liveproject file."
+        page.locator("#bf-room-file-block .btn-link").click()
+        page.wait_for_function("galleryCalls.some(c => c.method === 'select_file' && c.args[0] === 'measurement')")
+        rows = page.locator("#bf-room-file-result tbody tr")
+        rows.nth(3).wait_for()
+        assert rows.count() == 4
+        assert page.locator(".room-file-summary").inner_text().endswith("3 measurements with an impulse response, 48000 Hz")
+
+        def slot(i, rows=rows):
+            return rows.nth(i).locator('select[data-room-field="slot"]')
+
+        def side(i, rows=rows):
+            return rows.nth(i).locator('select[data-room-field="side"]')
+
+        assert [slot(i).input_value() for i in range(4)] == ["FL", "FL", "", ""]
+        assert [side(i).input_value() for i in range(2)] == ["left", "right"]
+        assert rows.nth(2).get_attribute("data-state") == "skipped" and slot(2).is_disabled()
+        assert side(3).is_disabled()
+        assert page.locator("#bf-room-file-status").inner_text().startswith("Only the measurements assigned here")
+
+        side(1).select_option("left")
+        assert rows.nth(0).get_attribute("data-state") == "error" == rows.nth(1).get_attribute("data-state")
+        assert "room-file-error" in (page.locator("#bf-room-file-status").get_attribute("class") or "")
+        before = page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length")
+        page.locator("#btn-generate-brir").click()
+        page.wait_for_timeout(100)
+        assert page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length") == before
+        side(1).select_option("right")
+        slot(3).select_option("FR")
+        assert not side(3).is_disabled()
+        request = request_brir(page)
+        assert request["room_measurement_file"] == "D:/Measurements/living room.mdat", request
+        assert request["room_measurement_map"] == "FL.left=1,FL.right=2,FR=4", request
+
+        # Until the new file's inspection answers, the REW table is gone and
+        # Generate starts nothing: it must not send the new path with the old map.
+        page.locator("#bf-room-file").fill("D:/Dirac/slow living room.liveproject")
+        assert rows.count() == 0
+        before = page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length")
+        page.locator("#btn-generate-brir").click()
+        page.wait_for_timeout(300)
+        assert page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length") == before
+        page.locator(".room-file-positions select").first.wait_for()
+        assert rows.count() == 6
+        assert [slot(i).input_value() for i in range(6)] == ["FL", "FR", "SL", "SR", "", ""]
+        assert "Subwoofer" in rows.nth(4).inner_text()
+        assert "calibration" in page.locator("#bf-room-file-result").inner_text()
+        page.locator('.room-file-positions select[data-room-field="right"]').select_option("2")
+        request = request_brir(page)
+        assert request["room_measurement_map"] == ("FL.left=1@1,FL.right=1@2,FR.left=2@1,FR.right=2@2,"
+                                                   "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2"), request
+
+        page.locator("#bf-room-file").fill("D:/Dirac/missing.liveproject")
+        page.locator("#bf-room-file-result .room-file-error", has_text="The file does not exist.").wait_for()
+        page.locator("#bf-room-file").fill("D:/Dirac/broken.mdat")
+        page.locator("#bf-room-file-result .room-file-details").wait_for()
+        assert "not a REW measurement file" not in page.locator("#bf-room-file-result .room-file-error").inner_text()
+        assert not page.locator("#bf-room-file-result .room-file-details code").is_visible()
+
+        page.locator("#bf-room-source").select_option("folder")
+        assert not page.locator("#bf-room-file-block").is_visible()
+        request = request_brir(page)
+        assert "room_measurement_file" not in request and "room_measurement_map" not in request, request
+        assert not errors, errors
+        context.close()
+    print("Gallery room file checks: source toggle, Browse kind, automatic table, duplicate block, REW and Dirac maps, missing/unreadable files, folder source OK", flush=True)
+
+
 def vbass_checks(browser):
     """Virtual bass crossover modes: Automatic hides the frequency and sends no
     vbass_freq, Manual and Legacy show and send it, the tooltip follows the
@@ -1021,6 +1150,7 @@ def render_gallery(output):
         guided_checks(browser)
         room_phase_checks(browser)
         room_tuning2_checks(browser)
+        room_file_checks(browser)
         vbass_checks(browser)
         tooltip_checks(browser)
         shell_checks(browser)
@@ -1117,6 +1247,20 @@ def render_gallery(output):
             page.locator("#bf-room-mode-tuning2").click()
             page.locator("#bf-room-tuning2-mimo").check()
             shots.append(shoot(page, output, f"processing-room-tuning2-{skin}-{language}-{theme}", errors))
+            context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "idle")
+            navigate(page, "processing")
+            disclosure(page, "room", True)
+            page.locator("#bf-room-source").select_option("file")
+            for kind, path, rows in (("rew", "D:/Measurements/living room.mdat", 4),
+                                     ("dirac", "D:/Dirac/living room.liveproject", 6)):
+                page.locator("#bf-room-file").fill(path)
+                page.locator("#bf-room-file-result tbody tr").nth(rows - 1).wait_for()
+                if kind == "rew":
+                    page.locator("#bf-room-file-result tbody tr").nth(3).locator('select[data-room-field="slot"]').select_option("FR")
+                page.locator("#bf-room-file-block").scroll_into_view_if_needed()
+                shots.append(shoot(page, output, f"processing-room-file-{skin}-{language}-{theme}-{kind}", errors))
             context.close()
         for theme, language in itertools.product(THEMES, LANGUAGES):
             context, page, errors = open_page(browser, "studio", theme, language, "update")

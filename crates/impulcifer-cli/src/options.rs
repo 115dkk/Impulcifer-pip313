@@ -108,6 +108,24 @@ pub fn usage() -> String {
 
 pub static EXTENSION_OPTIONS: &[CliOption] = &[
     CliOption {
+        flag: "--room_measurement_file",
+        short: None,
+        dest: "room_measurement_file",
+        help: "Room measurements from a REW measurement file (.mdat) or a Dirac Live project (.liveproject) instead of the folder's room-*.wav files.",
+        kind: CliType::Str,
+        choices: &[],
+        default: CliDefault::Suppressed,
+    },
+    CliOption {
+        flag: "--room_measurement_map",
+        short: None,
+        dest: "room_measurement_map",
+        help: "Which measurement of --room_measurement_file feeds which speaker and ear position, e.g. \"FL.left=1,FL.right=2\" or \"FL=1@1,FR=2@1\"; empty or \"auto\" assigns them from the measurement and speaker names.",
+        kind: CliType::Str,
+        choices: &[],
+        default: CliDefault::Suppressed,
+    },
+    CliOption {
         flag: "--room_tuning2_mode",
         short: None,
         dest: "room_tuning2_mode",

@@ -5,6 +5,7 @@ pub mod estimator;
 pub mod inputs;
 pub mod outputs;
 pub mod plots;
+pub mod room_file;
 pub mod run;
 pub mod sweep_grid;
 pub(crate) mod validation;

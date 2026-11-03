@@ -54,6 +54,11 @@ TEST_SIGNAL = Path("data") / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
 # runs a room correction mode.
 SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("default", (), "3.0.0"),
+    (
+        "room_measurement_file_rew",
+        (f"--room_measurement_file={PROJECT_ROOT / 'crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat'}",),
+        "3.8.0",
+    ),
     ("room_modes", ("--room_range=modes",), "3.2.0"),
     ("room_extreme", ("--room_range=extreme",), "3.2.0"),
     ("room_legacy", ("--room_range=legacy",), "3.2.0"),

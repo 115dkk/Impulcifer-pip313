@@ -6,6 +6,31 @@
 # Marking a feature implemented without a verification test is a CI failure by design.
 
 [[feature]]
+id = "room.measurement_files"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-io::rew_fixture_reads_two_impulse_responses_and_skips_the_frequency_response_only_one", "impulcifer-io::dirac_builder_finds_block_and_decodes_fields", "impulcifer-io::rew_examples_assign_as_specified", "impulcifer-io::dirac_assigns_known_unique_speakers_at_lowest_measured_position", "impulcifer-io::parse_map_accepts_and_rejects_required_cases", "impulcifer-io::oversized_array_is_rejected_before_allocation", "impulcifer-io::modified_utf8_decodes_surrogates_malformed_and_nul", "impulcifer-service::room_measurement_file_replaces_the_folder_room_recordings", "impulcifer-service::dirac_project_room_measurements_are_resampled_and_bring_their_calibration"]
+note = "ADR 0010 and docs/rust/EXTERNAL_MEASUREMENTS.md: a REW .mdat (Java object serialization stream) or Dirac Live .liveproject (QDataStream header, protobuf measurement block, row-major response matrix in mu-law 255) replaces the folder's room-*.wav recordings; the map assigns measurements to slots and ear positions (automatic from names when empty); the Dirac project's microphone calibration applies when no other is set; imported responses form no tuning recording pairs; checked locally against the maintainer's 11 Dirac projects and four REW files (not committed)."
+
+[[feature]]
+id = "ipc.inspect_room_measurements"
+kind = "ipc"
+status = "implemented"
+tests = ["impulcifer-service::inspect_room_measurements_reports_the_rew_fixture_with_its_automatic_map", "impulcifer-service::inspect_room_measurements_applies_a_map_and_rejects_bad_requests", "impulcifer-service::inspect_room_measurements_reports_a_dirac_project", "impulcifer-service::ipc_select_file_shape"]
+
+[[feature]]
+id = "config.room_measurement_file"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_measurement_options_parse", "impulcifer-service::room_measurement_file_replaces_the_folder_room_recordings"]
+
+[[feature]]
+id = "config.room_measurement_map"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_measurement_options_parse", "impulcifer-service::inspect_room_measurements_applies_a_map_and_rejects_bad_requests"]
+
+[[feature]]
 id = "policy.unsafe_forbid_everywhere"
 kind = "policy"
 status = "implemented"

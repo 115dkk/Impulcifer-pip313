@@ -67,6 +67,10 @@ interface RecordingResult {
 interface ProcessingRequest {
   dir_path?: string | null; test_signal?: string | null; fs?: number | null;
   room_target?: string | null; room_mic_calibration?: string | null; headphone_compensation_file?: string | null;
+  /* 3.x only (ADR 0010). Room measurements from a REW .mdat or Dirac Live .liveproject file instead of the
+     folder's room-*.wav files; the map assigns its measurement ids to slots and ear positions
+     ("FL.left=1,FL.right=2", "FL=1@1"); null or "auto" assigns them from the names. */
+  room_measurement_file?: string | null; room_measurement_map?: string | null;
   /* Custom EQ slots: omitted/null follows the folder, false is off, a path is read in place. */
   eq_file?: string | false | null; eq_left_file?: string | false | null; eq_right_file?: string | false | null;
   plot?: boolean; interactive_plots?: boolean; channel_balance?: string | number | null;
@@ -132,6 +136,26 @@ interface EqInspection {
   slots: EqSlotInfo[]; blocked: boolean; ears: { left: EqEarSource | null; right: EqEarSource | null };
   curves: { frequency: number[]; left: number[] | null; right: number[] | null };
 }
+/* inspect_room_measurements (ADR 0010): what a REW or Dirac Live file holds and how its measurements
+   are assigned. REW measurements have no speaker or position; Dirac ids are "<speaker>@<position>". */
+interface RoomFileRequest { path: string; map?: string | null }
+interface RoomFileMeasurement {
+  id: string; name: string; speaker: number | null; position: number | null; samples: number;
+  skipped: "no_impulse_response" | null;
+}
+interface RoomFileSpeaker { index: number; name: string; subwoofer: boolean; slot: string | null }
+interface RoomFileAssignment { slot: string; side: "left" | "right"; id: string }
+interface RoomFileInspection {
+  format: "rew" | "dirac"; path: string; title: string | null; sample_rate: number; microphone: string | null;
+  mic_calibration: boolean; positions: number[]; speakers: RoomFileSpeaker[];
+  measurements: RoomFileMeasurement[]; mapping: RoomFileAssignment[]; map: string; auto: boolean;
+}
+/* The screen's choice per REW measurement id or Dirac speaker index (as a string): a slot code or "",
+   and for REW the ear position; Dirac's two ear positions apply to every speaker. */
+interface RoomFileChoices {
+  path: string; rows: Record<string, { slot: string; side: "both" | "left" | "right" }>;
+  left: number; right: number;
+}
 interface RecoveryRequest { dir_path: string; include_hangloose?: boolean; remove_silent_channels?: boolean; confirm_warnings?: boolean }
 type RecoverySource = "hrir" | "hesuvi" | "hrir+hesuvi" | "hangloose" | "layout";
 interface RecoveryMetadata {
@@ -177,6 +201,7 @@ interface IpcApi {
   start_output_recovery(request: RecoveryRequest): Promise<Envelope<{ job: JobOf<"output_recovery"> }>>;
   plan_output_recovery(request: RecoveryRequest): Promise<Envelope<RecoveryPlan>>;
   inspect_eq(request: EqRequest): Promise<Envelope<EqInspection>>;
+  inspect_room_measurements(request: RoomFileRequest): Promise<Envelope<RoomFileInspection>>;
   poll_job(job_id: string, after_seq?: number): Promise<Envelope<JobPoll>>;
   cancel_job(job_id: string): Promise<Envelope<{ job: Job }>>;
   get_ui_settings(): Promise<Envelope<UiSettings>>;
@@ -218,6 +243,9 @@ interface AppState {
   recoveryRunRevision: number; recoveryRequestKey: string;
   eqChoices: Record<EqSlotName, EqChoice>; eqInspection: EqInspection | null; eqError: IpcError | null;
   eqRevision: number; eqTimer: number | undefined;
+  /* roomFileInput is the field's text the current inspection answered for ("" while none has). */
+  roomFile: RoomFileInspection | null; roomFileError: IpcError | null; roomFileChoices: RoomFileChoices | null;
+  roomFileInput: string; roomFileRevision: number; roomFileTimer: number | undefined;
 }
 interface Window {
   pywebview?: { api: IpcApi };
