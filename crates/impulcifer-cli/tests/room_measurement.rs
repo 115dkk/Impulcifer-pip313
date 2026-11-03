@@ -1,0 +1,28 @@
+#![forbid(unsafe_code)]
+use impulcifer_cli::{Parsed, parse};
+use impulcifer_types::config::ProcessingConfig;
+
+#[test]
+fn cli_room_measurement_options_parse() {
+    let args = [
+        "impulcifer",
+        "--dir_path=data/demo",
+        "--room_measurement_file",
+        "room.mdat",
+        "--room_measurement_map",
+        "FL.left=1,FL.right=2",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    let Parsed::Kwargs(kwargs) = parse(&args).unwrap() else {
+        panic!("expected config")
+    };
+    let config = ProcessingConfig::from_kwargs(&kwargs).unwrap();
+    assert_eq!(config.room_measurement_file.as_deref(), Some("room.mdat"));
+    assert_eq!(
+        config.room_measurement_map.as_deref(),
+        Some("FL.left=1,FL.right=2")
+    );
+    assert!(ProcessingConfig::default().room_measurement_file.is_none());
+    assert!(ProcessingConfig::default().room_measurement_map.is_none());
+}

@@ -20,6 +20,8 @@ pub struct ProcessingConfig {
     pub test_signal: Option<String>,
     pub room_target: Option<String>,
     pub room_mic_calibration: Option<String>,
+    pub room_measurement_file: Option<String>,
+    pub room_measurement_map: Option<String>,
     pub headphone_compensation_file: Option<String>,
     pub fs: Option<u32>,
     pub plot: bool,
@@ -82,6 +84,8 @@ impl Default for ProcessingConfig {
             test_signal: None,
             room_target: None,
             room_mic_calibration: None,
+            room_measurement_file: None,
+            room_measurement_map: None,
             headphone_compensation_file: None,
             fs: None,
             plot: false,
@@ -173,7 +177,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 19] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 21] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -193,6 +197,8 @@ pub const EXTENSION_FIELD_NAMES: [&str; 19] = [
     "room_tuning2_mimo_low",
     "vbass_mode",
     "layout_files",
+    "room_measurement_file",
+    "room_measurement_map",
 ];
 
 fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {

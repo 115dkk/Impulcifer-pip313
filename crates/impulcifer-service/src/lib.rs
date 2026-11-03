@@ -374,6 +374,10 @@ impl ImpulciferService {
                     })?;
                 Ok(json!({"job":snapshot(&job)}))
             }
+            IpcMethod::InspectRoomMeasurements => {
+                args.count(1, 1)?;
+                brir::room_file::inspect(args.get(0))
+            }
             IpcMethod::InspectEq => {
                 args.count(1, 1)?;
                 brir::eq_select::inspect(args.get(0))
@@ -477,7 +481,7 @@ impl ImpulciferService {
                 let kind = args
                     .optional_string(0, "kind")?
                     .unwrap_or_else(|| "audio".into());
-                let kind = if ["audio", "text", "wav"].contains(&kind.as_str()) {
+                let kind = if ["audio", "text", "wav", "measurement"].contains(&kind.as_str()) {
                     &kind
                 } else {
                     "audio"

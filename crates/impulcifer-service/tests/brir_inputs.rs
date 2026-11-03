@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 mod brir_support;
+#[path = "support/room_measurement.rs"]
+mod room_builder;
 use brir_support::*;
 use impulcifer_service::brir::{
     BrirError, BrirEvents, discovery::discover, estimator::open_estimator, inputs::load_inputs,
@@ -7,14 +9,15 @@ use impulcifer_service::brir::{
 use impulcifer_types::config::ProcessingConfig;
 use serde_json::Value;
 #[derive(Default)]
-struct Events(Vec<String>);
+struct Events(Vec<String>, Vec<(String, Value)>);
 impl BrirEvents for Events {
     fn step(&mut self, key: &str, _: Value) -> Result<(), BrirError> {
         self.0.push(key.into());
         Ok(())
     }
-    fn log(&mut self, _: &str, key: &str, _: Value) {
+    fn log(&mut self, _: &str, key: &str, args: Value) {
         self.0.push(key.into());
+        self.1.push((key.into(), args));
     }
     fn check_cancelled(&self) -> Result<(), BrirError> {
         Ok(())
@@ -125,4 +128,141 @@ fn eqapo_input_is_parsed_and_logged() {
         "unknown XX filter is bypassed"
     );
     assert!(!events.0.contains(&"cli_eqapo_channel_split".to_string()));
+}
+
+#[test]
+fn room_measurement_file_replaces_the_folder_room_recordings() {
+    let temp = Temp::demo();
+    let config = ProcessingConfig {
+        room_measurement_file: Some(
+            root()
+                .join("crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat")
+                .to_string_lossy()
+                .into(),
+        ),
+        room_measurement_map: Some("FL.left=1,FL.right=2".into()),
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    assert!(!dir.room.recordings.is_empty());
+    // Poison the discovered files: success proves they are not opened.
+    for (path, _) in &dir.room.recordings {
+        std::fs::write(path, b"not a wav").unwrap();
+    }
+    let estimator = open_estimator(&dir, Some("default")).unwrap();
+    let mut events = Events::default();
+    let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
+    let room = inputs.room.unwrap();
+    assert_eq!(room.frs.entries.len(), 2);
+    assert!(room.frs.entries.iter().all(|(slot, _, _)| slot == "FL"));
+    assert!(events.1.contains(&(
+        "cli_room_measurement_file_replaces_folder".into(),
+        serde_json::json!({"count":dir.room.recordings.len()})
+    )));
+    assert!(events.1.contains(&(
+        "cli_room_measurement_file_loaded".into(),
+        serde_json::json!({"file":"rew_two_irs_and_fr.mdat","format":"REW","count":2})
+    )));
+    assert!(
+        !events
+            .0
+            .contains(&"cli_room_measurement_file_mic_calibration".into())
+    );
+
+    let mut off = config.clone();
+    off.do_room_correction = false;
+    off.room_measurement_file = Some("missing.mdat".into());
+    load_inputs(&dir, &estimator, &off, &mut Events::default()).unwrap();
+    off.do_room_correction = true;
+    let err = load_inputs(&dir, &estimator, &off, &mut Events::default()).unwrap_err();
+    assert_eq!(err.envelope()["error"]["code"], "FILE_NOT_FOUND");
+    let mut bad = config;
+    bad.room_measurement_map = Some("FL=3".into());
+    let err = load_inputs(&dir, &estimator, &bad, &mut Events::default()).unwrap_err();
+    assert_eq!(err.envelope()["error"]["code"], "INVALID_REQUEST");
+}
+
+#[test]
+fn dirac_project_room_measurements_are_resampled_and_bring_their_calibration() {
+    let temp = Temp::demo();
+    for name in ["room-mic-calibration.csv", "room-mic-calibration.txt"] {
+        let path = temp.0.join(name);
+        if path.exists() {
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+    let path = temp.0.join("test.liveproject");
+    std::fs::write(&path, room_builder::dirac_project(44100)).unwrap();
+    let config = ProcessingConfig {
+        room_measurement_file: Some(path.to_string_lossy().into()),
+        room_measurement_map: Some(String::new()),
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    let estimator = open_estimator(&dir, Some("default")).unwrap();
+    let mut events = Events::default();
+    let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
+    let room = inputs.room.unwrap();
+    assert_eq!(room.frs.entries.len(), 4);
+    assert!(
+        room.frs
+            .entries
+            .iter()
+            .all(|(slot, _, _)| ["FL", "FR"].contains(&slot.as_str()))
+    );
+    let wav = impulcifer_io::read_wav(&temp.0.join("room-responses.wav")).unwrap();
+    assert_eq!(wav.sample_rate, estimator.fs);
+    assert!(
+        events
+            .0
+            .contains(&"cli_room_measurement_file_mic_calibration".into())
+    );
+    assert!(events.1.contains(&(
+        "cli_room_measurement_file_loaded".into(),
+        serde_json::json!({"file":"test.liveproject","format":"Dirac Live","count":4})
+    )));
+    std::fs::write(
+        temp.0.join("room-mic-calibration.csv"),
+        "frequency,raw\n10.0,0.0\n100.0,0.0\n1000.0,0.0\n10000.0,0.0\n24000.0,0.0\n",
+    )
+    .unwrap();
+    let dir = discover(&temp.0, &config).unwrap();
+    let mut events = Events::default();
+    let folder = load_inputs(&dir, &estimator, &config, &mut events)
+        .unwrap()
+        .room
+        .unwrap();
+    assert!(
+        !events
+            .0
+            .contains(&"cli_room_measurement_file_mic_calibration".into())
+    );
+    assert_ne!(room.frs.entries, folder.frs.entries);
+    // An explicit calibration wins even when a folder calibration also exists.
+    let explicit = temp.0.join("explicit.csv");
+    std::fs::write(
+        &explicit,
+        "frequency,raw\n10.0,-2.0\n100.0,-1.0\n1000.0,0.0\n10000.0,1.0\n24000.0,0.0\n",
+    )
+    .unwrap();
+    let config = ProcessingConfig {
+        room_mic_calibration: Some(explicit.to_string_lossy().into()),
+        ..config
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    let mut events = Events::default();
+    let explicit = load_inputs(&dir, &estimator, &config, &mut events)
+        .unwrap()
+        .room
+        .unwrap();
+    assert_eq!(room.frs.entries, explicit.frs.entries);
+    assert!(
+        !events
+            .0
+            .contains(&"cli_room_measurement_file_mic_calibration".into())
+    );
 }
