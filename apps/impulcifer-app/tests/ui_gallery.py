@@ -21,7 +21,7 @@ EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
-                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2)
+                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2))
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -196,10 +196,13 @@ def mock_script(skin, theme, language, scenario):
     select_directory: () => ok({path: directory}),
     select_file: kind => ok({path: kind === "text" ? "D:/EQ presets/HD800S left.csv"
       : kind === "measurement" ? "D:/Measurements/living room.mdat" : null}),
-    // ADR 0010: a REW file like the io crate's fixture (two impulse responses and a
-    // frequency-response-only measurement) and a Dirac Live 4.2 project.
+    // ADR 0010 and 0011: a REW file like the io crate's fixture (two impulse responses and a
+    // frequency-response-only measurement) and a Dirac Live 4.2 project, each assigned for the
+    // request's purpose the way the io crate's automatic rules do. A Dirac path with "single"
+    // has only position 1.
     inspect_room_measurements: request => {
       const path = request.path;
+      const purpose = request.purpose || "room";
       if (path.includes("missing")) return Promise.resolve(error("FILE_NOT_FOUND", "file not found", {path}));
       if (path.includes("broken")) return Promise.resolve(error("INVALID_REQUEST", "not a REW measurement file", {path}));
       // A path with "slow" answers after 1.5 s, so a check can act while it is pending.
@@ -208,14 +211,20 @@ def mock_script(skin, theme, language, scenario):
       if (path.endsWith(".liveproject")) {
         const names = ["Left", "Right", "LeftSurround", "RightSurround", "Subwoofer", "Subwoofer"];
         const slots = ["FL", "FR", "SL", "SR", null, null];
-        const positions = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        const positions = path.includes("single") ? [1] : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        const right = purpose === "room" ? 1 : positions[1] || positions[0];
+        const mapping = purpose === "headphones"
+          ? [{slot: "FL", side: "left", id: "1@1"}, {slot: "FR", side: "right", id: `2@${right}`}]
+          : slots.flatMap((slot, i) => slot ? [{slot, side: "left", id: `${i + 1}@1`}, {slot, side: "right", id: `${i + 1}@${right}`}] : []);
+        const map = purpose === "headphones" ? `left=1@1,right=2@${right}`
+          : purpose === "brir" ? mapping.map(e => `${e.slot}.${e.side}=${e.id}`).join(",")
+          : "FL=1@1,FR=2@1,SL=3@1,SR=4@1";
         return answer(ok({format: "dirac", path, title: "Living room", sample_rate: 48000,
           microphone: "Umik-1  Gain: 18dB", mic_calibration: true, positions,
           speakers: names.map((name, i) => ({index: i + 1, name, subwoofer: i >= 4, slot: slots[i]})),
           measurements: positions.flatMap(position => names.map((name, i) => ({id: `${i + 1}@${position}`, name,
             speaker: i + 1, position, samples: 32769, skipped: null}))),
-          mapping: slots.flatMap((slot, i) => slot ? [{slot, side: "left", id: `${i + 1}@1`}, {slot, side: "right", id: `${i + 1}@1`}] : []),
-          map: "FL=1@1,FR=2@1,SL=3@1,SR=4@1", auto: true}));
+          mapping, map, auto: true, purpose}));
       }
       return ok({format: "rew", path, title: null, sample_rate: 48000, microphone: null, mic_calibration: false,
         positions: [], speakers: [],
@@ -224,8 +233,10 @@ def mock_script(skin, theme, language, scenario):
           {id: "2", name: "FL 오른쪽 🎧", speaker: null, position: null, samples: 8192, skipped: null},
           {id: "3", name: "FR only", speaker: null, position: null, samples: 0, skipped: "no_impulse_response"},
           {id: "4", name: "secs aver", speaker: null, position: null, samples: 131072, skipped: null}],
-        mapping: [{slot: "FL", side: "left", id: "1"}, {slot: "FL", side: "right", id: "2"}],
-        map: "FL.left=1,FL.right=2", auto: true});
+        mapping: purpose === "headphones"
+          ? [{slot: "FL", side: "left", id: "1"}, {slot: "FR", side: "right", id: "2"}]
+          : [{slot: "FL", side: "left", id: "1"}, {slot: "FL", side: "right", id: "2"}],
+        map: purpose === "headphones" ? "left=1,right=2" : "FL.left=1,FL.right=2", auto: true, purpose});
     },
     open_path: path => ok({path}), open_url: url => ok({url}),
     generate_sweep_set: () => ok({files: [], play_path: null}), detect_sweep: () => ok({found: false, sidecar: false}),
@@ -933,7 +944,7 @@ def room_file_checks(browser):
         rows = page.locator("#bf-room-file-result tbody tr")
         rows.nth(3).wait_for()
         assert rows.count() == 4
-        assert page.locator(".room-file-summary").inner_text().endswith("3 measurements with an impulse response, 48000 Hz")
+        assert page.locator("#bf-room-file-result .room-file-summary").inner_text().endswith("3 measurements with an impulse response, 48000 Hz")
 
         def slot(i, rows=rows):
             return rows.nth(i).locator('select[data-room-field="slot"]')
@@ -969,12 +980,12 @@ def room_file_checks(browser):
         page.locator("#btn-generate-brir").click()
         page.wait_for_timeout(300)
         assert page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length") == before
-        page.locator(".room-file-positions select").first.wait_for()
+        page.locator("#bf-room-file-result .room-file-positions select").first.wait_for()
         assert rows.count() == 6
         assert [slot(i).input_value() for i in range(6)] == ["FL", "FR", "SL", "SR", "", ""]
         assert "Subwoofer" in rows.nth(4).inner_text()
         assert "calibration" in page.locator("#bf-room-file-result").inner_text()
-        page.locator('.room-file-positions select[data-room-field="right"]').select_option("2")
+        page.locator('#bf-room-file-result .room-file-positions select[data-room-field="right"]').select_option("2")
         request = request_brir(page)
         assert request["room_measurement_map"] == ("FL.left=1@1,FL.right=1@2,FR.left=2@1,FR.right=2@2,"
                                                    "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2"), request
@@ -993,6 +1004,182 @@ def room_file_checks(browser):
         assert not errors, errors
         context.close()
     print("Gallery room file checks: source toggle, Browse kind, automatic table, duplicate block, REW and Dirac maps, missing/unreadable files, folder source OK", flush=True)
+
+
+def _starts(page, method):
+    return page.evaluate(f"galleryCalls.filter(c => c.method === '{method}').length")
+
+
+def _blocked(page):
+    """Generate starts no job while a measurement file's screen has a problem."""
+    before = _starts(page, "start_brir")
+    page.locator("#btn-generate-brir").click()
+    page.wait_for_timeout(100)
+    return _starts(page, "start_brir") == before
+
+
+def brir_file_checks(browser):
+    """BRIR measurements from a REW or Dirac Live file (ADR 0011): the row sits
+    in Input Files and shows the file block only for the file source; the
+    inspection asks for the brir purpose; a REW measurement is one ear (no
+    "both"), a speaker with one ear or a missing FL keeps the job from
+    starting; Dirac's two ears start at positions 1 and 2, one position for
+    both ears or a one-position project blocks; the project's calibration is
+    not offered; the folder source sends no file. Both skins send the same."""
+    def request_brir(page):
+        request = brir_request(page)
+        if page.locator("#job-modal").is_visible():
+            page.locator("#job-modal-close").click()
+        return request
+
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "en", "idle")
+        navigate(page, "processing")
+        assert page.locator("#bf-brir-source-row").is_visible()
+        assert not page.locator("#bf-brir-file-block").is_visible()
+        request = request_brir(page)
+        assert "brir_measurement_file" not in request and "brir_measurement_map" not in request, request
+
+        page.locator("#bf-brir-source").select_option("file")
+        assert page.locator("#bf-brir-file-block").is_visible()
+        assert page.locator("#bf-brir-file-result").inner_text() == page.evaluate("t('room_file_choose')")
+        assert _blocked(page)
+        page.locator("#bf-brir-file-block .btn-link").click()
+        rows = page.locator("#bf-brir-file-result tbody tr")
+        rows.nth(3).wait_for()
+        assert page.evaluate("galleryCalls.some(c => c.method === 'inspect_room_measurements' && c.args[0].purpose === 'brir')")
+        status = page.locator("#bf-brir-file-status")
+
+        def slot(i, rows=rows):
+            return rows.nth(i).locator('select[data-room-field="slot"]')
+
+        def side(i, rows=rows):
+            return rows.nth(i).locator('select[data-room-field="side"]')
+
+        assert [slot(i).input_value() for i in range(4)] == ["FL", "FL", "", ""]
+        assert [side(i).input_value() for i in range(2)] == ["left", "right"]
+        assert side(0).locator("option").count() == 2, "a BRIR measurement is one ear"
+        assert status.inner_text() == page.evaluate("t('hint_brir_file')")
+
+        slot(3).select_option("FR")
+        assert side(3).input_value() == "left"
+        assert status.inner_text() == page.evaluate("fmt(t('brir_file_incomplete'), {speakers: 'FR'})")
+        assert rows.nth(3).get_attribute("data-state") == "error"
+        assert _blocked(page)
+        slot(3).select_option("")
+        slot(0).select_option("FR")
+        slot(1).select_option("FR")
+        assert status.inner_text() == page.evaluate("t('brir_file_needs_fl')")
+        assert _blocked(page)
+        slot(0).select_option("FL")
+        slot(1).select_option("FL")
+        side(1).select_option("left")
+        assert status.inner_text() == page.evaluate("t('room_file_duplicate')")
+        side(1).select_option("right")
+        request = request_brir(page)
+        assert request["brir_measurement_file"] == "D:/Measurements/living room.mdat", request
+        assert request["brir_measurement_map"] == "FL.left=1,FL.right=2", request
+
+        page.locator("#bf-brir-file").fill("D:/Dirac/living room.liveproject")
+        positions = page.locator("#bf-brir-file-result .room-file-positions select")
+        positions.first.wait_for()
+        assert [positions.nth(i).input_value() for i in range(2)] == ["1", "2"]
+        text = " ".join(page.locator("#bf-brir-file-result").inner_text().split())  # rendered spaces collapse
+        assert page.evaluate("t('hint_brir_file_dirac')") in text
+        assert " ".join(page.evaluate("fmt(t('room_file_microphone'), {name: 'Umik-1  Gain: 18dB'})").split()) in text
+        assert page.evaluate("t('room_file_microphone_calibrated').split('.')[1].trim()") not in text
+        request = request_brir(page)
+        assert request["brir_measurement_map"] == ("FL.left=1@1,FL.right=1@2,FR.left=2@1,FR.right=2@2,"
+                                                   "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2"), request
+        positions.nth(1).select_option("1")
+        assert status.inner_text() == page.evaluate("t('brir_file_same_position')")
+        assert _blocked(page)
+
+        page.locator("#bf-brir-file").fill("D:/Dirac/single position.liveproject")
+        page.locator("#bf-brir-file-result .room-file-positions select").first.wait_for()
+        page.wait_for_function("document.querySelector('#bf-brir-file-status')?.textContent === t('brir_file_one_position')")
+        assert _blocked(page)
+
+        page.locator("#bf-brir-source").select_option("folder")
+        assert not page.locator("#bf-brir-file-block").is_visible()
+        request = request_brir(page)
+        assert "brir_measurement_file" not in request and "brir_measurement_map" not in request, request
+        assert not errors, errors
+        context.close()
+    print("Gallery BRIR file checks: source row, brir purpose, one ear per REW measurement, incomplete/FL/duplicate "
+          "blocks, Dirac ear positions, one-position block, no calibration line, folder source OK", flush=True)
+
+
+def headphone_file_checks(browser):
+    """Headphone measurement from a REW or Dirac Live file (ADR 0011): the file
+    source hides the headphone file row and shows two earcup selects that
+    start from the file's automatic choice; the request carries left=,right=
+    and no headphone_compensation_file; one measurement for both earcups or a
+    missing one blocks the job, but only while compensation is on; Dirac
+    options name speaker and position. Both skins send the same."""
+    def request_brir(page):
+        request = brir_request(page)
+        if page.locator("#job-modal").is_visible():
+            page.locator("#job-modal-close").click()
+        return request
+
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "en", "idle")
+        navigate(page, "processing")
+        disclosure(page, "headphone", True)
+        assert page.locator("#bf-hp-folder-row").is_visible() and not page.locator("#bf-hp-file-block").is_visible()
+        page.locator("#bf-headphone-file").fill("my headphones.wav")
+        request = request_brir(page)
+        assert request["headphone_compensation_file"] == "my headphones.wav", request
+        assert "headphone_measurement_file" not in request, request
+
+        page.locator("#bf-hp-source").select_option("file")
+        assert not page.locator("#bf-hp-folder-row").is_visible() and page.locator("#bf-hp-file-block").is_visible()
+        page.locator("#bf-hp-file-block .btn-link").click()
+        left = page.locator('#bf-hp-file-result select[data-room-field="hp-left"]')
+        right = page.locator('#bf-hp-file-result select[data-room-field="hp-right"]')
+        left.wait_for()
+        assert page.evaluate("galleryCalls.some(c => c.method === 'inspect_room_measurements' && c.args[0].purpose === 'headphones')")
+        status = page.locator("#bf-hp-file-status")
+        assert (left.input_value(), right.input_value()) == ("1", "2")
+        assert left.locator("option").count() == 4, "a choice prompt and the three measurements with an impulse response"
+        assert status.inner_text() == page.evaluate("t('hint_headphone_file')")
+        request = request_brir(page)
+        assert request["headphone_measurement_file"] == "D:/Measurements/living room.mdat", request
+        assert request["headphone_measurement_map"] == "left=1,right=2", request
+        assert "headphone_compensation_file" not in request, request
+
+        right.select_option("1")
+        assert status.inner_text() == page.evaluate("t('headphone_file_same')")
+        assert page.locator('#bf-hp-file-result label[data-room-key="hp-right"]').get_attribute("data-state") == "error"
+        assert _blocked(page)
+        right.select_option("")
+        assert status.inner_text() == page.evaluate("t('headphone_file_incomplete')")
+        assert _blocked(page)
+        disclosure(page, "headphone", False)
+        request = request_brir(page)
+        assert "headphone_measurement_file" not in request and request["do_headphone_compensation"] is False, request
+        disclosure(page, "headphone", True)
+        right.select_option("4")
+        request = request_brir(page)
+        assert request["headphone_measurement_map"] == "left=1,right=4", request
+
+        page.locator("#bf-hp-file").fill("D:/Dirac/living room.liveproject")
+        page.wait_for_function("document.querySelector('#bf-hp-file-result select[data-room-field=\"hp-left\"]')?.value === '1@1'")
+        assert right.input_value() == "2@2"
+        assert left.locator("option[value='1@1']").inner_text() == page.evaluate(
+            "fmt(t('option_measurement_at_position'), {name: 'Left', n: 1})")
+        request = request_brir(page)
+        assert request["headphone_measurement_map"] == "left=1@1,right=2@2", request
+
+        page.locator("#bf-hp-source").select_option("folder")
+        assert page.locator("#bf-hp-folder-row").is_visible()
+        request = request_brir(page)
+        assert "headphone_measurement_file" not in request and "headphone_measurement_map" not in request, request
+        assert not errors, errors
+        context.close()
+    print("Gallery headphone file checks: source row, earcup selects from the automatic choice, map without the "
+          "recording file, same/missing blocks only while on, Dirac option names, folder source OK", flush=True)
 
 
 def vbass_checks(browser):
@@ -1151,6 +1338,8 @@ def render_gallery(output):
         room_phase_checks(browser)
         room_tuning2_checks(browser)
         room_file_checks(browser)
+        brir_file_checks(browser)
+        headphone_file_checks(browser)
         vbass_checks(browser)
         tooltip_checks(browser)
         shell_checks(browser)
@@ -1261,6 +1450,31 @@ def render_gallery(output):
                     page.locator("#bf-room-file-result tbody tr").nth(3).locator('select[data-room-field="slot"]').select_option("FR")
                 page.locator("#bf-room-file-block").scroll_into_view_if_needed()
                 shots.append(shoot(page, output, f"processing-room-file-{skin}-{language}-{theme}-{kind}", errors))
+            context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "idle")
+            navigate(page, "processing")
+            page.locator("#bf-brir-source").select_option("file")
+            for kind, path, rows in (("rew", "D:/Measurements/living room.mdat", 4),
+                                     ("dirac", "D:/Dirac/living room.liveproject", 6)):
+                page.locator("#bf-brir-file").fill(path)
+                page.locator("#bf-brir-file-result tbody tr").nth(rows - 1).wait_for()
+                if kind == "rew":  # a speaker with one ear, as the screen reports it
+                    page.locator("#bf-brir-file-result tbody tr").nth(3).locator('select[data-room-field="slot"]').select_option("FR")
+                page.locator("#bf-brir-file-block").scroll_into_view_if_needed()
+                shots.append(shoot(page, output, f"processing-brir-file-{skin}-{language}-{theme}-{kind}", errors))
+            context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "idle")
+            navigate(page, "processing")
+            disclosure(page, "headphone", True)
+            page.locator("#bf-hp-source").select_option("file")
+            for kind, path, value in (("rew", "D:/Measurements/living room.mdat", "1"),
+                                      ("dirac", "D:/Dirac/living room.liveproject", "1@1")):
+                page.locator("#bf-hp-file").fill(path)
+                page.wait_for_function(f"document.querySelector('#bf-hp-file-result select[data-room-field=\"hp-left\"]')?.value === '{value}'")
+                page.locator("#bf-hp-file-block").scroll_into_view_if_needed()
+                shots.append(shoot(page, output, f"processing-headphone-file-{skin}-{language}-{theme}-{kind}", errors))
             context.close()
         for theme, language in itertools.product(THEMES, LANGUAGES):
             context, page, errors = open_page(browser, "studio", theme, language, "update")

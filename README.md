@@ -128,10 +128,10 @@ native.run(
 | 파일 | 설명 |
 | --- | --- |
 | `FL,FR.wav`, `FC.wav`, `SL,SR.wav` 등 | 스피커 측정 파일입니다. 파일 이름의 스피커 이름을 보고 채널을 판단합니다. `FC,X.wav`의 `X`는 건너뛸 sweep 자리입니다(센터 스피커를 스테레오 분절 sweep으로 녹음했을 때 나머지 한쪽). 원본 Impulcifer와 같은 규칙입니다. 3.x는 FL·FR·FC·BL·BR·SL·SR·WL·WR·TFL·TFR·TSL·TSR·TBL·TBR에 몰입형 포맷용 코드 25개(높이층 `HFL`·`HFC`·`HBL`, 천정 `TC`, 바닥 `DFL`·`DFC`, Atmos의 `SL1`·`SL2`·`BL1`·`BL2` 등)를 더해 모두 40개를 읽습니다. 코드는 위치를 가리키며 포맷 라벨과 다를 수 있습니다(22.2의 FL은 왼쪽 60°라서 `WL`입니다). 전체 표는 [채널 순서 문서](docs/brir-channel-order.md#3x-몰입형-포맷)에 있습니다. |
-| `headphones.wav` | 기본 헤드폰 보정 측정 파일입니다. `--headphone_compensation_file`로 다른 파일을 지정할 수 있습니다. |
+| `headphones.wav` | 기본 헤드폰 보정 측정 파일입니다. `--headphone_compensation_file`로 다른 파일을 지정할 수 있고, REW·Dirac Live 측정 파일로 대신할 수도 있습니다. |
 | `room-target.csv` | 룸 보정 목표 응답입니다. 없으면 평탄한 목표를 씁니다. |
 | `room-mic-calibration.csv` 또는 `room-mic-calibration.txt` | 룸 측정 마이크 보정 파일입니다. 없으면 마이크 보정을 건너뜁니다. |
-| REW `.mdat` 또는 Dirac Live `.liveproject` | 폴더의 `room-*.wav` 대신 쓸 룸 측정입니다. 폴더 밖에 있어도 되며, `--room_measurement_file`이나 앱의 룸 보정 칸에서 고를 수 있습니다. 아래 [REW와 Dirac Live 룸 측정](#rew와-dirac-live-룸-측정)을 참고하세요. |
+| REW `.mdat` 또는 Dirac Live `.liveproject` | 폴더의 스피커 측정 파일, `headphones.wav`, `room-*.wav`를 대신할 수 있는 측정입니다. 폴더 밖에 있어도 됩니다. 아래 [REW와 Dirac Live 측정 파일](#rew와-dirac-live-측정-파일)을 참고하세요. |
 | `eq.csv`, `eq-left.csv`, `eq-right.csv` | Custom EQ 파일입니다. `eq.csv`는 양쪽 공통, `eq-left.csv`와 `eq-right.csv`는 좌우 개별 EQ입니다. 같은 이름의 `.txt`(예: `eq.txt`)도 읽습니다. |
 | `test.wav` | 녹음 때 쓴 sweep입니다. 녹음 화면에서 sweep 설정을 바꿔 녹음하면 자동으로 저장되고, 처리할 때 그대로 씁니다. |
 
@@ -140,17 +140,35 @@ Custom EQ 파일은 두 가지 형식을 읽습니다. 형식은 확장자가 �
 * **AutoEQ 결과 CSV:** `frequency,raw,error,...` 형식입니다. error 열이 없는 2열(`주파수 게인`) 파일은 값을 그대로 적용할 EQ 게인 곡선으로 읽습니다.
 * **EqualizerAPO(-XT) 설정 텍스트:** `Preamp:`, `Filter n: ON PK Fc ... Hz Gain ... dB Q ...`, `GraphicEQ:` 형식입니다. AutoEQ의 ParametricEQ.txt·GraphicEQ.txt 내보내기와 EqualizerAPO-XT에서 저장한 설정을 그대로 쓸 수 있습니다. 크기 응답으로 나타낼 수 있는 명령(Filter 바이쿼드·IIR, Preamp, GraphicEQ, `Convolution`)은 적용하고, 나타낼 수 없는 명령(`Copy`, `Delay`, `MultiConvolution`, VSTPlugin 등)은 경고를 남기고 건너뜁니다. `Convolution:`은 IR 파일의 크기 응답만 반영하고(위상 제외), EqualizerAPO처럼 샘플레이트가 다르면 적용하지 않습니다. `Channel: L`·`Channel: R` 구간은 좌우 EQ 곡선에 따로 적용하고, `Include:`는 같은 폴더 기준 상대 경로면 따라 들어가며, `If: sampleRate == 48000` 같은 단순한 샘플레이트 조건은 평가합니다(그 밖의 조건식 구간은 건너뜁니다).
 
-### REW와 Dirac Live 룸 측정
+### REW와 Dirac Live 측정 파일
 
-REW가 저장한 측정 파일(`.mdat`)과 Dirac Live 프로젝트(`.liveproject`)에 든 측정 마이크 응답을 룸 보정과 가상 룸 튜닝의 룸 측정으로 쓸 수 있습니다. 이미 임펄스 응답이므로 Impulcifer의 sweep으로 다시 잴 필요가 없습니다. 바이노럴 녹음, 헤드폰 측정, `room-target.csv`, `room.wav`는 지금처럼 폴더에서 읽고, 측정 파일을 정하면 폴더의 `room-*.wav`는 읽지 않습니다.
+REW가 저장한 측정 파일(`.mdat`)과 Dirac Live 프로젝트(`.liveproject`)에는 이미 임펄스 응답이 들어 있습니다. Impulcifer의 sweep으로 다시 잴 필요 없이 아래 세 입력으로 쓸 수 있습니다. 같은 파일을 여러 용도에 써도 되고, 대응은 용도마다 따로 정합니다. 결과 파일과 나머지 입력(`room-target.csv`, `room.wav`, EQ 파일)은 지금처럼 녹음 폴더를 씁니다.
 
-측정마다 어느 스피커의 어느 귀 위치인지 정해야 합니다. 앱에서는 파일을 읽어 자동으로 정한 대응이 표에 나오고, 표에서 대응을 고칠 수 있습니다.
+| 용도 | 대신하는 파일 | 앱에서 고르는 곳 | CLI |
+| --- | --- | --- | --- |
+| BRIR 측정 | 폴더의 스피커 측정 파일(`FL,FR.wav` 등) | 입력 파일 칸의 BRIR 측정 | `--brir_measurement_file` |
+| 헤드폰 측정 | `headphones.wav` | 헤드폰 보정 칸 | `--headphone_measurement_file` |
+| 룸 측정 | `room-*.wav` | 룸 보정 칸 | `--room_measurement_file` |
+
+측정마다 어느 스피커의 어느 귀인지 정해야 합니다. 앱에서는 파일을 읽어 자동으로 정한 대응이 나오고, 그 자리에서 고칠 수 있습니다.
+
+**BRIR 측정.** 바이노럴 마이크를 귀에 넣고 REW나 Dirac Live로 스피커를 잰 파일입니다. macOS처럼 Impulcifer가 8채널을 넘는 sweep을 낼 수 없는 환경에서도, 리시버의 Dirac Live가 낸 sweep으로 BRIR을 만들 수 있습니다.
+
+* 측정 하나가 한쪽 귀입니다. 쓰는 스피커마다 두 귀가 모두 있어야 하고, FL은 꼭 있어야 합니다. 다른 스피커를 FL에 맞춰 정렬하기 때문입니다.
+* **REW:** 측정 이름에서 스피커와 귀를 읽습니다(`FL left`, `FL 오른쪽`). 귀가 적히지 않은 측정은 자동으로 대응하지 않습니다. 두 귀를 한 번에 재거나 타이밍 기준을 써야 두 귀의 시간차가 남습니다.
+* **Dirac Live:** 마이크 입력이 하나이므로 두 귀를 서로 다른 위치에서 잽니다. 가장 낮은 위치를 왼쪽 귀, 그다음 위치를 오른쪽 귀로 보며, 다른 위치를 고를 수도 있습니다.
+* 폴더의 스피커 측정 파일과 섞어 쓰지는 않습니다. 두 출처는 레벨 기준이 달라서, 섞으면 스피커 사이 레벨이 틀어집니다.
+* 작업 기록에 스피커마다 두 귀의 시간차가 나옵니다. 시간차가 1 ms를 넘거나 옆쪽 스피커의 시간차가 모두 0이면 경고합니다. Dirac Live에서 위치 사이 지연이 바뀌었거나, 타이밍 기준 없이 두 귀를 따로 잰 경우에 이렇게 됩니다.
+* 프로젝트의 마이크 보정 곡선은 쓰지 않습니다. 같은 바이노럴 마이크로 잰 헤드폰 측정이 마이크 응답을 지우기 때문입니다.
+
+**헤드폰 측정.** 왼쪽 이어컵을 왼쪽 귀에서, 오른쪽 이어컵을 오른쪽 귀에서 잰 측정 두 개를 고릅니다. REW는 이름의 귀 단어(`left`, `R`, `왼쪽` 등)로 정하고, 그런 이름이 없는데 측정이 둘뿐이면 파일 순서로 정합니다. Dirac Live는 FL 열을 왼쪽 귀 위치에서, FR 열을 오른쪽 귀 위치에서 씁니다.
+
+**룸 측정.** 측정 마이크로 잰 응답을 룸 보정과 가상 룸 튜닝에 씁니다. 측정 파일을 정하면 폴더의 `room-*.wav`는 읽지 않습니다.
 
 * **REW:** 측정 이름에서 스피커와 귀를 읽습니다. `FL left`는 FL의 왼쪽 귀 위치이고, `L P1`처럼 귀가 없으면 두 귀 위치에 같은 측정을 씁니다. 임펄스 응답이 없는 측정(주파수 응답만 가져온 것 등)은 쓸 수 없습니다.
 * **Dirac Live:** 스피커 이름(`Left`, `LeftSurround` 등)에서 스피커를 읽고, 두 귀 위치에 위치 1(Dirac Live의 주 청취 위치)을 씁니다. 다른 위치를 귀 위치로 고를 수도 있습니다. Dirac Live의 응답은 0.68초라서, 룸 EQ가 측정의 잡음 바닥으로 부스트를 제한하는 검사(1초 이상 필요)는 건너뜁니다. 최대 부스트와 저역 롤오프 검출은 그대로 적용됩니다. 프로젝트에 마이크 보정 곡선이 들어 있으면, 마이크 보정 파일을 따로 정하지 않았을 때 그 곡선을 씁니다. 프로젝트의 측정만 읽고 필터 설계는 읽지 않습니다.
-* BRIR에는 서브우퍼 채널이 없으므로, 서브우퍼 측정은 스피커를 직접 고를 때만 씁니다.
 
-두 형식의 세부와 자동 대응 규칙은 [외부 룸 측정 문서](docs/rust/EXTERNAL_MEASUREMENTS.md)에, 결정 근거는 ADR 0010에 있습니다.
+BRIR에는 서브우퍼 채널이 없으므로, 서브우퍼 측정은 스피커를 직접 고를 때만 씁니다. 두 형식의 세부와 자동 대응 규칙은 [외부 측정 문서](docs/rust/EXTERNAL_MEASUREMENTS.md)에, 결정 근거는 ADR 0010(룸 측정)과 ADR 0011(BRIR·헤드폰 측정)에 있습니다.
 
 ## 출력 파일
 
@@ -183,6 +201,10 @@ REW가 저장한 측정 파일(`.mdat`)과 Dirac Live 프로젝트(`.liveproject
 | `--room_mic_calibration PATH` | `dir_path/room-mic-calibration.csv`, 없으면 `.txt` | 룸 측정 마이크 보정 파일입니다. |
 | `--room_measurement_file PATH` | 없음 | 폴더의 `room-*.wav` 대신 쓸 REW 측정 파일(`.mdat`)이나 Dirac Live 프로젝트(`.liveproject`)입니다. |
 | `--room_measurement_map MAP` | `auto` | 측정 파일의 어느 측정을 어느 스피커와 귀 위치에 쓸지 정합니다. REW는 측정 순번(`FL.left=1,FL.right=2`), Dirac Live는 `스피커 번호@위치`(`FL=1@1,FR=2@1`, 두 귀 위치에 같은 측정)입니다. 비우거나 `auto`면 이름에서 정합니다. |
+| `--brir_measurement_file PATH` | 없음 | 폴더의 스피커 측정 파일 대신 쓸 REW 측정 파일(`.mdat`)이나 Dirac Live 프로젝트(`.liveproject`)입니다. |
+| `--brir_measurement_map MAP` | `auto` | 측정 파일의 어느 측정을 어느 스피커의 어느 귀에 쓸지 정합니다. 항목 하나가 귀 하나입니다(REW는 `FL.left=1,FL.right=2`, Dirac Live는 `FL.left=1@1,FL.right=1@2`). 비우거나 `auto`면 이름에서 정합니다. |
+| `--headphone_measurement_file PATH` | 없음 | `headphones.wav` 대신 쓸 REW 측정 파일이나 Dirac Live 프로젝트입니다. |
+| `--headphone_measurement_map MAP` | `auto` | 왼쪽 귀에서 잰 왼쪽 이어컵과 오른쪽 귀에서 잰 오른쪽 이어컵의 측정입니다(`left=1,right=2`). 비우거나 `auto`면 이름에서 정합니다. |
 | `--headphone_compensation_file PATH` | `dir_path/headphones.wav` | 헤드폰 보정 측정 WAV입니다. 폴더를 주면 흔히 쓰는 파일 이름을 찾아봅니다. |
 | `--fs HZ` | 측정 신호의 샘플레이트 | 출력 샘플레이트입니다. 지정하면 결과를 그 샘플레이트로 맞춥니다. |
 
