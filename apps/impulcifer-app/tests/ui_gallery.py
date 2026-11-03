@@ -202,17 +202,20 @@ def mock_script(skin, theme, language, scenario):
       const path = request.path;
       if (path.includes("missing")) return Promise.resolve(error("FILE_NOT_FOUND", "file not found", {path}));
       if (path.includes("broken")) return Promise.resolve(error("INVALID_REQUEST", "not a REW measurement file", {path}));
+      // A path with "slow" answers after 1.5 s, so a check can act while it is pending.
+      const answer = response => path.includes("slow")
+        ? new Promise(resolve => setTimeout(() => resolve(response), 1500)) : response;
       if (path.endsWith(".liveproject")) {
         const names = ["Left", "Right", "LeftSurround", "RightSurround", "Subwoofer", "Subwoofer"];
         const slots = ["FL", "FR", "SL", "SR", null, null];
         const positions = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-        return ok({format: "dirac", path, title: "Living room", sample_rate: 48000,
+        return answer(ok({format: "dirac", path, title: "Living room", sample_rate: 48000,
           microphone: "Umik-1  Gain: 18dB", mic_calibration: true, positions,
           speakers: names.map((name, i) => ({index: i + 1, name, subwoofer: i >= 4, slot: slots[i]})),
           measurements: positions.flatMap(position => names.map((name, i) => ({id: `${i + 1}@${position}`, name,
             speaker: i + 1, position, samples: 32769, skipped: null}))),
           mapping: slots.flatMap((slot, i) => slot ? [{slot, side: "left", id: `${i + 1}@1`}, {slot, side: "right", id: `${i + 1}@1`}] : []),
-          map: "FL=1@1,FR=2@1,SL=3@1,SR=4@1", auto: true});
+          map: "FL=1@1,FR=2@1,SL=3@1,SR=4@1", auto: true}));
       }
       return ok({format: "rew", path, title: null, sample_rate: 48000, microphone: null, mic_calibration: false,
         positions: [], speakers: [],
@@ -958,7 +961,14 @@ def room_file_checks(browser):
         assert request["room_measurement_file"] == "D:/Measurements/living room.mdat", request
         assert request["room_measurement_map"] == "FL.left=1,FL.right=2,FR=4", request
 
-        page.locator("#bf-room-file").fill("D:/Dirac/living room.liveproject")
+        # Until the new file's inspection answers, the REW table is gone and
+        # Generate starts nothing: it must not send the new path with the old map.
+        page.locator("#bf-room-file").fill("D:/Dirac/slow living room.liveproject")
+        assert rows.count() == 0
+        before = page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length")
+        page.locator("#btn-generate-brir").click()
+        page.wait_for_timeout(300)
+        assert page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length") == before
         page.locator(".room-file-positions select").first.wait_for()
         assert rows.count() == 6
         assert [slot(i).input_value() for i in range(6)] == ["FL", "FR", "SL", "SR", "", ""]

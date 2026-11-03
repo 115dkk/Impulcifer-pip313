@@ -41,7 +41,8 @@ const state = {
   recoveryRequestKey: "",
   eqChoices: { both: { mode: "folder" }, left: { mode: "folder" }, right: { mode: "folder" } },
   eqInspection: null, eqError: null, eqRevision: 0, eqTimer: undefined,
-  roomFile: null, roomFileError: null, roomFileChoices: null, roomFileRevision: 0, roomFileTimer: undefined,
+  roomFile: null, roomFileError: null, roomFileChoices: null, roomFileInput: "", roomFileRevision: 0,
+  roomFileTimer: undefined,
 };
 
 /* Full speaker layout — must mirror core/constants.py SPEAKER_NAMES
@@ -2344,7 +2345,8 @@ function gatherBrirPayload() {
     if (roomFileMode()) {
       args.room_measurement_file = val("bf-room-file") || null;
       const { map } = roomFileAssignment();
-      args.room_measurement_map = state.roomFile && map ? map : null;
+      const current = state.roomFile && state.roomFileInput === val("bf-room-file");
+      args.room_measurement_map = current && map ? map : null;
     }
     args.room_mode = mode;
     if (mode === "tuning") addRoomTuningArgs(args);
@@ -2905,6 +2907,14 @@ function scheduleRoomFileInspection(delay = 250) {
   window.clearTimeout(state.roomFileTimer);
   const revision = ++state.roomFileRevision;
   const path = val("bf-room-file");
+  // Another path drops the previous file's table at once, so nothing can be
+  // sent with an assignment that belongs to a different file.
+  if (path !== state.roomFileInput) {
+    state.roomFile = null;
+    state.roomFileError = null;
+    state.roomFileInput = "";
+    renderRoomFile();
+  }
   if (!roomFileMode() || !path || !window.pywebview) {
     state.roomFile = null;
     state.roomFileError = null;
@@ -2919,6 +2929,7 @@ function scheduleRoomFileInspection(delay = 250) {
     if (revision !== state.roomFileRevision) return;
     state.roomFile = response.ok ? response.data : null;
     state.roomFileError = response.ok ? null : response.error;
+    state.roomFileInput = path;
     if (response.ok && state.roomFileChoices?.path !== response.data.path) {
       state.roomFileChoices = roomFileChoicesFrom(response.data);
     }
@@ -2980,12 +2991,12 @@ function roomFileAssignment() {
   return { map: entries.join(","), duplicates, assigned: entries.length };
 }
 
-/** Whether the job cannot use the file as the screen stands: no file, an
- * unreadable one, a slot and ear position claimed twice, or nothing assigned.
- * A file still being inspected does not block; the job checks it again. */
+/** Whether the job cannot use the file as the screen stands: no file, one
+ * whose inspection has not answered for the path in the field yet, an
+ * unreadable one, a slot and ear position claimed twice, or nothing assigned. */
 function roomFileBlocked() {
   if (!val("bf-room-file") || state.roomFileError) return true;
-  if (!state.roomFile) return false;
+  if (!state.roomFile || state.roomFileInput !== val("bf-room-file")) return true;
   const { duplicates, assigned } = roomFileAssignment();
   return duplicates.size > 0 || assigned === 0;
 }

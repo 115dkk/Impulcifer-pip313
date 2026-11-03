@@ -243,8 +243,9 @@ interface AppState {
   recoveryRunRevision: number; recoveryRequestKey: string;
   eqChoices: Record<EqSlotName, EqChoice>; eqInspection: EqInspection | null; eqError: IpcError | null;
   eqRevision: number; eqTimer: number | undefined;
+  /* roomFileInput is the field's text the current inspection answered for ("" while none has). */
   roomFile: RoomFileInspection | null; roomFileError: IpcError | null; roomFileChoices: RoomFileChoices | null;
-  roomFileRevision: number; roomFileTimer: number | undefined;
+  roomFileInput: string; roomFileRevision: number; roomFileTimer: number | undefined;
 }
 interface Window {
   pywebview?: { api: IpcApi };
