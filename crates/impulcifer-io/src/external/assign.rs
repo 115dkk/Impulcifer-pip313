@@ -10,6 +10,32 @@ pub enum EarSide {
     Right,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Purpose {
+    Room,
+    Brir,
+    Headphones,
+}
+
+impl Purpose {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "room" => Some(Self::Room),
+            "brir" => Some(Self::Brir),
+            "headphones" => Some(Self::Headphones),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Room => "room",
+            Self::Brir => "brir",
+            Self::Headphones => "headphones",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Assignment {
     pub slot: &'static str,
@@ -78,20 +104,25 @@ pub(crate) fn is_subwoofer_name(label: &str) -> bool {
 }
 
 pub fn auto_assign(file: &ExternalFile) -> Vec<Assignment> {
-    let assignments = match file.format {
-        ExternalFormat::Rew => auto_rew(file),
-        ExternalFormat::Dirac => auto_dirac(file),
+    auto_assign_for(file, Purpose::Room)
+}
+
+pub fn auto_assign_for(file: &ExternalFile, purpose: Purpose) -> Vec<Assignment> {
+    let assignments = match (file.format, purpose) {
+        (ExternalFormat::Rew, Purpose::Room) => auto_rew_room(file),
+        (ExternalFormat::Dirac, Purpose::Room) => auto_dirac_room(file),
+        (ExternalFormat::Rew, Purpose::Brir) => auto_rew_brir(file),
+        (ExternalFormat::Dirac, Purpose::Brir) => auto_dirac_brir(file),
+        (ExternalFormat::Rew, Purpose::Headphones) => auto_rew_headphones(file),
+        (ExternalFormat::Dirac, Purpose::Headphones) => auto_dirac_headphones(file),
     };
     canonical(assignments)
 }
 
-fn auto_rew(file: &ExternalFile) -> Vec<Assignment> {
+fn auto_rew_room(file: &ExternalFile) -> Vec<Assignment> {
     let mut assigned = HashSet::new();
     let mut result = Vec::new();
-    for measurement in &file.measurements {
-        if measurement.skipped.is_some() {
-            continue;
-        }
+    for measurement in usable(file) {
         let Some((slot, ear)) = rew_title(&measurement.name) else {
             continue;
         };
@@ -113,12 +144,52 @@ fn auto_rew(file: &ExternalFile) -> Vec<Assignment> {
     result
 }
 
+fn auto_rew_brir(file: &ExternalFile) -> Vec<Assignment> {
+    let mut assigned = HashSet::new();
+    usable(file)
+        .filter_map(|measurement| {
+            let (slot, side) = rew_title(&measurement.name)?;
+            let side = side?;
+            assigned.insert((slot, side)).then(|| Assignment {
+                slot,
+                side,
+                id: measurement.id.clone(),
+            })
+        })
+        .collect()
+}
+
+fn auto_rew_headphones(file: &ExternalFile) -> Vec<Assignment> {
+    let measurements: Vec<_> = usable(file).collect();
+    let mut assigned = HashSet::new();
+    let mut result = Vec::new();
+    for measurement in &measurements {
+        let Some(side) = headphone_side(&measurement.name) else {
+            continue;
+        };
+        if assigned.insert(side) {
+            result.push(headphone_assignment(side, measurement.id.clone()));
+        }
+    }
+    if result.is_empty() && measurements.len() == 2 {
+        result.push(headphone_assignment(
+            EarSide::Left,
+            measurements[0].id.clone(),
+        ));
+        result.push(headphone_assignment(
+            EarSide::Right,
+            measurements[1].id.clone(),
+        ));
+    }
+    result
+}
+
+fn usable(file: &ExternalFile) -> impl Iterator<Item = &super::ExternalMeasurement> {
+    file.measurements.iter().filter(|m| m.skipped.is_none())
+}
+
 fn rew_title(title: &str) -> Option<(&'static str, Option<EarSide>)> {
-    let tokens: Vec<String> = title
-        .split(|c: char| c.is_whitespace() || "_-,.;:/()[]".contains(c))
-        .filter(|token| !token.is_empty())
-        .map(|token| token.to_lowercase())
-        .collect();
+    let tokens = title_tokens(title);
     if tokens.iter().any(|token| is_subwoofer_name(token)) {
         return None;
     }
@@ -147,6 +218,25 @@ fn rew_title(title: &str) -> Option<(&'static str, Option<EarSide>)> {
     Some((slot, ear))
 }
 
+fn title_tokens(title: &str) -> Vec<String> {
+    title
+        .split(|c: char| c.is_whitespace() || "_-,.;:/()[]".contains(c))
+        .filter(|token| !token.is_empty())
+        .map(|token| token.to_lowercase())
+        .collect()
+}
+
+fn headphone_side(title: &str) -> Option<EarSide> {
+    let tokens = title_tokens(title);
+    tokens.iter().find_map(|token| ear_word(token)).or_else(|| {
+        tokens.iter().find_map(|token| match slot_for_label(token) {
+            Some("FL") => Some(EarSide::Left),
+            Some("FR") => Some(EarSide::Right),
+            _ => None,
+        })
+    })
+}
+
 fn ear_word(token: &str) -> Option<EarSide> {
     match token {
         "left" | "l" | "le" | "왼쪽" | "왼" | "좌" | "좌측" => Some(EarSide::Left),
@@ -155,11 +245,20 @@ fn ear_word(token: &str) -> Option<EarSide> {
     }
 }
 
-fn auto_dirac(file: &ExternalFile) -> Vec<Assignment> {
+fn ear_positions(file: &ExternalFile) -> Option<(usize, usize)> {
+    let mut positions = file.positions.clone();
+    positions.sort_unstable();
+    positions.dedup();
+    let left = *positions.first()?;
+    let right = positions.get(1).copied().unwrap_or(left);
+    Some((left, right))
+}
+
+fn auto_dirac_room(file: &ExternalFile) -> Vec<Assignment> {
     let position = if file.positions.contains(&1) {
         Some(1)
     } else {
-        file.positions.first().copied()
+        file.positions.iter().min().copied()
     };
     let Some(position) = position else {
         return Vec::new();
@@ -177,11 +276,7 @@ fn auto_dirac(file: &ExternalFile) -> Vec<Assignment> {
             continue;
         }
         let id = format!("{}@{position}", speaker.index);
-        if file
-            .measurements
-            .iter()
-            .any(|measurement| measurement.id == id && measurement.skipped.is_none())
-        {
+        if measurement_exists(file, &id) {
             for side in [EarSide::Left, EarSide::Right] {
                 result.push(Assignment {
                     slot,
@@ -194,10 +289,85 @@ fn auto_dirac(file: &ExternalFile) -> Vec<Assignment> {
     result
 }
 
+fn auto_dirac_brir(file: &ExternalFile) -> Vec<Assignment> {
+    let Some((left, right)) = ear_positions(file) else {
+        return Vec::new();
+    };
+    let mut used = HashSet::new();
+    let mut result = Vec::new();
+    for speaker in &file.speakers {
+        if speaker.subwoofer {
+            continue;
+        }
+        let Some(slot) = slot_for_label(&speaker.name) else {
+            continue;
+        };
+        if !used.insert(slot) {
+            continue;
+        }
+        for (side, position) in [(EarSide::Left, left), (EarSide::Right, right)] {
+            let id = format!("{}@{position}", speaker.index);
+            if measurement_exists(file, &id) {
+                result.push(Assignment { slot, side, id });
+            }
+        }
+    }
+    result
+}
+
+fn auto_dirac_headphones(file: &ExternalFile) -> Vec<Assignment> {
+    let Some((left_position, right_position)) = ear_positions(file) else {
+        return Vec::new();
+    };
+    let mut result = Vec::new();
+    for (wanted, side, position) in [
+        ("FL", EarSide::Left, left_position),
+        ("FR", EarSide::Right, right_position),
+    ] {
+        let Some(speaker) = file
+            .speakers
+            .iter()
+            .find(|speaker| !speaker.subwoofer && slot_for_label(&speaker.name) == Some(wanted))
+        else {
+            continue;
+        };
+        let id = format!("{}@{position}", speaker.index);
+        if measurement_exists(file, &id) {
+            result.push(headphone_assignment(side, id));
+        }
+    }
+    result
+}
+
+fn measurement_exists(file: &ExternalFile, id: &str) -> bool {
+    file.measurements
+        .iter()
+        .any(|measurement| measurement.id == id && measurement.skipped.is_none())
+}
+
+fn headphone_assignment(side: EarSide, id: String) -> Assignment {
+    Assignment {
+        slot: match side {
+            EarSide::Left => "FL",
+            EarSide::Right => "FR",
+        },
+        side,
+        id,
+    }
+}
+
 pub fn parse_map(file: &ExternalFile, map: &str) -> Result<Vec<Assignment>, ExternalError> {
+    parse_map_for(file, map, Purpose::Room)
+}
+
+pub fn parse_map_for(
+    file: &ExternalFile,
+    map: &str,
+    purpose: Purpose,
+) -> Result<Vec<Assignment>, ExternalError> {
     let map = map.trim();
     if map.is_empty() || map.eq_ignore_ascii_case("auto") {
-        return Ok(auto_assign(file));
+        return Ok(auto_assign_for(file, purpose));
     }
     let measurements: HashMap<_, _> = file
         .measurements
@@ -205,11 +375,12 @@ pub fn parse_map(file: &ExternalFile, map: &str) -> Result<Vec<Assignment>, Exte
         .map(|m| (m.id.as_str(), m))
         .collect();
     let mut assigned = HashSet::new();
-    let mut result: Vec<Assignment> = Vec::new();
+    let mut result = Vec::new();
     for entry in map.split(',') {
         let (target, id) = entry
             .split_once('=')
             .ok_or_else(|| ExternalError::new("invalid measurement map entry"))?;
+        let target = target.trim();
         let id = id.trim();
         let measurement = measurements
             .get(id)
@@ -217,20 +388,40 @@ pub fn parse_map(file: &ExternalFile, map: &str) -> Result<Vec<Assignment>, Exte
         if measurement.skipped.is_some() {
             return Err(ExternalError::new(format!("measurement is skipped: {id}")));
         }
-        let (raw_slot, sides): (&str, &[EarSide]) =
-            if let Some(slot) = target.trim().strip_suffix(".left") {
-                (slot, &[EarSide::Left])
-            } else if let Some(slot) = target.trim().strip_suffix(".right") {
-                (slot, &[EarSide::Right])
-            } else {
-                (target.trim(), &[EarSide::Left, EarSide::Right])
-            };
-        let slot = SLOTS
-            .iter()
-            .find(|slot| slot.code.eq_ignore_ascii_case(raw_slot))
-            .map(|slot| slot.code)
-            .ok_or_else(|| ExternalError::new(format!("unknown speaker slot: {raw_slot}")))?;
-        for &side in sides {
+        let targets: Vec<(&'static str, EarSide)> = match purpose {
+            Purpose::Headphones => match target.to_ascii_lowercase().as_str() {
+                "left" => vec![("FL", EarSide::Left)],
+                "right" => vec![("FR", EarSide::Right)],
+                _ => {
+                    return Err(ExternalError::new(
+                        "a headphone map entry must be left=ID or right=ID",
+                    ));
+                }
+            },
+            Purpose::Room | Purpose::Brir => {
+                let (raw_slot, sides): (&str, &[EarSide]) =
+                    if let Some(slot) = target.strip_suffix(".left") {
+                        (slot, &[EarSide::Left])
+                    } else if let Some(slot) = target.strip_suffix(".right") {
+                        (slot, &[EarSide::Right])
+                    } else if purpose == Purpose::Brir {
+                        return Err(ExternalError::new(
+                            "a BRIR map entry names one ear: use SLOT.left=ID or SLOT.right=ID",
+                        ));
+                    } else {
+                        (target, &[EarSide::Left, EarSide::Right])
+                    };
+                let slot = SLOTS
+                    .iter()
+                    .find(|slot| slot.code.eq_ignore_ascii_case(raw_slot.trim()))
+                    .map(|slot| slot.code)
+                    .ok_or_else(|| {
+                        ExternalError::new(format!("unknown speaker slot: {raw_slot}"))
+                    })?;
+                sides.iter().map(|side| (slot, *side)).collect()
+            }
+        };
+        for (slot, side) in targets {
             if !assigned.insert((slot, side)) {
                 return Err(ExternalError::new(format!(
                     "speaker slot side assigned more than once: {slot}"
@@ -247,7 +438,30 @@ pub fn parse_map(file: &ExternalFile, map: &str) -> Result<Vec<Assignment>, Exte
 }
 
 pub fn format_map(assignments: &[Assignment]) -> String {
+    format_map_for(assignments, Purpose::Room)
+}
+
+pub fn format_map_for(assignments: &[Assignment], purpose: Purpose) -> String {
     let sorted = canonical(assignments.to_vec());
+    if purpose == Purpose::Headphones {
+        return [EarSide::Left, EarSide::Right]
+            .iter()
+            .filter_map(|side| {
+                sorted.iter().find(|a| a.side == *side).map(|a| {
+                    format!(
+                        "{}={}",
+                        if *side == EarSide::Left {
+                            "left"
+                        } else {
+                            "right"
+                        },
+                        a.id
+                    )
+                })
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+    }
     let mut output = Vec::new();
     for slot in &SLOTS {
         let left = sorted
@@ -256,21 +470,99 @@ pub fn format_map(assignments: &[Assignment]) -> String {
         let right = sorted
             .iter()
             .find(|a| a.slot == slot.code && a.side == EarSide::Right);
-        match (left, right) {
-            (Some(left), Some(right)) if left.id == right.id => {
-                output.push(format!("{}={}", slot.code, left.id))
-            }
-            (Some(left), right) => {
-                output.push(format!("{}.left={}", slot.code, left.id));
-                if let Some(right) = right {
-                    output.push(format!("{}.right={}", slot.code, right.id));
+        if purpose == Purpose::Room {
+            match (left, right) {
+                (Some(left), Some(right)) if left.id == right.id => {
+                    output.push(format!("{}={}", slot.code, left.id))
                 }
+                (Some(left), right) => {
+                    output.push(format!("{}.left={}", slot.code, left.id));
+                    if let Some(right) = right {
+                        output.push(format!("{}.right={}", slot.code, right.id));
+                    }
+                }
+                (None, Some(right)) => output.push(format!("{}.right={}", slot.code, right.id)),
+                (None, None) => {}
             }
-            (None, Some(right)) => output.push(format!("{}.right={}", slot.code, right.id)),
-            (None, None) => {}
+        } else {
+            if let Some(left) = left {
+                output.push(format!("{}.left={}", slot.code, left.id));
+            }
+            if let Some(right) = right {
+                output.push(format!("{}.right={}", slot.code, right.id));
+            }
         }
     }
     output.join(",")
+}
+
+pub fn check_assignments(
+    assignments: &[Assignment],
+    purpose: Purpose,
+) -> Result<(), ExternalError> {
+    match purpose {
+        Purpose::Room => Ok(()),
+        Purpose::Brir => {
+            if assignments.is_empty() {
+                return Err(ExternalError::new("no BRIR measurements assigned"));
+            }
+            for slot in SLOTS.iter().map(|s| s.code) {
+                let sides: HashSet<_> = assignments
+                    .iter()
+                    .filter(|a| a.slot == slot)
+                    .map(|a| a.side)
+                    .collect();
+                if !sides.is_empty() {
+                    if !sides.contains(&EarSide::Left) {
+                        return Err(ExternalError::new(format!(
+                            "speaker slot {slot} has no left ear measurement"
+                        )));
+                    }
+                    if !sides.contains(&EarSide::Right) {
+                        return Err(ExternalError::new(format!(
+                            "speaker slot {slot} has no right ear measurement"
+                        )));
+                    }
+                }
+            }
+            check_unique_ids(assignments)?;
+            if !assignments.iter().any(|a| a.slot == "FL") {
+                return Err(ExternalError::new(
+                    "the BRIR measurements must include FL, the reference for alignment",
+                ));
+            }
+            Ok(())
+        }
+        Purpose::Headphones => {
+            let left = assignments.iter().find(|a| a.side == EarSide::Left);
+            let right = assignments.iter().find(|a| a.side == EarSide::Right);
+            match (left, right) {
+                (None, None) => Err(ExternalError::new(
+                    "headphone measurement needs a left and a right ear; both ears are missing",
+                )),
+                (None, Some(_)) => Err(ExternalError::new(
+                    "headphone measurement needs a left and a right ear; the left ear is missing",
+                )),
+                (Some(_), None) => Err(ExternalError::new(
+                    "headphone measurement needs a left and a right ear; the right ear is missing",
+                )),
+                (Some(_), Some(_)) => check_unique_ids(assignments),
+            }
+        }
+    }
+}
+
+fn check_unique_ids(assignments: &[Assignment]) -> Result<(), ExternalError> {
+    let mut ids = HashSet::new();
+    for assignment in assignments {
+        if !ids.insert(&assignment.id) {
+            return Err(ExternalError::new(format!(
+                "measurement {} is assigned more than once",
+                assignment.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn canonical(mut assignments: Vec<Assignment>) -> Vec<Assignment> {
@@ -325,17 +617,31 @@ mod tests {
                 .collect(),
         }
     }
+
     fn dirac(names: &[(&str, bool)], positions: &[usize]) -> ExternalFile {
         let speakers: Vec<_> = names
             .iter()
             .enumerate()
-            .map(|(i, (n, s))| ExternalSpeaker {
+            .map(|(i, (name, subwoofer))| ExternalSpeaker {
                 index: i + 1,
-                name: (*n).into(),
-                subwoofer: *s,
+                name: (*name).into(),
+                subwoofer: *subwoofer,
             })
             .collect();
-        let p = *positions.first().unwrap();
+        let measurements = positions
+            .iter()
+            .flat_map(|position| {
+                speakers.iter().map(move |speaker| ExternalMeasurement {
+                    id: format!("{}@{position}", speaker.index),
+                    name: speaker.name.clone(),
+                    speaker: Some(speaker.index),
+                    position: Some(*position),
+                    start_time: 0.0,
+                    samples: vec![0.0],
+                    skipped: None,
+                })
+            })
+            .collect();
         ExternalFile {
             format: ExternalFormat::Dirac,
             title: None,
@@ -343,117 +649,189 @@ mod tests {
             microphone: None,
             mic_calibration: None,
             positions: positions.to_vec(),
-            measurements: speakers
-                .iter()
-                .map(|s| ExternalMeasurement {
-                    id: format!("{}@{p}", s.index),
-                    name: s.name.clone(),
-                    speaker: Some(s.index),
-                    position: Some(p),
-                    start_time: 0.0,
-                    samples: vec![0.0],
-                    skipped: None,
-                })
-                .collect(),
+            measurements,
             speakers,
         }
     }
 
     #[test]
     fn rew_examples_assign_as_specified() {
-        for (name, expected) in [
-            ("FL left", Some(("FL", Some(EarSide::Left)))),
-            ("FL 오른쪽 🎧", Some(("FL", Some(EarSide::Right)))),
-            ("L P1", Some(("FL", None))),
-            ("R ART", Some(("FR", None))),
-            ("C 왼쪽 귀", Some(("FC", Some(EarSide::Left)))),
-            ("LS R", Some(("SL", Some(EarSide::Right)))),
-            ("secs aver", None),
-        ] {
-            assert_eq!(rew_title(name), expected, "{name}");
-        }
-    }
-
-    #[test]
-    fn rew_skipped_sub_and_partial_both_ears_follow_rules() {
-        let file = rew(&[
-            ("FR only", Some(Skip::NoImpulseResponse)),
-            ("Sub", None),
-            ("FL left", None),
-            ("FL", None),
-        ]);
-        let a = auto_assign(&file);
-        assert_eq!(
-            a.iter()
-                .map(|a| (a.slot, a.side, a.id.as_str()))
-                .collect::<Vec<_>>(),
-            [("FL", EarSide::Left, "3"), ("FL", EarSide::Right, "4")]
-        );
+        let file = rew(&[("FL left", None), ("FL right", None), ("FL", None)]);
+        assert_eq!(format_map(&auto_assign(&file)), "FL.left=1,FL.right=2");
     }
 
     #[test]
     fn dirac_assigns_known_unique_speakers_at_lowest_measured_position() {
-        let file = dirac(
-            &[
-                ("Left", false),
-                ("Right", false),
-                ("LeftSurround", false),
-                ("RightSurround", false),
-                ("Subwoofer", true),
-                ("Subwoofer", true),
-            ],
-            &[2],
-        );
-        assert_eq!(
-            format_map(&auto_assign(&file)),
-            "FL=1@2,FR=2@2,SL=3@2,SR=4@2"
-        );
-        let duplicate = dirac(&[("Left", false), ("Left", false)], &[1]);
-        assert_eq!(format_map(&auto_assign(&duplicate)), "FL=1@1");
+        let file = dirac(&[("Left", false), ("Right", false)], &[2]);
+        assert_eq!(format_map(&auto_assign(&file)), "FL=1@2,FR=2@2");
     }
 
     #[test]
     fn parse_map_accepts_and_rejects_required_cases() {
-        let file = rew(&[
-            ("FL", None),
-            ("FR", None),
-            ("skip", Some(Skip::NoImpulseResponse)),
-        ]);
+        let file = rew(&[("FL", None), ("FR", None)]);
         assert_eq!(
-            format_map(&parse_map(&file, "fl = 1, FR.right=2").unwrap()),
+            format_map(&parse_map(&file, "FL=1,FR.right=2").unwrap()),
             "FL=1,FR.right=2"
         );
-        // A side given twice is an error, also when one entry is for both ears.
-        for bad in [
-            "FL=9",
-            "FL=3",
-            "XX=1",
-            "FL.left=1,FL.left=2",
-            "FL=1,FL.right=2",
-        ] {
-            assert!(parse_map(&file, bad).is_err(), "{bad}");
+        assert!(parse_map(&file, "XX=1").is_err());
+    }
+
+    #[test]
+    fn purpose_parse_and_room_wrappers_are_exact() {
+        assert_eq!(Purpose::parse("room"), Some(Purpose::Room));
+        assert_eq!(Purpose::parse("BRIR"), None);
+        let files = [
+            rew(&[("FL left", None), ("FL right", None)]),
+            dirac(&[("Left", false)], &[1, 2]),
+        ];
+        for file in files {
+            assert_eq!(auto_assign(&file), auto_assign_for(&file, Purpose::Room));
+            let a = auto_assign(&file);
+            assert_eq!(format_map(&a), format_map_for(&a, Purpose::Room));
+            assert_eq!(
+                parse_map(&file, "auto").unwrap(),
+                parse_map_for(&file, "auto", Purpose::Room).unwrap()
+            );
         }
     }
 
     #[test]
-    fn format_map_pairs_equal_ids_and_round_trips() {
-        let file = dirac(&[("Left", false), ("Right", false)], &[1]);
-        let paired = auto_assign(&file);
-        assert_eq!(format_map(&paired), "FL=1@1,FR=2@1");
-        assert_eq!(parse_map(&file, &format_map(&paired)).unwrap(), paired);
-        let split = vec![
-            Assignment {
-                slot: "FL",
-                side: EarSide::Left,
-                id: "1@1".into(),
-            },
-            Assignment {
-                slot: "FL",
-                side: EarSide::Right,
-                id: "2@1".into(),
-            },
-        ];
-        assert_eq!(format_map(&split), "FL.left=1@1,FL.right=2@1");
-        assert_eq!(parse_map(&file, &format_map(&split)).unwrap(), split);
+    fn brir_automatic_assignment_follows_rew_and_dirac_rules() {
+        let file = rew(&[
+            ("FL", None),
+            ("FL left", None),
+            ("FL left", None),
+            ("FL right", None),
+            ("FR left", None),
+        ]);
+        assert_eq!(
+            format_map_for(&auto_assign_for(&file, Purpose::Brir), Purpose::Brir),
+            "FL.left=2,FL.right=4,FR.left=5"
+        );
+        let file = dirac(&[("Left", false), ("Right", false)], &[3, 7]);
+        assert_eq!(
+            format_map_for(&auto_assign_for(&file, Purpose::Brir), Purpose::Brir),
+            "FL.left=1@3,FL.right=1@7,FR.left=2@3,FR.right=2@7"
+        );
+        let one = dirac(&[("Left", false)], &[4]);
+        assert_eq!(
+            format_map_for(&auto_assign_for(&one, Purpose::Brir), Purpose::Brir),
+            "FL.left=1@4,FL.right=1@4"
+        );
+    }
+
+    #[test]
+    fn headphone_automatic_assignment_follows_rew_and_dirac_rules() {
+        let names = rew(&[
+            ("measurement left", None),
+            ("FR response", None),
+            ("right duplicate", None),
+        ]);
+        assert_eq!(
+            format_map_for(
+                &auto_assign_for(&names, Purpose::Headphones),
+                Purpose::Headphones
+            ),
+            "left=1,right=2"
+        );
+        let fallback = rew(&[("one", None), ("two", None)]);
+        assert_eq!(
+            format_map_for(
+                &auto_assign_for(&fallback, Purpose::Headphones),
+                Purpose::Headphones
+            ),
+            "left=1,right=2"
+        );
+        assert!(
+            auto_assign_for(
+                &rew(&[("one", None), ("two", None), ("three", None)]),
+                Purpose::Headphones
+            )
+            .is_empty()
+        );
+        let dirac = dirac(&[("Left", false), ("Right", false)], &[2, 5]);
+        assert_eq!(
+            format_map_for(
+                &auto_assign_for(&dirac, Purpose::Headphones),
+                Purpose::Headphones
+            ),
+            "left=1@2,right=2@5"
+        );
+    }
+
+    #[test]
+    fn purpose_maps_reject_invalid_forms_and_format_canonically() {
+        let file = rew(&[
+            ("FL left", None),
+            ("FL right", None),
+            ("skip", Some(Skip::NoImpulseResponse)),
+        ]);
+        for bad in ["FL=1", "FL.left=9", "FL.left=3"] {
+            assert!(parse_map_for(&file, bad, Purpose::Brir).is_err(), "{bad}");
+        }
+        for bad in ["FL.left=1", "left=1,left=2", "left=9", "right=3"] {
+            assert!(
+                parse_map_for(&file, bad, Purpose::Headphones).is_err(),
+                "{bad}"
+            );
+        }
+        let brir = parse_map_for(&file, "fl.right=2,FL.left=1", Purpose::Brir).unwrap();
+        assert_eq!(format_map_for(&brir, Purpose::Brir), "FL.left=1,FL.right=2");
+        let hp = parse_map_for(&file, "RIGHT=2, LEFT=1", Purpose::Headphones).unwrap();
+        assert_eq!(format_map_for(&hp, Purpose::Headphones), "left=1,right=2");
+    }
+
+    #[test]
+    fn assignment_checks_return_contract_messages() {
+        let a = |slot, side, id: &str| Assignment {
+            slot,
+            side,
+            id: id.into(),
+        };
+        assert_eq!(
+            check_assignments(&[], Purpose::Brir)
+                .unwrap_err()
+                .to_string(),
+            "no BRIR measurements assigned"
+        );
+        assert_eq!(
+            check_assignments(&[a("FL", EarSide::Left, "1")], Purpose::Brir)
+                .unwrap_err()
+                .to_string(),
+            "speaker slot FL has no right ear measurement"
+        );
+        assert_eq!(
+            check_assignments(
+                &[a("FL", EarSide::Left, "3"), a("FL", EarSide::Right, "3")],
+                Purpose::Brir
+            )
+            .unwrap_err()
+            .to_string(),
+            "measurement 3 is assigned more than once"
+        );
+        assert_eq!(
+            check_assignments(
+                &[a("FR", EarSide::Left, "1"), a("FR", EarSide::Right, "2")],
+                Purpose::Brir
+            )
+            .unwrap_err()
+            .to_string(),
+            "the BRIR measurements must include FL, the reference for alignment"
+        );
+        assert_eq!(
+            check_assignments(&[a("FL", EarSide::Left, "1")], Purpose::Headphones)
+                .unwrap_err()
+                .to_string(),
+            "headphone measurement needs a left and a right ear; the right ear is missing"
+        );
+        assert_eq!(
+            check_assignments(
+                &[a("FL", EarSide::Left, "3"), a("FR", EarSide::Right, "3")],
+                Purpose::Headphones
+            )
+            .unwrap_err()
+            .to_string(),
+            "measurement 3 is assigned more than once"
+        );
     }
 }

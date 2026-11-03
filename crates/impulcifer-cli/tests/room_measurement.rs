@@ -11,6 +11,14 @@ fn cli_room_measurement_options_parse() {
         "room.mdat",
         "--room_measurement_map",
         "FL.left=1,FL.right=2",
+        "--brir_measurement_file",
+        "brir.mdat",
+        "--brir_measurement_map",
+        "FL.left=1,FL.right=2",
+        "--headphone_measurement_file",
+        "headphones.mdat",
+        "--headphone_measurement_map",
+        "left=1,right=2",
     ]
     .map(str::to_owned)
     .to_vec();
@@ -22,6 +30,19 @@ fn cli_room_measurement_options_parse() {
     assert_eq!(
         config.room_measurement_map.as_deref(),
         Some("FL.left=1,FL.right=2")
+    );
+    assert_eq!(config.brir_measurement_file.as_deref(), Some("brir.mdat"));
+    assert_eq!(
+        config.brir_measurement_map.as_deref(),
+        Some("FL.left=1,FL.right=2")
+    );
+    assert_eq!(
+        config.headphone_measurement_file.as_deref(),
+        Some("headphones.mdat")
+    );
+    assert_eq!(
+        config.headphone_measurement_map.as_deref(),
+        Some("left=1,right=2")
     );
     assert!(ProcessingConfig::default().room_measurement_file.is_none());
     assert!(ProcessingConfig::default().room_measurement_map.is_none());

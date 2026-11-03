@@ -431,6 +431,7 @@ pub(crate) fn run_with_choices(
             &dir,
             config.test_signal.as_deref(),
             data_dir,
+            config.brir_measurement_file.is_some(),
             Some(&mut events),
         )?;
         events.same_fs = config.fs == Some(estimator.fs);

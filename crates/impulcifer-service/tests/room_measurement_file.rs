@@ -20,6 +20,7 @@ fn inspect_room_measurements_reports_the_rew_fixture_with_its_automatic_map() {
     assert_eq!(result["ok"], true, "{result}");
     let d = &result["data"];
     assert_eq!(d["format"], "rew");
+    assert_eq!(d["purpose"], "room");
     assert_eq!(d["map"], "FL.left=1,FL.right=2");
     assert_eq!(d["auto"], true);
     assert_eq!(
@@ -71,6 +72,26 @@ fn inspect_room_measurements_applies_a_map_and_rejects_bad_requests() {
         "INVALID_REQUEST"
     );
 }
+#[test]
+fn inspect_measurements_supports_all_purposes_and_rejects_invalid_purpose() {
+    let default = inspect(json!({"path":rew()}));
+    assert_eq!(default["data"]["purpose"], "room");
+    let brir = inspect(json!({"path":rew(),"purpose":"brir"}));
+    assert_eq!(brir["data"]["purpose"], "brir");
+    assert_eq!(brir["data"]["map"], "FL.left=1,FL.right=2");
+    let headphones = inspect(json!({"path":rew(),"purpose":"headphones"}));
+    assert_eq!(headphones["data"]["purpose"], "headphones");
+    assert_eq!(headphones["data"]["map"], "left=1,right=2");
+    for purpose in [json!("ROOM"), json!(42), json!([])] {
+        let result = inspect(json!({"path":rew(),"purpose":purpose}));
+        assert_eq!(result["error"]["code"], "INVALID_REQUEST");
+        assert_eq!(
+            result["error"]["message"],
+            "purpose must be room, brir or headphones."
+        );
+    }
+}
+
 #[test]
 fn inspect_room_measurements_reports_a_dirac_project() {
     let temp = Temp::new();

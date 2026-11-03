@@ -52,6 +52,9 @@ pub(crate) fn validate(value: &Value) -> Result<Request, Value> {
         "test_signal",
         "room_target",
         "room_mic_calibration",
+        "room_measurement_file",
+        "brir_measurement_file",
+        "headphone_measurement_file",
         "headphone_compensation_file",
     ] {
         if let Some(v) = params.get_mut(name)

@@ -1,5 +1,9 @@
 // Synthetic Dirac container from EXTERNAL_MEASUREMENTS.md, not program code.
 pub fn dirac_project(fs: u32) -> Vec<u8> {
+    dirac_project_with_delays(fs, &[0; 6])
+}
+
+pub fn dirac_project_with_delays(fs: u32, delays: &[usize; 6]) -> Vec<u8> {
     fn var(mut n: u64) -> Vec<u8> {
         let mut out = Vec::new();
         while n >= 128 {
@@ -16,13 +20,14 @@ pub fn dirac_project(fs: u32) -> Vec<u8> {
         [var(field << 3 | 2), var(data.len() as u64), data.to_vec()].concat()
     }
     let mut matrix = [int(1, fs.into()), int(2, 3), int(3, 2)].concat();
-    for _ in 0..6 {
+    for &delay in delays {
+        let peak = 100 + delay;
         let codes: Vec<u8> = (0..8192)
             .flat_map(|i| {
-                let code: i16 = if i == 100 {
+                let code: i16 = if i == peak {
                     30000
-                } else if i > 100 {
-                    (12000.0 * (-((i - 100) as f64) / 450.0).exp() * (i as f64 * 0.2).cos()) as i16
+                } else if i > peak {
+                    (12000.0 * (-((i - peak) as f64) / 450.0).exp() * (i as f64 * 0.2).cos()) as i16
                 } else {
                     0
                 };

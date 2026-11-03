@@ -13,10 +13,48 @@ tests = ["impulcifer-io::rew_fixture_reads_two_impulse_responses_and_skips_the_f
 note = "ADR 0010 and docs/rust/EXTERNAL_MEASUREMENTS.md: a REW .mdat (Java object serialization stream) or Dirac Live .liveproject (QDataStream header, protobuf measurement block, row-major response matrix in mu-law 255) replaces the folder's room-*.wav recordings; the map assigns measurements to slots and ear positions (automatic from names when empty); the Dirac project's microphone calibration applies when no other is set; imported responses form no tuning recording pairs; checked locally against the maintainer's 11 Dirac projects and four REW files (not committed)."
 
 [[feature]]
+id = "brir.measurement_files"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-io::purpose_parse_and_room_wrappers_are_exact", "impulcifer-io::brir_automatic_assignment_follows_rew_and_dirac_rules", "impulcifer-io::purpose_maps_reject_invalid_forms_and_format_canonically", "impulcifer-io::assignment_checks_return_contract_messages", "impulcifer-service::brir_measurement_file_preserves_rew_time_axis_and_replaces_folder", "impulcifer-service::dirac_brir_logs_large_and_zero_itd_warnings", "impulcifer-service::brir_measurement_errors_are_invalid_requests_or_missing_files", "impulcifer-service::external_brir_without_folder_recordings_runs_without_sweep_fallback_warning"]
+note = "ADR 0011 and docs/rust/EXTERNAL_MEASUREMENTS.md (Purposes): a REW .mdat or Dirac Live .liveproject replaces the folder's speaker recordings; one measurement per ear (SLOT.left/SLOT.right), every slot in use needs both ears and FL; Dirac ears at the lowest and next measured positions; REW responses placed on one time axis from startTime so each speaker keeps its interaural time difference; the job logs each speaker's difference and warns above 1 ms or when every side speaker is zero; no microphone calibration; not mixed with folder recordings."
+
+[[feature]]
+id = "headphone.measurement_files"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-io::headphone_automatic_assignment_follows_rew_and_dirac_rules", "impulcifer-io::purpose_maps_reject_invalid_forms_and_format_canonically", "impulcifer-io::assignment_checks_return_contract_messages", "impulcifer-service::headphone_measurement_file_replaces_folder_and_is_not_opened_when_disabled"]
+note = "ADR 0011: two measurements of a REW or Dirac Live file (left earcup at the left ear, right earcup at the right ear; map left=ID,right=ID) replace headphones.wav; both are cut to the shorter length and feed the existing compensation."
+
+[[feature]]
+id = "config.brir_measurement_file"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_measurement_options_parse", "impulcifer-service::brir_measurement_file_preserves_rew_time_axis_and_replaces_folder"]
+
+[[feature]]
+id = "config.brir_measurement_map"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_measurement_options_parse", "impulcifer-service::brir_measurement_errors_are_invalid_requests_or_missing_files"]
+
+[[feature]]
+id = "config.headphone_measurement_file"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_measurement_options_parse", "impulcifer-service::headphone_measurement_file_replaces_folder_and_is_not_opened_when_disabled"]
+
+[[feature]]
+id = "config.headphone_measurement_map"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_room_measurement_options_parse", "impulcifer-service::headphone_measurement_file_replaces_folder_and_is_not_opened_when_disabled"]
+
+[[feature]]
 id = "ipc.inspect_room_measurements"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::inspect_room_measurements_reports_the_rew_fixture_with_its_automatic_map", "impulcifer-service::inspect_room_measurements_applies_a_map_and_rejects_bad_requests", "impulcifer-service::inspect_room_measurements_reports_a_dirac_project", "impulcifer-service::ipc_select_file_shape"]
+tests = ["impulcifer-service::inspect_room_measurements_reports_the_rew_fixture_with_its_automatic_map", "impulcifer-service::inspect_room_measurements_applies_a_map_and_rejects_bad_requests", "impulcifer-service::inspect_room_measurements_reports_a_dirac_project", "impulcifer-service::inspect_measurements_supports_all_purposes_and_rejects_invalid_purpose", "impulcifer-service::ipc_select_file_shape"]
 
 [[feature]]
 id = "config.room_measurement_file"
