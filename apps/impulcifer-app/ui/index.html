@@ -247,6 +247,24 @@
                 <input id="bf-dir-path" class="mono" value="data/my_hrir" spellcheck="false">
                 <button class="btn-link" data-browse="dir" data-target="bf-dir-path" data-i18n="button_browse">Browse</button>
               </div>
+              <!-- BRIR measurements come from the folder's speaker recordings or from one REW (.mdat) or
+                   Dirac Live (.liveproject) file (ADR 0011). With a file the folder still receives the results
+                   and holds the other inputs; the table works like the room measurement one. -->
+              <div class="field-row" id="bf-brir-source-row">
+                <label for="bf-brir-source" data-i18n="label_brir_measurements">BRIR measurements:</label>
+                <select id="bf-brir-source">
+                  <option value="folder" selected data-i18n="option_brir_measurements_folder">Speaker recordings in the recording folder</option>
+                  <option value="file" data-i18n="option_room_measurements_file">A REW or Dirac Live file</option>
+                </select>
+              </div>
+              <div class="room-file" id="bf-brir-file-block" hidden>
+                <div class="field-row">
+                  <label for="bf-brir-file" data-i18n="label_room_measurement_file">Measurement file:</label>
+                  <input id="bf-brir-file" class="mono" spellcheck="false" placeholder="measurements.mdat">
+                  <button class="btn-link" data-browse="measurement" data-target="bf-brir-file" data-i18n="button_browse">Browse</button>
+                </div>
+                <div class="room-file-result" id="bf-brir-file-result" aria-live="polite"></div>
+              </div>
               <div class="field-row">
                 <label for="bf-test-signal-source" data-i18n="label_test_signal_source">Test signal source:</label>
                 <select id="bf-test-signal-source">
@@ -453,10 +471,28 @@
                   <span class="caret" aria-hidden="true"></span>
                 </div>
                 <div class="disclosure-body">
-                  <div class="field-row">
+                  <!-- The headphone measurement is a recording (headphones.wav or the file named here) or two
+                       measurements of one REW or Dirac Live file (ADR 0011): the left earcup at the left ear
+                       and the right earcup at the right ear. -->
+                  <div class="field-row" id="bf-hp-source-row">
+                    <label for="bf-hp-source" data-i18n="label_headphone_measurements">Headphone measurement:</label>
+                    <select id="bf-hp-source">
+                      <option value="folder" selected data-i18n="option_headphone_measurements_folder">A recording (headphones.wav)</option>
+                      <option value="file" data-i18n="option_room_measurements_file">A REW or Dirac Live file</option>
+                    </select>
+                  </div>
+                  <div class="field-row" id="bf-hp-folder-row">
                     <label for="bf-headphone-file" data-i18n="label_headphone_file">Headphone File:</label>
                     <input id="bf-headphone-file" class="mono" spellcheck="false" placeholder="headphones.wav">
                     <button class="btn-link" data-browse="wav" data-target="bf-headphone-file" data-i18n="button_browse">Browse</button>
+                  </div>
+                  <div class="room-file" id="bf-hp-file-block" hidden>
+                    <div class="field-row">
+                      <label for="bf-hp-file" data-i18n="label_room_measurement_file">Measurement file:</label>
+                      <input id="bf-hp-file" class="mono" spellcheck="false" placeholder="headphones.mdat">
+                      <button class="btn-link" data-browse="measurement" data-target="bf-hp-file" data-i18n="button_browse">Browse</button>
+                    </div>
+                    <div class="room-file-result" id="bf-hp-file-result" aria-live="polite"></div>
                   </div>
                 </div>
               </div>

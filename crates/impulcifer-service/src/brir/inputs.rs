@@ -38,11 +38,29 @@ fn ingest(
     hrir.open_recording_samples(estimator, wav.sample_rate, &wav.tracks, names, side, 2.0)?;
     Ok(())
 }
-fn ingest_measurements(
+fn open_measurements(
     dir: &MeasurementDir,
     estimator: &SweepEstimator,
+    config: &ProcessingConfig,
     events: &mut dyn BrirEvents,
 ) -> Result<Hrir, BrirError> {
+    if let Some(file) = &config.brir_measurement_file {
+        let path = std::path::PathBuf::from(file);
+        if !dir.recordings.is_empty() {
+            events.log(
+                "info",
+                "cli_brir_measurement_file_replaces_folder",
+                json!({"count":dir.recordings.len()}),
+            );
+        }
+        let (hrir, _) = super::measurement_file::load_brir(
+            &path,
+            config.brir_measurement_map.as_deref().unwrap_or(""),
+            estimator.fs,
+            events,
+        )?;
+        return Ok(hrir);
+    }
     let mut hrir = empty(estimator.fs);
     for (path, names) in &dir.recordings {
         events.check_cancelled()?;
@@ -55,6 +73,13 @@ fn ingest_measurements(
         )?;
     }
     Ok(hrir)
+}
+
+fn external_format(format: impulcifer_io::external::ExternalFormat) -> &'static str {
+    match format {
+        impulcifer_io::external::ExternalFormat::Rew => "REW",
+        impulcifer_io::external::ExternalFormat::Dirac => "Dirac Live",
+    }
 }
 fn csv(path: &Path) -> Result<FrequencyResponse, BrirError> {
     let text = std::fs::read_to_string(path)?;
@@ -183,7 +208,7 @@ pub fn load_inputs(
     let mut opened_hrir = None;
     let mut vbass_plan = None;
     if config.vbass && mode != VirtualBassMode::Legacy {
-        let hrir = ingest_measurements(dir, estimator, events)?;
+        let hrir = open_measurements(dir, estimator, config, events)?;
         let mut cropped = hrir.clone();
         cropped.crop_heads(config.head_ms)?;
         cropped.crop_tails(estimator)?;
@@ -219,7 +244,7 @@ pub fn load_inputs(
             // Read in place like room_target and room_mic_calibration, so the
             // job and inspect_room_measurements open the same file.
             let path = std::path::PathBuf::from(path);
-            let (rir, calibration, format) = super::room_file::load(
+            let (rir, calibration, format) = super::measurement_file::load_room(
                 &path,
                 config.room_measurement_map.as_deref().unwrap_or(""),
                 fs,
@@ -508,7 +533,9 @@ pub fn load_inputs(
     let mut headphone = None;
     if config.do_headphone_compensation {
         events.step("cli_running_headphone_compensation", json!({}))?;
-        if let Some(request) = &config.headphone_compensation_file {
+        if config.headphone_measurement_file.is_none()
+            && let Some(request) = &config.headphone_compensation_file
+        {
             events.log(
                 "info",
                 "cli_info_hp_param_provided",
@@ -527,17 +554,46 @@ pub fn load_inputs(
                     json!({"file":dir.dir.join(request)}),
                 );
             }
-        } else {
+        } else if config.headphone_measurement_file.is_none() {
             events.log(
                 "info",
                 "cli_info_hp_default",
                 json!({"file":dir.dir.join("headphones.wav")}),
             );
         }
-        if let Some(path) = &dir.headphones {
-            events.log("info", "cli_info_using_hp_file", json!({"file":path}));
-            let mut hp = empty(fs);
-            ingest(&mut hp, path, &["FL", "FR"], None, estimator)?;
+        let imported_hp = if let Some(file) = &config.headphone_measurement_file {
+            let path = std::path::PathBuf::from(file);
+            if let Some(folder) = &dir.headphones {
+                events.log(
+                    "info",
+                    "cli_headphone_measurement_file_replaces_folder",
+                    json!({"file":folder.file_name().unwrap_or_default().to_string_lossy()}),
+                );
+            }
+            let (hp, format, left, right) = super::measurement_file::load_headphones(
+                &path,
+                config.headphone_measurement_map.as_deref().unwrap_or(""),
+                fs,
+            )?;
+            events.log(
+                "info",
+                "cli_headphone_measurement_file_loaded",
+                json!({"file":path.file_name().unwrap_or_default().to_string_lossy(),"format":external_format(format),"left":left,"right":right}),
+            );
+            Some(hp)
+        } else {
+            None
+        };
+        if imported_hp.is_some() || dir.headphones.is_some() {
+            let hp = if let Some(hp) = imported_hp {
+                hp
+            } else {
+                let path = dir.headphones.as_ref().expect("checked");
+                events.log("info", "cli_info_using_hp_file", json!({"file":path}));
+                let mut hp = empty(fs);
+                ingest(&mut hp, path, &["FL", "FR"], None, estimator)?;
+                hp
+            };
             // Python writes before computing headphone compensation curves.
             write_wav(
                 &dir.dir.join("headphone-responses.wav"),
@@ -595,7 +651,7 @@ pub fn load_inputs(
     events.step("cli_opening_measurements", json!({}))?;
     let hrir = match opened_hrir {
         Some(hrir) => hrir,
-        None => ingest_measurements(dir, estimator, events)?,
+        None => open_measurements(dir, estimator, config, events)?,
     };
     if hrir.speakers.is_empty() {
         return Err(BrirError::Missing(

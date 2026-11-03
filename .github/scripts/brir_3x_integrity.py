@@ -59,6 +59,19 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         (f"--room_measurement_file={PROJECT_ROOT / 'crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat'}",),
         "3.8.0",
     ),
+    (
+        "brir_measurement_file_rew",
+        (f"--brir_measurement_file={PROJECT_ROOT / 'crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat'}",),
+        "3.9.0",
+    ),
+    (
+        "headphone_measurement_file_rew",
+        (
+            f"--headphone_measurement_file={PROJECT_ROOT / 'crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat'}",
+            "--headphone_measurement_map=left=1,right=2",
+        ),
+        "3.9.0",
+    ),
     ("room_modes", ("--room_range=modes",), "3.2.0"),
     ("room_extreme", ("--room_range=extreme",), "3.2.0"),
     ("room_legacy", ("--room_range=legacy",), "3.2.0"),

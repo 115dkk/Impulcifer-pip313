@@ -24,12 +24,13 @@ pub fn open_estimator(
     dir: &MeasurementDir,
     test_signal: Option<&str>,
 ) -> Result<SweepEstimator, BrirError> {
-    open_with_events(dir, test_signal, &crate::default_data_dir(), None)
+    open_with_events(dir, test_signal, &crate::default_data_dir(), false, None)
 }
 pub(crate) fn open_with_events(
     dir: &MeasurementDir,
     test_signal: Option<&str>,
     data: &Path,
+    external_brir: bool,
     mut events: Option<&mut dyn BrirEvents>,
 ) -> Result<SweepEstimator, BrirError> {
     let mut log = |level, key, args| {
@@ -70,7 +71,12 @@ pub(crate) fn open_with_events(
         if let Some(sidecar) = &dir.test_signal {
             path = Some(sidecar.clone());
         } else {
-            let detection = detect_sweep_parameters(&dir.dir)?;
+            let skip_detection = external_brir && dir.recordings.is_empty();
+            let detection = if skip_detection {
+                None
+            } else {
+                detect_sweep_parameters(&dir.dir)?
+            };
             if let Some(d) = &detection
                 && d.confidence == "high"
                 && !d.is_default()
@@ -85,7 +91,7 @@ pub(crate) fn open_with_events(
                     d.fs,
                 )?);
             }
-            if detection.is_none_or(|d| d.confidence != "high") {
+            if !skip_detection && detection.is_none_or(|d| d.confidence != "high") {
                 log("warning", "cli_warning_sweep_detect_fallback", json!({}));
             }
             path = Some(data.join(DEFAULT_SIGNAL));

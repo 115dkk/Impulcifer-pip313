@@ -71,6 +71,10 @@ interface ProcessingRequest {
      folder's room-*.wav files; the map assigns its measurement ids to slots and ear positions
      ("FL.left=1,FL.right=2", "FL=1@1"); null or "auto" assigns them from the names. */
   room_measurement_file?: string | null; room_measurement_map?: string | null;
+  /* 3.x only (ADR 0011). The same files instead of the folder's speaker recordings ("FL.left=1,FL.right=2",
+     one ear per entry) and instead of headphones.wav ("left=1,right=2"). */
+  brir_measurement_file?: string | null; brir_measurement_map?: string | null;
+  headphone_measurement_file?: string | null; headphone_measurement_map?: string | null;
   /* Custom EQ slots: omitted/null follows the folder, false is off, a path is read in place. */
   eq_file?: string | false | null; eq_left_file?: string | false | null; eq_right_file?: string | false | null;
   plot?: boolean; interactive_plots?: boolean; channel_balance?: string | number | null;
@@ -136,9 +140,11 @@ interface EqInspection {
   slots: EqSlotInfo[]; blocked: boolean; ears: { left: EqEarSource | null; right: EqEarSource | null };
   curves: { frequency: number[]; left: number[] | null; right: number[] | null };
 }
-/* inspect_room_measurements (ADR 0010): what a REW or Dirac Live file holds and how its measurements
-   are assigned. REW measurements have no speaker or position; Dirac ids are "<speaker>@<position>". */
-interface RoomFileRequest { path: string; map?: string | null }
+/* inspect_room_measurements (ADR 0010, 0011): what a REW or Dirac Live file holds and how its measurements
+   are assigned for a purpose (room when omitted). REW measurements have no speaker or position; Dirac ids are
+   "<speaker>@<position>". A headphone assignment is FL left (left earcup) and FR right (right earcup). */
+type MeasurementPurpose = "room" | "brir" | "headphones";
+interface RoomFileRequest { path: string; map?: string | null; purpose?: MeasurementPurpose | null }
 interface RoomFileMeasurement {
   id: string; name: string; speaker: number | null; position: number | null; samples: number;
   skipped: "no_impulse_response" | null;
@@ -149,12 +155,20 @@ interface RoomFileInspection {
   format: "rew" | "dirac"; path: string; title: string | null; sample_rate: number; microphone: string | null;
   mic_calibration: boolean; positions: number[]; speakers: RoomFileSpeaker[];
   measurements: RoomFileMeasurement[]; mapping: RoomFileAssignment[]; map: string; auto: boolean;
+  purpose?: MeasurementPurpose;
 }
 /* The screen's choice per REW measurement id or Dirac speaker index (as a string): a slot code or "",
-   and for REW the ear position; Dirac's two ear positions apply to every speaker. */
+   and for REW the ear position; Dirac's two ear positions apply to every speaker. Headphones use only
+   hpLeft and hpRight, the measurement ids of the two earcups ("" while none is chosen). */
 interface RoomFileChoices {
   path: string; rows: Record<string, { slot: string; side: "both" | "left" | "right" }>;
-  left: number; right: number;
+  left: number; right: number; hpLeft: string; hpRight: string;
+}
+/* One purpose's file on the screen; input is the field's text the current inspection answered for
+   ("" while none has). */
+interface MeasurementFileState {
+  data: RoomFileInspection | null; error: IpcError | null; choices: RoomFileChoices | null;
+  input: string; revision: number; timer: number | undefined;
 }
 interface RecoveryRequest { dir_path: string; include_hangloose?: boolean; remove_silent_channels?: boolean; confirm_warnings?: boolean }
 type RecoverySource = "hrir" | "hesuvi" | "hrir+hesuvi" | "hangloose" | "layout";
@@ -243,9 +257,7 @@ interface AppState {
   recoveryRunRevision: number; recoveryRequestKey: string;
   eqChoices: Record<EqSlotName, EqChoice>; eqInspection: EqInspection | null; eqError: IpcError | null;
   eqRevision: number; eqTimer: number | undefined;
-  /* roomFileInput is the field's text the current inspection answered for ("" while none has). */
-  roomFile: RoomFileInspection | null; roomFileError: IpcError | null; roomFileChoices: RoomFileChoices | null;
-  roomFileInput: string; roomFileRevision: number; roomFileTimer: number | undefined;
+  mfiles: Record<MeasurementPurpose, MeasurementFileState>;
 }
 interface Window {
   pywebview?: { api: IpcApi };

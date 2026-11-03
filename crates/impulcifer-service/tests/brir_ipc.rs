@@ -67,6 +67,41 @@ fn start_brir_emits_progress_with_cli_keys_and_total_eleven() {
         );
     }
 }
+
+#[test]
+fn external_brir_without_folder_recordings_runs_without_sweep_fallback_warning() {
+    let temp = Temp::new();
+    let jobs = JobRegistry::new();
+    let service = service(&temp, jobs.clone());
+    let external = root().join("crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat");
+    let result = service.call(
+        "start_brir",
+        vec![json!({
+            "dir_path":temp.0,
+            "brir_measurement_file":external,
+            "brir_measurement_map":"FL.left=1,FL.right=2",
+            "do_room_correction":false,
+            "do_headphone_compensation":false,
+            "do_equalization":false
+        })],
+    );
+    assert_eq!(result["ok"], true, "{result}");
+    let poll = wait(&jobs, result["data"]["job"]["job_id"].as_str().unwrap());
+    assert_eq!(
+        poll.job.status,
+        JobStatus::Succeeded,
+        "{:?}",
+        poll.job.error
+    );
+    assert!(temp.0.join("hesuvi.wav").is_file());
+    assert!(
+        !poll
+            .events
+            .iter()
+            .any(|event| { event.payload["key"] == "cli_warning_sweep_detect_fallback" })
+    );
+}
+
 #[test]
 fn start_brir_cancel_mid_run_reports_cancelled() {
     let temp = Temp::demo();

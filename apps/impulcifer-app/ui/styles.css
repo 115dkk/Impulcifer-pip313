@@ -929,6 +929,13 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .room-file-positions { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .room-file-positions label { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-1); }
 .room-file-positions select { width: auto; min-width: 9.5em; }
+/* Headphones: two labelled selects in a column; the label text takes a fixed
+   width so both selects start at the same edge, and wraps above on narrow widths. */
+.room-file-picks { display: grid; gap: 8px; }
+.room-file-picks label { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--fg-1); }
+.room-file-picks label > span { flex: 0 0 15em; }
+.room-file-picks select { width: auto; min-width: 12em; max-width: 100%; }
+.room-file-picks label[data-state="error"] select { border-color: var(--err); }
 
 .room-map {
   width: 100%;
@@ -1335,6 +1342,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .eq-slot-actions { justify-content: flex-start; }
   .room-map td:first-child { width: auto; }
   .room-map select { min-width: 0; }
+  .room-file-picks label > span { flex-basis: 100%; }
   .adv-panel .field-row, .adv-panel .adv-nested .field-row { grid-template-columns: 1fr; }
   .file-grid { grid-template-columns: 1fr; }
   .ch-grid { grid-template-columns: repeat(3, max-content); }

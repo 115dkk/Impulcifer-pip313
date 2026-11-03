@@ -376,7 +376,7 @@ impl ImpulciferService {
             }
             IpcMethod::InspectRoomMeasurements => {
                 args.count(1, 1)?;
-                brir::room_file::inspect(args.get(0))
+                brir::measurement_file::inspect(args.get(0))
             }
             IpcMethod::InspectEq => {
                 args.count(1, 1)?;

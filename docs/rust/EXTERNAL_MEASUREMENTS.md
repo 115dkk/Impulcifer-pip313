@@ -1,9 +1,10 @@
-# Room measurements from REW and Dirac Live files
+# Measurements from REW and Dirac Live files
 
 ADR 0010 decides that a REW measurement file (`.mdat`) or a Dirac Live project
 (`.liveproject`) can replace the `room-*.wav` recordings of a measurement folder.
-This document is the specification of both readers, of the automatic
-speaker/ear assignment and of the map syntax. Everything here was established
+ADR 0011 extends that to the binaural speaker recordings (the BRIR measurement)
+and to `headphones.wav`. This document is the specification of both readers, of
+the automatic speaker/ear assignment for each purpose and of the map syntax. Everything here was established
 from public encodings and from files: the Java Object Serialization
 Specification (chapter 6, stream protocol), the protobuf wire format, Qt's
 `QDataStream` format, files that REW 5.40 beta 135 wrote through its local API,
@@ -293,6 +294,125 @@ included. `format_map(entries)` writes the canonical form: entries in slot order
 (the 40-slot order), `left` before `right`, and `SLOT=ID` when both sides use
 the same id.
 
+## Purposes
+
+The same file can serve three purposes, each with its own map:
+
+| Purpose | Config fields | Replaces | Entries |
+| --- | --- | --- | --- |
+| `room` | `room_measurement_file`, `room_measurement_map` | `room-*.wav` | `SLOT=ID`, `SLOT.left=ID`, `SLOT.right=ID` |
+| `brir` | `brir_measurement_file`, `brir_measurement_map` | the speaker recordings (`FL,FR.wav`, …) | `SLOT.left=ID`, `SLOT.right=ID` |
+| `headphones` | `headphone_measurement_file`, `headphone_measurement_map` | `headphones.wav` | `left=ID`, `right=ID` |
+
+Everything above this section is the `room` purpose, and it does not change.
+In code (`impulcifer_io::external::assign`):
+
+```rust
+pub enum Purpose { Room, Brir, Headphones }      // parse("room" | "brir" | "headphones"), as_str()
+pub fn auto_assign_for(file: &ExternalFile, purpose: Purpose) -> Vec<Assignment>;
+pub fn parse_map_for(file: &ExternalFile, map: &str, purpose: Purpose) -> Result<Vec<Assignment>, ExternalError>;
+pub fn format_map_for(assignments: &[Assignment], purpose: Purpose) -> String;
+pub fn check_assignments(assignments: &[Assignment], purpose: Purpose) -> Result<(), ExternalError>;
+```
+
+`auto_assign`, `parse_map` and `format_map` stay as the `room` versions. A
+headphone assignment is expressed with the slots of `headphones.wav`: the left
+ear is `Assignment { slot: "FL", side: Left, .. }`, the right ear
+`Assignment { slot: "FR", side: Right, .. }`.
+
+### Ear positions in a Dirac project
+
+A Dirac project has one microphone input, so a binaural measurement puts the two
+ears at two positions. For `brir` and `headphones` the left ear uses the lowest
+measured position and the right ear the next one; with a single measured
+position both ears use it (which `check_assignments` then rejects for `brir`,
+because one measurement cannot serve two ears). The `room` purpose keeps its
+rule (position 1, else the lowest, for both ears).
+
+### Automatic assignment for `brir`
+
+- REW: the title rules of "REW files" above, but only titles with an ear give an
+  assignment (a measurement without an ear is not assigned). The first
+  measurement for a slot and side wins.
+- Dirac: every speaker that gets a slot under "Dirac projects" above and has a
+  non-skipped measurement at the left-ear position gets `SLOT.left` from it,
+  and likewise `SLOT.right` from the right-ear position.
+- The result may be incomplete (a slot with one ear). It is returned as is so
+  that a screen can show it; `check_assignments` reports it.
+
+### Automatic assignment for `headphones`
+
+- REW: a measurement's ear is the first token (title split as above) that is
+  an ear word, else the first token whose `slot_for_label` is FL (left) or FR
+  (right). Measurements are taken in file order and the first one for each ear
+  wins. When no usable measurement has an ear and there are exactly two usable
+  measurements, the first is left and the second right.
+- Dirac: the first speaker whose slot is FL at the left-ear position, and the
+  first speaker whose slot is FR at the right-ear position, each when that
+  measurement exists and is not skipped.
+
+### Map syntax for `brir` and `headphones`
+
+The common rules of "Map syntax" apply (unknown or skipped id, unknown slot, a
+slot and side given twice). In addition:
+
+- `brir` accepts only `SLOT.left=ID` and `SLOT.right=ID`; a bare `SLOT=ID` is
+  an error (`a BRIR map entry names one ear: use SLOT.left=ID or SLOT.right=ID`).
+- `headphones` accepts only `left=ID` and `right=ID` (any case, whitespace
+  ignored), each at most once.
+- `format_map_for(_, Brir)` writes `SLOT.left=ID,SLOT.right=ID` in slot order
+  and never merges two sides into `SLOT=ID`. `format_map_for(_, Headphones)`
+  writes `left=ID,right=ID` (whichever exist, left first).
+
+### Checks
+
+`check_assignments` is what a job requires before it uses the assignment; the
+inspection does not call it.
+
+- `room`: nothing (the room loader keeps its own "nothing assigned" error).
+- `brir`: at least one assignment (`no BRIR measurements assigned`); every slot
+  has both sides (`speaker slot FL has no right ear measurement`); no id appears
+  twice (`measurement 3 is assigned more than once`); FL is present
+  (`the BRIR measurements must include FL, the reference for alignment`).
+- `headphones`: both ears present (`headphone measurement needs a left and a
+  right ear; the right ear is missing`); the two ids differ (`measurement 3 is
+  assigned more than once`).
+
+### Building the BRIR responses
+
+For `brir` the service places all assigned responses on one time axis before it
+builds the `Hrir`, so that each speaker keeps the time difference between its
+two ears:
+
+1. `t0` is the smallest `start_time` among the assigned measurements (REW;
+   Dirac is always 0).
+2. Each response gets `round((start_time - t0) * sample_rate)` leading zeros.
+   A difference above 10 seconds is an error (`measurements are more than 10 s
+   apart in time`).
+3. All responses are cut to the shortest padded length. If that length is not
+   larger than the largest padding, the responses do not overlap and it is an
+   error (`measurements do not overlap in time`).
+4. The `Hrir` holds the slots in slot order at the file's rate and is resampled
+   to the job's rate when they differ.
+
+The `room` purpose does not do this (unchanged since ADR 0010); `headphones`
+cuts both responses to the shorter length and does nothing else.
+
+After building the BRIR responses, at the job's rate, the service compares the
+two ears of each slot. The arrival of an ear is
+`ImpulseResponse::peak_index(0, None, 0.12589)` (the measure `crop_heads` uses);
+the time difference is `(right - left) / fs` in milliseconds.
+
+- Always: info `cli_brir_measurement_file_itd` with `{"list": "FL +0.26, FR -0.25"}`
+  (slot order, two decimals, sign always shown).
+- Each slot whose difference exceeds 1.0 ms in magnitude: warning
+  `cli_brir_measurement_file_itd_large` with `{"speaker": "FL", "ms": "+9.38"}`.
+- When at least two slots off the median plane (slot azimuth not 0 and not 180)
+  are present and every one of them differs by at most one sample: warning
+  `cli_brir_measurement_file_itd_zero` with `{}`.
+
+Nothing is corrected automatically (ADR 0011, point 5).
+
 ## Service
 
 - Config fields `room_measurement_file` (path) and `room_measurement_map`
@@ -335,3 +455,44 @@ the same id.
   `slot` in `speakers` is the automatic slot. `mapping` and `map` are the
   effective assignment (from `map` when given, else automatic) in canonical
   order; `auto` says which.
+
+### BRIR and headphone measurement files (ADR 0011)
+
+- Config fields `brir_measurement_file`, `brir_measurement_map`,
+  `headphone_measurement_file` and `headphone_measurement_map` are 3.x
+  extension fields; the CLI options carry the same names
+  (`--brir_measurement_file PATH`, `--brir_measurement_map MAP`,
+  `--headphone_measurement_file PATH`, `--headphone_measurement_map MAP`).
+  Paths are read in place, like `room_measurement_file`.
+- With `brir_measurement_file` set, the job builds the HRIR from the file
+  (see "Building the BRIR responses") wherever it would open the folder's
+  speaker recordings, including the early opening for virtual bass `auto`. The
+  folder's speaker recordings are not opened; when there are any, info
+  `cli_brir_measurement_file_replaces_folder` with `{"count": n}`. After
+  loading, info `cli_brir_measurement_file_loaded` with `{"file": <file name>,
+  "format": "REW" | "Dirac Live", "count": <slots>}`, then the time-difference
+  lines above. No microphone calibration is applied (ADR 0011, point 6).
+- With `brir_measurement_file` set and no speaker recording in the folder, the
+  estimator falls back to the bundled default sweep without the
+  `cli_warning_sweep_detect_fallback` warning (nothing could be detected).
+- With headphone compensation on and `headphone_measurement_file` set, the job
+  builds the headphone `Hrir` (`FL` left and `FR` right only) from the file
+  instead of `headphones.wav`, skips the folder's headphone discovery messages,
+  and continues as before (`headphone-responses.wav`, compensation, plot). When
+  the folder has a headphone recording, info
+  `cli_headphone_measurement_file_replaces_folder` with `{"file": <its name>}`.
+  After loading, info `cli_headphone_measurement_file_loaded` with
+  `{"file": <file name>, "format": "REW" | "Dirac Live", "left": <measurement
+  name>, "right": <measurement name>}`.
+- The map of each purpose is resolved with `parse_map_for` and then
+  `check_assignments`; a missing file is `FILE_NOT_FOUND`, everything else
+  (unreadable file, invalid map, failed check) is a job error with the
+  English message of the reader or the check.
+- `inspect_room_measurements({path, map?, purpose?})`: `purpose` is `room`
+  (default when missing or null), `brir` or `headphones`; anything else is
+  `INVALID_REQUEST` (`purpose must be room, brir or headphones.`). The response
+  gains `"purpose"` (the effective one), and `mapping`, `map` and `auto` follow
+  that purpose (`parse_map_for`, `format_map_for`). `speakers[].slot` stays the
+  automatic slot of the speaker name, the same for every purpose. The
+  inspection never calls `check_assignments`; an incomplete assignment is
+  returned for the screen to show.

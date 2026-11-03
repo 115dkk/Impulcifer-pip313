@@ -266,3 +266,178 @@ fn dirac_project_room_measurements_are_resampled_and_bring_their_calibration() {
             .contains(&"cli_room_measurement_file_mic_calibration".into())
     );
 }
+
+#[test]
+fn brir_measurement_file_preserves_rew_time_axis_and_replaces_folder() {
+    let temp = Temp::demo();
+    let external = root().join("crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat");
+    let config = ProcessingConfig {
+        brir_measurement_file: Some(external.to_string_lossy().into()),
+        brir_measurement_map: Some("FL.left=1,FL.right=2".into()),
+        do_room_correction: false,
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    for (path, _) in &dir.recordings {
+        std::fs::write(path, b"poison").unwrap();
+    }
+    let estimator = open_estimator(&dir, Some("default")).unwrap();
+    let mut events = Events::default();
+    let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
+    assert_eq!(inputs.hrir.speakers.len(), 1);
+    let speaker = &inputs.hrir.speakers[0];
+    let left = speaker.left.as_ref().unwrap();
+    let right = speaker.right.as_ref().unwrap();
+    assert_eq!(left.data.len(), right.data.len());
+    let file = impulcifer_io::external::read_external(&external).unwrap();
+    let expected = ((file.measurements[1].start_time - file.measurements[0].start_time)
+        * f64::from(file.sample_rate))
+    .round() as usize;
+    assert!(right.data[..expected].iter().all(|sample| *sample == 0.0));
+    assert!(events.1.contains(&(
+        "cli_brir_measurement_file_replaces_folder".into(),
+        serde_json::json!({"count":dir.recordings.len()})
+    )));
+    assert!(events.1.contains(&(
+        "cli_brir_measurement_file_loaded".into(),
+        serde_json::json!({"file":"rew_two_irs_and_fr.mdat","format":"REW","count":1})
+    )));
+    let loaded = events
+        .0
+        .iter()
+        .position(|key| key == "cli_brir_measurement_file_loaded")
+        .unwrap();
+    let itd = events
+        .0
+        .iter()
+        .position(|key| key == "cli_brir_measurement_file_itd")
+        .unwrap();
+    assert!(loaded < itd, "loaded event must precede ITD diagnostics");
+}
+
+#[test]
+fn dirac_brir_logs_large_and_zero_itd_warnings() {
+    for (delays, expected, expected_count) in [
+        (
+            [0, 0, 0, 500, 500, 500],
+            "cli_brir_measurement_file_itd_large",
+            2,
+        ),
+        ([0; 6], "cli_brir_measurement_file_itd_zero", 1),
+    ] {
+        let temp = Temp::demo();
+        let path = temp.0.join("ears.liveproject");
+        std::fs::write(
+            &path,
+            room_builder::dirac_project_with_delays(48000, &delays),
+        )
+        .unwrap();
+        let config = ProcessingConfig {
+            brir_measurement_file: Some(path.to_string_lossy().into()),
+            do_room_correction: false,
+            do_headphone_compensation: false,
+            do_equalization: false,
+            ..Default::default()
+        };
+        let dir = discover(&temp.0, &config).unwrap();
+        let estimator = open_estimator(&dir, Some("default")).unwrap();
+        let mut events = Events::default();
+        load_inputs(&dir, &estimator, &config, &mut events).unwrap();
+        let warnings = events
+            .0
+            .iter()
+            .filter(|key| key.as_str() == expected)
+            .count();
+        assert_eq!(
+            warnings, expected_count,
+            "warning count for {expected}: {:?}",
+            events.0
+        );
+    }
+}
+
+#[test]
+fn brir_measurement_errors_are_invalid_requests_or_missing_files() {
+    let temp = Temp::demo();
+    let external = root().join("crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat");
+    let estimator = impulcifer_dsp::estimator::SweepEstimator::new(5.0, 48000).unwrap();
+    for map in ["FL.left=1", "FR.left=1,FR.right=2"] {
+        let config = ProcessingConfig {
+            brir_measurement_file: Some(external.to_string_lossy().into()),
+            brir_measurement_map: Some(map.into()),
+            do_room_correction: false,
+            do_headphone_compensation: false,
+            do_equalization: false,
+            ..Default::default()
+        };
+        let dir = discover(&temp.0, &config).unwrap();
+        assert_eq!(
+            load_inputs(&dir, &estimator, &config, &mut Events::default())
+                .unwrap_err()
+                .envelope()["error"]["code"],
+            "INVALID_REQUEST"
+        );
+    }
+    let config = ProcessingConfig {
+        brir_measurement_file: Some(temp.0.join("missing.mdat").to_string_lossy().into()),
+        do_room_correction: false,
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    assert_eq!(
+        load_inputs(&dir, &estimator, &config, &mut Events::default())
+            .unwrap_err()
+            .envelope()["error"]["code"],
+        "FILE_NOT_FOUND"
+    );
+}
+
+#[test]
+fn headphone_measurement_file_replaces_folder_and_is_not_opened_when_disabled() {
+    let temp = Temp::demo();
+    let external = root().join("crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat");
+    let file = impulcifer_io::external::read_external(&external).unwrap();
+    let config = ProcessingConfig {
+        headphone_measurement_file: Some(external.to_string_lossy().into()),
+        headphone_measurement_map: Some("left=1,right=2".into()),
+        do_room_correction: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    let folder = dir.headphones.as_ref().unwrap();
+    std::fs::write(folder, b"poison").unwrap();
+    let estimator = open_estimator(&dir, Some("default")).unwrap();
+    let mut events = Events::default();
+    let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
+    assert!(inputs.headphone.is_some());
+    assert!(temp.0.join("headphone-responses.wav").is_file());
+    assert!(events.1.contains(&(
+        "cli_headphone_measurement_file_replaces_folder".into(),
+        serde_json::json!({"file":"headphones.wav"})
+    )));
+    assert!(
+        events
+            .1
+            .iter()
+            .any(|(key, args)| key == "cli_headphone_measurement_file_loaded"
+                && args["left"] == file.measurements[0].name
+                && args["right"] == file.measurements[1].name)
+    );
+    for key in [
+        "cli_info_hp_param_provided",
+        "cli_info_hp_default",
+        "cli_info_using_hp_file",
+        "cli_error_hp_file_missing",
+    ] {
+        assert!(!events.0.contains(&key.into()));
+    }
+    let mut off = config;
+    off.do_headphone_compensation = false;
+    off.headphone_measurement_file = Some("missing.mdat".into());
+    load_inputs(&dir, &estimator, &off, &mut Events::default()).unwrap();
+}

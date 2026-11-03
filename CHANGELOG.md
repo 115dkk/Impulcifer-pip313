@@ -4,6 +4,23 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.9.0 - 2026-11-03
+### REW 측정 파일과 Dirac Live 프로젝트를 BRIR 측정과 헤드폰 측정으로도 읽기
+
+#### ⭐ 새로운 기능 / 개선
+- **BRIR 측정을 REW·Dirac Live 파일에서 읽기**: 합성 화면의 입력 파일 칸에서 BRIR 측정의 출처를 고릅니다. 지금처럼 녹음 폴더의 스피커 측정 파일(`FL,FR.wav` 등)을 쓰거나, 바이노럴 마이크로 스피커를 잰 REW 측정 파일이나 Dirac Live 프로젝트 하나를 고릅니다. macOS에서는 Impulcifer가 8채널을 넘는 sweep을 낼 수 없지만, 리시버의 Dirac Live가 낸 sweep을 바이노럴 마이크로 직접 재면 그 프로젝트로 BRIR을 만들 수 있습니다. 결과 파일과 나머지 입력은 지금처럼 녹음 폴더를 씁니다. CLI에서는 `--brir_measurement_file`과 `--brir_measurement_map`을 씁니다(ADR 0011).
+- **귀마다 측정 하나**: REW는 측정 이름에서 스피커와 귀를 읽고(`FL left`, `FL 오른쪽`), Dirac Live는 마이크 입력이 하나뿐이라 가장 낮은 측정 위치를 왼쪽 귀, 그다음 위치를 오른쪽 귀로 봅니다. 한쪽 귀만 있는 스피커, FL이 없는 대응, 두 귀에 같은 위치를 고른 대응은 화면에서 알려 주고 처리를 시작하지 않습니다. 폴더의 스피커 측정 파일과는 레벨 기준이 달라 섞어 쓰지 않습니다.
+- **두 귀의 시간차 확인**: REW 측정은 저장된 시작 시각대로 같은 시간축에 놓아 두 귀의 시간차를 지킵니다. 작업 기록에 스피커마다 두 귀의 시간차가 나오고, 1 ms를 넘으면(사람 머리로는 나올 수 없는 값) 그 스피커를, 옆쪽 스피커가 모두 0이면 타이밍 기준 없이 귀를 따로 잰 것으로 보고 경고합니다. 유지보수자의 Dirac 프로젝트 하나에서 위치 사이 지연이 9 ms 바뀐 것을 보고 넣은 검사입니다.
+- **헤드폰 측정을 REW·Dirac Live 파일에서 읽기**: 헤드폰 보정 칸에서 `headphones.wav` 대신 측정 파일을 고르고, 왼쪽 귀에서 잰 왼쪽 이어컵과 오른쪽 귀에서 잰 오른쪽 이어컵의 측정을 정합니다. 자동으로는 REW 측정 이름의 귀 단어로(그런 이름이 없고 측정이 둘이면 파일 순서로), Dirac Live는 FL과 FR 열로 정합니다. CLI에서는 `--headphone_measurement_file`과 `--headphone_measurement_map`을 씁니다.
+- BRIR과 헤드폰 측정에는 Dirac 프로젝트의 마이크 보정 곡선을 쓰지 않습니다. 그 곡선은 측정 마이크의 것이고, 바이노럴 마이크의 응답은 헤드폰 보정이 지웁니다.
+
+#### 🐛 버그 수정
+- **Dirac 프로젝트에서 재지 않은 위치를 고른 대응**: 어떤 스피커를 고른 위치에서 재지 않았으면 표가 그 측정을 대응에 그대로 넣어, 처리를 시작한 뒤에야 `unknown measurement id`로 실패했습니다(3.8.0의 룸 측정 표도 같습니다). 이제 그 스피커의 줄을 빨갛게 표시하고 이름을 알려 주며 처리를 시작하지 않습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **IPC**: `inspect_room_measurements`가 `purpose`(`room`, `brir`, `headphones`)를 받아 용도별 자동 대응을 돌려줍니다. 없으면 지금처럼 `room`입니다.
+- brir-3x 무결성 검사에 `brir_measurement_file_rew`와 `headphone_measurement_file_rew` 시나리오(3.9.0부터)를 추가했습니다.
+
 ## 3.8.0 - 2026-11-03
 ### REW 측정 파일과 Dirac Live 프로젝트를 룸 측정으로 읽기
 
