@@ -156,6 +156,7 @@
   "room_file_error_details": "Подробности",
   "room_file_duplicate": "Одной позиции уха для одного динамика назначено несколько измерений. Измените строки, отмеченные красным.",
   "room_file_none_assigned": "Ни одному динамику ещё не назначено измерение.",
+  "room_file_not_measured": "Некоторые динамики не были измерены в выбранной позиции ({speakers}). Выберите другую позицию или выберите для строки «Не используется».",
   "cli_room_measurement_file_loaded": "Измерения помещения: {count} откликов из {file} ({format})",
   "cli_room_measurement_file_replaces_folder": "Файлы room-*.wav из папки ({count}) не используются, поскольку задан файл измерений помещения",
   "cli_room_measurement_file_mic_calibration": "Используется калибровка микрофона, сохранённая в проекте Dirac Live",

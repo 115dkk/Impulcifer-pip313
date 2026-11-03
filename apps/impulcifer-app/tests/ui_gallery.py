@@ -212,10 +212,13 @@ def mock_script(skin, theme, language, scenario):
         const names = ["Left", "Right", "LeftSurround", "RightSurround", "Subwoofer", "Subwoofer"];
         const slots = ["FL", "FR", "SL", "SR", null, null];
         const positions = path.includes("single") ? [1] : [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        // "partial": the Right speaker was not measured at position 2 (no matrix element).
+        const missing = path.includes("partial") ? new Set(["2@2"]) : new Set();
         const right = purpose === "room" ? 1 : positions[1] || positions[0];
         const mapping = purpose === "headphones"
           ? [{slot: "FL", side: "left", id: "1@1"}, {slot: "FR", side: "right", id: `2@${right}`}]
-          : slots.flatMap((slot, i) => slot ? [{slot, side: "left", id: `${i + 1}@1`}, {slot, side: "right", id: `${i + 1}@${right}`}] : []);
+          : slots.flatMap((slot, i) => slot ? [{slot, side: "left", id: `${i + 1}@1`}, {slot, side: "right", id: `${i + 1}@${right}`}] : [])
+            .filter(entry => !missing.has(entry.id));
         const map = purpose === "headphones" ? `left=1@1,right=2@${right}`
           : purpose === "brir" ? mapping.map(e => `${e.slot}.${e.side}=${e.id}`).join(",")
           : "FL=1@1,FR=2@1,SL=3@1,SR=4@1";
@@ -223,7 +226,7 @@ def mock_script(skin, theme, language, scenario):
           microphone: "Umik-1  Gain: 18dB", mic_calibration: true, positions,
           speakers: names.map((name, i) => ({index: i + 1, name, subwoofer: i >= 4, slot: slots[i]})),
           measurements: positions.flatMap(position => names.map((name, i) => ({id: `${i + 1}@${position}`, name,
-            speaker: i + 1, position, samples: 32769, skipped: null}))),
+            speaker: i + 1, position, samples: 32769, skipped: null}))).filter(m => !missing.has(m.id)),
           mapping, map, auto: true, purpose}));
       }
       return ok({format: "rew", path, title: null, sample_rate: 48000, microphone: null, mic_calibration: false,
@@ -990,6 +993,13 @@ def room_file_checks(browser):
         assert request["room_measurement_map"] == ("FL.left=1@1,FL.right=1@2,FR.left=2@1,FR.right=2@2,"
                                                    "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2"), request
 
+        page.locator("#bf-room-file").fill("D:/Dirac/partial living room.liveproject")
+        page.wait_for_function("document.querySelector('#bf-room-file-status')?.textContent === t('hint_room_file')")
+        page.locator('#bf-room-file-result .room-file-positions select[data-room-field="right"]').select_option("2")
+        assert page.locator("#bf-room-file-status").inner_text() == page.evaluate(
+            "fmt(t('room_file_not_measured'), {speakers: 'FR'})")
+        assert _blocked(page)
+
         page.locator("#bf-room-file").fill("D:/Dirac/missing.liveproject")
         page.locator("#bf-room-file-result .room-file-error", has_text="The file does not exist.").wait_for()
         page.locator("#bf-room-file").fill("D:/Dirac/broken.mdat")
@@ -1094,6 +1104,16 @@ def brir_file_checks(browser):
         positions.nth(1).select_option("1")
         assert status.inner_text() == page.evaluate("t('brir_file_same_position')")
         assert _blocked(page)
+
+        # A speaker missing at a chosen position is named before the job starts (the
+        # automatic map leaves FR with its left ear only).
+        page.locator("#bf-brir-file").fill("D:/Dirac/partial living room.liveproject")
+        page.wait_for_function("document.querySelector('#bf-brir-file-status')?.textContent === "
+                               "fmt(t('room_file_not_measured'), {speakers: 'FR'})")
+        assert page.locator("#bf-brir-file-result tbody tr").nth(1).get_attribute("data-state") == "error"
+        assert _blocked(page)
+        page.locator("#bf-brir-file-result tbody tr").nth(1).locator('select[data-room-field="slot"]').select_option("")
+        assert page.locator("#bf-brir-file-status").inner_text() == page.evaluate("t('hint_brir_file')")
 
         page.locator("#bf-brir-file").fill("D:/Dirac/single position.liveproject")
         page.locator("#bf-brir-file-result .room-file-positions select").first.wait_for()

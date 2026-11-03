@@ -156,6 +156,7 @@
   "room_file_error_details": "Details",
   "room_file_duplicate": "An ear position of a speaker has more than one measurement. Change the rows marked in red.",
   "room_file_none_assigned": "No measurement is assigned to a speaker yet.",
+  "room_file_not_measured": "Some speakers were not measured at the chosen position ({speakers}). Choose another position or set the row to Not used.",
   "cli_room_measurement_file_loaded": "Room measurements: {count} responses from {file} ({format})",
   "cli_room_measurement_file_replaces_folder": "The folder's {count} room-*.wav files are not used because a room measurement file is set",
   "cli_room_measurement_file_mic_calibration": "Using the microphone calibration stored in the Dirac Live project",

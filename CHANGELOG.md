@@ -14,6 +14,9 @@ been fixed and old features improved.
 - **헤드폰 측정을 REW·Dirac Live 파일에서 읽기**: 헤드폰 보정 칸에서 `headphones.wav` 대신 측정 파일을 고르고, 왼쪽 귀에서 잰 왼쪽 이어컵과 오른쪽 귀에서 잰 오른쪽 이어컵의 측정을 정합니다. 자동으로는 REW 측정 이름의 귀 단어로(그런 이름이 없고 측정이 둘이면 파일 순서로), Dirac Live는 FL과 FR 열로 정합니다. CLI에서는 `--headphone_measurement_file`과 `--headphone_measurement_map`을 씁니다.
 - BRIR과 헤드폰 측정에는 Dirac 프로젝트의 마이크 보정 곡선을 쓰지 않습니다. 그 곡선은 측정 마이크의 것이고, 바이노럴 마이크의 응답은 헤드폰 보정이 지웁니다.
 
+#### 🐛 버그 수정
+- **Dirac 프로젝트에서 재지 않은 위치를 고른 대응**: 어떤 스피커를 고른 위치에서 재지 않았으면 표가 그 측정을 대응에 그대로 넣어, 처리를 시작한 뒤에야 `unknown measurement id`로 실패했습니다(3.8.0의 룸 측정 표도 같습니다). 이제 그 스피커의 줄을 빨갛게 표시하고 이름을 알려 주며 처리를 시작하지 않습니다.
+
 #### 🔧 빌드 / 설정 변경
 - **IPC**: `inspect_room_measurements`가 `purpose`(`room`, `brir`, `headphones`)를 받아 용도별 자동 대응을 돌려줍니다. 없으면 지금처럼 `room`입니다.
 - brir-3x 무결성 검사에 `brir_measurement_file_rew`와 `headphone_measurement_file_rew` 시나리오(3.9.0부터)를 추가했습니다.

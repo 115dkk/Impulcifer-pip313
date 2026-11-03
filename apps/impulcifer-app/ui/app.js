@@ -3026,6 +3026,12 @@ function mfileAssignment(purpose) {
   const claims = new Map();
   /** @type {Map<string, { sides: Set<string>; keys: string[] }>} */
   const ears = new Map();
+  // A Dirac matrix may lack a speaker at a position (not measured there).
+  const measured = new Set(inspection.measurements.filter((m) => !m.skipped).map((m) => m.id));
+  /** @type {string[]} */
+  const unmeasured = [];
+  /** @type {string[]} */
+  const unmeasuredKeys = [];
   /** @param {string} key @param {string} slot @param {"left" | "right"} side */
   const claim = (key, slot, side) => {
     claims.set(`${slot}.${side}`, [...(claims.get(`${slot}.${side}`) || []), key]);
@@ -3041,6 +3047,10 @@ function mfileAssignment(purpose) {
       const rightId = `${key}@${choices.right}`;
       entries.push(purpose === "room" && leftId === rightId ? `${row.slot}=${leftId}`
         : `${row.slot}.left=${leftId},${row.slot}.right=${rightId}`);
+      if (!measured.has(leftId) || !measured.has(rightId)) {
+        unmeasured.push(row.slot);
+        unmeasuredKeys.push(key);
+      }
       claim(key, row.slot, "left");
       claim(key, row.slot, "right");
     } else {
@@ -3054,6 +3064,10 @@ function mfileAssignment(purpose) {
   const flagged = new Set([...claims.values()].filter((keys) => keys.length > 1).flat());
   /** @type {string | null} */
   let problem = flagged.size ? t("room_file_duplicate") : entries.length ? null : t("room_file_none_assigned");
+  if (!problem && unmeasured.length) {
+    problem = fmt(t("room_file_not_measured"), { speakers: unmeasured.join(", ") });
+    for (const key of unmeasuredKeys) flagged.add(key);
+  }
   if (!problem && purpose === "brir") {
     const incomplete = [...ears].filter(([, ear]) => ear.sides.size < 2);
     if (dirac && inspection.positions.length < 2) problem = t("brir_file_one_position");

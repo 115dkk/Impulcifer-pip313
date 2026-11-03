@@ -156,6 +156,7 @@
   "room_file_error_details": "자세히",
   "room_file_duplicate": "한 스피커의 같은 귀 위치에 측정이 둘 이상 배정되어 있습니다. 빨갛게 표시한 줄을 고치세요.",
   "room_file_none_assigned": "아직 스피커에 배정한 측정이 없습니다.",
+  "room_file_not_measured": "고른 위치에서 측정하지 않은 스피커가 있습니다({speakers}). 다른 위치를 고르거나 해당 줄을 쓰지 않음으로 바꾸세요.",
   "cli_room_measurement_file_loaded": "룸 측정: {file}({format})에서 응답 {count}개",
   "cli_room_measurement_file_replaces_folder": "룸 측정 파일을 지정했으므로 폴더의 room-*.wav 파일 {count}개는 쓰지 않습니다",
   "cli_room_measurement_file_mic_calibration": "Dirac Live 프로젝트에 저장된 마이크 보정을 씁니다",

@@ -156,6 +156,7 @@
   "room_file_error_details": "詳細資訊",
   "room_file_duplicate": "同一喇叭的同一耳朵位置指派了多項量測。請修改標紅的行。",
   "room_file_none_assigned": "尚未為任何喇叭指派量測。",
+  "room_file_not_measured": "部分喇叭未在所選位置量測（{speakers}）。請選擇其他位置，或將該行設為「不使用」。",
   "cli_room_measurement_file_loaded": "房間量測：來自 {file}（{format}）的 {count} 個響應",
   "cli_room_measurement_file_replaces_folder": "已指定房間量測檔案，因此不使用資料夾中的 {count} 個 room-*.wav 檔案",
   "cli_room_measurement_file_mic_calibration": "使用 Dirac Live 專案中儲存的麥克風校準資料",

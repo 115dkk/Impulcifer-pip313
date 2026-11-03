@@ -156,6 +156,7 @@
   "room_file_error_details": "Detalles",
   "room_file_duplicate": "La posición de un oído de un altavoz tiene más de una medición asignada. Cambie las filas marcadas en rojo.",
   "room_file_none_assigned": "Aún no se ha asignado ninguna medición a un altavoz.",
+  "room_file_not_measured": "Algunos altavoces no se midieron en la posición elegida ({speakers}). Elija otra posición o cambie la fila a «Sin usar».",
   "cli_room_measurement_file_loaded": "Mediciones de sala: {count} respuestas de {file} ({format})",
   "cli_room_measurement_file_replaces_folder": "No se usan los {count} archivos room-*.wav de la carpeta porque se ha elegido un archivo de mediciones de sala",
   "cli_room_measurement_file_mic_calibration": "Se usa la calibración de micrófono guardada en el proyecto de Dirac Live",

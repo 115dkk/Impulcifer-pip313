@@ -156,6 +156,7 @@
   "room_file_error_details": "Détails",
   "room_file_duplicate": "Plusieurs mesures sont attribuées à la position d’une même oreille pour une enceinte. Modifiez les lignes marquées en rouge.",
   "room_file_none_assigned": "Aucune mesure n’est encore attribuée à une enceinte.",
+  "room_file_not_measured": "Certaines enceintes n’ont pas été mesurées à la position choisie ({speakers}). Choisissez une autre position ou réglez la ligne sur « Non utilisé ».",
   "cli_room_measurement_file_loaded": "Mesures de la pièce : {count} réponses provenant de {file} ({format})",
   "cli_room_measurement_file_replaces_folder": "Les {count} fichiers room-*.wav du dossier ne sont pas utilisés, car un fichier de mesures de la pièce est défini",
   "cli_room_measurement_file_mic_calibration": "Utilisation de la calibration du micro enregistrée dans le projet Dirac Live",

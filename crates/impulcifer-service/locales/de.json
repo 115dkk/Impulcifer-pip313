@@ -156,6 +156,7 @@
   "room_file_error_details": "Details",
   "room_file_duplicate": "Einer Ohrposition eines Lautsprechers ist mehr als eine Messung zugeordnet. Ändern Sie die rot markierten Zeilen.",
   "room_file_none_assigned": "Noch ist keine Messung einem Lautsprecher zugeordnet.",
+  "room_file_not_measured": "Einige Lautsprecher wurden an der gewählten Position nicht gemessen ({speakers}). Wählen Sie eine andere Position oder setzen Sie die Zeile auf „Nicht verwendet“.",
   "cli_room_measurement_file_loaded": "Raummessungen: {count} Antworten aus {file} ({format})",
   "cli_room_measurement_file_replaces_folder": "Die {count} room-*.wav-Dateien im Ordner werden nicht verwendet, da eine Raummessdatei festgelegt ist",
   "cli_room_measurement_file_mic_calibration": "Die im Dirac Live-Projekt gespeicherte Mikrofonkalibrierung wird verwendet",
