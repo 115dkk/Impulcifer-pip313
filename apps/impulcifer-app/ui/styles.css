@@ -914,6 +914,51 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .eq-error { color: var(--err); font-size: 13px; }
 .eq-slot-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
 
+/* -------------------------------------------- room measurements from a file
+   A REW or Dirac Live file (ADR 0010): what the file holds on one line, then
+   one table row per REW measurement or Dirac speaker with the speaker slot
+   and ear position it feeds. Rows that cannot feed anything stay readable
+   but quiet; a slot assigned twice turns its rows red. */
+
+.room-file { display: grid; gap: 10px; }
+.room-file[hidden] { display: none; }
+.room-file-result { display: grid; gap: 8px; }
+.room-file-result:empty { display: none; }
+.room-file-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.room-file-summary .eq-tag { flex: none; }
+.room-file-positions { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.room-file-positions label { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-1); }
+.room-file-positions select { width: auto; min-width: 9.5em; }
+
+.room-map {
+  width: 100%;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  border-spacing: 0;
+  background: var(--field-bg);
+}
+
+.room-map th {
+  padding: 7px 10px 6px;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.room-map td { padding: 5px 10px; border-top: 1px solid var(--line-soft); vertical-align: middle; }
+.room-map td:first-child { width: 100%; }
+.room-map select { width: auto; min-width: 8.5em; height: 32px; }
+.room-map-name { font-size: 13px; overflow-wrap: anywhere; }
+.room-map-note { display: block; color: var(--fg-3); font-size: 12px; }
+.room-map tr[data-state="skipped"] .room-map-name { color: var(--fg-3); }
+.room-map tr[data-state="error"] .room-map-name { color: var(--err); }
+.room-map tr[data-state="error"] select { border-color: var(--err); }
+.room-file-error { color: var(--err); font-size: 13px; }
+.room-file-details { color: var(--fg-2); font-size: 12px; }
+.room-file-details summary { cursor: pointer; width: max-content; }
+.room-file-details code { display: block; margin-top: 4px; overflow-wrap: anywhere; }
+
 .eq-result {
   display: grid;
   gap: 6px;
@@ -1288,6 +1333,8 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .field-row > label { margin-bottom: -6px; }
   .eq-slot { grid-template-columns: 1fr; gap: 6px; }
   .eq-slot-actions { justify-content: flex-start; }
+  .room-map td:first-child { width: auto; }
+  .room-map select { min-width: 0; }
   .adv-panel .field-row, .adv-panel .adv-nested .field-row { grid-template-columns: 1fr; }
   .file-grid { grid-template-columns: 1fr; }
   .ch-grid { grid-template-columns: repeat(3, max-content); }

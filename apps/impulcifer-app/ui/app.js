@@ -41,6 +41,7 @@ const state = {
   recoveryRequestKey: "",
   eqChoices: { both: { mode: "folder" }, left: { mode: "folder" }, right: { mode: "folder" } },
   eqInspection: null, eqError: null, eqRevision: 0, eqTimer: undefined,
+  roomFile: null, roomFileError: null, roomFileChoices: null, roomFileRevision: 0, roomFileTimer: undefined,
 };
 
 /* Full speaker layout — must mirror core/constants.py SPEAKER_NAMES
@@ -140,6 +141,7 @@ function applyStrings() {
   renderSystemInfo();
   renderRecoveryInventory();
   renderEq();
+  renderRoomFile();
   refreshStudioAdvanced();
   if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
 }
@@ -2339,6 +2341,11 @@ function gatherBrirPayload() {
     const mode = roomMode();
     args.room_target = val("bf-room-target") || null;
     args.room_mic_calibration = val("bf-mic-calibration") || null;
+    if (roomFileMode()) {
+      args.room_measurement_file = val("bf-room-file") || null;
+      const { map } = roomFileAssignment();
+      args.room_measurement_map = state.roomFile && map ? map : null;
+    }
     args.room_mode = mode;
     if (mode === "tuning") addRoomTuningArgs(args);
     else if (mode === "tuning2") addRoomTuning2Args(args);
@@ -2875,6 +2882,333 @@ function renderEq() {
   renderEqPreview();
 }
 
+/* -------------------------------------------- room measurements from a file
+   ADR 0010: a REW .mdat or Dirac Live .liveproject replaces the folder's
+   room-*.wav files. inspect_room_measurements reports what the file holds
+   and its automatic assignment; the table starts from that assignment, the
+   user may change it, and the job receives the table's assignment as
+   room_measurement_map. REW rows are measurements (slot and ear position
+   each); Dirac rows are the project's speakers, and the two ear positions
+   apply to all of them. */
+
+function roomFileMode() {
+  return val("bf-room-source") === "file";
+}
+
+/** @returns {string[]} */
+function roomSlotCodes() {
+  const names = state.sweepDefaults?.speaker_names;
+  return names && names.length ? names : DECAY_CHANNELS;
+}
+
+function scheduleRoomFileInspection(delay = 250) {
+  window.clearTimeout(state.roomFileTimer);
+  const revision = ++state.roomFileRevision;
+  const path = val("bf-room-file");
+  if (!roomFileMode() || !path || !window.pywebview) {
+    state.roomFile = null;
+    state.roomFileError = null;
+    renderRoomFile();
+    return;
+  }
+  state.roomFileTimer = window.setTimeout(async () => {
+    /** @type {Envelope<RoomFileInspection>} */
+    let response;
+    try { response = await api().inspect_room_measurements({ path }); }
+    catch (error) { response = { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } }; }
+    if (revision !== state.roomFileRevision) return;
+    state.roomFile = response.ok ? response.data : null;
+    state.roomFileError = response.ok ? null : response.error;
+    if (response.ok && state.roomFileChoices?.path !== response.data.path) {
+      state.roomFileChoices = roomFileChoicesFrom(response.data);
+    }
+    renderRoomFile();
+  }, delay);
+}
+
+/** The table's starting point: the file's automatic assignment.
+ * @param {RoomFileInspection} inspection @returns {RoomFileChoices} */
+function roomFileChoicesFrom(inspection) {
+  /** @type {RoomFileChoices["rows"]} */
+  const rows = {};
+  const first = inspection.positions[0] || 1;
+  let left = first;
+  let right = first;
+  for (const entry of inspection.mapping) {
+    const [speaker, position] = entry.id.split("@");
+    const key = inspection.format === "dirac" ? speaker : entry.id;
+    const row = rows[key];
+    if (!row) rows[key] = { slot: entry.slot, side: entry.side };
+    else if (row.slot === entry.slot && row.side !== entry.side) row.side = "both";
+    if (inspection.format === "dirac") {
+      if (entry.side === "left") left = Number(position);
+      else right = Number(position);
+    }
+  }
+  for (const row of Object.values(rows)) if (inspection.format === "dirac") row.side = "both";
+  return { path: inspection.path, rows, left, right };
+}
+
+/** The assignment the table describes, the rows that claim a slot and ear
+ * position another row also claims, and the map string for the job.
+ * @returns {{ map: string; duplicates: Set<string>; assigned: number }} */
+function roomFileAssignment() {
+  const inspection = state.roomFile;
+  const choices = state.roomFileChoices;
+  /** @type {string[]} */
+  const entries = [];
+  /** @type {Map<string, string[]>} */
+  const claims = new Map();
+  if (!inspection || !choices) return { map: "", duplicates: new Set(), assigned: 0 };
+  /** @param {string} key @param {string} claim */
+  const claim = (key, claim) => claims.set(claim, [...(claims.get(claim) || []), key]);
+  for (const [key, row] of Object.entries(choices.rows)) {
+    if (!row.slot) continue;
+    if (inspection.format === "dirac") {
+      const leftId = `${key}@${choices.left}`;
+      const rightId = `${key}@${choices.right}`;
+      entries.push(leftId === rightId ? `${row.slot}=${leftId}` : `${row.slot}.left=${leftId},${row.slot}.right=${rightId}`);
+      claim(key, `${row.slot}.left`);
+      claim(key, `${row.slot}.right`);
+    } else {
+      entries.push(row.side === "both" ? `${row.slot}=${key}` : `${row.slot}.${row.side}=${key}`);
+      if (row.side !== "right") claim(key, `${row.slot}.left`);
+      if (row.side !== "left") claim(key, `${row.slot}.right`);
+    }
+  }
+  const duplicates = new Set([...claims.values()].filter((keys) => keys.length > 1).flat());
+  return { map: entries.join(","), duplicates, assigned: entries.length };
+}
+
+/** Whether the job cannot use the file as the screen stands: no file, an
+ * unreadable one, a slot and ear position claimed twice, or nothing assigned.
+ * A file still being inspected does not block; the job checks it again. */
+function roomFileBlocked() {
+  if (!val("bf-room-file") || state.roomFileError) return true;
+  if (!state.roomFile) return false;
+  const { duplicates, assigned } = roomFileAssignment();
+  return duplicates.size > 0 || assigned === 0;
+}
+
+/** @param {string} value @param {string} label */
+function roomOption(value, label) {
+  return new Option(label, value);
+}
+
+/** @param {string} key @param {string} labelText @param {boolean} disabled */
+function roomSlotSelect(key, labelText, disabled) {
+  const select = document.createElement("select");
+  select.dataset.roomKey = key;
+  select.dataset.roomField = "slot";
+  select.setAttribute("aria-label", `${labelText}: ${t("room_file_col_speaker")}`);
+  select.add(roomOption("", t("option_room_file_unused")));
+  for (const code of roomSlotCodes()) select.add(roomOption(code, code));
+  select.value = state.roomFileChoices?.rows[key]?.slot || "";
+  select.disabled = disabled;
+  return select;
+}
+
+/** @param {RoomFileMeasurement} measurement */
+function renderRoomRewRow(measurement) {
+  const row = document.createElement("tr");
+  row.dataset.roomKey = measurement.id;
+  const name = document.createElement("td");
+  const title = document.createElement("span");
+  title.className = "room-map-name mono";
+  title.textContent = measurement.name;
+  name.append(title);
+  if (measurement.skipped) {
+    row.dataset.state = "skipped";
+    const note = document.createElement("span");
+    note.className = "room-map-note";
+    note.textContent = t("room_file_skipped");
+    name.append(note);
+  }
+  const slot = document.createElement("td");
+  slot.append(roomSlotSelect(measurement.id, measurement.name, Boolean(measurement.skipped)));
+  const ear = document.createElement("td");
+  const side = document.createElement("select");
+  side.dataset.roomKey = measurement.id;
+  side.dataset.roomField = "side";
+  side.setAttribute("aria-label", `${measurement.name}: ${t("room_file_col_ear")}`);
+  side.add(roomOption("both", t("option_room_file_both")));
+  side.add(roomOption("left", t("option_room_file_left")));
+  side.add(roomOption("right", t("option_room_file_right")));
+  side.value = state.roomFileChoices?.rows[measurement.id]?.side || "both";
+  side.disabled = Boolean(measurement.skipped);
+  ear.append(side);
+  row.append(name, slot, ear);
+  return row;
+}
+
+/** @param {RoomFileSpeaker} speaker */
+function renderRoomDiracRow(speaker) {
+  const key = String(speaker.index);
+  const row = document.createElement("tr");
+  row.dataset.roomKey = key;
+  const name = document.createElement("td");
+  const title = document.createElement("span");
+  title.className = "room-map-name";
+  title.textContent = speaker.name;
+  name.append(title);
+  if (speaker.subwoofer) {
+    const note = document.createElement("span");
+    note.className = "room-map-note";
+    note.textContent = t("room_file_subwoofer");
+    name.append(note);
+  }
+  const slot = document.createElement("td");
+  slot.append(roomSlotSelect(key, speaker.name, false));
+  row.append(name, slot);
+  return row;
+}
+
+/** @param {string} labelText @param {"left" | "right"} ear @param {number[]} positions */
+function renderRoomPosition(labelText, ear, positions) {
+  const label = document.createElement("label");
+  const text = document.createElement("span");
+  text.textContent = labelText;
+  const select = document.createElement("select");
+  select.dataset.roomField = ear;
+  for (const position of positions) {
+    select.add(roomOption(String(position), fmt(t("option_room_file_position"), { n: position })));
+  }
+  select.value = String(state.roomFileChoices?.[ear] || positions[0] || 1);
+  label.append(text, select);
+  return label;
+}
+
+/** @param {string[]} headings */
+function roomTableHead(headings) {
+  const head = document.createElement("thead");
+  const row = document.createElement("tr");
+  for (const heading of headings) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = heading;
+    row.append(cell);
+  }
+  head.append(row);
+  return head;
+}
+
+function renderRoomFile() {
+  const fileMode = roomFileMode();
+  $("bf-room-file-block").hidden = !fileMode;
+  const result = $("bf-room-file-result");
+  result.replaceChildren();
+  if (!fileMode) return;
+  if (!val("bf-room-file")) {
+    const line = document.createElement("p");
+    line.className = "hint";
+    line.textContent = t("room_file_choose");
+    result.append(line);
+    return;
+  }
+  const error = state.roomFileError;
+  if (error) {
+    const line = document.createElement("p");
+    line.className = "room-file-error";
+    line.textContent = error.code === "FILE_NOT_FOUND" ? t("room_file_missing") : t("room_file_error");
+    result.append(line);
+    if (error.code !== "FILE_NOT_FOUND" && error.message) {
+      const details = document.createElement("details");
+      details.className = "room-file-details";
+      const summary = document.createElement("summary");
+      summary.textContent = t("room_file_error_details");
+      const message = document.createElement("code");
+      message.textContent = error.message;
+      details.append(summary, message);
+      result.append(details);
+    }
+    return;
+  }
+  const inspection = state.roomFile;
+  if (!inspection) return;
+
+  const summary = document.createElement("p");
+  summary.className = "room-file-summary hint";
+  const usable = inspection.measurements.filter((m) => !m.skipped).length;
+  const text = document.createElement("span");
+  if (inspection.format === "dirac") {
+    summary.append(eqTag("Dirac Live"));
+    text.textContent = fmt(t("room_file_summary_dirac"), {
+      title: inspection.title || "", speakers: inspection.speakers.length,
+      positions: inspection.positions.length, rate: inspection.sample_rate,
+    });
+  } else {
+    summary.append(eqTag("REW"));
+    text.textContent = fmt(t("room_file_summary_rew"), { count: usable, rate: inspection.sample_rate });
+  }
+  summary.append(text);
+  result.append(summary);
+  if (inspection.microphone) {
+    const mic = document.createElement("p");
+    mic.className = "hint";
+    mic.textContent = inspection.mic_calibration
+      ? fmt(t("room_file_microphone_calibrated"), { name: inspection.microphone })
+      : fmt(t("room_file_microphone"), { name: inspection.microphone });
+    result.append(mic);
+  }
+
+  const table = document.createElement("table");
+  table.className = "room-map";
+  const body = document.createElement("tbody");
+  if (inspection.format === "dirac") {
+    const positions = document.createElement("div");
+    positions.className = "room-file-positions";
+    positions.append(
+      renderRoomPosition(t("label_room_file_left_position"), "left", inspection.positions),
+      renderRoomPosition(t("label_room_file_right_position"), "right", inspection.positions),
+    );
+    result.append(positions);
+    table.append(roomTableHead([t("room_file_col_project_speaker"), t("room_file_col_speaker")]));
+    body.append(...inspection.speakers.map(renderRoomDiracRow));
+  } else {
+    table.append(roomTableHead([t("room_file_col_measurement"), t("room_file_col_speaker"), t("room_file_col_ear")]));
+    body.append(...inspection.measurements.map(renderRoomRewRow));
+  }
+  table.append(body);
+  result.append(table);
+
+  const status = document.createElement("p");
+  status.id = "bf-room-file-status";
+  result.append(status);
+  updateRoomFileRows();
+}
+
+/** Row states after a change, without rebuilding the table (keeps focus). */
+function updateRoomFileRows() {
+  const status = document.getElementById("bf-room-file-status");
+  if (!status) return;
+  const { duplicates, assigned } = roomFileAssignment();
+  for (const row of /** @type {NodeListOf<HTMLTableRowElement>} */ ($("bf-room-file-result").querySelectorAll("tbody tr"))) {
+    const key = row.dataset.roomKey || "";
+    if (row.dataset.state !== "skipped") row.dataset.state = duplicates.has(key) ? "error" : "";
+    const side = /** @type {HTMLSelectElement | null} */ (row.querySelector('select[data-room-field="side"]'));
+    if (side && row.dataset.state !== "skipped") side.disabled = !state.roomFileChoices?.rows[key]?.slot;
+  }
+  const problem = duplicates.size ? t("room_file_duplicate") : assigned ? null : t("room_file_none_assigned");
+  status.className = problem ? "room-file-error" : "hint";
+  status.textContent = problem || t("hint_room_file");
+}
+
+/** @param {Event} event */
+function onRoomFileChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLSelectElement) || !state.roomFileChoices) return;
+  const field = target.dataset.roomField;
+  if (field === "left" || field === "right") {
+    state.roomFileChoices[field] = Number(target.value);
+  } else if (field === "slot" || field === "side") {
+    const key = target.dataset.roomKey || "";
+    const row = state.roomFileChoices.rows[key] || (state.roomFileChoices.rows[key] = { slot: "", side: "both" });
+    if (field === "slot") row.slot = target.value;
+    else row.side = /** @type {"both" | "left" | "right"} */ (target.value);
+  }
+  updateRoomFileRows();
+}
+
 /* -------------------------------------------------------------- settings */
 
 /** @param {Language[]} languages */
@@ -3111,6 +3445,12 @@ function wireEvents() {
   el("bf-room-tuning2-high", HTMLInputElement).addEventListener("input", updateRoomRows);
   el("bf-room-tuning2-mimo", HTMLInputElement).addEventListener("change", updateRoomRows);
   el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
+  el("bf-room-source", HTMLSelectElement).addEventListener("change", () => {
+    renderRoomFile();
+    scheduleRoomFileInspection(0);
+  });
+  el("bf-room-file", HTMLInputElement).addEventListener("input", () => scheduleRoomFileInspection());
+  $("bf-room-file-result").addEventListener("change", onRoomFileChange);
   // The preview is drawn at its rendered width; redraw when that changes
   // (window resize, or the disclosure opening from display: none).
   let eqPreviewWidth = 0;
@@ -3152,9 +3492,14 @@ function wireEvents() {
     $(id).addEventListener("change", refreshStudioAdvanced);
   }
 
-  el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () =>
-    begin((request) => api().start_brir(request), gatherBrirPayload()),
-  );
+  el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () => {
+    if (isOpen("dis-room") && roomFileMode() && roomFileBlocked()) {
+      renderRoomFile();
+      $("bf-room-file-block").scrollIntoView({ block: "center" });
+      return;
+    }
+    begin((request) => api().start_brir(request), gatherBrirPayload());
+  });
   el("btn-start-recovery", HTMLButtonElement).addEventListener("click", () =>
     begin(
       (request) => api().start_output_recovery(request),
