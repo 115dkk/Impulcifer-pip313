@@ -21,7 +21,7 @@ EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
-                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2))
+                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 2 * (2 * 2 * 2))
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -30,6 +30,10 @@ NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "B
             ("TpSiL", "TSL"), ("TpSiR", "TSR"), ("TpBC", "HBC"), ("BtFC", "DFC"), ("BtFL", "DFL"), ("BtFR", "DFR")]
 IMMERSIVE = [{"id": "22.2", "name": "NHK 22.2", "file_name": "nhk_22.2.wav",
               "channels": [{"label": label, "slot": slot} for label, slot in NHK_22_2]}]
+# 7.1 as bootstrap describes it: the Windows (WAVE) device order the sweep
+# tracks are written in, and the order an HDMI output on macOS takes (ADR 0012).
+TRACK_ORDERS = {"7.1": ["FL", "FR", "FC", "LFE", "BL", "BR", "SL", "SR"]}
+HDMI_ORDERS = {"7.1": ["FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR"]}
 
 
 def wrap(azimuth):
@@ -98,15 +102,21 @@ def mock_script(skin, theme, language, scenario):
                          "scenario": scenario, "strings": catalog(language),
                          "release": {"version": version, "notes": notes}, "immersive": IMMERSIVE,
                          "layoutSpeakers": LAYOUT_SPEAKERS, "speakerNames": SPEAKER_NAMES, "guided": GUIDED,
+                         "trackOrders": TRACK_ORDERS, "hdmiOrders": HDMI_ORDERS,
                          "catalogs": {code: catalog(code) for code in LANGUAGES}}, ensure_ascii=False)
     return "const fixture = " + fixture + ";\n" + r"""
 (() => {
   const {skin, theme, language, scenario, strings} = fixture;
   const calls = [];
   window.galleryCalls = calls;
-  window.galleryDialogs = [];
-  window.confirm = text => { window.galleryDialogs.push(text); return true; };
-  window.alert = text => window.galleryDialogs.push(text);
+  // WKWebView (macOS) answers window.confirm with false and drops alert and
+  // prompt, so the screen must ask with its own dialog (askDialog). The mock
+  // behaves the same way and records any call, which no check allows.
+  window.galleryNativeDialogs = [];
+  window.confirm = text => { window.galleryNativeDialogs.push(text); return false; };
+  window.alert = text => { window.galleryNativeDialogs.push(text); };
+  window.prompt = text => { window.galleryNativeDialogs.push(text); return null; };
+  const mac = scenario === "darwin";
   const ok = data => Promise.resolve({ok: true, data});
   const error = (code, message, details = {}) => ({ok: false, error: {code, message, details, retryable: false}});
   const directory = "C:/Impulcifer/output";
@@ -127,16 +137,22 @@ def mock_script(skin, theme, language, scenario):
   const settings = {skin, theme, language, strings, frontend: "webview", first_run: false,
     languages: [{code: "en", name: "English"}, {code: "ko", name: "한국어"}]};
   const methods = {
-    bootstrap: () => ok({version: "3.0.0-alpha.1", platform: "windows", install_kind: "dev", webview_backend: "edgechromium",
+    bootstrap: () => ok({version: "3.0.0-alpha.1", platform: mac ? "darwin" : "windows", install_kind: "dev",
+      webview_backend: mac ? "cocoa" : "edgechromium",
       brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "22.2"], default_fs: 48000, default_duration: 5,
         speaker_names: fixture.speakerNames, layout_speakers: fixture.layoutSpeakers, immersive: fixture.immersive,
-        guided: fixture.guided},
+        guided: fixture.guided, track_orders: fixture.trackOrders, hdmi_orders: fixture.hdmiOrders},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
         brir_cancel: true, output_recovery_cancel: false, share_modes: scenario === "disabled" ? ["auto"] : ["auto", "exclusive", "shared"]},
       active_job: null, ui: settings}),
-    list_audio_devices: () => ok({host_apis: ["Windows WASAPI"], default_input_index: 1, default_output_index: 0,
-      devices: [{index: 0, name: "Speakers (USB Audio)", host_api: "Windows WASAPI", max_input_channels: 0, max_output_channels: 2},
-        {index: 1, name: "Binaural microphones (USB Audio)", host_api: "Windows WASAPI", max_input_channels: 2, max_output_channels: 0}]}),
+    list_audio_devices: () => ok(mac
+      ? {host_apis: ["CoreAudio"], default_input_index: 1, default_output_index: 0,
+        devices: [{index: 0, name: "DENON-AVR", host_api: "CoreAudio", max_input_channels: 0, max_output_channels: 8, hdmi: true},
+          {index: 1, name: "Binaural microphones", host_api: "CoreAudio", max_input_channels: 2, max_output_channels: 0, hdmi: false},
+          {index: 2, name: "Scarlett 18i20 USB", host_api: "CoreAudio", max_input_channels: 18, max_output_channels: 20, hdmi: false}]}
+      : {host_apis: ["Windows WASAPI"], default_input_index: 1, default_output_index: 0,
+        devices: [{index: 0, name: "Speakers (USB Audio)", host_api: "Windows WASAPI", max_input_channels: 0, max_output_channels: 2, hdmi: false},
+          {index: 1, name: "Binaural microphones (USB Audio)", host_api: "Windows WASAPI", max_input_channels: 2, max_output_channels: 0, hdmi: false}]}),
     get_system_info: () => ok({version: "3.0.0-alpha.1", install_kind: "dev", os: "Windows 11", cpu_count: 16,
       runtime: {language: "Rust", toolchain: "rustc 1.99.0", audio_backend: "WASAPI", shell: "Tauri 2.11.5", webview: "WebView2 152.0.4191.66"},
       paths: {data_dir: "C:/Impulcifer/data", settings_path: "C:/Users/Listener/.impulcifer/settings.json"}, update_channel: "prerelease"}),
@@ -303,6 +319,21 @@ def navigate(page, view):
     page.locator(f'#nav [data-view="{view}"]').click()
 
 
+def answer(page, ok=True):
+    """Answer the screen's own dialog (askDialog) and return its message."""
+    page.locator("#ask-modal:not([hidden])").wait_for()
+    message = page.locator("#ask-modal-message").inner_text()
+    page.locator("#ask-modal-ok" if ok else "#ask-modal-cancel").click()
+    # Closed, or already showing the next dialog (Stable tells a refusal in a notice).
+    page.wait_for_function("text => document.querySelector('#ask-modal').hidden"
+                           " || document.querySelector('#ask-modal-message').innerText !== text", arg=message)
+    return message
+
+
+def native_dialogs(page):
+    return page.evaluate("galleryNativeDialogs.length")
+
+
 def shoot(page, output, name, errors):
     page.set_viewport_size({"width": 1280, "height": 860})
     height = page.evaluate("document.querySelector('#content').scrollHeight")
@@ -366,10 +397,11 @@ def behavior_checks(browser):
         context, page, errors = open_page(browser, "studio", "dark", "ko", scenario)
         page.locator("#rf-share-mode").select_option("shared")
         page.locator("#btn-record-headphones").click()
+        confirmation = answer(page)
         page.wait_for_function("galleryCalls.some(c => c.method === 'start_recording')")
         assert page.evaluate("galleryCalls.find(c => c.method === 'start_recording').args[0].share_mode") == "shared"
-        confirmation = page.evaluate("galleryDialogs[0]")
         assert "{play_file}" not in confirmation and "{share_mode}" not in confirmation
+        assert native_dialogs(page) == 0
         if scenario == "success":
             page.wait_for_function("document.querySelector('[data-rec-detail]').textContent.includes('자동 변환')")
             assert "untranslated fixture" not in page.locator("[data-log]").first.inner_text()
@@ -543,6 +575,94 @@ def advanced_checks(browser):
         assert not errors, errors
         context.close()
     print("Gallery advanced checks: per-tab requests, locks, reset, keyboard, skin carry-over, 9-language layout OK", flush=True)
+
+
+def dialog_checks(browser):
+    """WKWebView refuses window.confirm, which left the record buttons dead on
+    macOS. The screen's own dialog keeps focus, cancels on Escape and returns
+    focus to the button, and only OK starts the recording."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "darwin")
+    navigate(page, "recorder")
+    starts = "galleryCalls.filter(c => c.method === 'start_recording').length"
+    button = page.locator("#btn-record-headphones")
+    button.click()
+    page.locator("#ask-modal:not([hidden])").wait_for()
+    assert page.locator("#ask-modal [role=alertdialog]").get_attribute("aria-modal") == "true"
+    assert page.evaluate("document.activeElement.id") == "ask-modal-ok"
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.id") == "ask-modal-cancel"
+    page.keyboard.press("Tab")
+    assert page.evaluate("document.activeElement.id") == "ask-modal-ok"
+    page.keyboard.press("Escape")
+    page.locator("#ask-modal").wait_for(state="hidden")
+    assert page.evaluate("document.activeElement.id") == "btn-record-headphones"
+    button.click()
+    answer(page, ok=False)
+    assert page.evaluate(starts) == 0
+    page.locator("#btn-start-recording").click()
+    message = answer(page)
+    assert "{" not in message and message.strip(), message
+    page.wait_for_function(f"{starts} === 1")
+    assert native_dialogs(page) == 0
+    assert not errors, errors
+    context.close()
+    print("Gallery dialog checks: own dialog, focus, Escape, Cancel, OK OK", flush=True)
+
+
+def channel_order_checks(browser):
+    """On a Mac an HDMI or DisplayPort output takes LFE on 3 and FC on 4, the
+    side pair on 5-6 and the back pair on 7-8 (ADR 0012). The choice shows on
+    macOS for layouts with an HDMI order; auto follows the output's hdmi flag,
+    the device map shows the order the recording will use, and the request
+    carries the choice."""
+    standard, hdmi = TRACK_ORDERS["7.1"], HDMI_ORDERS["7.1"]
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "recorder")
+    page.locator("#rf-sweep-layout").select_option("7.1")
+    assert page.locator("#rf-channel-order-row").is_hidden() and page.locator("#rf-layout-row").is_hidden()
+    page.locator("#btn-start-recording").click()
+    answer(page)
+    page.wait_for_function("galleryCalls.some(c => c.method === 'start_recording')")
+    assert page.evaluate("galleryCalls.find(c => c.method === 'start_recording').args[0].channel_order") == "auto"
+    assert not errors, errors
+    context.close()
+
+    strings = catalog("en")
+    context, page, errors = open_page(browser, "studio", "dark", "en", "darwin")
+    navigate(page, "recorder")
+    row, auto = page.locator("#rf-channel-order-row"), page.locator("#rf-channel-order-auto")
+    slots = lambda: page.locator("#rf-layout-map .layout-ch-label").all_inner_texts()
+    assert row.is_hidden()
+    page.locator("#rf-sweep-layout").select_option("7.1")
+    assert row.is_visible() and page.locator("#rf-layout-row").is_visible()
+    assert slots() == hdmi, slots()
+    assert page.locator('#rf-layout-map .layout-ch[data-lfe="true"] .layout-ch-num').inner_text() == "3"
+    assert auto.inner_text() == strings["hint_channel_order_auto_hdmi"]
+    page.locator("#rf-output-device").select_option("Scarlett 18i20 USB")
+    assert slots() == standard, slots()
+    assert auto.inner_text() == strings["hint_channel_order_auto_standard"]
+    page.locator("#rf-channel-order").select_option("hdmi")
+    assert auto.is_hidden() and slots() == hdmi
+    page.locator("#rf-channel-order").select_option("standard")
+    assert slots() == standard
+    page.locator("#rf-channel-order").select_option("hdmi")
+    page.locator("#btn-start-recording").click()
+    answer(page)
+    page.wait_for_function("galleryCalls.some(c => c.method === 'start_recording')")
+    request = page.evaluate("galleryCalls.find(c => c.method === 'start_recording').args[0]")
+    assert request["channel_order"] == "hdmi" and request["sweep"]["tracks"] == "7.1", request
+    page.locator("#rf-sweep-layout").select_option("stereo")
+    assert row.is_hidden() and page.locator("#rf-layout-row").is_hidden()
+    page.locator("#rf-sweep-source").select_option("file")
+    play = page.locator("#rf-play")
+    play.fill("D:/Sweeps/sweep-seg-FL,FR,FC,BL,BR,SL,SR-7.1-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
+    assert row.is_visible()
+    play.fill("D:/Sweeps/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
+    assert row.is_hidden()
+    assert native_dialogs(page) == 0
+    assert not errors, errors
+    context.close()
+    print("Gallery channel order checks: Windows hidden, macOS auto by HDMI flag, map order, request OK", flush=True)
 
 
 def layout_checks(browser):
@@ -1352,6 +1472,8 @@ def render_gallery(output):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         behavior_checks(browser)
+        dialog_checks(browser)
+        channel_order_checks(browser)
         advanced_checks(browser)
         layout_checks(browser)
         guided_checks(browser)
@@ -1395,9 +1517,14 @@ def render_gallery(output):
             else:
                 page.locator("#rf-share-mode").select_option("exclusive")
                 page.locator("#btn-record-headphones").click()
+                answer(page)
                 page.wait_for_function("document.querySelector('[data-rec-detail]').textContent.includes('AUDCLNT_E_DEVICE_IN_USE')")
                 if skin == "stable":
-                    assert page.evaluate("galleryDialogs.length") == 2
+                    # Stable runs jobs in a dialog, so the refusal is also told in a notice.
+                    page.locator("#ask-modal:not([hidden])").wait_for()
+                    assert "AUDCLNT_E_DEVICE_IN_USE" in page.locator("#ask-modal-message").inner_text()
+                    assert page.locator("#ask-modal-cancel").is_hidden()
+                assert native_dialogs(page) == 0
             shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-{scenario}", errors))
             context.close()
         for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
@@ -1407,6 +1534,16 @@ def render_gallery(output):
             page.locator("#rf-layout-use-all").click()
             page.locator("#rf-layout-row").scroll_into_view_if_needed()
             shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-layout-22.2", errors))
+            context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "darwin")
+            navigate(page, "recorder")
+            page.locator("#rf-sweep-layout").select_option("7.1")
+            page.locator("#rf-channel-order-row").scroll_into_view_if_needed()
+            shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-hdmi-order", errors))
+            page.locator("#btn-start-recording").click()
+            page.locator("#ask-modal:not([hidden])").wait_for()
+            shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-confirm", errors))
             context.close()
         for skin, theme, language, scenario in itertools.product(SKINS, THEMES, LANGUAGES, EQ_SCENARIOS):
             context, page, errors = open_page(browser, skin, theme, language, scenario)

@@ -1,6 +1,7 @@
 use super::{
     RecordingError,
-    checks::check_recording,
+    channel_order::{ChannelOrder, hdmi_outputs, playback_layout, to_hdmi_order},
+    checks::{RecordingCheck, check_recording},
     devices::resolve_devices,
     progress::{RecorderProgressEvent, SweepSegment, event_for_elapsed, infer_sweep_segments},
     request::{Mode, ValidatedRecording},
@@ -229,6 +230,56 @@ fn run(
         v.host_api.as_deref(),
         playback_channels,
     )?;
+    let effective_channel_order =
+        playback_layout(v.sweep_spec.as_ref(), v.play_path.as_deref(), tracks.len()).map(
+            |layout| {
+                let order = match v.channel_order {
+                    ChannelOrder::Hdmi => ChannelOrder::Hdmi,
+                    ChannelOrder::Standard => ChannelOrder::Standard,
+                    ChannelOrder::Auto => {
+                        if hdmi_outputs().contains(&output.name) {
+                            ChannelOrder::Hdmi
+                        } else {
+                            ChannelOrder::Standard
+                        }
+                    }
+                };
+                if order == ChannelOrder::Hdmi {
+                    tracks = to_hdmi_order(std::mem::take(&mut tracks), &layout);
+                }
+                let slots = if order == ChannelOrder::Hdmi {
+                    impulcifer_types::constants::hdmi_track_order(&layout)
+                } else {
+                    impulcifer_types::constants::sweep_track_order(&layout)
+                }
+                .expect("playback_layout only returns layouts with an HDMI order");
+                let channels = slots
+                    .iter()
+                    .enumerate()
+                    .map(|(index, slot)| format!("{} {slot}", index + 1))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let (key, message) = if order == ChannelOrder::Hdmi {
+                    (
+                        "recording_channel_order_hdmi",
+                        format!("HDMI channel order: {channels}"),
+                    )
+                } else {
+                    (
+                        "recording_channel_order_standard",
+                        format!("Device channel order: {channels}"),
+                    )
+                };
+                ctx.log(json!({
+                    "level":"info",
+                    "key":key,
+                    "message":message,
+                    "channels":channels,
+                    "auto":v.channel_order == ChannelOrder::Auto,
+                }));
+                order
+            },
+        );
     emit(
         ctx,
         RecorderProgressEvent {
@@ -349,6 +400,8 @@ fn run(
                 .collect()
         })
         .collect();
+    let input_silent = tracks.iter().any(|track| !track.is_empty())
+        && tracks.iter().flatten().all(|sample| *sample == 0.0);
     save_recording(record, fs, tracks.clone(), v.append)?;
     let check_results = (v.mode == Mode::Speakers).then(|| {
         check_recording(
@@ -359,6 +412,24 @@ fn run(
             v.expected_azimuths.as_ref(),
             v.reference_measurements.as_deref(),
         )
+    });
+    let silent_check = input_silent.then(|| {
+        let key = if cfg!(target_os = "macos") {
+            "record_check_input_silent_macos"
+        } else {
+            "record_check_input_silent"
+        };
+        ctx.log(json!({
+            "level":"error",
+            "key":key,
+            "message":"The input recorded only digital silence."
+        }));
+        RecordingCheck {
+            key,
+            speaker: String::new(),
+            severity: "error",
+            values: serde_json::Map::new(),
+        }
     });
     emit(
         ctx,
@@ -383,9 +454,18 @@ fn run(
         None
     };
     let mut result = json!({"mode":v.mode,"record_path":v.record_path,"summary":analyze_recording(record),"sweep":generated.as_ref().map(|p|&p.display_name),"sidecar_path":sidecar,"share":share});
+    if let Some(order) = effective_channel_order {
+        result["channel_order"] = json!(order.as_str());
+    }
     if let Some(check_results) = check_results {
         result["measurements"] = json!(check_results.measurements);
-        result["checks"] = json!(check_results.checks);
+        result["checks"] = if let Some(check) = silent_check.as_ref() {
+            json!([check])
+        } else {
+            json!(check_results.checks)
+        };
+    } else if let Some(check) = silent_check.as_ref() {
+        result["checks"] = json!([check]);
     }
     if !warnings.is_empty() {
         result["warnings"] = json!(warnings);

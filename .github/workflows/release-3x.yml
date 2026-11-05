@@ -273,12 +273,53 @@ jobs:
       - name: Install the Tauri CLI
         run: npm install -g @tauri-apps/cli@^2
 
+      # tauri.conf.json signs the bundle ad hoc ("-"): Gatekeeper then offers
+      # "Open Anyway" instead of calling an unsigned bundle damaged. With the
+      # Developer ID secrets the same build signs with that identity (hardened
+      # runtime, Entitlements.plist) and notarizes; the Tauri CLI reads the
+      # APPLE_* variables, and an empty one breaks it, so they are exported
+      # only when the secret is set.
       - name: Build the app bundle and the dmg
         working-directory: apps/impulcifer-app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: tauri build --bundles app,dmg
+          DEVELOPER_ID_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          DEVELOPER_ID_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          NOTARY_APPLE_ID: ${{ secrets.APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          NOTARY_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "${DEVELOPER_ID_CERTIFICATE}" ]; then
+            export APPLE_CERTIFICATE="${DEVELOPER_ID_CERTIFICATE}"
+            export APPLE_CERTIFICATE_PASSWORD="${DEVELOPER_ID_CERTIFICATE_PASSWORD}"
+            export APPLE_SIGNING_IDENTITY="${DEVELOPER_ID_IDENTITY:-Developer ID Application}"
+            if [ -n "${NOTARY_APPLE_ID}" ]; then
+              export APPLE_ID="${NOTARY_APPLE_ID}" APPLE_PASSWORD="${NOTARY_PASSWORD}" APPLE_TEAM_ID="${NOTARY_TEAM_ID}"
+            fi
+            echo "Signing with the Developer ID certificate"
+          else
+            echo "No Developer ID certificate: signing ad hoc"
+          fi
+          tauri build --bundles app,dmg
+
+      # macOS gives an app without NSMicrophoneUsageDescription only silence,
+      # and the hardened runtime denies the microphone without the audio-input
+      # entitlement; both reached a tester as a recording of zeros.
+      - name: Check the bundle's signature, microphone text and entitlement
+        run: |
+          set -euo pipefail
+          app=target/release/bundle/macos/Impulcifer.app
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -E '^(Identifier|Authority|Signature|TeamIdentifier|Runtime)'
+          usage=$(plutil -extract NSMicrophoneUsageDescription raw "$app/Contents/Info.plist")
+          echo "NSMicrophoneUsageDescription: $usage"
+          test -n "$usage"
+          codesign -d --entitlements - --xml "$app" > "$RUNNER_TEMP/entitlements.plist"
+          plutil -p "$RUNNER_TEMP/entitlements.plist"
+          plutil -p "$RUNNER_TEMP/entitlements.plist" | grep -Eq '"com.apple.security.device.audio-input" => (true|1)$'
 
       - name: Collect artifacts with the 2.x asset names
         env:

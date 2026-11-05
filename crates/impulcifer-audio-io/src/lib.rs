@@ -12,6 +12,7 @@ pub mod cpal_backend;
 pub mod null_backend;
 pub mod policy;
 pub mod session;
+pub mod transport;
 
 use impulcifer_types::audio::AudioBackend;
 

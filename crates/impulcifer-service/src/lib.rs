@@ -16,7 +16,9 @@ use args::Args;
 use impulcifer_jobs::registry::{JobRegistry, panic_message};
 use impulcifer_types::audio::{AudioBackend, ShareMode};
 use impulcifer_types::config::ProcessingConfig;
-use impulcifer_types::constants::{SPEAKER_NAMES, SWEEP_TRACK_LAYOUTS, sweep_layout_speakers};
+use impulcifer_types::constants::{
+    SPEAKER_NAMES, SWEEP_TRACK_LAYOUTS, hdmi_track_order, sweep_layout_speakers, sweep_track_order,
+};
 use impulcifer_types::guided::{GUIDED_SETUPS, guided_plan};
 use impulcifer_types::ipc::{self, ErrorCode, IpcMethod};
 use impulcifer_types::job::JobSnapshot;
@@ -181,6 +183,12 @@ impl ImpulciferService {
                     "sweep": {"layouts": SWEEP_TRACK_LAYOUTS, "default_fs": paths::DEFAULT_SWEEP_FS,
                         "default_duration": paths::DEFAULT_SWEEP_DURATION, "speaker_names": SPEAKER_NAMES.as_slice(),
                         "guided": guided,
+                        "hdmi_orders": SWEEP_TRACK_LAYOUTS.iter()
+                            .filter_map(|layout| hdmi_track_order(layout).map(|order| (layout.to_string(), json!(order))))
+                            .collect::<serde_json::Map<_, _>>(),
+                        "track_orders": SWEEP_TRACK_LAYOUTS.iter()
+                            .filter_map(|layout| sweep_track_order(layout).map(|order| (layout.to_string(), json!(order))))
+                            .collect::<serde_json::Map<_, _>>(),
                         "layout_speakers": SWEEP_TRACK_LAYOUTS.iter()
                             .map(|layout| (layout.to_string(), json!(sweep_layout_speakers(layout))))
                             .collect::<serde_json::Map<_, _>>(),

@@ -125,6 +125,20 @@
                 <input id="rf-play" class="mono" value="data/sweep-seg-FL,FR-stereo-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" spellcheck="false">
                 <button class="btn-link" data-browse="audio" data-target="rf-play" data-i18n="button_browse">Browse</button>
               </div>
+              <!-- macOS only: an HDMI or DisplayPort output takes its channels in the
+                   receiver's slot order (LFE on 3, FC on 4; ADR 0012). -->
+              <div class="field-row top" id="rf-channel-order-row" hidden>
+                <label for="rf-channel-order" data-i18n="label_channel_order">Channel order:</label>
+                <div class="adv-stack">
+                  <select id="rf-channel-order" aria-describedby="rf-channel-order-auto rf-channel-order-hint">
+                    <option value="auto" data-i18n="option_channel_order_auto">Auto</option>
+                    <option value="standard" data-i18n="option_channel_order_standard">Standard: FC on 3, LFE on 4</option>
+                    <option value="hdmi" data-i18n="option_channel_order_hdmi">HDMI: LFE on 3, FC on 4</option>
+                  </select>
+                  <p class="hint" id="rf-channel-order-auto" hidden></p>
+                  <p class="hint" id="rf-channel-order-hint" data-i18n="hint_channel_order">A Mac sends an HDMI or DisplayPort output's channels in the receiver's order. If a sweep plays from the wrong speaker, compare the device channels with Configure Speakers in Audio MIDI Setup.</p>
+                </div>
+              </div>
               <div class="field-row">
                 <label for="rf-record-dir" data-i18n="label_record_to_folder">Record to Folder:</label>
                 <input id="rf-record-dir" class="mono" value="data/my_hrir" spellcheck="false">
@@ -1147,6 +1161,18 @@
           <button class="btn btn-primary" id="update-now" data-i18n="update_button_update">Update Now</button>
           <button class="btn btn-primary" id="update-restart" data-i18n="button_ok" hidden>OK</button>
           <button class="btn btn-secondary" id="update-close" data-i18n="button_close" hidden>Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmations and notices. WKWebView answers window.confirm with
+         false and drops window.alert, so the screen asks with its own dialog. -->
+    <div class="modal-backdrop" id="ask-modal" hidden>
+      <div class="modal ask-modal" role="alertdialog" aria-modal="true" aria-labelledby="ask-modal-message">
+        <p class="ask-message" id="ask-modal-message"></p>
+        <div class="actions-row modal-actions">
+          <button class="btn btn-secondary" id="ask-modal-cancel" data-i18n="button_cancel">Cancel</button>
+          <button class="btn btn-primary" id="ask-modal-ok" data-i18n="button_ok">OK</button>
         </div>
       </div>
     </div>

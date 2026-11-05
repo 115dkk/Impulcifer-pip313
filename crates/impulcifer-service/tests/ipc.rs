@@ -383,6 +383,14 @@ fn ipc_bootstrap_shape() {
                     "9.1": impulcifer_types::guided::guided_plan("stereo", "9.1").unwrap()
                 }}
             },
+            "hdmi_orders":impulcifer_types::constants::SWEEP_TRACK_LAYOUTS.iter().filter_map(|layout| {
+                impulcifer_types::constants::hdmi_track_order(layout)
+                    .map(|order| (layout.to_string(), json!(order)))
+            }).collect::<serde_json::Map<_, _>>(),
+            "track_orders":impulcifer_types::constants::SWEEP_TRACK_LAYOUTS.iter().filter_map(|layout| {
+                impulcifer_types::constants::sweep_track_order(layout)
+                    .map(|order| (layout.to_string(), json!(order)))
+            }).collect::<serde_json::Map<_, _>>(),
             "layout_speakers":impulcifer_types::constants::SWEEP_TRACK_LAYOUTS.iter().map(|layout| (
                 layout.to_string(), json!(impulcifer_types::constants::sweep_layout_speakers(layout).unwrap())
             )).collect::<serde_json::Map<_, _>>(),
@@ -626,9 +634,9 @@ fn ipc_list_audio_devices_shape() {
     assert_eq!(
         all,
         json!({"host_apis":["WASAPI","Other API"],"devices":[
-        {"index":0,"name":"Mic","host_api":"WASAPI","max_input_channels":2,"max_output_channels":0},
-        {"index":1,"name":"Speaker","host_api":"WASAPI","max_input_channels":0,"max_output_channels":8},
-        {"index":2,"name":"Other","host_api":"Other API","max_input_channels":1,"max_output_channels":1}
+        {"index":0,"name":"Mic","host_api":"WASAPI","max_input_channels":2,"max_output_channels":0,"hdmi":false},
+        {"index":1,"name":"Speaker","host_api":"WASAPI","max_input_channels":0,"max_output_channels":8,"hdmi":false},
+        {"index":2,"name":"Other","host_api":"Other API","max_input_channels":1,"max_output_channels":1,"hdmi":false}
     ],"default_input_index":0,"default_output_index":1})
     );
     assert_eq!(data(f.call("list_audio_devices", vec![Value::Null])), all);

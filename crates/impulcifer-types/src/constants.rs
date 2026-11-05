@@ -46,6 +46,24 @@ pub fn sweep_track_order(layout: &str) -> Option<Vec<&'static str>> {
     }
 }
 
+/// The device channel order of an HDMI or DisplayPort output on macOS (CEA-861 slots, ADR 0012), for the
+/// layouts whose first eight channels map onto them: LFE on 3, FC on 4, and for the 2.x 7.1 family the side
+/// pair on 5-6 and the back pair on 7-8. Channels after the eighth keep their order. `None` for other layouts.
+pub fn hdmi_track_order(layout: &str) -> Option<Vec<&'static str>> {
+    if !matches!(
+        layout,
+        "5.1" | "7.1" | "7.1.4" | "7.1.6" | "9.1" | "9.1.4" | "9.1.6"
+    ) {
+        return None;
+    }
+    let mut order = sweep_track_order(layout)?;
+    order.swap(2, 3);
+    if order.get(4..8) == Some(["BL", "BR", "SL", "SR"].as_slice()) {
+        order[4..8].copy_from_slice(&["SL", "SR", "BL", "BR"]);
+    }
+    Some(order)
+}
+
 /// The speakers a full measurement with `layout` sweeps, in device-channel order
 /// without the LFE channels: what the recorder fills in when the layout is chosen,
 /// so the recording is named after every speaker it holds. Mono sweeps FL alone.
@@ -73,6 +91,58 @@ pub const TRUEHD_13CH_ORDER: [&str; 13] = [
 #[cfg(test)]
 mod p07_tests {
     use super::*;
+
+    #[test]
+    fn hdmi_track_order_matches_cea_861_slots() {
+        let cases: [(&str, &[&str]); 7] = [
+            ("5.1", &["FL", "FR", "LFE", "FC", "BL", "BR"]),
+            ("7.1", &["FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR"]),
+            (
+                "7.1.4",
+                &[
+                    "FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR", "TFL", "TFR", "TBL", "TBR",
+                ],
+            ),
+            (
+                "7.1.6",
+                &[
+                    "FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR", "TFL", "TFR", "TSL", "TSR",
+                    "TBL", "TBR",
+                ],
+            ),
+            (
+                "9.1",
+                &["FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR", "WL", "WR"],
+            ),
+            (
+                "9.1.4",
+                &[
+                    "FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR", "WL", "WR", "TFL", "TFR",
+                    "TBL", "TBR",
+                ],
+            ),
+            (
+                "9.1.6",
+                &[
+                    "FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR", "WL", "WR", "TFL", "TFR",
+                    "TSL", "TSR", "TBL", "TBR",
+                ],
+            ),
+        ];
+        for (layout, expected) in cases {
+            let standard = sweep_track_order(layout).unwrap();
+            let actual = hdmi_track_order(layout).unwrap();
+            assert_eq!(actual, expected, "{layout}");
+            let mut standard_sorted = standard;
+            let mut actual_sorted = actual;
+            standard_sorted.sort_unstable();
+            actual_sorted.sort_unstable();
+            assert_eq!(actual_sorted, standard_sorted, "{layout} permutation");
+        }
+        for layout in ["mono", "stereo", "13.1", "22.2", "24.1.10", "30.2"] {
+            assert_eq!(hdmi_track_order(layout), None, "{layout}");
+        }
+    }
 
     #[test]
     fn truehd_orders_match_python_golden() {

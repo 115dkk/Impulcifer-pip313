@@ -4,6 +4,22 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.9.1 - 2026-11-05
+### macOS에서 녹음이 되지 않던 문제 넷
+
+#### 🐛 버그 수정
+- **마이크 권한**: 앱에 마이크 권한 문구(`NSMicrophoneUsageDescription`)가 없어서 macOS가 권한을 묻지 않았고, 입력이 모두 0으로 들어왔습니다. 이제 처음 녹음할 때 권한을 묻습니다. 앱 번들에 마이크 입력 권한(`com.apple.security.device.audio-input`)도 넣었습니다. 공증에 필요한 hardened runtime은 이 권한이 없으면 마이크를 막습니다.
+- **무음만 녹음된 경우**: 녹음한 모든 채널이 정확히 0이면 녹음 검사가 오류로 알립니다. macOS에서는 마이크 권한을 허용하는 곳(시스템 설정 > 개인정보 보호 및 보안 > 마이크)을 함께 알려 줍니다. 헤드폰 녹음에도 같은 검사를 합니다.
+- **녹음 버튼이 반응하지 않던 문제**: 화면이 녹음 전에 브라우저의 확인 창(`window.confirm`)을 띄웠는데, macOS의 WKWebView는 이 창을 띄우지 않고 바로 '취소'로 답합니다. 경고 창(`window.alert`)도 보이지 않았습니다. 이제 확인과 알림을 모든 플랫폼에서 앱 안의 대화상자로 묻습니다. Esc는 취소이고, 대화상자가 닫히면 누른 버튼으로 포커스가 돌아갑니다.
+- **맥 HDMI 출력의 채널 순서**: sweep 트랙은 Windows 순서(3번 FC, 4번 LFE, 5·6번 BL·BR, 7·8번 SL·SR)로 나가는데, 맥의 HDMI·DisplayPort 출력은 리시버의 순서(3번 LFE, 4번 FC, 5·6번 사이드, 7·8번 리어)로 채널을 받습니다. 그래서 센터 sweep이 서브우퍼에서 나왔고, 사이드와 리어도 서로 바뀌었습니다. 녹음 화면에 '채널 순서'(자동, 표준, HDMI)를 두었고, 자동은 macOS의 HDMI·DisplayPort 출력에서 HDMI 순서를 씁니다. macOS에서는 5.1, 7.1, 7.1.4, 7.1.6, 9.1 계열을 고르면 장치 채널마다 나갈 스피커가 표에 나오고, 작업 기록과 결과에 쓴 순서가 남습니다(ADR 0012).
+- **서명**: macOS 앱에 서명이 없어서 내려받은 앱을 Gatekeeper가 '손상되었다'고 막았습니다. 이제 임시 서명(ad hoc)을 하므로, 시스템 설정 > 개인정보 보호 및 보안의 '그래도 열기'로 열 수 있습니다. 공증까지 하려면 Apple Developer ID가 필요하며, 저장소에 그 비밀값을 넣으면 릴리스가 서명과 공증을 함께 합니다.
+
+#### 🔧 빌드 / 설정 변경
+- **의존성**: HDMI 여부를 읽으려고 `impulcifer-audio-io`가 macOS에서 `coreaudio-rs`를 직접 씁니다. cpal이 이미 쓰는 같은 버전이라 새 크레이트는 들어오지 않습니다.
+- **IPC**: 녹음 요청이 `channel_order`(`auto`, `standard`, `hdmi`)를 받고, 결과에 `channel_order`가 붙습니다. `list_audio_devices`의 장치마다 `hdmi`가, 부트스트랩의 `sweep`에 `track_orders`와 `hdmi_orders`가 붙습니다.
+- **릴리스**: macOS 빌드가 번들의 서명, 마이크 권한 문구, 마이크 입력 권한을 검사합니다. `APPLE_CERTIFICATE` 등 Developer ID 비밀값이 있으면 그 인증서로 서명하고 공증합니다.
+- **테스트**: 앱 설정에 마이크 문구·권한·서명 설정이 있는지, 화면 코드가 `window.confirm`·`window.alert`·`window.prompt`를 부르지 않는지를 `cargo test`가 검사합니다. HDMI 순서와 무음 검사는 서비스 테스트로 확인합니다. macOS의 CoreAudio 연결 방식 읽기는 기존 macOS 테스트 잡에서 확인합니다. UI 갤러리는 `window.confirm`이 false를 돌려주는 맥의 동작을 흉내 내고, HDMI 순서 화면과 확인 대화상자를 새로 찍습니다.
+
 ## 3.9.0 - 2026-11-03
 ### REW 측정 파일과 Dirac Live 프로젝트를 BRIR 측정과 헤드폰 측정으로도 읽기
 

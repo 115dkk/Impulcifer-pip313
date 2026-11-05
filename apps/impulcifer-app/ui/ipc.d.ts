@@ -18,6 +18,10 @@ interface SweepDefaults {
   layouts: string[]; default_fs: number; default_duration: number; speaker_names: string[];
   /* Every speaker a full measurement with each layout sweeps, in device-channel order without LFE. */
   layout_speakers: Record<string, string[]>;
+  /* Device channel slots of each layout with a fixed order, and of the layouts with an
+     HDMI order the slots an HDMI or DisplayPort output on macOS takes (ADR 0012). */
+  track_orders: Record<string, string[]>;
+  hdmi_orders: Record<string, string[]>;
   immersive: ImmersiveLayoutInfo[];
   /* Head-turn measurement plans by setup ("mono", "stereo"), then by target layout. */
   guided: Record<string, GuidedSetupInfo>;
@@ -39,13 +43,17 @@ interface SystemInfo {
   runtime: { language: string; toolchain: string; audio_backend: string; shell?: string; webview?: string };
   paths: { data_dir: string; settings_path: string }; update_channel: "prerelease" | "stable";
 }
-interface AudioDevice { index: number; name: string; host_api: string; max_input_channels: number; max_output_channels: number }
+/* hdmi: an HDMI or DisplayPort output on macOS (always false elsewhere). */
+interface AudioDevice { index: number; name: string; host_api: string; max_input_channels: number; max_output_channels: number; hdmi?: boolean }
+type ChannelOrder = "auto" | "standard" | "hdmi";
 interface AudioDevices { host_apis: string[]; devices: AudioDevice[]; default_input_index: number; default_output_index: number }
 interface SweepRequest { mode: string; speakers: string; tracks: string; fs?: number; duration?: number }
 interface RecordingRequest {
   mode: "speakers" | "headphones"; record_dir: string; play_path?: string; sweep?: SweepRequest;
   input_device: string | null; output_device: string | null; host_api: string | null;
   share_mode?: SharePreference | null; force_channels?: boolean; channels?: number;
+  /* Device channel order of a 5.1, 7.1, 7.1.x or 9.1.x sweep; auto uses HDMI for an HDMI output on macOS. */
+  channel_order?: ChannelOrder;
   append?: boolean; debug_plots?: boolean; confirm_warnings?: boolean;
   /* The azimuth each speaker should be heard at (ITU degrees); enables the turn-angle checks. */
   expected_azimuths?: Record<string, number>;
@@ -63,6 +71,8 @@ interface RecordingResult {
   mode: "speakers" | "headphones"; sweep: string | null; sidecar_path: string | null;
   share: RecordingShare; warnings?: string[];
   checks?: RecordingCheck[]; measurements?: RecordingMeasurement[];
+  /* The order the sweep was played in, when its layout has an HDMI order. */
+  channel_order?: "standard" | "hdmi";
 }
 interface ProcessingRequest {
   dir_path?: string | null; test_signal?: string | null; fs?: number | null;
@@ -200,7 +210,7 @@ interface ProgressPayload {
 }
 type JobEvent = { seq: number; timestamp_ms: number } & (
   { type: "progress"; payload: ProgressPayload } |
-  { type: "log"; payload: { level: string; message: string; key?: string; share?: RecordingShare } } |
+  { type: "log"; payload: { level: string; message: string; key?: string; share?: RecordingShare; channels?: string } } |
   { type: "status"; payload: { status: JobStatus } }
 );
 interface JobPoll { job: Job; events: JobEvent[]; next_seq: number }
@@ -251,6 +261,7 @@ interface AppState {
   lastOutputDir: string | null; lastRecoveryOutputDir: string | null; systemThemeQuery: MediaQueryList | null;
   stageIndex: number; stageAbort: string | null; modalDismissed: boolean; recPhase: string | null;
   recDoneSpeakers: Set<string>; shareModes: SharePreference[]; systemInfo: SystemInfo | null;
+  audioDevices: AudioDevice[]; defaultOutputIndex: number;
   recoveryPlan: RecoveryPlan | null; recoveryPlanError: IpcError | null;
   recoveryState: "empty" | "planning" | "ready" | "nothing" | "error";
   recoveryTimer: number | undefined; recoveryRevision: number; recoveryCreated: Set<string>;

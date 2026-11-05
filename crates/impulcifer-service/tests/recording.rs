@@ -93,6 +93,7 @@ fn golden_recording_validation_matches_python() {
             Ok(v) => {
                 let mut data = serde_json::to_value(v).unwrap();
                 data.as_object_mut().unwrap().remove("share");
+                data.as_object_mut().unwrap().remove("channel_order");
                 data.as_object_mut().unwrap().remove("expected_azimuths");
                 data.as_object_mut()
                     .unwrap()
@@ -179,6 +180,47 @@ fn share_mode_request_validation() {
             error["error"]["details"],
             json!({"share_mode":invalid_share})
         );
+    }
+}
+
+#[test]
+fn channel_order_request_validation() {
+    use impulcifer_service::recording::channel_order::ChannelOrder;
+
+    assert_eq!(
+        request::validate(&json!({"record_dir":"missing","sweep":{}}))
+            .unwrap()
+            .channel_order,
+        ChannelOrder::Auto
+    );
+    assert_eq!(
+        request::validate(&json!({"record_dir":"missing","sweep":{},"channel_order":null}))
+            .unwrap()
+            .channel_order,
+        ChannelOrder::Auto
+    );
+    for (raw, expected) in [
+        ("auto", ChannelOrder::Auto),
+        ("standard", ChannelOrder::Standard),
+        ("hdmi", ChannelOrder::Hdmi),
+    ] {
+        assert_eq!(
+            request::validate(&json!({"record_dir":"missing","sweep":{},"channel_order":raw}))
+                .unwrap()
+                .channel_order,
+            expected
+        );
+    }
+    for raw in [json!("HDMI"), json!("both"), json!(1), json!(true)] {
+        let error = request::validate(
+            &json!({"record_dir":"missing","sweep":{},"channel_order":raw.clone()}),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error["error"]["message"],
+            "channel_order must be auto, standard or hdmi."
+        );
+        assert_eq!(error["error"]["details"], json!({"channel_order":raw}));
     }
 }
 
@@ -377,6 +419,7 @@ struct FakeBackend {
     fallback: bool,
     /// Capture fails once playback has started (both streams already open).
     fail_read: bool,
+    capture_sample: Option<f32>,
     delay: Duration,
 }
 impl AudioBackend for FakeBackend {
@@ -450,6 +493,7 @@ impl AudioBackend for FakeBackend {
             channels: spec.channels,
             cursor: 0,
             fail_read: self.fail_read,
+            capture_sample: self.capture_sample,
         }))
     }
 }
@@ -482,6 +526,7 @@ struct FakeInput {
     channels: u16,
     cursor: usize,
     fail_read: bool,
+    capture_sample: Option<f32>,
 }
 impl InputSession for FakeInput {
     fn start(&mut self) -> Result<(), AudioError> {
@@ -512,13 +557,15 @@ impl InputSession for FakeInput {
         let frames = dst.len() / usize::from(self.channels);
         for (i, frame) in dst.chunks_exact_mut(usize::from(self.channels)).enumerate() {
             for (ch, sample) in frame.iter_mut().enumerate() {
-                *sample = (self.cursor + i)
-                    .checked_sub(1000)
-                    .and_then(|i| {
-                        playback.get(i * usize::from(*channels) + ch % usize::from(*channels))
-                    })
-                    .copied()
-                    .unwrap_or(0.0);
+                *sample = self.capture_sample.unwrap_or_else(|| {
+                    (self.cursor + i)
+                        .checked_sub(1000)
+                        .and_then(|i| {
+                            playback.get(i * usize::from(*channels) + ch % usize::from(*channels))
+                        })
+                        .copied()
+                        .unwrap_or(0.0)
+                });
             }
         }
         self.cursor += frames;
@@ -628,6 +675,122 @@ fn recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32() {
     assert_eq!(u16::from_le_bytes(bytes[34..36].try_into().unwrap()), 32);
     eprintln!("fake recording phases: {}", phases.join(", "));
 }
+#[test]
+fn hdmi_channel_order_moves_fc_to_device_channel_four() {
+    for (requested, expected_order, active_channel) in [
+        ("hdmi", "hdmi", 3usize),
+        ("standard", "standard", 2usize),
+        ("auto", "standard", 2usize),
+    ] {
+        let temp = Temp::new();
+        let backend = FakeBackend::default();
+        let shared = backend.shared.clone();
+        let validated = request::validate(&json!({
+            "record_dir":temp.0,
+            "sweep":{"mode":"custom","fs":8000,"duration":1,"speakers":"FC","tracks":"7.1"},
+            "channel_order":requested
+        }))
+        .unwrap();
+        let poll = start(validated, backend);
+        assert_eq!(json!(poll.job.status), "succeeded", "{:?}", poll.job.error);
+        let result = poll.job.result.unwrap();
+        assert_eq!(result["channel_order"], expected_order);
+        let state = shared.lock().unwrap();
+        let (playback, channels) = state.playback.as_ref().unwrap();
+        assert_eq!(*channels, 8);
+        let energy = |channel: usize| {
+            playback
+                .chunks_exact(usize::from(*channels))
+                .map(|frame| frame[channel].abs())
+                .sum::<f32>()
+        };
+        assert!(energy(active_channel) > 0.0, "{requested}");
+        assert_eq!(energy(if active_channel == 2 { 3 } else { 2 }), 0.0);
+        drop(state);
+        let log = poll
+            .events
+            .iter()
+            .find(|event| {
+                event.payload["key"]
+                    == if expected_order == "hdmi" {
+                        "recording_channel_order_hdmi"
+                    } else {
+                        "recording_channel_order_standard"
+                    }
+            })
+            .expect("channel order log");
+        if expected_order == "hdmi" {
+            assert!(
+                log.payload["channels"]
+                    .as_str()
+                    .unwrap()
+                    .contains("3 LFE, 4 FC")
+            );
+        }
+        assert_eq!(log.payload["auto"], requested == "auto");
+    }
+}
+
+#[test]
+fn silent_input_is_reported_as_one_error_check() {
+    let expected_key = if cfg!(target_os = "macos") {
+        "record_check_input_silent_macos"
+    } else {
+        "record_check_input_silent"
+    };
+    for mode in ["speakers", "headphones"] {
+        let temp = Temp::new();
+        let validated = request::validate(&json!({
+            "mode":mode,
+            "record_dir":temp.0,
+            "sweep":{"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR"}
+        }))
+        .unwrap();
+        let poll = start(
+            validated,
+            FakeBackend {
+                capture_sample: Some(0.0),
+                ..Default::default()
+            },
+        );
+        assert_eq!(json!(poll.job.status), "succeeded", "{:?}", poll.job.error);
+        let result = poll.job.result.unwrap();
+        assert_eq!(
+            result["checks"],
+            json!([{"key":expected_key,"speaker":"","severity":"error","values":{}}])
+        );
+        if mode == "speakers" {
+            assert!(result["measurements"].is_array());
+        }
+        assert!(poll.events.iter().any(|event| {
+            event.payload["key"] == expected_key
+                && event.payload["message"] == "The input recorded only digital silence."
+        }));
+    }
+
+    let temp = Temp::new();
+    let validated = request::validate(&json!({
+        "record_dir":temp.0,
+        "sweep":{"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR"}
+    }))
+    .unwrap();
+    let poll = start(
+        validated,
+        FakeBackend {
+            capture_sample: Some(0.25),
+            ..Default::default()
+        },
+    );
+    let result = poll.job.result.unwrap();
+    assert!(
+        result["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|check| check["key"] != expected_key)
+    );
+}
+
 #[test]
 fn recording_append_pads_and_stacks_like_python() {
     for (old, new) in [(3, 5), (5, 3)] {
@@ -768,7 +931,15 @@ fn list_audio_devices_shape_and_unknown_host_api() {
     assert_eq!(data["host_apis"], json!(["Windows WASAPI"]));
     assert_eq!(data["default_input_index"], 0);
     assert_eq!(data["default_output_index"], 1);
-    assert_eq!(data["devices"][0].as_object().unwrap().len(), 5);
+    assert_eq!(data["devices"][0].as_object().unwrap().len(), 6);
+    #[cfg(not(target_os = "macos"))]
+    assert!(
+        data["devices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|device| device["hdmi"] == false)
+    );
     let error = devices::list_audio_devices(&backend, Some("ASIO")).unwrap_err();
     assert_eq!(
         error["error"],
