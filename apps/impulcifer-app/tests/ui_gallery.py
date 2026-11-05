@@ -730,6 +730,50 @@ def layout_checks(browser):
     print("Gallery layout checks: recorder channel map, layout speakers, use-all, layout_files auto/none/forced OK", flush=True)
 
 
+def fill_lfe_checks(browser):
+    """ADR 0013: what the output files carry for unmeasured speakers and the LFE
+    channel. Studio sends both only with the Output tab on, Stable always; each
+    LFE choice shows its own explanation; reset returns the defaults."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "processing")
+    request = brir_request(page)
+    assert "missing_speakers" not in request and "lfe_mode" not in request, request
+    adv_switch(page, "output", True)
+    request = brir_request(page)
+    assert request["missing_speakers"] == "silent" and request["lfe_mode"] == "none", request
+    row = page.locator("#ba-lfe-mode-row")
+    hints = lambda: [mode for mode in ("none", "center", "all")
+                     if row.locator(f'[data-lfe-mode="{mode}"]').is_visible()]
+    assert hints() == ["none"]
+    page.locator("#ba-missing-speakers").select_option("neighbor")
+    page.locator("#ba-lfe-mode").select_option("all")
+    assert hints() == ["all"]
+    request = brir_request(page)
+    assert request["missing_speakers"] == "neighbor" and request["lfe_mode"] == "all", request
+    page.locator("#ba-lfe-mode").select_option("center")
+    assert hints() == ["center"] and brir_request(page)["lfe_mode"] == "center"
+    page.locator("#adv-reset-output").click()
+    assert page.locator("#ba-missing-speakers").input_value() == "silent"
+    assert page.locator("#ba-lfe-mode").input_value() == "none" and hints() == ["none"]
+    assert not errors, errors
+    context.close()
+
+    context, page, errors = open_page(browser, "stable", "dark", "ko", "idle")
+    navigate(page, "processing")
+    disclosure(page, "advanced", True)
+    payload = page.evaluate("gatherBrirPayload()")
+    assert payload["missing_speakers"] == "silent" and payload["lfe_mode"] == "none", payload
+    page.locator("#bf-missing-speakers").select_option("neighbor")
+    page.locator("#bf-lfe-mode").select_option("all")
+    assert page.locator('#bf-lfe-mode-row [data-lfe-mode="all"]').is_visible()
+    assert not page.locator('#bf-lfe-mode-row [data-lfe-mode="none"]').is_visible()
+    payload = page.evaluate("gatherBrirPayload()")
+    assert payload["missing_speakers"] == "neighbor" and payload["lfe_mode"] == "all", payload
+    assert not errors, errors
+    context.close()
+    print("Gallery fill/LFE checks: Studio sends only with Output on, Stable always, LFE hints per choice, reset OK", flush=True)
+
+
 def guided_checks(browser):
     """Head-turn measurement: each step's turn, ear and diagram; a step records
     its speakers with the angles it expects after a countdown; a clean step moves
@@ -1474,6 +1518,7 @@ def render_gallery(output):
         behavior_checks(browser)
         dialog_checks(browser)
         channel_order_checks(browser)
+        fill_lfe_checks(browser)
         advanced_checks(browser)
         layout_checks(browser)
         guided_checks(browser)
