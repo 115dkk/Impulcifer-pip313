@@ -71,7 +71,11 @@ fn neighbor_fill_picks_the_nearest_slot_on_the_same_side_and_layer() {
         let targets: Vec<_> = expected.iter().map(|(slot, _)| *slot).collect();
         let result = fill_missing_speakers(&input, &targets).unwrap();
         for (slot, expected_source) in *expected {
-            assert_eq!(source(&result.filled, slot), *expected_source, "{measured:?} -> {slot}");
+            assert_eq!(
+                source(&result.filled, slot),
+                *expected_source,
+                "{measured:?} -> {slot}"
+            );
         }
     }
 
@@ -80,8 +84,14 @@ fn neighbor_fill_picks_the_nearest_slot_on_the_same_side_and_layer() {
     let fc = result.hrir.pair("FC").unwrap();
     let fl = input.pair("FL").unwrap();
     let fr = input.pair("FR").unwrap();
-    assert_eq!(fc.0.data[0], (fl.0.data[0] + fr.0.data[0]) / std::f64::consts::SQRT_2);
-    assert_eq!(fc.1.data[0], (fl.1.data[0] + fr.1.data[0]) / std::f64::consts::SQRT_2);
+    assert_eq!(
+        fc.0.data[0],
+        (fl.0.data[0] + fr.0.data[0]) / std::f64::consts::SQRT_2
+    );
+    assert_eq!(
+        fc.1.data[0],
+        (fl.1.data[0] + fr.1.data[0]) / std::f64::consts::SQRT_2
+    );
 }
 
 #[test]
@@ -108,7 +118,11 @@ fn lfe_center_copies_fc_or_the_front_phantom() {
         lfe.left.unwrap().data[0],
         (pair.0.0.data[0] + pair.1.0.data[0]) / std::f64::consts::SQRT_2
     );
-    assert!(fill_lfe(&tagged(&["FL"]), "LFE", "center").unwrap().is_none());
+    assert!(
+        fill_lfe(&tagged(&["FL"]), "LFE", "center")
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]
@@ -119,7 +133,11 @@ fn lfe_all_is_the_power_average_below_the_crossover() {
         (0..length)
             .map(|n| {
                 let shifted = n.saturating_sub(peak) as f64;
-                if n < peak { 0.0 } else { gain * (std::f64::consts::TAU * frequency * shifted / fs as f64).sin() }
+                if n < peak {
+                    0.0
+                } else {
+                    gain * (std::f64::consts::TAU * frequency * shifted / fs as f64).sin()
+                }
             })
             .collect::<Vec<_>>()
     };
@@ -132,8 +150,14 @@ fn lfe_all_is_the_power_average_below_the_crossover() {
     );
     let first = fill_lfe(&input, "LFE", "all").unwrap().unwrap().0;
     let second = fill_lfe(&input, "LFE", "all").unwrap().unwrap().0;
-    assert_eq!(first.left.as_ref().unwrap().data, second.left.as_ref().unwrap().data);
-    assert_eq!(first.right.as_ref().unwrap().data, second.right.as_ref().unwrap().data);
+    assert_eq!(
+        first.left.as_ref().unwrap().data,
+        second.left.as_ref().unwrap().data
+    );
+    assert_eq!(
+        first.right.as_ref().unwrap().data,
+        second.right.as_ref().unwrap().data
+    );
     let data = &first.left.as_ref().unwrap().data;
     let peak = data
         .iter()
@@ -164,7 +188,10 @@ fn lfe_all_is_the_power_average_below_the_crossover() {
     };
     assert!((20.0 * (actual_40 / expected_40).log10()).abs() < 0.5);
     let attenuation = 20.0 * (spectrum[bin(1_000.0)].norm() / actual_40).log10();
-    assert!(attenuation < -60.0, "1 kHz attenuation was {attenuation} dB");
+    assert!(
+        attenuation < -60.0,
+        "1 kHz attenuation was {attenuation} dB"
+    );
 }
 
 #[test]
@@ -178,6 +205,9 @@ fn defaults_leave_every_output_unchanged() {
         .flat_map(|speaker| [format!("{speaker}-left"), format!("{speaker}-right")])
         .collect();
     let names: Vec<_> = names.iter().map(String::as_str).collect();
-    assert_eq!(defaults.hrir.stack_tracks(&names, false).unwrap(), enabled.hrir.stack_tracks(&names, false).unwrap());
+    assert_eq!(
+        defaults.hrir.stack_tracks(&names, false).unwrap(),
+        enabled.hrir.stack_tracks(&names, false).unwrap()
+    );
     assert!(enabled.filled.is_empty());
 }

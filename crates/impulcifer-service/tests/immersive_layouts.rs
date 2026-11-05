@@ -318,9 +318,21 @@ fn output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end() {
     let layout = layout("9.1").unwrap();
     let wav = read_wav(&temp.0.join(layout.file_name)).unwrap();
     for slot in ["LFE", "WL", "WR"] {
-        let channel = layout.channels.iter().position(|channel| channel.slot == slot).unwrap();
-        assert!(wav.tracks[2 * channel].iter().all(|value| *value == 0.0), "{slot}");
-        assert!(wav.tracks[2 * channel + 1].iter().all(|value| *value == 0.0), "{slot}");
+        let channel = layout
+            .channels
+            .iter()
+            .position(|channel| channel.slot == slot)
+            .unwrap();
+        assert!(
+            wav.tracks[2 * channel].iter().all(|value| *value == 0.0),
+            "{slot}"
+        );
+        assert!(
+            wav.tracks[2 * channel + 1]
+                .iter()
+                .all(|value| *value == 0.0),
+            "{slot}"
+        );
     }
     assert!(events(&defaults, "cli_info_filled_channels").is_empty());
     assert!(events(&defaults, "cli_info_lfe_filled").is_empty());
@@ -331,8 +343,16 @@ fn output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end() {
     );
     let wav = read_wav(&temp.0.join(layout.file_name)).unwrap();
     for (target, source) in [("WL", "FL"), ("WR", "FR"), ("LFE", "FC")] {
-        let target = layout.channels.iter().position(|channel| channel.slot == target).unwrap();
-        let source = layout.channels.iter().position(|channel| channel.slot == source).unwrap();
+        let target = layout
+            .channels
+            .iter()
+            .position(|channel| channel.slot == target)
+            .unwrap();
+        let source = layout
+            .channels
+            .iter()
+            .position(|channel| channel.slot == source)
+            .unwrap();
         assert_eq!(wav.tracks[2 * target], wav.tracks[2 * source]);
         assert_eq!(wav.tracks[2 * target + 1], wav.tracks[2 * source + 1]);
     }

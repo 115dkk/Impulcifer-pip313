@@ -557,8 +557,7 @@ fn cli_output_fill_options_parse_reject_invalid_and_appear_in_help() {
     assert_eq!(kwargs["missing_speakers"], json!("neighbor"));
     assert_eq!(kwargs["lfe_mode"], json!("all"));
 
-    for (flag, value) in [("--missing_speakers", "nearest"), ("--lfe_mode", "bass")]
-    {
+    for (flag, value) in [("--missing_speakers", "nearest"), ("--lfe_mode", "bass")] {
         let error = parse(&args(&[
             "impulcifer",
             "--dir_path",
