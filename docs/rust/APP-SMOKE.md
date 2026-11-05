@@ -47,6 +47,7 @@ Playwright 브라우저는 다운로드하지 않습니다. `--cdp`에서는 기
 
 1. 동결된 HTML은 `frontendDist` 밖의 `logo/pulse-32.png`, `logo/pulse-128.png`를 참조합니다. 첫 실행에서 두 리소스 오류를 확인했습니다. 셸의 자산 응답 훅에서 기존 로고 파일의 내장 바이트를 같은 URL로 제공하도록 수정했습니다. HTML과 번들 설정은 바꾸지 않았습니다.
 2. Tauri dialog 플러그인은 `window.confirm`을 비동기 함수로 바꿉니다. 기존 UI는 boolean을 기대하므로 Promise를 참으로 판정하여 확인 전에 녹음을 시작했습니다. 셸은 플러그인의 Rust 초기화와 파일 대화상자 API를 유지하되 JS 재정의만 제외합니다. WebView2 본래의 동기식 확인 창을 실제로 표시하고 누르는 검사가 통과했습니다.
+   - macOS(3.9.1부터): WKWebView는 호스트가 UI 델리게이트를 구현해야 확인·알림 창을 띄우는데, wry 0.55는 이를 구현하지 않습니다. 그래서 `window.confirm`이 0~1 ms 만에 `false`를 돌려주어 녹음이 시작되지 않았고, `window.alert`는 아무것도 띄우지 않았습니다. 이 측정값은 M4 맥미니(macOS 26.7)와 M2 맥북(macOS 27)에서 잰 것입니다(PR #272, @junha4king-ui). 3.x 화면은 이제 모든 플랫폼에서 브라우저 대화상자를 쓰지 않고 앱 안의 대화상자(`askDialog`)로 묻습니다(ADR 0012, `screen_never_calls_the_browser_dialogs`). 하드웨어 검사의 헤드폰 확인도 이제 따로 뜨는 창이 아니라 앱 창 안의 대화상자입니다. `confirm.ps1`은 앱 창의 접근성 트리에서 확인 문구와 확인 버튼을 찾으므로 그대로 동작할 것으로 보지만, 하드웨어 검사로는 아직 확인하지 않았습니다.
 3. 최초 구현의 로컬 HTTP 확인 요청은 WebView2에서 `Failed to fetch`로 실패했습니다. 보안 설정을 바꾸지 않고 파일 확인 방식으로 교체했습니다.
 
 당시 동결된 UI에서는 언어를 바꾸면 runtime 표시가 연결 대기로 바뀌었고 헤드폰 확인 문구의 `{play_file}` 등 자리표시자를 채우지 않았습니다. 2026-09-12의 3.x UI 수정에서는 서비스 연결 상태를 유지하고, 스피커·헤드폰 확인 모두 실제 요청 값과 장치 접근 방식으로 문구를 채웁니다. 아래 2026-09-08 기록의 업데이트 미구현 결과는 당시 실행에 해당합니다.
@@ -122,7 +123,7 @@ Playwright 브라우저는 다운로드하지 않습니다. `--cdp`에서는 기
 | smoke 보고 opt-in | `impulcifer-app::smoke_report_contract`(소스 게이트와 실제 helper의 동시 기록·전달 테스트) |
 | 초기 관찰기 | `impulcifer-app::startup_observer_contract` |
 | 드라이버 실패 진단 | `impulcifer-app::in_app_driver_failure_contract` |
-| 동기식 확인 창 | `impulcifer-app::native_confirmation_contract`와 하드웨어 실기 증거 |
+| 확인 대화상자 | `impulcifer-app::screen_never_calls_the_browser_dialogs`, UI 갤러리의 `dialog_checks`, 하드웨어 실기 증거 |
 | `app.smoke_brir`, `app.smoke_recovery`, `app.smoke_settings` | `impulcifer-app::app_smoke_windows` |
 | `app.smoke_recording` | `smoke.py --hardware` 실기 증거. Rust ignored hook은 비하드웨어이므로 이 hook만으로 녹음 등록을 대신하면 안 됩니다. |
 
