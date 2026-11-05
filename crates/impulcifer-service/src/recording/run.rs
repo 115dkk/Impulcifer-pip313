@@ -99,14 +99,19 @@ impl Drop for DecodeTemp {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-fn load_playback(path: &Path, record: &Path) -> Result<Wav, RecordingError> {
+/// The playback, and for a TrueHD file the `<record stem>_channels.txt` to write
+/// once the recording is saved (a cancelled or failed recording leaves no file).
+fn load_playback(
+    path: &Path,
+    record: &Path,
+) -> Result<(Wav, Option<(PathBuf, String)>), RecordingError> {
     let ext = path
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
     if !matches!(ext.as_str(), "mlp" | "thd" | "truehd") {
-        return read_wav(path).map_err(RecordingError::internal);
+        return Ok((read_wav(path).map_err(RecordingError::internal)?, None));
     }
     let tools = ffmpeg::discover(false)
         .map_err(RecordingError::internal)?
@@ -115,12 +120,13 @@ fn load_playback(path: &Path, record: &Path) -> Result<Wav, RecordingError> {
     let decoded = temp.0.join("decoded.wav");
     ffmpeg::decode_to_wav(&tools, path, &decoded).map_err(RecordingError::internal)?;
     let wav = read_wav(&decoded).map_err(RecordingError::internal)?;
+    let mut channel_names = None;
     if let Some(names) = ffmpeg::truehd_channel_names(wav.tracks.len()) {
         let info = record.with_file_name(format!(
             "{}_channels.txt",
             record.file_stem().unwrap_or_default().to_string_lossy()
         ));
-        std::fs::write(info, names.join(",")).map_err(RecordingError::internal)?;
+        channel_names = Some((info, names.join(",")));
     } else if ffmpeg::is_truehd_atmos_object_master(&tools, path)
         .map_err(RecordingError::internal)?
     {
@@ -130,7 +136,7 @@ fn load_playback(path: &Path, record: &Path) -> Result<Wav, RecordingError> {
             wav.tracks.len()
         )));
     }
-    Ok(wav)
+    Ok((wav, channel_names))
 }
 enum Clock {
     Start,
@@ -241,11 +247,13 @@ fn run(
             ..Default::default()
         },
     );
+    let mut channel_names = None;
     let (fs, mut tracks, segments) = if let Some(p) = generated.as_mut() {
         (p.spec.fs, std::mem::take(&mut p.tracks), p.segments.clone())
     } else {
         let play = v.play_path.as_deref().unwrap_or("");
-        let mut wav = load_playback(Path::new(play), record)?;
+        let (mut wav, names) = load_playback(Path::new(play), record)?;
+        channel_names = names;
         if v.mode == Mode::Headphones && wav.tracks.len() == 1 {
             wav.tracks.push(wav.tracks[0].clone());
         }
@@ -437,7 +445,15 @@ fn run(
         .collect();
     let input_silent = tracks.iter().any(|track| !track.is_empty())
         && tracks.iter().flatten().all(|sample| *sample == 0.0);
+    // The last point a cancellation is honoured: past it the recording is
+    // written (and an appended file changed), so the job completes.
+    if ctx.cancel.is_cancelled() {
+        return Err(cancelled(ctx, duration, speakers));
+    }
     save_recording(record, fs, tracks.clone(), v.append)?;
+    if let Some((path, names)) = channel_names {
+        std::fs::write(path, names).map_err(RecordingError::internal)?;
+    }
     let check_results = (v.mode == Mode::Speakers).then(|| {
         check_recording(
             &tracks,
