@@ -1,6 +1,11 @@
-use super::{RecordingError, channel_order::hdmi_outputs};
+use super::{
+    RecordingError,
+    channel_order::{ChannelOrder, hdmi_outputs, playback_layout, to_hdmi_order},
+    request::ValidatedRecording,
+};
 use impulcifer_types::{
     audio::{AudioBackend, Endpoint},
+    constants::{hdmi_track_order, sweep_track_order},
     ipc::ErrorCode,
 };
 use serde_json::{Value, json};
@@ -59,7 +64,7 @@ pub fn resolve_devices(
     input_name: Option<&str>,
     output_name: Option<&str>,
     host_api: Option<&str>,
-    playback_channels: u16,
+    _playback_channels: u16,
 ) -> Result<(Endpoint, Endpoint), RecordingError> {
     let eps = endpoints(backend)?;
     let host_api = host_api.filter(|s| !s.is_empty());
@@ -147,17 +152,12 @@ pub fn resolve_devices(
         };
         let ep = ep.ok_or_else(|| {
             RecordingError::device(format!(
-                "No device found with name \"{name}\" and host API \"{api}\". "
+                "No device found with name \"{name}\" and host API \"{api}\"."
             ))
         })?;
         if channels(ep) < min {
             let short = ep.host_api.replace("Windows ", "");
-            let message = if suffix.is_some() {
-                format!(
-                    "Found {kind} device \"{} {short}\"\" but minimum number of channels is not satisfied. 1",
-                    ep.name
-                )
-            } else if host_api.is_some() {
+            let message = if suffix.is_some() || host_api.is_some() {
                 format!(
                     "Found {kind} device \"{} {short}\" but minimum number of channels is not satisfied.",
                     ep.name
@@ -171,6 +171,235 @@ pub fn resolve_devices(
     };
     Ok((
         resolve(input_name, true, 1)?,
-        resolve(output_name, false, playback_channels)?,
+        resolve(output_name, false, 1)?,
     ))
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputShortage {
+    pub available: u16,
+    pub required: u16,
+    pub first: usize,
+    pub last: usize,
+    pub missing: Vec<String>,
+}
+
+impl OutputShortage {
+    pub fn missing_text(&self) -> String {
+        self.missing.join(", ")
+    }
+
+    pub fn message(&self, device: &str) -> String {
+        format!(
+            "{device} has {} output channels, so channels {}–{} ({}) were not played.",
+            self.available,
+            self.first,
+            self.last,
+            self.missing_text()
+        )
+    }
+}
+
+pub struct OutputPlan {
+    pub channel_order: Option<ChannelOrder>,
+    pub slots: Option<Vec<String>>,
+    pub layout: String,
+    pub shortage: Option<OutputShortage>,
+}
+
+pub struct OutputWarning {
+    pub device: String,
+    pub layout: String,
+    pub shortage: OutputShortage,
+}
+
+/// Best-effort preflight used by the confirmation flow. Device and playback
+/// errors remain the recording job's responsibility.
+pub fn output_warning(
+    backend: &dyn AudioBackend,
+    request: &ValidatedRecording,
+) -> Option<OutputWarning> {
+    let mut tracks = if let Some(spec) = request.sweep_spec.as_ref() {
+        sweep_signal_rows(spec)?
+    } else {
+        let mut wav =
+            impulcifer_io::read_wav(std::path::Path::new(request.play_path.as_deref()?)).ok()?;
+        if request.mode == super::request::Mode::Headphones && wav.tracks.len() == 1 {
+            wav.tracks.push(wav.tracks[0].clone());
+        }
+        wav.tracks
+    };
+    let channels = u16::try_from(tracks.len()).ok()?;
+    let (_, output) = resolve_devices(
+        backend,
+        request.input_device.as_deref(),
+        request.output_device.as_deref(),
+        request.host_api.as_deref(),
+        channels,
+    )
+    .ok()?;
+    let plan = output_plan(request, &output, &mut tracks);
+    Some(OutputWarning {
+        device: output.name,
+        layout: plan.layout,
+        shortage: plan.shortage?,
+    })
+}
+
+/// One row per device channel of a generated sweep, non-zero where a speaker is
+/// swept: the placement of `SweepEstimator::sweep_sequence` (mono plays FL alone,
+/// stereo follows the speaker list, a layout its track order) without making the
+/// audio, which for 7.1.4 is hundreds of megabytes the preflight does not need.
+fn sweep_signal_rows(spec: &super::sweep::SweepSpec) -> Option<Vec<Vec<f64>>> {
+    let speakers: Vec<&str> = spec.speakers.iter().map(String::as_str).collect();
+    let (order, count) = match spec.tracks.as_str() {
+        "mono" => (vec!["FL"], 1),
+        "stereo" => (speakers.clone(), 2),
+        layout => {
+            let order = sweep_track_order(layout)?;
+            let count = order.len();
+            (order, count)
+        }
+    };
+    let mut rows = vec![vec![0.0]; count];
+    let swept: &[&str] = if spec.tracks == "mono" {
+        &["FL"]
+    } else {
+        &speakers
+    };
+    for speaker in swept {
+        if let Some(index) = order.iter().position(|slot| slot == speaker) {
+            rows[index] = vec![1.0];
+        }
+    }
+    Some(rows)
+}
+
+/// Applies the effective device channel order and reports only signal-carrying
+/// rows which the selected output cannot play.
+pub fn output_plan(
+    request: &ValidatedRecording,
+    output: &Endpoint,
+    tracks: &mut Vec<Vec<f64>>,
+) -> OutputPlan {
+    let layout = request
+        .sweep_spec
+        .as_ref()
+        .map(|spec| spec.tracks.clone())
+        .or_else(|| {
+            request
+                .play_path
+                .as_deref()
+                .and_then(impulcifer_io::sweep_files::parse_sweep_file_name)
+                .map(|info| info.layout)
+        })
+        .unwrap_or_default();
+    let reorder_layout = playback_layout(
+        request.sweep_spec.as_ref(),
+        request.play_path.as_deref(),
+        tracks.len(),
+    );
+    let channel_order = reorder_layout.as_ref().map(|layout| {
+        let order = match request.channel_order {
+            ChannelOrder::Hdmi => ChannelOrder::Hdmi,
+            ChannelOrder::Standard => ChannelOrder::Standard,
+            ChannelOrder::Auto => {
+                if hdmi_outputs().contains(&output.name) {
+                    ChannelOrder::Hdmi
+                } else {
+                    ChannelOrder::Standard
+                }
+            }
+        };
+        if order == ChannelOrder::Hdmi {
+            *tracks = to_hdmi_order(std::mem::take(tracks), layout);
+        }
+        order
+    });
+    let slots = if layout.is_empty() {
+        None
+    } else {
+        let order = if channel_order == Some(ChannelOrder::Hdmi) {
+            hdmi_track_order(&layout)
+        } else {
+            sweep_track_order(&layout)
+        };
+        order.map(|order| order.into_iter().map(str::to_owned).collect::<Vec<_>>())
+    };
+    let available = usize::from(output.max_output_channels);
+    let active: Vec<_> = tracks
+        .iter()
+        .enumerate()
+        .skip(available)
+        .filter(|(_, row)| row.iter().any(|sample| *sample != 0.0))
+        .map(|(index, _)| index)
+        .collect();
+    let shortage = if let (Some(first), Some(last)) = (active.first(), active.last()) {
+        let missing = active
+            .iter()
+            .filter_map(|index| {
+                let name = slots
+                    .as_ref()
+                    .and_then(|slots| slots.get(*index))
+                    .cloned()
+                    .unwrap_or_else(|| (index + 1).to_string());
+                (!matches!(name.as_str(), "LFE" | "LFE2")).then_some(name)
+            })
+            .collect();
+        Some(OutputShortage {
+            available: output.max_output_channels,
+            required: u16::try_from(tracks.len()).unwrap_or(u16::MAX),
+            first: first + 1,
+            last: last + 1,
+            missing,
+        })
+    } else {
+        None
+    };
+    OutputPlan {
+        channel_order,
+        slots,
+        layout,
+        shortage,
+    }
+}
+
+#[cfg(test)]
+mod preflight_tests {
+    use super::*;
+    use crate::recording::sweep::{SweepSpec, build_sweep_playback};
+
+    /// The preflight must find the same swept channels as the real playback.
+    #[test]
+    fn sweep_signal_rows_match_the_generated_sweep() {
+        let cases: [(&str, &[&str]); 6] = [
+            ("mono", &["FL"]),
+            ("stereo", &["FL"]),
+            ("stereo", &["SL", "SR"]),
+            ("7.1.4", &["FL", "FR"]),
+            (
+                "7.1.4",
+                &[
+                    "FL", "FR", "FC", "BL", "BR", "SL", "SR", "TFL", "TFR", "TBL", "TBR",
+                ],
+            ),
+            ("22.2", &["WL", "TC", "BC"]),
+        ];
+        for (tracks, speakers) in cases {
+            let spec = SweepSpec {
+                fs: 8000,
+                duration: 0.5,
+                speakers: speakers.iter().map(|s| s.to_string()).collect(),
+                tracks: tracks.into(),
+            };
+            let active = |rows: &[Vec<f64>]| -> Vec<bool> {
+                rows.iter()
+                    .map(|row| row.iter().any(|x| *x != 0.0))
+                    .collect()
+            };
+            let real = build_sweep_playback(&spec).unwrap().tracks;
+            let preflight = sweep_signal_rows(&spec).unwrap();
+            assert_eq!(active(&preflight), active(&real), "{tracks} {speakers:?}");
+        }
+    }
 }

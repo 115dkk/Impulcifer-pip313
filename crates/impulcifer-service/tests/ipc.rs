@@ -281,7 +281,7 @@ fn start_blocked(fixture: &Fixture, cancellable: bool) -> (String, mpsc::Sender<
     let (send, receive) = mpsc::channel();
     let job = fixture
         .jobs
-        .start(JobKind::Recording, cancellable, move |context| {
+        .start(JobKind::OutputRecovery, cancellable, move |context| {
             receive.recv_timeout(Duration::from_secs(10)).unwrap();
             context.check_cancelled()?;
             Ok(json!({"record_path":"out.wav"}))
@@ -358,7 +358,7 @@ fn ipc_bootstrap_shape() {
     assert!(boot["active_job"].is_null());
     assert_eq!(
         boot["capabilities"],
-        json!({"recording":true,"brir":true,"output_recovery":true,"recording_cancel":false,"brir_cancel":true,"output_recovery_cancel":false,"share_modes":["auto"]})
+        json!({"recording":true,"brir":true,"output_recovery":true,"recording_cancel":true,"brir_cancel":true,"output_recovery_cancel":false,"share_modes":["auto"]})
     );
     let mut defaults =
         serde_json::to_value(impulcifer_types::config::ProcessingConfig::default()).unwrap();
@@ -699,7 +699,7 @@ fn ipc_cancel_job_shape() {
     let error = failure(f.call("cancel_job", vec![json!(id)]), "JOB_NOT_CANCELLABLE");
     assert_eq!(
         error["message"],
-        "recording jobs cannot be cancelled safely."
+        "output_recovery jobs cannot be cancelled safely."
     );
     assert_eq!(error["details"], json!({"job_id":id}));
     send.send(()).unwrap();

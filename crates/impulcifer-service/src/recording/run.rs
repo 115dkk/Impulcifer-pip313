@@ -1,8 +1,8 @@
 use super::{
     RecordingError,
-    channel_order::{ChannelOrder, hdmi_outputs, playback_layout, to_hdmi_order},
+    channel_order::ChannelOrder,
     checks::{RecordingCheck, check_recording},
-    devices::resolve_devices,
+    devices::{output_plan, resolve_devices},
     progress::{RecorderProgressEvent, SweepSegment, event_for_elapsed, infer_sweep_segments},
     request::{Mode, ValidatedRecording},
     sweep::{build_sweep_playback, write_sidecar},
@@ -11,7 +11,7 @@ use impulcifer_audio_io::session::{PlaybackBuffer, SessionEvent, SessionRequest,
 use impulcifer_io::{Wav, ffmpeg, read_wav, write_wav};
 use impulcifer_jobs::registry::{JobContext, JobFailure};
 use impulcifer_types::{
-    audio::{AudioBackend, ShareMode},
+    audio::{AudioBackend, AudioError, ShareMode},
     ipc::ErrorCode,
 };
 use serde_json::{Value, json};
@@ -99,14 +99,19 @@ impl Drop for DecodeTemp {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-fn load_playback(path: &Path, record: &Path) -> Result<Wav, RecordingError> {
+/// The playback, and for a TrueHD file the `<record stem>_channels.txt` to write
+/// once the recording is saved (a cancelled or failed recording leaves no file).
+fn load_playback(
+    path: &Path,
+    record: &Path,
+) -> Result<(Wav, Option<(PathBuf, String)>), RecordingError> {
     let ext = path
         .extension()
         .and_then(|s| s.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
     if !matches!(ext.as_str(), "mlp" | "thd" | "truehd") {
-        return read_wav(path).map_err(RecordingError::internal);
+        return Ok((read_wav(path).map_err(RecordingError::internal)?, None));
     }
     let tools = ffmpeg::discover(false)
         .map_err(RecordingError::internal)?
@@ -115,12 +120,13 @@ fn load_playback(path: &Path, record: &Path) -> Result<Wav, RecordingError> {
     let decoded = temp.0.join("decoded.wav");
     ffmpeg::decode_to_wav(&tools, path, &decoded).map_err(RecordingError::internal)?;
     let wav = read_wav(&decoded).map_err(RecordingError::internal)?;
+    let mut channel_names = None;
     if let Some(names) = ffmpeg::truehd_channel_names(wav.tracks.len()) {
         let info = record.with_file_name(format!(
             "{}_channels.txt",
             record.file_stem().unwrap_or_default().to_string_lossy()
         ));
-        std::fs::write(info, names.join(",")).map_err(RecordingError::internal)?;
+        channel_names = Some((info, names.join(",")));
     } else if ffmpeg::is_truehd_atmos_object_master(&tools, path)
         .map_err(RecordingError::internal)?
     {
@@ -130,7 +136,7 @@ fn load_playback(path: &Path, record: &Path) -> Result<Wav, RecordingError> {
             wav.tracks.len()
         )));
     }
-    Ok(wav)
+    Ok((wav, channel_names))
 }
 enum Clock {
     Start,
@@ -171,18 +177,55 @@ fn monitor(rx: mpsc::Receiver<Clock>, ctx: &JobContext, duration: f64, segments:
         }
     }
 }
+enum RunError {
+    Recording(RecordingError),
+    Cancelled,
+}
+impl From<RecordingError> for RunError {
+    fn from(error: RecordingError) -> Self {
+        Self::Recording(error)
+    }
+}
+fn cancelled(ctx: &JobContext, duration: f64, speakers: Vec<String>) -> RunError {
+    emit(
+        ctx,
+        RecorderProgressEvent {
+            phase: "cancelled".into(),
+            duration,
+            speakers,
+            ..Default::default()
+        },
+    );
+    RunError::Cancelled
+}
 pub fn run_recording(
     validated: &ValidatedRecording,
     backend: &(dyn AudioBackend + Sync),
     ctx: &JobContext,
 ) -> Result<Value, JobFailure> {
-    run(validated, backend, ctx).map_err(RecordingError::failure)
+    if ctx.cancel.is_cancelled() {
+        return Err(match cancelled(ctx, 0.0, Vec::new()) {
+            RunError::Cancelled => JobFailure {
+                error: Value::Null,
+                cancelled: true,
+            },
+            RunError::Recording(_) => unreachable!(),
+        });
+    }
+    match run(validated, backend, ctx) {
+        Ok(result) => Ok(result),
+        Err(RunError::Recording(error)) => Err(RecordingError::failure(error)),
+        Err(RunError::Cancelled) => Err(JobFailure {
+            error: Value::Null,
+            cancelled: true,
+        }),
+    }
 }
 fn run(
     v: &ValidatedRecording,
     backend: &(dyn AudioBackend + Sync),
     ctx: &JobContext,
-) -> Result<Value, RecordingError> {
+) -> Result<Value, RunError> {
     let record = Path::new(&v.record_path);
     if let Some(dir) = record.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|_| output_missing(record))?;
@@ -204,11 +247,13 @@ fn run(
             ..Default::default()
         },
     );
+    let mut channel_names = None;
     let (fs, mut tracks, segments) = if let Some(p) = generated.as_mut() {
         (p.spec.fs, std::mem::take(&mut p.tracks), p.segments.clone())
     } else {
         let play = v.play_path.as_deref().unwrap_or("");
-        let mut wav = load_playback(Path::new(play), record)?;
+        let (mut wav, names) = load_playback(Path::new(play), record)?;
+        channel_names = names;
         if v.mode == Mode::Headphones && wav.tracks.len() == 1 {
             wav.tracks.push(wav.tracks[0].clone());
         }
@@ -230,56 +275,34 @@ fn run(
         v.host_api.as_deref(),
         playback_channels,
     )?;
-    let effective_channel_order =
-        playback_layout(v.sweep_spec.as_ref(), v.play_path.as_deref(), tracks.len()).map(
-            |layout| {
-                let order = match v.channel_order {
-                    ChannelOrder::Hdmi => ChannelOrder::Hdmi,
-                    ChannelOrder::Standard => ChannelOrder::Standard,
-                    ChannelOrder::Auto => {
-                        if hdmi_outputs().contains(&output.name) {
-                            ChannelOrder::Hdmi
-                        } else {
-                            ChannelOrder::Standard
-                        }
-                    }
-                };
-                if order == ChannelOrder::Hdmi {
-                    tracks = to_hdmi_order(std::mem::take(&mut tracks), &layout);
-                }
-                let slots = if order == ChannelOrder::Hdmi {
-                    impulcifer_types::constants::hdmi_track_order(&layout)
-                } else {
-                    impulcifer_types::constants::sweep_track_order(&layout)
-                }
-                .expect("playback_layout only returns layouts with an HDMI order");
-                let channels = slots
-                    .iter()
-                    .enumerate()
-                    .map(|(index, slot)| format!("{} {slot}", index + 1))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let (key, message) = if order == ChannelOrder::Hdmi {
-                    (
-                        "recording_channel_order_hdmi",
-                        format!("HDMI channel order: {channels}"),
-                    )
-                } else {
-                    (
-                        "recording_channel_order_standard",
-                        format!("Device channel order: {channels}"),
-                    )
-                };
-                ctx.log(json!({
-                    "level":"info",
-                    "key":key,
-                    "message":message,
-                    "channels":channels,
-                    "auto":v.channel_order == ChannelOrder::Auto,
-                }));
-                order
-            },
-        );
+    let output_plan = output_plan(v, &output, &mut tracks);
+    let effective_channel_order = output_plan.channel_order;
+    if let (Some(order), Some(slots)) = (effective_channel_order, output_plan.slots.as_ref()) {
+        let channels = slots
+            .iter()
+            .enumerate()
+            .map(|(index, slot)| format!("{} {slot}", index + 1))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let (key, message) = if order == ChannelOrder::Hdmi {
+            (
+                "recording_channel_order_hdmi",
+                format!("HDMI channel order: {channels}"),
+            )
+        } else {
+            (
+                "recording_channel_order_standard",
+                format!("Device channel order: {channels}"),
+            )
+        };
+        ctx.log(json!({
+            "level":"info",
+            "key":key,
+            "message":message,
+            "channels":channels,
+            "auto":v.channel_order == ChannelOrder::Auto,
+        }));
+    }
     emit(
         ctx,
         RecorderProgressEvent {
@@ -294,10 +317,27 @@ fn run(
         },
     );
     let mut warnings = Vec::new();
-    if playback_channels > output.max_output_channels {
-        warnings.push(format!("WARNING: Output device only supports {} channels\nbut file has {playback_channels} channels. Audio will be truncated.",output.max_output_channels));
-        tracks.truncate(usize::from(output.max_output_channels));
-    }
+    let output_channels = output_plan.shortage.map(|shortage| {
+        let message = shortage.message(&output.name);
+        ctx.log(json!({
+            "level":"warning",
+            "key":"recording_output_channels_short",
+            "message":message,
+            "device":output.name,
+            "available":shortage.available,
+            "required":shortage.required,
+            "first":shortage.first,
+            "last":shortage.last,
+            "missing":shortage.missing_text(),
+        }));
+        warnings.push(message);
+        json!({
+            "available":shortage.available,
+            "required":shortage.required,
+            "missing":shortage.missing,
+        })
+    });
+    tracks.truncate(usize::from(output.max_output_channels));
     let interleaved = (0..frames)
         .flat_map(|i| tracks.iter().map(move |t| t[i] as f32))
         .collect();
@@ -339,6 +379,9 @@ fn run(
         timer.join().expect("recording progress timer");
         (result, streams_open)
     });
+    if matches!(result, Err(AudioError::Cancelled)) || ctx.cancel.is_cancelled() {
+        return Err(cancelled(ctx, duration, speakers));
+    }
     let captured = result.map_err(|e| {
         let reason = e.to_string();
         let error = if v.share.fixed_mode().is_some() && !streams_open {
@@ -402,7 +445,15 @@ fn run(
         .collect();
     let input_silent = tracks.iter().any(|track| !track.is_empty())
         && tracks.iter().flatten().all(|sample| *sample == 0.0);
+    // The last point a cancellation is honoured: past it the recording is
+    // written (and an appended file changed), so the job completes.
+    if ctx.cancel.is_cancelled() {
+        return Err(cancelled(ctx, duration, speakers));
+    }
     save_recording(record, fs, tracks.clone(), v.append)?;
+    if let Some((path, names)) = channel_names {
+        std::fs::write(path, names).map_err(RecordingError::internal)?;
+    }
     let check_results = (v.mode == Mode::Speakers).then(|| {
         check_recording(
             &tracks,
@@ -466,6 +517,9 @@ fn run(
         };
     } else if let Some(check) = silent_check.as_ref() {
         result["checks"] = json!([check]);
+    }
+    if let Some(output_channels) = output_channels {
+        result["output_channels"] = output_channels;
     }
     if !warnings.is_empty() {
         result["warnings"] = json!(warnings);
