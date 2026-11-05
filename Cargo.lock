@@ -2436,7 +2436,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-analysis"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "impulcifer-dsp",
  "impulcifer-types",
@@ -2446,7 +2446,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-app"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "dark-light",
  "impulcifer-audio-io",
@@ -2465,8 +2465,9 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-audio-io"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
+ "coreaudio-rs",
  "cpal",
  "impulcifer-io",
  "impulcifer-sys-win",
@@ -2476,7 +2477,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-cli"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "clap",
  "impulcifer-dsp",
@@ -2488,7 +2489,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-dsp"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "faer",
  "faer-traits",
@@ -2507,7 +2508,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-io"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "impulcifer-types",
  "serde_json",
@@ -2516,7 +2517,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-jobs"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "impulcifer-types",
  "serde_json",
@@ -2525,7 +2526,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-plots"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "impulcifer-types",
  "plotters",
@@ -2536,7 +2537,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-policy"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2545,7 +2546,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-python"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "impulcifer-cli",
  "impulcifer-service",
@@ -2556,7 +2557,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-service"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "chrono",
  "impulcifer-analysis",
@@ -2586,7 +2587,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-sys-win"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "audio_thread_priority",
  "impulcifer-types",
@@ -2596,7 +2597,7 @@ dependencies = [
 
 [[package]]
 name = "impulcifer-types"
-version = "3.9.0"
+version = "3.9.1"
 dependencies = [
  "serde",
  "serde_json",

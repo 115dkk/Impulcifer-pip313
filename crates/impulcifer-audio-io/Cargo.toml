@@ -16,9 +16,14 @@ cpal = { version = "0.18", optional = true }
 [target.'cfg(windows)'.dependencies]
 impulcifer-sys-win = { path = "../impulcifer-sys-win", optional = true }
 
+# The same version and features cpal uses on macOS: no new crate in the build,
+# only its safe helper for a device's transport type (ADR 0012).
+[target.'cfg(target_os = "macos")'.dependencies]
+coreaudio-rs = { version = "0.14.2", default-features = false, features = ["core_audio", "audio_toolbox"], optional = true }
+
 [features]
 default = ["native"]
-native = ["dep:cpal", "dep:impulcifer-sys-win"]
+native = ["dep:cpal", "dep:impulcifer-sys-win", "dep:coreaudio-rs"]
 
 [dev-dependencies]
 impulcifer-io = { path = "../impulcifer-io" }

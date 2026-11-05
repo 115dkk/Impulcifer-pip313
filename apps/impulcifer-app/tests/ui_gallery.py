@@ -324,7 +324,9 @@ def answer(page, ok=True):
     page.locator("#ask-modal:not([hidden])").wait_for()
     message = page.locator("#ask-modal-message").inner_text()
     page.locator("#ask-modal-ok" if ok else "#ask-modal-cancel").click()
-    page.locator("#ask-modal").wait_for(state="hidden")
+    # Closed, or already showing the next dialog (Stable tells a refusal in a notice).
+    page.wait_for_function("text => document.querySelector('#ask-modal').hidden"
+                           " || document.querySelector('#ask-modal-message').innerText !== text", arg=message)
     return message
 
 

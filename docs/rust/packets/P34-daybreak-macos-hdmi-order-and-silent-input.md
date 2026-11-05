@@ -7,6 +7,13 @@ packet is self-contained).
 
 Two bugs were reported by a tester on an Apple silicon Mac with an AV receiver on HDMI.
 
+> **Amended after review:** the `system_profiler` subprocess below was replaced. A subprocess outside
+> `crates/impulcifer-io/src/ffmpeg.rs` is forbidden by `policy.no_shell_subprocesses`, and a type alias that hides
+> `Command` from that gate is not acceptable. The transport type is read from CoreAudio instead, through the safe
+> `coreaudio::audio_unit::macos_helpers::get_device_transport_type` (coreaudio-rs 0.14.2, the version cpal already
+> uses), in `crates/impulcifer-audio-io/src/transport.rs`. `hdmi_output_names(json)` and its test are gone; the macOS
+> test is `impulcifer-audio-io::hdmi_output_names_reads_coreaudio_on_this_mac`.
+
 ## 1. HDMI channel order on macOS
 
 ### Problem

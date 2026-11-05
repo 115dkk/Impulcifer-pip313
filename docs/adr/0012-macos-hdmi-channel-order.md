@@ -16,7 +16,7 @@ Apple 실리콘 맥에 AV 리시버를 HDMI로 연결해 3.9.0을 쓴 테스터�
 ## 결정
 
 1. **녹음은 장치 채널 순서를 고른다.** 녹음 요청에 `channel_order`(`auto`, `standard`, `hdmi`)를 둔다. `standard`는 지금의 순서다. `hdmi`는 앞의 여덟 장치 채널을 CEA-861 슬롯에 맞춘다. FC와 LFE를 바꾸고, 2.x 7.1 계열(5.1, 7.1, 7.1.4, 7.1.6)은 5~8번을 `SL SR BL BR`로 둔다. 9.1 계열은 5~8번이 이미 그 순서라(ADR 0009) FC와 LFE만 바꾼다. 아홉 번째 채널부터는 그대로다. 통합 기기(Aggregate Device)의 뒤쪽 장치로 나가는 채널이기 때문이다. 13.1, 22.2, 24.1.10, 30.2는 HDMI 순서를 두지 않는다. 이 포맷들의 앞 여덟 채널에 대응하는 CEA-861 배치가 하나로 정해지지 않는다.
-2. **`auto`는 macOS의 HDMI·DisplayPort 출력에서만 `hdmi`다.** 출력의 연결 방식은 `system_profiler -json SPAudioDataType`의 `coreaudio_device_transport`로 알아낸다. CoreAudio의 채널 레이아웃(`kAudioDevicePropertyPreferredChannelLayout`)을 직접 읽으면 더 정확하지만 unsafe 호출이 필요하다. 모든 크레이트가 `forbid(unsafe_code)`이고 새 의존성도 넣지 않으므로 그 길은 쓰지 않는다. Windows와 Linux에서 `auto`는 언제나 `standard`다. 장치 목록은 장치마다 `hdmi`를 알리고, 녹음은 고른 순서를 로그와 결과(`channel_order`)에 남긴다. 화면은 macOS에서만 선택 칸과 그 순서의 장치 채널 표를 보인다.
+2. **`auto`는 macOS의 HDMI·DisplayPort 출력에서만 `hdmi`다.** 출력의 연결 방식은 CoreAudio의 `kAudioDevicePropertyTransportType`으로 알아낸다. 이 값은 coreaudio-rs의 안전한 함수 `get_device_transport_type`으로 읽는다. coreaudio-rs는 cpal이 macOS에서 쓰는 크레이트이고 버전도 같으므로 새 크레이트가 들어오지 않는다. 장치 이름도 cpal과 같은 함수(`get_device_name`)로 읽으므로 두 이름이 정확히 맞는다. 채널 레이아웃(`kAudioDevicePropertyPreferredChannelLayout`)을 읽으면 더 정확하지만, 그 값을 읽는 안전한 함수가 없어서 unsafe 호출이 필요하다. 모든 크레이트가 `forbid(unsafe_code)`이므로 그 길은 쓰지 않는다. `system_profiler` 같은 외부 명령도 쓰지 않는다. 하위 프로세스는 FFmpeg 한 곳에만 허용한다는 정책 게이트(`policy.no_shell_subprocesses`)가 있기 때문이다. Windows와 Linux에서 `auto`는 언제나 `standard`다. 장치 목록은 장치마다 `hdmi`를 알리고, 녹음은 고른 순서를 로그와 결과(`channel_order`)에 남긴다. 화면은 macOS에서만 선택 칸과 그 순서의 장치 채널 표를 보인다.
 3. **무음만 녹음되면 오류로 알린다.** 녹음한 모든 채널의 모든 샘플이 정확히 0이면 녹음 검사는 그 사실 하나만 오류로 알린다. macOS에서는 마이크 권한을 허용하는 곳을 함께 알린다. 파일은 지금처럼 저장한다.
 4. **번들은 마이크 사용을 밝힌다.** `Info.plist`에 `NSMicrophoneUsageDescription`을, `Entitlements.plist`에 `com.apple.security.device.audio-input`을 둔다. 공증에 필요한 hardened runtime은 이 권한 없이 마이크를 막는다.
 5. **화면은 자체 대화상자로 묻는다.** `window.confirm`, `window.alert`, `window.prompt`를 쓰지 않고 모든 플랫폼에서 같은 대화상자(`askDialog`)를 쓴다. 테스트가 화면 코드에 이 호출이 없음을 검사한다.
@@ -25,7 +25,7 @@ Apple 실리콘 맥에 AV 리시버를 HDMI로 연결해 3.9.0을 쓴 테스터�
 ## 결과
 
 - 맥의 HDMI 출력으로 5.1·7.1 sweep을 낼 때 센터가 서브우퍼로, 사이드가 백으로 가지 않는다. 연결 방식을 알 수 없는 출력(통합 기기 등)에서는 사용자가 `hdmi`를 골라야 한다.
-- `system_profiler`의 장치 이름과 cpal의 장치 이름이 다르면 `auto`는 `standard`로 남는다. 그때는 로그와 장치 채널 표로 확인하고 직접 고른다.
+- 연결 방식을 HDMI나 DisplayPort로 알리지 않는 출력(통합 기기, 일부 어댑터)에서 `auto`는 `standard`로 남는다. 그때는 로그와 장치 채널 표로 확인하고 직접 고른다.
 - Linux의 ALSA·PipeWire가 다채널 스트림을 어떤 순서로 내는지는 확인하지 않았다. 보고가 오면 같은 선택에 순서를 더한다.
 - 임시 서명은 코드가 바뀔 때마다 서명 해시가 바뀌므로, 업데이트한 뒤 macOS가 마이크 권한을 다시 물을 수 있다. Developer ID로 서명하면 이 문제가 없다.
 - 다시 제안하지 말 것: CoreAudio를 직접 부르려고 unsafe를 허용하는 것, `window.confirm`으로 되돌리는 것.
