@@ -4,6 +4,20 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.10.0 - 2026-11-05
+### 재지 않은 스피커와 LFE 채널을 채우는 선택
+
+#### ⭐ 새로운 기능 / 개선
+- **재지 않은 스피커 채우기**: 합성 화면의 출력 옵션에 '측정하지 않은 스피커'를 두었습니다. 기본인 '무음 트랙'은 지금과 같고, '가장 가까운 측정 스피커 복사'를 고르면 출력 파일에서 비어 있던 채널을 같은 쪽·같은 높이에서 방향이 가장 가까운 측정 스피커로 채웁니다. 예를 들어 7.0을 잰 데모로 9.1 파일을 쓰면 WL과 WR이 FL과 FR의 BRIR을 씁니다. 센터 같은 가운데 자리는 양옆의 대칭 쌍을 귀마다 1/√2씩 더해 만들고, 높이 채널은 귀 높이 스피커로 채우지 않습니다. 원본은 언제나 측정한 스피커입니다. `hesuvi.wav`와 `hrir.wav`는 2.x 기본 부분의 스피커만, 채널 순서 파일은 LFE를 뺀 모든 채널을 채웁니다. CLI에서는 `--missing_speakers=neighbor`를 지정하십시오(ADR 0013).
+- **LFE 채널 채우기**: 채널 순서 파일의 LFE 트랙을 고를 수 있습니다. '무음'(기본), '센터 스피커 복사'(FC가 없으면 FL·FR 팬텀), '모든 방향의 저음' 셋입니다. 마지막은 측정한 모든 스피커의 응답을 귀마다 크기 제곱으로 평균하고 120 Hz 4차 Linkwitz-Riley 저역 통과 크기를 곱해 최소 위상 응답 하나로 만듭니다. 위치마다 다른 방 모드의 피크와 딥이 고르게 되어, 방에 서브우퍼를 여러 대 둔 것과 비슷한 저음이 됩니다. 도착 시각이 다른 응답을 그대로 더하면 저역에서 상쇄되므로 더하지 않고, 지연은 모든 응답 피크의 중앙값 하나만 씁니다. CLI에서는 `--lfe_mode=center` 또는 `--lfe_mode=all`을 지정하십시오.
+- 작업 기록과 결과 폴더의 `README.md`에 파일마다 채운 채널과 그 원본(`WL ← FL`, `BC ← BL+BR`), LFE의 출처를 기록합니다. LFE를 채운 포맷의 README에는 'LFE 트랙은 무음'이라는 안내를 넣지 않습니다.
+- 두 선택 모두 출력 파일을 쓸 때만 쓰며, 처리 단계와 그래프, `responses.wav`는 바뀌지 않습니다. 기본값에서는 출력이 바이트 단위로 지금과 같습니다.
+- 맥 테스터 @junha4king-ui의 요청에서 시작했습니다. LFE의 세 선택지는 유지보수자가 정했습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **설정**: `ProcessingConfig`에 3.x 확장 필드 `missing_speakers`(`silent`, `neighbor`)와 `lfe_mode`(`none`, `center`, `all`)를 추가했습니다. 서비스와 CLI가 다른 값을 거부합니다.
+- brir-3x 무결성 검사에 `output_fill_neighbor_lfe_center`와 `output_fill_lfe_all` 시나리오(3.10.0부터)를 추가했습니다.
+
 ## 3.9.2 - 2026-11-05
 ### macOS 마이크 권한 유지, 녹음 취소, 채널이 모자란 출력 장치 안내
 
