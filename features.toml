@@ -125,8 +125,8 @@ note = "real backend enumeration (WASAPI on Windows, cpal elsewhere) in the 2.x 
 id = "ipc.start_recording"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::recording_ipc_shares_backend_rejects_busy_and_cancellation", "impulcifer-service::recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32", "impulcifer-service::golden_recording_validation_matches_python", "impulcifer-service::filename_speakers_follow_the_python_pattern_with_the_skip_placeholder"]
-note = "2.x request validation (136 golden cases), status/progress events with the ten-key RecorderProgressEvent, PCM_32 capture of exactly the playback length, sidecar rule; not cancellable like 2.x; CABLE-A hardware run recorded 878540 frames and detect_sweep found the default sweep"
+tests = ["impulcifer-service::recording_job_can_be_cancelled_and_writes_nothing", "impulcifer-service::recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32", "impulcifer-service::golden_recording_validation_matches_python", "impulcifer-service::filename_speakers_follow_the_python_pattern_with_the_skip_placeholder"]
+note = "2.x request validation (136 golden cases), status/progress events with the ten-key RecorderProgressEvent, cancellable PCM_32 capture of exactly the playback length, sidecar rule; CABLE-A hardware run recorded 878540 frames and detect_sweep found the default sweep"
 
 [[feature]]
 id = "ipc.start_brir"
