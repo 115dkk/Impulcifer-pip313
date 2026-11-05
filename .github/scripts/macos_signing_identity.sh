@@ -15,7 +15,8 @@
 # generating a new identity (users are asked for the microphone once more).
 #
 #   generate <dir>     write <dir>/identity.p12 and <dir>/certificate.pem (once, in CI)
-#   import <dir>       import identity.p12 into a temporary keychain on macOS and
+#   import <dir>       import identity.p12 into a temporary keychain on a macOS CI
+#                      runner, trust it for code signing there (needs sudo) and
 #                      print the identity name for APPLE_SIGNING_IDENTITY
 #   fingerprint <dir>  print the certificate's SHA-1, as the designated requirement shows it
 set -euo pipefail
@@ -95,6 +96,14 @@ import_identity() {
   security import "$dir/identity.p12" -k "$keychain" -P "$password" -T /usr/bin/codesign >/dev/null \
     || die "could not import $dir/identity.p12: the updater signing secrets no longer match the ones it was made with. Generate a new identity (ADR 0012)."
   security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
+  # codesign finds an identity by name only when it is trusted for code
+  # signing (an untrusted one is "no identity found" unless --keychain is
+  # passed, and tauri-macos-sign passes none). The trust setting lives on this
+  # CI machine only; users' Macs never need it, since macOS checks the
+  # designated requirement, not the certificate's trust.
+  sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+    -k /Library/Keychains/System.keychain "$dir/certificate.pem" \
+    || die "could not mark the signing certificate as trusted for code signing on this machine"
   # Searched by codesign; the runner's own keychains stay in the list.
   local existing
   existing=$(security list-keychains -d user | tr -d '"')
