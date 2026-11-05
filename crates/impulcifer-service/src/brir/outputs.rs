@@ -11,16 +11,13 @@ impl BrirEvents for Silent {
 }
 use impulcifer_dsp::{
     estimator::SweepEstimator,
-    hrir::compact_tracks,
     pipeline::{LayoutOutput, PipelineOutputs},
     stages::readme::{ReadmeData, ReverbKind},
 };
 use impulcifer_io::{brir_layout::append_track_names, write_wav};
 use impulcifer_types::{
     config::ProcessingConfig,
-    constants::{
-        HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, Side, TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER,
-    },
+    constants::{Side, TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER},
 };
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -460,24 +457,19 @@ pub(crate) fn write_outputs_checked(
     events.check_cancelled()?;
     std::fs::write(&readme, content)?;
     files.push(readme);
-    for (name, order, tracks) in [
-        (
-            "hrir.wav",
-            HEXADECAGONAL_TRACK_ORDER.as_slice(),
-            &outputs.hrir_tracks,
-        ),
+    for (name, tracks, names) in [
+        ("hrir.wav", &outputs.hrir_tracks, &outputs.hrir_track_names),
         (
             "hesuvi.wav",
-            HESUVI_TRACK_ORDER.as_slice(),
             &outputs.hesuvi_tracks,
+            &outputs.hesuvi_track_names,
         ),
     ] {
         let path = dir.join(name);
         events.check_cancelled()?;
         write_wav(&path, outputs.hrir.fs, tracks, 32)?;
         if config.remove_silent_channels {
-            let full = outputs.hrir.stack_tracks(order, false)?;
-            let (_, names) = compact_tracks(&full, order);
+            // The names of the tracks written, filled channels included (ADR 0013).
             append_track_names(&path, &names.iter().map(String::as_str).collect::<Vec<_>>())?;
         }
         let filled = if name == "hrir.wav" {

@@ -6,7 +6,9 @@ use brir_support::*;
 use impulcifer_io::{brir_layout::read_track_names, read_wav, write_wav};
 use impulcifer_jobs::registry::{JobRegistry, PollResult};
 use impulcifer_types::{
-    constants::{HEXADECAGONAL_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER_2X, SPEAKER_NAMES},
+    constants::{
+        HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER_2X, SPEAKER_NAMES,
+    },
     job::JobStatus,
     layouts::{IMMERSIVE_LAYOUTS, Layer, layout},
 };
@@ -362,6 +364,32 @@ fn output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end() {
     assert!(readme.contains("WL ← FL, WR ← FR"), "{readme}");
     assert!(readme.contains("The LFE tracks use FC."), "{readme}");
     assert!(!readme.contains("LFE tracks are silent"), "{readme}");
+}
+
+/// Compacted files name the tracks they hold, filled speakers included, so
+/// recovery can read them back.
+#[test]
+fn compacted_files_name_the_filled_tracks() {
+    let temp = Temp::demo();
+    measurements(&temp, &["FL", "FR"]);
+    run(
+        &temp,
+        json!({"remove_silent_channels":true,"missing_speakers":"neighbor"}),
+    );
+    for (name, order) in [
+        ("hesuvi.wav", HESUVI_TRACK_ORDER.as_slice()),
+        ("hrir.wav", HEXADECAGONAL_TRACK_ORDER.as_slice()),
+    ] {
+        let file = temp.0.join(name);
+        let wav = read_wav(&file).unwrap();
+        let names = read_track_names(&file, order, wav.tracks.len())
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name} has no track names"));
+        assert_eq!(names.len(), wav.tracks.len(), "{name}");
+        for track in ["FC-left", "SL-left", "BR-right"] {
+            assert!(names.iter().any(|n| n == track), "{name}: {names:?}");
+        }
+    }
 }
 
 #[test]

@@ -98,6 +98,10 @@ pub struct PipelineOutputs {
     pub readme: ReadmeData,
     pub hrir_tracks: Vec<Vec<f64>>,
     pub hesuvi_tracks: Vec<Vec<f64>>,
+    /// Track names of the compacted hrir.wav and hesuvi.wav, taken from the
+    /// filled tracks that are written; empty unless `remove_silent_channels`.
+    pub hrir_track_names: Vec<String>,
+    pub hesuvi_track_names: Vec<String>,
     pub hrir_filled: Vec<(&'static str, String)>,
     pub hesuvi_filled: Vec<(&'static str, String)>,
     pub responses_tracks: Vec<Vec<f64>>,
@@ -179,18 +183,24 @@ fn normalize(hrir: &mut Hrir, c: &ProcessingConfig) -> Result<f64, DspError> {
     )
 }
 /// Python _stage_write_brirs, core/pipeline.py:873-895; p10_default_final.
-fn output_tracks(hrir: &Hrir, order: &[&str], compact: bool) -> Result<Vec<Vec<f64>>, DspError> {
+/// The tracks of hrir.wav or hesuvi.wav and, when compacted, the names of the
+/// tracks kept (empty otherwise).
+fn output_tracks(
+    hrir: &Hrir,
+    order: &[&str],
+    compact: bool,
+) -> Result<(Vec<Vec<f64>>, Vec<String>), DspError> {
     let tracks = hrir.stack_tracks(order, !compact)?;
     if compact {
-        let (tracks, _) = compact_tracks(&tracks, order);
+        let (tracks, names) = compact_tracks(&tracks, order);
         if tracks.is_empty() {
             return Err(DspError::InvalidArgument(
                 "all output channels are silent".into(),
             ));
         }
-        Ok(tracks)
+        Ok((tracks, names))
     } else {
-        Ok(tracks)
+        Ok((tracks, Vec::new()))
     }
 }
 /// Both ears of each format channel, with missing slots silent and never compacted.
@@ -225,6 +235,8 @@ pub fn run_pipeline(
     let mut responses_tracks = Vec::new();
     let mut hrir_tracks = Vec::new();
     let mut hesuvi_tracks = Vec::new();
+    let mut hrir_track_names = Vec::new();
+    let mut hesuvi_track_names = Vec::new();
     let mut hrir_filled = Vec::new();
     let mut hesuvi_filled = Vec::new();
     let mut layouts = Vec::new();
@@ -398,7 +410,7 @@ pub fn run_pipeline(
                     &config.missing_speakers,
                     "none",
                 )?;
-                hrir_tracks = output_tracks(
+                (hrir_tracks, hrir_track_names) = output_tracks(
                     &filled_hrir.hrir,
                     &HEXADECAGONAL_TRACK_ORDER,
                     config.remove_silent_channels,
@@ -410,7 +422,7 @@ pub fn run_pipeline(
                     &config.missing_speakers,
                     "none",
                 )?;
-                hesuvi_tracks = output_tracks(
+                (hesuvi_tracks, hesuvi_track_names) = output_tracks(
                     &filled_hesuvi.hrir,
                     &HESUVI_TRACK_ORDER,
                     config.remove_silent_channels,
@@ -499,6 +511,8 @@ pub fn run_pipeline(
         readme: readme.unwrap(),
         hrir_tracks,
         hesuvi_tracks,
+        hrir_track_names,
+        hesuvi_track_names,
         hrir_filled,
         hesuvi_filled,
         responses_tracks,
