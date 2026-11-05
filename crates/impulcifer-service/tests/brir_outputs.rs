@@ -61,6 +61,8 @@ fn outputs(compact: bool) -> (PipelineOutputs, SweepEstimator) {
         readme: readme_data(&hrir, 8000, 0.0),
         hrir_tracks: tracks(&HEXADECAGONAL_TRACK_ORDER),
         hesuvi_tracks: tracks(&HESUVI_TRACK_ORDER),
+        hrir_filled: Vec::new(),
+        hesuvi_filled: Vec::new(),
         responses_tracks: hrir
             .stack_tracks(&HEXADECAGONAL_TRACK_ORDER, false)
             .unwrap(),

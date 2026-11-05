@@ -45,32 +45,45 @@ fn source<'a>(filled: &'a [(&str, String)], slot: &str) -> Option<&'a str> {
 
 #[test]
 fn neighbor_fill_picks_the_nearest_slot_on_the_same_side_and_layer() {
-    let cases: &[(&[&str], &[(&str, Option<&str>)])] = &[
-        (
-            &["FL", "FR", "FC", "BL", "BR", "SL", "SR"],
-            &[("WL", Some("FL")), ("WR", Some("FR"))],
-        ),
-        (
-            &["FL", "FR", "BL", "BR"],
-            &[
+    struct Case<'a> {
+        measured: &'a [&'a str],
+        expected: &'a [(&'a str, Option<&'a str>)],
+    }
+    let cases = [
+        Case {
+            measured: &["FL", "FR", "FC", "BL", "BR", "SL", "SR"],
+            expected: &[("WL", Some("FL")), ("WR", Some("FR"))],
+        },
+        Case {
+            measured: &["FL", "FR", "BL", "BR"],
+            expected: &[
                 ("SL", Some("BL")),
                 ("SR", Some("BR")),
                 ("FC", Some("FL+FR")),
             ],
-        ),
-        (&["FL", "FR", "SL", "SR"], &[("BL", Some("SL"))]),
-        (
-            &["TFL", "TFR"],
-            &[("TBL", Some("TFL")), ("TSL", Some("TFL"))],
-        ),
-        (&["FL", "FR"], &[("TFL", None)]),
-        (&["BL", "BR"], &[("BC", Some("BL+BR"))]),
+        },
+        Case {
+            measured: &["FL", "FR", "SL", "SR"],
+            expected: &[("BL", Some("SL"))],
+        },
+        Case {
+            measured: &["TFL", "TFR"],
+            expected: &[("TBL", Some("TFL")), ("TSL", Some("TFL"))],
+        },
+        Case {
+            measured: &["FL", "FR"],
+            expected: &[("TFL", None)],
+        },
+        Case {
+            measured: &["BL", "BR"],
+            expected: &[("BC", Some("BL+BR"))],
+        },
     ];
-    for (measured, expected) in cases {
+    for Case { measured, expected } in cases {
         let input = tagged(measured);
         let targets: Vec<_> = expected.iter().map(|(slot, _)| *slot).collect();
         let result = fill_missing_speakers(&input, &targets).unwrap();
-        for (slot, expected_source) in *expected {
+        for (slot, expected_source) in expected {
             assert_eq!(
                 source(&result.filled, slot),
                 *expected_source,
@@ -128,23 +141,16 @@ fn lfe_center_copies_fc_or_the_front_phantom() {
 #[test]
 fn lfe_all_is_the_power_average_below_the_crossover() {
     let fs = 48_000;
-    let length = 4_096;
-    let tone = |frequency: f64, gain: f64, peak: usize| {
-        (0..length)
-            .map(|n| {
-                let shifted = n.saturating_sub(peak) as f64;
-                if n < peak {
-                    0.0
-                } else {
-                    gain * (std::f64::consts::TAU * frequency * shifted / fs as f64).sin()
-                }
-            })
-            .collect::<Vec<_>>()
+    let length: usize = 4_096;
+    let impulse = |gain: f64, peak: usize| {
+        let mut data = vec![0.0; length];
+        data[peak] = gain;
+        data
     };
     let input = hrir(
         &[
-            ("FL", tone(40.0, 1.0, 9), tone(40.0, 0.8, 11)),
-            ("FR", tone(40.0, 0.5, 13), tone(40.0, 0.4, 15)),
+            ("FL", impulse(1.0, 9), impulse(0.8, 11)),
+            ("FR", impulse(0.5, 13), impulse(0.4, 15)),
         ],
         fs,
     );

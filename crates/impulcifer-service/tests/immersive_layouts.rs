@@ -356,7 +356,7 @@ fn output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end() {
         assert_eq!(wav.tracks[2 * target], wav.tracks[2 * source]);
         assert_eq!(wav.tracks[2 * target + 1], wav.tracks[2 * source + 1]);
     }
-    assert_eq!(events(&poll, "cli_info_filled_channels").len(), 3);
+    assert_eq!(events(&poll, "cli_info_filled_channels").len(), 1);
     assert_eq!(events(&poll, "cli_info_lfe_filled").len(), 1);
     let readme = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
     assert!(readme.contains("WL ← FL, WR ← FR"), "{readme}");
