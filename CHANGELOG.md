@@ -4,6 +4,20 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.10.0 - 2026-11-05
+### 재지 않은 스피커와 LFE 채널을 채우는 선택
+
+#### ⭐ 새로운 기능 / 개선
+- **재지 않은 스피커 채우기**: 합성 화면의 출력 옵션에 '측정하지 않은 스피커'를 두었습니다. 기본인 '무음 트랙'은 지금과 같고, '가장 가까운 측정 스피커 복사'를 고르면 출력 파일에서 비어 있던 채널을 같은 쪽·같은 높이에서 방향이 가장 가까운 측정 스피커로 채웁니다. 예를 들어 7.0을 잰 데모로 9.1 파일을 쓰면 WL과 WR이 FL과 FR의 BRIR을 씁니다. 센터 같은 가운데 자리는 양옆의 대칭 쌍을 귀마다 1/√2씩 더해 만들고, 높이 채널은 귀 높이 스피커로 채우지 않습니다. 원본은 언제나 측정한 스피커입니다. `hesuvi.wav`와 `hrir.wav`는 2.x 기본 부분의 스피커만, 채널 순서 파일은 LFE를 뺀 모든 채널을 채웁니다. CLI에서는 `--missing_speakers=neighbor`를 지정하십시오(ADR 0013).
+- **LFE 채널 채우기**: 채널 순서 파일의 LFE 트랙을 고를 수 있습니다. '무음'(기본), '센터 스피커 복사'(FC가 없으면 FL·FR 팬텀), '모든 방향의 저음' 셋입니다. 마지막은 측정한 모든 스피커의 응답을 귀마다 크기 제곱으로 평균하고 120 Hz 4차 Linkwitz-Riley 저역 통과 크기를 곱해 최소 위상 응답 하나로 만듭니다. 위치마다 다른 방 모드의 피크와 딥이 고르게 되어, 방에 서브우퍼를 여러 대 둔 것과 비슷한 저음이 됩니다. 도착 시각이 다른 응답을 그대로 더하면 저역에서 상쇄되므로 더하지 않고, 지연은 모든 응답 피크의 중앙값 하나만 씁니다. CLI에서는 `--lfe_mode=center` 또는 `--lfe_mode=all`을 지정하십시오.
+- 작업 기록과 결과 폴더의 `README.md`에 파일마다 채운 채널과 그 원본(`WL ← FL`, `BC ← BL+BR`), LFE의 출처를 기록합니다. LFE를 채운 포맷의 README에는 'LFE 트랙은 무음'이라는 안내를 넣지 않습니다.
+- 두 선택 모두 출력 파일을 쓸 때만 쓰며, 처리 단계와 그래프, `responses.wav`는 바뀌지 않습니다. 기본값에서는 출력이 바이트 단위로 지금과 같습니다.
+- 맥 테스터 @junha4king-ui의 요청에서 시작했습니다. LFE의 세 선택지는 유지보수자가 정했습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **설정**: `ProcessingConfig`에 3.x 확장 필드 `missing_speakers`(`silent`, `neighbor`)와 `lfe_mode`(`none`, `center`, `all`)를 추가했습니다. 서비스와 CLI가 다른 값을 거부합니다.
+- brir-3x 무결성 검사에 `output_fill_neighbor_lfe_center`와 `output_fill_lfe_all` 시나리오(3.10.0부터)를 추가했습니다.
+
 ## 3.9.2 - 2026-11-05
 ### macOS 마이크 권한 유지, 녹음 취소, 채널이 모자란 출력 장치 안내
 
@@ -22,7 +36,7 @@ been fixed and old features improved.
 #### 🐛 버그 수정
 - **마이크 권한**: 앱에 마이크 권한 문구(`NSMicrophoneUsageDescription`)가 없어서 macOS가 권한을 묻지 않았고, 입력이 모두 0으로 들어왔습니다. 이제 처음 녹음할 때 권한을 묻습니다. 앱 번들에 마이크 입력 권한(`com.apple.security.device.audio-input`)도 넣었습니다. 공증에 필요한 hardened runtime은 이 권한이 없으면 마이크를 막습니다.
 - **무음만 녹음된 경우**: 녹음한 모든 채널이 정확히 0이면 녹음 검사가 오류로 알립니다. macOS에서는 마이크 권한을 허용하는 곳(시스템 설정 > 개인정보 보호 및 보안 > 마이크)을 함께 알려 줍니다. 헤드폰 녹음에도 같은 검사를 합니다.
-- **녹음 버튼이 반응하지 않던 문제**: 화면이 녹음 전에 브라우저의 확인 창(`window.confirm`)을 띄웠는데, macOS의 WKWebView는 이 창을 띄우지 않고 바로 '취소'로 답합니다. 경고 창(`window.alert`)도 보이지 않았습니다. 이제 확인과 알림을 모든 플랫폼에서 앱 안의 대화상자로 묻습니다. Esc는 취소이고, 대화상자가 닫히면 누른 버튼으로 포커스가 돌아갑니다.
+- **녹음 버튼이 반응하지 않던 문제**: 화면이 녹음 전에 브라우저의 확인 창(`window.confirm`)을 띄웠는데, macOS의 WKWebView는 이 창을 띄우지 않고 바로 '취소'로 답합니다. 경고 창(`window.alert`)도 보이지 않았습니다. 이제 확인과 알림을 모든 플랫폼에서 앱 안의 대화상자로 묻습니다. Esc는 취소이고, 대화상자가 닫히면 누른 버튼으로 포커스가 돌아갑니다. @junha4king-ui가 같은 원인을 실제 맥(M4 맥미니 macOS 26.7, M2 맥북 macOS 27)에서 따로 찾아 PR #272로 보냈습니다. `window.confirm`이 0~1 ms 만에 `false`를 돌려준다는 측정과 3.9.0 dmg의 Info.plist에 마이크 문구가 없다는 확인이 이 수정의 근거를 뒷받침합니다.
 - **맥 HDMI 출력의 채널 순서**: sweep 트랙은 Windows 순서(3번 FC, 4번 LFE, 5·6번 BL·BR, 7·8번 SL·SR)로 나가는데, 맥의 HDMI·DisplayPort 출력은 리시버의 순서(3번 LFE, 4번 FC, 5·6번 사이드, 7·8번 리어)로 채널을 받습니다. 그래서 센터 sweep이 서브우퍼에서 나왔고, 사이드와 리어도 서로 바뀌었습니다. 녹음 화면에 '채널 순서'(자동, 표준, HDMI)를 두었고, 자동은 macOS의 HDMI·DisplayPort 출력에서 HDMI 순서를 씁니다. macOS에서는 5.1, 7.1, 7.1.4, 7.1.6, 9.1 계열을 고르면 장치 채널마다 나갈 스피커가 표에 나오고, 작업 기록과 결과에 쓴 순서가 남습니다(ADR 0012).
 - **서명**: macOS 앱에 서명이 없어서 내려받은 앱을 Gatekeeper가 '손상되었다'고 막았습니다. 이제 임시 서명(ad hoc)을 하므로, 시스템 설정 > 개인정보 보호 및 보안의 '그래도 열기'로 열 수 있습니다. 공증까지 하려면 Apple Developer ID가 필요하며, 저장소에 그 비밀값을 넣으면 릴리스가 서명과 공증을 함께 합니다.
 

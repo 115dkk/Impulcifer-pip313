@@ -2610,6 +2610,17 @@ function addOutputArgs(args, p) {
   args.remove_silent_channels = checked(`${p}-remove-silent-channels`);
   args.output_truehd_layouts = checked(`${p}-truehd`);
   args.layout_files = layoutFilesValue(p);
+  args.missing_speakers = /** @type {MissingSpeakers} */ (val(`${p}-missing-speakers`) || "silent");
+  args.lfe_mode = /** @type {LfeMode} */ (val(`${p}-lfe-mode`) || "none");
+}
+
+/* ADR 0013: each LFE choice shows its own explanation. */
+/** @param {string} p */
+function updateLfeHint(p) {
+  const mode = val(`${p}-lfe-mode`) || "none";
+  for (const node of $(`${p}-lfe-mode-row`).querySelectorAll("[data-lfe-mode]")) {
+    if (node instanceof HTMLElement) node.hidden = node.dataset.lfeMode !== mode;
+  }
 }
 
 /* The seven formats a channel-order file can be forced for, in page order:
@@ -2670,7 +2681,8 @@ const ADV_FIELDS = {
   tone: ["bass-gain", "bass-fc", "bass-q", "tilt", "target-level", "balance", "balance-db"],
   time: ["head-ms", "decay", "decay-per-channel", ...DECAY_CHANNELS.map((channel) => `decay-${channel}`)],
   output: ["resample", "fs", "jamesdsp", "hangloose", "truehd", "remove-silent-channels", "layout-files",
-    ...Array.from({ length: LAYOUT_FORCE_COUNT }, (_, index) => `layout-force-${index}`)],
+    ...Array.from({ length: LAYOUT_FORCE_COUNT }, (_, index) => `layout-force-${index}`),
+    "missing-speakers", "lfe-mode"],
   correction: ["mic-deviation", "mic-strength", "mic-debug", "interactive-plots"],
 };
 
@@ -2722,6 +2734,7 @@ function refreshStudioAdvanced() {
 
   el("ba-fs", HTMLSelectElement).disabled = !checked("ba-resample");
   updateLayoutForce("ba");
+  updateLfeHint("ba");
 
   const mic = el("ba-mic-deviation", HTMLInputElement);
   const blocked = isOpen("dis-headphone");
@@ -2748,6 +2761,7 @@ function refreshStableAdvanced() {
   el("bf-mic-strength", HTMLInputElement).disabled = !mic;
   el("bf-mic-debug", HTMLInputElement).disabled = !mic;
   updateLayoutForce("bf");
+  updateLfeHint("bf");
 }
 
 /** @param {string} id */
@@ -3779,6 +3793,7 @@ function wireEvents() {
   el("btn-gd-next", HTMLButtonElement).addEventListener("click", () => showGuidedStep(state.guided.index + 1));
   for (const p of ["bf", "ba"]) {
     el(`${p}-layout-files`, HTMLSelectElement).addEventListener("change", () => updateLayoutForce(p));
+    el(`${p}-lfe-mode`, HTMLSelectElement).addEventListener("change", () => updateLfeHint(p));
   }
   el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", updateTestSignalVisibility);
   el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRows);

@@ -60,6 +60,8 @@ pub struct ProcessingConfig {
     pub room_tuning2_mimo_low: String,
     pub vbass_mode: String,
     pub layout_files: String,
+    pub missing_speakers: String,
+    pub lfe_mode: String,
     pub bass_boost_gain: f64,
     pub bass_boost_fc: f64,
     pub bass_boost_q: f64,
@@ -123,6 +125,8 @@ impl Default for ProcessingConfig {
             room_tuning2_mimo_low: "auto".into(),
             vbass_mode: "auto".into(),
             layout_files: "auto".into(),
+            missing_speakers: "silent".into(),
+            lfe_mode: "none".into(),
             bass_boost_gain: 0.0,
             bass_boost_fc: 105.0,
             bass_boost_q: 0.76,
@@ -185,7 +189,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 25] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 27] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -205,6 +209,8 @@ pub const EXTENSION_FIELD_NAMES: [&str; 25] = [
     "room_tuning2_mimo_low",
     "vbass_mode",
     "layout_files",
+    "missing_speakers",
+    "lfe_mode",
     "room_measurement_file",
     "room_measurement_map",
     "brir_measurement_file",
@@ -357,6 +363,12 @@ impl ProcessingConfig {
         }
         crate::layouts::LayoutFiles::parse(&self.layout_files)
             .map_err(|reason| invalid("layout_files", &reason))?;
+        if !["silent", "neighbor"].contains(&self.missing_speakers.as_str()) {
+            return Err(invalid("missing_speakers", "must be silent or neighbor"));
+        }
+        if !["none", "center", "all"].contains(&self.lfe_mode.as_str()) {
+            return Err(invalid("lfe_mode", "must be none, center or all"));
+        }
         if TuningDelay::parse(&self.room_tuning_delay).is_none() {
             return Err(invalid("room_tuning_delay", "must be auto or 2–20 ms"));
         }

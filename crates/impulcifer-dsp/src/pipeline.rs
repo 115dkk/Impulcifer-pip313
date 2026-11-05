@@ -11,6 +11,7 @@ use crate::{
     },
     stages::{
         equalize::{AppliedEqualization, EqInputs, equalize_hrir},
+        fill::fill_output,
         headphone::HeadphoneCompensation,
         readme::{ReadmeData, readme_data},
         room::RoomCorrection,
@@ -24,7 +25,7 @@ use impulcifer_types::{
     config::{DecaySpec, ProcessingConfig},
     constants::{
         HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS, SPEAKER_NAMES,
-        TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER,
+        TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER, base_channel_count,
     },
     layouts::{FormatChannel, IMMERSIVE_LAYOUTS, ImmersiveLayout, LayoutFiles},
     stages::StageKey,
@@ -88,6 +89,7 @@ pub struct LayoutOutput {
     pub layout: &'static ImmersiveLayout,
     pub tracks: Vec<Vec<f64>>,
     pub missing: Vec<&'static FormatChannel>,
+    pub filled: Vec<(&'static str, String)>,
 }
 #[derive(Clone, Debug)]
 pub struct PipelineOutputs {
@@ -96,6 +98,12 @@ pub struct PipelineOutputs {
     pub readme: ReadmeData,
     pub hrir_tracks: Vec<Vec<f64>>,
     pub hesuvi_tracks: Vec<Vec<f64>>,
+    /// Track names of the compacted hrir.wav and hesuvi.wav, taken from the
+    /// filled tracks that are written; empty unless `remove_silent_channels`.
+    pub hrir_track_names: Vec<String>,
+    pub hesuvi_track_names: Vec<String>,
+    pub hrir_filled: Vec<(&'static str, String)>,
+    pub hesuvi_filled: Vec<(&'static str, String)>,
     pub responses_tracks: Vec<Vec<f64>>,
     pub layouts: Vec<LayoutOutput>,
     pub layout_notices: Vec<(&'static ImmersiveLayout, Vec<&'static FormatChannel>)>,
@@ -175,18 +183,24 @@ fn normalize(hrir: &mut Hrir, c: &ProcessingConfig) -> Result<f64, DspError> {
     )
 }
 /// Python _stage_write_brirs, core/pipeline.py:873-895; p10_default_final.
-fn output_tracks(hrir: &Hrir, order: &[&str], compact: bool) -> Result<Vec<Vec<f64>>, DspError> {
+/// The tracks of hrir.wav or hesuvi.wav and, when compacted, the names of the
+/// tracks kept (empty otherwise).
+fn output_tracks(
+    hrir: &Hrir,
+    order: &[&str],
+    compact: bool,
+) -> Result<(Vec<Vec<f64>>, Vec<String>), DspError> {
     let tracks = hrir.stack_tracks(order, !compact)?;
     if compact {
-        let (tracks, _) = compact_tracks(&tracks, order);
+        let (tracks, names) = compact_tracks(&tracks, order);
         if tracks.is_empty() {
             return Err(DspError::InvalidArgument(
                 "all output channels are silent".into(),
             ));
         }
-        Ok(tracks)
+        Ok((tracks, names))
     } else {
-        Ok(tracks)
+        Ok((tracks, Vec::new()))
     }
 }
 /// Both ears of each format channel, with missing slots silent and never compacted.
@@ -221,6 +235,10 @@ pub fn run_pipeline(
     let mut responses_tracks = Vec::new();
     let mut hrir_tracks = Vec::new();
     let mut hesuvi_tracks = Vec::new();
+    let mut hrir_track_names = Vec::new();
+    let mut hesuvi_track_names = Vec::new();
+    let mut hrir_filled = Vec::new();
+    let mut hesuvi_filled = Vec::new();
     let mut layouts = Vec::new();
     let mut layout_notices = Vec::new();
     let mut truehd = Vec::new();
@@ -379,26 +397,63 @@ pub fn run_pipeline(
                 }
             }
             StageKey::WriteBrirs => {
-                hrir_tracks = output_tracks(
+                fn output_targets<'a>(order: &'a [&'a str]) -> Vec<&'a str> {
+                    order[..base_channel_count(order)]
+                        .iter()
+                        .filter_map(|track| track.split_once('-').map(|(speaker, _)| speaker))
+                        .filter(|speaker| *speaker != "LFE" && *speaker != "LFE2")
+                        .collect()
+                }
+                let filled_hrir = fill_output(
                     &hrir,
+                    &output_targets(&HEXADECAGONAL_TRACK_ORDER),
+                    &config.missing_speakers,
+                    "none",
+                )?;
+                (hrir_tracks, hrir_track_names) = output_tracks(
+                    &filled_hrir.hrir,
                     &HEXADECAGONAL_TRACK_ORDER,
                     config.remove_silent_channels,
                 )?;
-                hesuvi_tracks =
-                    output_tracks(&hrir, &HESUVI_TRACK_ORDER, config.remove_silent_channels)?;
+                hrir_filled = filled_hrir.filled;
+                let filled_hesuvi = fill_output(
+                    &hrir,
+                    &output_targets(&HESUVI_TRACK_ORDER),
+                    &config.missing_speakers,
+                    "none",
+                )?;
+                (hesuvi_tracks, hesuvi_track_names) = output_tracks(
+                    &filled_hesuvi.hrir,
+                    &HESUVI_TRACK_ORDER,
+                    config.remove_silent_channels,
+                )?;
+                hesuvi_filled = filled_hesuvi.filled;
                 let selection =
                     LayoutFiles::parse(&config.layout_files).map_err(DspError::InvalidArgument)?;
                 for layout in &IMMERSIVE_LAYOUTS {
                     let measured = |s: &str| hrir.get(s).is_some();
-                    let missing = layout.missing(measured);
+                    let originally_missing = layout.missing(measured);
                     if selection.writes(layout.id, layout.written_automatically(measured)) {
+                        let targets: Vec<_> =
+                            layout.channels.iter().map(|channel| channel.slot).collect();
+                        let filled_output = fill_output(
+                            &hrir,
+                            &targets,
+                            &config.missing_speakers,
+                            &config.lfe_mode,
+                        )?;
+                        let missing = originally_missing
+                            .into_iter()
+                            .filter(|channel| filled_output.hrir.pair(channel.slot).is_none())
+                            .collect();
                         layouts.push(LayoutOutput {
                             layout,
-                            tracks: layout_tracks(&hrir, layout)?,
+                            tracks: layout_tracks(&filled_output.hrir, layout)?,
                             missing,
+                            filled: filled_output.filled,
                         });
                     } else if selection != LayoutFiles::None && layout.near_miss(measured) {
-                        layout_notices.push((layout, missing));
+                        layout_notices.push((layout, originally_missing));
                     }
                 }
             }
@@ -456,6 +511,10 @@ pub fn run_pipeline(
         readme: readme.unwrap(),
         hrir_tracks,
         hesuvi_tracks,
+        hrir_track_names,
+        hesuvi_track_names,
+        hrir_filled,
+        hesuvi_filled,
         responses_tracks,
         layouts,
         layout_notices,

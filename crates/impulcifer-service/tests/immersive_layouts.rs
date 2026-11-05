@@ -6,7 +6,9 @@ use brir_support::*;
 use impulcifer_io::{brir_layout::read_track_names, read_wav, write_wav};
 use impulcifer_jobs::registry::{JobRegistry, PollResult};
 use impulcifer_types::{
-    constants::{HEXADECAGONAL_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER_2X, SPEAKER_NAMES},
+    constants::{
+        HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER_2X, SPEAKER_NAMES,
+    },
     job::JobStatus,
     layouts::{IMMERSIVE_LAYOUTS, Layer, layout},
 };
@@ -308,4 +310,101 @@ fn layout_files_is_a_validated_brir_option() {
         assert_eq!(result["error"]["code"], "INVALID_REQUEST", "{bad}");
     }
     assert_eq!(IMMERSIVE_LAYOUTS.len(), FORMAT_FILES.len());
+}
+
+#[test]
+fn output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end() {
+    let temp = Temp::demo();
+    measurements(&temp, &["FL", "FR", "FC", "BL", "BR", "SL", "SR"]);
+    let defaults = run(&temp, json!({"layout_files":"9.1"}));
+    let layout = layout("9.1").unwrap();
+    let wav = read_wav(&temp.0.join(layout.file_name)).unwrap();
+    for slot in ["LFE", "WL", "WR"] {
+        let channel = layout
+            .channels
+            .iter()
+            .position(|channel| channel.slot == slot)
+            .unwrap();
+        assert!(
+            wav.tracks[2 * channel].iter().all(|value| *value == 0.0),
+            "{slot}"
+        );
+        assert!(
+            wav.tracks[2 * channel + 1]
+                .iter()
+                .all(|value| *value == 0.0),
+            "{slot}"
+        );
+    }
+    assert!(events(&defaults, "cli_info_filled_channels").is_empty());
+    assert!(events(&defaults, "cli_info_lfe_filled").is_empty());
+
+    let poll = run(
+        &temp,
+        json!({"layout_files":"9.1","missing_speakers":"neighbor","lfe_mode":"center"}),
+    );
+    let wav = read_wav(&temp.0.join(layout.file_name)).unwrap();
+    for (target, source) in [("WL", "FL"), ("WR", "FR"), ("LFE", "FC")] {
+        let target = layout
+            .channels
+            .iter()
+            .position(|channel| channel.slot == target)
+            .unwrap();
+        let source = layout
+            .channels
+            .iter()
+            .position(|channel| channel.slot == source)
+            .unwrap();
+        assert_eq!(wav.tracks[2 * target], wav.tracks[2 * source]);
+        assert_eq!(wav.tracks[2 * target + 1], wav.tracks[2 * source + 1]);
+    }
+    assert_eq!(events(&poll, "cli_info_filled_channels").len(), 1);
+    assert_eq!(events(&poll, "cli_info_lfe_filled").len(), 1);
+    let readme = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
+    assert!(readme.contains("WL ← FL, WR ← FR"), "{readme}");
+    assert!(readme.contains("The LFE tracks use FC."), "{readme}");
+    assert!(!readme.contains("LFE tracks are silent"), "{readme}");
+}
+
+/// Compacted files name the tracks they hold, filled speakers included, so
+/// recovery can read them back.
+#[test]
+fn compacted_files_name_the_filled_tracks() {
+    let temp = Temp::demo();
+    measurements(&temp, &["FL", "FR"]);
+    run(
+        &temp,
+        json!({"remove_silent_channels":true,"missing_speakers":"neighbor"}),
+    );
+    for (name, order) in [
+        ("hesuvi.wav", HESUVI_TRACK_ORDER.as_slice()),
+        ("hrir.wav", HEXADECAGONAL_TRACK_ORDER.as_slice()),
+    ] {
+        let file = temp.0.join(name);
+        let wav = read_wav(&file).unwrap();
+        let names = read_track_names(&file, order, wav.tracks.len())
+            .unwrap()
+            .unwrap_or_else(|| panic!("{name} has no track names"));
+        assert_eq!(names.len(), wav.tracks.len(), "{name}");
+        for track in ["FC-left", "SL-left", "BR-right"] {
+            assert!(names.iter().any(|n| n == track), "{name}: {names:?}");
+        }
+    }
+}
+
+#[test]
+fn output_fill_settings_are_validated_brir_options() {
+    let temp = Temp::new();
+    let service = service(&temp, JobRegistry::new());
+    let boot = service.call("bootstrap", vec![]);
+    assert_eq!(boot["data"]["brir_defaults"]["missing_speakers"], "silent");
+    assert_eq!(boot["data"]["brir_defaults"]["lfe_mode"], "none");
+    for request in [
+        json!({"dir_path":temp.0,"missing_speakers":"nearest"}),
+        json!({"dir_path":temp.0,"lfe_mode":"bass"}),
+    ] {
+        let result = service.call("start_brir", vec![request]);
+        assert_eq!(result["ok"], false, "{result}");
+        assert_eq!(result["error"]["code"], "INVALID_REQUEST", "{result}");
+    }
 }

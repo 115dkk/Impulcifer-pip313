@@ -539,3 +539,40 @@ fn cli_layout_files_option_parses_and_validates() {
     assert_eq!(error.exit_code, 2);
     assert!(error.message.contains("layout_files"), "{}", error.message);
 }
+
+#[test]
+fn cli_output_fill_options_parse_reject_invalid_and_appear_in_help() {
+    let Parsed::Kwargs(kwargs) = parse(&args(&[
+        "impulcifer",
+        "--dir_path",
+        "measurements",
+        "--missing_speakers",
+        "neighbor",
+        "--lfe_mode",
+        "all",
+    ]))
+    .unwrap() else {
+        panic!()
+    };
+    assert_eq!(kwargs["missing_speakers"], json!("neighbor"));
+    assert_eq!(kwargs["lfe_mode"], json!("all"));
+
+    for (flag, value) in [("--missing_speakers", "nearest"), ("--lfe_mode", "bass")] {
+        let error = parse(&args(&[
+            "impulcifer",
+            "--dir_path",
+            "measurements",
+            flag,
+            value,
+        ]))
+        .unwrap_err();
+        assert_eq!(error.exit_code, 2);
+        assert!(error.message.contains(&flag[2..]), "{}", error.message);
+    }
+
+    let Parsed::Help(help) = parse(&args(&["impulcifer", "--help"])).unwrap() else {
+        panic!()
+    };
+    assert!(help.contains("--missing_speakers"));
+    assert!(help.contains("--lfe_mode"));
+}

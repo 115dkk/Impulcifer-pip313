@@ -54,6 +54,13 @@ fn outputs(compact: bool) -> (PipelineOutputs, SweepEstimator) {
             full
         }
     };
+    let names = |order: &[&str]| {
+        if compact {
+            compact_tracks(&hrir.stack_tracks(order, false).unwrap(), order).1
+        } else {
+            Vec::new()
+        }
+    };
     let mut jd = hrir.subset(&["FL", "FR"]);
     jd.normalize(Some(-0.1), None).unwrap();
     let output = PipelineOutputs {
@@ -61,6 +68,10 @@ fn outputs(compact: bool) -> (PipelineOutputs, SweepEstimator) {
         readme: readme_data(&hrir, 8000, 0.0),
         hrir_tracks: tracks(&HEXADECAGONAL_TRACK_ORDER),
         hesuvi_tracks: tracks(&HESUVI_TRACK_ORDER),
+        hrir_track_names: names(&HEXADECAGONAL_TRACK_ORDER),
+        hesuvi_track_names: names(&HESUVI_TRACK_ORDER),
+        hrir_filled: Vec::new(),
+        hesuvi_filled: Vec::new(),
         responses_tracks: hrir
             .stack_tracks(&HEXADECAGONAL_TRACK_ORDER, false)
             .unwrap(),

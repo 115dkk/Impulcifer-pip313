@@ -609,6 +609,18 @@ tests = ["impulcifer-cli::cli_layout_files_option_parses_and_validates", "impulc
 note = "ADR 0007 rule 4: auto (default) writes a format's channel-order file when all its speakers are measured, none writes none, a list of format ids also writes those formats with missing speakers silent"
 
 [[feature]]
+id = "config.missing_speakers"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::output_fill_config_defaults_and_validation_messages", "impulcifer-cli::cli_output_fill_options_parse_reject_invalid_and_appear_in_help", "impulcifer-service::output_fill_settings_are_validated_brir_options"]
+
+[[feature]]
+id = "config.lfe_mode"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::output_fill_config_defaults_and_validation_messages", "impulcifer-cli::cli_output_fill_options_parse_reject_invalid_and_appear_in_help", "impulcifer-service::output_fill_settings_are_validated_brir_options"]
+
+[[feature]]
 id = "config.vbass_freq"
 kind = "config"
 status = "implemented"
@@ -974,6 +986,20 @@ kind = "output"
 status = "implemented"
 tests = ["impulcifer-service::nhk_22_2_file_puts_every_slot_and_ear_on_its_smpte_channel", "impulcifer-service::complete_formats_are_written_and_listed_ones_are_filled_with_silence", "impulcifer-service::layout_files_none_writes_no_format_file", "impulcifer-service::the_demo_keeps_its_2x_outputs", "impulcifer-dsp::layout_tracks_read_each_slot_and_ear_from_the_table"]
 note = "nhk_22.2.wav, auro_13.1.wav, atmos_24.1.10.wav, dtsx_30.2.wav: two tracks per channel in official order, LFE silent, never compacted, ICHL chunk of format labels; README.md lists each file's channel-to-speaker map; near misses are logged"
+
+[[feature]]
+id = "output.missing_speakers"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-dsp::neighbor_fill_picks_the_nearest_slot_on_the_same_side_and_layer", "impulcifer-dsp::fill_never_uses_a_filled_slot_as_source", "impulcifer-dsp::defaults_leave_every_output_unchanged", "impulcifer-service::output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end"]
+note = "ADR 0013: output-only nearest measured speaker fill on the same side and layer; defaults remain silent"
+
+[[feature]]
+id = "output.lfe_mode"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-dsp::lfe_center_copies_fc_or_the_front_phantom", "impulcifer-dsp::lfe_all_is_the_power_average_below_the_crossover", "impulcifer-dsp::defaults_leave_every_output_unchanged", "impulcifer-service::output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end"]
+note = "ADR 0013: layout LFE tracks can use FC/front phantom or the 120 Hz low-pass power average of measured speakers; defaults remain silent"
 
 [[feature]]
 id = "output.recovery_immersive_layouts"

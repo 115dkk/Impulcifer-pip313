@@ -46,6 +46,8 @@ interface SystemInfo {
 /* hdmi: an HDMI or DisplayPort output on macOS (always false elsewhere). */
 interface AudioDevice { index: number; name: string; host_api: string; max_input_channels: number; max_output_channels: number; hdmi?: boolean }
 type ChannelOrder = "auto" | "standard" | "hdmi";
+type MissingSpeakers = "silent" | "neighbor";
+type LfeMode = "none" | "center" | "all";
 interface AudioDevices { host_apis: string[]; devices: AudioDevice[]; default_input_index: number; default_output_index: number }
 interface SweepRequest { mode: string; speakers: string; tracks: string; fs?: number; duration?: number }
 interface RecordingRequest {
@@ -125,6 +127,8 @@ interface ProcessingRequest {
      measured, "none" writes none, and a comma-separated list of format ids ("22.2,30.2") also
      writes those formats with missing speakers silent. */
   layout_files?: string;
+  /* ADR 0013: what output files carry for unmeasured speakers and for the LFE channel. */
+  missing_speakers?: MissingSpeakers; lfe_mode?: LfeMode;
   confirm_warnings?: boolean;
 }
 type VbassMode = "auto" | "manual" | "legacy";

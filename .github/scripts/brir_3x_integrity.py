@@ -113,6 +113,19 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("layout_files_listed", ("--layout_files=13.1,22.2,24.1.10,30.2",), "3.4.0"),
     # ADR 0009: the demo writes the three 9.1 family files with missing speakers silent.
     ("layout_files_atmos_9", ("--layout_files=9.1,9.1.4,9.1.6",), "3.7.0"),
+    # ADR 0013: the demo's seven speakers fill the missing ear-level channels of
+    # these files from their neighbours (heights stay silent) and the LFE tracks
+    # from FC, or from the bass of every speaker.
+    (
+        "output_fill_neighbor_lfe_center",
+        ("--layout_files=9.1,9.1.4,13.1,22.2", "--missing_speakers=neighbor", "--lfe_mode=center"),
+        "3.10.0",
+    ),
+    (
+        "output_fill_lfe_all",
+        ("--layout_files=9.1,22.2,30.2", "--missing_speakers=neighbor", "--lfe_mode=all"),
+        "3.10.0",
+    ),
 )
 
 
