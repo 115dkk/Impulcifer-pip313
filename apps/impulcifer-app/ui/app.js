@@ -929,6 +929,11 @@ async function begin(start, payload, kindHint = null) {
 function confirmationText(response) {
   const details = response.error.details || {};
   if (details.warning === "headphones_mono") return t("message_headphones_mono_warning");
+  // The service checks the output's channels before it starts, for files and the CLI too.
+  if (details.warning === "output_channels_short") {
+    const layout = String(details.layout || "");
+    return fmt(t("warning_output_channels_short"), { ...details, layout: immersiveLayout(layout)?.name || layout });
+  }
   if (details.play_channels !== undefined) {
     return fmt(t("message_channel_mismatch_warning"), {
       play_channels: details.play_channels,
@@ -1596,9 +1601,7 @@ async function recordingConfirmationValues(payload) {
 async function startSpeakersRecording() {
   const payload = gatherRecordingPayload("speakers");
   const setup = fmt(t("message_recording_setup_info"), await recordingConfirmationValues(payload));
-  const shortage = channelShortage();
-  const text = shortage ? `${fmt(t("warning_output_channels_short"), shortage)}\n\n${setup}` : setup;
-  if (!(await confirmDialog(text))) return;
+  if (!(await confirmDialog(setup))) return;
   await begin((request) => api().start_recording(request), payload, "recording");
 }
 

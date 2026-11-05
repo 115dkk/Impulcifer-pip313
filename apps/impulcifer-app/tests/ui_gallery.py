@@ -179,6 +179,14 @@ def mock_script(skin, theme, language, scenario):
     },
     start_output_recovery: request => {kind = "output_recovery"; lastRequest = request; return ok({job: job("running")});},
     start_recording: request => {
+      // An 8-channel DENON with a 7.1.4 sweep of its height speakers: the service asks first.
+      const speakers = String(request.sweep?.speakers || "").split(",");
+      if (mac && !request.confirm_warnings && !request.output_device && request.sweep?.tracks === "7.1.4"
+          && speakers.includes("TFL")) {
+        return Promise.resolve(error("CONFIRMATION_REQUIRED", "DENON-AVR has 8 output channels",
+          {warning: "output_channels_short", device: "DENON-AVR", available: 8, required: 12, first: 9, last: 12,
+           missing: "TFL, TFR, TBL, TBR", layout: "7.1.4"}));
+      }
       lastRequest = request; kind = "recording";
       if (scenario === "unavailable") return Promise.resolve(error("INVALID_REQUEST", "backend cannot fix mode",
         {kind: "share_mode_unavailable", share_mode: request.share_mode, backend: "cpal"}));
@@ -691,9 +699,11 @@ def short_output_checks(browser):
     assert struck() == ["TFL", "TFR", "TBL", "TBR"], struck()
     assert record.get_attribute("data-warn") == "true" and record.is_enabled()
     record.click()
-    message = answer(page)
-    assert message.startswith(text), message
-    page.wait_for_function("galleryCalls.some(c => c.method === 'start_recording')")
+    answer(page)  # the setup confirmation
+    # The service asks for the short output (confirm_warnings), worded like the note.
+    assert answer(page) == text
+    page.wait_for_function("galleryCalls.filter(c => c.method === 'start_recording').length === 2")
+    assert page.evaluate("galleryCalls.filter(c => c.method === 'start_recording').at(-1).args[0].confirm_warnings") is True
     page.wait_for_function("!document.querySelector('#btn-start-recording').disabled")
     page.locator("#rf-sweep-speakers").fill("FL,FR")
     assert note.is_hidden() and record.get_attribute("data-warn") is None
