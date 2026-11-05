@@ -352,7 +352,14 @@ fn render_readme_with_layouts(
         for output in layouts {
             let layout = output.layout;
             out.push_str(&format!("### {} ({})\n\n", layout.file_name, layout.name));
-            out.push_str(&format!("{}\n\n", t("cli_readme_layouts_note")));
+            // The usual note says LFE tracks are silent; a filled LFE gets the
+            // note without that sentence and its source below (ADR 0013).
+            let note = if lfe_source(&output.filled).is_some() {
+                "cli_readme_layouts_note_lfe_filled"
+            } else {
+                "cli_readme_layouts_note"
+            };
+            out.push_str(&format!("{}\n\n", t(note)));
             let order_note = match layout.id {
                 "24.1.10" => Some("cli_readme_layouts_atmos_order"),
                 "30.2" => Some("cli_readme_layouts_dts_order"),

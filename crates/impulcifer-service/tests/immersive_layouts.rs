@@ -361,6 +361,7 @@ fn output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end() {
     let readme = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
     assert!(readme.contains("WL ← FL, WR ← FR"), "{readme}");
     assert!(readme.contains("The LFE tracks use FC."), "{readme}");
+    assert!(!readme.contains("LFE tracks are silent"), "{readme}");
 }
 
 #[test]
