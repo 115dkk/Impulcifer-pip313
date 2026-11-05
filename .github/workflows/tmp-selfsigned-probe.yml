@@ -17,7 +17,7 @@ jobs:
       - name: Self-signed identity versus ad hoc
         shell: bash
         run: |
-          set -uo pipefail
+          set +e
           sw_vers
           work="$RUNNER_TEMP/probe"; mkdir -p "$work"; cd "$work"
           cat > cert.cnf <<'EOF'
@@ -58,12 +58,13 @@ jobs:
 
           for f in build1 build2 adhoc1 adhoc2; do
             echo "== $f"
-            codesign -dv "$f" 2>&1 | grep -E '^(CDHash|Signature|Authority|TeamIdentifier)='
-            codesign -d -r- "$f" 2>&1 | grep '^designated'
+            codesign -dvvv "$f" 2>&1 | grep -E '^(CDHash|Signature|Authority|TeamIdentifier|Runtime)'
+            codesign -d -r- "$f" 2>&1 | grep 'designated'
             codesign --verify --strict -v "$f" 2>&1 | tail -2
+            "./$f"; echo "$f ran, exit status $?"
           done
 
-          dr() { codesign -d -r- "$1" 2>&1 | sed -n 's/^designated => //p'; }
+          dr() { codesign -d -r- "$1" 2>&1 | sed -n 's/^#* *designated => //p'; }
           echo "== does build 2 meet build 1's designated requirement?"
           codesign --verify -R="=$(dr build1)" build2 && echo "self-signed: build2 SATISFIES build1 DR" || echo "self-signed: build2 does NOT satisfy build1 DR"
           codesign --verify -R="=$(dr adhoc1)" adhoc2 && echo "ad hoc: adhoc2 SATISFIES adhoc1 DR" || echo "ad hoc: adhoc2 does NOT satisfy adhoc1 DR"
