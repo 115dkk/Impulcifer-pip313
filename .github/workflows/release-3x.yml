@@ -306,7 +306,9 @@ jobs:
             fi
             echo "Signing with the Developer ID certificate"
           elif [ -f macos-signing/identity.p12 ]; then
-            APPLE_SIGNING_IDENTITY=$(bash ../../.github/scripts/macos_signing_identity.sh import macos-signing)
+            # Not captured: its stdout registers the masks (see the script's header).
+            bash ../../.github/scripts/macos_signing_identity.sh import macos-signing
+            APPLE_SIGNING_IDENTITY=$(bash ../../.github/scripts/macos_signing_identity.sh name)
             export APPLE_SIGNING_IDENTITY
             echo "Signing with the project's self-signed identity: $APPLE_SIGNING_IDENTITY"
           else

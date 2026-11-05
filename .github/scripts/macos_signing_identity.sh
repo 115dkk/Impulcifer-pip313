@@ -16,16 +16,22 @@
 #
 #   generate <dir>     write <dir>/identity.p12 and <dir>/certificate.pem (once, in CI)
 #   import <dir>       import identity.p12 into a temporary keychain on a macOS CI
-#                      runner, trust it for code signing there (needs sudo) and
-#                      print the identity name for APPLE_SIGNING_IDENTITY
+#                      runner and trust it for code signing there (needs sudo)
+#   name               print the identity name for APPLE_SIGNING_IDENTITY
 #   fingerprint <dir>  print the certificate's SHA-1, as the designated requirement shows it
+#
+# Never capture the output of `generate` or `import` (no `$(...)`): their
+# stdout carries the ::add-mask:: commands, and a captured mask command is never
+# seen by the runner, so the value it should hide ends up in the log. The first
+# identity (label v1) leaked its password exactly that way and was retired.
 set -euo pipefail
 
 IDENTITY_NAME="Impulcifer Self-Signed Code Signing"
-LABEL="impulcifer macos code signing identity v1"
+LABEL="impulcifer macos code signing identity v2"
 
 die() { echo "::error::$*" >&2; exit 1; }
 
+# Registers a secret with the runner. Only effective on the step's own stdout.
 mask() {
   if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::add-mask::$1"; fi
 }
@@ -109,7 +115,7 @@ import_identity() {
   existing=$(security list-keychains -d user | tr -d '"')
   # shellcheck disable=SC2086
   security list-keychains -d user -s "$keychain" $existing
-  echo "$IDENTITY_NAME"
+  echo "Imported \"$IDENTITY_NAME\" into $keychain" >&2
 }
 
 fingerprint() {
@@ -119,6 +125,7 @@ fingerprint() {
 case "${1:-}" in
   generate) generate "${2:?directory}" ;;
   import) import_identity "${2:?directory}" ;;
+  name) echo "$IDENTITY_NAME" ;;
   fingerprint) fingerprint "${2:?directory}" ;;
-  *) die "usage: $0 generate|import|fingerprint <dir>" ;;
+  *) die "usage: $0 generate <dir> | import <dir> | name | fingerprint <dir>" ;;
 esac
