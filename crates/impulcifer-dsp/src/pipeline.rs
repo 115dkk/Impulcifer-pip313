@@ -385,13 +385,13 @@ pub fn run_pipeline(
                 }
             }
             StageKey::WriteBrirs => {
-                let output_targets = |order: &[&str]| -> Vec<&str> {
+                fn output_targets<'a>(order: &'a [&'a str]) -> Vec<&'a str> {
                     order[..base_channel_count(order)]
                         .iter()
                         .filter_map(|track| track.split_once('-').map(|(speaker, _)| speaker))
                         .filter(|speaker| *speaker != "LFE" && *speaker != "LFE2")
                         .collect()
-                };
+                }
                 let filled_hrir = fill_output(
                     &hrir,
                     &output_targets(&HEXADECAGONAL_TRACK_ORDER),
