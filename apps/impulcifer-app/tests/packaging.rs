@@ -640,3 +640,46 @@ mod windows {
         println!("{report}");
     }
 }
+
+/// macOS hands an app without `NSMicrophoneUsageDescription` silent input (all
+/// zeros) and never asks. Tauri merges this `Info.plist`, which sits next to
+/// `tauri.conf.json`, into the bundle's Info.plist.
+#[test]
+fn macos_bundle_declares_microphone_use() {
+    let plist = include_str!("../Info.plist");
+    let key = "<key>NSMicrophoneUsageDescription</key>";
+    let after = &plist[plist
+        .find(key)
+        .expect("NSMicrophoneUsageDescription missing")
+        + key.len()..];
+    let text = after
+        .trim_start()
+        .strip_prefix("<string>")
+        .and_then(|rest| rest.split_once("</string>"))
+        .map(|(text, _)| text.trim())
+        .expect("NSMicrophoneUsageDescription needs a <string> value");
+    assert!(
+        !text.is_empty(),
+        "the usage description is shown in the permission prompt"
+    );
+}
+
+/// On macOS `window.confirm` is async (src/macos-dialogs.js). A Promise is
+/// truthy, so an unawaited confirm would start a recording before the answer
+/// (docs/rust/APP-SMOKE.md); every call in the 3.x UI must await it.
+#[test]
+fn ui_awaits_every_confirm() {
+    let app = include_str!("../ui/app.js");
+    let calls: Vec<usize> = app
+        .match_indices("window.confirm(")
+        .map(|(at, _)| at)
+        .collect();
+    assert!(!calls.is_empty());
+    for at in calls {
+        assert!(
+            app[..at].ends_with("await "),
+            "unawaited window.confirm on ui/app.js line {}",
+            app[..at].matches('\n').count() + 1
+        );
+    }
+}

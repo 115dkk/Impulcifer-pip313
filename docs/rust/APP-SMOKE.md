@@ -47,6 +47,7 @@ Playwright 브라우저는 다운로드하지 않습니다. `--cdp`에서는 기
 
 1. 동결된 HTML은 `frontendDist` 밖의 `logo/pulse-32.png`, `logo/pulse-128.png`를 참조합니다. 첫 실행에서 두 리소스 오류를 확인했습니다. 셸의 자산 응답 훅에서 기존 로고 파일의 내장 바이트를 같은 URL로 제공하도록 수정했습니다. HTML과 번들 설정은 바꾸지 않았습니다.
 2. Tauri dialog 플러그인은 `window.confirm`을 비동기 함수로 바꿉니다. 기존 UI는 boolean을 기대하므로 Promise를 참으로 판정하여 확인 전에 녹음을 시작했습니다. 셸은 플러그인의 Rust 초기화와 파일 대화상자 API를 유지하되 JS 재정의만 제외합니다. WebView2 본래의 동기식 확인 창을 실제로 표시하고 누르는 검사가 통과했습니다.
+   - macOS(3.9.1부터): WKWebView에는 UI 델리게이트 없이 뜨는 확인·알림 창이 없어 `window.confirm`이 곧바로 `false`였습니다. macOS에서만 `src/macos-dialogs.js`가 두 함수를 플러그인의 `message` 명령(확인/취소)으로 바꾸고, 3.x 화면은 모든 `window.confirm`을 `await`합니다(`ui_awaits_every_confirm`). 그래서 위의 Promise 판정 문제는 다시 생기지 않습니다. 플러그인의 재정의 스크립트는 없어진 `confirm` 명령을 부르므로 여전히 쓰지 않습니다. M4 맥미니(macOS 26.7)에서 빌드한 앱의 시트 창을 System Events로 눌러 확인은 `true`, 취소는 `false`, 알림은 메시지와 확인 버튼이 뜨는 것을 확인했습니다.
 3. 최초 구현의 로컬 HTTP 확인 요청은 WebView2에서 `Failed to fetch`로 실패했습니다. 보안 설정을 바꾸지 않고 파일 확인 방식으로 교체했습니다.
 
 당시 동결된 UI에서는 언어를 바꾸면 runtime 표시가 연결 대기로 바뀌었고 헤드폰 확인 문구의 `{play_file}` 등 자리표시자를 채우지 않았습니다. 2026-09-12의 3.x UI 수정에서는 서비스 연결 상태를 유지하고, 스피커·헤드폰 확인 모두 실제 요청 값과 장치 접근 방식으로 문구를 채웁니다. 아래 2026-09-08 기록의 업데이트 미구현 결과는 당시 실행에 해당합니다.

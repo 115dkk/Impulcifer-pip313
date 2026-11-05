@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.9.1 - 2026-11-05
+### macOS에서 녹음 버튼이 반응하지 않고 마이크 입력이 0이던 문제 수정
+
+#### 🐛 버그 수정
+- **macOS에서 녹음 확인 창이 뜨지 않아 녹음이 시작되지 않던 문제**: WKWebView는 UI 델리게이트가 있어야 `window.confirm`·`window.alert` 창을 띄우는데 wry는 둘 다 구현하지 않습니다. 그래서 `window.confirm`이 0~1 ms 만에 `false`를 돌려주어 스피커 녹음, 헤드폰 녹음, 확인이 필요한 녹음 시작이 모두 그 자리에서 끝났고, `window.alert`로 띄우던 오류와 완료 메시지도 보이지 않았습니다. 이제 macOS에서만 두 함수를 dialog 플러그인의 `message` 명령(확인/취소 버튼)으로 바꾸고, 3.x 화면이 확인 결과를 `await`로 기다립니다. Windows(WebView2)와 Linux(WebKitGTK)는 브라우저의 동기식 확인 창을 그대로 쓰며, boolean을 `await`해도 동작은 같습니다. 플러그인에 들어 있는 재정의 스크립트는 2.7에서 없어진 `confirm` 명령을 아직 부르므로 쓰지 않습니다.
+- **macOS에서 마이크 입력이 전부 0으로 녹음되던 문제**: 앱 번들의 Info.plist에 `NSMicrophoneUsageDescription`이 없어 macOS가 허용 창을 띄우지 않고 입력을 0으로 주었습니다. `apps/impulcifer-app/Info.plist`에 사용 목적을 적었고, Tauri가 빌드 때 이 파일을 번들의 Info.plist에 합칩니다.
+
+#### 🔧 빌드 / 설정 변경
+- **테스트**: 번들 Info.plist에 마이크 사용 목적이 있는지(`macos_bundle_declares_microphone_use`), 화면의 모든 `window.confirm`을 `await`하는지(`ui_awaits_every_confirm`), macOS 확인 창 스크립트가 `message` 명령과 확인/취소 버튼을 쓰는지(`macos_dialogs_use_the_message_command`, `tests/macos-dialogs-contract.cjs`)를 확인합니다. 모두 macOS 러너 없이 돕니다.
+
 ## 3.9.0 - 2026-11-03
 ### REW 측정 파일과 Dirac Live 프로젝트를 BRIR 측정과 헤드폰 측정으로도 읽기
 

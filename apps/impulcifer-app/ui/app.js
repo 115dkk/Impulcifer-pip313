@@ -803,7 +803,7 @@ async function begin(start, payload, kindHint = null) {
   try {
     response = await start(payload);
     if (response && !response.ok && response.error.code === "CONFIRMATION_REQUIRED") {
-      if (!window.confirm(confirmationText(response))) {
+      if (!(await window.confirm(confirmationText(response)))) {
         state.startPending = false;
         updateStartControls(state.lastJob);
         return;
@@ -1417,13 +1417,13 @@ async function recordingConfirmationValues(payload) {
 async function startSpeakersRecording() {
   const payload = gatherRecordingPayload("speakers");
   const setup = fmt(t("message_recording_setup_info"), await recordingConfirmationValues(payload));
-  if (!window.confirm(setup)) return;
+  if (!(await window.confirm(setup))) return;
   await begin((request) => api().start_recording(request), payload, "recording");
 }
 
 async function startHeadphonesRecording() {
   const payload = gatherRecordingPayload("headphones");
-  if (!window.confirm(fmt(t("message_record_headphones_confirm"), await recordingConfirmationValues(payload)))) return;
+  if (!(await window.confirm(fmt(t("message_record_headphones_confirm"), await recordingConfirmationValues(payload))))) return;
   await begin((request) => api().start_recording(request), payload, "recording");
 }
 
