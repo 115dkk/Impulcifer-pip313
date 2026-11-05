@@ -364,10 +364,7 @@ impl ProcessingConfig {
         crate::layouts::LayoutFiles::parse(&self.layout_files)
             .map_err(|reason| invalid("layout_files", &reason))?;
         if !["silent", "neighbor"].contains(&self.missing_speakers.as_str()) {
-            return Err(invalid(
-                "missing_speakers",
-                "must be silent or neighbor",
-            ));
+            return Err(invalid("missing_speakers", "must be silent or neighbor"));
         }
         if !["none", "center", "all"].contains(&self.lfe_mode.as_str()) {
             return Err(invalid("lfe_mode", "must be none, center or all"));

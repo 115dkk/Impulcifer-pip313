@@ -4,6 +4,7 @@ pub mod decay;
 pub mod eq_files;
 pub mod eqapo;
 pub mod equalize;
+pub mod fill;
 pub mod headphone;
 pub mod readme;
 pub mod room;

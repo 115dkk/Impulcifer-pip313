@@ -349,5 +349,10 @@
   "record_check_mics_swapped": "左右麥克風似乎接反了：喇叭的聲音先到達了錯誤的一側耳朵。請對調麥克風或輸入聲道，然後重新錄音。",
   "record_check_distortion": "{speaker}：喇叭的聲音出現失真（諧波位準 {distortion_db} dB）。請降低播放音量，然後重新錄音。",
   "record_check_itd_mismatch": "{speaker}：聲音到達雙耳的時間差為 {itd_us} µs，但同一角度下測得的 {reference} 為 {reference_itd_us} µs（相差 {diff_us} µs）。兩次測量中有一次轉動的角度不對，請重新錄製角度有偏差的那一次。",
-  "record_check_level_changed": "{speaker}：位準與之前的步驟相差 {db_diff} dB。請保持相同的播放音量和與喇叭的距離，然後重新錄音。"
+  "record_check_level_changed": "{speaker}：位準與之前的步驟相差 {db_diff} dB。請保持相同的播放音量和與喇叭的距離，然後重新錄音。",
+  "cli_info_filled_channels": "{file}: unmeasured channels are filled from the nearest measured speaker ({list})",
+  "cli_info_lfe_filled": "{file}: the LFE tracks use {source}",
+  "cli_readme_filled_channels": "Unmeasured channels filled from the nearest measured speaker: {list}",
+  "cli_readme_lfe_filled": "The LFE tracks use {source}.",
+  "cli_lfe_source_all": "the low frequencies of every measured speaker (below 120 Hz)"
 }

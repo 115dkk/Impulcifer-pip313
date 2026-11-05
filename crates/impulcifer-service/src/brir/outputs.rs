@@ -94,6 +94,27 @@ fn missing_channels(channels: &[&impulcifer_types::layouts::FormatChannel]) -> S
         .collect::<Vec<_>>()
         .join(", ")
 }
+fn speaker_fills(filled: &[(&'static str, String)]) -> String {
+    filled
+        .iter()
+        .filter(|(slot, _)| !matches!(*slot, "LFE" | "LFE2"))
+        .map(|(slot, source)| format!("{slot} ← {source}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+fn lfe_source<'a>(filled: &'a [(&'static str, String)]) -> Option<&'a str> {
+    filled
+        .iter()
+        .find(|(slot, _)| matches!(*slot, "LFE" | "LFE2"))
+        .map(|(_, source)| source.as_str())
+}
+fn display_lfe_source(catalog: &Catalog, source: &str) -> String {
+    if source == "all" {
+        catalog.translate("cli_lfe_source_all", &json!({}))
+    } else {
+        source.into()
+    }
+}
 
 pub(super) fn tuning2_mode_name(mode: impulcifer_types::config::Tuning2Mode) -> String {
     use impulcifer_types::config::Tuning2Mode;
@@ -196,7 +217,7 @@ fn tuning2_readme(report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report) 
 }
 
 pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String {
-    render_readme_with_layouts(data, catalog, date, &[])
+    render_readme_with_layouts(data, catalog, date, &[], &[])
 }
 
 fn render_readme_with_layouts(
@@ -204,6 +225,7 @@ fn render_readme_with_layouts(
     catalog: &Catalog,
     date: &str,
     layouts: &[LayoutOutput],
+    fixed_fills: &[(&str, &[(&'static str, String)])],
 ) -> String {
     let t = |key: &str| catalog.translate(key, &json!({}));
     let mut out = format!(
@@ -312,6 +334,19 @@ fn render_readme_with_layouts(
         }
         out.push('\n');
     }
+    if fixed_fills.iter().any(|(_, filled)| !filled.is_empty()) {
+        out.push_str("## hrir.wav and hesuvi.wav\n\n");
+        for (file, filled) in fixed_fills {
+            let list = speaker_fills(filled);
+            if !list.is_empty() {
+                out.push_str(&format!("### {file}\n\n"));
+                out.push_str(
+                    &catalog.translate("cli_readme_filled_channels", &json!({"list":list})),
+                );
+                out.push_str("\n\n");
+            }
+        }
+    }
     if !layouts.is_empty() {
         out.push_str(&format!("## {}\n\n", t("cli_readme_layouts_title")));
         for output in layouts {
@@ -327,6 +362,20 @@ fn render_readme_with_layouts(
             };
             if let Some(key) = order_note {
                 out.push_str(&format!("{}\n\n", t(key)));
+            }
+            let fills = speaker_fills(&output.filled);
+            if !fills.is_empty() {
+                out.push_str(
+                    &catalog.translate("cli_readme_filled_channels", &json!({"list":fills})),
+                );
+                out.push_str("\n\n");
+            }
+            if let Some(source) = lfe_source(&output.filled) {
+                out.push_str(&catalog.translate(
+                    "cli_readme_lfe_filled",
+                    &json!({"source":display_lfe_source(catalog, source)}),
+                ));
+                out.push_str("\n\n");
             }
             if !output.missing.is_empty() {
                 out.push_str(&catalog.translate(
@@ -386,7 +435,16 @@ pub(crate) fn write_outputs_checked(
     let date = i18n.readme_date.clone().unwrap_or_else(local_date);
     let readme = dir.join("README.md");
     // Python open(..., "w") uses the host's native text-mode newline.
-    let content = render_readme_with_layouts(&outputs.readme, i18n, &date, &outputs.layouts);
+    let content = render_readme_with_layouts(
+        &outputs.readme,
+        i18n,
+        &date,
+        &outputs.layouts,
+        &[
+            ("hrir.wav", &outputs.hrir_filled),
+            ("hesuvi.wav", &outputs.hesuvi_filled),
+        ],
+    );
     let content = if cfg!(windows) {
         content.replace('\n', "\r\n")
     } else {
@@ -415,6 +473,19 @@ pub(crate) fn write_outputs_checked(
             let (_, names) = compact_tracks(&full, order);
             append_track_names(&path, &names.iter().map(String::as_str).collect::<Vec<_>>())?;
         }
+        let filled = if name == "hrir.wav" {
+            &outputs.hrir_filled
+        } else {
+            &outputs.hesuvi_filled
+        };
+        let list = speaker_fills(filled);
+        if !list.is_empty() {
+            events.log(
+                "info",
+                "cli_info_filled_channels",
+                json!({"file":name,"list":list}),
+            );
+        }
         files.push(path);
     }
     for output in &outputs.layouts {
@@ -429,6 +500,21 @@ pub(crate) fn write_outputs_checked(
             "cli_success_layout_file",
             json!({"layout":layout.name,"path":path}),
         );
+        let fills = speaker_fills(&output.filled);
+        if !fills.is_empty() {
+            events.log(
+                "info",
+                "cli_info_filled_channels",
+                json!({"file":layout.file_name,"list":fills}),
+            );
+        }
+        if let Some(source) = lfe_source(&output.filled) {
+            events.log(
+                "info",
+                "cli_info_lfe_filled",
+                json!({"file":layout.file_name,"source":display_lfe_source(i18n, source)}),
+            );
+        }
         if !output.missing.is_empty() {
             events.log(
                 "warning",
