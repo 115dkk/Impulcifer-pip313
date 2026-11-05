@@ -270,6 +270,7 @@
   "cli_info_layout_missing": "Il reste {count} enceintes à mesurer pour créer le fichier dans l’ordre des canaux de {layout} : {missing}",
   "cli_readme_layouts_title": "Fichiers dans l’ordre des canaux",
   "cli_readme_layouts_note": "Chaque canal comporte deux pistes, l’oreille gauche en premier, dans l’ordre des canaux du format. Les pistes LFE sont silencieuses.",
+  "cli_readme_layouts_note_lfe_filled": "Chaque canal comporte deux pistes, l’oreille gauche en premier, dans l’ordre des canaux du format.",
   "cli_readme_layouts_atmos_order": "Dolby ne publie aucun ordre de canaux au-delà de 9.1.6. Les pistes 1–32 suivent l’ordre d’échange 9.1.6 d’Apple et d’AWS MediaConvert ; les autres suivent l’ordre des Dolby Atmos Home Theater Installation Guidelines. Aucun décodeur ne produit cet ordre.",
   "cli_readme_layouts_dts_order": "L’ordre suit le masque de canaux de 32 bits du tableau B-5 de la norme ETSI TS 103 491. DTS ne publie aucun ordre PCM pour un décodeur 30.2.",
   "cli_readme_layouts_atmos_916_order": "L’ordre est l’ordre d’échange 9.1.6 d’Apple et d’AWS MediaConvert (L R C LFE Ls Rs Lrs Rrs Lw Rw Ltf Rtf Ltm Rtm Ltr Rtr).",

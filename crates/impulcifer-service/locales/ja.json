@@ -270,6 +270,7 @@
   "cli_info_layout_missing": "{layout} のチャンネル順のファイルを作成するには、あと {count} 個のスピーカーの測定が必要です: {missing}",
   "cli_readme_layouts_title": "チャンネル順のファイル",
   "cli_readme_layouts_note": "フォーマットのチャンネル順に、各チャンネルに左耳、右耳の順で2トラックを配置します。LFEトラックは無音です。",
+  "cli_readme_layouts_note_lfe_filled": "フォーマットのチャンネル順に、各チャンネルに左耳、右耳の順で2トラックを配置します。",
   "cli_readme_layouts_atmos_order": "Dolbyは9.1.6を超える構成のチャンネル順を公開していません。トラック1–32はAppleとAWS MediaConvertの9.1.6交換順に従い、残りはDolby Atmos Home Theater Installation Guidelinesの順に従います。この順で出力するデコーダーはありません。",
   "cli_readme_layouts_dts_order": "ETSI TS 103 491の表B-5にある32ビットのチャンネルマスクの順に従います。DTSは30.2デコーダーのPCM順を公開していません。",
   "cli_readme_layouts_atmos_916_order": "AppleとAWS MediaConvertの9.1.6交換順（L R C LFE Ls Rs Lrs Rrs Lw Rw Ltf Rtf Ltm Rtm Ltr Rtr）に従います。",
