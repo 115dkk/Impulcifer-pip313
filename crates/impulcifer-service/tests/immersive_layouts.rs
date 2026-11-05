@@ -309,3 +309,53 @@ fn layout_files_is_a_validated_brir_option() {
     }
     assert_eq!(IMMERSIVE_LAYOUTS.len(), FORMAT_FILES.len());
 }
+
+#[test]
+fn output_fill_options_fill_neighbor_and_lfe_tracks_end_to_end() {
+    let temp = Temp::demo();
+    measurements(&temp, &["FL", "FR", "FC", "BL", "BR", "SL", "SR"]);
+    let defaults = run(&temp, json!({"layout_files":"9.1"}));
+    let layout = layout("9.1").unwrap();
+    let wav = read_wav(&temp.0.join(layout.file_name)).unwrap();
+    for slot in ["LFE", "WL", "WR"] {
+        let channel = layout.channels.iter().position(|channel| channel.slot == slot).unwrap();
+        assert!(wav.tracks[2 * channel].iter().all(|value| *value == 0.0), "{slot}");
+        assert!(wav.tracks[2 * channel + 1].iter().all(|value| *value == 0.0), "{slot}");
+    }
+    assert!(events(&defaults, "cli_info_filled_channels").is_empty());
+    assert!(events(&defaults, "cli_info_lfe_filled").is_empty());
+
+    let poll = run(
+        &temp,
+        json!({"layout_files":"9.1","missing_speakers":"neighbor","lfe_mode":"center"}),
+    );
+    let wav = read_wav(&temp.0.join(layout.file_name)).unwrap();
+    for (target, source) in [("WL", "FL"), ("WR", "FR"), ("LFE", "FC")] {
+        let target = layout.channels.iter().position(|channel| channel.slot == target).unwrap();
+        let source = layout.channels.iter().position(|channel| channel.slot == source).unwrap();
+        assert_eq!(wav.tracks[2 * target], wav.tracks[2 * source]);
+        assert_eq!(wav.tracks[2 * target + 1], wav.tracks[2 * source + 1]);
+    }
+    assert_eq!(events(&poll, "cli_info_filled_channels").len(), 3);
+    assert_eq!(events(&poll, "cli_info_lfe_filled").len(), 1);
+    let readme = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
+    assert!(readme.contains("WL ← FL, WR ← FR"), "{readme}");
+    assert!(readme.contains("The LFE tracks use FC."), "{readme}");
+}
+
+#[test]
+fn output_fill_settings_are_validated_brir_options() {
+    let temp = Temp::new();
+    let service = service(&temp, JobRegistry::new());
+    let boot = service.call("bootstrap", vec![]);
+    assert_eq!(boot["data"]["brir_defaults"]["missing_speakers"], "silent");
+    assert_eq!(boot["data"]["brir_defaults"]["lfe_mode"], "none");
+    for request in [
+        json!({"dir_path":temp.0,"missing_speakers":"nearest"}),
+        json!({"dir_path":temp.0,"lfe_mode":"bass"}),
+    ] {
+        let result = service.call("start_brir", vec![request]);
+        assert_eq!(result["ok"], false, "{result}");
+        assert_eq!(result["error"]["code"], "INVALID_REQUEST", "{result}");
+    }
+}
