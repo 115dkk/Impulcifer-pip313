@@ -36,6 +36,7 @@ const state = {
   recPhase: null,
   recDoneSpeakers: new Set(),
   shareModes: ["auto"], systemInfo: null,
+  audioDevices: [], defaultOutputIndex: -1,
   recoveryPlan: null, recoveryPlanError: null, recoveryState: "empty",
   recoveryTimer: undefined, recoveryRevision: 0, recoveryCreated: new Set(), recoveryRunRevision: -1,
   recoveryRequestKey: "",
@@ -564,7 +565,7 @@ function finishRecorderStatus(job) {
   } else if (job.status === "failed") {
     const message = job.error ? errorSentence(job.error) : "";
     setRecorderStatus(t("recording_status_error"), message);
-    if (state.skin === "stable" && job.error && shareModeError(job.error)) window.alert(message);
+    if (state.skin === "stable" && job.error && shareModeError(job.error)) void noticeDialog(message);
   }
   finishGuidedStep(job);
 }
@@ -789,6 +790,58 @@ function shareModeError(error) {
   });
 }
 
+/* --------------------------------------------------------------- dialogs */
+
+/* WKWebView (macOS) answers window.confirm with false and drops window.alert
+   and window.prompt unless the host implements them, and wry does not, so on
+   macOS every confirmation was refused before it was shown. The screen asks
+   with its own dialog on every platform instead. */
+/** @type {{resolve: (ok: boolean) => void, cancel: boolean, focus: Element | null} | null} */
+let pendingAsk = null;
+
+/** @param {string} message @param {boolean} cancel @returns {Promise<boolean>} */
+function askDialog(message, cancel) {
+  if (pendingAsk) closeAsk(false);
+  $("ask-modal-message").textContent = message;
+  $("ask-modal-cancel").hidden = !cancel;
+  $("ask-modal").hidden = false;
+  const focus = document.activeElement;
+  el("ask-modal-ok", HTMLButtonElement).focus();
+  return new Promise((resolve) => { pendingAsk = { resolve, cancel, focus }; });
+}
+
+/** @param {boolean} ok */
+function closeAsk(ok) {
+  const ask = pendingAsk;
+  if (!ask) return;
+  pendingAsk = null;
+  $("ask-modal").hidden = true;
+  if (ask.focus instanceof HTMLElement && ask.focus.isConnected) ask.focus.focus();
+  ask.resolve(ok);
+}
+
+/** @param {string} message */
+const confirmDialog = (message) => askDialog(message, true);
+/** @param {string} message */
+const noticeDialog = (message) => askDialog(message, false).then(() => undefined);
+
+/** @param {KeyboardEvent} event */
+function onAskKey(event) {
+  if (!pendingAsk) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeAsk(!pendingAsk.cancel);
+  } else if (event.key === "Tab") {
+    /* Keep focus on the dialog's buttons while it is open. */
+    const buttons = [el("ask-modal-cancel", HTMLButtonElement), el("ask-modal-ok", HTMLButtonElement)]
+      .filter((button) => !button.hidden);
+    const index = buttons.indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
+    const next = buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length];
+    event.preventDefault();
+    next.focus();
+  }
+}
+
 /* ------------------------------------------------------------------ jobs */
 
 /** @template {{confirm_warnings?: boolean}} P @param {(payload: P) => Promise<Envelope<{job: Job}>>} start @param {P} payload @param {JobKind | null} kindHint */
@@ -803,7 +856,7 @@ async function begin(start, payload, kindHint = null) {
   try {
     response = await start(payload);
     if (response && !response.ok && response.error.code === "CONFIRMATION_REQUIRED") {
-      if (!window.confirm(confirmationText(response))) {
+      if (!(await confirmDialog(confirmationText(response)))) {
         state.startPending = false;
         updateStartControls(state.lastJob);
         return;
@@ -838,7 +891,7 @@ async function begin(start, payload, kindHint = null) {
     // Stable hides the inline activity cards (jobs run in the modal), so a
     // pre-start validation error would otherwise be invisible there.
     if (state.skin === "stable" && kindHint !== "output_recovery") {
-      window.alert(errorText(response));
+      void noticeDialog(errorText(response));
     }
     return;
   }
@@ -907,8 +960,13 @@ async function pollJob() {
     }
     if (event.type === "log") {
       const payload = event.payload;
-      const message = payload.key === "recording_share_mode_opened" && state.strings[payload.key] && payload.share
-        ? shareDescription(payload.share) : payload.message;
+      const key = payload.key || "";
+      // A recording check is shown from the job result (checkMessage).
+      if (key.startsWith("record_check_")) continue;
+      const message = key === "recording_share_mode_opened" && state.strings[key] && payload.share
+        ? shareDescription(payload.share)
+        : key.startsWith("recording_channel_order_") && state.strings[key] && payload.channels
+          ? fmt(t(key), { channels: payload.channels }) : payload.message;
       appendLog(`[${payload.level}] ${message}`);
       updateSteps(payload.message, payload.key);
     }
@@ -1213,8 +1271,11 @@ async function loadDevices(hostApi = "") {
     hostSelect.value = previousHost;
   }
   const devices = response.data.devices;
+  state.audioDevices = devices;
+  state.defaultOutputIndex = response.data.default_output_index;
   fillDevices(el("rf-input-device", HTMLSelectElement), devices.filter((item) => item.max_input_channels > 0));
   fillDevices(el("rf-output-device", HTMLSelectElement), devices.filter((item) => item.max_output_channels > 0));
+  updateChannelOrder();
 }
 
 /** @param {HTMLSelectElement} select @param {AudioDevice[]} devices */
@@ -1284,18 +1345,74 @@ function populateSweepLayouts(layouts) {
   select.replaceChildren();
   layouts.forEach((layout) => select.add(new Option(immersiveLayout(layout)?.name || layout, layout)));
   select.value = layouts.includes(previous) ? previous : "stereo";
+  updateChannelOrder();
+}
+
+/* ------------------------------------------------- HDMI channel order */
+
+/* On a Mac an HDMI or DisplayPort output takes its channels in the
+   receiver's slot order (CEA-861: LFE on 3, FC on 4, the side pair on 5-6,
+   the back pair on 7-8; ADR 0012), not in the Windows order the sweep tracks
+   are written in, so the FC sweep played from the subwoofer. "auto" uses the
+   HDMI order when the service reports the chosen output as HDMI. */
+
+/** The output device the recording opens: the chosen one, else the default. */
+function selectedOutputDevice() {
+  const name = val("rf-output-device");
+  return state.audioDevices.find((device) => name
+    ? device.name === name && device.max_output_channels > 0
+    : device.index === state.defaultOutputIndex) || null;
+}
+
+/** @returns {"standard" | "hdmi"} */
+function effectiveChannelOrder() {
+  const choice = val("rf-channel-order") || "auto";
+  if (choice === "standard" || choice === "hdmi") return choice;
+  return selectedOutputDevice()?.hdmi ? "hdmi" : "standard";
+}
+
+/* The layout the choice reorders: the generated sweep's, or the layout in an
+   Impulcifer sweep file name (sweep-seg-FL,FR,...-7.1-...wav). */
+function channelOrderLayout() {
+  const orders = state.sweepDefaults?.hdmi_orders || {};
+  if (sweepSourceMode() !== "file") {
+    const layout = val("rf-sweep-layout");
+    return orders[layout] ? layout : null;
+  }
+  const name = val("rf-play").split(/[\\/]/).pop() || "";
+  const layout = /^sweep-seg-[^-]+-([^-]+)-/.exec(name)?.[1] || "";
+  return orders[layout] ? layout : null;
+}
+
+function updateChannelOrder() {
+  const shown = state.platform === "darwin" && !!channelOrderLayout();
+  $("rf-channel-order-row").hidden = !shown;
+  const auto = $("rf-channel-order-auto");
+  auto.hidden = !shown || (val("rf-channel-order") || "auto") !== "auto";
+  auto.textContent = t(effectiveChannelOrder() === "hdmi"
+    ? "hint_channel_order_auto_hdmi" : "hint_channel_order_auto_standard");
   renderLayoutMap();
 }
 
 /* An immersive layout (ADR 0007) numbers its device channels in the format's
    official order, and its labels can name other positions than Impulcifer's
    speaker codes (22.2's FL is WL), so the map shows the code each channel
-   plays. LFE channels stay silent. */
+   plays. LFE channels stay silent. On a Mac the 2.x layouts that have an HDMI
+   order show the map too, in the order the recording will use. */
 function renderLayoutMap() {
-  const layout = immersiveLayout(val("rf-sweep-layout"));
-  $("rf-layout-row").hidden = !layout;
-  if (!layout) return;
-  $("rf-layout-map").replaceChildren(...layout.channels.map((channel, index) => {
+  const id = val("rf-sweep-layout");
+  const immersive = immersiveLayout(id);
+  const hdmi = state.platform === "darwin" ? state.sweepDefaults?.hdmi_orders?.[id] : undefined;
+  const standard = state.sweepDefaults?.track_orders?.[id] || [];
+  /** @type {{label: string, slot: string}[]} */
+  let channels = immersive ? immersive.channels
+    : hdmi ? standard.map((slot) => ({ label: slot, slot })) : [];
+  if (hdmi && effectiveChannelOrder() === "hdmi") {
+    channels = hdmi.map((slot) => channels.find((channel) => channel.slot === slot) || { label: slot, slot });
+  }
+  $("rf-layout-row").hidden = !channels.length;
+  if (!channels.length) return;
+  $("rf-layout-map").replaceChildren(...channels.map((channel, index) => {
     const lfe = channel.slot.startsWith("LFE");
     const item = document.createElement("li");
     item.className = "layout-ch";
@@ -1381,6 +1498,7 @@ function gatherRecordingPayload(mode) {
     output_device: val("rf-output-device") || null,
     host_api: val("rf-host-api") || null,
     share_mode: selectedShareMode(),
+    channel_order: /** @type {ChannelOrder} */ (val("rf-channel-order") || "auto"),
   };
   if (sweep) {
     payload.sweep = sweep;
@@ -1417,13 +1535,13 @@ async function recordingConfirmationValues(payload) {
 async function startSpeakersRecording() {
   const payload = gatherRecordingPayload("speakers");
   const setup = fmt(t("message_recording_setup_info"), await recordingConfirmationValues(payload));
-  if (!window.confirm(setup)) return;
+  if (!(await confirmDialog(setup))) return;
   await begin((request) => api().start_recording(request), payload, "recording");
 }
 
 async function startHeadphonesRecording() {
   const payload = gatherRecordingPayload("headphones");
-  if (!window.confirm(fmt(t("message_record_headphones_confirm"), await recordingConfirmationValues(payload)))) return;
+  if (!(await confirmDialog(fmt(t("message_record_headphones_confirm"), await recordingConfirmationValues(payload))))) return;
   await begin((request) => api().start_recording(request), payload, "recording");
 }
 
@@ -1437,14 +1555,14 @@ async function generateSweepSet() {
     const response = await api().generate_sweep_set(folder);
     if (!response.ok) {
       appendLog(errorText(response));
-      window.alert(t("message_sweep_set_error"));
+      void noticeDialog(t("message_sweep_set_error"));
       return;
     }
     if (response.data.play_path) {
       el("rf-play", HTMLInputElement).value = response.data.play_path;
       refreshResolvedPath();
     }
-    window.alert(fmt(t("message_sweep_set_complete"), {
+    void noticeDialog(fmt(t("message_sweep_set_complete"), {
       count: response.data.files.length,
       folder,
     }));
@@ -3558,7 +3676,15 @@ function wireEvents() {
   el("btn-refresh-devices", HTMLButtonElement).addEventListener("click", () => loadDevices(val("rf-host-api")));
   el("rf-host-api", HTMLSelectElement).addEventListener("change", () => loadDevices(val("rf-host-api")));
 
-  el("rf-play", HTMLInputElement).addEventListener("input", refreshResolvedPath);
+  el("rf-play", HTMLInputElement).addEventListener("input", () => {
+    refreshResolvedPath();
+    updateChannelOrder();
+  });
+  el("rf-output-device", HTMLSelectElement).addEventListener("change", updateChannelOrder);
+  el("rf-channel-order", HTMLSelectElement).addEventListener("change", updateChannelOrder);
+  el("ask-modal-ok", HTMLButtonElement).addEventListener("click", () => closeAsk(true));
+  el("ask-modal-cancel", HTMLButtonElement).addEventListener("click", () => closeAsk(false));
+  document.addEventListener("keydown", onAskKey);
   el("rf-record-dir", HTMLInputElement).addEventListener("input", () => {
     refreshResolvedPath();
     renderGuided();
@@ -3566,10 +3692,11 @@ function wireEvents() {
   el("rf-sweep-source", HTMLSelectElement).addEventListener("change", () => {
     updateSweepSourceVisibility();
     refreshResolvedPath();
+    updateChannelOrder();
   });
   el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", refreshResolvedPath);
   el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", () => {
-    renderLayoutMap();
+    updateChannelOrder();
     useLayoutSpeakers();
   });
   el("rf-layout-use-all", HTMLButtonElement).addEventListener("click", useLayoutSpeakers);

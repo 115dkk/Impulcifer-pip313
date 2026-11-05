@@ -1150,6 +1150,19 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .modal .log { min-height: 100px; max-height: 180px; }
 .modal-actions { justify-content: flex-end; }
 
+/* Confirmations and notices (askDialog). The recording setup message is
+   several lines, so line breaks are kept and long paths wrap. It sits last
+   in the document, above a job dialog that is open at the same time. */
+#ask-modal { z-index: 41; }
+.ask-message {
+  margin: 0;
+  max-height: min(60vh, 420px);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
 /* Release notes: the version's CHANGELOG section rendered from Markdown
    (renderReleaseNotes). Wider than other modals so paragraphs stay short. */
 #update-modal .modal { width: min(720px, calc(100vw - 48px)); }

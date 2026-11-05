@@ -83,6 +83,78 @@ fn bundle_config_contract() {
     }
 }
 
+/// The plist value that follows `<key>name</key>`, as raw XML up to the next tag end.
+fn plist_value<'a>(plist: &'a str, name: &str) -> Option<&'a str> {
+    let key = format!("<key>{name}</key>");
+    let rest = plist[plist.find(&key)? + key.len()..].trim_start();
+    if let Some(body) = rest.strip_prefix("<string>") {
+        return body.split("</string>").next();
+    }
+    rest.split('>').next().map(|tag| &rest[..=tag.len()])
+}
+
+/// macOS hands an app without NSMicrophoneUsageDescription a stream of zeros
+/// instead of asking for microphone access, and the hardened runtime that
+/// Developer ID signing turns on denies the microphone without the audio-input
+/// entitlement. A bundle that is not signed at all is reported as damaged by
+/// Gatekeeper, so the app is signed ad hoc unless CI provides a Developer ID.
+#[test]
+fn macos_bundle_asks_for_the_microphone_and_is_signed() {
+    let config: Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+    let mac = &config["bundle"]["macOS"];
+    assert_eq!(mac["signingIdentity"], "-");
+    assert_eq!(mac["infoPlist"], "Info.plist");
+    assert_eq!(mac["entitlements"], "Entitlements.plist");
+    assert!(
+        mac.get("hardenedRuntime").is_none_or(|v| v == true),
+        "notarization needs the hardened runtime"
+    );
+
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let info = std::fs::read_to_string(manifest.join("Info.plist")).unwrap();
+    let usage = plist_value(&info, "NSMicrophoneUsageDescription").unwrap();
+    assert!(
+        usage.contains("microphone"),
+        "the permission prompt shows this text: {usage:?}"
+    );
+    let entitlements = std::fs::read_to_string(manifest.join("Entitlements.plist")).unwrap();
+    assert_eq!(
+        plist_value(&entitlements, "com.apple.security.device.audio-input"),
+        Some("<true/>")
+    );
+}
+
+/// WKWebView answers `window.confirm` with false and drops `window.alert` and
+/// `window.prompt` unless the host implements them, and wry does not; on macOS
+/// the recording buttons therefore did nothing. The screen uses its own dialog.
+#[test]
+fn screen_never_calls_the_browser_dialogs() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for file in ["ui/app.js", "src/bridge.js"] {
+        let source = std::fs::read_to_string(manifest.join(file)).unwrap();
+        for (number, line) in source.lines().enumerate() {
+            let code = line.split("//").next().unwrap_or_default();
+            for call in ["confirm(", "alert(", "prompt("] {
+                let mut start = 0;
+                while let Some(at) = code[start..].find(call) {
+                    let index = start + at;
+                    let before = code[..index].chars().next_back();
+                    let bare = before.is_none_or(|c| !(c.is_alphanumeric() || c == '_'));
+                    let window = code[..index].ends_with("window.");
+                    let method = before == Some('.') && !window;
+                    assert!(
+                        !(window || (bare && !method)),
+                        "{file}:{} calls {call}…): {}",
+                        number + 1,
+                        line.trim()
+                    );
+                    start = index + call.len();
+                }
+            }
+        }
+    }
+}
+
 struct TemporaryRoot(PathBuf);
 
 impl TemporaryRoot {
