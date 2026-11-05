@@ -1,0 +1,73 @@
+# Temporary (removed after one run): make the project's self-signed macOS
+# signing identity once, commit it, and prove on macOS that the release's import
+# path signs with it (ADR 0012). The key is created and encrypted inside this
+# job; only the encrypted PKCS#12 and the public certificate leave it.
+name: tmp macOS signing identity
+on:
+  push:
+    branches: [ccr-083fe5e3-macsign]
+    paths: [.github/workflows/tmp-macos-signing-identity.yml]
+permissions:
+  contents: write
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ccr-083fe5e3-macsign
+      - name: Generate and commit the identity
+        id: commit
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          bash .github/scripts/macos_signing_identity.sh generate apps/impulcifer-app/macos-signing
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/impulcifer-app/macos-signing/identity.p12 apps/impulcifer-app/macos-signing/certificate.pem
+          git commit -m "build(macos): the project's self-signed code-signing identity (ADR 0012)" \
+            -m "identity.p12 is encrypted with a password derived from the updater signing secrets; certificate.pem is public."
+          git push origin HEAD:ccr-083fe5e3-macsign
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  verify-on-macos:
+    needs: generate
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.generate.outputs.sha }}
+      - name: Import as the release does, sign by name, check the requirement
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          sw_vers -productVersion
+          dir=apps/impulcifer-app/macos-signing
+          identity=$(bash .github/scripts/macos_signing_identity.sh import "$dir")
+          echo "identity: $identity"
+          security find-identity -p codesigning | sed -n '1,6p'
+          leaf=$(bash .github/scripts/macos_signing_identity.sh fingerprint "$dir")
+          work=$(mktemp -d)
+          for n in 0 1; do
+            printf 'int main(void){return %s;}\n' "$n" > "$work/p$n.c"
+            cc "$work/p$n.c" -o "$work/p$n"
+            # The same arguments tauri-macos-sign passes (no --keychain: found through the search list).
+            codesign --force -s "$identity" --options runtime \
+              --entitlements apps/impulcifer-app/Entitlements.plist -i dev.impulcifer.app "$work/p$n"
+            codesign --verify --strict -v "$work/p$n"
+            requirement=$(codesign -d -r- "$work/p$n" 2>&1 | sed -n 's/^#* *designated => //p')
+            echo "p$n: $requirement"
+            case "$requirement" in
+              *"identifier \"dev.impulcifer.app\" and certificate leaf = H\"$leaf\""*) ;;
+              *) echo "::error::unexpected requirement"; exit 1 ;;
+            esac
+            "$work/p$n" || echo "p$n exit $?"
+          done
+          codesign -d --entitlements - --xml "$work/p0" | plutil -p - | grep audio-input

@@ -273,12 +273,17 @@ jobs:
       - name: Install the Tauri CLI
         run: npm install -g @tauri-apps/cli@^2
 
-      # tauri.conf.json signs the bundle ad hoc ("-"): Gatekeeper then offers
-      # "Open Anyway" instead of calling an unsigned bundle damaged. With the
-      # Developer ID secrets the same build signs with that identity (hardened
-      # runtime, Entitlements.plist) and notarizes; the Tauri CLI reads the
-      # APPLE_* variables, and an empty one breaks it, so they are exported
-      # only when the secret is set.
+      # Signing, first match wins (ADR 0012):
+      # - Developer ID secrets: that identity (hardened runtime,
+      #   Entitlements.plist) and notarization. The Tauri CLI reads the APPLE_*
+      #   variables and an empty one breaks it, so they are exported only when
+      #   the secret is set.
+      # - the project's self-signed identity in macos-signing/: every release
+      #   keeps the same designated requirement, so macOS keeps the microphone
+      #   permission across updates. Tauri finds an APPLE_CERTIFICATE only under
+      #   Apple's name prefixes, so the identity is imported into a keychain
+      #   here and passed by name. Gatekeeper still offers only "Open Anyway".
+      # - otherwise tauri.conf.json's ad hoc "-".
       - name: Build the app bundle and the dmg
         working-directory: apps/impulcifer-app
         env:
@@ -300,20 +305,37 @@ jobs:
               export APPLE_ID="${NOTARY_APPLE_ID}" APPLE_PASSWORD="${NOTARY_PASSWORD}" APPLE_TEAM_ID="${NOTARY_TEAM_ID}"
             fi
             echo "Signing with the Developer ID certificate"
+          elif [ -f macos-signing/identity.p12 ]; then
+            APPLE_SIGNING_IDENTITY=$(bash ../../.github/scripts/macos_signing_identity.sh import macos-signing)
+            export APPLE_SIGNING_IDENTITY
+            echo "Signing with the project's self-signed identity: $APPLE_SIGNING_IDENTITY"
           else
-            echo "No Developer ID certificate: signing ad hoc"
+            echo "No signing identity: signing ad hoc"
           fi
           tauri build --bundles app,dmg
 
       # macOS gives an app without NSMicrophoneUsageDescription only silence,
       # and the hardened runtime denies the microphone without the audio-input
       # entitlement; both reached a tester as a recording of zeros.
+      # With the self-signed identity the designated requirement must name its
+      # certificate; a cdhash requirement would lose the permission on update.
       - name: Check the bundle's signature, microphone text and entitlement
+        env:
+          DEVELOPER_ID_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
         run: |
           set -euo pipefail
           app=target/release/bundle/macos/Impulcifer.app
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv "$app" 2>&1 | grep -E '^(Identifier|Authority|Signature|TeamIdentifier|Runtime)'
+          requirement=$(codesign -d -r- "$app" 2>&1 | sed -n 's/^#* *designated => //p')
+          echo "Designated requirement: $requirement"
+          if [ -z "${DEVELOPER_ID_CERTIFICATE}" ] && [ -f apps/impulcifer-app/macos-signing/identity.p12 ]; then
+            leaf=$(bash .github/scripts/macos_signing_identity.sh fingerprint apps/impulcifer-app/macos-signing)
+            case "$requirement" in
+              *"identifier \"dev.impulcifer.app\" and certificate leaf = H\"$leaf\""*) ;;
+              *) echo "::error::the bundle is not signed with the project's certificate (SHA-1 $leaf)"; exit 1 ;;
+            esac
+          fi
           usage=$(plutil -extract NSMicrophoneUsageDescription raw "$app/Contents/Info.plist")
           echo "NSMicrophoneUsageDescription: $usage"
           test -n "$usage"
