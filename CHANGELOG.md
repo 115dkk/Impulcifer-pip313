@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.9.2 - 2026-11-05
+### macOS 마이크 권한 유지, 녹음 취소, 채널이 모자란 출력 장치 안내
+
+#### 🐛 버그 수정
+- **녹음을 취소할 수 없던 문제**: 녹음 작업은 취소를 거부해서("recording jobs cannot be cancelled safely"), 잘못 시작하면 앱을 꺼야만 멈췄습니다. 이제 Studio에서는 페이지 머리의 '녹음 취소'로, Stable에서는 작업 창의 취소로 멈출 수 있습니다. 취소한 녹음은 파일을 남기지 않고, 덧붙이기로 녹음하던 기존 파일도 그대로 둡니다.
+- **출력 채널이 모자란 장치에서 녹음이 바로 실패하던 문제**: 8채널 HDMI 리시버에서 7.1.4(12채널)처럼 장치보다 채널이 많은 배치를 고르면, 경고 없이 녹음을 시작하자마자 "Could not find any device which satisfies minimum channel count."로 실패했습니다. 이제 녹음을 막지 않고 장치가 가진 채널만 냅니다. 대신 녹음 화면이 장치 이름과 나오지 않을 스피커를 알려 주고(예: DENON-AVR은 출력이 8채널이라 9~12번 TFL, TFR, TBL, TBR이 나오지 않음), 장치 채널 표에서 그 채널에 줄을 긋습니다. 녹음 버튼과 확인 창에도 같은 경고가 붙고, 작업 기록과 결과(`output_channels`)에도 남습니다. sweep을 내지 않는 채널만 잘리는 경우(예: 7.1.4에서 FL, FR만 잴 때)는 경고하지 않습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **macOS 마이크 권한이 업데이트 뒤에도 남음**: 3.9.1은 임시 서명(ad hoc)이라서, macOS가 업데이트할 때마다 다른 앱으로 보고 마이크 권한을 다시 물을 수 있었습니다. 이제 릴리스를 프로젝트의 자체 서명 인증서 하나로 서명하므로, 모든 버전의 지정 요구사항이 같아져 권한이 그대로 남습니다. 3.9.1에서 3.9.2로 올릴 때만 한 번 더 묻습니다. 개인 키는 업데이터 서명 비밀값에서 유도한 암호로 잠가 저장소에 두고, CI만 풉니다. Gatekeeper는 그대로라서, 내려받은 앱을 처음 열 때는 여전히 '그래도 열기'가 필요합니다(ADR 0012 7항).
+- 릴리스의 macOS 잡이 번들의 지정 요구사항에 이 인증서의 해시가 들어 있는지 검사합니다.
+
 ## 3.9.1 - 2026-11-05
 ### macOS에서 녹음이 되지 않던 문제 넷
 

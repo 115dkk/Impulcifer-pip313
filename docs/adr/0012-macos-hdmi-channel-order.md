@@ -21,11 +21,17 @@ Apple 실리콘 맥에 AV 리시버를 HDMI로 연결해 3.9.0을 쓴 테스터�
 4. **번들은 마이크 사용을 밝힌다.** `Info.plist`에 `NSMicrophoneUsageDescription`을, `Entitlements.plist`에 `com.apple.security.device.audio-input`을 둔다. 공증에 필요한 hardened runtime은 이 권한 없이 마이크를 막는다.
 5. **화면은 자체 대화상자로 묻는다.** `window.confirm`, `window.alert`, `window.prompt`를 쓰지 않고 모든 플랫폼에서 같은 대화상자(`askDialog`)를 쓴다. 테스트가 화면 코드에 이 호출이 없음을 검사한다.
 6. **서명은 임시 서명(ad hoc)으로 시작한다.** `signingIdentity`는 `"-"`다. 이렇게 서명한 번들은 Gatekeeper가 '손상되었다' 대신 '확인할 수 없는 개발자'로 막고, 시스템 설정의 '개인정보 보호 및 보안'에서 '그래도 열기'로 열 수 있다. 공증에는 유료 Apple Developer 계정이 필요하다. 저장소에 Developer ID 비밀값(`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`)이 있으면 릴리스가 같은 빌드를 그 인증서로 서명하고 공증한다. 릴리스의 macOS 잡은 번들의 서명, 마이크 문구, 권한을 검사한다.
+7. **릴리스는 프로젝트의 자체 서명 인증서로 서명한다(2026-11-05 추가).** 임시 서명한 앱은 지정 요구사항(designated requirement)이 그 빌드의 해시(`cdhash`)라서, 업데이트할 때마다 macOS가 마이크 권한을 다시 물었다. macOS는 허용한 앱의 지정 요구사항을 기록해 두고 접근할 때마다 대조한다(Apple TN3127). 인증서 하나로 서명하면 모든 릴리스의 요구사항이 `identifier "dev.impulcifer.app" and certificate leaf = H"<인증서 SHA-1>"`로 같아져 권한이 유지된다.
+   - **확인:** macOS 26 러너에서 코드가 다른 두 빌드를 같은 자체 서명 인증서로 서명했더니 요구사항이 같았고, 임시 서명은 빌드마다 달랐다. 신뢰로 설정하지 않은 인증서로도 서명과 검증이 됐다. 다만 `--keychain` 없이 이름으로 찾을 때는 신뢰로 설정한 인증서만 보이므로, CI가 러너에서만 신뢰를 설정한다. 사용자의 맥에는 아무 설정도 필요 없다.
+   - **보관:** 개인 키는 `apps/impulcifer-app/macos-signing/identity.p12`에 PKCS#12로 들어 있고, 공개 인증서는 같은 폴더의 `certificate.pem`이다. p12의 암호는 업데이터 서명 비밀값(`TAURI_SIGNING_PRIVATE_KEY`와 `_PASSWORD`)에서 HMAC-SHA256으로 유도한다. 이 세션에서는 저장소 비밀값을 쓸 수 없어서(프록시가 Actions 비밀값 API를 막음) 유지보수자가 이 방식을 골랐다. 키는 CI 작업 안에서 한 번 만들고 암호화했으며, 평문으로는 그 작업 밖으로 나가지 않았다. 인증서는 RSA 3072비트, 유효 기간 20년이다.
+   - **순서:** Developer ID 비밀값이 있으면 그것이 먼저이고, 그다음이 이 인증서, 둘 다 없으면 임시 서명이다. 릴리스의 macOS 잡은 번들의 요구사항에 이 인증서의 해시가 있는지 검사한다.
+   - **교체:** 업데이터 서명 비밀값을 바꾸면 p12를 풀 수 없어 macOS 빌드가 실패한다. 그때는 `.github/scripts/macos_signing_identity.sh generate`로 새 인증서를 만들고, 사용자는 마이크 권한을 한 번 더 허용한다. Developer ID로 바꿀 때도 한 번 더 묻는다.
+   - **한계:** Gatekeeper는 자체 서명을 임시 서명과 똑같이 거부한다(`spctl` 확인). 내려받은 앱을 처음 열 때는 여전히 '그래도 열기'가 필요하다.
 
 ## 결과
 
 - 맥의 HDMI 출력으로 5.1·7.1 sweep을 낼 때 센터가 서브우퍼로, 사이드가 백으로 가지 않는다. 연결 방식을 알 수 없는 출력(통합 기기 등)에서는 사용자가 `hdmi`를 골라야 한다.
 - 연결 방식을 HDMI나 DisplayPort로 알리지 않는 출력(통합 기기, 일부 어댑터)에서 `auto`는 `standard`로 남는다. 그때는 로그와 장치 채널 표로 확인하고 직접 고른다.
 - Linux의 ALSA·PipeWire가 다채널 스트림을 어떤 순서로 내는지는 확인하지 않았다. 보고가 오면 같은 선택에 순서를 더한다.
-- 임시 서명은 코드가 바뀔 때마다 서명 해시가 바뀌므로, 업데이트한 뒤 macOS가 마이크 권한을 다시 물을 수 있다. Developer ID로 서명하면 이 문제가 없다.
+- 3.9.1은 임시 서명이라 업데이트한 뒤 macOS가 마이크 권한을 다시 물을 수 있었다. 3.9.2부터는 프로젝트 인증서로 서명하므로, 3.9.1에서 3.9.2로 올릴 때 한 번 묻고 그 뒤로는 묻지 않는다.
 - 다시 제안하지 말 것: CoreAudio를 직접 부르려고 unsafe를 허용하는 것, `window.confirm`으로 되돌리는 것.

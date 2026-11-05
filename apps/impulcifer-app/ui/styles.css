@@ -1388,6 +1388,25 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .layout-ch-arrow { color: var(--fg-3); text-align: center; }
 .layout-ch-slot { color: var(--fg-0); font-weight: 700; }
 .layout-ch[data-lfe="true"] .layout-ch-slot { color: var(--fg-3); font-weight: 400; }
+/* Past the output device's last channel: the row stays in the map so the
+   user sees which speakers the recording will miss. */
+.layout-ch[data-missing="true"] { opacity: 0.5; }
+.layout-ch[data-missing="true"] .layout-ch-slot { text-decoration: line-through; }
+
+/* A recording that runs but will come out incomplete (fewer output channels
+   than the layout). The record button keeps working and carries the same
+   warning colour, so the state is visible where the user acts. */
+.warning-note {
+  margin: 2px 0 4px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--fg-0);
+  line-height: 1.45;
+}
+.warning-note[hidden] { display: none; }
+.btn[data-warn="true"] { box-shadow: 0 0 0 2px var(--warn); }
 
 .layout-force { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 /* The formats to write anyway open under the channel-order mode that asks for them. */
