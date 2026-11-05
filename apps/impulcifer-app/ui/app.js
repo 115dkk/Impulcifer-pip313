@@ -1504,6 +1504,7 @@ function useLayoutSpeakers() {
   const speakers = state.sweepDefaults?.layout_speakers?.[val("rf-sweep-layout")];
   if (speakers) el("rf-sweep-speakers", HTMLInputElement).value = speakers.join(",");
   refreshResolvedPath();
+  updateChannelOrder();
 }
 
 async function refreshResolvedPath() {
@@ -3762,7 +3763,7 @@ function wireEvents() {
   });
   el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", () => {
     refreshResolvedPath();
-    updateChannelShortage();
+    updateChannelOrder();
   });
   el("btn-cancel-recording", HTMLButtonElement).addEventListener("click", cancelActiveJob);
   el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", () => {

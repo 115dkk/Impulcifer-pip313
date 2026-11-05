@@ -636,7 +636,10 @@ def channel_order_checks(browser):
     context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
     navigate(page, "recorder")
     page.locator("#rf-sweep-layout").select_option("7.1")
-    assert page.locator("#rf-channel-order-row").is_hidden() and page.locator("#rf-layout-row").is_hidden()
+    # No channel order on Windows; the map shows here only for the 2-channel
+    # output's shortage warning (short_output_checks).
+    assert page.locator("#rf-channel-order-row").is_hidden()
+    assert page.locator("#rf-layout-row").is_visible() and page.locator("#rf-channel-shortage").is_visible()
     page.locator("#btn-start-recording").click()
     answer(page)
     page.wait_for_function("galleryCalls.some(c => c.method === 'start_recording')")
@@ -787,9 +790,10 @@ def layout_checks(browser):
     speakers.fill("WL,WR")
     page.locator("#rf-layout-use-all").click()
     assert speakers.input_value() == expected
-    # 7.1 has no channel map, and still names the recording after its seven speakers.
+    # 7.1 has no channel map of its own (the mock's 2-channel output shows one only
+    # with the shortage warning), and still names the recording after its seven speakers.
     layout.select_option("7.1")
-    assert not page.locator("#rf-layout-row").is_visible()
+    assert page.locator("#rf-layout-row").is_visible() == page.locator("#rf-channel-shortage").is_visible()
     assert speakers.input_value() == "FL,FR,FC,BL,BR,SL,SR"
     page.wait_for_function("document.getElementById('rf-resolved-path').textContent.includes('FL,FR,FC,BL,BR,SL,SR.wav')")
     layout.select_option("stereo")
