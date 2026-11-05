@@ -1466,6 +1466,18 @@ tests = ["impulcifer-service::recording_job_with_fake_backend_emits_lifecycle_an
 note = "fake backend: lifecycle loading/devices/recording/saving/complete, exact sample count, requested input channels"
 
 [[feature]]
+id = "recording.cancel"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-service::recording_job_can_be_cancelled_and_writes_nothing", "impulcifer-service::ipc_bootstrap_shape"]
+
+[[feature]]
+id = "recording.short_output"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-service::short_output_records_the_channels_it_has", "impulcifer-service::short_output_asks_for_confirmation_first", "impulcifer-service::short_output_without_swept_extra_channels_is_quiet"]
+
+[[feature]]
 id = "recording.append"
 kind = "recording"
 status = "implemented"
