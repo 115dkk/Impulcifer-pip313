@@ -1,5 +1,6 @@
 //! Ordered Python request validation. Do not deserialize before checking errors.
 use super::{
+    channel_order::ChannelOrder,
     checks::ReferenceMeasurement,
     naming,
     sweep::{SweepSpec, validate_sweep_spec},
@@ -43,6 +44,7 @@ pub struct RecordingRequest {
 pub struct ValidatedRecording {
     pub mode: Mode,
     pub share: SharePreference,
+    pub channel_order: ChannelOrder,
     pub play_path: Option<String>,
     pub sweep_spec: Option<SweepSpec>,
     pub record_path: String,
@@ -238,6 +240,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
         &[
             "mode",
             "share_mode",
+            "channel_order",
             "play_path",
             "record_dir",
             "input_device",
@@ -271,6 +274,22 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
                     ErrorCode::InvalidRequest,
                     "share_mode must be auto, exclusive or shared.",
                     json!({"share_mode":raw_share}),
+                    false,
+                )
+            })?
+    };
+    let raw_channel_order = o.get("channel_order").unwrap_or(&Value::Null);
+    let channel_order = if raw_channel_order.is_null() {
+        ChannelOrder::Auto
+    } else {
+        raw_channel_order
+            .as_str()
+            .and_then(ChannelOrder::parse)
+            .ok_or_else(|| {
+                ipc::error(
+                    ErrorCode::InvalidRequest,
+                    "channel_order must be auto, standard or hdmi.",
+                    json!({"channel_order":raw_channel_order}),
                     false,
                 )
             })?
@@ -457,6 +476,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
     Ok(ValidatedRecording {
         mode,
         share,
+        channel_order,
         play_path,
         sweep_spec,
         record_path,

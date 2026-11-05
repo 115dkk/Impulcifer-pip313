@@ -1,4 +1,4 @@
-use super::RecordingError;
+use super::{RecordingError, channel_order::hdmi_outputs};
 use impulcifer_types::{
     audio::{AudioBackend, Endpoint},
     ipc::ErrorCode,
@@ -48,7 +48,8 @@ pub fn list_audio_devices(
             .map(|i| i as i64)
             .unwrap_or(-1)
     };
-    let devices:Vec<_>=endpoints.iter().enumerate().filter(|(_,e)|filter.is_none_or(|a|a==e.host_api)).map(|(i,e)|json!({"index":i,"name":e.name,"host_api":e.host_api,"max_input_channels":e.max_input_channels,"max_output_channels":e.max_output_channels})).collect();
+    let hdmi = hdmi_outputs();
+    let devices:Vec<_>=endpoints.iter().enumerate().filter(|(_,e)|filter.is_none_or(|a|a==e.host_api)).map(|(i,e)|json!({"index":i,"name":e.name,"host_api":e.host_api,"max_input_channels":e.max_input_channels,"max_output_channels":e.max_output_channels,"hdmi":hdmi.contains(&e.name)})).collect();
     Ok(
         json!({"host_apis":apis,"devices":devices,"default_input_index":index(true),"default_output_index":index(false)}),
     )

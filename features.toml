@@ -1498,6 +1498,20 @@ tests = ["impulcifer-audio-io::fixed_share_preference_never_falls_back", "impulc
 note = "auto keeps the exclusive-then-shared policy; exclusive/shared never fall back and an open-time refusal is reported as share_mode_refused (failures after both streams opened stay ordinary device errors); backends without selectable modes (cpal) reject a fixed choice as share_mode_unavailable"
 
 [[feature]]
+id = "recording.hdmi_channel_order"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-types::hdmi_track_order_matches_cea_861_slots", "impulcifer-service::hdmi_output_names_reads_system_profiler_json", "impulcifer-service::to_hdmi_order_moves_each_row_to_its_hdmi_slot", "impulcifer-service::playback_layout_from_spec_and_file_name", "impulcifer-service::hdmi_channel_order_moves_fc_to_device_channel_four", "impulcifer-service::channel_order_request_validation", "impulcifer-service::list_audio_devices_shape_and_unknown_host_api"]
+note = "ADR 0012: macOS HDMI and DisplayPort outputs use CEA-861 device slots; auto detection, explicit standard/hdmi selection, playback row mapping, device metadata and bootstrap channel maps"
+
+[[feature]]
+id = "recording.input_silence_check"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-service::silent_input_is_reported_as_one_error_check"]
+note = "exact all-zero capture is saved but reported as one error check in speaker and headphone modes, with a macOS microphone-permission-specific key"
+
+[[feature]]
 id = "recording.hardware"
 kind = "recording"
 status = "implemented"
