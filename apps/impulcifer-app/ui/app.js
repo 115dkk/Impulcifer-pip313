@@ -310,6 +310,9 @@ function updateStartControls(job) {
     button.disabled = busy;
   });
   el("btn-cancel-brir", HTMLButtonElement).disabled = !active || !job?.cancellable;
+  // Studio cancels a recording from the page header; Stable from its job dialog.
+  el("btn-cancel-recording", HTMLButtonElement).hidden =
+    !(active && state.skin === "studio" && job?.kind === "recording" && job.cancellable);
   el("btn-start-recovery", HTMLButtonElement).disabled = busy || (state.skin === "studio" && state.recoveryState !== "ready");
 }
 
@@ -562,6 +565,8 @@ function finishRecorderStatus(job) {
     appendLog(detail);
     (job.result.checks || []).forEach((check) => appendLog(checkMessage(check)));
     rememberMeasurements(job.result);
+  } else if (job.status === "cancelled") {
+    setRecorderStatus(t("recording_status_cancelled"), "");
   } else if (job.status === "failed") {
     const message = job.error ? errorSentence(job.error) : "";
     setRecorderStatus(t("recording_status_error"), message);
@@ -790,6 +795,14 @@ function shareModeError(error) {
   });
 }
 
+/* Recording log lines the screen words itself, with the fields their text needs. */
+/** @type {Record<string, string[]>} */
+const LOG_FIELDS = {
+  recording_channel_order_hdmi: ["channels"],
+  recording_channel_order_standard: ["channels"],
+  recording_output_channels_short: ["device", "available", "first", "last", "missing"],
+};
+
 /* --------------------------------------------------------------- dialogs */
 
 /* WKWebView (macOS) answers window.confirm with false and drops window.alert
@@ -916,6 +929,11 @@ async function begin(start, payload, kindHint = null) {
 function confirmationText(response) {
   const details = response.error.details || {};
   if (details.warning === "headphones_mono") return t("message_headphones_mono_warning");
+  // The service checks the output's channels before it starts, for files and the CLI too.
+  if (details.warning === "output_channels_short") {
+    const layout = String(details.layout || "");
+    return fmt(t("warning_output_channels_short"), { ...details, layout: immersiveLayout(layout)?.name || layout });
+  }
   if (details.play_channels !== undefined) {
     return fmt(t("message_channel_mismatch_warning"), {
       play_channels: details.play_channels,
@@ -963,10 +981,12 @@ async function pollJob() {
       const key = payload.key || "";
       // A recording check is shown from the job result (checkMessage).
       if (key.startsWith("record_check_")) continue;
+      const fields = LOG_FIELDS[key];
+      const values = /** @type {Record<string, unknown>} */ (payload);
       const message = key === "recording_share_mode_opened" && state.strings[key] && payload.share
         ? shareDescription(payload.share)
-        : key.startsWith("recording_channel_order_") && state.strings[key] && payload.channels
-          ? fmt(t(key), { channels: payload.channels }) : payload.message;
+        : fields && state.strings[key] && fields.every((name) => values[name] !== undefined)
+          ? fmt(t(key), Object.fromEntries(fields.map((name) => [name, values[name]]))) : payload.message;
       appendLog(`[${payload.level}] ${message}`);
       updateSteps(payload.message, payload.key);
     }
@@ -1392,6 +1412,56 @@ function updateChannelOrder() {
   auto.textContent = t(effectiveChannelOrder() === "hdmi"
     ? "hint_channel_order_auto_hdmi" : "hint_channel_order_auto_standard");
   renderLayoutMap();
+  updateChannelShortage();
+}
+
+/* The chosen layout's device channels in the order the recording plays them:
+   an immersive format's official order, otherwise the track order, reordered
+   for an HDMI output on a Mac. Empty for mono and stereo. */
+function layoutChannels() {
+  const id = val("rf-sweep-layout");
+  const immersive = immersiveLayout(id);
+  const standard = state.sweepDefaults?.track_orders?.[id] || [];
+  const hdmi = state.platform === "darwin" ? state.sweepDefaults?.hdmi_orders?.[id] : undefined;
+  /** @type {{label: string, slot: string}[]} */
+  let channels = immersive ? immersive.channels : standard.map((slot) => ({ label: slot, slot }));
+  if (hdmi && effectiveChannelOrder() === "hdmi") {
+    channels = hdmi.map((slot) => channels.find((channel) => channel.slot === slot) || { label: slot, slot });
+  }
+  return channels;
+}
+
+/* An output with fewer channels than the layout still records (the maintainer
+   chose a warning over a block), but the swept speakers past the device's last
+   channel do not play. Null when nothing that is swept is lost. */
+function channelShortage() {
+  if (sweepSourceMode() === "file") return null;
+  const device = selectedOutputDevice();
+  const channels = layoutChannels();
+  if (!device || channels.length <= device.max_output_channels) return null;
+  const swept = new Set(val("rf-sweep-speakers").split(",").map((code) => code.trim().toUpperCase()));
+  const missing = channels
+    .map((channel, index) => ({ slot: channel.slot, number: index + 1 }))
+    .filter((channel) => channel.number > device.max_output_channels
+      && !channel.slot.startsWith("LFE") && swept.has(channel.slot));
+  if (!missing.length) return null;
+  const id = val("rf-sweep-layout");
+  return {
+    device: device.name, available: device.max_output_channels, required: channels.length,
+    layout: immersiveLayout(id)?.name || id,
+    first: missing[0].number, last: missing[missing.length - 1].number,
+    missing: missing.map((channel) => channel.slot).join(", "),
+  };
+}
+
+function updateChannelShortage() {
+  const shortage = channelShortage();
+  const note = $("rf-channel-shortage");
+  note.hidden = !shortage;
+  note.textContent = shortage ? fmt(t("warning_output_channels_short"), shortage) : "";
+  const button = el("btn-start-recording", HTMLButtonElement);
+  if (shortage) button.dataset.warn = "true";
+  else delete button.dataset.warn;
 }
 
 /* An immersive layout (ADR 0007) numbers its device channels in the format's
@@ -1401,15 +1471,10 @@ function updateChannelOrder() {
    order show the map too, in the order the recording will use. */
 function renderLayoutMap() {
   const id = val("rf-sweep-layout");
-  const immersive = immersiveLayout(id);
-  const hdmi = state.platform === "darwin" ? state.sweepDefaults?.hdmi_orders?.[id] : undefined;
-  const standard = state.sweepDefaults?.track_orders?.[id] || [];
-  /** @type {{label: string, slot: string}[]} */
-  let channels = immersive ? immersive.channels
-    : hdmi ? standard.map((slot) => ({ label: slot, slot })) : [];
-  if (hdmi && effectiveChannelOrder() === "hdmi") {
-    channels = hdmi.map((slot) => channels.find((channel) => channel.slot === slot) || { label: slot, slot });
-  }
+  const shown = !!immersiveLayout(id) || !!channelShortage()
+    || (state.platform === "darwin" && !!state.sweepDefaults?.hdmi_orders?.[id]);
+  const channels = shown ? layoutChannels() : [];
+  const available = selectedOutputDevice()?.max_output_channels ?? Infinity;
   $("rf-layout-row").hidden = !channels.length;
   if (!channels.length) return;
   $("rf-layout-map").replaceChildren(...channels.map((channel, index) => {
@@ -1417,6 +1482,7 @@ function renderLayoutMap() {
     const item = document.createElement("li");
     item.className = "layout-ch";
     item.dataset.lfe = String(lfe);
+    item.dataset.missing = String(index + 1 > available);
     /** @param {string} className @param {string} text */
     const cell = (className, text) => {
       const span = document.createElement("span");
@@ -1438,6 +1504,7 @@ function useLayoutSpeakers() {
   const speakers = state.sweepDefaults?.layout_speakers?.[val("rf-sweep-layout")];
   if (speakers) el("rf-sweep-speakers", HTMLInputElement).value = speakers.join(",");
   refreshResolvedPath();
+  updateChannelOrder();
 }
 
 async function refreshResolvedPath() {
@@ -3708,7 +3775,11 @@ function wireEvents() {
     refreshResolvedPath();
     updateChannelOrder();
   });
-  el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", refreshResolvedPath);
+  el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", () => {
+    refreshResolvedPath();
+    updateChannelOrder();
+  });
+  el("btn-cancel-recording", HTMLButtonElement).addEventListener("click", cancelActiveJob);
   el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", () => {
     updateChannelOrder();
     useLayoutSpeakers();

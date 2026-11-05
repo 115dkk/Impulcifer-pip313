@@ -48,7 +48,10 @@
               <h1 data-i18n="studio_recorder_title">Channel recording</h1>
               <p class="subtitle" data-i18n="studio_recorder_subtitle">Play sweep through each speaker, capture with binaural mics.</p>
             </div>
-            <button class="btn btn-danger" id="btn-start-recording" data-start data-i18n="button_start_recording">Start Recording</button>
+            <div class="header-actions">
+              <button class="btn btn-secondary" id="btn-cancel-recording" data-i18n="button_cancel_recording" hidden>Cancel recording</button>
+              <button class="btn btn-danger" id="btn-start-recording" data-start data-i18n="button_start_recording">Start Recording</button>
+            </div>
           </header>
 
           <div class="card">
@@ -109,6 +112,9 @@
                     </div>
                   </div>
                 </div>
+                <!-- The output has fewer channels than the layout: the recording still
+                     runs, without the speakers past the device's last channel. -->
+                <p class="warning-note" id="rf-channel-shortage" role="status" hidden></p>
                 <div class="field-row">
                   <label for="rf-sweep-speakers" data-i18n="label_sweep_speakers">Speakers (in order):</label>
                   <input id="rf-sweep-speakers" class="mono" value="FL,FR" spellcheck="false">

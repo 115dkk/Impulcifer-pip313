@@ -75,6 +75,8 @@ interface RecordingResult {
   checks?: RecordingCheck[]; measurements?: RecordingMeasurement[];
   /* The order the sweep was played in, when its layout has an HDMI order. */
   channel_order?: "standard" | "hdmi";
+  /* The output had fewer channels than the playback; `missing` names the swept speakers that did not play. */
+  output_channels?: { available: number; required: number; missing: string[] };
 }
 interface ProcessingRequest {
   dir_path?: string | null; test_signal?: string | null; fs?: number | null;
@@ -214,7 +216,9 @@ interface ProgressPayload {
 }
 type JobEvent = { seq: number; timestamp_ms: number } & (
   { type: "progress"; payload: ProgressPayload } |
-  { type: "log"; payload: { level: string; message: string; key?: string; share?: RecordingShare; channels?: string } } |
+  { type: "log"; payload: { level: string; message: string; key?: string; share?: RecordingShare; channels?: string;
+    /* recording_output_channels_short */
+    device?: string; available?: number; first?: number; last?: number; missing?: string } } |
   { type: "status"; payload: { status: JobStatus } }
 );
 interface JobPoll { job: Job; events: JobEvent[]; next_seq: number }

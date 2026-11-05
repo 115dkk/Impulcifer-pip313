@@ -199,7 +199,7 @@ impl ImpulciferService {
                             })).collect::<Vec<_>>()
                         })).collect::<Vec<_>>()},
                     "capabilities": {"recording":true,"brir":true,"output_recovery":true,
-                        "recording_cancel":false,"brir_cancel":true,"output_recovery_cancel":false,
+                        "recording_cancel":true,"brir_cancel":true,"output_recovery_cancel":false,
                         "share_modes":share_modes},
                     "active_job": self.jobs.active().as_ref().map(snapshot),
                     "ui": self.settings().payload(),
@@ -286,7 +286,33 @@ impl ImpulciferService {
             }
             IpcMethod::StartRecording => {
                 args.count(1, 1)?;
+                let confirm_warnings = args
+                    .get(0)
+                    .get("confirm_warnings")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false);
                 let request = recording::request::validate(args.get(0))?;
+                if !confirm_warnings
+                    && let Some(warning) =
+                        recording::devices::output_warning(&*self.backend, &request)
+                {
+                    let shortage = warning.shortage;
+                    return Err(ipc::error(
+                        ErrorCode::ConfirmationRequired,
+                        shortage.message(&warning.device),
+                        json!({
+                            "warning":"output_channels_short",
+                            "device":warning.device,
+                            "available":shortage.available,
+                            "required":shortage.required,
+                            "first":shortage.first,
+                            "last":shortage.last,
+                            "missing":shortage.missing_text(),
+                            "layout":warning.layout,
+                        }),
+                        false,
+                    ));
+                }
                 if let Some(mode) = request.share.fixed_mode()
                     && !self.backend.selectable_share_modes().contains(&mode)
                 {
@@ -302,7 +328,7 @@ impl ImpulciferService {
                     .jobs
                     .start(
                         impulcifer_types::job::JobKind::Recording,
-                        false,
+                        true,
                         move |ctx| recording::run::run_recording(&request, &*backend, ctx),
                     )
                     .map_err(|code| {

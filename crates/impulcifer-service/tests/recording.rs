@@ -507,10 +507,16 @@ impl OutputSession for FakeOutput {
     fn play_to_completion(
         &mut self,
         data: &[f32],
-        _: &CancelToken,
+        cancel: &CancelToken,
     ) -> Result<PlaybackReport, AudioError> {
         self.shared.lock().unwrap().playback = Some((data.to_vec(), self.channels));
-        std::thread::sleep(self.delay);
+        let deadline = Instant::now() + self.delay;
+        while Instant::now() < deadline {
+            if cancel.is_cancelled() {
+                return Err(AudioError::Cancelled);
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
         let frames = (data.len() / usize::from(self.channels)) as u64;
         Ok(PlaybackReport {
             frames_submitted: frames,
@@ -590,7 +596,7 @@ fn wait(registry: &JobRegistry, id: &str) -> PollResult {
 fn start(v: request::ValidatedRecording, backend: impl AudioBackend + 'static) -> PollResult {
     let registry = JobRegistry::new();
     let job = registry
-        .start(JobKind::Recording, false, move |ctx| {
+        .start(JobKind::Recording, true, move |ctx| {
             run::run_recording(&v, &backend, ctx)
         })
         .unwrap();
@@ -611,7 +617,7 @@ fn recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32() {
     let shared = backend.shared.clone();
     let p = start(validated, backend);
     assert_eq!(json!(p.job.status), "succeeded", "{:?}", p.job.error);
-    assert!(!p.job.cancellable);
+    assert!(p.job.cancellable);
     assert!(
         p.events
             .iter()
@@ -729,6 +735,108 @@ fn hdmi_channel_order_moves_fc_to_device_channel_four() {
         }
         assert_eq!(log.payload["auto"], requested == "auto");
     }
+}
+
+#[test]
+fn short_output_records_the_channels_it_has() {
+    for order in ["standard", "hdmi"] {
+        let temp = Temp::new();
+        let backend = FakeBackend::default();
+        let shared = backend.shared.clone();
+        let validated = request::validate(&json!({
+            "record_dir":temp.0,
+            "sweep":{"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR","tracks":"7.1.4"},
+            "channel_order":order,
+            "confirm_warnings":true
+        }))
+        .unwrap();
+        let poll = start(validated, backend);
+        assert_eq!(json!(poll.job.status), "succeeded", "{:?}", poll.job.error);
+        let state = shared.lock().unwrap();
+        assert_eq!(state.playback.as_ref().unwrap().1, 8);
+        drop(state);
+        let log = poll
+            .events
+            .iter()
+            .find(|event| event.payload["key"] == "recording_output_channels_short")
+            .expect("short output log");
+        assert_eq!(log.payload["missing"], "TFL, TFR, TBL, TBR");
+        assert_eq!(log.payload["first"], 9);
+        assert_eq!(log.payload["last"], 12);
+        let result = poll.job.result.unwrap();
+        assert_eq!(result["output_channels"]["available"], 8);
+        assert_eq!(result["output_channels"]["required"], 12);
+        assert_eq!(
+            result["output_channels"]["missing"],
+            json!(["TFL", "TFR", "TBL", "TBR"])
+        );
+    }
+}
+
+#[test]
+fn short_output_without_swept_extra_channels_is_quiet() {
+    let temp = Temp::new();
+    let validated = request::validate(&json!({
+        "record_dir":temp.0,
+        "sweep":{"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR","tracks":"7.1.4"},
+        "channel_order":"standard"
+    }))
+    .unwrap();
+    let poll = start(validated, FakeBackend::default());
+    assert_eq!(json!(poll.job.status), "succeeded", "{:?}", poll.job.error);
+    assert!(
+        poll.events
+            .iter()
+            .all(|event| event.payload["key"] != "recording_output_channels_short")
+    );
+    let result = poll.job.result.unwrap();
+    assert!(result.get("output_channels").is_none());
+    assert!(result.get("warnings").is_none());
+}
+
+#[test]
+fn short_output_asks_for_confirmation_first() {
+    let temp = Temp::new();
+    let svc = service(&temp, Box::new(FakeBackend::default()));
+    let request = json!({
+        "record_dir":temp.0.join("out"),
+        "sweep":{"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR,FC,BL,BR,SL,SR,TFL,TFR,TBL,TBR","tracks":"7.1.4"},
+        "channel_order":"standard"
+    });
+    let warning = svc.call("start_recording", vec![request.clone()]);
+    assert_eq!(warning["error"]["code"], "CONFIRMATION_REQUIRED");
+    assert_eq!(
+        warning["error"]["details"]["warning"],
+        "output_channels_short"
+    );
+    assert_eq!(warning["error"]["details"]["available"], 8);
+    assert_eq!(warning["error"]["details"]["required"], 12);
+    assert_eq!(warning["error"]["details"]["first"], 9);
+    assert_eq!(warning["error"]["details"]["last"], 12);
+    assert_eq!(warning["error"]["details"]["missing"], "TFL, TFR, TBL, TBR");
+    assert_eq!(warning["error"]["details"]["layout"], "7.1.4");
+    let mut confirmed = request;
+    confirmed["confirm_warnings"] = json!(true);
+    let started = svc.call("start_recording", vec![confirmed]);
+    assert_eq!(started["ok"], true, "{started}");
+    let id = started["data"]["job"]["job_id"].as_str().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(90);
+    loop {
+        let poll = svc.call("poll_job", vec![json!(id)]);
+        if poll["data"]["job"]["status"] != "running" {
+            assert_eq!(poll["data"]["job"]["status"], "succeeded", "{poll}");
+            break;
+        }
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+
+    let quiet = json!({
+        "record_dir":temp.0.join("quiet"),
+        "sweep":{"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR","tracks":"7.1.4"},
+        "channel_order":"standard"
+    });
+    assert_eq!(svc.call("start_recording", vec![quiet])["ok"], true);
 }
 
 #[test]
@@ -965,16 +1073,15 @@ fn resolve_devices_matches_2x_name_rules() {
     }
     let e = devices::resolve_devices(&backend, None, Some("Speak"), Some("Windows WASAPI"), 2)
         .unwrap_err();
+    // 3.x deliberately fixes the trailing-space typo in the 2.x message.
     assert_eq!(
         e.message,
-        "No device found with name \"Speak\" and host API \"WASAPI\". "
+        "No device found with name \"Speak\" and host API \"WASAPI\"."
     );
-    let e = devices::resolve_devices(&backend, None, Some("Speakers"), Some("Windows WASAPI"), 9)
-        .unwrap_err();
-    assert_eq!(
-        e.message,
-        "Found output device \"Speakers WASAPI\" but minimum number of channels is not satisfied."
-    );
+    let (_, output) =
+        devices::resolve_devices(&backend, None, Some("Speakers"), Some("Windows WASAPI"), 9)
+            .unwrap();
+    assert_eq!(output.max_output_channels, 8);
     assert_eq!(
         devices::resolve_devices(&backend, None, None, Some("ASIO"), 2)
             .unwrap_err()
@@ -1003,7 +1110,7 @@ fn recording_virtual_cable_end_to_end() {
     let v=request::validate(&json!({"record_dir":temp.0,"sweep":{"mode":"default"},"input_device":input,"output_device":output})).unwrap();
     let registry = JobRegistry::new();
     let job = registry
-        .start(JobKind::Recording, false, move |ctx| {
+        .start(JobKind::Recording, true, move |ctx| {
             run::run_recording(&v, &*backend, ctx)
         })
         .unwrap();
@@ -1108,73 +1215,66 @@ fn recording_sha256_known_answers() {
 }
 
 #[test]
-fn recording_ipc_shares_backend_rejects_busy_and_cancellation() {
-    let temp = Temp::new();
-    // Progress ticks every 250 ms while recording; 650 ms left the "at least three
-    // ticks" check at the mercy of a slow runner (CI Windows saw two). 1.5 s gives
-    // about six.
-    let backend = FakeBackend {
-        delay: Duration::from_millis(1500),
-        ..Default::default()
-    };
-    let shared = backend.shared.clone();
-    let svc = service(&temp, Box::new(backend));
-    let play = temp.0.join("mono.wav");
-    write_wav(&play, 8000, &[vec![0.25; 8000]], 32).unwrap();
-    let payload = json!({"record_dir":temp.0.join("out"),"play_path":play,"mode":"headphones","confirm_warnings":true,"channels":8,"append":true});
-    let started = svc.call("start_recording", vec![payload.clone()]);
-    assert_eq!(started["ok"], true, "{started}");
-    assert_eq!(started["data"]["job"]["cancellable"], false);
-    let id = started["data"]["job"]["job_id"].clone();
-    assert_eq!(
-        svc.call("start_recording", vec![payload])["error"]["code"],
-        "JOB_BUSY"
-    );
-    let cancel = svc.call("cancel_job", vec![id.clone()]);
-    assert_eq!(cancel["error"]["code"], "JOB_NOT_CANCELLABLE");
-    assert_eq!(
-        cancel["error"]["message"],
-        "recording jobs cannot be cancelled safely."
-    );
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let poll = loop {
-        let poll = svc.call("poll_job", vec![id.clone()]);
-        if poll["data"]["job"]["status"] != "running" {
-            break poll;
+fn recording_job_can_be_cancelled_and_writes_nothing() {
+    for append in [false, true] {
+        let temp = Temp::new();
+        let backend = FakeBackend {
+            delay: Duration::from_millis(1500),
+            ..Default::default()
+        };
+        let svc = service(&temp, Box::new(backend));
+        let play = temp.0.join("mono.wav");
+        write_wav(&play, 8000, &[vec![0.25; 8000]], 32).unwrap();
+        let record_dir = temp.0.join("out");
+        let record_path = record_dir.join("headphones.wav");
+        let original = b"existing recording".to_vec();
+        if append {
+            std::fs::create_dir_all(&record_dir).unwrap();
+            std::fs::write(&record_path, &original).unwrap();
         }
-        assert!(Instant::now() < deadline);
-        std::thread::sleep(Duration::from_millis(5));
-    };
-    assert_eq!(poll["data"]["job"]["status"], "succeeded", "{poll}");
-    let result = &poll["data"]["job"]["result"];
-    assert!(result["sweep"].is_null());
-    assert!(result["sidecar_path"].is_null());
-    let wav = read_wav(Path::new(result["record_path"].as_str().unwrap())).unwrap();
-    assert_eq!(wav.tracks.len(), 2);
-    assert_eq!(wav.tracks[0], wav.tracks[1]);
-    let state = shared.lock().unwrap();
-    assert_eq!(state.playback.as_ref().unwrap().1, 2);
-    let during: Vec<_> = poll["data"]["events"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|e| e["payload"]["phase"] == "recording")
-        .collect();
-    assert!(during.len() >= 3);
-    assert!(
-        during
+        let payload = json!({"record_dir":record_dir,"play_path":play,"mode":"headphones","confirm_warnings":true,"append":append});
+        let started = svc.call("start_recording", vec![payload]);
+        assert_eq!(started["ok"], true, "{started}");
+        assert_eq!(started["data"]["job"]["cancellable"], true);
+        let id = started["data"]["job"]["job_id"].clone();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while svc.call("poll_job", vec![id.clone()])["data"]["events"]
+            .as_array()
+            .unwrap()
             .iter()
-            .all(|e| e["payload"]["progress"].as_f64().unwrap() <= 0.98)
-    );
-    assert!(
-        during
-            .iter()
-            .skip(1)
-            .any(|e| e["payload"]["elapsed"].as_f64().unwrap() > 0.0)
-    );
-    let boot = svc.call("bootstrap", vec![]);
-    assert_eq!(boot["data"]["capabilities"]["recording"], true);
-    assert_eq!(boot["data"]["capabilities"]["recording_cancel"], false);
+            .all(|event| event["payload"]["phase"] != "recording")
+        {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(svc.call("cancel_job", vec![id.clone()])["ok"], true);
+        let poll = loop {
+            let poll = svc.call("poll_job", vec![id.clone()]);
+            if matches!(
+                poll["data"]["job"]["status"].as_str(),
+                Some("succeeded" | "failed" | "cancelled")
+            ) {
+                break poll;
+            }
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        assert_eq!(poll["data"]["job"]["status"], "cancelled", "{poll}");
+        assert!(
+            poll["data"]["events"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|event| event["payload"]["phase"] == "cancelled")
+        );
+        if append {
+            assert_eq!(std::fs::read(record_path).unwrap(), original);
+        } else {
+            assert!(!record_path.exists());
+        }
+        let boot = svc.call("bootstrap", vec![]);
+        assert_eq!(boot["data"]["capabilities"]["recording_cancel"], true);
+    }
 }
 
 #[test]

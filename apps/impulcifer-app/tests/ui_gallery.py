@@ -21,7 +21,7 @@ EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
-                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 2 * (2 * 2 * 2))
+                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 3 * (2 * 2 * 2))
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -32,8 +32,10 @@ IMMERSIVE = [{"id": "22.2", "name": "NHK 22.2", "file_name": "nhk_22.2.wav",
               "channels": [{"label": label, "slot": slot} for label, slot in NHK_22_2]}]
 # 7.1 as bootstrap describes it: the Windows (WAVE) device order the sweep
 # tracks are written in, and the order an HDMI output on macOS takes (ADR 0012).
-TRACK_ORDERS = {"7.1": ["FL", "FR", "FC", "LFE", "BL", "BR", "SL", "SR"]}
-HDMI_ORDERS = {"7.1": ["FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR"]}
+TRACK_ORDERS = {"7.1": ["FL", "FR", "FC", "LFE", "BL", "BR", "SL", "SR"],
+                "7.1.4": ["FL", "FR", "FC", "LFE", "BL", "BR", "SL", "SR", "TFL", "TFR", "TBL", "TBR"]}
+HDMI_ORDERS = {"7.1": ["FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR"],
+               "7.1.4": ["FL", "FR", "LFE", "FC", "SL", "SR", "BL", "BR", "TFL", "TFR", "TBL", "TBR"]}
 
 
 def wrap(azimuth):
@@ -69,6 +71,7 @@ SPEAKER_NAMES = ["FL", "FR", "FC", "BL", "BR", "SL", "SR", "WL", "WR", "TFL", "T
                  "BC", "HFL", "HFR", "HFC", "HBL", "HBR", "HBC", "TC", "DFL", "DFR", "DFC"]
 # bootstrap sweep.layout_speakers: every speaker a layout sweeps, without LFE.
 LAYOUT_SPEAKERS = {"stereo": ["FL", "FR"], "7.1": ["FL", "FR", "FC", "BL", "BR", "SL", "SR"],
+                   "7.1.4": ["FL", "FR", "FC", "BL", "BR", "SL", "SR", "TFL", "TFR", "TBL", "TBR"],
                    "22.2": [slot for _, slot in NHK_22_2 if not slot.startswith("LFE")]}
 ADVANCED_KEYS = {"fs", "target_level", "channel_balance", "bass_boost_gain", "bass_boost_fc", "bass_boost_q", "tilt",
                  "decay", "head_ms", "jamesdsp", "hangloose", "remove_silent_channels", "interactive_plots",
@@ -133,13 +136,16 @@ def mock_script(skin, theme, language, scenario):
     return {...meta, existing_files: allPresent ? [...meta.existing_files, ...planned.map(file => file.path)] : meta.existing_files,
       planned_files: allPresent ? [] : planned, hangloose_dir: request.include_hangloose ? `${directory}/Hangloose` : null};
   };
-  const job = status => ({job_id: "gallery", kind, status, cancellable: false, result: null, error: null});
+  const job = status => ({job_id: "gallery", kind, status, cancellable: kind === "recording" || kind === "brir",
+    result: null, error: null});
+  // "recording-running": the recording keeps running until it is cancelled.
+  let cancelRequested = false;
   const settings = {skin, theme, language, strings, frontend: "webview", first_run: false,
     languages: [{code: "en", name: "English"}, {code: "ko", name: "한국어"}]};
   const methods = {
     bootstrap: () => ok({version: "3.0.0-alpha.1", platform: mac ? "darwin" : "windows", install_kind: "dev",
       webview_backend: mac ? "cocoa" : "edgechromium",
-      brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "22.2"], default_fs: 48000, default_duration: 5,
+      brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "7.1.4", "22.2"], default_fs: 48000, default_duration: 5,
         speaker_names: fixture.speakerNames, layout_speakers: fixture.layoutSpeakers, immersive: fixture.immersive,
         guided: fixture.guided, track_orders: fixture.trackOrders, hdmi_orders: fixture.hdmiOrders},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
@@ -173,6 +179,14 @@ def mock_script(skin, theme, language, scenario):
     },
     start_output_recovery: request => {kind = "output_recovery"; lastRequest = request; return ok({job: job("running")});},
     start_recording: request => {
+      // An 8-channel DENON with a 7.1.4 sweep of its height speakers: the service asks first.
+      const speakers = String(request.sweep?.speakers || "").split(",");
+      if (mac && !request.confirm_warnings && !request.output_device && request.sweep?.tracks === "7.1.4"
+          && speakers.includes("TFL")) {
+        return Promise.resolve(error("CONFIRMATION_REQUIRED", "DENON-AVR has 8 output channels",
+          {warning: "output_channels_short", device: "DENON-AVR", available: 8, required: 12, first: 9, last: 12,
+           missing: "TFL, TFR, TBL, TBR", layout: "7.1.4"}));
+      }
       lastRequest = request; kind = "recording";
       if (scenario === "unavailable") return Promise.resolve(error("INVALID_REQUEST", "backend cannot fix mode",
         {kind: "share_mode_unavailable", share_mode: request.share_mode, backend: "cpal"}));
@@ -180,6 +194,9 @@ def mock_script(skin, theme, language, scenario):
     },
     start_brir: () => {kind = "brir"; return ok({job: job("running")});},
     poll_job: () => {
+      if (kind === "recording" && scenario === "recording-running") {
+        return ok({job: job(cancelRequested ? "cancelled" : "running"), events: [], next_seq: 1});
+      }
       if (kind === "recording") {
         if (scenario === "refused") return ok({job: {...job("failed"), error: error("DEVICE_ERROR", "device refused exclusive",
           {kind: "share_mode_refused", share_mode: "exclusive", reason: "AUDCLNT_E_DEVICE_IN_USE"}).error}, events: [], next_seq: 1});
@@ -201,7 +218,7 @@ def mock_script(skin, theme, language, scenario):
       written = true;
       return ok({job: {...job("succeeded"), result}, events: [], next_seq: 1});
     },
-    cancel_job: () => ok({job: job("cancelled")}),
+    cancel_job: () => { cancelRequested = true; return ok({job: job("cancelled")}); },
     check_for_updates: () => scenario === "update"
       ? ok({update_available: true, current_version: "3.0.0-alpha.1", latest_version: fixture.release.version,
         download_url: "https://example.invalid/Impulcifer-win-Setup.exe", release_notes: fixture.release.notes, release_url: null})
@@ -619,7 +636,10 @@ def channel_order_checks(browser):
     context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
     navigate(page, "recorder")
     page.locator("#rf-sweep-layout").select_option("7.1")
-    assert page.locator("#rf-channel-order-row").is_hidden() and page.locator("#rf-layout-row").is_hidden()
+    # No channel order on Windows; the map shows here only for the 2-channel
+    # output's shortage warning (short_output_checks).
+    assert page.locator("#rf-channel-order-row").is_hidden()
+    assert page.locator("#rf-layout-row").is_visible() and page.locator("#rf-channel-shortage").is_visible()
     page.locator("#btn-start-recording").click()
     answer(page)
     page.wait_for_function("galleryCalls.some(c => c.method === 'start_recording')")
@@ -665,6 +685,86 @@ def channel_order_checks(browser):
     print("Gallery channel order checks: Windows hidden, macOS auto by HDMI flag, map order, request OK", flush=True)
 
 
+def short_output_checks(browser):
+    """An output with fewer channels than the layout still records (the
+    maintainer chose a warning over a block): the note names the device and the
+    swept speakers that will not play, the device map strikes the channels the
+    device lacks, the record button carries the warning and stays enabled, and
+    the confirmation repeats it. Speakers within the device bring no warning."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "darwin")
+    navigate(page, "recorder")
+    note, record = page.locator("#rf-channel-shortage"), page.locator("#btn-start-recording")
+    struck = lambda: page.locator('#rf-layout-map .layout-ch[data-missing="true"] .layout-ch-slot').all_inner_texts()
+    assert note.is_hidden() and record.get_attribute("data-warn") is None
+    page.locator("#rf-sweep-layout").select_option("7.1.4")
+    text = note.inner_text()
+    assert note.is_visible() and "DENON-AVR" in text and "TFL, TFR, TBL, TBR" in text and "9" in text and "12" in text, text
+    assert struck() == ["TFL", "TFR", "TBL", "TBR"], struck()
+    assert record.get_attribute("data-warn") == "true" and record.is_enabled()
+    record.click()
+    answer(page)  # the setup confirmation
+    # The service asks for the short output (confirm_warnings), worded like the note.
+    assert answer(page) == text
+    page.wait_for_function("galleryCalls.filter(c => c.method === 'start_recording').length === 2")
+    assert page.evaluate("galleryCalls.filter(c => c.method === 'start_recording').at(-1).args[0].confirm_warnings") is True
+    page.wait_for_function("!document.querySelector('#btn-start-recording').disabled")
+    page.locator("#rf-sweep-speakers").fill("FL,FR")
+    assert note.is_hidden() and record.get_attribute("data-warn") is None
+    assert struck() == ["TFL", "TFR", "TBL", "TBR"]  # the map still shows what the device lacks
+    page.locator("#rf-layout-use-all").click()
+    assert note.is_visible()
+    page.locator("#rf-output-device").select_option("Scarlett 18i20 USB")
+    assert note.is_hidden() and struck() == []
+    assert native_dialogs(page) == 0 and not errors, errors
+    context.close()
+
+    # Windows, a stereo output and 7.1: the map appears for the warning alone.
+    context, page, errors = open_page(browser, "studio", "dark", "ko", "idle")
+    navigate(page, "recorder")
+    page.locator("#rf-sweep-layout").select_option("7.1")
+    text = page.locator("#rf-channel-shortage").inner_text()
+    assert "Speakers (USB Audio)" in text and "FC, BL, BR, SL, SR" in text, text
+    assert page.locator("#rf-layout-row").is_visible()
+    assert struck() == ["FC", "—", "BL", "BR", "SL", "SR"], struck()
+    assert not errors, errors
+    context.close()
+    print("Gallery short output checks: note, struck channels, warned record button, confirmation, quiet within the device OK", flush=True)
+
+
+def recording_cancel_checks(browser):
+    """A running recording can be cancelled: from the page header in Studio,
+    from the job dialog in Stable; the status then says nothing was saved."""
+    strings = catalog("en")
+    status = ("[...document.querySelectorAll('[data-rec-status]')]"
+              ".some(node => node.textContent.includes(%s))" % json.dumps(strings["recording_status_cancelled"]))
+    context, page, errors = open_page(browser, "studio", "dark", "en", "recording-running")
+    navigate(page, "recorder")
+    cancel = page.locator("#btn-cancel-recording")
+    assert cancel.is_hidden()
+    page.locator("#btn-record-headphones").click()
+    answer(page)
+    cancel.wait_for(state="visible")
+    cancel.click()
+    page.wait_for_function("galleryCalls.some(c => c.method === 'cancel_job')")
+    page.wait_for_function(status)
+    cancel.wait_for(state="hidden")
+    assert not errors, errors
+    context.close()
+
+    context, page, errors = open_page(browser, "stable", "dark", "en", "recording-running")
+    navigate(page, "recorder")
+    page.locator("#btn-record-headphones").click()
+    answer(page)
+    page.locator("#job-modal-cancel").wait_for(state="visible")
+    assert page.locator("#btn-cancel-recording").is_hidden()
+    page.locator("#job-modal-cancel").click()
+    page.wait_for_function("galleryCalls.some(c => c.method === 'cancel_job')")
+    page.wait_for_function(status)
+    assert not errors, errors
+    context.close()
+    print("Gallery recording cancel checks: Studio header, Stable dialog, cancelled status OK", flush=True)
+
+
 def layout_checks(browser):
     """Immersive layouts (ADR 0007): the recorder shows which speaker code each
     device channel plays; choosing any layout fills in its speakers, which name
@@ -690,9 +790,10 @@ def layout_checks(browser):
     speakers.fill("WL,WR")
     page.locator("#rf-layout-use-all").click()
     assert speakers.input_value() == expected
-    # 7.1 has no channel map, and still names the recording after its seven speakers.
+    # 7.1 has no channel map of its own (the mock's 2-channel output shows one only
+    # with the shortage warning), and still names the recording after its seven speakers.
     layout.select_option("7.1")
-    assert not page.locator("#rf-layout-row").is_visible()
+    assert page.locator("#rf-layout-row").is_visible() == page.locator("#rf-channel-shortage").is_visible()
     assert speakers.input_value() == "FL,FR,FC,BL,BR,SL,SR"
     page.wait_for_function("document.getElementById('rf-resolved-path').textContent.includes('FL,FR,FC,BL,BR,SL,SR.wav')")
     layout.select_option("stereo")
@@ -1518,6 +1619,8 @@ def render_gallery(output):
         behavior_checks(browser)
         dialog_checks(browser)
         channel_order_checks(browser)
+        short_output_checks(browser)
+        recording_cancel_checks(browser)
         fill_lfe_checks(browser)
         advanced_checks(browser)
         layout_checks(browser)
@@ -1589,6 +1692,13 @@ def render_gallery(output):
             page.locator("#btn-start-recording").click()
             page.locator("#ask-modal:not([hidden])").wait_for()
             shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-confirm", errors))
+            context.close()
+        for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, skin, theme, language, "darwin")
+            navigate(page, "recorder")
+            page.locator("#rf-sweep-layout").select_option("7.1.4")
+            page.locator("#rf-channel-shortage").scroll_into_view_if_needed()
+            shots.append(shoot(page, output, f"recorder-{skin}-{language}-{theme}-short-output", errors))
             context.close()
         for skin, theme, language, scenario in itertools.product(SKINS, THEMES, LANGUAGES, EQ_SCENARIOS):
             context, page, errors = open_page(browser, skin, theme, language, scenario)
