@@ -5,6 +5,7 @@ use super::{
 use impulcifer_dsp::{
     DspError,
     fr::FrequencyResponse,
+    itd::{AlignmentReport, Correction},
     pipeline::{StageObserver, StageProgress, run_pipeline, total_steps},
     stages::equalize::AppliedEqualization,
     virtual_bass::{VirtualBassMode, VirtualBassPlan, VirtualBassReport},
@@ -20,7 +21,52 @@ use std::path::{Path, PathBuf};
 
 pub struct BrirRun {
     pub output_path: PathBuf,
+    pub alignment: Value,
 }
+
+fn one_decimal(value: f64) -> f64 {
+    (value * 10.0).round() / 10.0
+}
+
+fn optional_integer(value: Option<f64>) -> Value {
+    value.map_or(Value::Null, |value| json!(value.round() as i64))
+}
+
+fn optional_decimal(value: Option<f64>) -> Value {
+    value.map_or(Value::Null, |value| json!(one_decimal(value)))
+}
+
+pub fn alignment_json(report: &AlignmentReport) -> Value {
+    json!({
+        "mode": report.mode,
+        "head_radius_cm": one_decimal(report.head_radius_cm),
+        "head_radius_source": report.head_radius_source,
+        "yaw_deg": optional_decimal(report.yaw_deg),
+        "common_offset_us": optional_integer(report.common_offset_us),
+        "input_balance_db": optional_decimal(report.input_balance_db),
+        "hf_asymmetry_db": optional_decimal(report.hf_asymmetry_db),
+        "headphone_balance_db": optional_decimal(report.headphone_balance_db),
+        "predicted_balance_db": optional_decimal(report.predicted_balance_db),
+        "speakers": report.speakers.iter().map(|speaker| json!({
+            "speaker": speaker.speaker,
+            "measured_us": optional_integer(speaker.measured_us),
+            "model_us": speaker.model_us.round() as i64,
+            "target_us": optional_integer(speaker.target_us),
+            "after_us": optional_integer(speaker.after_us),
+            "applied_us": optional_integer(speaker.applied_us),
+            "lf_ild_db": optional_decimal(speaker.lf_ild_db),
+            "hf_ild_db": optional_decimal(speaker.hf_ild_db),
+            "skipped": speaker.skipped,
+        })).collect::<Vec<_>>(),
+        "pairs": report.pairs.iter().map(|pair| json!({
+            "left": pair.left,
+            "right": pair.right,
+            "sum_us": pair.sum_us.round() as i64,
+            "yaw_deg": optional_decimal(pair.yaw_deg),
+        })).collect::<Vec<_>>(),
+    })
+}
+
 struct Events<'a> {
     ctx: &'a JobContext,
     catalog: &'a Catalog,
@@ -91,6 +137,7 @@ struct Observer<'a, 'b> {
     directory: &'a Path,
     estimator: &'a impulcifer_dsp::estimator::SweepEstimator,
     headphone: Option<(FrequencyResponse, FrequencyResponse)>,
+    alignment: Option<AlignmentReport>,
 }
 impl StageObserver for Observer<'_, '_> {
     fn on_virtual_bass(
@@ -253,6 +300,103 @@ impl StageObserver for Observer<'_, '_> {
                 }
             }
         }
+        Ok(())
+    }
+    fn on_alignment(
+        &mut self,
+        report: &AlignmentReport,
+        corrections: &[Correction],
+    ) -> Result<(), DspError> {
+        let mut report = report.clone();
+        if self.config.do_headphone_compensation
+            && let Some((left, right)) = &self.headphone
+        {
+            let differences: Vec<_> = left
+                .frequency
+                .iter()
+                .zip(&left.raw)
+                .zip(&right.raw)
+                .filter_map(|((frequency, left), right)| {
+                    (200.0..=2_000.0)
+                        .contains(frequency)
+                        .then_some(left - right)
+                })
+                .collect();
+            if !differences.is_empty() {
+                let headphone = differences.iter().sum::<f64>() / differences.len() as f64;
+                report.headphone_balance_db = Some(headphone);
+                report.predicted_balance_db =
+                    report.input_balance_db.map(|speaker| speaker - headphone);
+            }
+        }
+        let decimal =
+            |value: Option<f64>| value.map_or_else(|| "?".into(), |value| format!("{value:.1}"));
+        let integer = |value: Option<f64>| {
+            value.map_or_else(|| "?".into(), |value| format!("{:.0}", value.round()))
+        };
+        self.events.log(
+            "info",
+            "cli_itd_report",
+            json!({
+                "yaw": decimal(report.yaw_deg),
+                "offset_us": integer(report.common_offset_us),
+                "balance": decimal(report.input_balance_db),
+            }),
+        );
+        if let (Some(speaker), Some(headphone), Some(predicted)) = (
+            report.input_balance_db,
+            report.headphone_balance_db,
+            report.predicted_balance_db,
+        ) {
+            let values = json!({
+                "speaker_db": format!("{speaker:.1}"),
+                "headphone_db": format!("{headphone:.1}"),
+                "predicted_db": format!("{predicted:.1}"),
+            });
+            if predicted.abs() >= 2.0 {
+                self.events
+                    .log("warning", "cli_itd_pairing_warning", values);
+            } else {
+                self.events.log("info", "cli_itd_pairing", values);
+            }
+        }
+        if let Some(yaw) = report.yaw_deg.filter(|yaw| yaw.abs() >= 3.0) {
+            self.events.log(
+                "warning",
+                "cli_itd_head_turned",
+                json!({"yaw":format!("{yaw:.1}")}),
+            );
+        }
+        let adjusted: Vec<_> = corrections
+            .iter()
+            .filter(|correction| !correction.skipped && correction.applied_us.abs() >= 0.5)
+            .collect();
+        if !adjusted.is_empty() {
+            let max_us = adjusted
+                .iter()
+                .map(|correction| correction.applied_us.abs())
+                .fold(0.0, f64::max);
+            self.events.log(
+                "info",
+                "cli_itd_corrected",
+                json!({
+                    "mode":report.mode,
+                    "count":adjusted.len(),
+                    "max_us":max_us.round() as i64,
+                }),
+            );
+        }
+        for correction in corrections.iter().filter(|correction| correction.skipped) {
+            self.events.log(
+                "warning",
+                "cli_itd_skipped",
+                json!({
+                    "speaker":correction.speaker,
+                    "us":correction.applied_us.round() as i64,
+                }),
+            );
+        }
+        self.alignment = Some(report);
         Ok(())
     }
     fn on_equalized(&mut self, applied: &[AppliedEqualization]) -> Result<(), DspError> {
@@ -464,29 +608,31 @@ pub(crate) fn run_with_choices(
             })
             .map(|s| usize::from(s.left.is_some()) + usize::from(s.right.is_some()))
             .sum();
-        let outputs = run_pipeline(
+        let mut observer = Observer {
+            events: &mut events,
             config,
-            inputs,
-            &mut Observer {
-                events: &mut events,
-                config,
-                channels,
-                decay_channels,
-                sample_rate: estimator.fs,
-                previous: None,
-                vbass_crossover,
-                vbass_applied: config.vbass_mode == "legacy",
-                directory: &dir.dir,
-                estimator: &estimator,
-                headphone,
-            },
-        )?;
+            channels,
+            decay_channels,
+            sample_rate: estimator.fs,
+            previous: None,
+            vbass_crossover,
+            vbass_applied: config.vbass_mode == "legacy",
+            directory: &dir.dir,
+            estimator: &estimator,
+            headphone,
+            alignment: None,
+        };
+        let mut outputs = run_pipeline(config, inputs, &mut observer)?;
+        if let Some(alignment) = observer.alignment.take() {
+            outputs.alignment = alignment;
+        }
         events.check_cancelled()?;
         let written =
             write_outputs_checked(&dir.dir, &outputs, config, i18n, &estimator, &mut events)?;
         events.check_cancelled()?;
         Ok(BrirRun {
             output_path: written.hesuvi,
+            alignment: alignment_json(&outputs.alignment),
         })
     })();
     // An observer cancellation is carried through a DSP error; retain the job contract.

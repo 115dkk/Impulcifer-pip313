@@ -396,7 +396,7 @@ impl ImpulciferService {
                             ctx,
                             &data,
                         )?;
-                        Ok(json!({"output_path":run.output_path}))
+                        Ok(json!({"output_path":run.output_path,"alignment":run.alignment}))
                     })
                     .map_err(|code| {
                         ipc::error(

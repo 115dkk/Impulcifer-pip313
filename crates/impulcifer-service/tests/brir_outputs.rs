@@ -5,6 +5,7 @@ use impulcifer_dsp::{
     estimator::SweepEstimator,
     hrir::{Hrir, SpeakerIrs, compact_tracks},
     ir::ImpulseResponse,
+    itd::analyze,
     pipeline::PipelineOutputs,
     stages::readme::readme_data,
 };
@@ -64,6 +65,7 @@ fn outputs(compact: bool) -> (PipelineOutputs, SweepEstimator) {
     let mut jd = hrir.subset(&["FL", "FR"]);
     jd.normalize(Some(-0.1), None).unwrap();
     let output = PipelineOutputs {
+        alignment: analyze(&hrir, None, 1.5),
         applied_gain_db: 0.0,
         readme: readme_data(&hrir, 8000, 0.0),
         hrir_tracks: tracks(&HEXADECAGONAL_TRACK_ORDER),
@@ -233,7 +235,7 @@ fn demo_readme_korean_bytes_match_python() {
     let p = wait(&jobs, &job.job_id);
     assert_eq!(p.job.status, JobStatus::Succeeded, "{:?}", p.job.error);
     let expected = std::fs::read_to_string(golden("p11_default_ko.txt")).unwrap();
-    let actual = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
+    let actual = without_itd_section(&std::fs::read_to_string(temp.0.join("README.md")).unwrap());
     let diffs = readme_differences(&actual, &expected, 0.1, 2.0);
     assert!(diffs.is_empty(), "Korean README parity failed: {diffs:#?}");
 }

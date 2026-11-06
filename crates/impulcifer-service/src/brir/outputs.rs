@@ -213,12 +213,65 @@ fn tuning2_readme(report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report) 
     out
 }
 
+fn alignment_readme(report: &impulcifer_dsp::itd::AlignmentReport, catalog: &Catalog) -> String {
+    let integer = |value: Option<f64>| {
+        value.map_or_else(|| "?".into(), |value| format!("{:.0}", value.round()))
+    };
+    let decimal =
+        |value: Option<f64>| value.map_or_else(|| "?".into(), |value| format!("{value:.1}"));
+    let mut out = format!(
+        "## {}\n\n",
+        catalog.translate("cli_readme_itd_title", &json!({}))
+    );
+    for speaker in &report.speakers {
+        out.push_str(&catalog.translate(
+            "cli_readme_itd_row",
+            &json!({
+                "speaker":speaker.speaker,
+                "measured_us":integer(speaker.measured_us),
+                "model_us":integer(Some(speaker.model_us)),
+                "after_us":integer(speaker.after_us),
+            }),
+        ));
+        out.push('\n');
+    }
+    out.push('\n');
+    out.push_str(&catalog.translate(
+        "cli_readme_itd_summary",
+        &json!({
+            "yaw":decimal(report.yaw_deg),
+            "offset_us":integer(report.common_offset_us),
+            "balance":decimal(report.input_balance_db),
+            "radius_cm":format!("{:.1}",report.head_radius_cm),
+        }),
+    ));
+    out.push('\n');
+    if let (Some(speaker), Some(headphone), Some(predicted)) = (
+        report.input_balance_db,
+        report.headphone_balance_db,
+        report.predicted_balance_db,
+    ) {
+        out.push_str(&catalog.translate(
+            "cli_readme_itd_pairing",
+            &json!({
+                "speaker_db":format!("{speaker:.1}"),
+                "headphone_db":format!("{headphone:.1}"),
+                "predicted_db":format!("{predicted:.1}"),
+            }),
+        ));
+        out.push('\n');
+    }
+    out.push('\n');
+    out
+}
+
 pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String {
-    render_readme_with_layouts(data, catalog, date, &[], &[])
+    render_readme_with_layouts(data, None, catalog, date, &[], &[])
 }
 
 fn render_readme_with_layouts(
     data: &ReadmeData,
+    alignment: Option<&impulcifer_dsp::itd::AlignmentReport>,
     catalog: &Catalog,
     date: &str,
     layouts: &[LayoutOutput],
@@ -312,6 +365,10 @@ fn render_readme_with_layouts(
     if let Some(report) = &data.tuning2 {
         out.push_str(&tuning2_readme(report));
     }
+    let has_tuning = data.tuning.is_some() || data.tuning2.is_some();
+    if has_tuning && let Some(alignment) = alignment {
+        out.push_str(&alignment_readme(alignment, catalog));
+    }
     if !data.reflections.is_empty() {
         out.push_str(&format!("## {}\n", t("cli_readme_reflection_title")));
         let mut previous = "";
@@ -343,6 +400,9 @@ fn render_readme_with_layouts(
                 out.push_str("\n\n");
             }
         }
+    }
+    if !has_tuning && let Some(alignment) = alignment {
+        out.push_str(&alignment_readme(alignment, catalog));
     }
     if !layouts.is_empty() {
         out.push_str(&format!("## {}\n\n", t("cli_readme_layouts_title")));
@@ -441,6 +501,7 @@ pub(crate) fn write_outputs_checked(
     // Python open(..., "w") uses the host's native text-mode newline.
     let content = render_readme_with_layouts(
         &outputs.readme,
+        Some(&outputs.alignment),
         i18n,
         &date,
         &outputs.layouts,

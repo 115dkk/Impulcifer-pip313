@@ -1470,3 +1470,50 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 @media (max-width: 900px) {
   .file-grid.layout-grid { grid-template-columns: 1fr; }
 }
+
+/* ------------------------------------------- Interaural alignment report
+   (ADR 0014). Shown in the activity card once a BRIR job has finished; the
+   summary is a key/value grid, the table one row per measured speaker. */
+.align-report {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-2);
+}
+.align-head { display: flex; align-items: baseline; gap: 10px; }
+.align-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--fg-0); }
+.align-mode { margin-left: auto; font-size: 12px; color: var(--fg-2); }
+.align-summary { margin: 0; grid-template-columns: 220px 1fr; }
+.align-summary dd { margin: 0; }
+.align-summary .kv-val { font-variant-numeric: tabular-nums; }
+.align-flag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.align-flag.warn { background: var(--warn); color: #ffffff; }
+.align-flag.ok { background: var(--bg-3); color: var(--fg-1); }
+.align-table-wrap { overflow-x: auto; }
+.align-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.align-table th, .align-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.align-table th { color: var(--fg-1); font-weight: 700; }
+.align-table td { color: var(--fg-1); }
+.align-table th.num, .align-table td.num { text-align: right; }
+.align-table td.speaker { color: var(--fg-0); font-weight: 700; }
+.align-table tr.skipped td { color: var(--fg-3); }
+.align-table td.changed { color: var(--fg-0); }
+@media (max-width: 700px) {
+  .align-summary { grid-template-columns: 1fr; gap: 2px 0; }
+  .align-summary .kv-val { margin-bottom: 6px; }
+}

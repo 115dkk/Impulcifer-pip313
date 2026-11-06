@@ -6,6 +6,7 @@ use crate::{
     estimator::SweepEstimator,
     fr::FrequencyResponse,
     hrir::{Hrir, compact_tracks},
+    itd::{self, AlignmentReport, Correction, ItdMode},
     mic_deviation::{
         MicDeviationAnalysis, MicDeviationOptions, apply_mic_deviation_correction_with_analysis,
     },
@@ -66,6 +67,13 @@ pub trait StageObserver {
     ) -> Result<(), DspError> {
         Ok(())
     }
+    fn on_alignment(
+        &mut self,
+        _report: &AlignmentReport,
+        _corrections: &[Correction],
+    ) -> Result<(), DspError> {
+        Ok(())
+    }
     /// Read-only plot snapshot before any later resampling; no progress step added.
     fn on_plot(&mut self, _key: StageKey, _hrir: &Hrir) -> Result<(), DspError> {
         Ok(())
@@ -94,6 +102,7 @@ pub struct LayoutOutput {
 #[derive(Clone, Debug)]
 pub struct PipelineOutputs {
     pub hrir: Hrir,
+    pub alignment: AlignmentReport,
     pub applied_gain_db: f64,
     pub readme: ReadmeData,
     pub hrir_tracks: Vec<Vec<f64>>,
@@ -230,6 +239,7 @@ pub fn run_pipeline(
     let mut vbass = vbass;
     let mut applied_gain_db = 0.0;
     let mut readme = None;
+    let mut alignment = None;
     let mut tuning_report = None;
     let mut tuning2_report = None;
     let mut responses_tracks = Vec::new();
@@ -270,8 +280,19 @@ pub fn run_pipeline(
             }
             StageKey::CropAndAlign => {
                 hrir.crop_heads(config.head_ms)?;
+                let mut report = itd::analyze(&hrir, config.head_radius, 1.5);
+                let mode = ItdMode::parse(&config.itd_mode)
+                    .ok_or_else(|| DspError::InvalidArgument("invalid itd_mode".into()))?;
+                let corrections = if mode == ItdMode::Off {
+                    Vec::new()
+                } else {
+                    itd::correct(&mut hrir, &mut report, mode)
+                };
                 hrir.align_ipsilateral_all(&IPSILATERAL_PAIRS, 30.0);
                 hrir.align_onset_groups_peak_leftref(None)?;
+                itd::measure_after(&hrir, &mut report, 1.5);
+                observer.on_alignment(&report, &corrections)?;
+                alignment = Some(report);
                 hrir.crop_tails(&estimator)?;
                 if config.do_room_correction
                     && config.room_mode == "tuning"
@@ -507,6 +528,7 @@ pub fn run_pipeline(
     }
     Ok(PipelineOutputs {
         hrir,
+        alignment: alignment.expect("crop and align always runs"),
         applied_gain_db,
         readme: readme.unwrap(),
         hrir_tracks,

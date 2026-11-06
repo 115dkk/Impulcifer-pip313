@@ -2614,6 +2614,111 @@ function addOutputArgs(args, p) {
   args.lfe_mode = /** @type {LfeMode} */ (val(`${p}-lfe-mode`) || "none");
 }
 
+/* ADR 0014: each ITD choice shows its own explanation, and the head radius
+   only matters when a model is involved (it still feeds the report's model
+   column, so the row stays visible; the hint says what "auto" does). */
+/** @param {string} p */
+function updateItdHint(p) {
+  const mode = val(`${p}-itd-mode`) || "off";
+  for (const node of $(`${p}-itd-mode-row`).querySelectorAll("[data-itd-mode]")) {
+    if (node instanceof HTMLElement) node.hidden = node.dataset.itdMode !== mode;
+  }
+}
+
+/* ADR 0014: the alignment report of a finished BRIR job. A pure view: it
+   reads the report and the locale table and writes the activity card's
+   report block. Hidden again with `null` (a new job, a failure). */
+/** @param {AlignmentReport | null | undefined} report */
+function renderAlignment(report) {
+  const block = $("brir-alignment");
+  if (!report || !Array.isArray(report.speakers) || report.speakers.length === 0) {
+    block.hidden = true;
+    return;
+  }
+  /** @param {number | null | undefined} value @param {number} decimals @param {string} unit */
+  const num = (value, decimals, unit) =>
+    value === null || value === undefined || !Number.isFinite(value) ? "–" : `${value.toFixed(decimals)}${unit}`;
+  /** @param {number | null | undefined} value @param {number} decimals @param {string} unit */
+  const signed = (value, decimals, unit) =>
+    value === null || value === undefined || !Number.isFinite(value)
+      ? "–"
+      : `${value > 0 ? "+" : ""}${value.toFixed(decimals)}${unit}`;
+
+  $("brir-alignment-mode").textContent = `itd_mode=${report.mode}`;
+
+  const summary = $("brir-alignment-summary");
+  summary.replaceChildren();
+  /** @param {string} key @param {string} text @param {"warn" | "ok" | null} flag @param {string} flagText */
+  const row = (key, text, flag, flagText) => {
+    const dt = document.createElement("dt");
+    dt.className = "kv-key";
+    dt.textContent = t(key);
+    const dd = document.createElement("dd");
+    dd.className = "kv-val";
+    dd.textContent = text;
+    if (flag) {
+      const chip = document.createElement("span");
+      chip.className = `align-flag ${flag}`;
+      chip.textContent = flagText;
+      dd.append(chip);
+    }
+    summary.append(dt, dd);
+  };
+  const yaw = report.yaw_deg;
+  row(
+    "label_itd_yaw",
+    yaw === null || yaw === undefined ? "–" : fmt(t("value_itd_yaw"), { deg: Math.abs(yaw).toFixed(1), side: t(yaw >= 0 ? "value_itd_left" : "value_itd_right") }),
+    yaw !== null && yaw !== undefined && Math.abs(yaw) >= 3 ? "warn" : null,
+    t("flag_itd_head_turned"),
+  );
+  row("label_itd_offset", signed(report.common_offset_us, 0, " µs"), null, "");
+  row(
+    "label_itd_input_balance",
+    signed(report.input_balance_db, 1, " dB"),
+    report.input_balance_db !== null && Math.abs(report.input_balance_db) >= 3 ? "warn" : null,
+    t("flag_itd_input_unbalanced"),
+  );
+  if (report.headphone_balance_db !== null || report.predicted_balance_db !== null) {
+    row("label_itd_headphone_balance", signed(report.headphone_balance_db, 1, " dB"), null, "");
+    const predicted = report.predicted_balance_db;
+    const bad = predicted !== null && Math.abs(predicted) >= 2;
+    row("label_itd_predicted_balance", signed(predicted, 1, " dB"), bad ? "warn" : "ok", t(bad ? "flag_itd_pairing_warning" : "flag_itd_pairing_ok"));
+  }
+  row("label_itd_hf_asymmetry", signed(report.hf_asymmetry_db, 1, " dB"), null, "");
+  const radius = report.head_radius_cm;
+  row(
+    "label_itd_head_radius",
+    radius === null ? "–" : `${num(radius, 1, " cm")} (${t(`value_itd_radius_${report.head_radius_source || "default"}`)})`,
+    null,
+    "",
+  );
+
+  const rows = $("brir-alignment-rows");
+  rows.replaceChildren();
+  for (const speaker of report.speakers) {
+    const tr = document.createElement("tr");
+    if (speaker.skipped) tr.className = "skipped";
+    const cells = [
+      ["speaker", speaker.speaker],
+      ["num", signed(speaker.measured_us, 0, "")],
+      ["num", signed(speaker.model_us, 0, "")],
+      ["num", signed(speaker.after_us, 0, "")],
+      ["num", signed(speaker.lf_ild_db, 1, "")],
+    ];
+    cells.forEach(([className, text], index) => {
+      const td = document.createElement("td");
+      td.className = className;
+      if (index === 3 && speaker.applied_us !== null && speaker.applied_us !== undefined && Math.abs(speaker.applied_us) >= 1) {
+        td.classList.add("changed");
+      }
+      td.textContent = text;
+      tr.append(td);
+    });
+    rows.append(tr);
+  }
+  block.hidden = false;
+}
+
 /* ADR 0013: each LFE choice shows its own explanation. */
 /** @param {string} p */
 function updateLfeHint(p) {

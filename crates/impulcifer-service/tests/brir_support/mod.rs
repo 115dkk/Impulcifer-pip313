@@ -14,6 +14,18 @@ use std::time::{Duration, Instant};
 /// real room noise (default demo), 5 dB / 20 ms for scenarios whose tails are
 /// filter roll-off at the 1e-8 level (virtual bass), where the Lundeby noise
 /// floor is itself numerical noise while the written WAVs still agree to 5e-8.
+pub fn without_itd_section(readme: &str) -> String {
+    let heading = "## Interaural time differences";
+    let Some(start) = readme.find(heading) else {
+        return readme.to_owned();
+    };
+    let after_heading = start + heading.len();
+    let end = readme[after_heading..]
+        .find("\n## ")
+        .map_or(readme.len(), |next| after_heading + next + 1);
+    format!("{}{}", &readme[..start], &readme[end..])
+}
+
 pub fn readme_differences(actual: &str, expected: &str, db_tol: f64, ms_tol: f64) -> Vec<String> {
     let a = actual.replace("\r\n", "\n");
     let b = expected.replace("\r\n", "\n");
