@@ -46,7 +46,11 @@ names the C library the oracle ran on, and `meta.settings` the settings. Familie
 | `s2r_rc_<spk>_<off,dip,protect,bands,all>` | the oracle's end-to-end channel correction: `design_db`, `peq`, `fir`, `response`, `phase_strength`, `notes`, `rolloff_hz` | run the whole RC with the SECS policy; `design_db` is gated, the rest is report-only (see "Gates") |
 
 If a family the exporter produced is missing from this table, or a fixture holds a field this table does not
-name, use it as its `meta` describes and say so in the report.
+name, use it as its `meta` describes and say so in the report. `meta.settings` of the `s2r_rc_*` cases lists
+every switch of the oracle's own configuration, including ones that are not part of this bundle (all `false`
+or empty there); ignore those names, they are not options of Impulcifer. The oracle ran on Windows
+(`meta.libm = "msvcrt"`), so on a Linux or macOS CI runner `s2r_libm_probe` will not match and the 1e-9
+gates apply there; on this machine it should match exactly.
 
 ## What to build
 
