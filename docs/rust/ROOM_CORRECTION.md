@@ -529,11 +529,22 @@ progress increment. `room_range`, `room_max_boost` and every v1 option
 | `room_tuning2_mimo` | false | true / false |
 | `room_tuning2_fsiso` | 150 | 50–150 Hz |
 | `room_tuning2_mimo_low` | `"auto"` | `auto` or 15–150 Hz |
+| `room_tuning2_dip_limit` | false | true / false (3.13.0) |
+| `room_tuning2_low_protect` | false | true / false (3.13.0) |
+| `room_tuning2_bands` | `""` | up to four extra bands `lo-hi,lo-hi` in Hz, `20 ≤ lo < hi ≤ 20000` (3.13.0) |
 
 `room_tuning2_mode`, `room_tuning2_high` and `room_tuning2_mimo_low` accept
 strings or numbers in JSON and are stored as decimal strings, like v1's
 delay. Values outside the ranges are rejected naming the field (SECS clamps;
 Impulcifer validates). These are extension fields and CLI extension options.
+
+`room_tuning2_bands` is a string of comma-separated `lo-hi` pairs in decimal
+Hz; whitespace around a pair is ignored and the empty string means none.
+Validation rejects, naming the field, a pair that is not two finite numbers,
+`lo < 20`, `hi > 20000`, `lo ≥ hi`, and more than four pairs. The pairs are
+sorted by `lo` and merged with the primary band ("Band set" below). The three
+options of 3.13.0 reproduce improvements the maintainer made in SECS 2R
+(ADR 0015); with their defaults every output is byte-identical to 3.12.0.
 
 Modes (FIR taps at 48 kHz, PEQ bands, lift = design delay, phase resolution β):
 
@@ -676,23 +687,62 @@ indices with D < −5 / < −25 (0 if none), and keep `3*(i25−i5)/fs` when
 `i25 > i5 > 0`. `T60 = median`, `f_S = 2000*sqrt(T60/V)`. Then `hi = 500` when
 there is no f_S or `f_S > 500`, else `max(f_S, 100)`.
 
+**Band set** (3.13.0). `bands = merge([(lo, hi)] ++ extras)`: sort the pairs by
+their lower edge and merge a pair whose lower edge is at or below the previous
+pair's upper edge (touching counts) into it, the merged upper edge being the
+larger. With no extras the set is `[(lo, hi)]`. Below, "the band" is the primary
+pair `(lo, hi)` unless the text says "the band set". The phase-score grid is the
+concatenation over the band set of `geomspace(max(lo_b, 20), hi_b, 1200)` (a pair
+with `max(lo_b, 20) ≥ hi_b` contributes no points); with the primary pair alone it
+is `geomspace(max(lo, 20), hi, 1200)` as before.
+
 ### Design curve
 
 For each measured speaker. The channel trim does not enter the design (in SECS
 it cancels): the "comb" response at position p is `comb_p = H_p` and L is the
-speaker's own level L_i.
+speaker's own level L_i. P is the position-weighted power
+`Σ_p w_p |H_p|² / Σ_p w_p` of the channel level.
 
 1. `S = 10*log10(S_b(f)(P) + 1e-30)`, `S3 = 10*log10(S_3(P) + 1e-30)`,
-   `S = max(S, S3 − 3)` — narrow dips are filled by at most 3 dB.
+   `S = max(S, S3 − 3)` (narrow dips are filled by at most 3 dB).
 2. `U = clip(T(max(f,1)) + L − S, −25, cap)` with `cap = max_boost`, or
    `min(2, max_boost)` above 16 kHz.
-3. Long-mode limit: `U = min(U, 3)` inside the long-mode mask.
-4. Band fade: `ℓ = log2(max(f,1e-3))`, `e = min(hi*√2, 0.99*fs/2)`,
-   `U0 = U * clip((ℓ − log2(lo/√2))/0.5, 0, 1) * clip((log2 e − ℓ)/max(log2(e/hi), 1e-3), 0, 1)`.
-   U0 is the design curve.
+3. Dip limit (`room_tuning2_dip_limit`, 3.13.0): `E = 10*log10(S_1(P) + 1e-30)`
+   (one-octave smoothing of the same power), `d = max(E − S, 0)`, `a = d` when
+   `d ≤ 2`, else `2 + (d − 2)/2`, then `a = min(a, 6)`;
+   `U = min(U, max(T(max(f,1)) + L − E + a, −25))`. A dip below its one-octave
+   envelope is filled by at most 2 dB plus half of the rest, 6 dB in all,
+   instead of up to the boost cap. Keep `U_u`, the curve this step would have
+   left alone, through steps 4 to 6 for the report below.
+4. Low-end protection (`room_tuning2_low_protect`, 3.13.0) with the rolloff
+   `f_r` defined below, when it exists: `U = min(U, 0)` where `f < f_r`;
+   `U = min(U, max_boost*log2(f/f_r))` where `f_r ≤ f < 2*f_r`. Without a
+   rolloff this step does nothing.
+5. Long-mode limit: `U = min(U, 3)` inside the long-mode mask.
+6. Band fade over the band set: `ℓ = log2(max(f,1e-3))` and, for each pair
+   `(lo_b, hi_b)` with `e_b = min(hi_b*√2, 0.99*fs/2)`,
+   `ramp_b = clip((ℓ − log2(lo_b/√2))/0.5, 0, 1) * clip((log2 e_b − ℓ)/max(log2(e_b/hi_b), 1e-3), 0, 1)`;
+   `U0 = U * max_b ramp_b`. With the primary pair alone this is the fade of
+   3.12.0. U0 is the design curve.
+
+**Rolloff** `f_r` (3.13.0). `D = 10*log10(S_3(P) + 1e-30)`, `ref = median of D
+over 200 ≤ f ≤ 1000`, `thr = ref − 10`. Walk downward from `u = 200` Hz with
+`D_u = D(200)` (D interpolated linearly in f, end values held) over every grid
+frequency `l` with `20 ≤ l < 200` in descending order and finally the point
+`l = 20` itself. With `D_l = D(l)`: if `D_l ≤ thr`, the rolloff is
+`f_r = l + (u − l)*(thr − D_l)/(D_u − D_l)` when `D_u > thr`, else `f_r = u`, and
+the walk stops; otherwise `u, D_u ← l, D_l`. No crossing down to 20 Hz means no
+rolloff: the protection is inert for this speaker and `cli_room_tuning2_low_protect`
+says so. P is the same weighted power as above (position policy applies), so
+with one position the rolloff is SECS 2R's.
+
+**Limited dips (report).** With the dip limit on, after step 6 applied to both
+U and U_u: the bins with `d ≥ 4` and `U0_u − U0 ≥ 0.5`. Contiguous bins form one
+dip, reported at its deepest bin as (f, d, a); deepest first; at most six.
 
 Long-mode mask of one position's comb response X: `x = LR(X, 300)`; peaks
-`LP([x], 8)` within `lo ≤ p ≤ min(hi, 160)`; `T60(x, p, 1.5)` for each, dropping
+`LP([x], 8)` with `p ≤ 160` inside a pair of the band set (`lo ≤ p ≤ min(hi, 160)`
+with the primary pair alone); `T60(x, p, 1.5)` for each, dropping
 none and zero; fewer than two left → empty. With `r` their median, mark the bins
 `p*2^(−1/24) ≤ f ≤ p*2^(1/24)` of every peak with `T60 ≥ max(0.3, 1.3*r)`.
 SECS reports the marked peaks in its notes; Impulcifer lists them in the README.
@@ -731,12 +781,69 @@ the bounded two-point difference from scipy (BSD-3, credited in
 THIRD_PARTY_LICENSES). Output `(e^lnf, min(e^lnQ, Qring(e^lnf, G)), G)` per band,
 in order.
 
+A residual value that is not finite (the cascade is NaN or infinite at a grid
+point) is replaced by `1e12` (3.13.0, always on; a finite cascade gives the same
+bits as 3.12.0). When the solver fails outright (a non-finite start point or
+bound) instead of stopping, the result is the greedy start.
+
+**Reach** (`room_tuning2_bands`, zero mode only, 3.13.0). When an extra pair
+overlaps a fit's `[lo, hi]`, the fit runs with the reach set
+`R = merge([(lo, hi_p*√2)] ++ [(lo_b/√2, hi_b*√2) for each extra])`, hi_p the
+primary pair's upper edge, dropping a pair with `lo ≥ hi`: "inside `[lo, hi]`"
+above then means "inside `[lo, hi]` and inside a pair of R", for the greedy
+residual r and for ω alike; each greedy band's `ln f0` bounds are intersected
+with the pair of R that holds its f0; and the start point is clipped with the
+margin `min(1e-6, (upper − lower)/4)` per coordinate instead of 1e-6. Without an
+overlapping extra pair the fit is unchanged.
+
+### Low-end protection in the fits
+
+With a rolloff `f_r` (`room_tuning2_low_protect`, 3.13.0), three rules keep the
+correction from boosting below the speaker's own rolloff.
+
+- **Fit floor.** A Fit's lower limit becomes `max(lo_fit, f_r)`: `lo = max(20, f_r)`
+  for the FIR-mode fits and `lo = max(15, lo/1.4, f_r)` for the zero-mode low fit.
+- **Centre clamp** `Clamp(B, f_r)`: a band with `f0 < f_r` gets `G = min(G, 0)`.
+- **Realized-response limit** `Limit(B, X, f_r, o)`: X is the fixed response the
+  PEQ multiplies (unity, or the FIR), o the outcome of an earlier call on the
+  same list (the reduced band indices and the number of protective cuts appended
+  at its end; empty at first). Grid: the n bins with `f < f_r`.
+  `dB(z) = 20*log10(max(|z|, 1e-30))`, +∞ when z is not finite;
+  `excess_i = dB(PEQ(B; f_i)*X_i) − 0.5`.
+  1. Reduction, at most `4*|B| + 8` rounds. Eligible bins: `f_i ≥ 10`, not
+     excluded, and some band with `G > 0` has `dB(P_band(f_i)) > 0.05`. The
+     worst bin is the eligible one with the largest `excess_i > 0`; none ends
+     the rounds. The candidate is the band with `G > 0` whose own
+     `dB(P_band(f_i))` is the largest and `> 0.05`; none ends the rounds. Set
+     its G to 0: if `excess_i > 0` still holds, restore G, exclude the bin and
+     start the next round. Otherwise bisect 40 times with `(lo, hi) = (0, G)`:
+     `mid = (lo + hi)/2`, `G ← mid`; if `excess_i ≤ 0` then `lo = mid` else
+     `hi = mid`; finally `G = lo`, and the band is recorded as reduced.
+  2. Protective cuts, while the cuts appended so far (o's and this call's)
+     number fewer than four: the worst bin over all `f_i ≥ 10` (no exclusion)
+     with `excess_i > 0`; none, or a non-finite excess, ends the call; append
+     the band `(f_i, 1.4, −(excess_i + 0.1))`.
+  3. Deepening, at most eight times: the worst bin as in step 2; none or
+     non-finite stops. Among the appended cuts take the one with the largest
+     finite attenuation `−dB(P_cut(f_i))` that is `≥ 1`; none stops. With
+     `rel = attenuation/(−G_cut)`, `G_cut −= min(excess_i/rel, 12)`.
+
+  `Limited(B, X, f_r)` is true when no bin with `10 ≤ f < f_r` has `excess > 0`.
+- **Where.** FIR modes: after the first PEQ, `Clamp(B1, f_r)` then
+  `Limit(B1, 1, f_r, ∅)`; after the second PEQ, `Clamp(B2, f_r)` then
+  `Limit(B2, 1, f_r, ∅)` with outcome o2; after the FIR, `Limit(B2, F, f_r, o2)`
+  on the realized FIR response F, and `Limited(B2, F, f_r)` is reported. Zero
+  mode: `Clamp` on the combined list, no `Limit`. The touch-up clamp and the
+  DC correction of "FIR modes" also depend on `f_r`.
+
 ### IIR-only mode (`zero`)
 
 `g = geomspace(15, 20000, 900)`, `c = interp(g, f, U0)`.
-`B_lo = Fit(g, c·[g ≤ 500], 16, lo = max(15, lo/1.4), hi = 400)`;
+`B_lo = Fit(g, c·[g ≤ 500], 16, lo = max(15, lo/1.4, f_r), hi = 400)`;
 `rest = c − 20*log10(|PEQ(g; B_lo)| + 1e-12)`;
-`B_hi = Fit(g, rest·[g ≥ 300], 16, lo = 400, hi = min(20000, hi))`.
+`B_hi = Fit(g, rest·[g ≥ 300], 16, lo = 400, hi = min(20000, hi_last))`, hi_last
+the upper edge of the last pair of the band set (hi with the primary pair
+alone); both fits follow the reach rule; then `Clamp(B_lo ++ B_hi, f_r)`.
 `F = PEQ(f; B_lo ++ B_hi)`, no FIR, no lift, phase strength 0 and no phase
 resolution (SECS reports a one-tap unit FIR and its default resolution 6;
 both mean "none"). (`·[cond]` keeps
@@ -747,38 +854,48 @@ the value where the condition holds and puts 0 elsewhere.)
 Let `g = geomspace(15, 20000, 700)`, `f_F = 1.5*fs/taps`,
 `ramp(f) = clip((f − f_F/2)/(f_F/2), 0, 1)`, `f_e = hi*√2`, λ = lift in seconds.
 
-1. **First PEQ.** `B1 = Fit(g, interp(g, f, U0), 16, fmax = hi)`, `P1 = PEQ(f; B1)`,
+1. **First PEQ.** `B1 = Fit(g, interp(g, f, U0), 16, lo = max(20, f_r), fmax = hi)`,
+   then `Clamp(B1, f_r)` and `Limit(B1, 1, f_r, ∅)` with a rolloff; `P1 = PEQ(f; B1)`,
    `U1 = (U0 − 20*log10(|P1| + 1e-12)) * ramp`; `M = MP(10^(U1/20))`.
 2. **Excess phase common to the positions.** For each position:
    `R = comb_p*P1*M`; `t = argmax|irfft_N(R)|/fs`; `R *= exp(+j*2π*f*t)`;
    `E = R/(MP(sqrt(S_b(f)(|R|²)) + 1e-12) + 1e-30)`; `V += w_p*E/(|E| + 1e-30)`.
    `V /= Σw_p`; `φ = unwrap(angle(nan_to_num(S_β(V))))`.
 3. **Delay budget.** `γ = clip((log2 f_e − log2 max(f,1e-3))/0.5, 0, 1)`, and
-   `γ = clip(f/15, 0, 1)` below 15 Hz.
+   `γ = clip(f/15, 0, 1)` below 15 Hz. With extra pairs,
+   `γ = max(γ, max_b clip((ℓ − log2(lo_b/√2))/0.5, 0, 1) * clip((log2(hi_b*√2) − ℓ)/0.5, 0, 1))`
+   over every pair of the band set, the primary included.
    `τ = −gradient(φ, 2π*max(f, Δ))`, non-finite values set to 0, `τ = S_β(τ)`;
    `x = (τ − median(τ over 3–6 kHz)) * γ`.
 4. **Realize(s, M′):** `adv = clip(x, −0.005, λ*s)`,
    `ψ = −2π*cumsum(λ − adv)*Δ`, `h = irfft_N(M′*exp(jψ))[:taps]`, the last
-   `K = int(0.1*taps)` samples multiplied by `0.5*(1+cos(π*k/K))`,
-   `F = rfft_N(h)`; error `20*log10(|F|+1e-12) − 20*log10(|M′|+1e-12)` over
-   `max(20, f_F) ≤ f ≤ f_e`; return h, F, its RMS and maximum absolute value.
+   `K = int(0.1*taps)` samples multiplied by `0.5*(1+cos(π*k/K))`. With a
+   rolloff, DC correction: `x_dc = Σ_n h[n] − 1`; when `taps > 2`, x_dc is finite
+   and `x_dc > 10^(0.5/20) − 1`, then `h[n] −= x_dc*w[n]/Σw` with
+   `w[n] = 0.5*(1 − cos(2π*n/(taps − 1)))`. `F = rfft_N(h)`; error
+   `20*log10(|F|+1e-12) − 20*log10(|M′|+1e-12)` over `max(20, f_F) ≤ f ≤ f_e` or
+   inside an extra pair `lo_b ≤ f ≤ min(hi_b*√2, 0.99*fs/2)`; return h, F, its
+   RMS and maximum absolute value.
 5. **Strength.** `(h, F, rms0, max0) = Realize(0, M)`, `s* = 0`. For s in
    0.9, 0.7, 0.5, 0.3 take the first Realize(s, M) with
    `rms ≤ max(0.5, rms0+0.3)` and `max ≤ max(2, max0+1)`; s* = s. s* is the
    reported phase strength.
-6. **Second PEQ.** `B2 = Fit(g, interp(g, f, U0 − 20*log10(|F|+1e-12)), 16, fmax = hi)`,
+6. **Second PEQ.** `B2 = Fit(g, interp(g, f, U0 − 20*log10(|F|+1e-12)), 16, lo = max(20, f_r), fmax = hi)`,
+   then `Clamp(B2, f_r)` and `Limit(B2, 1, f_r, ∅)` with a rolloff (outcome o2);
    `P2 = PEQ(f; B2)`.
-7. **Broad touch-up**, at most two rounds. ρ: bins with
-   `max(lo,20) ≤ f ≤ hi`. `err(F′)`: with
-   `e = 10*log10(S_24(|F′*P2|²) + 1e-30) − U0` on ρ, `sqrt(mean((e − median e)²))`.
-   Round: `r = ρ·(U0 − 20*log10(|F*P2| + 1e-12))`; `ζ = S_3(r)*ramp*ρ`;
+7. **Broad touch-up**, at most two rounds. ρ: bins with `f ≥ 20` inside a pair
+   of the band set (`max(lo,20) ≤ f ≤ hi` with the primary pair alone). `err(F′)`:
+   with `e = 10*log10(S_24(|F′*P2|²) + 1e-30) − U0` on ρ, `sqrt(mean((e − median e)²))`.
+   Round: `r = ρ·(U0 − 20*log10(|F*P2| + 1e-12))`; `ζ = S_3(r)`, then with a
+   rolloff `ζ = min(ζ, 0)` where `f < f_r`; `ζ = ζ*ramp*ρ`;
    `M2 = MP(|M|*10^(ζ/20))`; `(h2, F2) = Realize(s*, M2)`; stop if
    `err(F2) ≥ err(F)`, else `h, F, M ← h2, F2, M2`.
-8. The correction is `F_total = F*P2`: FIR h and PEQ B2.
+8. With a rolloff, `Limit(B2, F, f_r, o2)` on the final F, and `Limited(B2, F, f_r)`
+   is reported. The correction is `F_total = F*P2`: FIR h and PEQ B2.
 
 **Phase resolution (linear, x ms).** Run steps 1–8 with β = 24 and with β = 6.
 Score each by `GD − median(GD)`'s maximum, where
-`GD = GroupDelay(comb_p*F_total)` on `geomspace(max(lo,20), hi, 1200)` and the
+`GD = GroupDelay(comb_p*F_total)` on the phase-score grid of the band set and the
 position policy takes the worst position. Keep the lower score, β = 24 on a tie.
 `GroupDelay(X)`: `t = argmax|irfft_N(X)|/fs`, `Xs = S_24(X*exp(j*2π*f*t))`,
 `c = interp(grid, f, Re Xs) + j*interp(grid, f, Im Xs)`,
@@ -873,6 +990,14 @@ phase strength and resolution, long modes, representativeness, pre-echo,
 EDT and excess group delay before/after, and with MIMO each input's supports,
 level and guard scale.
 
+With the 3.13.0 options: per speaker `cli_room_tuning2_low_protect` (speaker,
+rolloff in Hz to one decimal or `none`, reduced band count, cut count, limited
+yes/no) when `room_tuning2_low_protect` is on; `cli_room_tuning2_dip_limit`
+(speaker, the number of limited dips, and the deepest as Hz, depth and fill to
+one decimal) when `room_tuning2_dip_limit` is on and a dip was limited;
+`cli_room_tuning2_bands` once (the merged band set as `lo-hi` pairs) when
+`room_tuning2_bands` is set. The README lists the same under each speaker.
+
 ### Reference acceptance
 
 The port is gated like the 2.x migration: `tests/migration/export_goldens_secs2.py`
@@ -910,6 +1035,21 @@ guard step (3 dB of support level). The oracle's own variants do so for 1–3 of
 7 inputs per setting; the allowance over the worst variant is recorded next to
 `room_tuning2_matches_secs2_mimo`.
 
+**SECS 2R fixtures (`s2r_*`, ADR 0015).** The 3.13.0 options reproduce
+improvements the maintainer made in SECS 2R (GPL-3.0, published crates
+AGPL-3.0), used as an oracle the same way: a feature-gated example inside a
+SECS 2R checkout runs its functions on the demo omni recordings and on synthetic
+inputs and freezes `inputs`/`outputs`/`meta` as `tests/migration/goldens/s2r_*`
+(`tests/migration/README-secs2r.md`: families, encoding, budgets). The example
+is not part of this repository; only its results are. Function-level fixtures
+(rolloff, centre clamp, realized-response limit, DC correction, dip limit,
+masks, band set, residual) are gated exactly or at 1e-12 relative on the
+oracle's libm and at 1e-9 elsewhere (`s2r_libm_probe` tells which); the
+end-to-end `s2r_rc_*` runs are report-only beyond the budgets of the `s2_*`
+family, because that oracle weights its listening position 5× and its PEQ
+refinement diverges the same way. People porting these options must not open
+or run the exporter.
+
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of
 N = 131072) for 62 runs on the demo omni files: every file/speaker as one
@@ -934,12 +1074,16 @@ supports, the per-input support limit (a DSP budget), SECS's arrival-delay
 alignment (Impulcifer's alignment already places the speakers),
 REW/CamillaDSP export, and SECS's environment knobs (fixed at their defaults:
 ring 30 ms, common-phase positions, long-mode boost 3 dB, guard 1 dB, 180
-support taps).
+support taps). From SECS 2R (ADR 0015): the position-agreement basis of the
+upper limit (it needs three positions), the subwoofer, bus and bundle parts of
+its low-end protection and its subwoofer high-pass export, and the no-boost
+mask's own criterion (its only use here is the rolloff clamp).
 
 Virtual room tuning v2 reproduces the correction method of SECS 2 by the
-Speaker Gallery (DCinside), released under GPL-3.0. Impulcifer's implementation
-is independent and contains no SECS code; SECS 2 was used only as a black box
-to produce the reference numbers.
+Speaker Gallery (DCinside), released under GPL-3.0, and the 3.13.0 options
+reproduce improvements the maintainer made in SECS 2R (GPL-3.0/AGPL-3.0).
+Impulcifer's implementation is independent and contains no SECS or SECS 2R
+code; both were used only as oracles to produce the reference numbers.
 
 ## Why not invert everything?
 
