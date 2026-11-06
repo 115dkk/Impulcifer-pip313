@@ -21,7 +21,7 @@ EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
-                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 3 * (2 * 2 * 2))
+                  + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 3 * (2 * 2 * 2) + 2 * 2)
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -74,7 +74,7 @@ LAYOUT_SPEAKERS = {"stereo": ["FL", "FR"], "7.1": ["FL", "FR", "FC", "BL", "BR",
                    "7.1.4": ["FL", "FR", "FC", "BL", "BR", "SL", "SR", "TFL", "TFR", "TBL", "TBR"],
                    "22.2": [slot for _, slot in NHK_22_2 if not slot.startswith("LFE")]}
 ADVANCED_KEYS = {"fs", "target_level", "channel_balance", "bass_boost_gain", "bass_boost_fc", "bass_boost_q", "tilt",
-                 "decay", "head_ms", "jamesdsp", "hangloose", "remove_silent_channels", "interactive_plots",
+                 "decay", "head_ms", "itd_mode", "head_radius", "jamesdsp", "hangloose", "remove_silent_channels", "interactive_plots",
                  "microphone_deviation_correction", "mic_deviation_strength", "mic_deviation_debug_plots",
                  "output_truehd_layouts", "layout_files"}
 
@@ -145,7 +145,7 @@ def mock_script(skin, theme, language, scenario):
   const methods = {
     bootstrap: () => ok({version: "3.0.0-alpha.1", platform: mac ? "darwin" : "windows", install_kind: "dev",
       webview_backend: mac ? "cocoa" : "edgechromium",
-      brir_defaults: {}, sweep: {layouts: ["stereo", "7.1", "7.1.4", "22.2"], default_fs: 48000, default_duration: 5,
+      brir_defaults: {itd_mode: "off", head_radius: null}, sweep: {layouts: ["stereo", "7.1", "7.1.4", "22.2"], default_fs: 48000, default_duration: 5,
         speaker_names: fixture.speakerNames, layout_speakers: fixture.layoutSpeakers, immersive: fixture.immersive,
         guided: fixture.guided, track_orders: fixture.trackOrders, hdmi_orders: fixture.hdmiOrders},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
@@ -210,9 +210,25 @@ def mock_script(skin, theme, language, scenario):
           summary: null,
           sweep: null, sidecar_path: null, share, checks,
           measurements: Object.entries(lastRequest.expected_azimuths || {}).map(([speaker, azimuth]) => ({
-            speaker, peak_db: -12, snr_db: 60, itd_us: Math.sign(azimuth) * 250, lf_db: -20, azimuth}))}},
+            speaker, peak_db: -12, snr_db: 60, itd_us: Math.sign(azimuth) * 250, lf_db: -20, lf_ild_db: -6.5, azimuth}))}},
           events: [{seq: 1, timestamp_ms: 0, type: "log",
             payload: {level: "info", key: "recording_share_mode_opened", message: "untranslated fixture", share}}], next_seq: 1});
+      }
+      if (kind === "brir") {
+        const status = window.galleryBrirStatus || "succeeded";
+        const alignment = {mode: "off", yaw_deg: 4.4, common_offset_us: -20,
+          input_balance_db: -6.5, headphone_balance_db: 7.0, predicted_balance_db: -13.5,
+          hf_asymmetry_db: 2.1, head_radius_cm: 11.2, head_radius_source: "estimated",
+          speakers: [["FL", 288, 334, -7.3, 0.4], ["FR", -309, -334, -6.5, -9.2],
+            ["FC", -25, 0, -6.2, -4.4], ["BL", 329, 487, -6.7, -1.2], ["BR", -327, -487, -6.4, -7.6],
+            ["SL", 882, 839, -6.9, 1.0], ["SR", -874, -839, -6.1, -9.8]]
+            .map(([speaker, measured_us, model_us, lf_ild_db, hf_ild_db]) => ({speaker, measured_us, model_us,
+              after_us: measured_us, target_us: null, applied_us: null, lf_ild_db, hf_ild_db, skipped: false})),
+          pairs: [{left: "FL", right: "FR", sum_us: -21, yaw_deg: -0.9},
+            {left: "BL", right: "BR", sum_us: 2, yaw_deg: 4.4},
+            {left: "SL", right: "SR", sum_us: 8, yaw_deg: null}]};
+        return ok({job: {...job(status), result: status === "succeeded" ? {output_path: directory, alignment} : null},
+          events: [], next_seq: 1});
       }
       const result = {...meta, created_files: plan(lastRequest).planned_files.map(file => file.path)};
       written = true;
@@ -839,6 +855,29 @@ def fill_lfe_checks(browser):
     navigate(page, "processing")
     request = brir_request(page)
     assert "missing_speakers" not in request and "lfe_mode" not in request, request
+    assert "itd_mode" not in request and "head_radius" not in request, request
+    adv_switch(page, "time", True)
+    request = brir_request(page)
+    assert request["itd_mode"] == "off" and request["head_radius"] is None, request
+    page.locator("#ba-itd-mode").select_option("model")
+    page.locator("#ba-head-radius").fill("9")
+    request = brir_request(page)
+    assert request["itd_mode"] == "model" and request["head_radius"] == 9, request
+    assert page.locator('#ba-itd-mode-row [data-itd-mode="model"]').is_visible()
+    assert not page.locator('#ba-itd-mode-row [data-itd-mode="off"]').is_visible()
+    page.locator("#ba-itd-mode").select_option("symmetric")
+    assert page.locator('#ba-itd-mode-row [data-itd-mode="symmetric"]').is_visible()
+    assert brir_request(page)["itd_mode"] == "symmetric"
+    adv_switch(page, "time", False)
+    request = brir_request(page)
+    assert "head_ms" not in request and "itd_mode" not in request and "head_radius" not in request, request
+    assert page.locator("#ba-head-radius").input_value() == "9"
+    adv_switch(page, "time", True)
+    page.locator("#adv-reset-time").click()
+    assert page.locator("#ba-itd-mode").input_value() == "off" and page.locator("#ba-head-radius").input_value() == ""
+    assert page.locator('#ba-itd-mode-row [data-itd-mode="off"]').is_visible()
+    request = brir_request(page)
+    assert request["itd_mode"] == "off" and request["head_radius"] is None, request
     adv_switch(page, "output", True)
     request = brir_request(page)
     assert request["missing_speakers"] == "silent" and request["lfe_mode"] == "none", request
@@ -864,6 +903,13 @@ def fill_lfe_checks(browser):
     disclosure(page, "advanced", True)
     payload = page.evaluate("gatherBrirPayload()")
     assert payload["missing_speakers"] == "silent" and payload["lfe_mode"] == "none", payload
+    assert payload["itd_mode"] == "off" and payload["head_radius"] is None, payload
+    page.locator("#bf-itd-mode").select_option("model")
+    page.locator("#bf-head-radius").fill("9")
+    payload = page.evaluate("gatherBrirPayload()")
+    assert payload["itd_mode"] == "model" and payload["head_radius"] == 9, payload
+    assert page.locator('#bf-itd-mode-row [data-itd-mode="model"]').is_visible()
+    assert not page.locator('#bf-itd-mode-row [data-itd-mode="off"]').is_visible()
     page.locator("#bf-missing-speakers").select_option("neighbor")
     page.locator("#bf-lfe-mode").select_option("all")
     assert page.locator('#bf-lfe-mode-row [data-lfe-mode="all"]').is_visible()
@@ -873,6 +919,64 @@ def fill_lfe_checks(browser):
     assert not errors, errors
     context.close()
     print("Gallery fill/LFE checks: Studio sends only with Output on, Stable always, LFE hints per choice, reset OK", flush=True)
+
+
+def itd_checks(browser):
+    """ADR 0014: report lifecycle, service defaults and folder-scoped references,
+    including headphone requests without replacing the speaker references."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "processing")
+    page.evaluate("state.brirDefaults = {itd_mode: 'model', head_radius: 9}; applyTimeDefaults(); applyStrings()")
+    for prefix in ("bf", "ba"):
+        assert page.locator(f"#{prefix}-itd-mode").input_value() == "model"
+        assert page.locator(f"#{prefix}-head-radius").input_value() == "9"
+    adv_switch(page, "time", True)
+    page.locator("#ba-itd-mode").select_option("symmetric")
+    page.locator("#ba-head-radius").fill("10")
+    page.locator("#adv-reset-time").click()
+    request = brir_request(page)
+    assert request["itd_mode"] == "model" and request["head_radius"] == 9, request
+    page.evaluate("state.brirDefaults = {}; applyTimeDefaults(); applyStrings()")
+    assert page.locator("#ba-itd-mode").input_value() == "off"
+    assert page.locator("#ba-head-radius").input_value() == ""
+    page.locator("#brir-alignment:not([hidden])").wait_for()
+    assert page.locator("#brir-alignment-rows tr").count() == 7
+    assert page.locator("#brir-alignment .align-flag.warn").count() == 3
+    assert "-13.5 dB" in page.locator("#brir-alignment-summary").inner_text()
+    page.evaluate("window.galleryBrirStatus = 'running'")
+    page.locator("#btn-generate-brir").click()
+    page.wait_for_function("state.jobId !== null && document.querySelector('#brir-alignment').hidden")
+    page.evaluate("window.galleryBrirStatus = 'succeeded'")
+    page.locator("#brir-alignment:not([hidden])").wait_for()
+    for status in ("failed", "cancelled"):
+        page.evaluate("status => { window.galleryBrirStatus = status; }", status)
+        page.locator("#btn-generate-brir").click()
+        page.wait_for_function("status => state.lastJob?.status === status && state.jobId === null", arg=status)
+        assert page.locator("#brir-alignment").is_hidden()
+
+    # Missing older fields become null; headphone measurements never replace
+    # the session's speaker references, and a different folder sees none.
+    page.evaluate("""() => {
+      const measurements = [{speaker: 'FL', peak_db: -12, snr_db: 60, itd_us: 250, lf_ild_db: -6.5},
+        {speaker: 'FR', peak_db: -12, snr_db: 60, itd_us: -250}];
+      rememberMeasurements({mode: 'speakers', record_dir: 'data/my_hrir', measurements});
+      rememberMeasurements({mode: 'headphones', record_dir: 'data/my_hrir',
+        measurements: [{...measurements[0], lf_ild_db: 7}]});
+    }""")
+    refs = page.evaluate("gatherRecordingPayload('headphones').reference_measurements")
+    assert [(item["speaker"], item["lf_ild_db"]) for item in refs] == [("FL", -6.5), ("FR", None)], refs
+    assert page.evaluate("state.takeMeasurements[folderKey('data/my_hrir')][1].lf_ild_db") is None
+    navigate(page, "recorder")
+    page.locator("#btn-record-headphones").click()
+    answer(page)
+    page.wait_for_function("state.lastJob?.kind === 'recording' && state.jobId === null")
+    sent = page.evaluate("galleryCalls.filter(c => c.method === 'start_recording').at(-1).args[0]")
+    assert sent["mode"] == "headphones" and sent["reference_measurements"] == refs, sent
+    page.locator("#rf-record-dir").fill("data/other_hrir")
+    assert page.evaluate("gatherRecordingPayload('headphones').reference_measurements") == []
+    assert not errors, errors
+    context.close()
+    print("Gallery ITD checks: defaults, reset, report success/start/failure/cancel, warning badges, headphone references OK", flush=True)
 
 
 def guided_checks(browser):
@@ -910,6 +1014,7 @@ def guided_checks(browser):
     page.wait_for_function(f"{starts}.length === 2")
     references = page.evaluate(f"{starts}.at(-1).args[0]")["reference_measurements"]
     assert [(item["speaker"], item["azimuth"]) for item in references] == [("FL", 30), ("FR", -30)], references
+    assert all(item["lf_ild_db"] == -6.5 for item in references), references
     page.wait_for_function("document.querySelectorAll('#gd-steps .gd-step')[1].dataset.status === 'warning'")
     assert steps.nth(1).get_attribute("aria-current") == "step"
     warning = page.locator('#gd-checks .gd-check[data-severity="warning"]')
@@ -1622,6 +1727,7 @@ def render_gallery(output):
         short_output_checks(browser)
         recording_cancel_checks(browser)
         fill_lfe_checks(browser)
+        itd_checks(browser)
         advanced_checks(browser)
         layout_checks(browser)
         guided_checks(browser)
@@ -1638,6 +1744,15 @@ def render_gallery(output):
             for view in VIEWS:
                 navigate(page, view)
                 shots.append(shoot(page, output, f"{view}-{skin}-{language}-{theme}", errors))
+            context.close()
+        for theme, language in itertools.product(THEMES, LANGUAGES):
+            context, page, errors = open_page(browser, "studio", theme, language, "idle")
+            navigate(page, "processing")
+            page.locator("#btn-generate-brir").click()
+            page.locator("#brir-alignment:not([hidden])").wait_for()
+            assert page.locator("#brir-alignment-rows tr").count() == 7
+            assert page.locator("#brir-alignment .align-flag.warn").count() == 3
+            shots.append(shoot(page, output, f"processing-itd-report-studio-{language}-{theme}", errors))
             context.close()
         for theme, language, scenario in itertools.product(THEMES, LANGUAGES, RECOVERY_STATES):
             context, page, errors = open_page(browser, "studio", theme, language, scenario)

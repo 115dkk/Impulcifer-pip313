@@ -454,16 +454,15 @@ fn run(
     if let Some((path, names)) = channel_names {
         std::fs::write(path, names).map_err(RecordingError::internal)?;
     }
-    let check_results = (v.mode == Mode::Speakers).then(|| {
-        check_recording(
-            &tracks,
-            fs,
-            &segments,
-            generated.as_ref().map(|playback| &playback.estimator),
-            v.expected_azimuths.as_ref(),
-            v.reference_measurements.as_deref(),
-        )
-    });
+    let check_results = Some(check_recording(
+        &tracks,
+        fs,
+        &segments,
+        generated.as_ref().map(|playback| &playback.estimator),
+        v.expected_azimuths.as_ref(),
+        v.reference_measurements.as_deref(),
+        v.mode == Mode::Headphones,
+    ));
     let silent_check = input_silent.then(|| {
         let key = if cfg!(target_os = "macos") {
             "record_check_input_silent_macos"

@@ -3,6 +3,7 @@ use super::progress::SweepSegment;
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     filters::{self, BType},
+    itd::{band_level_db, direct_arrival, estimate},
 };
 use impulcifer_types::layouts::SLOTS;
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ pub struct ReferenceMeasurement {
     pub speaker: String,
     pub itd_us: Option<f64>,
     pub lf_db: Option<f64>,
+    pub lf_ild_db: Option<f64>,
     pub azimuth: Option<f64>,
 }
 
@@ -24,6 +26,7 @@ pub struct Measurement {
     pub snr_db: f64,
     pub itd_us: Option<f64>,
     pub lf_db: Option<f64>,
+    pub lf_ild_db: Option<f64>,
     pub azimuth: Option<f64>,
 }
 
@@ -39,12 +42,6 @@ pub struct RecordingCheck {
 pub struct CheckResults {
     pub measurements: Vec<Measurement>,
     pub checks: Vec<RecordingCheck>,
-}
-
-#[derive(Clone, Copy)]
-struct ItdEstimate {
-    itd_us: f64,
-    inverted: bool,
 }
 
 #[derive(Default)]
@@ -63,6 +60,8 @@ struct MeasuredTake {
     measurement: Measurement,
     ear_silent: bool,
     wrong_side: bool,
+    headphone_left_db: Option<f64>,
+    headphone_right_db: Option<f64>,
 }
 
 fn rounded(value: f64, decimals: i32) -> f64 {
@@ -121,81 +120,12 @@ fn low_frequency_level(tracks: &[Vec<f64>], start: usize, end: usize, fs: u32) -
     db(levels.iter().sum::<f64>() / levels.len() as f64).map(|value| rounded(value, 1))
 }
 
-fn direct_arrival(left: &[f64], right: &[f64]) -> Option<usize> {
-    let max = left
-        .iter()
-        .chain(right)
-        .fold(0.0_f64, |value, sample| value.max(sample.abs()));
-    if max == 0.0 {
-        return None;
-    }
-    let onset = |ir: &[f64]| ir.iter().position(|sample| sample.abs() >= 0.5 * max);
-    match (onset(left), onset(right)) {
-        (Some(a), Some(b)) => Some(a.min(b)),
-        (Some(a), None) | (None, Some(a)) => Some(a),
-        (None, None) => None,
-    }
-}
-
 fn deconvolve_pair(
     left: &[f64],
     right: &[f64],
     estimator: &SweepEstimator,
 ) -> (Vec<f64>, Vec<f64>) {
     (estimator.estimate(left), estimator.estimate(right))
-}
-
-fn estimate_itd_from_ir(left: &[f64], right: &[f64], fs: u32) -> Option<ItdEstimate> {
-    if left.is_empty() || right.is_empty() || fs == 0 {
-        return None;
-    }
-    let lowpass = filters::butter(2, 1500.0 / (fs as f64 / 2.0), BType::Lowpass);
-    let left = filters::sosfilt(&lowpass, left);
-    let right = filters::sosfilt(&lowpass, right);
-    let peak = direct_arrival(&left, &right)?;
-    let pre = (0.002 * fs as f64).round() as usize;
-    let post = (0.003 * fs as f64).round() as usize;
-    let start = peak.saturating_sub(pre);
-    let end = (peak + post + 1).min(left.len()).min(right.len());
-    if end <= start + 2 {
-        return None;
-    }
-    let max_lag = (0.001 * fs as f64).round() as isize;
-    let correlation = |lag: isize| {
-        let mut sum = 0.0;
-        for (i, sample) in left.iter().enumerate().take(end).skip(start) {
-            let j = i as isize + lag;
-            if j >= start as isize && j < end as isize {
-                sum += *sample * right[j as usize];
-            }
-        }
-        sum
-    };
-    let values: Vec<_> = (-max_lag..=max_lag).map(correlation).collect();
-    let index = values
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.abs().total_cmp(&b.abs()))?
-        .0;
-    let lag = index as isize - max_lag;
-    let magnitudes: Vec<_> = values.iter().map(|value| value.abs()).collect();
-    let fraction = if index > 0 && index + 1 < magnitudes.len() {
-        let before = magnitudes[index - 1];
-        let center = magnitudes[index];
-        let after = magnitudes[index + 1];
-        let denominator = before - 2.0 * center + after;
-        if denominator.abs() > f64::EPSILON {
-            0.5 * (before - after) / denominator
-        } else {
-            0.0
-        }
-    } else {
-        0.0
-    };
-    Some(ItdEstimate {
-        itd_us: (lag as f64 + fraction) * 1_000_000.0 / fs as f64,
-        inverted: values[index].is_sign_negative(),
-    })
 }
 
 fn window_energy(tracks: [&[f64]; 2], center: usize, before: usize, after: usize) -> f64 {
@@ -367,6 +297,7 @@ pub fn check_recording(
     estimator: Option<&SweepEstimator>,
     expected_azimuths: Option<&BTreeMap<String, f64>>,
     reference_measurements: Option<&[ReferenceMeasurement]>,
+    headphones: bool,
 ) -> CheckResults {
     let mut takes = Vec::new();
     let mut checks = Vec::new();
@@ -415,14 +346,37 @@ pub fn check_recording(
                 let right =
                     &tracks[1][analysis_start.min(tracks[1].len())..tail_end.min(tracks[1].len())];
                 let (left_ir, right_ir) = deconvolve_pair(left, right, estimator);
-                let itd = estimate_itd_from_ir(&left_ir, &right_ir, fs);
+                let itd = estimate(&left_ir, &right_ir, fs, 1.0);
                 let impulse = impulse_metrics(&left_ir, &right_ir, estimator, fs);
-                (itd, impulse)
+                let lf_ild_db = band_level_db(&left_ir, fs, 30.0, 120.0)
+                    .zip(band_level_db(&right_ir, fs, 30.0, 120.0))
+                    .map(|(left, right)| left - right);
+                let headphone_left_db = band_level_db(&left_ir, fs, 200.0, 2_000.0);
+                let headphone_right_db = band_level_db(&right_ir, fs, 200.0, 2_000.0);
+                (
+                    itd,
+                    impulse,
+                    lf_ild_db,
+                    headphone_left_db,
+                    headphone_right_db,
+                )
             })
         } else {
             None
         };
-        let itd = analysis.as_ref().and_then(|(itd, _)| *itd);
+        let itd = analysis.as_ref().and_then(|(itd, _, _, _, _)| *itd);
+        let lf_ild_db = analysis
+            .as_ref()
+            .and_then(|(_, _, level, _, _)| *level)
+            .filter(|_| snr_db >= 6.0 && !ear_silent);
+        let headphone_left_db = analysis
+            .as_ref()
+            .and_then(|(_, _, _, level, _)| *level)
+            .filter(|_| snr_db >= 6.0);
+        let headphone_right_db = analysis
+            .as_ref()
+            .and_then(|(_, _, _, _, level)| *level)
+            .filter(|_| snr_db >= 6.0);
         let measurement = Measurement {
             speaker: segment.speaker.clone(),
             peak_db: rounded(peak_db, 1),
@@ -433,6 +387,7 @@ pub fn check_recording(
                 .filter(|_| snr_db >= 6.0 && !ear_silent)
                 .map(|value| rounded(value.itd_us, 0)),
             lf_db,
+            lf_ild_db,
             azimuth,
         };
 
@@ -448,6 +403,8 @@ pub fn check_recording(
                 measurement,
                 ear_silent,
                 wrong_side: false,
+                headphone_left_db,
+                headphone_right_db,
             });
             continue;
         }
@@ -479,7 +436,8 @@ pub fn check_recording(
                 &[("snr_db", measurement.snr_db)],
             );
         }
-        if let Some((left, right)) = ear_levels
+        if !headphones
+            && let Some((left, right)) = ear_levels
             && ear_silent
         {
             let (key, difference) = if left < right {
@@ -502,7 +460,8 @@ pub fn check_recording(
             );
         }
         // Second-harmonic energy at -20 dB (10 %) or more is audible distortion.
-        if let Some((_, impulse)) = &analysis
+        if !headphones
+            && let Some((_, impulse, _, _, _)) = &analysis
             && let Some(distortion_db) = impulse.distortion_db
             && distortion_db >= -20.0
         {
@@ -516,7 +475,10 @@ pub fn check_recording(
         }
 
         let mut wrong_side = false;
-        if !ear_silent && let Some(itd) = itd {
+        if !headphones
+            && !ear_silent
+            && let Some(itd) = itd
+        {
             if itd.inverted {
                 issue(
                     &mut checks,
@@ -605,6 +567,8 @@ pub fn check_recording(
             measurement,
             ear_silent,
             wrong_side,
+            headphone_left_db,
+            headphone_right_db,
         });
     }
 
@@ -621,6 +585,7 @@ pub fn check_recording(
             snr_db: 0.0,
             itd_us: reference.itd_us,
             lf_db: reference.lf_db,
+            lf_ild_db: reference.lf_ild_db,
             azimuth: reference.azimuth,
         })
         .collect();
@@ -628,6 +593,65 @@ pub fn check_recording(
         .iter()
         .filter(|reference| !current_speakers.contains(&reference.speaker.as_str()))
         .collect();
+
+    if headphones {
+        let headphone_balance_db = takes
+            .iter()
+            .find(|take| take.measurement.speaker == "FL")
+            .and_then(|take| take.headphone_left_db)
+            .zip(
+                takes
+                    .iter()
+                    .find(|take| take.measurement.speaker == "FR")
+                    .and_then(|take| take.headphone_right_db),
+            )
+            .map(|(left, right)| left - right);
+        let speaker_balance_db = median(
+            reference_measurements
+                .unwrap_or(&[])
+                .iter()
+                .filter_map(|reference| reference.lf_ild_db)
+                .collect(),
+        );
+        if let Some((headphone, speaker)) = headphone_balance_db.zip(speaker_balance_db) {
+            let predicted = speaker - headphone;
+            if predicted.abs() >= 2.0 {
+                issue(
+                    &mut checks,
+                    "record_check_headphone_balance",
+                    takes.first().map_or("", |take| &take.measurement.speaker),
+                    "warning",
+                    &[
+                        ("db_diff", rounded(headphone, 1)),
+                        ("predicted_db", rounded(predicted, 1)),
+                    ],
+                );
+            }
+        }
+        return CheckResults {
+            measurements: takes.into_iter().map(|take| take.measurement).collect(),
+            checks,
+        };
+    }
+
+    let input_balance_db = median(
+        takes
+            .iter()
+            .filter(|take| take.measurement.snr_db >= 6.0 && !take.ear_silent && !take.wrong_side)
+            .filter_map(|take| take.measurement.lf_ild_db)
+            .collect(),
+    );
+    if let Some(balance) = input_balance_db.filter(|balance| balance.abs() >= 3.0)
+        && let Some(first) = takes.first()
+    {
+        issue(
+            &mut checks,
+            "record_check_input_balance",
+            &first.measurement.speaker,
+            "warning",
+            &[("db_diff", rounded(balance, 1))],
+        );
+    }
 
     for index in 0..takes.len() {
         if takes[index].ear_silent

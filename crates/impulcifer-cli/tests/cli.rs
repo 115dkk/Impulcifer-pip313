@@ -541,6 +541,41 @@ fn cli_layout_files_option_parses_and_validates() {
 }
 
 #[test]
+fn cli_itd_options_parse_and_validate() {
+    let Parsed::Kwargs(kwargs) = parse(&args(&[
+        "impulcifer",
+        "--dir_path",
+        "measurements",
+        "--itd_mode",
+        "model",
+        "--head_radius",
+        "9.25",
+    ]))
+    .unwrap() else {
+        panic!()
+    };
+    assert_eq!(kwargs["itd_mode"], json!("model"));
+    assert_eq!(kwargs["head_radius"], json!(9.25));
+
+    for (flag, value) in [("--itd_mode", "other"), ("--head_radius", "20")] {
+        let error = parse(&args(&[
+            "impulcifer",
+            "--dir_path",
+            "measurements",
+            flag,
+            value,
+        ]))
+        .unwrap_err();
+        assert_eq!(error.exit_code, 2);
+    }
+    let Parsed::Help(help) = parse(&args(&["impulcifer", "--help"])).unwrap() else {
+        panic!()
+    };
+    assert!(help.contains("--itd_mode"));
+    assert!(help.contains("--head_radius"));
+}
+
+#[test]
 fn cli_output_fill_options_parse_reject_invalid_and_appear_in_help() {
     let Parsed::Kwargs(kwargs) = parse(&args(&[
         "impulcifer",

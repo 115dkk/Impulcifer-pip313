@@ -264,7 +264,7 @@ fn reference_measurements_validate_shape_limit_and_speakers() {
         "record_dir":"missing",
         "sweep":{"speakers":["FR"]},
         "reference_measurements":[{
-            "speaker":"fl","itd_us":250,"lf_db":-20.5,"azimuth":30
+            "speaker":"fl","itd_us":250,"lf_db":-20.5,"lf_ild_db":-6.5,"azimuth":30
         }]
     }))
     .unwrap();
@@ -272,11 +272,13 @@ fn reference_measurements_validate_shape_limit_and_speakers() {
     assert_eq!(reference.speaker, "FL");
     assert_eq!(reference.itd_us, Some(250.0));
     assert_eq!(reference.lf_db, Some(-20.5));
+    assert_eq!(reference.lf_ild_db, Some(-6.5));
     assert_eq!(reference.azimuth, Some(30.0));
 
     let invalid = [
         json!({}),
         json!([{"speaker":"FL","itd_us":"250","lf_db":null,"azimuth":null}]),
+        json!([{"speaker":"FL","itd_us":null,"lf_db":null,"lf_ild_db":"-6","azimuth":null}]),
         json!([{"speaker":"NOPE","itd_us":null,"lf_db":null,"azimuth":null}]),
         json!([{"speaker":"FL","itd_us":null,"lf_db":null,"azimuth":181}]),
         Value::Array(
@@ -295,10 +297,15 @@ fn reference_measurements_validate_shape_limit_and_speakers() {
     }
     let headphones = request::validate(&json!({
         "mode":"headphones","record_dir":"missing","sweep":{},
-        "reference_measurements":"ignored"
+        "reference_measurements":[{
+            "speaker":"FC","itd_us":null,"lf_db":null,"lf_ild_db":-7.0,"azimuth":0
+        }]
     }))
     .unwrap();
-    assert!(headphones.reference_measurements.is_none());
+    assert_eq!(
+        headphones.reference_measurements.unwrap()[0].lf_ild_db,
+        Some(-7.0)
+    );
 }
 
 #[test]

@@ -126,6 +126,12 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         ("--layout_files=9.1,22.2,30.2", "--missing_speakers=neighbor", "--lfe_mode=all"),
         "3.10.0",
     ),
+    # ADR 0014: the interaural time differences of the demo's mirror pairs are
+    # made symmetric with a fractional delay of one ear, or set to the
+    # spherical head model with a given radius. Both change the output; the
+    # default (off) is covered by every other scenario.
+    ("itd_symmetric", ("--itd_mode=symmetric",), "3.12.0"),
+    ("itd_model", ("--itd_mode=model", "--head_radius=8.75"), "3.12.0"),
 )
 
 

@@ -110,7 +110,7 @@ fn scenario(name: &str) {
             }
         }
     }
-    let actual = std::fs::read_to_string(dir.0.join("README.md")).unwrap();
+    let actual = without_itd_section(&std::fs::read_to_string(dir.0.join("README.md")).unwrap());
     let expected = std::fs::read_to_string(golden(&format!("p11_{name}_en.txt"))).unwrap();
     let (db_tol, ms_tol) = if name == "vbass" {
         (5.0, 20.0)

@@ -62,6 +62,8 @@ pub struct ProcessingConfig {
     pub layout_files: String,
     pub missing_speakers: String,
     pub lfe_mode: String,
+    pub itd_mode: String,
+    pub head_radius: Option<f64>,
     pub bass_boost_gain: f64,
     pub bass_boost_fc: f64,
     pub bass_boost_q: f64,
@@ -127,6 +129,8 @@ impl Default for ProcessingConfig {
             layout_files: "auto".into(),
             missing_speakers: "silent".into(),
             lfe_mode: "none".into(),
+            itd_mode: "off".into(),
+            head_radius: None,
             bass_boost_gain: 0.0,
             bass_boost_fc: 105.0,
             bass_boost_q: 0.76,
@@ -189,7 +193,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 27] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 29] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -211,6 +215,8 @@ pub const EXTENSION_FIELD_NAMES: [&str; 27] = [
     "layout_files",
     "missing_speakers",
     "lfe_mode",
+    "itd_mode",
+    "head_radius",
     "room_measurement_file",
     "room_measurement_map",
     "brir_measurement_file",
@@ -368,6 +374,15 @@ impl ProcessingConfig {
         }
         if !["none", "center", "all"].contains(&self.lfe_mode.as_str()) {
             return Err(invalid("lfe_mode", "must be none, center or all"));
+        }
+        if !["off", "symmetric", "model"].contains(&self.itd_mode.as_str()) {
+            return Err(invalid("itd_mode", "must be off, symmetric or model"));
+        }
+        if self
+            .head_radius
+            .is_some_and(|radius| !radius.is_finite() || !(5.0..=15.0).contains(&radius))
+        {
+            return Err(invalid("head_radius", "must be between 5 and 15 cm"));
         }
         if TuningDelay::parse(&self.room_tuning_delay).is_none() {
             return Err(invalid("room_tuning_delay", "must be auto or 2–20 ms"));

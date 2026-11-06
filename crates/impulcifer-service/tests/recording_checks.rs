@@ -53,6 +53,7 @@ fn signal(
         Some(&playback.estimator),
         Some(&expected),
         None,
+        false,
     )
 }
 
@@ -109,6 +110,7 @@ fn take_checks_direction_rules_and_optional_angle_gate() {
         Some(&playback.estimator),
         None,
         None,
+        false,
     );
     assert!(
         !no_expected
@@ -160,6 +162,7 @@ fn take_checks_level_noise_and_missing_signal_rules() {
         Some(&estimator.estimator),
         Some(&BTreeMap::from([("FL".to_owned(), 30.0)])),
         None,
+        false,
     );
     assert!(has(&silent, "record_check_no_signal"));
     assert_eq!(silent.checks.len(), 1);
@@ -190,6 +193,7 @@ fn centre_slots_are_never_on_the_wrong_side() {
         Some(&playback.estimator),
         None,
         None,
+        false,
     );
     assert!(
         !has(&result, "record_check_wrong_side_left"),
@@ -221,6 +225,7 @@ fn digital_silence_is_no_signal() {
         Some(&playback.estimator),
         Some(&BTreeMap::from([("FR".to_owned(), -30.0)])),
         None,
+        false,
     );
     let keys: Vec<_> = result
         .checks
@@ -259,6 +264,7 @@ fn the_first_arrival_decides_the_side_over_a_louder_reflection() {
         Some(&playback.estimator),
         Some(&expected),
         None,
+        false,
     );
     let itd = result.measurements[0].itd_us.unwrap();
     assert!((itd - 250.0).abs() <= 25.0, "{itd}");
@@ -303,6 +309,7 @@ fn custom_take(
         Some(&playback.estimator),
         expected,
         references,
+        false,
     )
 }
 
@@ -356,6 +363,7 @@ fn take_checks_detect_reversed_microphone_polarity_without_changing_itd() {
         Some(&playback.estimator),
         Some(&BTreeMap::from([("FL".into(), 30.0)])),
         None,
+        false,
     );
     assert!(has(&result, "record_check_polarity"), "{:?}", result.checks);
     assert!((result.measurements[0].itd_us.unwrap() - 250.0).abs() <= 25.0);
@@ -395,12 +403,14 @@ fn take_checks_compare_same_angle_current_and_reference_measurements() {
             speaker: "FL".into(),
             itd_us: Some(250.0),
             lf_db: None,
+            lf_ild_db: None,
             azimuth: Some(30.0),
         },
         ReferenceMeasurement {
             speaker: "FR".into(),
             itd_us: Some(-250.0),
             lf_db: None,
+            lf_ild_db: None,
             azimuth: Some(-30.0),
         },
     ];
@@ -450,6 +460,7 @@ fn nonlinear_take(nonlinearity: f64) -> CheckResults {
         Some(&playback.estimator),
         Some(&BTreeMap::from([("FL".into(), 30.0)])),
         None,
+        false,
     )
 }
 
@@ -478,12 +489,14 @@ fn take_checks_detect_level_change_and_swapped_microphones() {
             speaker: "FR".into(),
             itd_us: Some(250.0),
             lf_db: Some(-20.0),
+            lf_ild_db: None,
             azimuth: Some(-30.0),
         },
         ReferenceMeasurement {
             speaker: "FL".into(),
             itd_us: Some(-250.0),
             lf_db: Some(-20.0),
+            lf_ild_db: None,
             azimuth: Some(30.0),
         },
     ];
@@ -531,18 +544,110 @@ fn take_checks_detect_level_change_and_swapped_microphones() {
 /// Retaking FL and FR with the microphones swapped is diagnosed even though
 /// this folder's earlier, correct FL and FR are among the references.
 #[test]
+fn take_checks_report_the_input_balance() {
+    let expected = BTreeMap::from([("FL".into(), 30.0), ("FR".into(), -30.0)]);
+    let left_gain = 0.2 * 10_f64.powf(-6.0 / 20.0);
+    let unbalanced = custom_take(
+        &["FL", "FR"],
+        &[(0, 12), (12, 0)],
+        &[(left_gain, 0.2), (left_gain, 0.2)],
+        Some(&expected),
+        None,
+    );
+    for measurement in &unbalanced.measurements {
+        assert!(
+            (measurement.lf_ild_db.unwrap() + 6.0).abs() <= 0.5,
+            "{measurement:?}"
+        );
+    }
+    let warnings: Vec<_> = unbalanced
+        .checks
+        .iter()
+        .filter(|check| check.key == "record_check_input_balance")
+        .collect();
+    assert_eq!(warnings.len(), 1, "{:?}", unbalanced.checks);
+    assert!((warnings[0].values["db_diff"].as_f64().unwrap() + 6.0).abs() <= 0.5);
+
+    let balanced = custom_take(
+        &["FL", "FR"],
+        &[(0, 12), (12, 0)],
+        &[(0.2, 0.2), (0.2, 0.2)],
+        Some(&expected),
+        None,
+    );
+    assert!(!has(&balanced, "record_check_input_balance"));
+}
+
+fn headphone_take(right_gain_db: f64, reference_balance_db: f64) -> CheckResults {
+    let playback = build_sweep_playback(&SweepSpec {
+        fs: FS,
+        duration: 0.1,
+        speakers: vec!["FL".into(), "FR".into()],
+        tracks: "stereo".into(),
+    })
+    .unwrap();
+    let n = playback.tracks[0].len() + 64;
+    let mut tracks = vec![vec![0.0; n], vec![0.0; n]];
+    for (segment_index, segment) in playback.segments.iter().enumerate() {
+        let start = (segment.start * FS as f64).round() as usize;
+        let end = (segment.end * FS as f64).round() as usize;
+        let source = &playback.tracks[segment_index][start..end];
+        for (index, sample) in source.iter().enumerate() {
+            if segment.speaker == "FL" {
+                tracks[0][start + index] = sample * 0.2;
+            } else {
+                tracks[1][start + index] = sample * 0.2 * 10_f64.powf(right_gain_db / 20.0);
+            }
+        }
+    }
+    let references = [ReferenceMeasurement {
+        speaker: "FC".into(),
+        itd_us: Some(0.0),
+        lf_db: None,
+        lf_ild_db: Some(reference_balance_db),
+        azimuth: Some(0.0),
+    }];
+    check_recording(
+        &tracks,
+        FS,
+        &playback.segments,
+        Some(&playback.estimator),
+        None,
+        Some(&references),
+        true,
+    )
+}
+
+#[test]
+fn headphone_take_checks_predict_the_final_balance() {
+    let swapped = headphone_take(-7.0, -6.5);
+    let warning = swapped
+        .checks
+        .iter()
+        .find(|check| check.key == "record_check_headphone_balance")
+        .unwrap_or_else(|| panic!("{:?}", swapped.checks));
+    assert!((warning.values["db_diff"].as_f64().unwrap() - 7.0).abs() <= 0.5);
+    assert!((warning.values["predicted_db"].as_f64().unwrap() + 13.5).abs() <= 0.5);
+
+    let matched = headphone_take(7.0, -7.0);
+    assert!(!has(&matched, "record_check_headphone_balance"));
+}
+
+#[test]
 fn superseded_references_do_not_hide_swapped_microphones() {
     let reference = [
         ReferenceMeasurement {
             speaker: "FL".into(),
             itd_us: Some(250.0),
             lf_db: Some(-20.0),
+            lf_ild_db: None,
             azimuth: Some(30.0),
         },
         ReferenceMeasurement {
             speaker: "FR".into(),
             itd_us: Some(-250.0),
             lf_db: Some(-20.0),
+            lf_ild_db: None,
             azimuth: Some(-30.0),
         },
     ];

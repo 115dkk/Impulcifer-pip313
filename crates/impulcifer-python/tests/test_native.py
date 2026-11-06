@@ -121,7 +121,13 @@ def test_progress_and_log_callbacks_receive_cli_keys(package, demo):
         ids.append(threading.get_ident())
 
     result = package.impulcifer_native.run(config(package, demo), progress=on_progress, log=logs.append)
-    assert set(result) == {"output_path"}
+    assert set(result) == {"output_path", "alignment"}
+    # ADR 0014: the ITD report rides every BRIR result; the default mode reads but does not write.
+    alignment = result["alignment"]
+    assert alignment["mode"] == "off" and alignment["head_radius_source"] in {"given", "estimated", "default"}
+    assert {"yaw_deg", "common_offset_us", "input_balance_db", "speakers", "pairs"} <= set(alignment)
+    assert {entry["speaker"] for entry in alignment["speakers"]} == {"FL", "FR", "FC", "BL", "BR", "SL", "SR"}
+    assert all(entry["applied_us"] is None and not entry["skipped"] for entry in alignment["speakers"])
     assert progress and logs and set(ids) == {caller}
     assert all(type(e) is dict and set(e) == {"progress", "message", "key"} for e in progress)
     assert all(type(e) is dict and set(e) == {"level", "message", "key"} for e in logs)

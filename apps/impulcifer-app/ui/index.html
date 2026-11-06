@@ -620,6 +620,24 @@
                     <label for="bf-head-ms" data-i18n="label_pre_response">Pre-response (ms):</label>
                     <input type="number" id="bf-head-ms" class="num mono" value="1.0" step="0.1" min="0">
                   </div>
+                  <div class="field-row top" id="bf-itd-mode-row">
+                    <label for="bf-itd-mode" data-i18n="label_itd_mode">Ear timing (ITD):</label>
+                    <div class="adv-stack">
+                      <select id="bf-itd-mode">
+                        <option value="off" selected data-i18n="option_itd_mode_off">As recorded</option>
+                        <option value="symmetric" data-i18n="option_itd_mode_symmetric">Symmetric pairs</option>
+                        <option value="model" data-i18n="option_itd_mode_model">Spherical head model</option>
+                      </select>
+                      <p class="hint" data-itd-mode="off" data-i18n="hint_itd_mode_off">The time differences between the ears stay as recorded. The report after processing shows them for every speaker.</p>
+                      <p class="hint" data-itd-mode="symmetric" data-i18n="hint_itd_mode_symmetric" hidden>Mirror pairs (FL/FR, SL/SR…) get the same time difference and the center speakers none, which removes a head turned during the recording and a microphone sitting deeper in one ear.</p>
+                      <p class="hint" data-itd-mode="model" data-i18n="hint_itd_mode_model" hidden>Every speaker gets the time difference of a spherical head at its nominal direction. Front speakers of real heads usually measure smaller than the model.</p>
+                    </div>
+                  </div>
+                  <div class="field-row" id="bf-head-radius-row">
+                    <label for="bf-head-radius" data-i18n="label_head_radius">Head radius (cm):</label>
+                    <input type="number" id="bf-head-radius" class="num mono" min="5" max="15" step="0.1" placeholder="auto">
+                    <span class="hint" data-i18n="hint_head_radius">Empty: estimated from the side pair of the recording.</span>
+                  </div>
                   <div class="check-row">
                     <input type="checkbox" id="bf-remove-silent-channels">
                     <label for="bf-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label>
@@ -771,6 +789,24 @@
                   <div class="field-row">
                     <label for="ba-head-ms" data-i18n="studio_adv_label_pre_response">Pre-response:</label>
                     <div><span class="unit-field"><input type="number" id="ba-head-ms" value="1.0" step="0.1" min="0"><span class="unit" data-i18n="studio_adv_unit_ms">ms</span></span></div>
+                  </div>
+                  <div class="field-row" id="ba-itd-mode-row">
+                    <label for="ba-itd-mode" data-i18n="label_itd_mode">Ear timing (ITD):</label>
+                    <div class="adv-stack">
+                      <select id="ba-itd-mode">
+                        <option value="off" selected data-i18n="option_itd_mode_off">As recorded</option>
+                        <option value="symmetric" data-i18n="option_itd_mode_symmetric">Symmetric pairs</option>
+                        <option value="model" data-i18n="option_itd_mode_model">Spherical head model</option>
+                      </select>
+                      <p class="hint" data-itd-mode="off" data-i18n="hint_itd_mode_off">The time differences between the ears stay as recorded. The report after processing shows them for every speaker.</p>
+                      <p class="hint" data-itd-mode="symmetric" data-i18n="hint_itd_mode_symmetric" hidden>Mirror pairs (FL/FR, SL/SR…) get the same time difference and the center speakers none, which removes a head turned during the recording and a microphone sitting deeper in one ear.</p>
+                      <p class="hint" data-itd-mode="model" data-i18n="hint_itd_mode_model" hidden>Every speaker gets the time difference of a spherical head at its nominal direction. Front speakers of real heads usually measure smaller than the model.</p>
+                    </div>
+                  </div>
+                  <div class="field-row" id="ba-head-radius-row">
+                    <label for="ba-head-radius" data-i18n="label_head_radius">Head radius (cm):</label>
+                    <div><span class="unit-field"><input type="number" id="ba-head-radius" min="5" max="15" step="0.1" placeholder="auto"><span class="unit">cm</span></span></div>
+                    <span class="hint" data-i18n="hint_head_radius">Empty: estimated from the side pair of the recording.</span>
                   </div>
                   <div class="field-row">
                     <label for="ba-decay" data-i18n="studio_adv_label_decay">Decay:</label>
@@ -945,6 +981,28 @@
             </div>
             <div class="card-body">
               <ol class="steps" id="brir-steps" hidden></ol>
+              <section class="align-report" id="brir-alignment" hidden aria-labelledby="brir-alignment-title">
+                <div class="align-head">
+                  <h4 class="align-title" id="brir-alignment-title" data-i18n="label_itd_report">Interaural time differences</h4>
+                  <span class="align-mode mono" id="brir-alignment-mode"></span>
+                </div>
+                <dl class="kv-grid align-summary" id="brir-alignment-summary"></dl>
+                <div class="align-table-wrap">
+                  <table class="align-table">
+                    <thead>
+                      <tr>
+                        <th scope="col" data-i18n="th_itd_speaker">Speaker</th>
+                        <th scope="col" class="num" data-i18n="th_itd_measured">Measured (µs)</th>
+                        <th scope="col" class="num" data-i18n="th_itd_model">Spherical head (µs)</th>
+                        <th scope="col" class="num" data-i18n="th_itd_after">Final (µs)</th>
+                        <th scope="col" class="num" data-i18n="th_itd_lf_ild">Bass L−R (dB)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="brir-alignment-rows"></tbody>
+                  </table>
+                </div>
+                <p class="hint" data-i18n="hint_itd_report">Positive values: the sound reaches the left ear first. Bass L−R below 120 Hz should be the same in both ears; what differs is the recording chain.</p>
+              </section>
               <div class="progress"><i data-progress></i></div>
               <pre class="log" data-log aria-live="polite"></pre>
               <div class="actions-row">

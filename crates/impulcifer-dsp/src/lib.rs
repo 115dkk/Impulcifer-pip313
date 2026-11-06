@@ -24,6 +24,7 @@ pub mod fr;
 pub mod hrir;
 pub mod interp;
 pub mod ir;
+pub mod itd;
 pub mod mic_deviation;
 pub mod optimize;
 pub mod peaks;

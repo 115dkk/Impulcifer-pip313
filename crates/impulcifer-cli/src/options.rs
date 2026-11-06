@@ -350,6 +350,24 @@ pub static EXTENSION_OPTIONS: &[CliOption] = &[
         default: CliDefault::Suppressed,
         help: "How layout files fill LFE tracks: none (default), the measured or phantom front center (center), or a 120 Hz low-pass power average of every measured speaker (all).",
     },
+    CliOption {
+        flag: "--itd_mode",
+        short: None,
+        dest: "itd_mode",
+        kind: CliType::Str,
+        choices: &["off", "symmetric", "model"],
+        default: CliDefault::Suppressed,
+        help: "Interaural time-difference correction: off (default), symmetric, or spherical-head model.",
+    },
+    CliOption {
+        flag: "--head_radius",
+        short: None,
+        dest: "head_radius",
+        kind: CliType::Float,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Head radius in centimetres (5–15); when omitted it is estimated from the measurements.",
+    },
 ];
 
 pub const OPTIONS: &[CliOption] = &[

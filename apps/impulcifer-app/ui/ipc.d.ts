@@ -48,6 +48,34 @@ interface AudioDevice { index: number; name: string; host_api: string; max_input
 type ChannelOrder = "auto" | "standard" | "hdmi";
 type MissingSpeakers = "silent" | "neighbor";
 type LfeMode = "none" | "center" | "all";
+type ItdMode = "off" | "symmetric" | "model";
+
+/** ADR 0014: the interaural alignment report of a BRIR job (docs/rust/ALIGNMENT.md).
+    Microseconds are integers, dB and degrees have one decimal; null when not measurable. */
+interface AlignmentSpeaker {
+  speaker: string;
+  measured_us: number | null;
+  model_us: number | null;
+  target_us: number | null;
+  after_us: number | null;
+  applied_us: number | null;
+  lf_ild_db: number | null;
+  skipped: boolean;
+}
+interface AlignmentPair { left: string; right: string; sum_us: number | null; yaw_deg: number | null }
+interface AlignmentReport {
+  mode: ItdMode;
+  head_radius_cm: number | null;
+  head_radius_source: "given" | "estimated" | "default" | null;
+  yaw_deg: number | null;
+  common_offset_us: number | null;
+  input_balance_db: number | null;
+  hf_asymmetry_db: number | null;
+  headphone_balance_db: number | null;
+  predicted_balance_db: number | null;
+  speakers: AlignmentSpeaker[];
+  pairs: AlignmentPair[];
+}
 interface AudioDevices { host_apis: string[]; devices: AudioDevice[]; default_input_index: number; default_output_index: number }
 interface SweepRequest { mode: string; speakers: string; tracks: string; fs?: number; duration?: number }
 interface RecordingRequest {
@@ -60,13 +88,13 @@ interface RecordingRequest {
   /* The azimuth each speaker should be heard at (ITU degrees); enables the turn-angle checks. */
   expected_azimuths?: Record<string, number>;
   /* Earlier takes in the same folder, compared with speakers that should share their angle. */
-  reference_measurements?: { speaker: string; itd_us: number | null; lf_db: number | null; azimuth: number | null }[];
+  reference_measurements?: { speaker: string; itd_us: number | null; lf_db: number | null; azimuth: number | null; lf_ild_db?: number | null }[];
 }
 /* A finding of the post-recording checks; `key` is a catalog key, `values` its placeholders. */
 interface RecordingCheck { key: string; speaker: string; severity: "error" | "warning"; values: Record<string, number | string> }
 interface RecordingMeasurement {
   speaker: string; peak_db: number; snr_db: number; itd_us: number | null;
-  lf_db?: number | null; azimuth?: number | null;
+  lf_db?: number | null; azimuth?: number | null; lf_ild_db?: number | null;
 }
 interface RecordingResult {
   /* record_dir is the folder as requested; record_path may be in a subfolder of it
@@ -131,6 +159,7 @@ interface ProcessingRequest {
   layout_files?: string;
   /* ADR 0013: what output files carry for unmeasured speakers and for the LFE channel. */
   missing_speakers?: MissingSpeakers; lfe_mode?: LfeMode;
+  itd_mode?: ItdMode; head_radius?: number | null;
   confirm_warnings?: boolean;
 }
 type VbassMode = "auto" | "manual" | "legacy";
@@ -206,7 +235,7 @@ interface UpdateInfo {
 interface UpdateRequest { download_url: string | null; latest_version: string | null }
 interface UpdateResult { progress: number; status_key: string; status_default: string;
   title_key: string; title_default: string; message_key: string; message_default: string; requires_restart: boolean }
-interface JobResults { recording: RecordingResult; brir: { output_path: string }; output_recovery: RecoveryResult; update: UpdateResult }
+interface JobResults { recording: RecordingResult; brir: { output_path: string; alignment?: AlignmentReport | null }; output_recovery: RecoveryResult; update: UpdateResult }
 type JobKind = keyof JobResults;
 type JobStatus = "running" | "cancel_requested" | "succeeded" | "failed" | "cancelled";
 type JobOf<K extends JobKind> = { job_id: string; kind: K; status: JobStatus; cancellable: boolean; result: JobResults[K] | null; error: IpcError | null };
