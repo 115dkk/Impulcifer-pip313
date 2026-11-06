@@ -1,0 +1,1 @@
+{"inputs":{"lo":20.0,"hi":500.0,"extra":[]},"outputs":{"bands":[[20.0,500.0]]},"meta":{"oracle":"SECS 2R 06183335 (v0.55.0)","rustc":"rustc 1.99.0 (b940084d7 2026-09-28)","target":"x86_64-pc-windows-msvc","libm":"msvcrt","weights":[1.0],"grid":"48000 Hz, N = 131072","settings":{"case":"none"},"family":"band_set"}}
