@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.12.0 - 2026-11-07
+### SECS 2R의 엔진 개선을 가상 룸 튜닝 2에 들여오는 결정
+
+#### 🔧 빌드 / 설정 변경
+- **ADR 0015(문서만)**: 유지보수자가 SECS 2R(GPL-3.0/AGPL-3.0)에 넣은 방 보정과 MIMO 개선 열두 가지(D46~D59)를 가상 룸 튜닝 2에 들여오기로 했습니다. 설정 아홉 개는 모두 3.x 확장이고 기본값의 출력은 바이트 단위로 그대로입니다. 2R의 코드는 읽지 않고, 2R 저장소 안의 내보내기 프로그램이 낸 `s2r_*` 픽스처와 명세만 보고 구현하며, 다섯 PR로 나눠 진행합니다. 위치 일치도 근거와 설정으로 스피커 극성을 뒤집는 기능은 들여오지 않습니다. 이번 항목은 결정 기록(`docs/adr/0015-secs2r-improvements-into-tuning2.md`)만 더하고 출하물은 바꾸지 않습니다.
+
 ## 3.12.0 - 2026-11-06
 ### 양 귀 도착 시차 보고서와 보정
 
