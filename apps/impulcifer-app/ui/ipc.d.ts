@@ -97,7 +97,9 @@ interface RecordingMeasurement {
   lf_db?: number | null; azimuth?: number | null;
 }
 interface RecordingResult {
-  record_path: string; summary: { sample_rate: number; channels: number; duration: number; peak_db: number; active_channels: number } | null;
+  /* record_dir is the folder as requested; record_path may be in a subfolder of it
+     (n, nn…) when the folder already held an earlier recording. */
+  record_path: string; record_dir?: string; summary: { sample_rate: number; channels: number; duration: number; peak_db: number; active_channels: number } | null;
   mode: "speakers" | "headphones"; sweep: string | null; sidecar_path: string | null;
   share: RecordingShare; warnings?: string[];
   checks?: RecordingCheck[]; measurements?: RecordingMeasurement[];
@@ -270,7 +272,7 @@ interface IpcApi {
   set_skin(skin: string): Promise<Envelope<{ skin: string }>>;
   set_frontend(frontend: string): Promise<Envelope<{ frontend: string }>>;
   get_system_info(): Promise<Envelope<SystemInfo>>;
-  resolve_recording_paths(record_dir: string, play_path?: string | null, mode?: string, sweep?: SweepRequest | null): Promise<Envelope<{ record_path: string }>>;
+  resolve_recording_paths(record_dir: string, play_path?: string | null, mode?: string, sweep?: SweepRequest | null, append?: boolean): Promise<Envelope<{ record_path: string }>>;
   detect_sweep(dir_path: string): Promise<Envelope<SweepDetection>>;
   generate_sweep_set(dir_path: string): Promise<Envelope<{ files: string[]; play_path: string | null }>>;
   open_path(path?: string | null): Promise<Envelope<{ path: string }>>;

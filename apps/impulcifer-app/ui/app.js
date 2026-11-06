@@ -548,7 +548,7 @@ function updateRecorderStatus(payload) {
 function finishRecorderStatus(job) {
   if (job.status === "succeeded" && job.result) {
     finishRecorderChips();
-    const file = String(job.result.record_path || "").split(/[\\/]/).pop();
+    const file = relativeRecordPath(job.result.record_path, job.result.record_dir || "");
     const summary = job.result.summary;
     let detail = summary
       ? fmt(t("recording_status_summary"), {
@@ -565,6 +565,8 @@ function finishRecorderStatus(job) {
     appendLog(detail);
     (job.result.checks || []).forEach((check) => appendLog(checkMessage(check)));
     rememberMeasurements(job.result);
+    // The next recording may now land elsewhere (headphones_n.wav, a subfolder).
+    refreshResolvedPath();
   } else if (job.status === "cancelled") {
     setRecorderStatus(t("recording_status_cancelled"), "");
   } else if (job.status === "failed") {
@@ -798,6 +800,7 @@ function shareModeError(error) {
 /* Recording log lines the screen words itself, with the fields their text needs. */
 /** @type {Record<string, string[]>} */
 const LOG_FIELDS = {
+  recording_session_folder: ["folder"],
   recording_channel_order_hdmi: ["channels"],
   recording_channel_order_standard: ["channels"],
   recording_output_channels_short: ["device", "available", "first", "last", "missing"],
@@ -1516,7 +1519,7 @@ async function refreshResolvedPath() {
     node.textContent = "";
     return;
   }
-  const response = await api().resolve_recording_paths(recordDir, playPath, "speakers", sweep);
+  const response = await api().resolve_recording_paths(recordDir, playPath, "speakers", sweep, checked("rf-append"));
   if (response.ok) {
     state.resolvedRecordPath = response.data.record_path;
     node.textContent = fmt(t("label_record_resolved_path"), { path: response.data.record_path });
@@ -1588,7 +1591,7 @@ function gatherRecordingPayload(mode) {
 
 /** @param {RecordingRequest} payload */
 async function recordingConfirmationValues(payload) {
-  const response = await api().resolve_recording_paths(payload.record_dir, payload.play_path || null, payload.mode, payload.sweep || null);
+  const response = await api().resolve_recording_paths(payload.record_dir, payload.play_path || null, payload.mode, payload.sweep || null, Boolean(payload.append));
   return {
     play_file: sweepDisplayName(payload.sweep || null),
     record_file: response.ok ? response.data.record_path : payload.record_dir,
@@ -1794,12 +1797,25 @@ function folderKey(dir) {
   return dir.replace(/[\\/]+$/, "");
 }
 
-/* Keep each speaker's latest measurement per recording folder for this session;
-   a retake replaces the speaker's earlier entry. */
+/* A recording's file relative to the folder it was requested in: `n\FL,FR.wav`
+   when the service put it in a subfolder because the folder already held an
+   earlier recording, otherwise the file name. */
+/** @param {string} path @param {string} dir */
+function relativeRecordPath(path, dir) {
+  const file = String(path || "");
+  const root = folderKey(String(dir || "")).replace(/\\/g, "/");
+  return root && file.replace(/\\/g, "/").startsWith(`${root}/`)
+    ? file.slice(root.length + 1)
+    : file.split(/[\\/]/).pop() || "";
+}
+
+/* Keep each speaker's latest measurement per requested recording folder for
+   this session (the takes may sit in a subfolder of it); a retake replaces the
+   speaker's earlier entry. */
 /** @param {RecordingResult} result */
 function rememberMeasurements(result) {
   if (result.mode !== "speakers" || !result.measurements?.length) return;
-  const dir = folderKey(String(result.record_path || "").replace(/[\\/][^\\/]*$/, ""));
+  const dir = folderKey(result.record_dir || String(result.record_path || "").replace(/[\\/][^\\/]*$/, ""));
   const fresh = new Set(result.measurements.map((item) => item.speaker));
   state.takeMeasurements[dir] = [
     ...(state.takeMeasurements[dir] || []).filter((item) => !fresh.has(item.speaker)),
@@ -1839,7 +1855,7 @@ function renderGuided() {
   $("gd-ear").hidden = !ear;
   $("gd-plays").textContent = take.sources
     .map((source) => `${source.speaker} (${guidedDirection(source.azimuth)})`).join(", ");
-  $("gd-file").textContent = fmt(t("label_record_resolved_path"), { path: `${take.speakers.join(",")}.wav` });
+  void showGuidedFile(take, index);
   drawGuidedDiagram(info, take);
   const result = results[guidedKey(index)];
   /** @param {string} severity @param {string} text */
@@ -1859,6 +1875,24 @@ function renderGuided() {
   $("gd-checks").replaceChildren(...lines);
   el("btn-gd-prev", HTMLButtonElement).disabled = index === 0;
   el("btn-gd-next", HTMLButtonElement).disabled = index >= takes.length - 1;
+}
+
+/* The step's file, then where the service will put it: a subfolder (n, nn…)
+   once the folder already holds an earlier recording of this session's names. */
+/** @param {GuidedTake} take @param {number} index */
+async function showGuidedFile(take, index) {
+  const node = $("gd-file");
+  const speakers = take.speakers.join(",");
+  node.textContent = fmt(t("label_record_resolved_path"), { path: `${speakers}.wav` });
+  const recordDir = val("rf-record-dir");
+  if (!recordDir || !window.pywebview) return;
+  const key = guidedKey(index);
+  const response = await api().resolve_recording_paths(recordDir, null, "speakers",
+    { mode: "default", speakers, tracks: take.tracks });
+  if (!response.ok || key !== guidedKey(state.guided.index)) return;
+  node.textContent = fmt(t("label_record_resolved_path"), {
+    path: relativeRecordPath(response.data.record_path, recordDir),
+  });
 }
 
 /** @param {number} index */
@@ -3875,6 +3909,7 @@ function wireEvents() {
     refreshResolvedPath();
     renderGuided();
   });
+  el("rf-append", HTMLInputElement).addEventListener("change", refreshResolvedPath);
   el("rf-sweep-source", HTMLSelectElement).addEventListener("change", () => {
     updateSweepSourceVisibility();
     refreshResolvedPath();

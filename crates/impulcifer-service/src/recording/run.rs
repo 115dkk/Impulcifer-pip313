@@ -503,7 +503,7 @@ fn run(
     } else {
         None
     };
-    let mut result = json!({"mode":v.mode,"record_path":v.record_path,"summary":analyze_recording(record),"sweep":generated.as_ref().map(|p|&p.display_name),"sidecar_path":sidecar,"share":share});
+    let mut result = json!({"mode":v.mode,"record_path":v.record_path,"record_dir":v.record_dir,"summary":analyze_recording(record),"sweep":generated.as_ref().map(|p|&p.display_name),"sidecar_path":sidecar,"share":share});
     if let Some(order) = effective_channel_order {
         result["channel_order"] = json!(order.as_str());
     }

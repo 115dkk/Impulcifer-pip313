@@ -25,6 +25,7 @@
   "error_share_mode_refused": "El dispositivo rechazó el modo {mode}: {reason}. Elige Auto para intentar otro modo, o selecciona el otro modo directamente.",
   "recording_share_mode_opened": "Salida: {output} · Entrada: {input}",
   "recording_channel_order_hdmi": "Orden de canales HDMI: {channels}",
+  "recording_session_folder": "Esta carpeta ya contiene una grabación anterior, por lo que las grabaciones se guardarán en su subcarpeta {folder} hasta que cierres la aplicación. Elige esa subcarpeta al procesar este conjunto de grabaciones.",
   "recording_output_channels_short": "{device} tiene {available} canales de salida, por lo que los canales {first}–{last} ({missing}) no se reprodujeron. Esos altavoces faltan en la grabación.",
   "warning_output_channels_short": "{device} tiene {available} canales de salida, pero {layout} necesita {required}. Los canales {first}–{last} ({missing}) no se reproducirán, por lo que esos altavoces faltarán en la grabación.",
   "recording_status_cancelled": "Grabación cancelada. No se guardó nada.",

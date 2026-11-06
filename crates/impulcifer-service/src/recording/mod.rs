@@ -6,6 +6,7 @@ pub mod naming;
 pub mod progress;
 pub mod request;
 pub mod run;
+pub mod session;
 pub mod sweep;
 
 use impulcifer_jobs::registry::JobFailure;

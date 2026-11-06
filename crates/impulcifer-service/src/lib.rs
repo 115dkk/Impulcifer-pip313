@@ -74,6 +74,8 @@ pub struct ImpulciferService {
     backend: Arc<dyn AudioBackend>,
     jobs: JobRegistry,
     data_dir: PathBuf,
+    /// Which folder this run records into, per requested folder.
+    recording_sessions: Mutex<recording::session::Sessions>,
 }
 
 impl ImpulciferService {
@@ -104,6 +106,7 @@ impl ImpulciferService {
             backend: Arc::from(backend),
             jobs,
             data_dir: plain_path(&data_dir),
+            recording_sessions: Mutex::default(),
         }
     }
 
@@ -121,6 +124,12 @@ impl ImpulciferService {
 
     fn settings(&self) -> MutexGuard<'_, settings::Settings> {
         self.settings
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn recording_sessions(&self) -> MutexGuard<'_, recording::session::Sessions> {
+        self.recording_sessions
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
@@ -323,13 +332,36 @@ impl ImpulciferService {
                         false,
                     ));
                 }
+                let mut request = request;
+                let name = std::path::Path::new(&request.record_path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let placement = self.recording_sessions().place(
+                    request.mode,
+                    request.append,
+                    &request.record_dir,
+                    &name,
+                );
+                request.record_path = placement.record_path.clone();
+                let new_folder = placement.new_folder.clone();
                 let backend = Arc::clone(&self.backend);
                 let job = self
                     .jobs
                     .start(
                         impulcifer_types::job::JobKind::Recording,
                         true,
-                        move |ctx| recording::run::run_recording(&request, &*backend, ctx),
+                        move |ctx| {
+                            if let Some(folder) = new_folder {
+                                ctx.log(json!({
+                                    "level":"info",
+                                    "key":"recording_session_folder",
+                                    "folder":folder,
+                                    "message":format!("This folder already holds an earlier recording, so until the app is closed recordings go into its subfolder {folder}. Choose that subfolder when processing this set."),
+                                }));
+                            }
+                            recording::run::run_recording(&request, &*backend, ctx)
+                        },
                     )
                     .map_err(|code| {
                         ipc::error(
@@ -339,6 +371,7 @@ impl ImpulciferService {
                             code == ErrorCode::JobBusy,
                         )
                     })?;
+                self.recording_sessions().commit(placement);
                 Ok(json!({"job":snapshot(&job)}))
             }
             IpcMethod::PollJob => {
@@ -476,7 +509,7 @@ impl ImpulciferService {
                     ))
                 }
             }
-            IpcMethod::ResolveRecordingPaths => paths::resolve(&args),
+            IpcMethod::ResolveRecordingPaths => paths::resolve(&args, &self.recording_sessions()),
             IpcMethod::OpenPath => {
                 args.count(0, 1)?;
                 let raw = match args.optional_string(0, "path")? {

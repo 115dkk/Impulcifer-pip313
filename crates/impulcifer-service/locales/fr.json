@@ -25,6 +25,7 @@
   "error_share_mode_refused": "Le périphérique a refusé le mode {mode} : {reason}. Choisissez Auto pour essayer un autre mode, ou sélectionnez l’autre mode.",
   "recording_share_mode_opened": "Sortie : {output} · Entrée : {input}",
   "recording_channel_order_hdmi": "Ordre des canaux HDMI : {channels}",
+  "recording_session_folder": "Ce dossier contient déjà un ancien enregistrement. Les enregistrements seront donc sauvegardés dans son sous-dossier {folder} jusqu’à la fermeture de l’application. Choisissez ce sous-dossier pour traiter cette série d’enregistrements.",
   "recording_output_channels_short": "{device} dispose de {available} canaux de sortie, les canaux {first}–{last} ({missing}) n’ont donc pas été lus. Ces enceintes sont absentes de l’enregistrement.",
   "warning_output_channels_short": "{device} dispose de {available} canaux de sortie, mais {layout} en nécessite {required}. Les canaux {first}–{last} ({missing}) ne seront pas lus, ces enceintes seront donc absentes de l’enregistrement.",
   "recording_status_cancelled": "Enregistrement annulé. Rien n’a été sauvegardé.",

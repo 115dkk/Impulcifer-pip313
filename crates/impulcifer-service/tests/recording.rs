@@ -646,7 +646,8 @@ fn recording_job_with_fake_backend_emits_lifecycle_and_writes_pcm32() {
         assert_eq!(e.payload.as_object().unwrap().len(), 10);
     }
     let result = p.job.result.unwrap();
-    assert_eq!(result.as_object().unwrap().len(), 8);
+    assert_eq!(result.as_object().unwrap().len(), 9);
+    assert_eq!(result["record_dir"], json!(temp.0));
     assert!(result["measurements"].is_array());
     assert!(result["checks"].is_array());
     assert_eq!(result["mode"], "speakers");
@@ -1282,6 +1283,141 @@ fn recording_job_can_be_cancelled_and_writes_nothing() {
         let boot = svc.call("bootstrap", vec![]);
         assert_eq!(boot["data"]["capabilities"]["recording_cancel"], true);
     }
+}
+
+#[test]
+fn headphone_recordings_never_replace_an_earlier_one() {
+    let temp = Temp::new();
+    let svc = service(&temp, Box::new(FakeBackend::default()));
+    let dir = temp.0.join("session");
+    let preview = || {
+        let response = svc.call(
+            "resolve_recording_paths",
+            vec![json!(dir), Value::Null, json!("headphones")],
+        );
+        PathBuf::from(response["data"]["record_path"].as_str().unwrap())
+    };
+    // A folder that does not exist yet, then an empty one: the original name.
+    assert_eq!(preview(), dir.join("headphones.wav"));
+    std::fs::create_dir(&dir).unwrap();
+    assert_eq!(preview(), dir.join("headphones.wav"));
+    let earlier = [
+        ("headphones.wav", b"first take".as_slice()),
+        ("headphones_n.wav", b"second take".as_slice()),
+    ];
+    for (name, bytes) in earlier {
+        assert_eq!(preview(), dir.join(name));
+        std::fs::write(dir.join(name), bytes).unwrap();
+    }
+    // The third take adds one more n, in the preview and in the job.
+    let third = dir.join("headphones_nn.wav");
+    assert_eq!(preview(), third);
+    let sweep = json!({"mode":"custom","fs":8000,"duration":1});
+    let v =
+        request::validate(&json!({"record_dir":dir,"mode":"headphones","sweep":sweep})).unwrap();
+    assert_eq!(PathBuf::from(&v.record_path), third);
+    let p = start(v, FakeBackend::default());
+    assert_eq!(json!(p.job.status), "succeeded", "{:?}", p.job.error);
+    assert_eq!(
+        p.job.result.unwrap()["record_path"],
+        json!(third.to_string_lossy())
+    );
+    assert_eq!(read_wav(&third).unwrap().tracks.len(), 2);
+    for (name, bytes) in earlier {
+        assert_eq!(std::fs::read(dir.join(name)).unwrap(), bytes, "{name}");
+    }
+    assert_eq!(preview(), dir.join("headphones_nnn.wav"));
+}
+
+/// A recording started through the service, polled until it has finished.
+fn record_through(svc: &ImpulciferService, request: Value) -> Value {
+    let started = svc.call("start_recording", vec![request]);
+    assert_eq!(started["ok"], true, "{started}");
+    let id = started["data"]["job"]["job_id"].clone();
+    let deadline = Instant::now() + Duration::from_secs(90);
+    loop {
+        let poll = svc.call("poll_job", vec![id.clone()]);
+        if matches!(
+            poll["data"]["job"]["status"].as_str(),
+            Some("succeeded" | "failed" | "cancelled")
+        ) {
+            assert_eq!(poll["data"]["job"]["status"], "succeeded", "{poll}");
+            return poll["data"].clone();
+        }
+        assert!(Instant::now() < deadline, "recording timeout");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn a_session_records_into_a_subfolder_instead_of_replacing_an_earlier_recording() {
+    let temp = Temp::new();
+    let svc = service(&temp, Box::new(FakeBackend::default()));
+    let dir = temp.0.join("measurement");
+    std::fs::create_dir(&dir).unwrap();
+    for name in ["FL,FR.wav", "headphones.wav"] {
+        std::fs::write(dir.join(name), b"earlier").unwrap();
+    }
+    let sweep = json!({"mode":"custom","fs":8000,"duration":1,"speakers":"FL,FR"});
+    let preview = |svc: &ImpulciferService, mode: &str| {
+        let response = svc.call(
+            "resolve_recording_paths",
+            vec![json!(dir), Value::Null, json!(mode), sweep.clone()],
+        );
+        PathBuf::from(response["data"]["record_path"].as_str().unwrap())
+    };
+    let notices = |data: &Value| -> Vec<Value> {
+        data["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["payload"]["key"] == "recording_session_folder")
+            .map(|event| event["payload"].clone())
+            .collect()
+    };
+    let sub = dir.join("n");
+    assert_eq!(preview(&svc, "speakers"), sub.join("FL,FR.wav"));
+    // Until a speaker recording moves the session, headphones follow the
+    // folder's own names.
+    assert_eq!(preview(&svc, "headphones"), dir.join("headphones_n.wav"));
+
+    let first = record_through(&svc, json!({"record_dir":dir,"sweep":sweep}));
+    assert_eq!(
+        first["job"]["result"]["record_path"],
+        json!(sub.join("FL,FR.wav"))
+    );
+    assert_eq!(first["job"]["result"]["record_dir"], json!(dir));
+    let notice = notices(&first);
+    assert_eq!(notice.len(), 1, "{first}");
+    assert_eq!(notice[0]["folder"], "n");
+    assert_eq!(notice[0]["level"], "info");
+
+    // Recording the step again replaces the session's own take, quietly.
+    let again = record_through(&svc, json!({"record_dir":dir,"sweep":sweep}));
+    assert_eq!(
+        again["job"]["result"]["record_path"],
+        json!(sub.join("FL,FR.wav"))
+    );
+    assert!(notices(&again).is_empty(), "{again}");
+
+    // The session's headphones go with its speakers.
+    assert_eq!(preview(&svc, "headphones"), sub.join("headphones.wav"));
+    let headphones = record_through(
+        &svc,
+        json!({"record_dir":dir,"mode":"headphones","sweep":{"mode":"custom","fs":8000,"duration":1}}),
+    );
+    assert_eq!(
+        headphones["job"]["result"]["record_path"],
+        json!(sub.join("headphones.wav"))
+    );
+    assert_eq!(read_wav(&sub.join("FL,FR.wav")).unwrap().tracks.len(), 2);
+    for name in ["FL,FR.wav", "headphones.wav"] {
+        assert_eq!(std::fs::read(dir.join(name)).unwrap(), b"earlier", "{name}");
+    }
+
+    // A new service is a new run, and n now holds the last one.
+    let next = service(&temp, Box::new(FakeBackend::default()));
+    assert_eq!(preview(&next, "speakers"), dir.join("nn").join("FL,FR.wav"));
 }
 
 #[test]
