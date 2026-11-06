@@ -56,7 +56,17 @@ impl Sessions {
                 naming::first_free_path(&folder(&session.sub), "headphones.wav"),
                 None,
             ),
-            Mode::Speakers if append => (folder(&session.sub).join(name), None),
+            Mode::Speakers if append => {
+                let target = folder(&session.sub).join(name);
+                if taken(&target) {
+                    (target, None)
+                } else {
+                    // Appending to a file that does not exist yet creates it,
+                    // so the run owns it like any take it records.
+                    session.written.insert(folded(name));
+                    (target, Some(session))
+                }
+            }
             Mode::Speakers => {
                 let target = folder(&session.sub).join(name);
                 if taken(&target) && !session.written.contains(&folded(name)) {
@@ -231,6 +241,31 @@ mod tests {
             PathBuf::from(&append.record_path),
             root.join("n").join("FL,FR.wav")
         );
+    }
+
+    #[test]
+    fn appending_to_a_file_the_run_creates_makes_it_the_runs_own() {
+        let temp = Temp::new("append-new");
+        let root = &temp.0;
+        let mut sessions = Sessions::default();
+        // Append is on but FL,FR.wav does not exist yet: the run creates it.
+        let placement = sessions.place(Mode::Speakers, true, &root.to_string_lossy(), "FL,FR.wav");
+        assert_eq!(placement.new_folder, None);
+        let path = PathBuf::from(&placement.record_path);
+        assert_eq!(path, root.join("FL,FR.wav"));
+        sessions.commit(placement);
+        std::fs::write(&path, b"take").unwrap();
+        // Recording it again without append replaces the run's own take and
+        // keeps the rest of the set in the folder.
+        assert_eq!(
+            record(&mut sessions, Mode::Speakers, root, "FL,FR.wav"),
+            root.join("FL,FR.wav")
+        );
+        assert_eq!(
+            record(&mut sessions, Mode::Speakers, root, "FC.wav"),
+            root.join("FC.wav")
+        );
+        assert!(!root.join("n").exists());
     }
 
     #[test]

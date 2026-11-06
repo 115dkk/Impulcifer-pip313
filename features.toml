@@ -1501,7 +1501,7 @@ tests = ["impulcifer-service::recording_job_can_be_cancelled_and_writes_nothing"
 id = "recording.keep_earlier_takes"
 kind = "recording"
 status = "implemented"
-tests = ["impulcifer-service::headphone_recordings_never_replace_an_earlier_one", "impulcifer-service::a_session_records_into_a_subfolder_instead_of_replacing_an_earlier_recording", "impulcifer-service::a_run_moves_to_a_subfolder_instead_of_replacing_an_earlier_run", "impulcifer-service::a_run_stays_in_the_folder_until_it_would_replace_an_earlier_run", "impulcifer-service::appending_to_an_earlier_take_keeps_its_file"]
+tests = ["impulcifer-service::headphone_recordings_never_replace_an_earlier_one", "impulcifer-service::a_session_records_into_a_subfolder_instead_of_replacing_an_earlier_recording", "impulcifer-service::a_run_moves_to_a_subfolder_instead_of_replacing_an_earlier_run", "impulcifer-service::a_run_stays_in_the_folder_until_it_would_replace_an_earlier_run", "impulcifer-service::appending_to_an_earlier_take_keeps_its_file", "impulcifer-service::appending_to_a_file_the_run_creates_makes_it_the_runs_own"]
 note = "a recording never replaces one the app run did not make: headphone takes are headphones.wav, headphones_n.wav, headphones_nn.wav and so on; a speaker recording whose file is already in the folder moves the run (until the app closes, headphones included) to a new subfolder n, nn, nnn…, where retakes of the run replace the run's own takes; appending still adds to the existing file; resolve_recording_paths previews the same path (optional append argument) and the recording result carries the requested record_dir"
 
 [[feature]]
