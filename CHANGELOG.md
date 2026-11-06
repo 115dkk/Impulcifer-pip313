@@ -4,6 +4,18 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.12.0 - 2026-11-06
+### 양 귀 도착 시차 보고서와 보정
+
+#### ⭐ 새로운 기능 / 개선
+- **양 귀 도착 시차(ITD) 보고서**: BRIR 작업이 스피커마다 두 귀의 도착 시차를 재어 거울 쌍의 비대칭과 머리 회전 추정, 센터 자리의 공통 오프셋, 120 Hz 아래 좌우 레벨 차(입력 체인 불균형), 4~12 kHz 비대칭을 작업 결과·작업 기록·결과 폴더 README에 남깁니다. 헤드폰 보정을 켜면 헤드폰 녹음의 좌우 차와 합쳐 최종 BRIR의 예상 좌우 차를 내고 2 dB 이상이면 경고합니다. 헤드폰 보정은 왼쪽 귀를 0 dB로 맞춘 뒤 같은 양만큼 오른쪽도 옮기므로, 스피커 녹음과 헤드폰 녹음에서 마이크를 다른 입력에 꽂으면 입력 감도 차가 두 배가 되는데 이 검사가 그것을 잡습니다(ADR 0014).
+- **ITD 보정 선택(`itd_mode`, `head_radius`)**: `symmetric`은 공통 오프셋을 뺀 뒤 거울 쌍(FL/FR, SL/SR 등)의 시차를 둘의 평균으로 맞추고 센터는 0으로 두며, `model`은 구형 머리 모델의 값을 목표로 합니다. 보정은 한 귀 전체를 FFT 선형 위상으로 늦추는 소수 샘플 지연이고 앞당기지 않습니다. 기본값 `off`의 출력은 바이트 단위로 그대로입니다. 합성 화면에 선택과 머리 반지름 입력이 있고, 작업이 끝나면 결과 표를 표시합니다.
+- **녹음 점검 확장**: 측정마다 120 Hz 아래 좌우 레벨 차를 재어 두 입력의 감도 차가 3 dB 이상이면 경고하고, 헤드폰 보정 녹음은 같은 폴더의 스피커 녹음과 견주어 최종 BRIR의 좌우 차가 2 dB 이상이 되면 경고합니다. 참조 측정에 `lf_ild_db`가 생기고 헤드폰 녹음도 참조 측정을 받습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **brir-3x 시나리오**: `itd_symmetric`과 `itd_model`(3.12.0부터)을 더했습니다.
+- **ITD 추정 구현 하나**: 녹음 점검의 추정 코드를 `impulcifer-dsp::itd`로 옮겨 처리 단계와 함께 씁니다. 녹음 점검의 수치는 바뀌지 않습니다.
+
 ## 3.11.0 - 2026-11-06
 ### 다시 녹음해도 이전 녹음을 덮어쓰지 않음
 

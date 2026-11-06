@@ -88,13 +88,13 @@ interface RecordingRequest {
   /* The azimuth each speaker should be heard at (ITU degrees); enables the turn-angle checks. */
   expected_azimuths?: Record<string, number>;
   /* Earlier takes in the same folder, compared with speakers that should share their angle. */
-  reference_measurements?: { speaker: string; itd_us: number | null; lf_db: number | null; azimuth: number | null }[];
+  reference_measurements?: { speaker: string; itd_us: number | null; lf_db: number | null; azimuth: number | null; lf_ild_db?: number | null }[];
 }
 /* A finding of the post-recording checks; `key` is a catalog key, `values` its placeholders. */
 interface RecordingCheck { key: string; speaker: string; severity: "error" | "warning"; values: Record<string, number | string> }
 interface RecordingMeasurement {
   speaker: string; peak_db: number; snr_db: number; itd_us: number | null;
-  lf_db?: number | null; azimuth?: number | null;
+  lf_db?: number | null; azimuth?: number | null; lf_ild_db?: number | null;
 }
 interface RecordingResult {
   /* record_dir is the folder as requested; record_path may be in a subfolder of it
@@ -159,6 +159,7 @@ interface ProcessingRequest {
   layout_files?: string;
   /* ADR 0013: what output files carry for unmeasured speakers and for the LFE channel. */
   missing_speakers?: MissingSpeakers; lfe_mode?: LfeMode;
+  itd_mode?: ItdMode; head_radius?: number | null;
   confirm_warnings?: boolean;
 }
 type VbassMode = "auto" | "manual" | "legacy";

@@ -148,6 +148,9 @@ function applyStrings() {
   renderEq();
   for (const purpose of MFILE_PURPOSES) renderMfile(purpose);
   refreshStudioAdvanced();
+  updateItdHint("bf");
+  updateItdHint("ba");
+  if (state.lastJob?.kind === "brir" && state.lastJob.status === "succeeded") renderAlignment(state.lastJob.result?.alignment ?? null);
   if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
 }
 
@@ -221,9 +224,13 @@ function numOr(id, fallback) {
 
 /* Canonical pipeline default shipped by bootstrap(); the literal fallback
    only applies when bootstrap itself failed to load ProcessingConfig. */
-/** @param {keyof ProcessingRequest} name @param {number} fallback */
+/** @overload @param {keyof ProcessingRequest} name @param {number} fallback @returns {number} */
+/** @overload @param {keyof ProcessingRequest} name @param {string} fallback @returns {string} */
+/** @overload @param {keyof ProcessingRequest} name @param {null} fallback @returns {number | null} */
+/** @param {keyof ProcessingRequest} name @param {number | string | null} fallback */
 function brirDefault(name, fallback) {
   const value = state.brirDefaults[name];
+  if (typeof fallback === "string") return typeof value === "string" ? value : fallback;
   return typeof value === "number" ? value : fallback;
 }
 
@@ -921,6 +928,7 @@ async function begin(start, payload, kindHint = null) {
   }
   state.modalDismissed = false;
   resetSteps(job.kind === "brir");
+  if (job.kind === "brir") renderAlignment(null);
   resetRecorderStatus();
   el("btn-open-output", HTMLButtonElement).hidden = true;
   setProgress(0);
@@ -962,6 +970,7 @@ async function pollJob() {
   const response = await api().poll_job(state.jobId, state.nextSeq);
   if (!response.ok) {
     appendLog(errorText(response));
+    if (state.jobKind === "brir") renderAlignment(null);
     renderJobState(null);
     state.jobId = null;
     return;
@@ -1002,8 +1011,10 @@ async function pollJob() {
     if (job.kind === "brir") {
       if (job.status === "succeeded") {
         completeSteps();
+        renderAlignment(job.result?.alignment ?? null);
         if (state.lastOutputDir) el("btn-open-output", HTMLButtonElement).hidden = false;
       } else {
+        renderAlignment(null);
         abortSteps(job.status);
       }
     }
@@ -1575,12 +1586,13 @@ function gatherRecordingPayload(mode) {
   } else {
     payload.play_path = val("rf-play");
   }
+  // Earlier speaker takes in this folder, for angle checks and for comparing
+  // the speaker and headphone recordings' left/right balance.
+  payload.reference_measurements = (state.takeMeasurements[folderKey(payload.record_dir)] || []).map((item) => ({
+    speaker: item.speaker, itd_us: item.itd_us, lf_db: item.lf_db ?? null, azimuth: item.azimuth ?? null,
+    lf_ild_db: item.lf_ild_db ?? null,
+  }));
   if (mode === "speakers") {
-    // Earlier takes in this folder, so the service can compare speakers that
-    // should share an angle (FL against FR) across separate recordings.
-    payload.reference_measurements = (state.takeMeasurements[folderKey(payload.record_dir)] || []).map((item) => ({
-      speaker: item.speaker, itd_us: item.itd_us, lf_db: item.lf_db ?? null, azimuth: item.azimuth ?? null,
-    }));
     payload.force_channels = checked("rf-force-channels");
     payload.channels = payload.force_channels ? Math.trunc(numOr("rf-channels", 2)) : 2;
     payload.append = checked("rf-append");
@@ -1819,7 +1831,7 @@ function rememberMeasurements(result) {
   const fresh = new Set(result.measurements.map((item) => item.speaker));
   state.takeMeasurements[dir] = [
     ...(state.takeMeasurements[dir] || []).filter((item) => !fresh.has(item.speaker)),
-    ...result.measurements,
+    ...result.measurements.map((item) => ({ ...item, lf_ild_db: item.lf_ild_db ?? null })),
   ];
 }
 
@@ -2634,6 +2646,19 @@ function addTimeArgs(args, p) {
     if (decayMs !== null && decayMs > 0) args.decay = decayMs / 1000;
   }
   args.head_ms = numOr(`${p}-head-ms`, brirDefault("head_ms", 1.0));
+  args.itd_mode = /** @type {ItdMode} */ (val(`${p}-itd-mode`) || "off");
+  args.head_radius = numOrNull(`${p}-head-radius`);
+}
+
+function applyTimeDefaults() {
+  for (const p of ["bf", "ba"]) {
+    const mode = el(`${p}-itd-mode`, HTMLSelectElement);
+    mode.value = brirDefault("itd_mode", "off");
+    for (const option of mode.options) option.defaultSelected = option.value === mode.value;
+    const radius = el(`${p}-head-radius`, HTMLInputElement);
+    radius.value = String(brirDefault("head_radius", null) ?? "");
+    radius.defaultValue = radius.value;
+  }
 }
 
 /** @param {ProcessingRequest} args @param {string} p */
@@ -2818,7 +2843,7 @@ const ADV_TABS = ["tone", "time", "output", "correction"];
 /** @type {Record<string, string[]>} */
 const ADV_FIELDS = {
   tone: ["bass-gain", "bass-fc", "bass-q", "tilt", "target-level", "balance", "balance-db"],
-  time: ["head-ms", "decay", "decay-per-channel", ...DECAY_CHANNELS.map((channel) => `decay-${channel}`)],
+  time: ["head-ms", "itd-mode", "head-radius", "decay", "decay-per-channel", ...DECAY_CHANNELS.map((channel) => `decay-${channel}`)],
   output: ["resample", "fs", "jamesdsp", "hangloose", "truehd", "remove-silent-channels", "layout-files",
     ...Array.from({ length: LAYOUT_FORCE_COUNT }, (_, index) => `layout-force-${index}`),
     "missing-speakers", "lfe-mode"],
@@ -2874,6 +2899,7 @@ function refreshStudioAdvanced() {
   el("ba-fs", HTMLSelectElement).disabled = !checked("ba-resample");
   updateLayoutForce("ba");
   updateLfeHint("ba");
+  updateItdHint("ba");
 
   const mic = el("ba-mic-deviation", HTMLInputElement);
   const blocked = isOpen("dis-headphone");
@@ -2901,6 +2927,7 @@ function refreshStableAdvanced() {
   el("bf-mic-debug", HTMLInputElement).disabled = !mic;
   updateLayoutForce("bf");
   updateLfeHint("bf");
+  updateItdHint("bf");
 }
 
 /** @param {string} id */
@@ -3934,6 +3961,7 @@ function wireEvents() {
   for (const p of ["bf", "ba"]) {
     el(`${p}-layout-files`, HTMLSelectElement).addEventListener("change", () => updateLayoutForce(p));
     el(`${p}-lfe-mode`, HTMLSelectElement).addEventListener("change", () => updateLfeHint(p));
+    el(`${p}-itd-mode`, HTMLSelectElement).addEventListener("change", () => updateItdHint(p));
   }
   el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", updateTestSignalVisibility);
   el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRows);
@@ -4088,6 +4116,7 @@ async function boot() {
   state.brirDefaults = data.brir_defaults || {};
   applyRoomDefaults();
   applyVbassDefaults();
+  applyTimeDefaults();
   state.sweepDefaults = data.sweep || {};
   populateSweepLayouts(
     (data.sweep && data.sweep.layouts) || ["mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6"]
@@ -4127,6 +4156,7 @@ async function boot() {
       state.jobKind = activeJob.kind;
       state.nextSeq = 0;
       resetSteps(activeJob.kind === "brir");
+      if (activeJob.kind === "brir") renderAlignment(null);
       resetRecorderStatus();
       schedulePoll(0);
     }
