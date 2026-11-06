@@ -25,6 +25,7 @@
   "error_share_mode_refused": "设备拒绝了{mode}模式：{reason}。请选择自动以尝试其他模式，或手动选择另一模式。",
   "recording_share_mode_opened": "输出：{output} · 输入：{input}",
   "recording_channel_order_hdmi": "HDMI 声道顺序：{channels}",
+  "recording_session_folder": "此文件夹中已有之前的录音，因此在关闭应用前，录音都会保存到其中的子文件夹 {folder}。处理这组录音时，请选择该子文件夹。",
   "recording_output_channels_short": "{device} 有 {available} 个输出声道，因此第 {first}～{last} 声道（{missing}）未播放。录音中缺少这些扬声器的声音。",
   "warning_output_channels_short": "{device} 有 {available} 个输出声道，但 {layout} 需要 {required} 个。第 {first}～{last} 声道（{missing}）将不会播放，因此录音将缺少这些扬声器的声音。",
   "recording_status_cancelled": "录音已取消。未保存任何内容。",

@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.11.0 - 2026-11-06
+### 다시 녹음해도 이전 녹음을 덮어쓰지 않음
+
+#### 🐛 버그 수정
+- **헤드폰 녹음이 이전 녹음을 덮어쓰던 문제**: 헤드폰 보정 녹음은 언제나 `headphones.wav`로 저장돼서, 같은 폴더에서 다시 녹음하면 이전 녹음이 사라졌습니다. 이제 첫 녹음만 `headphones.wav`이고, 그 뒤로는 `headphones_n.wav`, `headphones_nn.wav`, `headphones_nnn.wav`처럼 녹음할 때마다 `n`을 하나씩 더 붙입니다. BRIR 합성은 지금처럼 `headphones.wav`를 기본으로 읽으므로, 나중 녹음을 쓰려면 합성 화면의 헤드폰 보정 칸에 그 파일을 적으십시오.
+- **스피커 녹음이 이전 녹음을 덮어쓰던 문제**: `FL,FR.wav`가 있는 폴더에서 같은 스피커를 다시 녹음하면 이전 녹음 위에 그대로 썼습니다. 이제 앱을 켠 뒤 직접 만들지 않은 녹음을 바꿔 쓰게 되면, 그 녹음부터 앱을 닫을 때까지 그 폴더로 하는 녹음을 하위 폴더 `n`(이미 있으면 `nn`, `nnn`…)에 저장합니다. 헤드폰 녹음도 같은 하위 폴더로 가므로 한 번의 측정이 한 세트로 모입니다. 그 세트로 BRIR을 만들려면 하위 폴더를 측정 폴더로 고르십시오. 같은 실행 안에서 다시 녹음한 단계(가이드 녹음에서 경고가 난 단계 등)는 지금처럼 그 실행의 녹음을 바꿉니다. 폴더에 아직 없는 스피커는 원래 폴더에 저장하므로, 전에 잰 세트에 스피커를 더하는 일은 그대로 할 수 있습니다. '기존 파일에 덧붙이기'도 지금처럼 그 파일에 트랙을 더합니다.
+- 녹음 전 경로 표시와 확인 창, 가이드 녹음의 단계별 파일 이름이 실제로 저장할 위치(예: `n\FL,FR.wav`, `headphones_n.wav`)를 보여 줍니다. 하위 폴더로 옮길 때는 작업 기록에 안내가 한 줄 남고, 녹음 결과 요약에도 하위 폴더를 포함한 이름이 나옵니다.
+
+#### 🔧 빌드 / 설정 변경
+- `resolve_recording_paths`가 다섯째 인자로 덧붙이기 여부(`append`)를 받고, 녹음 결과에 요청한 폴더(`record_dir`)가 들어갑니다. 2.x(Python) 앱의 녹음 이름 규칙은 바꾸지 않았습니다.
+
 ## 3.10.0 - 2026-11-05
 ### 재지 않은 스피커와 LFE 채널을 채우는 선택
 

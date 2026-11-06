@@ -25,6 +25,7 @@
   "error_share_mode_refused": "장치에서 {mode} 방식을 거부했습니다. 사유: {reason}. 자동을 선택하면 다른 방식으로 다시 시도합니다. 다른 방식을 직접 선택해도 됩니다.",
   "recording_share_mode_opened": "출력: {output} · 입력: {input}",
   "recording_channel_order_hdmi": "HDMI 채널 순서: {channels}",
+  "recording_session_folder": "이 폴더에 이전 녹음이 있어 앱을 닫을 때까지 녹음을 하위 폴더 {folder}에 저장합니다. 이 세트를 처리할 때는 그 하위 폴더를 고르세요.",
   "recording_output_channels_short": "{device}의 출력은 {available}채널이라 {first}~{last}번 채널({missing})은 재생하지 않았습니다. 이 녹음에는 그 스피커가 빠져 있습니다.",
   "warning_output_channels_short": "{device}의 출력은 {available}채널인데 {layout}에는 {required}채널이 필요합니다. {first}~{last}번 채널({missing})은 재생되지 않으므로, 녹음에서 그 스피커가 빠집니다.",
   "recording_status_cancelled": "녹음을 취소했습니다. 저장한 파일은 없습니다.",
