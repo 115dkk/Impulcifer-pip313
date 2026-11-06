@@ -48,6 +48,10 @@ pub struct ValidatedRecording {
     pub play_path: Option<String>,
     pub sweep_spec: Option<SweepSpec>,
     pub record_path: String,
+    /// The folder as requested; record_path may be in a subfolder of it
+    /// (recording::session). Not part of the 2.x validation golden.
+    #[serde(skip_serializing)]
+    pub record_dir: String,
     pub input_device: Option<String>,
     pub output_device: Option<String>,
     pub host_api: Option<String>,
@@ -480,6 +484,7 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
         play_path,
         sweep_spec,
         record_path,
+        record_dir: dir,
         input_device: optional_string(&request["input_device"]),
         output_device: optional_string(&request["output_device"]),
         host_api: optional_string(&request["host_api"]),

@@ -1,6 +1,6 @@
 //! core/recording_naming.py; preserve the caller's unnormalised directory.
 use impulcifer_types::constants::SPEAKER_NAMES;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn normalize_speakers(speakers: &[String]) -> Result<Vec<String>, String> {
     let names: Vec<_> = speakers
@@ -57,9 +57,30 @@ pub fn resolve_record_path_for_speakers(dir: &str, speakers: &[String]) -> Resul
         .to_string_lossy()
         .into_owned())
 }
+/// `name` in `dir` if nothing is there yet, otherwise the first free one of
+/// `<stem>_n<ext>`, `<stem>_nn<ext>`, `<stem>_nnn<ext>` and so on: one more `n`
+/// per earlier take, so a new recording never replaces an earlier one.
+pub fn first_free_path(dir: &Path, name: &str) -> PathBuf {
+    let (stem, ext) = name.rfind('.').map_or((name, ""), |i| name.split_at(i));
+    let mut suffix = String::new();
+    loop {
+        let candidate = if suffix.is_empty() {
+            dir.join(name)
+        } else {
+            dir.join(format!("{stem}_{suffix}{ext}"))
+        };
+        // symlink_metadata, so a dangling link also counts as taken.
+        if std::fs::symlink_metadata(&candidate).is_err() {
+            return candidate;
+        }
+        suffix.push('n');
+    }
+}
+/// The first headphone recording in a folder is headphones.wav; later ones are
+/// headphones_n.wav, headphones_nn.wav and so on (the first stays the one the
+/// BRIR step reads by default).
 pub fn resolve_headphones_record_path(dir: &str) -> String {
-    Path::new(dir)
-        .join("headphones.wav")
+    first_free_path(Path::new(dir), "headphones.wav")
         .to_string_lossy()
         .into_owned()
 }

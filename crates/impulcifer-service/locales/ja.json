@@ -25,6 +25,7 @@
   "error_share_mode_refused": "デバイスが{mode}モードを拒否しました。理由：{reason}。自動で別のモードを試すか、他のモードを選んでください。",
   "recording_share_mode_opened": "出力: {output} · 入力: {input}",
   "recording_channel_order_hdmi": "HDMIのチャンネル順序: {channels}",
+  "recording_session_folder": "このフォルダーには以前の録音があるため、アプリを閉じるまで録音はこのフォルダー内のサブフォルダー {folder} に保存します。今回の録音セットを処理するときは、そのサブフォルダーを選んでください。",
   "recording_output_channels_short": "{device}の出力は{available}チャンネルのため、{first}～{last}チャンネル（{missing}）は再生されませんでした。この録音にはこれらのスピーカーの音が含まれていません。",
   "warning_output_channels_short": "{device}の出力は{available}チャンネルですが、{layout}には{required}チャンネルが必要です。{first}～{last}チャンネル（{missing}）は再生されないため、これらのスピーカーの音は録音に含まれません。",
   "recording_status_cancelled": "録音をキャンセルしました。何も保存されていません。",
