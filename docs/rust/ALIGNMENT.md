@@ -191,7 +191,12 @@ is the recording's): `headphone_balance_db` = the mean of
 `left.raw − right.raw` over the grid points with 200 Hz ≤ f ≤ 2 kHz.
 
 The final BRIR's balance is the speaker chain's divided by the headphone
-chain's: `predicted_balance_db = input_balance_db − headphone_balance_db`.
+chain's, shifted by the channel balance stage that runs later:
+`predicted_balance_db = input_balance_db − headphone_balance_db` without
+`channel_balance`; minus `g` when `channel_balance` is a number `g` (the stage
+raises the right ear by `g` dB); and `0` when it is a method name (`trend`,
+`left`, `right`, `avg`, `min`, `mids` equalise the ears from the data, which
+removes the flat offset this number is about).
 The service logs `cli_itd_pairing` (info) with both numbers and the
 prediction, and `cli_itd_pairing_warning` (warning) instead when
 `|predicted_balance_db| ≥ 2`. Without headphone compensation both headphone

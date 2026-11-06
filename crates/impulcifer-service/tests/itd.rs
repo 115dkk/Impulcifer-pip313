@@ -159,3 +159,41 @@ fn pairing_warning_when_the_inputs_were_swapped_between_the_recordings() {
     assert!((predicted - before + 13.5).abs() <= 0.5, "{report}");
     assert!(has_log(&poll, "cli_itd_pairing_warning"));
 }
+
+#[test]
+fn predicted_balance_includes_the_configured_channel_balance() {
+    let control = Temp::demo();
+    let before = alignment(&run(&control, json!({"dir_path":control.0})))["predicted_balance_db"]
+        .as_f64()
+        .unwrap();
+    assert!(
+        before.abs() < 2.0,
+        "the demo control is not balanced: {before}"
+    );
+    let swapped = || {
+        let temp = Temp::demo();
+        for name in ["FL,FR.wav", "FC.wav", "BL,SL.wav", "SR,BR.wav"] {
+            scale_track(&temp.0.join(name), 0, -6.5);
+        }
+        scale_track(&temp.0.join("headphones.wav"), 1, -7.0);
+        temp
+    };
+
+    // A number (the service takes it as a JSON number) raises the right ear by
+    // that many dB, so -13.5 undoes the injected swap and the warning that
+    // recommended it goes away.
+    let temp = swapped();
+    let poll = run(&temp, json!({"dir_path":temp.0, "channel_balance":-13.5}));
+    let report = alignment(&poll);
+    let predicted = report["predicted_balance_db"].as_f64().unwrap();
+    assert!((predicted - before).abs() <= 0.5, "{report}");
+    assert!(has_log(&poll, "cli_itd_pairing"), "{report}");
+    assert!(!has_log(&poll, "cli_itd_pairing_warning"), "{report}");
+
+    // A method name equalises the ears from the data, so the prediction is 0.
+    let temp = swapped();
+    let poll = run(&temp, json!({"dir_path":temp.0, "channel_balance":"mids"}));
+    let report = alignment(&poll);
+    assert_eq!(report["predicted_balance_db"], 0.0, "{report}");
+    assert!(!has_log(&poll, "cli_itd_pairing_warning"), "{report}");
+}

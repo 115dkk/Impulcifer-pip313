@@ -4,6 +4,7 @@ use super::{
 };
 use impulcifer_dsp::{
     DspError,
+    channel_balance::ChannelBalance,
     fr::FrequencyResponse,
     itd::{AlignmentReport, Correction},
     pipeline::{StageObserver, StageProgress, run_pipeline, total_steps},
@@ -325,8 +326,23 @@ impl StageObserver for Observer<'_, '_> {
             if !differences.is_empty() {
                 let headphone = differences.iter().sum::<f64>() / differences.len() as f64;
                 report.headphone_balance_db = Some(headphone);
+                // The channel balance stage runs after this report. A number
+                // raises the right ear by that many dB; a method name equalises
+                // the ears from the data, which removes the flat offset this
+                // prediction is about.
+                let channel_balance = self
+                    .config
+                    .channel_balance
+                    .as_deref()
+                    .and_then(|value| ChannelBalance::parse(value).ok());
                 report.predicted_balance_db =
-                    report.input_balance_db.map(|speaker| speaker - headphone);
+                    report
+                        .input_balance_db
+                        .map(|speaker| match channel_balance {
+                            None => speaker - headphone,
+                            Some(ChannelBalance::GainDb(gain)) => speaker - headphone - gain,
+                            Some(_) => 0.0,
+                        });
             }
         }
         let decimal =
