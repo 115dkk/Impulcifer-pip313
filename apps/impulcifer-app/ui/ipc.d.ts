@@ -152,6 +152,9 @@ interface ProcessingRequest {
   /* 3.13.0 (ADR 0015). Dip limiting and low-end protection are optional; extra bands are a
      comma-separated string of up to four lo-hi pairs in Hz (20–20000), empty for none. */
   room_tuning2_dip_limit?: boolean; room_tuning2_low_protect?: boolean; room_tuning2_bands?: string;
+  /* 3.14.0 (ADR 0015). Optional bass arrival alignment, mode-decay cuts and treble phase correction.
+     Arrival alignment and treble phase correction require FIR; the screen sends false in "zero". */
+  room_tuning2_lf_align?: boolean; room_tuning2_mode_decay?: boolean; room_tuning2_hf_phase?: boolean;
   /* 3.x only (ADR 0006). "auto" finds the crossover in the measurements and ignores vbass_freq;
      "manual" uses vbass_freq; "legacy" is the 2.x method. Without vbass_mode, a given vbass_freq
      means "manual". */

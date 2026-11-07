@@ -310,9 +310,9 @@ fn room_tuning2_bundle2_options_log_on_demo() {
     );
     let readme = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
     for text in [
-        "low-frequency arrival alignment",
+        "bass arrival alignment from",
         "mode-decay target",
-        "high-frequency phase",
+        "treble phase",
     ] {
         assert!(readme.contains(text), "{text}: {readme}");
     }
