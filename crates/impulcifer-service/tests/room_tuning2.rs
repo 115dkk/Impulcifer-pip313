@@ -261,9 +261,9 @@ fn room_tuning2_new_options_log_on_demo() {
     }));
     let readme = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
     for key in [
-        "Tuning2 correction bands:",
-        "low-end protection rolloff",
-        "dip limiting affected",
+        "Virtual room tuning 2 correction bands:",
+        "low-end protection, rolloff (Hz):",
+        "boost limited in",
     ] {
         assert!(readme.contains(key), "{key}: {readme}");
     }
