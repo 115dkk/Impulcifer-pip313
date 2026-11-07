@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //! Clean-room gates for the SECS 2R (`s2r_*`) fixtures from ADR 0015 bundle 1.
 mod golden_secs2_helpers;
-use golden_secs2_helpers::{array, bands, complex, fixture_r, fixtures_r, number};
+use golden_secs2_helpers::{array, bands, complex, fixture_r, fixtures_r, number, sha256};
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     fft::Complex64,
@@ -38,6 +38,26 @@ fn flatten_bands(values: &[(f64, f64, f64)]) -> Vec<f64> {
 
 fn flatten_pairs(values: &[(f64, f64)]) -> Vec<f64> {
     values.iter().flat_map(|pair| [pair.0, pair.1]).collect()
+}
+
+fn sha_f64(values: &[f64]) -> String {
+    sha256(
+        &values
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn compare_input_sha(name: &str, got: &str, expected: &str) {
+    if oracle_libm_r() {
+        assert_eq!(got, expected, "{name}");
+    } else {
+        println!(
+            "REPORT {name}: exact={} got={got} expected={expected}",
+            got == expected
+        );
+    }
 }
 
 fn bins() -> &'static Vec<usize> {
@@ -195,10 +215,336 @@ fn compare_decision<T: std::fmt::Debug + PartialEq>(
     }
 }
 
+fn compare_refinement(
+    name: &str,
+    got: &ResonanceRefinement,
+    expected: &Value,
+    class: Comparison,
+    errors: &mut Errors,
+) {
+    assert_eq!(got.low_index, expected["lo"].as_u64().unwrap() as usize);
+    assert_eq!(got.high_index, expected["hi"].as_u64().unwrap() as usize);
+    assert_eq!(
+        got.peak_index,
+        expected["peak"].as_u64().map(|value| value as usize),
+        "{name}/peak"
+    );
+    assert_eq!(
+        got.rejection,
+        expected["rejection"].as_str(),
+        "{name}/rejection"
+    );
+    for (label, actual) in [
+        ("left", got.left_db),
+        ("middle", got.middle_db),
+        ("right", got.right_db),
+        ("curvature", got.curvature),
+        ("offset", got.offset),
+    ] {
+        if expected[label].is_null() {
+            assert!(actual.is_none(), "{name}/{label}");
+        } else {
+            errors.compare(
+                &format!("{name}/{label}"),
+                &[actual.unwrap()],
+                &[number(&expected[label])],
+                class,
+            );
+        }
+    }
+}
+
+fn compare_realize_call(
+    name: &str,
+    got: &RealizeDiagnostics,
+    expected: &Value,
+    errors: &mut Errors,
+) {
+    for (label, actual) in [
+        ("applied_before", got.applied_before.as_slice()),
+        ("applied_after", got.applied_after.as_slice()),
+    ] {
+        let want = array(&expected[label]);
+        let actual = if want.len() == actual.len() {
+            actual.to_vec()
+        } else {
+            sampled(actual)
+        };
+        errors.compare(
+            &format!("{name}/{label}"),
+            &actual,
+            &want,
+            Comparison::Exact,
+        );
+    }
+    for (label, actual) in [
+        ("total", got.total),
+        ("rho", got.rho),
+        ("wrapped", got.wrapped),
+        ("correction", got.correction),
+        ("rotation", got.rotation),
+    ] {
+        if let Some(want) = expected[label].as_f64() {
+            errors.compare(
+                &format!("{name}/{label}"),
+                &[actual.unwrap()],
+                &[want],
+                Comparison::Exact,
+            );
+        } else {
+            assert!(actual.is_none(), "{name}/{label}");
+        }
+    }
+    if let Some(want) = expected["limited"].as_bool() {
+        compare_decision(
+            &format!("{name}/limited"),
+            &got.limited,
+            &want,
+            Comparison::Exact,
+        );
+    }
+    errors.compare(
+        &format!("{name}/h"),
+        &got.fir,
+        &array(&expected["h"]),
+        Comparison::Curve,
+    );
+    errors.compare(
+        &format!("{name}/rms_max"),
+        &[got.rms, got.max],
+        &[number(&expected["rms"]), number(&expected["max"])],
+        Comparison::Curve,
+    );
+}
+
 #[test]
 fn room_tuning2_s2r_libm_probe() {
     let same = oracle_libm_r();
     println!("SECS 2R oracle libm match: {same}");
+}
+
+#[test]
+fn room_tuning2_s2r_lf_weight_and_pull() {
+    let mut errors = Errors::default();
+    let fixture = fixture_r("lf_weight");
+    let frequencies = array(&fixture["inputs"]["f"]);
+    let expected = fixture["outputs"]["w"].as_array().unwrap();
+    for (index, f_lin) in fixture["inputs"]["f_lin"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        errors.compare(
+            &format!("lf_weight/{index}"),
+            &lf_alignment_weight(&frequencies, number(f_lin)),
+            &array(&expected[index]),
+            Comparison::Exact,
+        );
+    }
+    let fixture = fixture_r("lf_pull");
+    let got: Vec<_> = fixture["inputs"]["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|case| {
+            let row = case.as_array().unwrap();
+            lf_pull_bound(
+                number(&row[0]),
+                number(&row[1]),
+                number(&row[2]),
+                number(&row[3]),
+                number(&row[4]),
+            )
+        })
+        .collect();
+    errors.compare(
+        "lf_pull",
+        &got,
+        &array(&fixture["outputs"]["value"]),
+        Comparison::Exact,
+    );
+    errors.finish("s2r_lf_weight_pull");
+}
+
+#[test]
+fn room_tuning2_s2r_decay_cut_and_hf_region() {
+    let mut errors = Errors::default();
+    let fixture = fixture_r("decay_cut");
+    let expected = fixture["outputs"]["cut"].as_array().unwrap();
+    for (index, case) in fixture["inputs"]["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        let row = case.as_array().unwrap();
+        let got = mode_decay_cut(
+            number(&row[0]),
+            number(&row[1]),
+            number(&row[2]),
+            number(&row[3]),
+            number(&row[4]),
+        );
+        if expected[index].is_null() {
+            assert!(got.is_none(), "decay_cut/{index}");
+        } else {
+            let got = got.unwrap();
+            errors.compare(
+                &format!("decay_cut/{index}"),
+                &[got.frequency_hz, got.q, -got.depth_db],
+                &array(&expected[index]),
+                Comparison::Exact,
+            );
+        }
+    }
+    let frequencies = grid();
+    for (name, fixture) in fixtures_r("hf_region_") {
+        let extras = pairs(&fixture["inputs"]["rc_bands"]);
+        let region = hf_phase_region(
+            &frequencies,
+            FS,
+            number(&fixture["inputs"]["rc_hi"]),
+            &merge_band_set((20.0, number(&fixture["inputs"]["rc_hi"])), &extras),
+        );
+        if fixture["outputs"]["inert"].as_bool().unwrap() {
+            assert!(region.is_none(), "{name}");
+        } else {
+            let region = region.unwrap();
+            errors.compare(
+                &format!("{name}/scalars"),
+                &[
+                    region.low_hz,
+                    region.high_hz,
+                    region.log_width,
+                    region.weight_sum,
+                ],
+                &[
+                    number(&fixture["outputs"]["lo"]),
+                    number(&fixture["outputs"]["hi"]),
+                    number(&fixture["outputs"]["log_width"]),
+                    number(&fixture["outputs"]["weight_sum"]),
+                ],
+                Comparison::Exact,
+            );
+            errors.compare(
+                &format!("{name}/weight"),
+                &sampled(&region.weight),
+                &array(&fixture["outputs"]["weight"]),
+                Comparison::Exact,
+            );
+        }
+    }
+    errors.finish("s2r_decay_cut_hf_region");
+}
+
+#[test]
+fn room_tuning2_s2r_mode_t60_and_refinement() {
+    let mut errors = Errors::default();
+    let fixture = fixture_r("mode_t60_48k_synthetic");
+    let impulse = array(&fixture["inputs"]["x"]);
+    let centers = array(&fixture["inputs"]["fc"]);
+    let half = array(&fixture["inputs"]["half"]);
+    let got: Vec<_> = centers
+        .iter()
+        .zip(half)
+        .map(|(center, half)| primitives::mode_decay_at_rate(&impulse, *center, half, FS).unwrap())
+        .collect();
+    errors.compare(
+        "mode_t60_48k_synthetic",
+        &got,
+        &array(&fixture["outputs"]["t60"]),
+        Comparison::Curve,
+    );
+    for (name, fixture) in fixtures_r("mode_t60_48k_") {
+        if name.ends_with("synthetic") {
+            continue;
+        }
+        let speaker = fixture["meta"]["case"]
+            .as_str()
+            .unwrap()
+            .to_ascii_uppercase();
+        let spectrum = point_spectrum(&points(&speaker)[0]);
+        let impulse = impulcifer_dsp::fft::irfft(&spectrum, N);
+        let centers = array(&fixture["inputs"]["fc"]);
+        let half = array(&fixture["inputs"]["half"]);
+        let got: Vec<_> = centers
+            .iter()
+            .zip(half)
+            .map(|(center, half)| {
+                primitives::mode_decay_at_rate(&impulse, *center, half, FS).unwrap()
+            })
+            .collect();
+        errors.compare(
+            &name,
+            &got,
+            &array(&fixture["outputs"]["t60"]),
+            Comparison::Rebuilt,
+        );
+    }
+
+    let fixture = fixture_r("refine_resonance");
+    let response = complex(&fixture["inputs"]["H"]);
+    let frequencies = grid();
+    for (index, candidate) in array(&fixture["inputs"]["p"]).iter().enumerate() {
+        let got = refine_resonance(&response, &frequencies, *candidate);
+        let expected = &fixture["outputs"]["results"][index];
+        compare_refinement(
+            &format!("refine_resonance/{index}"),
+            &got,
+            expected,
+            Comparison::Exact,
+            &mut errors,
+        );
+        if let Some(mode) = got.mode {
+            errors.compare(
+                &format!("refine/{index}/mode"),
+                &[mode.0],
+                &[number(&expected["output"][0])],
+                Comparison::Exact,
+            );
+            errors.compare(
+                &format!("refine/{index}/t60"),
+                &[mode.1],
+                &[number(&expected["output"][1])],
+                Comparison::Curve,
+            );
+        } else {
+            assert!(expected["output"].is_null(), "refine/{index}");
+        }
+    }
+    for (name, fixture) in fixtures_r("refine_") {
+        if name == "refine_resonance" {
+            continue;
+        }
+        let speaker = fixture["meta"]["case"]
+            .as_str()
+            .unwrap()
+            .to_ascii_uppercase();
+        let response = point_spectrum(&points(&speaker)[0]);
+        for (index, candidate) in array(&fixture["inputs"]["candidates"]).iter().enumerate() {
+            let got = refine_resonance(&response, &frequencies, *candidate);
+            let expected = &fixture["outputs"]["results"][index];
+            compare_refinement(
+                &format!("{name}/{index}"),
+                &got,
+                expected,
+                Comparison::Rebuilt,
+                &mut errors,
+            );
+            if let Some(mode) = got.mode {
+                errors.compare(
+                    &format!("{name}/{index}/mode"),
+                    &[mode.0, mode.1],
+                    &array(&expected["output"]),
+                    Comparison::Rebuilt,
+                );
+            } else {
+                assert!(expected["output"].is_null(), "{name}/{index}");
+            }
+        }
+    }
+    errors.finish("s2r_mode_t60_refine");
 }
 
 #[test]
@@ -514,6 +860,23 @@ fn points(speaker: &str) -> Vec<ImpulseResponse> {
         .collect()
 }
 
+fn point_spectrum(point: &ImpulseResponse) -> Vec<Complex64> {
+    let onset = primitives::onset(&point.data);
+    let start = onset.saturating_sub((0.002 * FS) as usize);
+    let end = (start + (0.5 * FS) as usize).min(point.data.len());
+    let mut window = point.data[start..end].to_vec();
+    primitives::taper(&mut window, 0.2);
+    let frequencies = grid();
+    let mut response = primitives::rfft(&window, N);
+    for (value, frequency) in response.iter_mut().zip(frequencies) {
+        *value *= Complex64::from_polar(
+            1.0,
+            -2.0 * std::f64::consts::PI * frequency * (start as f64 - onset as f64) / FS,
+        );
+    }
+    response
+}
+
 fn options() -> RcOptions {
     RcOptions {
         policy: PositionPolicy::Listening {
@@ -826,6 +1189,689 @@ fn room_tuning2_low_protect_matches_secs2r() {
     errors.finish("s2r_mask");
 }
 
+#[test]
+fn room_tuning2_realize_synthetic_matches_secs2r() {
+    let frequencies = grid();
+    let excess: Vec<_> = frequencies
+        .iter()
+        .map(|frequency| {
+            if *frequency > 0.0 && *frequency < 500.0 * 2_f64.sqrt() {
+                let value = (*frequency / 100.0).log2();
+                0.002 * (-value.powi(2)).exp()
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let magnitude = vec![Complex64::new(1.0, 0.0); frequencies.len()];
+    let mut errors = Errors::default();
+    for case in ["unity_hf", "unity_off", "unity_beta", "unity_inert"] {
+        let fixture = fixture_r(&format!("realize_{case}"));
+        let input = &fixture["inputs"];
+        let lift = number(&input["lift"]);
+        let taps = input["taps"].as_u64().unwrap() as usize;
+        let extras = input["hf_phase"]["rc_bands"]
+            .as_array()
+            .map_or_else(Vec::new, |_| pairs(&input["hf_phase"]["rc_bands"]));
+        let region = input["hf_phase"].as_object().and_then(|_| {
+            hf_phase_region(
+                &frequencies,
+                FS,
+                number(&input["hf_phase"]["rc_hi"]),
+                &merge_band_set((20.0, number(&input["hf_phase"]["rc_hi"])), &extras),
+            )
+        });
+        compare_input_sha(
+            &format!("{case}/excess_sha256"),
+            &sha_f64(&excess),
+            input["excess_sha256"].as_str().unwrap(),
+        );
+        let kappa = input["beta_rule"]
+            .as_str()
+            .map(|_| lf_alignment_weight(&frequencies, 40.0));
+        if let (Some(kappa), Some(expected)) = (&kappa, input["beta_sha256"].as_str()) {
+            compare_input_sha(&format!("{case}/beta_sha256"), &sha_f64(kappa), expected);
+        }
+        let mut error_mask = vec![false; frequencies.len()];
+        for run in input["band_true_runs"].as_array().unwrap() {
+            let row = run.as_array().unwrap();
+            let start = row[0].as_u64().unwrap() as usize;
+            let end = row[1].as_u64().unwrap() as usize;
+            error_mask[start..end].fill(true);
+        }
+        compare_input_sha(
+            &format!("{case}/band_sha256"),
+            &sha_f64(
+                &error_mask
+                    .iter()
+                    .map(|value| f64::from(*value))
+                    .collect::<Vec<_>>(),
+            ),
+            input["band_sha256"].as_str().unwrap(),
+        );
+        let re: Vec<_> = magnitude.iter().map(|value| value.re).collect();
+        let im: Vec<_> = magnitude.iter().map(|value| value.im).collect();
+        compare_input_sha(
+            &format!("{case}/m_re_sha256"),
+            &sha_f64(&re),
+            input["m_sha256"]["re"].as_str().unwrap(),
+        );
+        compare_input_sha(
+            &format!("{case}/m_im_sha256"),
+            &sha_f64(&im),
+            input["m_sha256"]["im"].as_str().unwrap(),
+        );
+        let got = realize_for_fixture(
+            &frequencies,
+            &excess,
+            &magnitude,
+            taps,
+            lift,
+            1.5 * FS / taps as f64,
+            500.0 * 2_f64.sqrt(),
+            &extras,
+            None,
+            FS,
+            number(&input["frac"]),
+            kappa.as_deref(),
+            region.as_ref(),
+            Some(&error_mask),
+        );
+        errors.compare(
+            &format!("{case}/applied_before"),
+            &sampled(&got.applied_before),
+            &array(&fixture["outputs"]["applied_before"]),
+            Comparison::Exact,
+        );
+        errors.compare(
+            &format!("{case}/applied_after"),
+            &sampled(&got.applied_after),
+            &array(&fixture["outputs"]["applied_after"]),
+            Comparison::Exact,
+        );
+        errors.compare(
+            &format!("{case}/h"),
+            &got.fir,
+            &array(&fixture["outputs"]["h"]),
+            Comparison::Curve,
+        );
+        errors.compare(
+            &format!("{case}/rms_max"),
+            &[got.rms, got.max],
+            &[
+                number(&fixture["outputs"]["rms"]),
+                number(&fixture["outputs"]["max"]),
+            ],
+            Comparison::Curve,
+        );
+        for (label, actual) in [
+            ("total", got.total),
+            ("rho", got.rho),
+            ("wrapped", got.wrapped),
+            ("correction", got.correction),
+            ("rotation", got.rotation),
+        ] {
+            if let Some(expected) = fixture["outputs"][label].as_f64() {
+                errors.compare(
+                    &format!("{case}/{label}"),
+                    &[actual.unwrap()],
+                    &[expected],
+                    Comparison::Exact,
+                );
+            } else {
+                assert!(actual.is_none(), "{case}/{label}");
+            }
+        }
+        if let Some(expected) = fixture["outputs"]["limited"].as_bool() {
+            compare_decision(
+                &format!("{case}/limited"),
+                &got.limited,
+                &expected,
+                Comparison::Exact,
+            );
+        } else {
+            assert!(got.rotation_deg.is_none());
+        }
+    }
+
+    let fixture = fixture_r("realize_fl_phase_linear");
+    let input = &fixture["inputs"]["selected_repeat"];
+    let excess = array(&input["excess"]);
+    let band = array(&input["band"])
+        .into_iter()
+        .map(|value| value != 0.0)
+        .collect::<Vec<_>>();
+    let kappa = array(&input["beta"]);
+    let magnitude = complex(&input["m"]);
+    let taps = input["taps"].as_u64().unwrap() as usize;
+    let region = hf_phase_region(&frequencies, FS, 500.0, &[(20.0, 500.0)]).unwrap();
+    let got = realize_for_fixture(
+        &frequencies,
+        &excess,
+        &magnitude,
+        taps,
+        number(&input["lift"]),
+        1.5 * FS / taps as f64,
+        500.0 * 2_f64.sqrt(),
+        &[],
+        None,
+        FS,
+        number(&input["frac"]),
+        Some(&kappa),
+        Some(&region),
+        Some(&band),
+    );
+    let expected = fixture["outputs"]["calls"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|call| call["selected"].as_bool() == Some(true))
+        .unwrap();
+    compare_realize_call("fl_phase_linear/selected", &got, expected, &mut errors);
+    errors.finish("s2r_realize_synthetic");
+}
+
+#[test]
+fn room_tuning2_realize_demo_reports_secs2r() {
+    for (name, fixture) in fixtures_r("realize_") {
+        if name.starts_with("realize_unity_") {
+            continue;
+        }
+        let speaker = fixture["meta"]["speaker"].as_str().unwrap();
+        let settings = &fixture["meta"]["settings"];
+        let speaker_points = points(speaker);
+        let opts = RcOptions {
+            mode: Tuning2Mode::parse(settings["mode"].as_str().unwrap()).unwrap(),
+            low_protect: settings["low_protect"].as_bool().unwrap(),
+            dip_limit: settings["dip_limit"].as_bool().unwrap(),
+            lf_align: settings["lf_align"].as_bool().unwrap(),
+            mode_decay: settings["mode_decay"].as_bool().unwrap(),
+            hf_phase: settings["hf_phase"].as_bool().unwrap(),
+            extra_bands: pairs(&settings["rc_bands"]),
+            ..options()
+        };
+        let band = correction_band(&[&speaker_points], &opts).unwrap();
+        let mut stages = RcStages::default();
+        let result =
+            design_rc_with_stages(&speaker_points, &opts, &band, None, None, Some(&mut stages))
+                .unwrap();
+        let actual: Vec<_> = stages
+            .sessions
+            .iter()
+            .flat_map(|session| &session.realizations)
+            .collect();
+        let expected = fixture["outputs"]["calls"].as_array().unwrap();
+        println!(
+            "REPORT {name}: selected_fraction got={:.1} expected={:.1}; calls got={} expected={}",
+            result.phase_strength,
+            number(&fixture["outputs"]["selected_fraction"]),
+            actual.len(),
+            expected.len()
+        );
+        for (index, (got, want)) in actual.iter().zip(expected).enumerate() {
+            println!(
+                "REPORT {name}/call_{index:02}: fraction got={:.1} expected={:.1}; limited got={} expected={:?}; rotation got={:?} expected={:?}; rms got={:.9e} expected={:.9e}; max got={:.9e} expected={:.9e}",
+                got.strength,
+                number(&want["frac"]),
+                got.limited,
+                want["limited"].as_bool(),
+                got.rotation,
+                want["rotation"].as_f64(),
+                got.rms,
+                number(&want["rms"]),
+                got.max,
+                number(&want["max"]),
+            );
+        }
+        if let Some(index) = expected
+            .iter()
+            .position(|call| call["selected"].as_bool() == Some(true))
+            && let Some(got) = actual.get(index)
+        {
+            let want = &expected[index];
+            let want_adv = array(&want["applied_after"]);
+            let got_adv = if want_adv.len() == got.applied_after.len() {
+                got.applied_after.clone()
+            } else {
+                sampled(&got.applied_after)
+            };
+            let adv_max = got_adv
+                .iter()
+                .zip(want_adv)
+                .map(|(got, want)| (got - want).abs())
+                .fold(0.0, f64::max);
+            let h_max = got
+                .fir
+                .iter()
+                .zip(array(&want["h"]))
+                .map(|(got, want)| (got - want).abs())
+                .fold(0.0, f64::max);
+            println!(
+                "REPORT {name}/selected_call_{index:02}: adv_max={adv_max:.9e}; h_max={h_max:.9e}"
+            );
+        }
+    }
+}
+
+#[test]
+fn room_tuning2_lf_excess_recombines_secs2r() {
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("lf_excess_") {
+        let speaker = fixture["meta"]["speaker"].as_str().unwrap();
+        let prep = fixture_r(&format!(
+            "lf_prep_{}_lf_linear",
+            speaker.to_ascii_lowercase()
+        ));
+        let kappa = array(&prep["outputs"]["beta"]);
+        let target = array(&prep["outputs"]["target"]);
+        let tau = array(&fixture["outputs"]["tau"]);
+        let reference = number(&fixture["outputs"]["reference"]);
+        let tau_total = array(&fixture["outputs"]["tau_tot"]);
+        let reference_total = number(&fixture["outputs"]["reference_tot"]);
+        let fade = array(&fixture["outputs"]["fade"]);
+        let expected_error = array(&fixture["outputs"]["total_error"]);
+        let error: Vec<_> = tau_total
+            .iter()
+            .zip(&target)
+            .map(|(delay, target)| delay - reference_total - target)
+            .collect();
+        errors.compare(
+            &format!("{name}/error"),
+            &error,
+            &expected_error,
+            Comparison::Exact,
+        );
+        let total_valid: Vec<_> = error.iter().map(|value| value.is_finite()).collect();
+        let excess = blend_lf_excess(&tau, reference, &error, &total_valid, &kappa, &fade);
+        errors.compare(
+            &format!("{name}/excess"),
+            &excess,
+            &array(&fixture["outputs"]["excess"]),
+            Comparison::Exact,
+        );
+        if fixture["meta"]["full_resolution"].is_array() {
+            let full_frequencies = grid();
+            let full_total_phase = complex(&fixture["outputs"]["ut_full"]);
+            let beta = number(&fixture["outputs"]["phase_frac"]);
+            let total = primitives::smooth_phasors(&full_total_phase, &full_frequencies, &[beta]);
+            errors.compare(
+                &format!("{name}/full_total"),
+                &sampled_complex(&total)
+                    .iter()
+                    .flat_map(|value| [value.re, value.im])
+                    .collect::<Vec<_>>(),
+                &complex(&fixture["outputs"]["total"])
+                    .iter()
+                    .flat_map(|value| [value.re, value.im])
+                    .collect::<Vec<_>>(),
+                Comparison::Curve,
+            );
+            let full_delay = smoothed_phase_delay(&total, &full_frequencies);
+            errors.compare(
+                &format!("{name}/full_delay"),
+                &sampled(&full_delay),
+                &array(&fixture["outputs"]["tau_tot"]),
+                Comparison::Curve,
+            );
+            let full_reference = primitives::median(
+                &full_frequencies
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, frequency)| **frequency >= 3000.0 && **frequency <= 6000.0)
+                    .map(|(index, _)| full_delay[index])
+                    .collect::<Vec<_>>(),
+            );
+            errors.compare(
+                &format!("{name}/full_reference"),
+                &[full_reference],
+                &[reference_total],
+                Comparison::Curve,
+            );
+            let full_target = array(&fixture["outputs"]["target_full"]);
+            let full_error: Vec<_> = full_delay
+                .iter()
+                .zip(&full_target)
+                .map(|(delay, target)| delay - full_reference - target)
+                .collect();
+            errors.compare(
+                &format!("{name}/full_error"),
+                &sampled(&full_error),
+                &expected_error,
+                Comparison::Curve,
+            );
+            let full_tau = array(&fixture["outputs"]["tau_full"]);
+            let full_fade = array(&fixture["outputs"]["fade_full"]);
+            let full_kappa = array(&fixture["outputs"]["beta_full"]);
+            let full_valid: Vec<_> = full_total_phase
+                .iter()
+                .zip(&total)
+                .map(|(raw, smoothed)| {
+                    raw.re.is_finite()
+                        && raw.im.is_finite()
+                        && smoothed.re.is_finite()
+                        && smoothed.im.is_finite()
+                })
+                .collect();
+            let full_excess = blend_lf_excess(
+                &full_tau,
+                reference,
+                &full_error,
+                &full_valid,
+                &full_kappa,
+                &full_fade,
+            );
+            errors.compare(
+                &format!("{name}/full_excess"),
+                &sampled(&full_excess),
+                &array(&fixture["outputs"]["excess"]),
+                Comparison::Curve,
+            );
+            let realize = fixture_r("realize_fl_phase_linear");
+            let realize_excess = array(&realize["inputs"]["selected_repeat"]["excess"]);
+            if fixture["meta"]["realize_excess_identity"]["bit_identical"]
+                .as_bool()
+                .unwrap()
+            {
+                assert_eq!(full_excess.len(), realize_excess.len());
+                assert!(
+                    full_excess
+                        .iter()
+                        .zip(&realize_excess)
+                        .all(|(got, expected)| got.to_bits() == expected.to_bits()),
+                    "{name}/realize excess bit identity"
+                );
+            }
+
+            let speaker_points = points("FL");
+            let opts = RcOptions {
+                mode: Tuning2Mode::Linear,
+                lf_align: true,
+                ..options()
+            };
+            let band = correction_band(&[&speaker_points], &opts).unwrap();
+            let mut stages = RcStages::default();
+            design_rc_with_stages(&speaker_points, &opts, &band, None, None, Some(&mut stages))
+                .unwrap();
+            let session = &stages.sessions[0];
+            for (label, got, want) in [
+                (
+                    "ut",
+                    sampled_complex(&session.v_total),
+                    complex(&fixture["outputs"]["ut"]),
+                ),
+                (
+                    "total",
+                    sampled_complex(&session.v_total_smoothed),
+                    complex(&fixture["outputs"]["total"]),
+                ),
+            ] {
+                let maximum = got
+                    .iter()
+                    .zip(want)
+                    .map(|(got, want)| (got - want).norm())
+                    .fold(0.0, f64::max);
+                println!("REPORT {name}/rebuilt_{label}: max_complex={maximum:.9e}");
+            }
+            for (label, got, want) in [
+                (
+                    "tau_tot",
+                    sampled(&session.total_delay),
+                    array(&fixture["outputs"]["tau_tot"]),
+                ),
+                (
+                    "total_error",
+                    sampled(&session.total_error),
+                    expected_error.clone(),
+                ),
+                (
+                    "excess",
+                    sampled(&session.excess),
+                    array(&fixture["outputs"]["excess"]),
+                ),
+            ] {
+                let maximum = got
+                    .iter()
+                    .zip(want)
+                    .map(|(got, want)| (got - want).abs())
+                    .fold(0.0, f64::max);
+                println!("REPORT {name}/rebuilt_{label}: max_abs={maximum:.9e}");
+            }
+        }
+    }
+    errors.finish("s2r_lf_excess");
+}
+
+#[test]
+fn room_tuning2_lf_preparation_matches_secs2r() {
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("lf_prep_") {
+        let speaker = fixture["meta"]["speaker"].as_str().unwrap();
+        let protect = fixture["meta"]["setting"]
+            .as_str()
+            .unwrap()
+            .contains("protect");
+        let speaker_points = points(speaker);
+        let opts = RcOptions {
+            mode: Tuning2Mode::Linear,
+            low_protect: protect,
+            lf_align: true,
+            ..options()
+        };
+        let band = correction_band(&[&speaker_points], &opts).unwrap();
+        let mut stages = RcStages::default();
+        let result =
+            design_rc_with_stages(&speaker_points, &opts, &band, None, None, Some(&mut stages))
+                .unwrap();
+        let f_lin = stages.lf_f_lin_hz.unwrap();
+        errors.compare(
+            &format!("{name}/f_lin"),
+            &[f_lin],
+            &[number(&fixture["outputs"]["f_lin"])],
+            Comparison::Rebuilt,
+        );
+        if let Some(expected) = fixture["outputs"]["rolloff_hz"].as_f64() {
+            let got = if f_lin > opts.low {
+                f_lin / 1.5
+            } else {
+                opts.low
+            };
+            errors.compare(
+                &format!("{name}/rolloff"),
+                &[got],
+                &[expected],
+                Comparison::Rebuilt,
+            );
+        }
+        for (label, got) in [
+            ("beta_raw", stages.lf_weight_raw.as_slice()),
+            ("beta", stages.lf_weight.as_slice()),
+            ("sm", stages.lf_smoothed_db.as_slice()),
+            ("corr", stages.lf_target_magnitude.as_slice()),
+            ("tau", stages.lf_target_delay.as_slice()),
+            ("target", stages.lf_target.as_slice()),
+        ] {
+            errors.compare(
+                &format!("{name}/{label}"),
+                &sampled(got),
+                &array(&fixture["outputs"][label]),
+                Comparison::Rebuilt,
+            );
+        }
+        assert!(result.lf_align.is_some());
+    }
+    errors.finish("s2r_lf_prep");
+}
+
+#[test]
+fn room_tuning2_mode_decay_matches_secs2r() {
+    let frequencies = grid();
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("mode_decay_") {
+        let speaker = fixture["meta"]["speaker"].as_str().unwrap();
+        let speaker_points = points(speaker);
+        let opts = RcOptions {
+            mode_decay: true,
+            ..options()
+        };
+        let band = correction_band(&[&speaker_points], &opts).unwrap();
+        let mut stages = RcStages::default();
+        let result =
+            design_rc_with_stages(&speaker_points, &opts, &band, None, None, Some(&mut stages))
+                .unwrap();
+        let details = stages.mode_decay.as_ref().unwrap();
+        errors.compare(
+            &format!("{name}/candidates"),
+            &flatten_pairs(&details.candidates),
+            &flatten_pairs(&pairs(&fixture["outputs"]["long_modes"])),
+            Comparison::Rebuilt,
+        );
+        errors.compare(
+            &format!("{name}/band_t60"),
+            &details.band_t60,
+            &array(&fixture["outputs"]["band_t60"]),
+            Comparison::Rebuilt,
+        );
+        let expected_refined = fixture["outputs"]["refined"].as_array().unwrap();
+        assert_eq!(
+            details.refinements.len(),
+            expected_refined.len(),
+            "{name}/refined length"
+        );
+        for (index, ((candidate, refinement), expected)) in
+            details.refinements.iter().zip(expected_refined).enumerate()
+        {
+            errors.compare(
+                &format!("{name}/refined/{index}/candidate"),
+                &[*candidate],
+                &[number(&expected["p"])],
+                Comparison::Exact,
+            );
+            compare_refinement(
+                &format!("{name}/refined/{index}"),
+                refinement,
+                expected,
+                Comparison::Rebuilt,
+                &mut errors,
+            );
+        }
+        errors.compare(
+            &format!("{name}/merged"),
+            &flatten_pairs(&details.merged),
+            &flatten_pairs(&pairs(&fixture["outputs"]["merged"])),
+            Comparison::Rebuilt,
+        );
+        errors.compare(
+            &format!("{name}/heights"),
+            &details.heights,
+            &array(&fixture["outputs"]["heights"]),
+            Comparison::Rebuilt,
+        );
+        let expected_attempts = fixture["outputs"]["decay_cuts"].as_array().unwrap();
+        assert_eq!(
+            details.decay_cuts.len(),
+            expected_attempts.len(),
+            "{name}/decay_cuts length"
+        );
+        for (index, (got, expected)) in details.decay_cuts.iter().zip(expected_attempts).enumerate()
+        {
+            if expected.is_null() {
+                assert!(got.is_none(), "{name}/decay_cuts/{index}");
+            } else {
+                let got = got.unwrap();
+                errors.compare(
+                    &format!("{name}/decay_cuts/{index}"),
+                    &[got.frequency_hz, got.q, -got.depth_db],
+                    &array(expected),
+                    Comparison::Rebuilt,
+                );
+            }
+        }
+        let smoothed: Vec<_> = stages
+            .smoothed_variable
+            .iter()
+            .zip(&stages.smoothed_third)
+            .map(|(variable, third)| {
+                (10.0 * (variable + 1e-30).log10()).max(10.0 * (third + 1e-30).log10() - 3.0)
+            })
+            .collect();
+        errors.compare(
+            &format!("{name}/power"),
+            &sampled(&stages.power),
+            &array(&fixture["outputs"]["power"]),
+            Comparison::Rebuilt,
+        );
+        errors.compare(
+            &format!("{name}/sm"),
+            &sampled(&smoothed),
+            &array(&fixture["outputs"]["sm"]),
+            Comparison::Rebuilt,
+        );
+        errors.compare(
+            &format!("{name}/design"),
+            &sampled(&stages.design_db),
+            &array(&fixture["outputs"]["design_db"]),
+            Comparison::Rebuilt,
+        );
+        let decay = result.mode_decay.as_ref().unwrap();
+        errors.compare(
+            &format!("{name}/target"),
+            &[decay.target_t60_s],
+            &[number(&fixture["outputs"]["target_t60_s"])],
+            Comparison::Rebuilt,
+        );
+        let expected_selected: Vec<_> = fixture["outputs"]["selected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(array)
+            .collect();
+        errors.compare(
+            &format!("{name}/selected"),
+            &decay
+                .cuts
+                .iter()
+                .flat_map(|cut| [cut.frequency_hz, cut.measured_t60_s, cut.depth_db])
+                .collect::<Vec<_>>(),
+            &expected_selected.into_iter().flatten().collect::<Vec<_>>(),
+            Comparison::Rebuilt,
+        );
+        let expected_cuts: Vec<_> = fixture["outputs"]["cuts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(array)
+            .collect();
+        errors.compare(
+            &format!("{name}/cuts"),
+            &decay
+                .cuts
+                .iter()
+                .flat_map(|cut| [cut.frequency_hz, cut.q, -cut.depth_db])
+                .collect::<Vec<_>>(),
+            &expected_cuts.into_iter().flatten().collect::<Vec<_>>(),
+            Comparison::Rebuilt,
+        );
+        let decay_bands: Vec<_> = decay
+            .cuts
+            .iter()
+            .map(|cut| (cut.frequency_hz, cut.q, -cut.depth_db))
+            .collect();
+        errors.compare(
+            &format!("{name}/dr"),
+            &sampled_complex(&peq::response(&frequencies, &decay_bands, FS))
+                .iter()
+                .flat_map(|value| [value.re, value.im])
+                .collect::<Vec<_>>(),
+            &complex(&fixture["outputs"]["dr"])
+                .iter()
+                .flat_map(|value| [value.re, value.im])
+                .collect::<Vec<_>>(),
+            Comparison::Rebuilt,
+        );
+    }
+    errors.finish("s2r_mode_decay");
+}
+
 #[derive(Default)]
 struct RcReportOnly {
     peq_f: f64,
@@ -855,6 +1901,22 @@ enum RcActualNote {
         reduced: usize,
         cuts: usize,
     },
+    LfAlign {
+        role: String,
+        strength: f64,
+        arrival_ms: Option<f64>,
+        limited: bool,
+    },
+    ModeDecay {
+        role: String,
+        target_t60_s: f64,
+        modes: Vec<(f64, f64, f64)>,
+    },
+    HfPhase {
+        role: String,
+        rotation_deg: Option<f64>,
+        limited: bool,
+    },
 }
 
 fn actual_rc_notes(speaker: &str, opts: &RcOptions, result: &SpeakerRc) -> Vec<RcActualNote> {
@@ -867,6 +1929,12 @@ fn actual_rc_notes(speaker: &str, opts: &RcOptions, result: &SpeakerRc) -> Vec<R
             cap_db: 3.0,
             modes: result.long_modes.clone(),
         });
+        if matches!(opts.mode, Tuning2Mode::Linear | Tuning2Mode::Ultra(_)) {
+            notes.push(RcActualNote::LongModes {
+                cap_db: 3.0,
+                modes: result.long_modes.clone(),
+            });
+        }
     }
     if opts.dip_limit && !result.limited_dips.is_empty() {
         notes.push(RcActualNote::Dips {
@@ -882,6 +1950,32 @@ fn actual_rc_notes(speaker: &str, opts: &RcOptions, result: &SpeakerRc) -> Vec<R
             limited: result.low_limited,
             reduced: result.limit_outcome.reduced.len(),
             cuts: result.limit_outcome.cuts,
+        });
+    }
+    if let Some(mode_decay) = &result.mode_decay {
+        notes.push(RcActualNote::ModeDecay {
+            role: speaker.to_owned(),
+            target_t60_s: mode_decay.target_t60_s,
+            modes: mode_decay
+                .cuts
+                .iter()
+                .map(|cut| (cut.frequency_hz, cut.measured_t60_s, cut.depth_db))
+                .collect(),
+        });
+    }
+    if let Some(hf_phase) = &result.hf_phase {
+        notes.push(RcActualNote::HfPhase {
+            role: speaker.to_owned(),
+            rotation_deg: hf_phase.rotation_deg,
+            limited: hf_phase.limited,
+        });
+    }
+    if let Some(lf_align) = &result.lf_align {
+        notes.push(RcActualNote::LfAlign {
+            role: speaker.to_owned(),
+            strength: result.phase_strength,
+            arrival_ms: lf_align.arrival_ms,
+            limited: lf_align.limited,
         });
     }
     notes
@@ -1002,6 +2096,69 @@ fn compare_rc_notes(name: &str, actual: &[RcActualNote], expected: &[Value], err
                     Comparison::FitDependent,
                 );
             }
+            (
+                RcActualNote::ModeDecay {
+                    role,
+                    target_t60_s,
+                    modes,
+                },
+                "ModeDecay",
+            ) => {
+                assert_eq!(role, expected["role"].as_str().unwrap(), "{label}/role");
+                errors.compare(
+                    &format!("{label}/target"),
+                    &[*target_t60_s],
+                    &[number(&expected["target_t60_s"])],
+                    Comparison::Rebuilt,
+                );
+                let expected_modes: Vec<_> = expected["modes"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(array)
+                    .collect();
+                errors.compare(
+                    &format!("{label}/modes"),
+                    &modes
+                        .iter()
+                        .flat_map(|mode| [mode.0, mode.1, mode.2])
+                        .collect::<Vec<_>>(),
+                    &expected_modes.into_iter().flatten().collect::<Vec<_>>(),
+                    Comparison::Rebuilt,
+                );
+            }
+            (
+                RcActualNote::HfPhase {
+                    role,
+                    rotation_deg,
+                    limited,
+                },
+                "HfPhase",
+            ) => {
+                assert_eq!(role, expected["role"].as_str().unwrap(), "{label}/role");
+                println!(
+                    "REPORT {label}: rotation got={rotation_deg:?} expected={:?}; limited got={limited} expected={}",
+                    expected["rotation_deg"].as_f64(),
+                    expected["limited"].as_bool().unwrap()
+                );
+            }
+            (
+                RcActualNote::LfAlign {
+                    role,
+                    strength,
+                    arrival_ms,
+                    limited,
+                },
+                "LfAlign",
+            ) => {
+                assert_eq!(role, expected["role"].as_str().unwrap(), "{label}/role");
+                println!(
+                    "REPORT {label}: strength got={strength:.9e} expected={:.9e}; arrival got={arrival_ms:?} expected={:?}; limited got={limited} expected={}",
+                    number(&expected["strength"]),
+                    expected["arrival_ms"].as_f64(),
+                    expected["limited"].as_bool().unwrap()
+                );
+            }
             (_, kind) => panic!("{label}: actual {actual:?}, expected kind {kind}"),
         }
     }
@@ -1018,13 +2175,28 @@ fn room_tuning2_bands_matches_secs2r() {
         let extras = pairs(&settings["rc_bands"]);
         let speaker_points = points(speaker);
         let opts = RcOptions {
+            mode: Tuning2Mode::parse(settings["mode"].as_str().unwrap()).unwrap(),
             dip_limit: settings["dip_limit"].as_bool().unwrap(),
             low_protect: settings["low_protect"].as_bool().unwrap(),
             extra_bands: extras,
+            lf_align: settings["lf_align"].as_bool().unwrap_or(false),
+            mode_decay: settings["mode_decay"].as_bool().unwrap_or(false),
+            hf_phase: settings["hf_phase"].as_bool().unwrap_or(false),
             ..options()
         };
         let band = correction_band(&[&speaker_points], &opts).unwrap();
         let result = design_rc(&speaker_points, &opts, &band, None, None).unwrap();
+        if fixture["outputs"]["phase_candidates"].is_object() {
+            let expected = &fixture["outputs"]["phase_candidates"];
+            println!(
+                "REPORT {name}/phase_candidates: got={:?}, kept={}; expected requested={:.9e}, fallback={:.9e}, kept={}",
+                result.phase_candidates,
+                result.phase_frac,
+                number(&expected["requested_score"]),
+                number(&expected["fallback_score"]),
+                number(&expected["kept"]),
+            );
+        }
         errors.compare(
             &format!("{name}/design_db"),
             &sampled(&result.design_db),

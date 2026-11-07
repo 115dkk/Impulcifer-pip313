@@ -1152,8 +1152,8 @@ EDT and excess group delay before/after, and with MIMO each input's supports,
 level and guard scale.
 
 With the 3.13.0 options: per speaker `cli_room_tuning2_low_protect` (speaker,
-rolloff in Hz to one decimal or `none`, reduced band count, cut count, limited
-yes/no) when `room_tuning2_low_protect` is on; `cli_room_tuning2_dip_limit`
+rolloff in Hz to one decimal or `none`, reduced band count, cut count, limited as
+`true`/`false`) when `room_tuning2_low_protect` is on; `cli_room_tuning2_dip_limit`
 (speaker, the number of limited dips, and the deepest as Hz, depth and fill to
 one decimal) when `room_tuning2_dip_limit` is on and a dip was limited;
 `cli_room_tuning2_bands` once (the merged band set as `lo-hi` pairs) when
@@ -1163,13 +1163,13 @@ With the 3.14.0 options, per speaker:
 
 - `cli_room_tuning2_lf_align` (FIR modes, `room_tuning2_lf_align` on): speaker,
   f_lin in Hz to one decimal, phase strength s*, arrival in ms to one decimal or
-  `none`, limited yes/no.
+  `none`, limited as `true`/`false`.
 - `cli_room_tuning2_mode_decay` (`room_tuning2_mode_decay` on, at least one
   cut): speaker, T_t in s to two decimals, the cut count, and the cuts as
   `<f_m> Hz <T_m> s -<depth> dB` (one, two and one decimals) joined by `, `;
   `cli_room_tuning2_mode_decay_none` (speaker, T_t) when no mode needed a cut.
 - `cli_room_tuning2_hf_phase` (FIR modes, `room_tuning2_hf_phase` on): speaker,
-  rotation in degrees to one decimal, limited yes/no;
+  rotation in degrees to one decimal, limited as `true`/`false`;
   `cli_room_tuning2_hf_phase_none` (speaker, ν_1 and ν_2 in Hz rounded) when the
   range is less than an octave.
 

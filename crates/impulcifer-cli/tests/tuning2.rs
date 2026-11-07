@@ -8,7 +8,7 @@ fn args(s: &[&str]) -> Vec<String> {
 #[test]
 fn cli_room_tuning2_options_parse_and_validate() {
     assert_eq!(
-        EXTENSION_OPTIONS[EXTENSION_OPTIONS.len() - 3..]
+        EXTENSION_OPTIONS[EXTENSION_OPTIONS.len() - 6..]
             .iter()
             .map(|option| option.dest)
             .collect::<Vec<_>>(),
@@ -16,6 +16,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
             "room_tuning2_dip_limit",
             "room_tuning2_low_protect",
             "room_tuning2_bands",
+            "room_tuning2_lf_align",
+            "room_tuning2_mode_decay",
+            "room_tuning2_hf_phase",
         ]
     );
     let Parsed::Kwargs(baseline) = parse(&args(&["impulcifer", "--dir_path=data/demo"])).unwrap()
@@ -33,6 +36,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "dip_limit",
         "low_protect",
         "bands",
+        "lf_align",
+        "mode_decay",
+        "hf_phase",
     ] {
         assert!(!baseline.contains_key(&format!("room_tuning2_{name}")));
     }
@@ -51,6 +57,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "--room_tuning2_dip_limit=true",
         "--room_tuning2_low_protect=true",
         "--room_tuning2_bands=1000-3000, 20-500",
+        "--room_tuning2_lf_align=true",
+        "--room_tuning2_mode_decay=true",
+        "--room_tuning2_hf_phase=true",
     ]))
     .unwrap() else {
         panic!()
@@ -67,6 +76,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
     assert_eq!(config.room_tuning2_mimo_low, "40");
     assert!(config.room_tuning2_dip_limit);
     assert!(config.room_tuning2_low_protect);
+    assert!(config.room_tuning2_lf_align);
+    assert!(config.room_tuning2_mode_decay);
+    assert!(config.room_tuning2_hf_phase);
     assert_eq!(config.room_tuning2_bands, "1000-3000, 20-500");
     assert_eq!(
         config.room_tuning2_bands(),
@@ -99,6 +111,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         ("mimo_low", "151"),
         ("dip_limit", "yes"),
         ("low_protect", "yes"),
+        ("lf_align", "yes"),
+        ("mode_decay", "yes"),
+        ("hf_phase", "yes"),
         ("bands", "bad"),
         ("bands", "20-30,40-50,60-70,80-90,100-110"),
     ] {
@@ -117,6 +132,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "--room_tuning2_mimo=false",
         "--room_tuning2_dip_limit=false",
         "--room_tuning2_low_protect=false",
+        "--room_tuning2_lf_align=false",
+        "--room_tuning2_mode_decay=false",
+        "--room_tuning2_hf_phase=false",
         "--room_tuning2_high=auto",
         "--room_tuning2_mimo_low=auto",
     ]))
@@ -126,4 +144,7 @@ fn cli_room_tuning2_options_parse_and_validate() {
     assert_eq!(kwargs["room_tuning2_mimo"], json!(false));
     assert_eq!(kwargs["room_tuning2_dip_limit"], json!(false));
     assert_eq!(kwargs["room_tuning2_low_protect"], json!(false));
+    assert_eq!(kwargs["room_tuning2_lf_align"], json!(false));
+    assert_eq!(kwargs["room_tuning2_mode_decay"], json!(false));
+    assert_eq!(kwargs["room_tuning2_hf_phase"], json!(false));
 }

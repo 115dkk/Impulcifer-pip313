@@ -20,6 +20,9 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | `masks_*` | 크기 마스크, 위상 페이드, FIR 오차 구간, 위상 점수 격자, zero 모드 PEQ 도달 구간 |
 | `mask_*` | 저역 보호와 긴 모드 제한, 구간 페이드를 적용한 설계 곡선 |
 | `residual_*` | PEQ 잔차와 유한하지 않은 값의 `1e12` 치환 |
+| `lf_weight`, `lf_pull`, `lf_prep_*`, `lf_excess_*` | 저역 도착 맞춤의 가중치, 실현 상한, 스피커별 준비 곡선과 후보별 전체 위상 결합 |
+| `decay_cut`, `mode_t60_48k_*`, `refine_*`, `mode_decay_*` | 모드 감쇠 컷, 전체 샘플레이트 T60, 공진 정련, 스피커별 컷 설계 |
+| `hf_region_*`, `realize_*` | 고역 위상 보정 구간과 실현 함수의 저역 상한·고역 위상 보정 결과 |
 | `rc_*` | 선택별·스피커별 끝단 설계 곡선, PEQ, FIR, 응답, 위상 강도와 진단 |
 
 ## Gates
@@ -35,7 +38,7 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 
 `Rebuilt`는 libm이 같아도 비트 단위로 같지 않다. 오라클과 Rust가 녹음의 RC 윈도 스펙트럼을 서로 다른 FFT 구현으로 계산해 입력 전력부터 상대 1e-12 안팎의 차이가 생기고, 뒤 계산에서 절대 오차가 커지기 때문이다. 끝단 PEQ 정련도 `s2_*`와 마찬가지로 첫 평가 뒤 결과가 달라진다. 따라서 그 PEQ와 FIR에 의존하는 끝단 `Limit` 결정은 같은 libm에서도 `FitDependent`다. note 배열의 길이, 종류, 유무와 순서는 언제나 정확히 비교하고, payload만 위 표에 따라 판정한다.
 
-아래 Windows 값은 2026-11-07, Windows 11 x86_64-pc-windows-msvc에서 `cargo test -p impulcifer-dsp --test golden_secs2r -- --nocapture --test-threads=1`로 측정했다. 픽스처는 Debian glibc 2.41에서 만들었으며, 이 Windows 환경에서는 `ln`, `sqrt`, `powf(0.5)`만 비트 단위로 같았다. 나머지 다섯 함수가 달라 외부 libm 게이트를 적용했다.
+아래 Windows 값은 2026-11-08, Windows 11 x86_64-pc-windows-msvc에서 `cargo test -p impulcifer-dsp --test golden_secs2r -- --nocapture --test-threads=1`로 측정했다. 픽스처는 Debian glibc 2.41에서 만들었으며, 이 Windows 환경에서는 `ln`, `sqrt`, `powf(0.5)`만 비트 단위로 같았다. 나머지 다섯 함수가 달라 외부 libm 게이트를 적용했다.
 
 | 가족 | 주된 부류 | Windows 최대 절대 오차 | Windows 최대 상대 L2 오차 |
 | --- | --- | ---: | ---: |
@@ -49,7 +52,14 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | dip limit | `Curve` + `Rebuilt` | 6.821210263296962e-13 | 4.360486500742148e-15 |
 | low-protection design mask | `Rebuilt` | 4.263256414560601e-14 | 2.842924265171789e-15 |
 | residual | `Curve` | 2.6645352591003757e-14 | 2.9169934962049308e-16 |
-| RC design and complete notes | `Exact` + `Rebuilt` + `FitDependent` | 4.263256414560601e-14 | 3.2620804220457383e-15 |
+| LF weight and pull | `Exact` | 1.1102230246251565e-16 | 2.4207429354183342e-17 |
+| mode-decay cut and HF range | `Exact` | 9.094947017729282e-13 | 2.7639363298736875e-16 |
+| full-rate T60 and resonance refinement | `Exact` + `Curve` + `Rebuilt` | 1.95110594347625e-12 | 9.024465838040792e-11 |
+| LF preparation | `Rebuilt` | 6.821210263296962e-13 | 7.390250486780205e-14 |
+| LF excess recombination | `Exact` + `Curve` | 0 | 0 |
+| realization synthetic cases | `Exact` + `Curve` | 7.105427357601002e-15 | 7.072561793909911e-15 |
+| mode-decay design | `Rebuilt` | 2.3386093062072177e-10 | 9.024465838040792e-11 |
+| RC design and complete notes | `Exact` + `Rebuilt` + `FitDependent` | 1.939670646322611e-10 | 5.335245331134957e-12 |
 
 같은 libm을 쓴 Ubuntu 실행에서는 FFT 차이 때문에 `Rebuilt` 값이 다음만큼 달랐다. 이 값은 1e-9 게이트 안이다.
 

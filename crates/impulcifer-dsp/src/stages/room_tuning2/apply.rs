@@ -49,6 +49,9 @@ pub struct Speaker2Report {
     pub low_protect_limited: bool,
     pub limited_dips: Vec<(f64, f64, f64)>,
     pub bands: Vec<(f64, f64)>,
+    pub lf_align: Option<LfAlignResult>,
+    pub mode_decay: Option<ModeDecayResult>,
+    pub hf_phase: Option<HfPhaseResult>,
 }
 #[derive(Clone, Debug)]
 pub struct Tuning2Report {
@@ -62,6 +65,9 @@ pub struct Tuning2Report {
     pub dip_limit: bool,
     pub low_protect: bool,
     pub extra_bands: bool,
+    pub lf_align: bool,
+    pub mode_decay: bool,
+    pub hf_phase: bool,
 }
 pub fn prepare_tuning2(
     omni: &Hrir,
@@ -144,6 +150,9 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
         dip_limit: plan.options.rc.dip_limit,
         low_protect: plan.options.rc.low_protect,
         extra_bands: !plan.options.rc.extra_bands.is_empty(),
+        lf_align: plan.options.rc.lf_align,
+        mode_decay: plan.options.rc.mode_decay,
+        hf_phase: plan.options.rc.hf_phase,
     };
     if measured.is_empty() {
         return Ok(report);
@@ -213,6 +222,9 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
             low_protect_limited: s.rc.low_limited,
             limited_dips: s.rc.limited_dips.clone(),
             bands: s.rc.bands.clone(),
+            lf_align: s.rc.lf_align.clone(),
+            mode_decay: s.rc.mode_decay.clone(),
+            hf_phase: s.rc.hf_phase.clone(),
         });
     }
     report.pair_checks = plan

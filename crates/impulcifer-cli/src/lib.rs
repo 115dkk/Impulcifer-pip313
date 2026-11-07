@@ -102,6 +102,9 @@ pub fn parse(argv: &[String]) -> Result<Parsed, CliError> {
                                 | "room_tuning2_mimo"
                                 | "room_tuning2_dip_limit"
                                 | "room_tuning2_low_protect"
+                                | "room_tuning2_lf_align"
+                                | "room_tuning2_mode_decay"
+                                | "room_tuning2_hf_phase"
                         ) =>
                         {
                             json!(raw == "true")

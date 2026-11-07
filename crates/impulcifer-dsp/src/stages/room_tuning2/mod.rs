@@ -18,8 +18,9 @@ mod rc;
 use crate::{DspError, fft::Complex64, filters, fr::FrequencyResponse, ir::ImpulseResponse};
 use primitives::*;
 pub use rc::{
-    DipLimitResult, RcSession, RcStages, design_rc, design_rc_with_stages, dip_limit_curve,
-    limited_dips,
+    DipLimitResult, ModeDecayStages, RcSession, RcStages, RealizeDiagnostics, ResonanceRefinement,
+    blend_lf_excess, design_rc, design_rc_with_stages, dip_limit_curve, limited_dips,
+    realize_for_fixture, refine_resonance, select_mode_decay_cuts, smoothed_phase_delay,
 };
 use std::f64::consts::PI;
 
@@ -41,6 +42,9 @@ pub struct RcOptions {
     pub dip_limit: bool,
     pub low_protect: bool,
     pub extra_bands: Vec<(f64, f64)>,
+    pub lf_align: bool,
+    pub mode_decay: bool,
+    pub hf_phase: bool,
 }
 impl Default for RcOptions {
     fn default() -> Self {
@@ -55,6 +59,9 @@ impl Default for RcOptions {
             dip_limit: false,
             low_protect: false,
             extra_bands: Vec::new(),
+            lf_align: false,
+            mode_decay: false,
+            hf_phase: false,
         }
     }
 }
@@ -74,6 +81,26 @@ pub struct CorrectionBand {
     pub bands: Vec<(f64, f64)>,
 }
 #[derive(Clone, Debug)]
+pub struct LfAlignResult {
+    pub f_lin_hz: f64,
+    pub arrival_ms: Option<f64>,
+    pub limited: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModeDecayResult {
+    pub target_t60_s: f64,
+    pub cuts: Vec<ModeDecayCut>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HfPhaseResult {
+    pub range_hz: Option<(f64, f64)>,
+    pub rotation_deg: Option<f64>,
+    pub limited: bool,
+}
+
+#[derive(Clone, Debug)]
 pub struct SpeakerRc {
     pub points: usize,
     pub level_db: f64,
@@ -83,6 +110,7 @@ pub struct SpeakerRc {
     pub fir: Vec<f64>,
     pub phase_strength: f64,
     pub phase_frac: f64,
+    pub phase_candidates: Vec<(f64, f64)>,
     pub long_modes: Vec<(f64, f64)>,
     pub response: Vec<Complex64>,
     pub lift_samples: usize,
@@ -91,6 +119,9 @@ pub struct SpeakerRc {
     pub low_limited: bool,
     pub limited_dips: Vec<(f64, f64, f64)>,
     pub bands: Vec<(f64, f64)>,
+    pub lf_align: Option<LfAlignResult>,
+    pub mode_decay: Option<ModeDecayResult>,
+    pub hf_phase: Option<HfPhaseResult>,
 }
 
 fn merge_bands(mut bands: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
@@ -167,6 +198,115 @@ pub fn phase_fade(
 }
 
 /// Bins used to measure FIR realization error.
+/// Low-frequency arrival-alignment weight before smoothing and exclusions.
+pub fn lf_alignment_weight(frequencies: &[f64], f_lin: f64) -> Vec<f64> {
+    frequencies
+        .iter()
+        .map(|frequency| {
+            if f_lin >= 200.0 || *frequency <= 0.0 {
+                return 0.0;
+            }
+            let a = (2.0 * (*frequency / f_lin).log2() + 1.0).clamp(0.0, 1.0);
+            let b = (1.0 - 2.0 * (*frequency / 200.0).log2()).clamp(0.0, 1.0);
+            0.5 * (1.0 - (PI * a).cos()) * 0.5 * (1.0 - (PI * b).cos())
+        })
+        .collect()
+}
+
+/// Per-bin upper bound for low-frequency arrival alignment in a realization.
+pub fn lf_pull_bound(value: f64, lift: f64, strength: f64, frequency: f64, weight: f64) -> f64 {
+    let upper = if frequency > 0.0 {
+        (1.0 - weight) * lift * strength + weight * (lift * strength).min(1.5 / frequency)
+    } else {
+        lift * strength
+    };
+    value.clamp(-0.005, upper)
+}
+
+/// A mode-decay cut and the mode measurement from which it was designed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ModeDecayCut {
+    pub frequency_hz: f64,
+    pub measured_t60_s: f64,
+    pub depth_db: f64,
+    pub q: f64,
+}
+
+/// Build one decay cut, or return `None` when the mode does not need one.
+pub fn mode_decay_cut(
+    frequency_hz: f64,
+    measured_t60_s: f64,
+    target_t60_s: f64,
+    height_db: f64,
+    long_boost_db: f64,
+) -> Option<ModeDecayCut> {
+    if !frequency_hz.is_finite()
+        || !measured_t60_s.is_finite()
+        || !target_t60_s.is_finite()
+        || !height_db.is_finite()
+        || frequency_hz <= 0.0
+        || target_t60_s <= 0.0
+        || measured_t60_s <= 1.5 * target_t60_s
+    {
+        return None;
+    }
+    let depth_db = 12.0_f64
+        .min(20.0 * (measured_t60_s / target_t60_s).log10())
+        .min(height_db.max(0.0) + long_boost_db);
+    if depth_db < 1.0 {
+        return None;
+    }
+    Some(ModeDecayCut {
+        frequency_hz,
+        measured_t60_s,
+        depth_db,
+        q: 10_f64.powf(-depth_db / 40.0) * PI * frequency_hz * measured_t60_s / 6.91,
+    })
+}
+
+#[derive(Clone, Debug)]
+pub struct HfPhaseRegion {
+    pub low_hz: f64,
+    pub high_hz: f64,
+    pub log_width: f64,
+    pub weight_sum: f64,
+    pub weight: Vec<f64>,
+}
+
+/// Raised-cosine range used to unwind the constant FIR phase above the band.
+pub fn hf_phase_region(
+    frequencies: &[f64],
+    fs: f64,
+    primary_high: f64,
+    bands: &[(f64, f64)],
+) -> Option<HfPhaseRegion> {
+    let last_high = bands.last().map_or(primary_high, |band| band.1);
+    let low_hz = last_high * 2_f64.sqrt();
+    let high_hz = (8.0 * low_hz).min(0.45 * fs);
+    if high_hz < 2.0 * low_hz {
+        return None;
+    }
+    let log_width = (high_hz / low_hz).ln();
+    let weight: Vec<_> = frequencies
+        .iter()
+        .map(|frequency| {
+            if *frequency >= low_hz && *frequency <= high_hz {
+                0.5 * (1.0 - (2.0 * PI * (*frequency / low_hz).ln() / log_width).cos())
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let weight_sum = weight.iter().sum();
+    Some(HfPhaseRegion {
+        low_hz,
+        high_hz,
+        log_width,
+        weight_sum,
+        weight,
+    })
+}
+
 pub fn phase_error_band(
     frequencies: &[f64],
     primary_high: f64,
