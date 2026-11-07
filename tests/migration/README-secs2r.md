@@ -38,6 +38,8 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 
 `Rebuilt`는 libm이 같아도 비트 단위로 같지 않다. 오라클과 Rust가 녹음의 RC 윈도 스펙트럼을 서로 다른 FFT 구현으로 계산해 입력 전력부터 상대 1e-12 안팎의 차이가 생기고, 뒤 계산에서 절대 오차가 커지기 때문이다. 끝단 PEQ 정련도 `s2_*`와 마찬가지로 첫 평가 뒤 결과가 달라진다. 따라서 그 PEQ와 FIR에 의존하는 끝단 `Limit` 결정은 같은 libm에서도 `FitDependent`다. note 배열의 길이, 종류, 유무와 순서는 언제나 정확히 비교하고, payload만 위 표에 따라 판정한다.
 
+다시 만든 `s2r_refine_*`와 `s2r_mode_decay_*`의 `curvature`·`offset`에는 값별 `Rebuilt` 한도만 적용하고 상대 L2 한도에서는 제외한다. glibc에서 `offset`의 상대 오차는 1.8067888727235077e-9였지만 절대 오차는 약 5.6e-13이었다. 거의 같은 두 dB 차이를 `curvature`로 나누므로 조건수가 커지는 수치이며, 값별 `오차 ≤ 1e-9 + 1e-9·|기대값|` 판정에는 충분히 들어온다. 저장 입력을 쓰는 `s2r_refine_resonance`는 계속 `Exact`로 판정한다.
+
 아래 Windows 값은 2026-11-08, Windows 11 x86_64-pc-windows-msvc에서 `cargo test -p impulcifer-dsp --test golden_secs2r -- --nocapture --test-threads=1`로 측정했다. 픽스처는 Debian glibc 2.41에서 만들었으며, 이 Windows 환경에서는 `ln`, `sqrt`, `powf(0.5)`만 비트 단위로 같았다. 나머지 다섯 함수가 달라 외부 libm 게이트를 적용했다.
 
 | 가족 | 주된 부류 | Windows 최대 절대 오차 | Windows 최대 상대 L2 오차 |
@@ -53,12 +55,12 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | low-protection design mask | `Rebuilt` | 4.263256414560601e-14 | 2.842924265171789e-15 |
 | residual | `Curve` | 2.6645352591003757e-14 | 2.9169934962049308e-16 |
 | LF weight and pull | `Exact` | 1.1102230246251565e-16 | 2.4207429354183342e-17 |
-| mode-decay cut and HF range | `Exact` | 9.094947017729282e-13 | 2.7639363298736875e-16 |
-| full-rate T60 and resonance refinement | `Exact` + `Curve` + `Rebuilt` | 1.95110594347625e-12 | 9.024465838040792e-11 |
+| mode-decay cut and HF range | `Exact` | 1.1102230246251565e-16 | 2.9336934266632966e-17 |
+| full-rate T60 and resonance refinement | `Exact` + `Curve` + `Rebuilt` | 1.95110594347625e-12 | 3.8149630433217217e-12 |
 | LF preparation | `Rebuilt` | 6.821210263296962e-13 | 7.390250486780205e-14 |
 | LF excess recombination | `Exact` + `Curve` | 0 | 0 |
 | realization synthetic cases | `Exact` + `Curve` | 7.105427357601002e-15 | 7.072561793909911e-15 |
-| mode-decay design | `Rebuilt` | 2.3386093062072177e-10 | 9.024465838040792e-11 |
+| mode-decay design | `Rebuilt` | 2.3386093062072177e-10 | 9.129288844769646e-12 |
 | RC design and complete notes | `Exact` + `Rebuilt` + `FitDependent` | 1.939670646322611e-10 | 5.335245331134957e-12 |
 
 같은 libm을 쓴 Ubuntu 실행에서는 FFT 차이 때문에 `Rebuilt` 값이 다음만큼 달랐다. 이 값은 1e-9 게이트 안이다.

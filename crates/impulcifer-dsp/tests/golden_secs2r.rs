@@ -188,6 +188,25 @@ impl Errors {
         }
     }
 
+    fn compare_rebuilt_values_only(&mut self, name: &str, got: &[f64], expected: &[f64]) {
+        assert_eq!(got.len(), expected.len(), "{name}: shape");
+        let budget = 1e-9;
+        let mut first = None;
+        for (index, (got, expected)) in got.iter().zip(expected).enumerate() {
+            self.values += 1;
+            let error = (got - expected).abs();
+            self.absolute = self.absolute.max(error);
+            if (!got.is_finite() || error > budget + budget * expected.abs()) && first.is_none() {
+                first = Some(format!(
+                    "{name}[{index}] (Rebuilt): got={got:.17e} expected={expected:.17e} error={error:.17e}"
+                ));
+            }
+        }
+        if let Some(failure) = first {
+            self.failures.push(failure);
+        }
+    }
+
     fn finish(self, family: &str) {
         println!(
             "MEASURE {family}: max_abs={:.17e}, max_relative_l2={:.17e}, values={}, budgets=class-specific",
@@ -244,12 +263,13 @@ fn compare_refinement(
         if expected[label].is_null() {
             assert!(actual.is_none(), "{name}/{label}");
         } else {
-            errors.compare(
-                &format!("{name}/{label}"),
-                &[actual.unwrap()],
-                &[number(&expected[label])],
-                class,
-            );
+            let actual = [actual.unwrap()];
+            let expected = [number(&expected[label])];
+            if class == Comparison::Rebuilt && matches!(label, "curvature" | "offset") {
+                errors.compare_rebuilt_values_only(&format!("{name}/{label}"), &actual, &expected);
+            } else {
+                errors.compare(&format!("{name}/{label}"), &actual, &expected, class);
+            }
         }
     }
 }

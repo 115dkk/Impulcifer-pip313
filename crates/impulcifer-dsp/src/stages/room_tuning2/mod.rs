@@ -287,17 +287,18 @@ pub fn hf_phase_region(
         return None;
     }
     let log_width = (high_hz / low_hz).ln();
-    let weight: Vec<_> = frequencies
-        .iter()
-        .map(|frequency| {
-            if *frequency >= low_hz && *frequency <= high_hz {
-                0.5 * (1.0 - (2.0 * PI * (*frequency / low_hz).ln() / log_width).cos())
-            } else {
-                0.0
-            }
-        })
-        .collect();
-    let weight_sum = weight.iter().sum();
+    let mut weight = Vec::with_capacity(frequencies.len());
+    let mut weight_sum = 0.0;
+    for frequency in frequencies {
+        let value = if *frequency >= low_hz && *frequency <= high_hz {
+            let x = (*frequency / low_hz).ln() / log_width;
+            0.5 * (1.0 - (2.0 * PI * x).cos())
+        } else {
+            0.0
+        };
+        weight.push(value);
+        weight_sum += value;
+    }
     Some(HfPhaseRegion {
         low_hz,
         high_hz,

@@ -1047,9 +1047,10 @@ energy ahead of the first arrival).
 - *Range* per speaker: `ν_1 = hi_last*√2`, hi_last the upper edge of the last
   pair of the band set (hi with the primary pair alone), and
   `ν_2 = min(8*ν_1, 0.45*fs)`. When `ν_2 < 2*ν_1` nothing is unwound for that
-  speaker and it is reported as having no range. Otherwise
-  `w_k = 0.5*(1 − cos(2π*ln(f_k/ν_1)/ln(ν_2/ν_1)))` for `ν_1 ≤ f_k ≤ ν_2`, 0
-  elsewhere, and `W = Σ_k w_k` summed in bin order.
+  speaker and it is reported as having no range. Otherwise, with
+  `L = ln(ν_2/ν_1)` computed once, `x_k = ln(f_k/ν_1)/L` and
+  `w_k = 0.5*(1 − cos(2π*x_k))` (the product `2π*x_k` taken after the division)
+  for `ν_1 ≤ f_k ≤ ν_2`, 0 elsewhere, and `W = Σ_k w_k` summed in bin order.
 - *In every Realize(s)*, the strength ladder and the touch-up alike, after adv:
   `A = Σ_k adv_k` in bin order, `ρ = 2π*Δ*(A − λ)` (left to right),
   `u = ρ mod 2π` in [0, 2π) (Euclidean remainder), `c = u/(2π*Δ)`. For
