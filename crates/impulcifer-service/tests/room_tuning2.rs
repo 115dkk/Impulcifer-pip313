@@ -119,6 +119,9 @@ fn config_room_tuning2_defaults_and_validation() {
         "mimo",
         "fsiso",
         "mimo_low",
+        "dip_limit",
+        "low_protect",
+        "bands",
     ] {
         let field = format!("room_tuning2_{field}");
         assert_eq!(boot["data"]["brir_defaults"][&field], defaults[&field]);
@@ -131,6 +134,11 @@ fn config_room_tuning2_defaults_and_validation() {
         ("mimo", json!("true")),
         ("fsiso", json!(151)),
         ("mimo_low", json!(14)),
+        ("dip_limit", json!("true")),
+        ("low_protect", json!("true")),
+        ("bands", json!(20)),
+        ("bands", json!("bad")),
+        ("bands", json!("20-30,40-50,60-70,80-90,100-110")),
     ] {
         let field = format!("room_tuning2_{field}");
         let mut request = json!({"dir_path":temp.0,"room_mode":"tuning2","room_range":"legacy"});
@@ -139,7 +147,7 @@ fn config_room_tuning2_defaults_and_validation() {
         assert_eq!(result["error"]["code"], "INVALID_REQUEST", "{result}");
         assert_eq!(result["error"]["details"]["field"], field, "{result}");
     }
-    let request = json!({"dir_path":temp.0,"room_mode":"tuning2","room_range":"legacy","room_tuning2_mode":60,"room_tuning2_high":300,"room_tuning2_mimo_low":50});
+    let request = json!({"dir_path":temp.0,"room_mode":"tuning2","room_range":"legacy","room_tuning2_mode":60,"room_tuning2_high":300,"room_tuning2_mimo_low":50,"room_tuning2_dip_limit":true,"room_tuning2_low_protect":true,"room_tuning2_bands":"1000-3000, 20-500"});
     let result = svc.call("start_brir", vec![request]);
     assert_eq!(result["ok"], true, "{result}");
 }
@@ -218,6 +226,49 @@ fn room_tuning2_runs_on_the_demo() {
         );
     }
 }
+#[test]
+fn room_tuning2_new_options_log_on_demo() {
+    let (temp, logs) = logged(ProcessingConfig {
+        room_mode: "tuning2".into(),
+        room_tuning2_dip_limit: true,
+        room_tuning2_low_protect: true,
+        room_tuning2_bands: "1000-3000".into(),
+        ..Default::default()
+    });
+    assert_eq!(
+        logs.iter()
+            .filter(|event| event["key"] == "cli_room_tuning2_bands")
+            .count(),
+        1
+    );
+    let low: Vec<_> = logs
+        .iter()
+        .filter(|event| event["key"] == "cli_room_tuning2_low_protect")
+        .collect();
+    assert_eq!(low.len(), 7);
+    assert!(low.iter().all(|event| {
+        let message = event["message"].as_str().unwrap();
+        message.contains("rolloff") && message.contains("limit satisfied")
+    }));
+    let dips: Vec<_> = logs
+        .iter()
+        .filter(|event| event["key"] == "cli_room_tuning2_dip_limit")
+        .collect();
+    assert!(!dips.is_empty());
+    assert!(dips.iter().all(|event| {
+        let message = event["message"].as_str().unwrap();
+        message.contains("deepest") && message.contains("allowed fill")
+    }));
+    let readme = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
+    for key in [
+        "Tuning2 correction bands:",
+        "low-end protection rolloff",
+        "dip limiting affected",
+    ] {
+        assert!(readme.contains(key), "{key}: {readme}");
+    }
+}
+
 #[test]
 fn room_tuning2_modes_on_the_demo() {
     for (mode, ms) in [("zero", 0), ("linear", 28), ("60", 58)] {

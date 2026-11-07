@@ -98,7 +98,10 @@ pub fn parse(argv: &[String]) -> Result<Parsed, CliError> {
                         }
                         _ if matches!(
                             option.dest,
-                            "room_tuning_level_match" | "room_tuning2_mimo"
+                            "room_tuning_level_match"
+                                | "room_tuning2_mimo"
+                                | "room_tuning2_dip_limit"
+                                | "room_tuning2_low_protect"
                         ) =>
                         {
                             json!(raw == "true")

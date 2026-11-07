@@ -368,6 +368,33 @@ pub static EXTENSION_OPTIONS: &[CliOption] = &[
         default: CliDefault::Suppressed,
         help: "Head radius in centimetres (5–15); when omitted it is estimated from the measurements.",
     },
+    CliOption {
+        flag: "--room_tuning2_dip_limit",
+        short: None,
+        dest: "room_tuning2_dip_limit",
+        kind: CliType::Str,
+        choices: &["true", "false"],
+        default: CliDefault::Suppressed,
+        help: "Limit correction of narrow response dips in tuning2 (default false).",
+    },
+    CliOption {
+        flag: "--room_tuning2_low_protect",
+        short: None,
+        dest: "room_tuning2_low_protect",
+        kind: CliType::Str,
+        choices: &["true", "false"],
+        default: CliDefault::Suppressed,
+        help: "Prevent tuning2 from boosting below each speaker's measured low-frequency rolloff (default false).",
+    },
+    CliOption {
+        flag: "--room_tuning2_bands",
+        short: None,
+        dest: "room_tuning2_bands",
+        kind: CliType::Str,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Up to four extra tuning2 correction bands as LO-HI pairs separated by commas.",
+    },
 ];
 
 pub const OPTIONS: &[CliOption] = &[

@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use impulcifer_cli::{Parsed, parse};
+use impulcifer_cli::{Parsed, options::EXTENSION_OPTIONS, parse};
 use impulcifer_types::config::ProcessingConfig;
 use serde_json::json;
 fn args(s: &[&str]) -> Vec<String> {
@@ -7,6 +7,17 @@ fn args(s: &[&str]) -> Vec<String> {
 }
 #[test]
 fn cli_room_tuning2_options_parse_and_validate() {
+    assert_eq!(
+        EXTENSION_OPTIONS[EXTENSION_OPTIONS.len() - 3..]
+            .iter()
+            .map(|option| option.dest)
+            .collect::<Vec<_>>(),
+        [
+            "room_tuning2_dip_limit",
+            "room_tuning2_low_protect",
+            "room_tuning2_bands",
+        ]
+    );
     let Parsed::Kwargs(baseline) = parse(&args(&["impulcifer", "--dir_path=data/demo"])).unwrap()
     else {
         panic!()
@@ -19,6 +30,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "mimo",
         "fsiso",
         "mimo_low",
+        "dip_limit",
+        "low_protect",
+        "bands",
     ] {
         assert!(!baseline.contains_key(&format!("room_tuning2_{name}")));
     }
@@ -34,6 +48,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "--room_tuning2_mimo=true",
         "--room_tuning2_fsiso=120",
         "--room_tuning2_mimo_low=40",
+        "--room_tuning2_dip_limit=true",
+        "--room_tuning2_low_protect=true",
+        "--room_tuning2_bands=1000-3000, 20-500",
     ]))
     .unwrap() else {
         panic!()
@@ -48,6 +65,13 @@ fn cli_room_tuning2_options_parse_and_validate() {
     assert_eq!(kwargs["room_tuning2_mimo"], json!(true));
     assert_eq!(config.room_tuning2_fsiso, 120.0);
     assert_eq!(config.room_tuning2_mimo_low, "40");
+    assert!(config.room_tuning2_dip_limit);
+    assert!(config.room_tuning2_low_protect);
+    assert_eq!(config.room_tuning2_bands, "1000-3000, 20-500");
+    assert_eq!(
+        config.room_tuning2_bands(),
+        vec![(20.0, 500.0), (1000.0, 3000.0)]
+    );
     for mode in ["zero", "mixed", "linear", "long", "30", "200"] {
         parse(&args(&[
             "impulcifer",
@@ -73,6 +97,10 @@ fn cli_room_tuning2_options_parse_and_validate() {
         ("fsiso", "151"),
         ("mimo_low", "14"),
         ("mimo_low", "151"),
+        ("dip_limit", "yes"),
+        ("low_protect", "yes"),
+        ("bands", "bad"),
+        ("bands", "20-30,40-50,60-70,80-90,100-110"),
     ] {
         let flag = format!("--room_tuning2_{name}");
         let error =
@@ -87,6 +115,8 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "impulcifer",
         "--dir_path=data/demo",
         "--room_tuning2_mimo=false",
+        "--room_tuning2_dip_limit=false",
+        "--room_tuning2_low_protect=false",
         "--room_tuning2_high=auto",
         "--room_tuning2_mimo_low=auto",
     ]))
@@ -94,4 +124,6 @@ fn cli_room_tuning2_options_parse_and_validate() {
         panic!()
     };
     assert_eq!(kwargs["room_tuning2_mimo"], json!(false));
+    assert_eq!(kwargs["room_tuning2_dip_limit"], json!(false));
+    assert_eq!(kwargs["room_tuning2_low_protect"], json!(false));
 }

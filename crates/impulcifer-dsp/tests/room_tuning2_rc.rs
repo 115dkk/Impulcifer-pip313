@@ -15,6 +15,17 @@ use std::{collections::BTreeMap, f64::consts::PI, path::PathBuf};
 const THRESHOLDS_DB: [f64; 4] = [0.001, 0.01, 0.1, 1.];
 
 #[test]
+fn fit_reach_drops_an_inverted_primary_pair() {
+    let extra = (450.0, 500.0);
+    let reach = fit_reach(400.0, 500.0, 100.0, &[extra]).unwrap();
+    assert_eq!(
+        reach,
+        vec![(extra.0 / 2_f64.sqrt(), extra.1 * 2_f64.sqrt())]
+    );
+    assert!(reach.iter().all(|(low, high)| low < high));
+}
+
+#[test]
 fn linear_sessions_are_bit_identical_across_thread_counts() {
     let measurements = demo();
     let points: Vec<_> = ["left", "right"]
@@ -530,6 +541,7 @@ fn room_tuning2_rejects_invalid_inputs() {
         high: 500.,
         source: BandSource::Default,
         schroeder: None,
+        bands: vec![(20.0, 500.0)],
     };
     assert!(design_rc(&[], &opts, &band, None, None).is_err());
     assert!(design_rc(&[impulse(32000)], &opts, &band, None, None).is_err());

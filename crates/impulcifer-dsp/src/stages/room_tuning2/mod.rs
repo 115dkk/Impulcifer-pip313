@@ -13,10 +13,14 @@ pub use mimo::{
 pub mod peq;
 pub mod primitives;
 pub mod profile;
+pub mod protect;
 mod rc;
 use crate::{DspError, fft::Complex64, filters, fr::FrequencyResponse, ir::ImpulseResponse};
 use primitives::*;
-pub use rc::{RcSession, RcStages, design_rc, design_rc_with_stages};
+pub use rc::{
+    DipLimitResult, RcSession, RcStages, design_rc, design_rc_with_stages, dip_limit_curve,
+    limited_dips,
+};
 use std::f64::consts::PI;
 
 pub use impulcifer_types::config::{ModeParams, Tuning2Mode};
@@ -34,6 +38,9 @@ pub struct RcOptions {
     pub schroeder: Option<f64>,
     pub room_volume: Option<f64>,
     pub policy: PositionPolicy,
+    pub dip_limit: bool,
+    pub low_protect: bool,
+    pub extra_bands: Vec<(f64, f64)>,
 }
 impl Default for RcOptions {
     fn default() -> Self {
@@ -45,6 +52,9 @@ impl Default for RcOptions {
             schroeder: None,
             room_volume: None,
             policy: PositionPolicy::Symmetric,
+            dip_limit: false,
+            low_protect: false,
+            extra_bands: Vec::new(),
         }
     }
 }
@@ -61,6 +71,7 @@ pub struct CorrectionBand {
     pub high: f64,
     pub source: BandSource,
     pub schroeder: Option<f64>,
+    pub bands: Vec<(f64, f64)>,
 }
 #[derive(Clone, Debug)]
 pub struct SpeakerRc {
@@ -75,7 +86,142 @@ pub struct SpeakerRc {
     pub long_modes: Vec<(f64, f64)>,
     pub response: Vec<Complex64>,
     pub lift_samples: usize,
+    pub rolloff_hz: Option<f64>,
+    pub limit_outcome: protect::LimitOutcome,
+    pub low_limited: bool,
+    pub limited_dips: Vec<(f64, f64, f64)>,
+    pub bands: Vec<(f64, f64)>,
 }
+
+fn merge_bands(mut bands: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+    bands.sort_by(|left, right| left.0.total_cmp(&right.0).then(left.1.total_cmp(&right.1)));
+    let mut merged: Vec<(f64, f64)> = Vec::with_capacity(bands.len());
+    for (low, high) in bands {
+        if let Some(previous) = merged.last_mut()
+            && low <= previous.1
+        {
+            previous.1 = previous.1.max(high);
+        } else {
+            merged.push((low, high));
+        }
+    }
+    merged
+}
+
+/// Sort and merge the primary correction band with optional extra bands.
+pub fn merge_band_set(primary: (f64, f64), extras: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let mut bands = Vec::with_capacity(extras.len() + 1);
+    bands.push(primary);
+    bands.extend_from_slice(extras);
+    merge_bands(bands)
+}
+
+/// Frequency fade used by the tuning2 design curve over the merged band set.
+pub fn magnitude_mask(frequencies: &[f64], bands: &[(f64, f64)], fs: f64) -> Vec<f64> {
+    frequencies
+        .iter()
+        .map(|frequency| {
+            let log_frequency = frequency.max(1e-3).log2();
+            bands
+                .iter()
+                .map(|(low, high)| {
+                    let end = (high * 2_f64.sqrt()).min(0.99 * fs / 2.0);
+                    ((log_frequency - (low / 2_f64.sqrt()).log2()) / 0.5).clamp(0.0, 1.0)
+                        * ((end.log2() - log_frequency) / (end / high).log2().max(1e-3))
+                            .clamp(0.0, 1.0)
+                })
+                .fold(0.0, f64::max)
+        })
+        .collect()
+}
+
+/// Phase-delay fade, retaining the 3.12.0 arithmetic when no extras are set.
+pub fn phase_fade(
+    frequencies: &[f64],
+    primary_high: f64,
+    bands: &[(f64, f64)],
+    has_extras: bool,
+) -> Vec<f64> {
+    let end = primary_high * 2_f64.sqrt();
+    frequencies
+        .iter()
+        .map(|frequency| {
+            let base = if *frequency < 15.0 {
+                (frequency / 15.0).clamp(0.0, 1.0)
+            } else {
+                ((end.log2() - frequency.max(1e-3).log2()) / 0.5).clamp(0.0, 1.0)
+            };
+            if !has_extras {
+                return base;
+            }
+            let log_frequency = frequency.max(1e-3).log2();
+            bands
+                .iter()
+                .map(|(low, high)| {
+                    ((log_frequency - (low / 2_f64.sqrt()).log2()) / 0.5).clamp(0.0, 1.0)
+                        * (((high * 2_f64.sqrt()).log2() - log_frequency) / 0.5).clamp(0.0, 1.0)
+                })
+                .fold(base, f64::max)
+        })
+        .collect()
+}
+
+/// Bins used to measure FIR realization error.
+pub fn phase_error_band(
+    frequencies: &[f64],
+    primary_high: f64,
+    extras: &[(f64, f64)],
+    fir_low: f64,
+    floor: f64,
+    fs: f64,
+) -> Vec<f64> {
+    let primary_end = primary_high * 2_f64.sqrt();
+    frequencies
+        .iter()
+        .map(|frequency| {
+            let inside_primary = *frequency >= floor.max(fir_low) && *frequency <= primary_end;
+            let inside_extra = extras.iter().any(|(low, high)| {
+                *frequency >= *low && *frequency <= (high * 2_f64.sqrt()).min(0.99 * fs / 2.0)
+            });
+            f64::from(inside_primary || inside_extra)
+        })
+        .collect()
+}
+
+/// Concatenated phase-score grid over the merged correction bands.
+pub fn band_grid(bands: &[(f64, f64)]) -> Vec<f64> {
+    bands
+        .iter()
+        .filter(|(low, high)| low.max(20.0) < *high)
+        .flat_map(|(low, high)| geomspace(low.max(20.0), *high, 1200))
+        .collect()
+}
+
+/// Optional zero-mode PEQ reach set for a fit touched by an extra band.
+pub fn fit_reach(
+    fit_low: f64,
+    fit_high: f64,
+    primary_high: f64,
+    extras: &[(f64, f64)],
+) -> Option<Vec<(f64, f64)>> {
+    if !extras
+        .iter()
+        .any(|(low, high)| *low <= fit_high && *high >= fit_low)
+    {
+        return None;
+    }
+    let mut expanded: Vec<_> = extras
+        .iter()
+        .map(|(low, high)| (low / 2_f64.sqrt(), high * 2_f64.sqrt()))
+        .filter(|(low, high)| low < high)
+        .collect();
+    let primary = (fit_low, primary_high * 2_f64.sqrt());
+    if primary.0 < primary.1 {
+        expanded.push(primary);
+    }
+    Some(merge_bands(expanded))
+}
+
 pub fn analysis_len(fs: u32) -> usize {
     (131072. * fs as f64 / 48000. / 2.).round_ties_even() as usize * 2
 }
@@ -207,6 +353,7 @@ pub fn correction_band(
             high,
             source: BandSource::Manual,
             schroeder: None,
+            bands: merge_band_set((opts.low, high), &opts.extra_bands),
         });
     }
     let mut source = BandSource::Default;
@@ -250,14 +397,16 @@ pub fn correction_band(
             source = BandSource::Volume;
         }
     }
+    let high = schroeder
+        .filter(|s| *s <= 500.)
+        .map(|s| s.max(100.))
+        .unwrap_or(500.);
     Ok(CorrectionBand {
         low: opts.low,
-        high: schroeder
-            .filter(|s| *s <= 500.)
-            .map(|s| s.max(100.))
-            .unwrap_or(500.),
+        high,
         source,
         schroeder,
+        bands: merge_band_set((opts.low, high), &opts.extra_bands),
     })
 }
 fn validate(
@@ -286,6 +435,10 @@ fn validate(
             .iter()
             .flatten()
             .any(|v| !v.is_finite() || *v <= 0.)
+        || opts.extra_bands.len() > 4
+        || opts.extra_bands.iter().any(|(low, high)| {
+            !low.is_finite() || !high.is_finite() || *low < 20.0 || *high > 20_000.0 || low >= high
+        })
     {
         return Err(invalid());
     }
