@@ -6,7 +6,7 @@
 # 단일 claude -p 세션에서 실행합니다.
 # 직전 감사 이후 코드 변경이 없으면(문서 등 제외) 실행하지 않습니다.
 #
-# 모델: claude-fable-5-1
+# 모델: claude-mythos-5-1
 # Effort: xhigh
 # 인증: Workload Identity Federation(Claude API 크레딧)
 #
@@ -174,7 +174,7 @@ jobs:
       ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
       ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
       ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
-      AUDIT_MODEL: claude-fable-5-1
+      AUDIT_MODEL: claude-mythos-5-1
     steps:
       # 변수 누락, 이 실행과 맞지 않는 규칙, 조직이 쓸 수 없는 모델을 세션을
       # 띄우기 전에 몇 초 만에 잡습니다. 여기서 한 번 교환하면 Console의
@@ -370,7 +370,7 @@ jobs:
             --effort xhigh \
             --settings "{\"availableModels\": [\"$AUDIT_MODEL\"]}" \
             --permission-mode auto \
-            --max-turns 100 \
+            --max-turns 200 \
             -p "
           Task tools (TaskCreate, TaskUpdate, TaskList) are available. Before
           each part, create one task per dimension or step it requires, then
