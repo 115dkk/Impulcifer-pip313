@@ -10,6 +10,9 @@ fn root() -> PathBuf {
 pub fn fixture(name: &str) -> Value {
     serde_json::from_slice(&fs::read(root().join(format!("s2_{name}.json"))).unwrap()).unwrap()
 }
+pub fn fixture_r(name: &str) -> Value {
+    serde_json::from_slice(&fs::read(root().join(format!("s2r_{name}.json"))).unwrap()).unwrap()
+}
 pub fn fixtures(prefix: &str) -> Vec<(String, Value)> {
     let mut names: Vec<_> = fs::read_dir(root())
         .unwrap()
@@ -27,6 +30,26 @@ pub fn fixtures(prefix: &str) -> Vec<(String, Value)> {
                 .to_owned();
             let v = fixture(&name);
             (name, v)
+        })
+        .collect()
+}
+pub fn fixtures_r(prefix: &str) -> Vec<(String, Value)> {
+    let mut names: Vec<_> = fs::read_dir(root())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.starts_with(&format!("s2r_{prefix}")) && name.ends_with(".json"))
+        .collect();
+    names.sort();
+    assert!(!names.is_empty(), "missing s2r family {prefix}");
+    names
+        .into_iter()
+        .map(|name| {
+            let name = name
+                .trim_start_matches("s2r_")
+                .trim_end_matches(".json")
+                .to_owned();
+            let value = fixture_r(&name);
+            (name, value)
         })
         .collect()
 }
@@ -109,7 +132,11 @@ pub fn integer(v: &Value) -> usize {
 pub fn array(v: &Value) -> Vec<f64> {
     if let Some(file) = v.get("file") {
         let name = file.as_str().unwrap();
-        assert!(name.starts_with("s2_") && !name.contains('/') && !name.contains('\\'));
+        assert!(
+            (name.starts_with("s2_") || name.starts_with("s2r_"))
+                && !name.contains('/')
+                && !name.contains('\\')
+        );
         let path = root().join(name);
         let bytes = fs::read(&path).unwrap();
         assert_eq!(

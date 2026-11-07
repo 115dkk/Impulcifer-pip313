@@ -43,6 +43,12 @@ pub struct Speaker2Report {
     pub lf_edt_after_ms: f64,
     pub excess_median_before_ms: f64,
     pub excess_median_after_ms: f64,
+    pub rolloff_hz: Option<f64>,
+    pub low_protect_reduced: usize,
+    pub low_protect_cuts: usize,
+    pub low_protect_limited: bool,
+    pub limited_dips: Vec<(f64, f64, f64)>,
+    pub bands: Vec<(f64, f64)>,
 }
 #[derive(Clone, Debug)]
 pub struct Tuning2Report {
@@ -53,6 +59,9 @@ pub struct Tuning2Report {
     pub speakers: Vec<Speaker2Report>,
     pub mimo: Option<MimoDesign>,
     pub pair_checks: Vec<v1::PairCheck>,
+    pub dip_limit: bool,
+    pub low_protect: bool,
+    pub extra_bands: bool,
 }
 pub fn prepare_tuning2(
     omni: &Hrir,
@@ -132,6 +141,9 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
         speakers: vec![],
         mimo: None,
         pair_checks: vec![],
+        dip_limit: plan.options.rc.dip_limit,
+        low_protect: plan.options.rc.low_protect,
+        extra_bands: !plan.options.rc.extra_bands.is_empty(),
     };
     if measured.is_empty() {
         return Ok(report);
@@ -195,6 +207,12 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
             lf_edt_after_ms: 0.,
             excess_median_before_ms: 0.,
             excess_median_after_ms: 0.,
+            rolloff_hz: s.rc.rolloff_hz,
+            low_protect_reduced: s.rc.limit_outcome.reduced.len(),
+            low_protect_cuts: s.rc.limit_outcome.cuts,
+            low_protect_limited: s.rc.low_limited,
+            limited_dips: s.rc.limited_dips.clone(),
+            bands: s.rc.bands.clone(),
         });
     }
     report.pair_checks = plan

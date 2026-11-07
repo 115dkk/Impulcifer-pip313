@@ -386,6 +386,9 @@ pub fn load_inputs(
                         schroeder: config.schroeder_freq,
                         room_volume: config.room_volume,
                         policy: PositionPolicy::Symmetric,
+                        dip_limit: config.room_tuning2_dip_limit,
+                        low_protect: config.room_tuning2_low_protect,
+                        extra_bands: config.room_tuning2_bands(),
                     },
                     level_match: config.room_tuning_level_match,
                     mimo: config.room_tuning2_mimo.then(|| MimoOptions {

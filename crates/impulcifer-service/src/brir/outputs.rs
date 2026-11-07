@@ -131,7 +131,10 @@ pub(super) fn tuning2_representation(
             / s.representation_rms_db.len() as f64
     })
 }
-fn tuning2_readme(report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report) -> String {
+fn tuning2_readme(
+    report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report,
+    catalog: &Catalog,
+) -> String {
     use impulcifer_dsp::stages::room_tuning2::BandSource;
     let mut out = format!(
         "## Virtual room tuning v2\n\nMode: {}. Latency: {:.2} ms.",
@@ -168,6 +171,62 @@ fn tuning2_readme(report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report) 
         };
         let rms = tuning2_representation(s).map_or_else(|| "—".into(), |v| format!("{v:.2}"));
         out.push_str(&format!("| {} | {} | {:.2} | {:.2} | {} | {} | {:.1} | {} | {} | {} | {:.2} / {:.2} | {:.2} / {:.2} | {} |\n", s.speaker, s.points, s.level_db, s.trim_db, s.trim_source, s.peq_bands, s.phase_strength, resolution, modes, rms, s.lf_edt_before_ms, s.lf_edt_after_ms, s.excess_median_before_ms, s.excess_median_after_ms, s.weak));
+    }
+    if report.extra_bands
+        && let Some(band) = &report.band
+    {
+        let format_hz = |value: f64| {
+            if value.fract() == 0.0 {
+                format!("{value:.0}")
+            } else {
+                value.to_string()
+            }
+        };
+        let bands = band
+            .bands
+            .iter()
+            .map(|(low, high)| format!("{}-{}", format_hz(*low), format_hz(*high)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        out.push('\n');
+        out.push_str(&catalog.translate("cli_room_tuning2_bands", &json!({"bands":bands})));
+        out.push('\n');
+    }
+    for speaker in &report.speakers {
+        if report.low_protect {
+            let rolloff = speaker
+                .rolloff_hz
+                .map_or_else(|| "none".to_owned(), |value| format!("{value:.1}"));
+            out.push('\n');
+            out.push_str(&catalog.translate(
+                "cli_room_tuning2_low_protect",
+                &json!({
+                    "speaker":speaker.speaker,
+                    "rolloff":rolloff,
+                    "reduced":speaker.low_protect_reduced,
+                    "cuts":speaker.low_protect_cuts,
+                    "limited":speaker.low_protect_limited,
+                }),
+            ));
+        }
+        if report.dip_limit
+            && let Some((hz, depth, fill)) = speaker.limited_dips.first()
+        {
+            out.push('\n');
+            out.push_str(&catalog.translate(
+                "cli_room_tuning2_dip_limit",
+                &json!({
+                    "speaker":speaker.speaker,
+                    "count":speaker.limited_dips.len(),
+                    "hz":format!("{hz:.1}"),
+                    "depth":format!("{depth:.1}"),
+                    "fill":format!("{fill:.1}"),
+                }),
+            ));
+        }
+    }
+    if report.extra_bands || report.low_protect || report.dip_limit {
+        out.push('\n');
     }
     out.push_str("\nPre-echo uses the first −18 dB direct peak and a 2 ms guard, against the louder of the speaker's two direct sounds. Warn only above −30 dB and at least 6 dB above the same untuned ear. Weak means mean omni/in-ear magnitude RMS exceeds 4 dB (30–300 Hz, level matched at 100–300 Hz); EDT and excess GD are information only.\n\n| Speaker | Ear | Pre-echo untuned / tuned (dB) | Warning |\n| --- | --- | --- | --- |\n");
     for s in &report.speakers {
@@ -363,7 +422,7 @@ fn render_readme_with_layouts(
         out.push('\n');
     }
     if let Some(report) = &data.tuning2 {
-        out.push_str(&tuning2_readme(report));
+        out.push_str(&tuning2_readme(report, catalog));
     }
     let has_tuning = data.tuning.is_some() || data.tuning2.is_some();
     if has_tuning && let Some(alignment) = alignment {

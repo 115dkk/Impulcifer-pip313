@@ -1769,6 +1769,42 @@ status = "implemented"
 tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
 
 [[feature]]
+id = "config.room_tuning2_dip_limit"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_low_protect"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_bands"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "room.tuning2_dip_limit"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_dip_limit_matches_secs2r", "impulcifer-dsp::room_tuning2_bands_matches_secs2r", "impulcifer-service::room_tuning2_new_options_log_on_demo"]
+
+[[feature]]
+id = "room.tuning2_low_protect"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_low_protect_matches_secs2r", "impulcifer-dsp::room_tuning2_s2r_limit", "impulcifer-dsp::room_tuning2_s2r_dc_correction", "impulcifer-service::room_tuning2_new_options_log_on_demo"]
+
+[[feature]]
+id = "room.tuning2_bands"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_s2r_band_set_and_masks", "impulcifer-dsp::room_tuning2_bands_matches_secs2r", "impulcifer-service::room_tuning2_new_options_log_on_demo"]
+
+[[feature]]
 id = "room.virtual_tuning2"
 kind = "stage"
 status = "implemented"

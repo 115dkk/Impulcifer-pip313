@@ -2424,6 +2424,9 @@ function updateRoomRows() {
     "bf-room-tuning2-max-boost-row": tuning2,
     "bf-room-tuning2-low-row": tuning2,
     "bf-room-tuning2-high-row": tuning2,
+    "bf-room-tuning2-bands-row": tuning2,
+    "bf-room-tuning2-dip-limit-row": tuning2,
+    "bf-room-tuning2-low-protect-row": tuning2,
     "bf-room-tuning2-mimo-row": tuning2,
     "bf-room-tuning2-fsiso-row": tuning2 && mimo,
     "bf-room-tuning2-mimo-low-row": tuning2 && mimo,
@@ -2465,6 +2468,9 @@ function applyRoomDefaults() {
   el("bf-room-tuning2-max-boost", HTMLInputElement).value = String(brirDefault("room_tuning2_max_boost", 10));
   el("bf-room-tuning2-low", HTMLInputElement).value = String(brirDefault("room_tuning2_low", 20));
   el("bf-room-tuning2-high", HTMLInputElement).value = autoOrNumberText(defaults.room_tuning2_high);
+  el("bf-room-tuning2-bands", HTMLInputElement).value = typeof defaults.room_tuning2_bands === "string" ? defaults.room_tuning2_bands : "";
+  el("bf-room-tuning2-dip-limit", HTMLInputElement).checked = defaults.room_tuning2_dip_limit === true;
+  el("bf-room-tuning2-low-protect", HTMLInputElement).checked = defaults.room_tuning2_low_protect === true;
   el("bf-room-tuning2-mimo", HTMLInputElement).checked = defaults.room_tuning2_mimo === true;
   el("bf-room-tuning2-fsiso", HTMLInputElement).value = String(brirDefault("room_tuning2_fsiso", 150));
   el("bf-room-tuning2-mimo-low", HTMLInputElement).value = autoOrNumberText(defaults.room_tuning2_mimo_low);
@@ -2549,6 +2555,9 @@ function addRoomTuning2Args(args) {
   args.room_tuning2_low = numOr("bf-room-tuning2-low", brirDefault("room_tuning2_low", 20));
   const high = numOrNull("bf-room-tuning2-high");
   args.room_tuning2_high = high ?? "auto";
+  args.room_tuning2_bands = val("bf-room-tuning2-bands").trim();
+  args.room_tuning2_dip_limit = checked("bf-room-tuning2-dip-limit");
+  args.room_tuning2_low_protect = checked("bf-room-tuning2-low-protect");
   if (high === null) {
     args.room_volume = numOrNull("bf-room-volume");
     args.schroeder_freq = numOrNull("bf-schroeder-freq");

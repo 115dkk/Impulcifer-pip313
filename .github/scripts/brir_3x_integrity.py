@@ -88,6 +88,21 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "3.2.0",
     ),
     ("room_tuning2", ("--room_mode=tuning2",), "3.5.0"),
+    (
+        "room_tuning2_dip_limit",
+        ("--room_mode=tuning2", "--room_tuning2_dip_limit=true"),
+        "3.13.0",
+    ),
+    (
+        "room_tuning2_low_protect",
+        ("--room_mode=tuning2", "--room_tuning2_low_protect=true"),
+        "3.13.0",
+    ),
+    (
+        "room_tuning2_bands",
+        ("--room_mode=tuning2", "--room_tuning2_bands=1000-3000"),
+        "3.13.0",
+    ),
     ("room_tuning2_zero", ("--room_mode=tuning2", "--room_tuning2_mode=zero"), "3.5.0"),
     ("room_tuning2_linear", ("--room_mode=tuning2", "--room_tuning2_mode=linear"), "3.5.0"),
     (

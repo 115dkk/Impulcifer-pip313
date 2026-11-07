@@ -149,6 +149,9 @@ interface ProcessingRequest {
   room_tuning2_mode?: Exclude<Tuning2Filter, "custom"> | number; room_tuning2_max_boost?: number;
   room_tuning2_low?: number; room_tuning2_high?: "auto" | number; room_tuning2_mimo?: boolean;
   room_tuning2_fsiso?: number; room_tuning2_mimo_low?: "auto" | number;
+  /* 3.13.0 (ADR 0015). Dip limiting and low-end protection are optional; extra bands are a
+     comma-separated string of up to four lo-hi pairs in Hz (20–20000), empty for none. */
+  room_tuning2_dip_limit?: boolean; room_tuning2_low_protect?: boolean; room_tuning2_bands?: string;
   /* 3.x only (ADR 0006). "auto" finds the crossover in the measurements and ignores vbass_freq;
      "manual" uses vbass_freq; "legacy" is the 2.x method. Without vbass_mode, a given vbass_freq
      means "manual". */

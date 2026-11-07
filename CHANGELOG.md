@@ -4,6 +4,15 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.13.0 - 2026-11-07
+### 가상 룸 튜닝 2의 딥 제한, 저역 보호, 추가 보정 구간
+
+#### ⭐ 새로운 기능 / 개선
+- **딥 보정 제한**: `room_tuning2_dip_limit`를 켜면 1옥타브 포락선보다 깊은 딥의 부스트를 2 dB까지 그대로 허용하고, 그보다 깊은 부분은 절반만 보정하되 모두 6 dB로 제한합니다.
+- **저역 보호**: `room_tuning2_low_protect`를 켜면 스피커마다 측정한 저역 롤오프 아래의 부스트를 막고, 롤오프 위 한 옥타브에서 최대 부스트까지 허용합니다. PEQ 중심과 실제 PEQ·FIR 응답, FIR의 DC 이득도 함께 검사합니다.
+- **추가 보정 구간**: `room_tuning2_bands`에 최대 네 개의 주파수 구간을 지정하면 기본 보정 구간과 합쳐 크기와 위상 보정에 사용합니다.
+- **PEQ 잔차 보호**: PEQ 맞춤 도중 유한하지 않은 잔차가 생기면 큰 유한값으로 바꿔 최적화기가 중단되지 않게 했습니다. 세 선택의 기본값은 기존과 같아서 출력 바이트가 바뀌지 않습니다. 이 동작들은 ADR 0015에 따라 SECS 2R(GPL-3.0/AGPL-3.0)을 오라클로만 사용하고 명세와 픽스처로 따로 구현했습니다.
+
 ## 3.12.0 - 2026-11-06
 ### 양 귀 도착 시차 보고서와 보정
 

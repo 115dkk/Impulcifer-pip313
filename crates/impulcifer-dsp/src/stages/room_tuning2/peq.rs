@@ -91,6 +91,45 @@ pub fn response(f: &[f64], bands: &[(f64, f64, f64)], fs: f64) -> Vec<Complex64>
     }
     out
 }
+
+fn fit_residual_in_place(
+    grid: &[f64],
+    curve: &[f64],
+    magnitudes: &mut [f64],
+    mut inside: impl FnMut(f64) -> bool,
+) {
+    assert_eq!(grid.len(), curve.len());
+    assert_eq!(magnitudes.len(), grid.len());
+    for (index, residual) in magnitudes.iter_mut().enumerate() {
+        let value = (if inside(grid[index]) { 1.0 } else { 0.15 })
+            * (20.0 * residual.log10() - curve[index]);
+        *residual = if value.is_finite() { value } else { 1e12 };
+    }
+}
+
+/// PEQ fitting residual, including the always-on non-finite guard used by production fitting.
+pub fn fit_residual(
+    grid: &[f64],
+    curve: &[f64],
+    bands: &[(f64, f64, f64)],
+    lo: f64,
+    hi: f64,
+    ranges: &[(f64, f64)],
+    fs: f64,
+) -> Vec<f64> {
+    let mut residual: Vec<_> = response(grid, bands, fs)
+        .into_iter()
+        .map(|value| magnitude(value) + 1e-12)
+        .collect();
+    fit_residual_in_place(grid, curve, &mut residual, |frequency| {
+        frequency >= lo
+            && frequency <= hi
+            && ranges
+                .iter()
+                .any(|(range_low, range_high)| frequency >= *range_low && frequency <= *range_high)
+    });
+    residual
+}
 #[allow(clippy::too_many_arguments)]
 pub(super) fn fit(
     grid: &[f64],
@@ -102,7 +141,22 @@ pub(super) fn fit(
     fmax: Option<f64>,
     fs: f64,
 ) -> Result<Bands, DspError> {
-    fit_with_trace(grid, curve, n, lo, hi, boost, fmax, fs, None)
+    fit_impl(grid, curve, n, lo, hi, boost, fmax, fs, None, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fit_with_reach(
+    grid: &[f64],
+    curve: &[f64],
+    n: usize,
+    lo: f64,
+    hi: f64,
+    boost: f64,
+    fmax: Option<f64>,
+    fs: f64,
+    reach: Option<&[(f64, f64)]>,
+) -> Result<Bands, DspError> {
+    fit_impl(grid, curve, n, lo, hi, boost, fmax, fs, None, reach)
 }
 /// A fit has no trace when its greedy start selects no bands.
 #[derive(Debug)]
@@ -124,11 +178,36 @@ pub fn fit_with_trace(
     boost: f64,
     fmax: Option<f64>,
     fs: f64,
+    trace: Option<&mut Option<FitTrace>>,
+) -> Result<Vec<(f64, f64, f64)>, DspError> {
+    fit_impl(grid, curve, n, lo, hi, boost, fmax, fs, trace, None)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn fit_impl(
+    grid: &[f64],
+    curve: &[f64],
+    n: usize,
+    lo: f64,
+    hi: f64,
+    boost: f64,
+    fmax: Option<f64>,
+    fs: f64,
     mut trace: Option<&mut Option<FitTrace>>,
+    reach: Option<&[(f64, f64)]>,
 ) -> Result<Vec<(f64, f64, f64)>, DspError> {
     if let Some(t) = trace.as_deref_mut() {
         *t = None;
     }
+    let inside = |frequency: f64| {
+        frequency >= lo
+            && frequency <= hi
+            && reach.is_none_or(|ranges| {
+                ranges.iter().any(|(range_low, range_high)| {
+                    frequency >= *range_low && frequency <= *range_high
+                })
+            })
+    };
     let mut bands = Vec::new();
     for _ in 0..n {
         let current = response(grid, &bands, fs);
@@ -136,7 +215,7 @@ pub fn fit_with_trace(
             .iter()
             .enumerate()
             .map(|(i, f)| {
-                if *f >= lo && *f <= hi {
+                if inside(*f) {
                     curve[i] - 20. * (magnitude(current[i]) + 1e-12).log10()
                 } else {
                     0.
@@ -168,6 +247,7 @@ pub fn fit_with_trace(
     if bands.is_empty() {
         return Ok(bands);
     }
+    let greedy = bands.clone();
     let mut x = Vec::new();
     let mut lb = Vec::new();
     let mut ub = Vec::new();
@@ -178,8 +258,24 @@ pub fn fit_with_trace(
         x.extend([f.ln(), q.ln(), g]);
     }
     ring_time_bounds(&bands, &mut lb, &mut ub, 30.);
+    if let Some(reach) = reach {
+        for (index, band) in bands.iter().enumerate() {
+            if let Some((range_low, range_high)) = reach
+                .iter()
+                .find(|(range_low, range_high)| band.0 >= *range_low && band.0 <= *range_high)
+            {
+                lb[index * 3] = lb[index * 3].max(range_low.ln());
+                ub[index * 3] = ub[index * 3].min(range_high.ln());
+            }
+        }
+    }
     for i in 0..x.len() {
-        x[i] = x[i].clamp(lb[i] + 1e-6, ub[i] - 1e-6);
+        let margin = if reach.is_some() {
+            1e-6_f64.min((ub[i] - lb[i]) / 4.0)
+        } else {
+            1e-6
+        };
+        x[i] = x[i].clamp(lb[i] + margin, ub[i] - margin);
     }
     let z: Vec<_> = grid
         .iter()
@@ -239,20 +335,17 @@ pub fn fit_with_trace(
                     *o = magnitude(*p) + 1e-12;
                 }
             });
-            for (i, o) in out.iter_mut().enumerate() {
-                *o = (if grid[i] >= lo && grid[i] <= hi {
-                    1.
-                } else {
-                    0.15
-                }) * (20. * o.log10() - curve[i]);
-            }
+            fit_residual_in_place(grid, curve, out, &inside);
         },
         &x,
         &lb,
         &ub,
         150,
         solver_trace.as_mut(),
-    )?;
+    );
+    let Ok(result) = result else {
+        return Ok(greedy);
+    };
     let bands: Vec<_> = result
         .x
         .as_chunks::<3>()

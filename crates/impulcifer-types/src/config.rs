@@ -58,6 +58,10 @@ pub struct ProcessingConfig {
     pub room_tuning2_fsiso: f64,
     #[serde(deserialize_with = "string_or_number")]
     pub room_tuning2_mimo_low: String,
+    pub room_tuning2_dip_limit: bool,
+    pub room_tuning2_low_protect: bool,
+    #[serde(deserialize_with = "trimmed_string")]
+    pub room_tuning2_bands: String,
     pub vbass_mode: String,
     pub layout_files: String,
     pub missing_speakers: String,
@@ -125,6 +129,9 @@ impl Default for ProcessingConfig {
             room_tuning2_mimo: false,
             room_tuning2_fsiso: 150.0,
             room_tuning2_mimo_low: "auto".into(),
+            room_tuning2_dip_limit: false,
+            room_tuning2_low_protect: false,
+            room_tuning2_bands: String::new(),
             vbass_mode: "auto".into(),
             layout_files: "auto".into(),
             missing_speakers: "silent".into(),
@@ -193,7 +200,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 29] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 32] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -223,6 +230,9 @@ pub const EXTENSION_FIELD_NAMES: [&str; 29] = [
     "brir_measurement_map",
     "headphone_measurement_file",
     "headphone_measurement_map",
+    "room_tuning2_dip_limit",
+    "room_tuning2_low_protect",
+    "room_tuning2_bands",
 ];
 
 fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
@@ -231,6 +241,46 @@ fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result
         serde_json::Value::Number(n) => Ok(n.to_string()),
         _ => Err(serde::de::Error::custom("expected a string or number")),
     }
+}
+
+fn trimmed_string<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    String::deserialize(deserializer).map(|value| value.trim().to_owned())
+}
+
+fn parse_tuning2_bands(value: &str) -> Result<Vec<(f64, f64)>, &'static str> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(Vec::new());
+    }
+    let pairs: Vec<_> = value.split(',').collect();
+    if pairs.len() > 4 {
+        return Err("must contain at most four pairs");
+    }
+    let mut parsed = Vec::with_capacity(pairs.len());
+    for pair in pairs {
+        let values: Vec<_> = pair.trim().split('-').collect();
+        if values.len() != 2 {
+            return Err("must contain lo-hi pairs");
+        }
+        let lo = values[0]
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|value| value.is_finite())
+            .ok_or("must contain finite numbers")?;
+        let hi = values[1]
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .filter(|value| value.is_finite())
+            .ok_or("must contain finite numbers")?;
+        if lo < 20.0 || hi > 20_000.0 || lo >= hi {
+            return Err("must satisfy 20 <= lo < hi <= 20000");
+        }
+        parsed.push((lo, hi));
+    }
+    parsed.sort_by(|left, right| left.0.total_cmp(&right.0).then(left.1.total_cmp(&right.1)));
+    Ok(parsed)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -349,6 +399,12 @@ impl ProcessingConfig {
         }
     }
 
+    /// Parsed extra tuning2 correction bands, sorted by their lower edge.
+    /// Validation must run before callers use this method.
+    pub fn room_tuning2_bands(&self) -> Vec<(f64, f64)> {
+        parse_tuning2_bands(&self.room_tuning2_bands).unwrap_or_default()
+    }
+
     /// Validate the 3.x extension options without changing legacy validation semantics.
     pub fn validate_room_options(&self) -> Result<(), ConfigError> {
         let invalid = |field: &str, reason: &str| ConfigError::Invalid {
@@ -399,6 +455,8 @@ impl ProcessingConfig {
                 "must be zero, mixed, linear, long or 30–200 ms",
             ));
         }
+        parse_tuning2_bands(&self.room_tuning2_bands)
+            .map_err(|reason| invalid("room_tuning2_bands", reason))?;
         for (field, value, lo, hi) in [
             ("room_tuning2_high", &self.room_tuning2_high, 100.0, 20000.0),
             (
@@ -482,6 +540,12 @@ impl ProcessingConfig {
     ) -> Result<Self, ConfigError> {
         let mut filtered = serde_json::Map::new();
         for (key, value) in kwargs {
+            if key == "room_tuning2_bands" && !value.is_string() {
+                return Err(ConfigError::Invalid {
+                    field: key.clone(),
+                    reason: "expected a string".into(),
+                });
+            }
             if FIELD_NAMES.contains(&key.as_str()) || EXTENSION_FIELD_NAMES.contains(&key.as_str())
             {
                 filtered.insert(key.clone(), value.clone());

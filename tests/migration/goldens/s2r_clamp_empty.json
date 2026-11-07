@@ -1,0 +1,1 @@
+{"inputs":{"peq":[],"rolloff_hz":60.0},"outputs":{"peq":[]},"meta":{"oracle":"SECS 2R 06183335 (v0.55.0)","rustc":"rustc 1.99.0 (b940084d7 2026-09-28)","target":"x86_64-unknown-linux-gnu","libm":"glibc ldd (Debian GLIBC 2.41-12+deb13u3) 2.41","weights":[1.0],"grid":"48000 Hz, N = 131072","settings":{"case":"empty"},"family":"clamp"}}

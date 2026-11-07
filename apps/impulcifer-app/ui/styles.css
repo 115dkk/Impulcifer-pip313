@@ -297,6 +297,8 @@ select {
 input.mono { font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace; font-size: 14px; }
 input.num { width: 110px; }
 select.num { width: 130px; }
+/* Up to four "lo-hi" pairs with their commas fit without scrolling. */
+#bf-room-tuning2-bands { width: 220px; }
 
 input:focus-visible, select:focus-visible, button:focus-visible, .switch:focus-visible {
   outline: 2px solid var(--accent);

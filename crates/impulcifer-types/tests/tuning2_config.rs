@@ -4,6 +4,14 @@ use serde_json::{Value, json};
 
 #[test]
 fn config_room_tuning2_defaults_and_validation() {
+    assert_eq!(
+        &EXTENSION_FIELD_NAMES[29..],
+        &[
+            "room_tuning2_dip_limit",
+            "room_tuning2_low_protect",
+            "room_tuning2_bands",
+        ]
+    );
     let defaults = serde_json::to_value(ProcessingConfig::default()).unwrap();
     for (key, value) in [
         ("mode", json!("mixed")),
@@ -13,6 +21,9 @@ fn config_room_tuning2_defaults_and_validation() {
         ("mimo", json!(false)),
         ("fsiso", json!(150.0)),
         ("mimo_low", json!("auto")),
+        ("dip_limit", json!(false)),
+        ("low_protect", json!(false)),
+        ("bands", json!("")),
     ] {
         let key = format!("room_tuning2_{key}");
         assert_eq!(defaults[&key], value);
@@ -57,8 +68,49 @@ fn config_room_tuning2_defaults_and_validation() {
         check(key, json!("auto"), true);
     }
     for value in [true, false] {
-        check("room_tuning2_mimo", json!(value), true);
+        for key in [
+            "room_tuning2_mimo",
+            "room_tuning2_dip_limit",
+            "room_tuning2_low_protect",
+        ] {
+            check(key, json!(value), true);
+        }
     }
+    for accepted in [
+        "",
+        "20-20000",
+        "1000-3000, 20-500",
+        "8000-9000, 1000-1500, 4000-5000, 2000-3000",
+        " 1000 - 3000 ",
+    ] {
+        check("room_tuning2_bands", json!(accepted), true);
+    }
+    for rejected in [
+        "20",
+        "20-40-60",
+        "NaN-100",
+        "20-inf",
+        "19.9-100",
+        "20-20000.1",
+        "100-100",
+        "101-100",
+        "20-30,40-50,60-70,80-90,100-110",
+        "20-30,",
+    ] {
+        check("room_tuning2_bands", json!(rejected), false);
+    }
+    check("room_tuning2_bands", json!(100), false);
+    let parsed = ProcessingConfig::from_kwargs(
+        json!({"room_tuning2_bands":" 1000-3000, 20-500 "})
+            .as_object()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(parsed.room_tuning2_bands, "1000-3000, 20-500");
+    assert_eq!(
+        parsed.room_tuning2_bands(),
+        vec![(20.0, 500.0), (1000.0, 3000.0)]
+    );
     let mut config = ProcessingConfig {
         room_tuning2_low: 100.0,
         room_tuning2_high: "100".into(),

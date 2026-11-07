@@ -246,12 +246,62 @@ impl StageObserver for Observer<'_, '_> {
                 "low": band.low.round() as i64, "high": band.high.round() as i64,
             }));
         }
+        if !self.config.room_tuning2_bands.trim().is_empty()
+            && let Some(band) = &report.band
+        {
+            let format_hz = |value: f64| {
+                if value.fract() == 0.0 {
+                    format!("{value:.0}")
+                } else {
+                    value.to_string()
+                }
+            };
+            let bands = band
+                .bands
+                .iter()
+                .map(|(low, high)| format!("{}-{}", format_hz(*low), format_hz(*high)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            self.events
+                .log("info", "cli_room_tuning2_bands", json!({"bands":bands}));
+        }
         for speaker in &report.speakers {
             if speaker.points == 1 {
                 self.events.log(
                     "info",
                     "cli_room_tuning_single_point",
                     json!({"speaker":speaker.speaker}),
+                );
+            }
+            if self.config.room_tuning2_low_protect {
+                let rolloff = speaker
+                    .rolloff_hz
+                    .map_or_else(|| "none".to_owned(), |value| format!("{value:.1}"));
+                self.events.log(
+                    "info",
+                    "cli_room_tuning2_low_protect",
+                    json!({
+                        "speaker":speaker.speaker,
+                        "rolloff":rolloff,
+                        "reduced":speaker.low_protect_reduced,
+                        "cuts":speaker.low_protect_cuts,
+                        "limited":speaker.low_protect_limited,
+                    }),
+                );
+            }
+            if self.config.room_tuning2_dip_limit
+                && let Some((hz, depth, fill)) = speaker.limited_dips.first()
+            {
+                self.events.log(
+                    "info",
+                    "cli_room_tuning2_dip_limit",
+                    json!({
+                        "speaker":speaker.speaker,
+                        "count":speaker.limited_dips.len(),
+                        "hz":format!("{hz:.1}"),
+                        "depth":format!("{depth:.1}"),
+                        "fill":format!("{fill:.1}"),
+                    }),
                 );
             }
             if self.config.room_tuning_level_match && speaker.level_difference_db.abs() > 2.0 {
