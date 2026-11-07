@@ -299,6 +299,9 @@ input.num { width: 110px; }
 select.num { width: 130px; }
 /* Up to four "lo-hi" pairs with their commas fit without scrolling. */
 #bf-room-tuning2-bands { width: 220px; }
+/* The arrival and treble-phase options act on the FIR; with PEQ only they are
+   disabled, their labels dim, and #bf-room-tuning2-fir-hint says why. */
+.check-row.fir-only:has(> input:disabled) > label { color: var(--fg-3); }
 
 input:focus-visible, select:focus-visible, button:focus-visible, .switch:focus-visible {
   outline: 2px solid var(--accent);

@@ -251,42 +251,65 @@ pub fn smoothed_group_delay(h: &[Complex64], f: &[f64], g: &[f64], frac: f64, fs
         .collect()
 }
 pub fn mode_decay(x: &[f64], fc: f64, half: f64) -> Option<f64> {
-    let sos = filters::butter_bandpass(2, (fc - half).max(1.) / 300., (fc + half).min(270.) / 300.);
-    let mut input = vec![0.; 1200];
+    mode_decay_at_rate(x, fc, half, 600.0)
+}
+
+/// Estimate a mode's T60 at an arbitrary sample rate. The 600 Hz branch keeps
+/// the original constants and operation order used by the SECS 2 gates.
+pub fn mode_decay_at_rate(x: &[f64], fc: f64, half: f64, rate: f64) -> Option<f64> {
+    if !rate.is_finite() || rate <= 0.0 {
+        return None;
+    }
+    let (nyquist, upper, padding, mean_divisor) = if rate == 600.0 {
+        (300.0, 270.0, 1200, 1200.0)
+    } else {
+        (rate / 2.0, 0.45 * rate, (2.0 * rate) as usize, 2.0 * rate)
+    };
+    let low = (fc - half).max(1.0);
+    let high = (fc + half).min(upper);
+    if !low.is_finite() || !high.is_finite() || low >= high {
+        return None;
+    }
+    let sos = filters::butter_bandpass(2, low / nyquist, high / nyquist);
+    let mut input = vec![0.0; padding];
     input.extend_from_slice(x);
     input.reverse();
     let mut y = filters::sosfilt(&sos, &input);
     y.reverse();
     let e: Vec<_> = y.iter().map(|v| v * v).collect();
     let start = argmax(&e);
-    let mut edc = vec![0.; e.len() - start];
-    let mut sum = 0.;
+    let mut edc = vec![0.0; e.len() - start];
+    let mut sum = 0.0;
     for i in (start..e.len()).rev() {
         sum += e[i];
         edc[i - start] = sum;
     }
-    if edc[0] <= 0. {
+    if edc[0] <= 0.0 {
         return None;
     }
     let db: Vec<_> = edc
         .iter()
-        .map(|e| 10. * (e / edc[0]).max(1e-30).log10())
+        .map(|e| 10.0 * (e / edc[0]).max(1e-30).log10())
         .collect();
-    let i5 = db.iter().position(|x| *x <= -5.).unwrap_or(0);
-    let i25 = db.iter().position(|x| *x <= -25.).unwrap_or(0);
+    let i5 = db.iter().position(|x| *x <= -5.0).unwrap_or(0);
+    let i25 = db.iter().position(|x| *x <= -25.0).unwrap_or(0);
     if i25 <= i5 + 2 {
         return None;
     }
     let len = (i25 - i5) as f64;
-    let tmean = (i5 + i25 - 1) as f64 / 1200.;
+    let tmean = (i5 + i25 - 1) as f64 / mean_divisor;
     let ymean = db[i5..i25].iter().sum::<f64>() / len;
-    let mut num = 0.;
-    let mut den = 0.;
+    let mut num = 0.0;
+    let mut den = 0.0;
     for (i, y) in db.iter().enumerate().take(i25).skip(i5) {
-        let t = i as f64 / 600. - tmean;
+        let t = i as f64 / rate - tmean;
         num += t * (y - ymean);
         den += t * t;
     }
     let slope = num / den;
-    if slope < 0. { Some(-60. / slope) } else { None }
+    if slope < 0.0 {
+        Some(-60.0 / slope)
+    } else {
+        None
+    }
 }

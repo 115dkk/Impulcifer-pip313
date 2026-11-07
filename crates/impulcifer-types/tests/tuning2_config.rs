@@ -10,6 +10,9 @@ fn config_room_tuning2_defaults_and_validation() {
             "room_tuning2_dip_limit",
             "room_tuning2_low_protect",
             "room_tuning2_bands",
+            "room_tuning2_lf_align",
+            "room_tuning2_mode_decay",
+            "room_tuning2_hf_phase",
         ]
     );
     let defaults = serde_json::to_value(ProcessingConfig::default()).unwrap();
@@ -24,6 +27,9 @@ fn config_room_tuning2_defaults_and_validation() {
         ("dip_limit", json!(false)),
         ("low_protect", json!(false)),
         ("bands", json!("")),
+        ("lf_align", json!(false)),
+        ("mode_decay", json!(false)),
+        ("hf_phase", json!(false)),
     ] {
         let key = format!("room_tuning2_{key}");
         assert_eq!(defaults[&key], value);
@@ -72,6 +78,9 @@ fn config_room_tuning2_defaults_and_validation() {
             "room_tuning2_mimo",
             "room_tuning2_dip_limit",
             "room_tuning2_low_protect",
+            "room_tuning2_lf_align",
+            "room_tuning2_mode_decay",
+            "room_tuning2_hf_phase",
         ] {
             check(key, json!(value), true);
         }

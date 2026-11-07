@@ -265,6 +265,22 @@ impl StageObserver for Observer<'_, '_> {
             self.events
                 .log("info", "cli_room_tuning2_bands", json!({"bands":bands}));
         }
+        if report.mode == impulcifer_types::config::Tuning2Mode::Zero {
+            let mut inert = Vec::new();
+            if report.lf_align {
+                inert.push("room_tuning2_lf_align");
+            }
+            if report.hf_phase {
+                inert.push("room_tuning2_hf_phase");
+            }
+            if !inert.is_empty() {
+                self.events.log(
+                    "info",
+                    "cli_room_tuning2_zero_inert",
+                    json!({"options":inert.join(", ")}),
+                );
+            }
+        }
         for speaker in &report.speakers {
             if speaker.points == 1 {
                 self.events.log(
@@ -303,6 +319,62 @@ impl StageObserver for Observer<'_, '_> {
                         "fill":format!("{fill:.1}"),
                     }),
                 );
+            }
+            if let Some(result) = &speaker.lf_align {
+                self.events.log(
+                    "info",
+                    "cli_room_tuning2_lf_align",
+                    json!({
+                        "speaker":speaker.speaker,
+                        "f_lin":format!("{:.1}", result.f_lin_hz),
+                        "strength":format!("{:.1}", speaker.phase_strength),
+                        "arrival":result.arrival_ms.map_or_else(|| "none".to_owned(), |value| format!("{value:.1}")),
+                        "limited":result.limited,
+                    }),
+                );
+            }
+            if let Some(result) = &speaker.mode_decay {
+                if result.cuts.is_empty() {
+                    self.events.log(
+                        "info",
+                        "cli_room_tuning2_mode_decay_none",
+                        json!({"speaker":speaker.speaker,"target":format!("{:.2}",result.target_t60_s)}),
+                    );
+                } else {
+                    let cuts = result
+                        .cuts
+                        .iter()
+                        .map(|cut| {
+                            format!(
+                                "{:.1} Hz {:.2} s -{:.1} dB",
+                                cut.frequency_hz, cut.measured_t60_s, cut.depth_db
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    self.events.log(
+                        "info",
+                        "cli_room_tuning2_mode_decay",
+                        json!({"speaker":speaker.speaker,"target":format!("{:.2}",result.target_t60_s),"count":result.cuts.len(),"cuts":cuts}),
+                    );
+                }
+            }
+            if let Some(result) = &speaker.hf_phase {
+                if let Some(rotation) = result.rotation_deg {
+                    self.events.log(
+                        "info",
+                        "cli_room_tuning2_hf_phase",
+                        json!({"speaker":speaker.speaker,"rotation":format!("{rotation:.1}"),"limited":result.limited}),
+                    );
+                } else {
+                    let high = speaker.bands.last().map_or(0.0, |band| band.1);
+                    let low = high * 2_f64.sqrt();
+                    self.events.log(
+                        "info",
+                        "cli_room_tuning2_hf_phase_none",
+                        json!({"speaker":speaker.speaker,"low":low.round() as i64,"high":(8.0 * low).min(0.45 * report.fs as f64).round() as i64}),
+                    );
+                }
             }
             if self.config.room_tuning_level_match && speaker.level_difference_db.abs() > 2.0 {
                 self.events.log("warning", "cli_room_tuning_level_inconsistent", json!({"speaker":speaker.speaker,"db":format!("{:.1}",speaker.level_difference_db)}));

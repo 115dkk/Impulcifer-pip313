@@ -389,6 +389,9 @@ pub fn load_inputs(
                         dip_limit: config.room_tuning2_dip_limit,
                         low_protect: config.room_tuning2_low_protect,
                         extra_bands: config.room_tuning2_bands(),
+                        lf_align: config.room_tuning2_lf_align,
+                        mode_decay: config.room_tuning2_mode_decay,
+                        hf_phase: config.room_tuning2_hf_phase,
                     },
                     level_match: config.room_tuning_level_match,
                     mimo: config.room_tuning2_mimo.then(|| MimoOptions {

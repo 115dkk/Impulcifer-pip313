@@ -192,6 +192,22 @@ fn tuning2_readme(
         out.push_str(&catalog.translate("cli_room_tuning2_bands", &json!({"bands":bands})));
         out.push('\n');
     }
+    if report.mode == impulcifer_types::config::Tuning2Mode::Zero {
+        let mut inert = Vec::new();
+        if report.lf_align {
+            inert.push("room_tuning2_lf_align");
+        }
+        if report.hf_phase {
+            inert.push("room_tuning2_hf_phase");
+        }
+        if !inert.is_empty() {
+            out.push('\n');
+            out.push_str(&catalog.translate(
+                "cli_room_tuning2_zero_inert",
+                &json!({"options":inert.join(", ")}),
+            ));
+        }
+    }
     for speaker in &report.speakers {
         if report.low_protect {
             let rolloff = speaker
@@ -224,8 +240,68 @@ fn tuning2_readme(
                 }),
             ));
         }
+        if let Some(result) = &speaker.lf_align {
+            out.push('\n');
+            out.push_str(&catalog.translate(
+                "cli_room_tuning2_lf_align",
+                &json!({
+                    "speaker":speaker.speaker,
+                    "f_lin":format!("{:.1}",result.f_lin_hz),
+                    "strength":format!("{:.1}",speaker.phase_strength),
+                    "arrival":result.arrival_ms.map_or_else(|| "none".to_owned(), |value| format!("{value:.1}")),
+                    "limited":result.limited,
+                }),
+            ));
+        }
+        if let Some(result) = &speaker.mode_decay {
+            out.push('\n');
+            if result.cuts.is_empty() {
+                out.push_str(&catalog.translate(
+                    "cli_room_tuning2_mode_decay_none",
+                    &json!({"speaker":speaker.speaker,"target":format!("{:.2}",result.target_t60_s)}),
+                ));
+            } else {
+                let cuts = result
+                    .cuts
+                    .iter()
+                    .map(|cut| {
+                        format!(
+                            "{:.1} Hz {:.2} s -{:.1} dB",
+                            cut.frequency_hz, cut.measured_t60_s, cut.depth_db
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                out.push_str(&catalog.translate(
+                    "cli_room_tuning2_mode_decay",
+                    &json!({"speaker":speaker.speaker,"target":format!("{:.2}",result.target_t60_s),"count":result.cuts.len(),"cuts":cuts}),
+                ));
+            }
+        }
+        if let Some(result) = &speaker.hf_phase {
+            out.push('\n');
+            if let Some(rotation) = result.rotation_deg {
+                out.push_str(&catalog.translate(
+                    "cli_room_tuning2_hf_phase",
+                    &json!({"speaker":speaker.speaker,"rotation":format!("{rotation:.1}"),"limited":result.limited}),
+                ));
+            } else {
+                let high = speaker.bands.last().map_or(0.0, |band| band.1);
+                let low = high * 2_f64.sqrt();
+                out.push_str(&catalog.translate(
+                    "cli_room_tuning2_hf_phase_none",
+                    &json!({"speaker":speaker.speaker,"low":low.round() as i64,"high":(8.0*low).min(0.45*report.fs as f64).round() as i64}),
+                ));
+            }
+        }
     }
-    if report.extra_bands || report.low_protect || report.dip_limit {
+    if report.extra_bands
+        || report.low_protect
+        || report.dip_limit
+        || report.lf_align
+        || report.mode_decay
+        || report.hf_phase
+    {
         out.push('\n');
     }
     out.push_str("\nPre-echo uses the first −18 dB direct peak and a 2 ms guard, against the louder of the speaker's two direct sounds. Warn only above −30 dB and at least 6 dB above the same untuned ear. Weak means mean omni/in-ear magnitude RMS exceeds 4 dB (30–300 Hz, level matched at 100–300 Hz); EDT and excess GD are information only.\n\n| Speaker | Ear | Pre-echo untuned / tuned (dB) | Warning |\n| --- | --- | --- | --- |\n");

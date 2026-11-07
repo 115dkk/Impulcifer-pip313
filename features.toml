@@ -1805,6 +1805,42 @@ status = "implemented"
 tests = ["impulcifer-dsp::room_tuning2_s2r_band_set_and_masks", "impulcifer-dsp::room_tuning2_bands_matches_secs2r", "impulcifer-service::room_tuning2_new_options_log_on_demo"]
 
 [[feature]]
+id = "config.room_tuning2_lf_align"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_mode_decay"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_hf_phase"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "room.tuning2_lf_align"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_lf_preparation_matches_secs2r", "impulcifer-dsp::room_tuning2_lf_excess_recombines_secs2r", "impulcifer-service::room_tuning2_bundle2_options_log_on_demo"]
+
+[[feature]]
+id = "room.tuning2_mode_decay"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_mode_decay_matches_secs2r", "impulcifer-dsp::room_tuning2_s2r_decay_cut_and_hf_region", "impulcifer-service::room_tuning2_bundle2_options_log_on_demo"]
+
+[[feature]]
+id = "room.tuning2_hf_phase"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_realize_synthetic_matches_secs2r", "impulcifer-dsp::room_tuning2_s2r_decay_cut_and_hf_region", "impulcifer-service::room_tuning2_bundle2_options_log_on_demo"]
+
+[[feature]]
 id = "room.virtual_tuning2"
 kind = "stage"
 status = "implemented"

@@ -62,6 +62,9 @@ pub struct ProcessingConfig {
     pub room_tuning2_low_protect: bool,
     #[serde(deserialize_with = "trimmed_string")]
     pub room_tuning2_bands: String,
+    pub room_tuning2_lf_align: bool,
+    pub room_tuning2_mode_decay: bool,
+    pub room_tuning2_hf_phase: bool,
     pub vbass_mode: String,
     pub layout_files: String,
     pub missing_speakers: String,
@@ -132,6 +135,9 @@ impl Default for ProcessingConfig {
             room_tuning2_dip_limit: false,
             room_tuning2_low_protect: false,
             room_tuning2_bands: String::new(),
+            room_tuning2_lf_align: false,
+            room_tuning2_mode_decay: false,
+            room_tuning2_hf_phase: false,
             vbass_mode: "auto".into(),
             layout_files: "auto".into(),
             missing_speakers: "silent".into(),
@@ -200,7 +206,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 32] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 35] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -233,6 +239,9 @@ pub const EXTENSION_FIELD_NAMES: [&str; 32] = [
     "room_tuning2_dip_limit",
     "room_tuning2_low_protect",
     "room_tuning2_bands",
+    "room_tuning2_lf_align",
+    "room_tuning2_mode_decay",
+    "room_tuning2_hf_phase",
 ];
 
 fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {

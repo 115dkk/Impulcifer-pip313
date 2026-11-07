@@ -395,6 +395,33 @@ pub static EXTENSION_OPTIONS: &[CliOption] = &[
         default: CliDefault::Suppressed,
         help: "Up to four extra tuning2 correction bands as LO-HI pairs separated by commas.",
     },
+    CliOption {
+        flag: "--room_tuning2_lf_align",
+        short: None,
+        dest: "room_tuning2_lf_align",
+        kind: CliType::Str,
+        choices: &["true", "false"],
+        default: CliDefault::Suppressed,
+        help: "Align tuning2 low-frequency arrival with the 3–6 kHz arrival (default false).",
+    },
+    CliOption {
+        flag: "--room_tuning2_mode_decay",
+        short: None,
+        dest: "room_tuning2_mode_decay",
+        kind: CliType::Str,
+        choices: &["true", "false"],
+        default: CliDefault::Suppressed,
+        help: "Shorten long room modes with tuning2 decay cuts (default false).",
+    },
+    CliOption {
+        flag: "--room_tuning2_hf_phase",
+        short: None,
+        dest: "room_tuning2_hf_phase",
+        kind: CliType::Str,
+        choices: &["true", "false"],
+        default: CliDefault::Suppressed,
+        help: "Unwind tuning2 FIR phase rotation above the correction band (default false).",
+    },
 ];
 
 pub const OPTIONS: &[CliOption] = &[

@@ -2427,11 +2427,18 @@ function updateRoomRows() {
     "bf-room-tuning2-bands-row": tuning2,
     "bf-room-tuning2-dip-limit-row": tuning2,
     "bf-room-tuning2-low-protect-row": tuning2,
+    "bf-room-tuning2-mode-decay-row": tuning2,
+    "bf-room-tuning2-lf-align-row": tuning2,
+    "bf-room-tuning2-hf-phase-row": tuning2,
+    "bf-room-tuning2-fir-hint": tuning2 && tuning2Filter() === "zero",
     "bf-room-tuning2-mimo-row": tuning2,
     "bf-room-tuning2-fsiso-row": tuning2 && mimo,
     "bf-room-tuning2-mimo-low-row": tuning2 && mimo,
   };
   for (const [id, shown] of Object.entries(rows)) $(id).hidden = !shown;
+  for (const id of ["bf-room-tuning2-lf-align", "bf-room-tuning2-hf-phase"]) {
+    el(id, HTMLInputElement).disabled = tuning2Filter() === "zero";
+  }
   // Stable's checkbox shows only Schroeder or the full band; name any other
   // limit the slider keeps. The styles hide this line in Studio.
   const current = $("bf-room-phase-current");
@@ -2471,6 +2478,9 @@ function applyRoomDefaults() {
   el("bf-room-tuning2-bands", HTMLInputElement).value = typeof defaults.room_tuning2_bands === "string" ? defaults.room_tuning2_bands : "";
   el("bf-room-tuning2-dip-limit", HTMLInputElement).checked = defaults.room_tuning2_dip_limit === true;
   el("bf-room-tuning2-low-protect", HTMLInputElement).checked = defaults.room_tuning2_low_protect === true;
+  el("bf-room-tuning2-mode-decay", HTMLInputElement).checked = defaults.room_tuning2_mode_decay === true;
+  el("bf-room-tuning2-lf-align", HTMLInputElement).checked = defaults.room_tuning2_lf_align === true;
+  el("bf-room-tuning2-hf-phase", HTMLInputElement).checked = defaults.room_tuning2_hf_phase === true;
   el("bf-room-tuning2-mimo", HTMLInputElement).checked = defaults.room_tuning2_mimo === true;
   el("bf-room-tuning2-fsiso", HTMLInputElement).value = String(brirDefault("room_tuning2_fsiso", 150));
   el("bf-room-tuning2-mimo-low", HTMLInputElement).value = autoOrNumberText(defaults.room_tuning2_mimo_low);
@@ -2558,6 +2568,9 @@ function addRoomTuning2Args(args) {
   args.room_tuning2_bands = val("bf-room-tuning2-bands").trim();
   args.room_tuning2_dip_limit = checked("bf-room-tuning2-dip-limit");
   args.room_tuning2_low_protect = checked("bf-room-tuning2-low-protect");
+  args.room_tuning2_mode_decay = checked("bf-room-tuning2-mode-decay");
+  args.room_tuning2_lf_align = tuning2Filter() !== "zero" && checked("bf-room-tuning2-lf-align");
+  args.room_tuning2_hf_phase = tuning2Filter() !== "zero" && checked("bf-room-tuning2-hf-phase");
   if (high === null) {
     args.room_volume = numOrNull("bf-room-volume");
     args.schroeder_freq = numOrNull("bf-schroeder-freq");
