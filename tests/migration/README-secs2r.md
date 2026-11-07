@@ -70,3 +70,12 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | `all` | 1.587310403e1 | 3.164880375 | 1.035219351e1 | 1.113121823e-3 | 1.284493722 | 0 |
 
 저역 보호 진단의 `reduced`와 `cuts`는 두 번째 PEQ를 제한할 때 만든 결과를 최종 FIR 응답 제한까지 이어서 누적한 값이며, `limited`도 최종 응답을 기준으로 한다. 오라클이 만든 데모 픽스처에서는 최종 FIR 응답 제한이 새로 줄인 밴드가 없었다. PEQ 정련 결과에 따라 이 결정이 달라지므로 `rc_*`의 세 값은 모든 플랫폼에서 `FitDependent`로 보고한다.
+
+## Regeneration
+
+픽스처는 유지보수자와 명세를 쓰는 주 세션만 다시 만든다. 옵션을 구현하는 사람은 이 절차를 돌리지 않고, 내보내기 프로그램을 열지도 않는다.
+
+1. **입력.** 이 저장소에서 `cargo run --release -p impulcifer-dsp --example secs2_inputs -- <inputs>`를 돌려 데모의 자르지 않은 무지향 귀 위치 IR을 `<inputs>/omni/`에 쓴다(`s2_*`와 같은 입력).
+2. **오라클.** SECS 2R 06183335(v0.55.0) 체크아웃에 내보내기 디프(기능 플래그 `oracle-fixtures`, 예제 `impulcifer_fixtures`)를 적용한다. 이 디프는 GPL 저장소의 코드이므로 이 저장소에 두지 않고 SECS 2R 작업 사본에 둔다.
+3. **내보내기.** Debian glibc(WSL Debian, glibc 2.41에서 확인)에서 `S2R_BINS=<이 저장소>/tests/migration/goldens/s2_bins.json`을 주고 `cargo run --release -p secs-engine --features oracle-fixtures --example impulcifer_fixtures -- <inputs> <out>`를 두 번 돌린다. 두 번째 실행은 파일을 하나도 바꾸지 않아야 한다. 내보내기는 자기가 쓰지 않은 `s2r_*` 파일이 `<out>`에 있으면 실패하므로 빈 폴더나 앞선 출력 폴더를 쓴다. glibc에서 내는 까닭은 CI의 ubuntu 러너가 같은 libm을 써서 `Exact`·`Curve` 게이트가 그곳에서 비트 단위로 맞기 때문이다.
+4. **반영.** `<out>`의 파일을 `tests/migration/goldens/`에 그대로 복사하고, 앞선 묶음의 파일이 바이트 단위로 그대로인지 `git diff --stat`으로 확인한다.
