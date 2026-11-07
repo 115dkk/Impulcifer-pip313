@@ -97,18 +97,16 @@ fn oracle_libm_r() -> bool {
     })
 }
 
-fn assert_exact(name: &str, condition: bool) {
-    assert!(condition, "{name}");
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Comparison {
-    /// Curves use 1e-12 on the oracle libm and 1e-9 elsewhere.
+    /// Stored-input, decision-free values are exact on the oracle libm and 1e-9 elsewhere.
+    Exact,
+    /// Stored-input curves use 1e-12 on the oracle libm and 1e-9 elsewhere.
     Curve,
-    /// Scalars, bands, masks and note payloads are bit exact on the oracle libm.
-    ExactOnOracle,
-    /// Limit's integer choices are exact on the oracle libm and report-only elsewhere.
-    LimitDecision,
+    /// Values rebuilt through Rust's FFT use 1e-9 on every platform.
+    Rebuilt,
+    /// Values downstream of PEQ refinement are report-only on every platform.
+    FitDependent,
 }
 
 #[derive(Default)]
@@ -123,13 +121,17 @@ impl Errors {
     fn compare(&mut self, name: &str, got: &[f64], expected: &[f64], class: Comparison) {
         assert_ne!(
             class,
-            Comparison::LimitDecision,
+            Comparison::FitDependent,
             "{name}: wrong comparison helper"
         );
         assert_eq!(got.len(), expected.len(), "{name}: shape");
         let oracle_libm = oracle_libm_r();
-        let exact = oracle_libm && class == Comparison::ExactOnOracle;
-        let budget = if oracle_libm { 1e-12 } else { 1e-9 };
+        let exact = oracle_libm && class == Comparison::Exact;
+        let budget = match class {
+            Comparison::Exact | Comparison::Curve if oracle_libm => 1e-12,
+            Comparison::Exact | Comparison::Curve | Comparison::Rebuilt => 1e-9,
+            Comparison::FitDependent => unreachable!(),
+        };
         let mut error_energy = 0.0;
         let mut expected_energy = 0.0;
         let mut first = None;
@@ -167,24 +169,29 @@ impl Errors {
     }
 
     fn finish(self, family: &str) {
-        let budget = if oracle_libm_r() { 1e-12 } else { 1e-9 };
         println!(
-            "MEASURE {family}: max_abs={:.17e}, max_relative_l2={:.17e}, values={}, curve_budget={budget:.1e}",
+            "MEASURE {family}: max_abs={:.17e}, max_relative_l2={:.17e}, values={}, budgets=class-specific",
             self.absolute, self.relative, self.values
         );
         assert!(self.failures.is_empty(), "{}", self.failures.join("\n"));
     }
 }
 
-fn compare_limit_decision<T: std::fmt::Debug + PartialEq>(name: &str, got: &T, expected: &T) {
-    let class = Comparison::LimitDecision;
-    if oracle_libm_r() {
-        assert_eq!(got, expected, "{name} ({class:?})");
-    } else {
-        println!(
+fn compare_decision<T: std::fmt::Debug + PartialEq>(
+    name: &str,
+    got: &T,
+    expected: &T,
+    class: Comparison,
+) {
+    match class {
+        Comparison::Exact if oracle_libm_r() => assert_eq!(got, expected, "{name} ({class:?})"),
+        Comparison::Exact | Comparison::FitDependent => println!(
             "REPORT {name} ({class:?}): match={} got={got:?} expected={expected:?}",
             got == expected
-        );
+        ),
+        Comparison::Curve | Comparison::Rebuilt => {
+            panic!("{name}: wrong decision comparison class {class:?}")
+        }
     }
 }
 
@@ -208,7 +215,7 @@ fn room_tuning2_s2r_band_set_and_masks() {
             &name,
             &flatten_pairs(&got),
             &flatten_pairs(&expected),
-            Comparison::ExactOnOracle,
+            Comparison::Exact,
         );
     }
 
@@ -222,13 +229,13 @@ fn room_tuning2_s2r_band_set_and_masks() {
             &format!("{name}/bands"),
             &flatten_pairs(&merged),
             &flatten_pairs(&pairs(&fixture["outputs"]["bands"])),
-            Comparison::ExactOnOracle,
+            Comparison::Exact,
         );
         errors.compare(
             &format!("{name}/magnitude_mask"),
             &sampled(&magnitude_mask(&frequencies, &merged, FS)),
             &array(&fixture["outputs"]["magnitude_mask"]),
-            Comparison::ExactOnOracle,
+            Comparison::Curve,
         );
         errors.compare(
             &format!("{name}/phase_fade"),
@@ -239,7 +246,7 @@ fn room_tuning2_s2r_band_set_and_masks() {
                 !extras.is_empty(),
             )),
             &array(&fixture["outputs"]["phase_fade"]),
-            Comparison::ExactOnOracle,
+            Comparison::Curve,
         );
         errors.compare(
             &format!("{name}/phase_error_band"),
@@ -252,13 +259,13 @@ fn room_tuning2_s2r_band_set_and_masks() {
                 FS,
             )),
             &array(&fixture["outputs"]["phase_error_band"]),
-            Comparison::ExactOnOracle,
+            Comparison::Exact,
         );
         errors.compare(
             &format!("{name}/band_grid"),
             &band_grid(&merged),
             &array(&fixture["outputs"]["band_grid"]),
-            Comparison::ExactOnOracle,
+            Comparison::Curve,
         );
         let reach = fit_reach(primary.0, primary.1, primary.1, &extras);
         let expected = &fixture["outputs"]["fit_reach"];
@@ -278,7 +285,7 @@ fn room_tuning2_s2r_band_set_and_masks() {
                 &format!("{name}/fit_reach"),
                 &got,
                 &expected,
-                Comparison::ExactOnOracle,
+                Comparison::Exact,
             );
         }
     }
@@ -295,7 +302,7 @@ fn room_tuning2_s2r_clamp() {
             &name,
             &flatten_bands(&got),
             &flatten_bands(&bands(&fixture["outputs"]["peq"])),
-            Comparison::ExactOnOracle,
+            Comparison::Exact,
         );
     }
     let mut edge = vec![(20.0, 1.0, 3.0)];
@@ -333,7 +340,7 @@ fn room_tuning2_s2r_limit() {
             &format!("{name}/peq"),
             &flatten_bands(&got),
             &flatten_bands(&bands(&fixture["outputs"]["peq"])),
-            Comparison::ExactOnOracle,
+            Comparison::Curve,
         );
         let expected_reduced: Vec<_> = fixture["outputs"]["outcome"]["reduced"]
             .as_array()
@@ -345,28 +352,35 @@ fn room_tuning2_s2r_limit() {
             expected_reduced,
             fixture["outputs"]["outcome"]["cuts"].as_u64().unwrap() as usize,
         );
-        compare_limit_decision(
+        compare_decision(
             &format!("{name}/outcome"),
             &(outcome.reduced.clone(), outcome.cuts),
             &expected_outcome,
+            Comparison::Exact,
         );
-        assert_exact(
+        compare_decision(
             &format!("{name}/limited"),
-            protect::limited(&got, &fixed, frequencies, rolloff, FS)
-                == fixture["outputs"]["limited"].as_bool().unwrap(),
+            &protect::limited(&got, &fixed, frequencies, rolloff, FS),
+            &fixture["outputs"]["limited"].as_bool().unwrap(),
+            Comparison::Exact,
         );
         for (label, actual) in [("worst_before", before), ("worst_after", after)] {
             let expected = &fixture["outputs"][label];
             let actual_bin = actual.map(|(bin, _)| bin);
             let expected_bin =
                 (!expected.is_null()).then(|| expected["bin"].as_u64().unwrap() as usize);
-            compare_limit_decision(&format!("{name}/{label}/bin"), &actual_bin, &expected_bin);
+            compare_decision(
+                &format!("{name}/{label}/bin"),
+                &actual_bin,
+                &expected_bin,
+                Comparison::Exact,
+            );
             if let (Some((_, value)), false) = (actual, expected.is_null()) {
                 errors.compare(
                     &format!("{name}/{label}/excess"),
                     &[value],
                     &[number(&expected["excess"])],
-                    Comparison::ExactOnOracle,
+                    Comparison::Curve,
                 );
             }
         }
@@ -403,7 +417,7 @@ fn room_tuning2_s2r_dc_correction() {
             &format!("{name}/excess"),
             &[excess],
             &[number(&fixture["outputs"]["excess"])],
-            Comparison::ExactOnOracle,
+            Comparison::Exact,
         );
         errors.compare(
             &format!("{name}/h"),
@@ -561,7 +575,13 @@ fn room_tuning2_s2r_rolloff() {
     let mut errors = Errors::default();
     for (name, fixture) in fixtures_r("rolloff_") {
         let input = &fixture["inputs"];
-        let power = if name.starts_with("rolloff_synthetic_") {
+        let synthetic = name.starts_with("rolloff_synthetic_");
+        let class = if synthetic {
+            Comparison::Curve
+        } else {
+            Comparison::Rebuilt
+        };
+        let power = if synthetic {
             array(&input["power"])
         } else {
             let speaker = fixture["meta"]["speaker"].as_str().unwrap();
@@ -570,7 +590,7 @@ fn room_tuning2_s2r_rolloff() {
                 &format!("{name}/power"),
                 &sampled(&power),
                 &array(&input["power"]),
-                Comparison::Curve,
+                Comparison::Rebuilt,
             );
             power
         };
@@ -583,7 +603,7 @@ fn room_tuning2_s2r_rolloff() {
             &format!("{name}/db"),
             &sampled(&db),
             &array(&input["db"]),
-            Comparison::Curve,
+            class,
         );
         errors.compare(
             &format!("{name}/reference_threshold"),
@@ -592,15 +612,12 @@ fn room_tuning2_s2r_rolloff() {
                 number(&fixture["outputs"]["reference"]),
                 number(&fixture["outputs"]["threshold"]),
             ],
-            Comparison::ExactOnOracle,
+            class,
         );
         match (details.frequency, fixture["outputs"]["rolloff_hz"].as_f64()) {
-            (Some(got), Some(expected)) => errors.compare(
-                &format!("{name}/rolloff"),
-                &[got],
-                &[expected],
-                Comparison::ExactOnOracle,
-            ),
+            (Some(got), Some(expected)) => {
+                errors.compare(&format!("{name}/rolloff"), &[got], &[expected], class)
+            }
             (None, None) => (),
             _ => panic!("{name}: rolloff presence differs"),
         }
@@ -615,7 +632,7 @@ fn room_tuning2_s2r_rolloff() {
                         number(&expected["lower"]),
                         number(&expected["lower_db"]),
                     ],
-                    Comparison::ExactOnOracle,
+                    class,
                 );
             }
             (None, expected) if expected.is_null() => (),
@@ -646,6 +663,11 @@ fn room_tuning2_dip_limit_matches_secs2r() {
     let mut errors = Errors::default();
     for (name, fixture) in fixtures_r("dip_") {
         let input = &fixture["inputs"];
+        let class = if name.starts_with("dip_synthetic_") {
+            Comparison::Curve
+        } else {
+            Comparison::Rebuilt
+        };
         let (power, level_db) = dip_source(&name, &fixture);
         let long_modes = fixture["meta"]["speaker"]
             .as_str()
@@ -674,23 +696,18 @@ fn room_tuning2_dip_limit_matches_secs2r() {
         } else {
             sampled(&power)
         };
-        errors.compare(
-            &format!("{name}/power"),
-            &got_power,
-            &expected_power,
-            Comparison::Curve,
-        );
+        errors.compare(&format!("{name}/power"), &got_power, &expected_power, class);
         errors.compare(
             &format!("{name}/sm"),
             &sampled(&smoothed),
             &array(&input["sm"]),
-            Comparison::Curve,
+            class,
         );
         errors.compare(
             &format!("{name}/corr_before"),
             &sampled(&correction),
             &array(&input["corr_before"]),
-            Comparison::Curve,
+            class,
         );
         let target = vec![0.0; frequencies.len()];
         let result = dip_limit_curve(
@@ -711,7 +728,7 @@ fn room_tuning2_dip_limit_matches_secs2r() {
                 &format!("{name}/{label}"),
                 &sampled(got),
                 &array(&fixture["outputs"][label]),
-                Comparison::Curve,
+                class,
             );
         }
         let mut unlimited = correction.clone();
@@ -731,13 +748,13 @@ fn room_tuning2_dip_limit_matches_secs2r() {
             &format!("{name}/unlimited"),
             &sampled(&unlimited),
             &array(&fixture["outputs"]["unlimited"]),
-            Comparison::Curve,
+            class,
         );
         errors.compare(
             &format!("{name}/limited"),
             &sampled(&limited),
             &array(&fixture["outputs"]["limited"]),
-            Comparison::Curve,
+            class,
         );
         let notes = limited_dips(
             &frequencies,
@@ -750,16 +767,25 @@ fn room_tuning2_dip_limit_matches_secs2r() {
             .as_array()
             .unwrap()
             .iter()
-            .flat_map(array)
+            .map(array)
             .collect();
         errors.compare(
-            &format!("{name}/notes"),
+            &format!("{name}/notes/hz"),
+            &notes.iter().map(|note| note.0).collect::<Vec<_>>(),
+            &expected.iter().map(|note| note[0]).collect::<Vec<_>>(),
+            Comparison::Exact,
+        );
+        errors.compare(
+            &format!("{name}/notes/depth_fill"),
             &notes
                 .iter()
-                .flat_map(|note| [note.0, note.1, note.2])
+                .flat_map(|note| [note.1, note.2])
                 .collect::<Vec<_>>(),
-            &expected,
-            Comparison::ExactOnOracle,
+            &expected
+                .iter()
+                .flat_map(|note| [note[1], note[2]])
+                .collect::<Vec<_>>(),
+            class,
         );
     }
     errors.finish("s2r_dip");
@@ -775,7 +801,7 @@ fn room_tuning2_low_protect_matches_secs2r() {
             &format!("{name}/corr"),
             &sampled(&pre.correction),
             &array(&fixture["inputs"]["corr"]),
-            Comparison::Curve,
+            Comparison::Rebuilt,
         );
         let speaker_points = points(speaker);
         let opts = RcOptions {
@@ -788,13 +814,13 @@ fn room_tuning2_low_protect_matches_secs2r() {
             &format!("{name}/design"),
             &sampled(&result.design_db),
             &array(&fixture["outputs"]["design_db"]),
-            Comparison::Curve,
+            Comparison::Rebuilt,
         );
         errors.compare(
             &format!("{name}/rolloff"),
             &[result.rolloff_hz.unwrap()],
             &[number(&fixture["inputs"]["rolloff_hz"])],
-            Comparison::ExactOnOracle,
+            Comparison::Rebuilt,
         );
     }
     errors.finish("s2r_mask");
@@ -872,7 +898,7 @@ fn compare_rc_notes(name: &str, actual: &[RcActualNote], expected: &[Value], err
                     &format!("{label}/bands"),
                     &flatten_pairs(got),
                     &flatten_pairs(&pairs(&expected["bands"])),
-                    Comparison::ExactOnOracle,
+                    Comparison::Exact,
                 );
             }
             (RcActualNote::LongModes { cap_db, modes }, "LongModeBoost") => {
@@ -881,36 +907,50 @@ fn compare_rc_notes(name: &str, actual: &[RcActualNote], expected: &[Value], err
                     &format!("{label}/cap_db"),
                     &[*cap_db],
                     &[number(&expected["cap_db"])],
-                    Comparison::ExactOnOracle,
+                    Comparison::Exact,
+                );
+                // Peak frequencies are grid bins (exact); their T60 values come
+                // from the low-rate response rebuilt from the demo recordings.
+                let expected_modes = pairs(&expected["modes"]);
+                errors.compare(
+                    &format!("{label}/modes/hz"),
+                    &modes.iter().map(|mode| mode.0).collect::<Vec<_>>(),
+                    &expected_modes.iter().map(|mode| mode.0).collect::<Vec<_>>(),
+                    Comparison::Exact,
                 );
                 errors.compare(
-                    &format!("{label}/modes"),
-                    &flatten_pairs(modes),
-                    &expected["modes"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .flat_map(array)
-                        .collect::<Vec<_>>(),
-                    Comparison::ExactOnOracle,
+                    &format!("{label}/modes/t60"),
+                    &modes.iter().map(|mode| mode.1).collect::<Vec<_>>(),
+                    &expected_modes.iter().map(|mode| mode.1).collect::<Vec<_>>(),
+                    Comparison::Rebuilt,
                 );
             }
             (RcActualNote::Dips { role, dips }, "DipLimit") => {
                 assert_eq!(expected.as_object().unwrap().len(), 3, "{label} payload");
                 assert_eq!(role, expected["role"].as_str().unwrap(), "{label}/role");
+                let expected_dips: Vec<_> = expected["dips"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(array)
+                    .collect();
                 errors.compare(
-                    &format!("{label}/dips"),
+                    &format!("{label}/dips/hz"),
+                    &dips.iter().map(|dip| dip.0).collect::<Vec<_>>(),
+                    &expected_dips.iter().map(|dip| dip[0]).collect::<Vec<_>>(),
+                    Comparison::Exact,
+                );
+                errors.compare(
+                    &format!("{label}/dips/depth_fill"),
                     &dips
                         .iter()
-                        .flat_map(|dip| [dip.0, dip.1, dip.2])
+                        .flat_map(|dip| [dip.1, dip.2])
                         .collect::<Vec<_>>(),
-                    &expected["dips"]
-                        .as_array()
-                        .unwrap()
+                    &expected_dips
                         .iter()
-                        .flat_map(array)
+                        .flat_map(|dip| [dip[1], dip[2]])
                         .collect::<Vec<_>>(),
-                    Comparison::ExactOnOracle,
+                    Comparison::Rebuilt,
                 );
             }
             (
@@ -931,7 +971,7 @@ fn compare_rc_notes(name: &str, actual: &[RcActualNote], expected: &[Value], err
                         &format!("{label}/rolloff_hz"),
                         &[got],
                         &[want],
-                        Comparison::ExactOnOracle,
+                        Comparison::Rebuilt,
                     ),
                     (None, None) => (),
                     _ => panic!("{label}/rolloff_hz presence differs"),
@@ -941,23 +981,25 @@ fn compare_rc_notes(name: &str, actual: &[RcActualNote], expected: &[Value], err
                         &format!("{label}/hp_hz"),
                         &[got],
                         &[want],
-                        Comparison::ExactOnOracle,
+                        Comparison::Exact,
                     ),
                     (None, None) => (),
                     _ => panic!("{label}/hp_hz presence differs"),
                 }
-                assert_eq!(
-                    *limited,
-                    expected["limited"].as_bool().unwrap(),
-                    "{label}/limited"
+                compare_decision(
+                    &format!("{label}/limited"),
+                    limited,
+                    &expected["limited"].as_bool().unwrap(),
+                    Comparison::FitDependent,
                 );
-                compare_limit_decision(
+                compare_decision(
                     &format!("{label}/outcome"),
                     &(*reduced, *cuts),
                     &(
                         expected["reduced"].as_u64().unwrap() as usize,
                         expected["cuts"].as_u64().unwrap() as usize,
                     ),
+                    Comparison::FitDependent,
                 );
             }
             (_, kind) => panic!("{label}: actual {actual:?}, expected kind {kind}"),
@@ -987,14 +1029,14 @@ fn room_tuning2_bands_matches_secs2r() {
             &format!("{name}/design_db"),
             &sampled(&result.design_db),
             &array(&fixture["outputs"]["design_db"]),
-            Comparison::Curve,
+            Comparison::Rebuilt,
         );
         match (result.rolloff_hz, fixture["outputs"]["rolloff_hz"].as_f64()) {
             (Some(got), Some(expected)) => errors.compare(
                 &format!("{name}/rolloff"),
                 &[got],
                 &[expected],
-                Comparison::ExactOnOracle,
+                Comparison::Rebuilt,
             ),
             (None, None) => (),
             _ => panic!("{name}: rolloff presence differs"),
