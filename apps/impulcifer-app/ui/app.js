@@ -2249,8 +2249,8 @@ function setTuning2Mode(spec) {
   }
 }
 
-/** "auto" or a number in a JSON field that takes both, as an input's text. @param {unknown} spec */
-function autoOrNumberText(spec) {
+/** A numeric JSON spec as input text; "auto", "off" and missing values stay empty. @param {unknown} spec */
+function numberSpecText(spec) {
   const value = typeof spec === "number" || (typeof spec === "string" && spec.trim() !== "") ? Number(spec) : NaN;
   return Number.isFinite(value) ? String(value) : "";
 }
@@ -2424,6 +2424,12 @@ function updateRoomRows() {
     "bf-room-tuning2-max-boost-row": tuning2,
     "bf-room-tuning2-low-row": tuning2,
     "bf-room-tuning2-high-row": tuning2,
+    "bf-room-tuning2-high-basis-row": tuning2 && roomFacts,
+    "bf-room-tuning2-high-transition-row": tuning2 && roomFacts,
+    "bf-room-tuning2-high-volume-hint": tuning2 && roomFacts
+      && (val("bf-room-tuning2-high-basis") === "lenient" || val("bf-room-tuning2-high-transition") !== "1")
+      && val("bf-room-volume").trim() === "" && val("bf-schroeder-freq").trim() === "",
+    "bf-room-tuning2-input-hp-row": tuning2,
     "bf-room-tuning2-bands-row": tuning2,
     "bf-room-tuning2-dip-limit-row": tuning2,
     "bf-room-tuning2-low-protect-row": tuning2,
@@ -2453,6 +2459,7 @@ function updateRoomRows() {
   // The two tunings match levels differently (±6 dB around the median, or down to the quietest).
   $("bf-room-tuning-level-match-tip").textContent = t(tuning2 ? "tooltip_room_tuning2_level_match" : "tooltip_room_tuning_level_match");
   el("bf-schroeder-freq", HTMLInputElement).placeholder = t("placeholder_schroeder_freq");
+  el("bf-room-tuning2-input-hp", HTMLInputElement).placeholder = t("placeholder_room_tuning2_off");
   for (const id of ["bf-room-tuning2-high", "bf-room-tuning2-mimo-low"]) {
     el(id, HTMLInputElement).placeholder = t("placeholder_room_tuning2_auto");
   }
@@ -2474,7 +2481,11 @@ function applyRoomDefaults() {
   setTuning2Mode(defaults.room_tuning2_mode);
   el("bf-room-tuning2-max-boost", HTMLInputElement).value = String(brirDefault("room_tuning2_max_boost", 10));
   el("bf-room-tuning2-low", HTMLInputElement).value = String(brirDefault("room_tuning2_low", 20));
-  el("bf-room-tuning2-high", HTMLInputElement).value = autoOrNumberText(defaults.room_tuning2_high);
+  el("bf-room-tuning2-high", HTMLInputElement).value = numberSpecText(defaults.room_tuning2_high);
+  el("bf-room-tuning2-high-basis", HTMLSelectElement).value = defaults.room_tuning2_high_basis === "lenient" ? "lenient" : "strict";
+  const transition = String(defaults.room_tuning2_high_transition ?? 1);
+  el("bf-room-tuning2-high-transition", HTMLSelectElement).value = ["1", "2", "4"].includes(transition) ? transition : "1";
+  el("bf-room-tuning2-input-hp", HTMLInputElement).value = numberSpecText(defaults.room_tuning2_input_hp);
   el("bf-room-tuning2-bands", HTMLInputElement).value = typeof defaults.room_tuning2_bands === "string" ? defaults.room_tuning2_bands : "";
   el("bf-room-tuning2-dip-limit", HTMLInputElement).checked = defaults.room_tuning2_dip_limit === true;
   el("bf-room-tuning2-low-protect", HTMLInputElement).checked = defaults.room_tuning2_low_protect === true;
@@ -2483,7 +2494,7 @@ function applyRoomDefaults() {
   el("bf-room-tuning2-hf-phase", HTMLInputElement).checked = defaults.room_tuning2_hf_phase === true;
   el("bf-room-tuning2-mimo", HTMLInputElement).checked = defaults.room_tuning2_mimo === true;
   el("bf-room-tuning2-fsiso", HTMLInputElement).value = String(brirDefault("room_tuning2_fsiso", 150));
-  el("bf-room-tuning2-mimo-low", HTMLInputElement).value = autoOrNumberText(defaults.room_tuning2_mimo_low);
+  el("bf-room-tuning2-mimo-low", HTMLInputElement).value = numberSpecText(defaults.room_tuning2_mimo_low);
   setRoomMode(isRoomMode(defaults.room_mode) ? defaults.room_mode : "eq");
 }
 
@@ -2565,6 +2576,10 @@ function addRoomTuning2Args(args) {
   args.room_tuning2_low = numOr("bf-room-tuning2-low", brirDefault("room_tuning2_low", 20));
   const high = numOrNull("bf-room-tuning2-high");
   args.room_tuning2_high = high ?? "auto";
+  args.room_tuning2_high_basis = val("bf-room-tuning2-high-basis") === "lenient" ? "lenient" : "strict";
+  const transition = Number(val("bf-room-tuning2-high-transition"));
+  args.room_tuning2_high_transition = transition === 2 || transition === 4 ? transition : 1;
+  args.room_tuning2_input_hp = numOrNull("bf-room-tuning2-input-hp") ?? "off";
   args.room_tuning2_bands = val("bf-room-tuning2-bands").trim();
   args.room_tuning2_dip_limit = checked("bf-room-tuning2-dip-limit");
   args.room_tuning2_low_protect = checked("bf-room-tuning2-low-protect");
@@ -4009,7 +4024,12 @@ function wireEvents() {
   el("bf-room-tuning-delay-auto", HTMLInputElement).addEventListener("change", updateRoomRows);
   // Tuning 2: the filter shows the latency row, an empty upper end the room facts, MIMO its limits.
   el("bf-room-tuning2-mode", HTMLSelectElement).addEventListener("change", updateRoomRows);
-  el("bf-room-tuning2-high", HTMLInputElement).addEventListener("input", updateRoomRows);
+  for (const id of ["bf-room-tuning2-high", "bf-room-volume", "bf-schroeder-freq"]) {
+    el(id, HTMLInputElement).addEventListener("input", updateRoomRows);
+  }
+  for (const id of ["bf-room-tuning2-high-basis", "bf-room-tuning2-high-transition"]) {
+    el(id, HTMLSelectElement).addEventListener("change", updateRoomRows);
+  }
   el("bf-room-tuning2-mimo", HTMLInputElement).addEventListener("change", updateRoomRows);
   el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
   for (const purpose of MFILE_PURPOSES) {

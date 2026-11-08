@@ -155,6 +155,10 @@ interface ProcessingRequest {
   /* 3.14.0 (ADR 0015). Optional bass arrival alignment, mode-decay cuts and treble phase correction.
      Arrival alignment and treble phase correction require FIR; the screen sends false in "zero". */
   room_tuning2_lf_align?: boolean; room_tuning2_mode_decay?: boolean; room_tuning2_hf_phase?: boolean;
+  /* 3.15.0 (ADR 0015). Basis and multiplier apply only to the automatic upper limit.
+     The common input high-pass is "off" or 10–50 Hz and works with every tuning 2 filter. */
+  room_tuning2_high_basis?: "strict" | "lenient"; room_tuning2_high_transition?: 1 | 2 | 4;
+  room_tuning2_input_hp?: number | "off";
   /* 3.x only (ADR 0006). "auto" finds the crossover in the measurements and ignores vbass_freq;
      "manual" uses vbass_freq; "legacy" is the 2.x method. Without vbass_mode, a given vbass_freq
      means "manual". */
@@ -175,11 +179,12 @@ type RoomMode = "eq" | "tuning" | "tuning2";
 type Tuning2Filter = "zero" | "mixed" | "linear" | "long" | "custom";
 type RoomPhaseLimit = "off" | "schroeder" | "full" | number;
 /* bootstrap's defaults carry the CLI spec for the tuning delay and limit, e.g. "10" or "auto",
-   and for tuning 2's filter, band end and support floor, e.g. "mixed", "60" or "auto". */
+   and for tuning 2's filter, band end, support floor and high-pass, e.g. "mixed", "60", "auto" or "off". */
 type BrirDefaults = Omit<ProcessingRequest, "room_tuning_delay" | "room_tuning_phase_limit" | "room_tuning2_mode"
-  | "room_tuning2_high" | "room_tuning2_mimo_low"> &
+  | "room_tuning2_high" | "room_tuning2_mimo_low" | "room_tuning2_input_hp"> &
   { room_tuning_delay?: string | number; room_tuning_phase_limit?: string | number | null;
-    room_tuning2_mode?: string | number; room_tuning2_high?: string | number; room_tuning2_mimo_low?: string | number };
+    room_tuning2_mode?: string | number; room_tuning2_high?: string | number; room_tuning2_mimo_low?: string | number;
+    room_tuning2_input_hp?: string | number };
 type EqSlotName = "both" | "left" | "right";
 type EqChoice = { mode: "folder" } | { mode: "off" } | { mode: "file"; path: string };
 interface EqRequest extends Pick<ProcessingRequest, "eq_file" | "eq_left_file" | "eq_right_file"> { dir_path: string }
