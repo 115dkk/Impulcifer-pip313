@@ -518,7 +518,9 @@ fn mimo_bench() {
         mimo: Some(MimoOptions {
             fsiso: 150.,
             low: None,
+            input_hp: None,
         }),
+        input_hp: None,
         pairs: vec![],
     };
     let plan = prepare_tuning2(&h, &opts, None, None).unwrap();

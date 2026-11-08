@@ -10,12 +10,17 @@ pub use mimo::{
     MimoDesign, MimoInput, MimoInputResult, MimoOptions, MimoSupport, design_supports,
     support_response,
 };
+pub mod pair_phase;
+pub use pair_phase::{
+    PairPhaseBand, PairPhaseReport, PairPhaseResponse, pair_phase_bands, pair_phase_edges,
+    pair_phase_report,
+};
 pub mod peq;
 pub mod primitives;
 pub mod profile;
 pub mod protect;
 mod rc;
-use crate::{DspError, fft::Complex64, filters, fr::FrequencyResponse, ir::ImpulseResponse};
+use crate::{DspError, fft::Complex64, fr::FrequencyResponse, ir::ImpulseResponse};
 use primitives::*;
 pub use rc::{
     DipLimitResult, ModeDecayStages, RcSession, RcStages, RealizeDiagnostics, ResonanceRefinement,
@@ -45,6 +50,8 @@ pub struct RcOptions {
     pub lf_align: bool,
     pub mode_decay: bool,
     pub hf_phase: bool,
+    pub high_basis: String,
+    pub high_transition: u32,
 }
 impl Default for RcOptions {
     fn default() -> Self {
@@ -62,6 +69,8 @@ impl Default for RcOptions {
             lf_align: false,
             mode_decay: false,
             hf_phase: false,
+            high_basis: "strict".into(),
+            high_transition: 1,
         }
     }
 }
@@ -78,6 +87,11 @@ pub struct CorrectionBand {
     pub high: f64,
     pub source: BandSource,
     pub schroeder: Option<f64>,
+    pub basis: String,
+    pub transition: u32,
+    pub lenient: Option<f64>,
+    pub lenient_t60_s: Option<f64>,
+    pub automatic_basis_configured: bool,
     pub bands: Vec<(f64, f64)>,
 }
 #[derive(Clone, Debug)]
@@ -470,6 +484,55 @@ pub fn channel_level(
     let (f, h) = spectra(points, policy, calibration);
     Ok(level(&power(&h, policy), &f, target))
 }
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LenientBandEvidence {
+    pub centre_hz: f64,
+    pub median_t60_s: Option<f64>,
+    pub g_hz: Option<f64>,
+}
+
+/// Per-band evidence for the lenient automatic upper-limit basis.
+pub fn lenient_band_evidence(
+    points: &[&[ImpulseResponse]],
+    room_volume: f64,
+) -> Vec<LenientBandEvidence> {
+    let ratio = 2_f64.powf(1.0 / 6.0);
+    [100.0, 125.0, 160.0, 200.0, 250.0, 315.0, 400.0, 500.0]
+        .into_iter()
+        .map(|centre| {
+            let mut times = Vec::new();
+            for speaker_points in points {
+                for ir in *speaker_points {
+                    if let Some(decay) =
+                        band_decay(&ir.data, ir.fs as f64, centre / ratio, centre * ratio).decay_s
+                    {
+                        times.push(decay);
+                    }
+                }
+            }
+            let median_t60_s = (!times.is_empty()).then(|| median(&times));
+            LenientBandEvidence {
+                centre_hz: centre,
+                median_t60_s,
+                g_hz: median_t60_s.map(|t60| 2000.0 * (t60 / room_volume).sqrt()),
+            }
+        })
+        .collect()
+}
+
+/// Combine strict and lenient automatic upper-limit evidence with the transition multiplier.
+pub fn automatic_high(strict: Option<f64>, lenient: Option<f64>, transition: u32) -> f64 {
+    let value = match (strict, lenient) {
+        (Some(strict), Some(lenient)) => Some(strict.max(lenient)),
+        (Some(strict), None) => Some(strict),
+        (None, Some(lenient)) => Some(lenient),
+        (None, None) => None,
+    };
+    value.map_or(500.0, |value| {
+        (value * transition as f64).clamp(100.0, 500.0 * transition as f64)
+    })
+}
+
 /// All measured speakers contribute to the automatic decay estimate.
 pub fn correction_band(
     points: &[&[ImpulseResponse]],
@@ -494,6 +557,11 @@ pub fn correction_band(
             high,
             source: BandSource::Manual,
             schroeder: None,
+            basis: opts.high_basis.clone(),
+            transition: opts.high_transition,
+            lenient: None,
+            lenient_t60_s: None,
+            automatic_basis_configured: opts.room_volume.is_some() || opts.schroeder.is_some(),
             bands: merge_band_set((opts.low, high), &opts.extra_bands),
         });
     }
@@ -503,50 +571,64 @@ pub fn correction_band(
         source = BandSource::Override;
     } else if let Some(volume) = opts.room_volume {
         let mut times = Vec::new();
-        for points in points {
-            for index in chosen(&opts.policy, points.len()) {
-                let ir = &points[index];
-                for fc in [500., 1000.] {
-                    let y = filters::sosfilt(
-                        &filters::butter_bandpass(
-                            4,
-                            fc / 2_f64.sqrt() / (ir.fs as f64 / 2.),
-                            fc * 2_f64.sqrt() / (ir.fs as f64 / 2.),
-                        ),
+        for speaker_points in points {
+            for index in chosen(&opts.policy, speaker_points.len()) {
+                let ir = &speaker_points[index];
+                for centre in [500.0, 1000.0] {
+                    if let Some(decay) = band_decay(
                         &ir.data,
-                    );
-                    let mut e = vec![0.; y.len()];
-                    let mut sum = 0.;
-                    for i in (0..y.len()).rev() {
-                        sum += y[i] * y[i];
-                        e[i] = sum;
-                    }
-                    let d: Vec<_> = e
-                        .iter()
-                        .map(|e| 10. * (e / (sum + 1e-30) + 1e-30).log10())
-                        .collect();
-                    let i5 = d.iter().position(|d| *d < -5.).unwrap_or(0);
-                    let i25 = d.iter().position(|d| *d < -25.).unwrap_or(0);
-                    if i25 > i5 && i5 > 0 {
-                        times.push(3. * (i25 - i5) as f64 / ir.fs as f64);
+                        ir.fs as f64,
+                        centre / 2_f64.sqrt(),
+                        centre * 2_f64.sqrt(),
+                    )
+                    .decay_s
+                    {
+                        times.push(decay);
                     }
                 }
             }
         }
         if !times.is_empty() {
-            schroeder = Some(2000. * (median(&times) / volume).sqrt());
+            schroeder = Some(2000.0 * (median(&times) / volume).sqrt());
             source = BandSource::Volume;
         }
     }
-    let high = schroeder
-        .filter(|s| *s <= 500.)
-        .map(|s| s.max(100.))
-        .unwrap_or(500.);
+
+    let (mut lenient, mut lenient_t60_s) = (None, None);
+    if opts.high_basis == "lenient"
+        && opts.schroeder.is_none()
+        && let Some(volume) = opts.room_volume
+    {
+        for evidence in lenient_band_evidence(points, volume) {
+            if evidence
+                .g_hz
+                .is_some_and(|candidate| candidate >= evidence.centre_hz)
+            {
+                lenient = Some(evidence.centre_hz);
+                lenient_t60_s = evidence.median_t60_s;
+            }
+        }
+    }
+
+    let high = if opts.high_basis == "strict" && opts.high_transition == 1 {
+        // Preserve the 3.14.0 branch and its bits for the default options.
+        schroeder
+            .filter(|value| *value <= 500.0)
+            .map(|value| value.max(100.0))
+            .unwrap_or(500.0)
+    } else {
+        automatic_high(schroeder, lenient, opts.high_transition)
+    };
     Ok(CorrectionBand {
         low: opts.low,
         high,
         source,
         schroeder,
+        basis: opts.high_basis.clone(),
+        transition: opts.high_transition,
+        lenient,
+        lenient_t60_s,
+        automatic_basis_configured: opts.room_volume.is_some() || opts.schroeder.is_some(),
         bands: merge_band_set((opts.low, high), &opts.extra_bands),
     })
 }
@@ -576,6 +658,8 @@ fn validate(
             .iter()
             .flatten()
             .any(|v| !v.is_finite() || *v <= 0.)
+        || !["strict", "lenient"].contains(&opts.high_basis.as_str())
+        || ![1, 2, 4].contains(&opts.high_transition)
         || opts.extra_bands.len() > 4
         || opts.extra_bands.iter().any(|(low, high)| {
             !low.is_finite() || !high.is_finite() || *low < 20.0 || *high > 20_000.0 || low >= high
@@ -673,6 +757,67 @@ mod tests {
                 channel_level(&shifted, &policy, None, None).unwrap()
             );
         }
+    }
+
+    #[test]
+    fn automatic_upper_limit_clamps_and_keeps_no_volume_at_500() {
+        assert_eq!(automatic_high(Some(40.0), None, 1), 100.0);
+        assert_eq!(automatic_high(Some(900.0), None, 1), 500.0);
+        assert_eq!(automatic_high(Some(1200.0), None, 2), 1000.0);
+        assert_eq!(automatic_high(None, None, 4), 500.0);
+    }
+
+    #[test]
+    fn band_decay_without_minus_25_crossing_does_not_underflow() {
+        let mut data = vec![0.0; 48_000];
+        data[47_900] = 1.0;
+        let decay = band_decay(&data, 48_000.0, 500.0 / 2_f64.sqrt(), 500.0 * 2_f64.sqrt());
+        assert!(decay.i5 > 0);
+        assert_eq!(decay.i25, 0);
+        assert_eq!(decay.decay_s, None);
+
+        let point = ImpulseResponse {
+            fs: 48_000,
+            data,
+            recording: None,
+        };
+        let band = correction_band(
+            &[std::slice::from_ref(&point)],
+            &RcOptions {
+                room_volume: Some(50.0),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(band.schroeder, None);
+        assert_eq!(band.high, 500.0);
+        assert!(band.automatic_basis_configured);
+    }
+
+    #[test]
+    fn upper_limit_override_skips_lenient_and_manual_high_is_inert() {
+        let point = point(100, 1.0);
+        let opts = RcOptions {
+            schroeder: Some(250.0),
+            room_volume: Some(50.0),
+            high_basis: "lenient".into(),
+            high_transition: 2,
+            ..Default::default()
+        };
+        let band = correction_band(&[std::slice::from_ref(&point)], &opts).unwrap();
+        assert_eq!(band.schroeder, Some(250.0));
+        assert_eq!(band.lenient, None);
+        assert_eq!(band.high, 500.0);
+        let manual = correction_band(
+            &[std::slice::from_ref(&point)],
+            &RcOptions {
+                high: Some(321.0),
+                ..opts
+            },
+        )
+        .unwrap();
+        assert_eq!(manual.high, 321.0);
+        assert_eq!(manual.lenient, None);
     }
 
     #[test]

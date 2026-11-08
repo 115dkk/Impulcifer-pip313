@@ -422,6 +422,33 @@ pub static EXTENSION_OPTIONS: &[CliOption] = &[
         default: CliDefault::Suppressed,
         help: "Unwind tuning2 FIR phase rotation above the correction band (default false).",
     },
+    CliOption {
+        flag: "--room_tuning2_high_basis",
+        short: None,
+        dest: "room_tuning2_high_basis",
+        kind: CliType::Str,
+        choices: &["strict", "lenient"],
+        default: CliDefault::Suppressed,
+        help: "Basis for the automatic tuning2 upper limit: strict (default) or lenient.",
+    },
+    CliOption {
+        flag: "--room_tuning2_high_transition",
+        short: None,
+        dest: "room_tuning2_high_transition",
+        kind: CliType::Int,
+        choices: &["1", "2", "4"],
+        default: CliDefault::Suppressed,
+        help: "Transition multiplier above the automatic tuning2 upper limit: 1 (default), 2 or 4.",
+    },
+    CliOption {
+        flag: "--room_tuning2_input_hp",
+        short: None,
+        dest: "room_tuning2_input_hp",
+        kind: CliType::Str,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Common eighth-order input high-pass: off (default) or 10–50 Hz.",
+    },
 ];
 
 pub const OPTIONS: &[CliOption] = &[

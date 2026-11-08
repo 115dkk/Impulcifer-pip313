@@ -2,8 +2,9 @@
 mod brir_support;
 use brir_support::*;
 use impulcifer_dsp::{
+    conv, fft,
     pipeline::{PipelineOutputs, StageObserver, StageProgress, run_pipeline},
-    stages::room_tuning2::primitives,
+    stages::room_tuning2::{analysis_len, apply_tuning2, primitives},
 };
 use impulcifer_jobs::registry::JobRegistry;
 use impulcifer_service::brir::{
@@ -12,6 +13,7 @@ use impulcifer_service::brir::{
 };
 use impulcifer_types::{
     config::ProcessingConfig,
+    constants::IPSILATERAL_PAIRS,
     job::{JobKind, JobStatus},
 };
 use serde_json::{Value, json};
@@ -33,6 +35,7 @@ impl StageObserver for Silent {
         Ok(())
     }
 }
+
 fn output(config: ProcessingConfig) -> PipelineOutputs {
     let temp = Temp::demo();
     let dir = discover(&temp.0, &config).unwrap();
@@ -125,6 +128,9 @@ fn config_room_tuning2_defaults_and_validation() {
         "lf_align",
         "mode_decay",
         "hf_phase",
+        "high_basis",
+        "high_transition",
+        "input_hp",
     ] {
         let field = format!("room_tuning2_{field}");
         assert_eq!(boot["data"]["brir_defaults"][&field], defaults[&field]);
@@ -142,6 +148,10 @@ fn config_room_tuning2_defaults_and_validation() {
         ("lf_align", json!("true")),
         ("mode_decay", json!("true")),
         ("hf_phase", json!("true")),
+        ("high_basis", json!("agreement")),
+        ("high_transition", json!(3)),
+        ("input_hp", json!(9)),
+        ("input_hp", json!(51)),
         ("bands", json!(20)),
         ("bands", json!("bad")),
         ("bands", json!("20-30,40-50,60-70,80-90,100-110")),
@@ -153,7 +163,7 @@ fn config_room_tuning2_defaults_and_validation() {
         assert_eq!(result["error"]["code"], "INVALID_REQUEST", "{result}");
         assert_eq!(result["error"]["details"]["field"], field, "{result}");
     }
-    let request = json!({"dir_path":temp.0,"room_mode":"tuning2","room_range":"legacy","room_tuning2_mode":60,"room_tuning2_high":300,"room_tuning2_mimo_low":50,"room_tuning2_dip_limit":true,"room_tuning2_low_protect":true,"room_tuning2_bands":"1000-3000, 20-500","room_tuning2_lf_align":true,"room_tuning2_mode_decay":true,"room_tuning2_hf_phase":true});
+    let request = json!({"dir_path":temp.0,"room_mode":"tuning2","room_range":"legacy","room_tuning2_mode":60,"room_tuning2_high":300,"room_tuning2_mimo_low":50,"room_tuning2_dip_limit":true,"room_tuning2_low_protect":true,"room_tuning2_bands":"1000-3000, 20-500","room_tuning2_lf_align":true,"room_tuning2_mode_decay":true,"room_tuning2_hf_phase":true,"room_tuning2_high_basis":"lenient","room_tuning2_high_transition":2,"room_tuning2_input_hp":25});
     let result = svc.call("start_brir", vec![request]);
     assert_eq!(result["ok"], true, "{result}");
 }
@@ -334,6 +344,158 @@ fn room_tuning2_bundle2_options_log_on_demo() {
     assert!(!zero_logs.iter().any(|event| {
         event["key"] == "cli_room_tuning2_lf_align" || event["key"] == "cli_room_tuning2_hf_phase"
     }));
+}
+
+#[test]
+fn room_tuning2_bundle3_options_and_reports_log_on_demo() {
+    let (temp, logs) = logged(ProcessingConfig {
+        room_mode: "tuning2".into(),
+        room_volume: Some(95.0),
+        room_tuning2_high_basis: "lenient".into(),
+        room_tuning2_high_transition: 2,
+        room_tuning2_input_hp: "25".into(),
+        ..Default::default()
+    });
+    assert_eq!(
+        logs.iter()
+            .filter(|event| event["key"] == "cli_room_tuning2_high")
+            .count(),
+        1
+    );
+    assert_eq!(
+        logs.iter()
+            .filter(|event| event["key"] == "cli_room_tuning2_input_hp")
+            .count(),
+        1
+    );
+    let pair_count = logs
+        .iter()
+        .filter(|event| event["key"] == "cli_room_tuning2_pair_phase")
+        .count();
+    let readme = std::fs::read_to_string(temp.0.join("README.md")).unwrap();
+    assert!(readme.contains("automatic upper limit"), "{readme}");
+    assert!(readme.contains("input high-pass"), "{readme}");
+    assert_eq!(pair_count > 0, readme.contains("### Pair phase"));
+
+    let (_, no_volume_logs) = logged(ProcessingConfig {
+        room_mode: "tuning2".into(),
+        room_tuning2_high_basis: "lenient".into(),
+        ..Default::default()
+    });
+    assert_eq!(
+        no_volume_logs
+            .iter()
+            .filter(|event| event["key"] == "cli_room_tuning2_high_no_volume")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn room_tuning2_bundle3_volume_evidence_on_demo() {
+    let mut strict = None;
+    for basis in ["strict", "lenient"] {
+        for transition in [1_u32, 2, 4] {
+            let output = output(ProcessingConfig {
+                room_mode: "tuning2".into(),
+                room_volume: Some(95.0),
+                room_tuning2_high_basis: basis.into(),
+                room_tuning2_high_transition: transition,
+                ..Default::default()
+            });
+            let band = output
+                .readme
+                .tuning2
+                .as_ref()
+                .unwrap()
+                .band
+                .as_ref()
+                .unwrap();
+            strict.get_or_insert(band.schroeder.unwrap());
+            println!(
+                "DEMO UPPER basis={basis} factor={transition} strict={:.17} lenient={:?} t60={:?} high={:.17}",
+                band.schroeder.unwrap(),
+                band.lenient,
+                band.lenient_t60_s,
+                band.high
+            );
+            if basis == "strict" {
+                assert_eq!(band.lenient, None);
+            } else {
+                assert_eq!(band.lenient, Some(125.0));
+                assert!(band.lenient_t60_s.is_some());
+            }
+        }
+    }
+    assert!(strict.unwrap() > 119.0 && strict.unwrap() < 120.0);
+}
+
+#[test]
+fn room_tuning2_no_measurements_service_path_applies_exact_input_high_pass() {
+    let temp = Temp::demo();
+    for entry in std::fs::read_dir(&temp.0).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_string_lossy();
+        if name.starts_with("room-") && path.extension().is_some_and(|value| value == "wav") {
+            std::fs::remove_file(path).unwrap();
+        }
+    }
+    let config = ProcessingConfig {
+        dir_path: Some(temp.0.to_string_lossy().into_owned()),
+        room_mode: "tuning2".into(),
+        room_tuning2_input_hp: "25".into(),
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    let estimator = open_estimator(&dir, Some("default")).unwrap();
+    let inputs = load_inputs(&dir, &estimator, &config, &mut Silent).unwrap();
+    let plan = inputs.room.unwrap().tuning2.unwrap();
+    assert!(plan.speakers.is_empty());
+    assert_eq!(plan.options.input_hp, Some(25.0));
+
+    let mut actual = inputs.hrir;
+    actual.crop_heads(config.head_ms).unwrap();
+    actual.align_ipsilateral_all(&IPSILATERAL_PAIRS, 30.0);
+    actual.align_onset_groups_peak_leftref(None).unwrap();
+    actual.crop_tails(&estimator).unwrap();
+    let mut expected = actual.clone();
+    let n = analysis_len(expected.fs);
+    let filter = fft::irfft(
+        &primitives::hp8(&primitives::grid(n, expected.fs as f64), 25.0),
+        n,
+    );
+    let fade_len = (0.005 * expected.fs as f64).round() as usize;
+    for ir in expected
+        .speakers
+        .iter_mut()
+        .flat_map(|speaker| speaker.left.iter_mut().chain(&mut speaker.right))
+    {
+        let keep = ir.len();
+        let mut data = conv::convolve(&ir.data, &filter, conv::Mode::Full);
+        data.truncate(keep);
+        let start = data.len().saturating_sub(fade_len);
+        for (index, value) in data[start..].iter_mut().enumerate() {
+            *value *= 0.5 * (1.0 + (std::f64::consts::PI * index as f64 / fade_len as f64).cos());
+        }
+        ir.data = data;
+    }
+
+    let report = apply_tuning2(&mut actual, &plan).unwrap();
+    assert!(report.speakers.is_empty());
+    assert_eq!(actual.speakers.len(), expected.speakers.len());
+    for (actual, expected) in actual.speakers.iter().zip(&expected.speakers) {
+        assert_eq!(actual.speaker, expected.speaker);
+        for (actual, expected) in actual
+            .left
+            .iter()
+            .chain(&actual.right)
+            .zip(expected.left.iter().chain(&expected.right))
+        {
+            assert_eq!(actual.data, expected.data);
+        }
+    }
 }
 
 #[test]

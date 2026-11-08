@@ -14,19 +14,20 @@ use std::f64::consts::PI;
 pub struct MimoOptions {
     pub fsiso: f64,
     pub low: Option<f64>,
+    pub input_hp: Option<f64>,
 }
 pub struct MimoInput<'a> {
     pub speaker: &'a str,
     pub gain_db: f64,
     pub response: &'a [Complex64],
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MimoSupport {
     pub speaker: String,
     pub low: f64,
     pub fir: Vec<f64>,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MimoInputResult {
     pub speaker: String,
     pub candidates: Vec<String>,
@@ -36,7 +37,7 @@ pub struct MimoInputResult {
     pub band_change_db: f64,
     pub tail_change_db: f64,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MimoDesign {
     pub ranges: Vec<(String, Option<(f64, f64)>)>,
     pub inputs: Vec<MimoInputResult>,
@@ -426,7 +427,16 @@ pub fn design_paths(
         },
     ))
 }
-fn long_spectrum(ir: &crate::ir::ImpulseResponse, b: usize, n: usize) -> Vec<Complex64> {
+fn apply_input_high_pass(spectra: &mut [Vec<Vec<Complex64>>], response: &[Complex64]) {
+    for spectrum in spectra.iter_mut().flatten() {
+        assert_eq!(spectrum.len(), response.len());
+        for (value, high_pass) in spectrum.iter_mut().zip(response) {
+            *value *= high_pass;
+        }
+    }
+}
+
+pub(super) fn long_spectrum(ir: &crate::ir::ImpulseResponse, b: usize, n: usize) -> Vec<Complex64> {
     let a = onset(&ir.data).saturating_sub((0.002 * ir.fs as f64) as usize);
     let mut w = ir.data[a..(a + 2 * ir.fs as usize).min(ir.len())].to_vec();
     taper(&mut w, 0.1);
@@ -453,12 +463,25 @@ pub fn design_supports_observed(
     opts: &MimoOptions,
     observe: &(impl Fn(&str, &MimoStages) + Sync),
 ) -> Result<MimoDesign, DspError> {
+    design_supports_observed_with_spectra(brirs, inputs, opts, None, observe)
+}
+
+fn design_supports_observed_with_spectra(
+    brirs: &Hrir,
+    inputs: &[MimoInput<'_>],
+    opts: &MimoOptions,
+    spectra_override: Option<Vec<Vec<Vec<Complex64>>>>,
+    observe: &(impl Fn(&str, &MimoStages) + Sync),
+) -> Result<MimoDesign, DspError> {
     let n = analysis_len(brirs.fs);
     let f = grid(n, brirs.fs as f64);
     if brirs.fs < 44100
         || !opts.fsiso.is_finite()
         || !(50. ..=150.).contains(&opts.fsiso)
         || opts.low.is_some_and(|v| !v.is_finite() || v <= 0.)
+        || opts
+            .input_hp
+            .is_some_and(|value| !value.is_finite() || !(10.0..=50.0).contains(&value))
         || brirs
             .speakers
             .iter()
@@ -489,15 +512,35 @@ pub fn design_supports_observed(
         .map(|s| onset(&s.left.as_ref().unwrap().data))
         .min()
         .unwrap_or(0);
-    let spectra: Vec<Vec<_>> = speakers
-        .iter()
-        .map(|s| {
-            [s.left.as_ref().unwrap(), s.right.as_ref().unwrap()]
-                .iter()
-                .map(|ir| long_spectrum(ir, b, n))
-                .collect()
+    let mut spectra: Vec<Vec<_>> = spectra_override.unwrap_or_else(|| {
+        speakers
+            .iter()
+            .map(|s| {
+                [s.left.as_ref().unwrap(), s.right.as_ref().unwrap()]
+                    .iter()
+                    .map(|ir| long_spectrum(ir, b, n))
+                    .collect()
+            })
+            .collect()
+    });
+    if spectra.len() != speakers.len()
+        || spectra.iter().any(|ears| {
+            ears.len() != 2
+                || ears.iter().any(|spectrum| {
+                    spectrum.len() != n / 2 + 1
+                        || spectrum
+                            .iter()
+                            .any(|value| !value.re.is_finite() || !value.im.is_finite())
+                })
         })
-        .collect();
+    {
+        return Err(DspError::InvalidArgument(
+            "invalid MIMO spectrum override".into(),
+        ));
+    }
+    if let Some(cutoff) = opts.input_hp {
+        apply_input_high_pass(&mut spectra, &hp8(&f, cutoff));
+    }
     let ranges: Vec<_> = speakers
         .iter()
         .zip(&spectra)
@@ -672,6 +715,111 @@ pub fn support_response(
 }
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn input_high_pass_reaches_every_mimo_design_boundary_bit_for_bit() {
+        use crate::{hrir::SpeakerIrs, ir::ImpulseResponse};
+        use std::sync::Mutex;
+
+        let impulse = |offset: usize, gain: f64| {
+            let mut data = vec![0.0; 4096];
+            data[offset] = gain;
+            ImpulseResponse {
+                fs: 48_000,
+                data,
+                recording: None,
+            }
+        };
+        let brirs = Hrir {
+            fs: 48_000,
+            speakers: [("FL", 100, 1.0), ("FR", 110, 0.8), ("FC", 120, 0.6)]
+                .into_iter()
+                .map(|(speaker, offset, gain)| SpeakerIrs {
+                    speaker: speaker.into(),
+                    left: Some(impulse(offset, gain)),
+                    right: Some(impulse(offset + 3, gain * 0.9)),
+                })
+                .collect(),
+        };
+        let n = analysis_len(brirs.fs);
+        let frequencies = grid(n, brirs.fs as f64);
+        let common_onset = brirs
+            .speakers
+            .iter()
+            .map(|speaker| onset(&speaker.left.as_ref().unwrap().data))
+            .min()
+            .unwrap();
+        let raw: Vec<Vec<Vec<_>>> = brirs
+            .speakers
+            .iter()
+            .map(|speaker| {
+                [
+                    speaker.left.as_ref().unwrap(),
+                    speaker.right.as_ref().unwrap(),
+                ]
+                .iter()
+                .map(|ir| long_spectrum(ir, common_onset, n))
+                .collect()
+            })
+            .collect();
+        let correction = vec![Complex64::new(1.0, 0.0); n / 2 + 1];
+        let inputs = [MimoInput {
+            speaker: "FL",
+            gain_db: -1.5,
+            response: &correction,
+        }];
+        let cut_stages = Mutex::new(None);
+        let cut = design_supports_observed_with_spectra(
+            &brirs,
+            &inputs,
+            &MimoOptions {
+                fsiso: 120.0,
+                low: None,
+                input_hp: Some(25.0),
+            },
+            Some(raw.clone()),
+            &|_, stages| *cut_stages.lock().unwrap() = Some(stages.clone()),
+        )
+        .unwrap();
+
+        let high_pass = hp8(&frequencies, 25.0);
+        let mut premultiplied = raw;
+        for spectrum in premultiplied.iter_mut().flatten() {
+            for (value, filter) in spectrum.iter_mut().zip(&high_pass) {
+                *value *= filter;
+            }
+        }
+        let premultiplied_stages = Mutex::new(None);
+        let premultiplied_result = design_supports_observed_with_spectra(
+            &brirs,
+            &inputs,
+            &MimoOptions {
+                fsiso: 120.0,
+                low: None,
+                input_hp: None,
+            },
+            Some(premultiplied),
+            &|_, stages| *premultiplied_stages.lock().unwrap() = Some(stages.clone()),
+        )
+        .unwrap();
+
+        assert_eq!(cut, premultiplied_result, "ranges and supports");
+        let cut = cut_stages.into_inner().unwrap().unwrap();
+        let premultiplied = premultiplied_stages.into_inner().unwrap().unwrap();
+        assert_eq!(cut.x, premultiplied.x, "MIMO input x");
+        assert_eq!(cut.g, premultiplied.g, "support paths");
+        assert_eq!(cut.guard_band, premultiplied.guard_band, "guard bands");
+        assert_eq!(cut.guard_tail, premultiplied.guard_tail, "guard tails");
+        assert_eq!(cut.ratios, premultiplied.ratios, "strength ratios");
+        assert_eq!(cut.direct, premultiplied.direct, "ratio denominator");
+        let expected_direct: f64 = low_rate(&correction, &frequencies, N)
+            .iter()
+            .map(|value| value * value)
+            .sum();
+        assert_eq!(cut.direct, expected_direct);
+    }
+
     #[test]
     fn mimo_designs_in_parallel_stay_within_the_memory_budget() {
         assert_eq!(super::designs_at_once(39), 1);

@@ -392,12 +392,16 @@ pub fn load_inputs(
                         lf_align: config.room_tuning2_lf_align,
                         mode_decay: config.room_tuning2_mode_decay,
                         hf_phase: config.room_tuning2_hf_phase,
+                        high_basis: config.room_tuning2_high_basis.clone(),
+                        high_transition: config.room_tuning2_high_transition,
                     },
                     level_match: config.room_tuning_level_match,
                     mimo: config.room_tuning2_mimo.then(|| MimoOptions {
                         fsiso: config.room_tuning2_fsiso,
                         low: config.room_tuning2_mimo_low.parse().ok(),
+                        input_hp: config.room_tuning2_input_hp.parse().ok(),
                     }),
+                    input_hp: config.room_tuning2_input_hp.parse().ok(),
                     pairs: room_pairs,
                 },
             )?)

@@ -246,6 +246,35 @@ impl StageObserver for Observer<'_, '_> {
                 "low": band.low.round() as i64, "high": band.high.round() as i64,
             }));
         }
+        if let Some(band) = &report.band {
+            match super::outputs::tuning2_high_key(band) {
+                Some("cli_room_tuning2_high_no_volume") => self.events.log(
+                    "warning",
+                    "cli_room_tuning2_high_no_volume",
+                    json!({}),
+                ),
+                Some("cli_room_tuning2_high") => self.events.log(
+                    "info",
+                    "cli_room_tuning2_high",
+                    json!({
+                        "basis":band.basis,
+                        "factor":band.transition,
+                        "schroeder":band.schroeder.map_or_else(|| "none".into(), |value| format!("{value:.0}")),
+                        "band":band.lenient.map_or_else(|| "none".into(), |value| format!("{value:.0}")),
+                        "band_t60":band.lenient_t60_s.map_or_else(|| "none".into(), |value| format!("{value:.2}")),
+                        "high":format!("{:.0}",band.high),
+                    }),
+                ),
+                Some(_) | None => {}
+            }
+        }
+        if let Some(cutoff) = report.input_hp {
+            self.events.log(
+                "info",
+                "cli_room_tuning2_input_hp",
+                json!({"freq":format!("{cutoff:.1}")}),
+            );
+        }
         if !self.config.room_tuning2_bands.trim().is_empty()
             && let Some(band) = &report.band
         {
@@ -422,6 +451,30 @@ impl StageObserver for Observer<'_, '_> {
                     );
                 }
             }
+        }
+        for pair in &report.pair_phase {
+            for (ear, bands) in [("left", &pair.left), ("right", &pair.right)] {
+                if bands.is_empty() {
+                    continue;
+                }
+                self.events.log(
+                    "info",
+                    "cli_room_tuning2_pair_phase",
+                    json!({
+                        "a":pair.a,
+                        "b":pair.b,
+                        "ear":ear,
+                        "spans":super::outputs::pair_phase_spans(bands),
+                    }),
+                );
+            }
+        }
+        if !report.pair_phase.is_empty()
+            && report.mode != impulcifer_types::config::Tuning2Mode::Zero
+            && !report.lf_align
+        {
+            self.events
+                .log("info", "cli_room_tuning2_pair_phase_hint", json!({}));
         }
         Ok(())
     }
