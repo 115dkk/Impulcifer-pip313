@@ -13,6 +13,9 @@ fn config_room_tuning2_defaults_and_validation() {
             "room_tuning2_lf_align",
             "room_tuning2_mode_decay",
             "room_tuning2_hf_phase",
+            "room_tuning2_high_basis",
+            "room_tuning2_high_transition",
+            "room_tuning2_input_hp",
         ]
     );
     let defaults = serde_json::to_value(ProcessingConfig::default()).unwrap();
@@ -30,6 +33,9 @@ fn config_room_tuning2_defaults_and_validation() {
         ("lf_align", json!(false)),
         ("mode_decay", json!(false)),
         ("hf_phase", json!(false)),
+        ("high_basis", json!("strict")),
+        ("high_transition", json!(1)),
+        ("input_hp", json!("off")),
     ] {
         let key = format!("room_tuning2_{key}");
         assert_eq!(defaults[&key], value);
@@ -84,6 +90,27 @@ fn config_room_tuning2_defaults_and_validation() {
         ] {
             check(key, json!(value), true);
         }
+    }
+    for basis in ["strict", "lenient"] {
+        check("room_tuning2_high_basis", json!(basis), true);
+    }
+    for basis in ["agreement", "bad", ""] {
+        check("room_tuning2_high_basis", json!(basis), false);
+    }
+    for (transition, valid) in [(1, true), (2, true), (4, true), (0, false), (3, false)] {
+        check("room_tuning2_high_transition", json!(transition), valid);
+    }
+    for value in [json!("off"), json!(10), json!(25.5), json!("50")] {
+        check("room_tuning2_input_hp", value, true);
+    }
+    for value in [
+        json!(9.9),
+        json!(50.1),
+        json!("NaN"),
+        json!("bad"),
+        json!(true),
+    ] {
+        check("room_tuning2_input_hp", value, false);
     }
     for accepted in [
         "",

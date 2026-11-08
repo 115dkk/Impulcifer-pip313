@@ -11,7 +11,11 @@ use impulcifer_dsp::{
 };
 use impulcifer_io::read_wav;
 use serde_json::Value;
-use std::{collections::BTreeMap, path::PathBuf, sync::OnceLock};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+    sync::OnceLock,
+};
 
 const FS: f64 = 48_000.0;
 const N: usize = 131_072;
@@ -2189,6 +2193,9 @@ fn room_tuning2_bands_matches_secs2r() {
     let mut errors = Errors::default();
     let mut reports: BTreeMap<String, RcReportOnly> = BTreeMap::new();
     for (name, fixture) in fixtures_r("rc_") {
+        if name.ends_with("_upper_mixed") {
+            continue;
+        }
         let speaker = fixture["meta"]["speaker"].as_str().unwrap();
         let setting = fixture["meta"]["setting"].as_str().unwrap();
         let settings = &fixture["inputs"]["settings"];
@@ -2292,4 +2299,446 @@ fn room_tuning2_bands_matches_secs2r() {
         );
     }
     errors.finish("s2r_rc_design");
+}
+
+fn upper_band_cases() -> Vec<(&'static str, f64, f64)> {
+    let third = 2_f64.powf(1.0 / 6.0);
+    vec![
+        ("octave_500", 500.0 / 2_f64.sqrt(), 500.0 * 2_f64.sqrt()),
+        ("octave_1000", 1000.0 / 2_f64.sqrt(), 1000.0 * 2_f64.sqrt()),
+        ("third_100", 100.0 / third, 100.0 * third),
+        ("third_125", 125.0 / third, 125.0 * third),
+        ("third_160", 160.0 / third, 160.0 * third),
+        ("third_200", 200.0 / third, 200.0 * third),
+        ("third_250", 250.0 / third, 250.0 * third),
+        ("third_315", 315.0 / third, 315.0 * third),
+        ("third_400", 400.0 / third, 400.0 * third),
+        ("third_500", 500.0 / third, 500.0 * third),
+    ]
+}
+
+#[test]
+fn room_tuning2_s2r_band_sos() {
+    let fixture = fixture_r("band_sos");
+    let mut errors = Errors::default();
+    for (name, low, high) in upper_band_cases() {
+        let got = impulcifer_dsp::filters::butter_bandpass(4, low / (FS / 2.0), high / (FS / 2.0));
+        let got: Vec<_> = got.0.into_iter().flatten().collect();
+        let expected: Vec<_> = fixture["outputs"][name]["sos"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(array)
+            .collect();
+        errors.compare(name, &got, &expected, Comparison::Curve);
+    }
+    errors.finish("s2r_band_sos_curve");
+}
+
+#[test]
+fn room_tuning2_s2r_band_t60_synthetic() {
+    let fixture = fixture_r("band_t60_synthetic");
+    let impulse = array(&fixture["inputs"]["ir"]);
+    let mut errors = Errors::default();
+    for (name, low, high) in upper_band_cases() {
+        let got = primitives::band_decay(&impulse, FS, low, high);
+        let expected = &fixture["outputs"][name];
+        assert_eq!(
+            got.i5,
+            expected["i5"].as_u64().unwrap() as usize,
+            "{name}/i5"
+        );
+        assert_eq!(
+            got.i25,
+            expected["i25"].as_u64().unwrap() as usize,
+            "{name}/i25"
+        );
+        errors.compare(
+            name,
+            &[got.decay_s.unwrap()],
+            &[number(&expected["decay_s"])],
+            Comparison::Exact,
+        );
+    }
+    errors.finish("s2r_band_t60_synthetic_exact");
+}
+
+#[test]
+fn room_tuning2_s2r_band_t60_demo() {
+    let fixture = fixture_r("band_t60_demo");
+    let mut errors = Errors::default();
+    for (case, input) in fixture["inputs"].as_object().unwrap() {
+        let speaker = input["speaker"].as_str().unwrap();
+        let position = input["position"].as_u64().unwrap() as usize;
+        let impulse = points(speaker)[position].data.clone();
+        for (band, low, high) in upper_band_cases() {
+            let got = primitives::band_decay(&impulse, FS, low, high);
+            let expected = &fixture["outputs"][case][band];
+            assert_eq!(
+                got.i5,
+                expected["i5"].as_u64().unwrap() as usize,
+                "{case}/{band}/i5"
+            );
+            assert_eq!(
+                got.i25,
+                expected["i25"].as_u64().unwrap() as usize,
+                "{case}/{band}/i25"
+            );
+            match (got.decay_s, expected["decay_s"].as_f64()) {
+                (Some(got), Some(expected)) => errors.compare(
+                    &format!("{case}/{band}"),
+                    &[got],
+                    &[expected],
+                    Comparison::Rebuilt,
+                ),
+                (None, None) => (),
+                _ => panic!("{case}/{band}: decay presence"),
+            }
+        }
+    }
+    errors.finish("s2r_band_t60_demo_rebuilt");
+}
+
+#[test]
+fn room_tuning2_s2r_upper_rule() {
+    let fixture = fixture_r("upper_rule");
+    let got: Vec<_> = fixture["inputs"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            automatic_high(
+                row["strict"].as_f64(),
+                row["band"].as_f64(),
+                row["factor"].as_u64().unwrap() as u32,
+            )
+        })
+        .collect();
+    let mut errors = Errors::default();
+    errors.compare(
+        "upper_rule",
+        &got,
+        &array(&fixture["outputs"]["hz"]),
+        Comparison::Exact,
+    );
+    errors.finish("s2r_upper_rule_exact");
+}
+
+#[test]
+fn room_tuning2_s2r_upper_demo() {
+    let all_points: Vec<_> = ["FL", "FR", "FC", "BL", "BR", "SL", "SR"]
+        .into_iter()
+        .map(points)
+        .collect();
+    let refs: Vec<_> = all_points.iter().map(Vec::as_slice).collect();
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("upper_demo_v") {
+        let volume = number(&fixture["inputs"]["room_volume_m3"]);
+        let evidence = lenient_band_evidence(&refs, volume);
+        for (got, expected) in evidence
+            .iter()
+            .zip(fixture["outputs"]["lenient_centres"].as_array().unwrap())
+        {
+            errors.compare(
+                &format!("{name}/lenient/{}", got.centre_hz),
+                &[got.centre_hz, got.median_t60_s.unwrap(), got.g_hz.unwrap()],
+                &[
+                    number(&expected["centre_hz"]),
+                    number(&expected["median_t60_s"]),
+                    number(&expected["g_hz"]),
+                ],
+                Comparison::Rebuilt,
+            );
+        }
+        let choice = &fixture["outputs"]["lenient_choice"];
+        let expected_lenient = choice["centre_hz"].as_f64().unwrap_or(0.0);
+        let expected_lenient_t60 = choice["median_t60_s"].as_f64().unwrap_or(0.0);
+        for (basis, fixture_key) in [("strict", "strict"), ("lenient", "lenient")] {
+            for transition in [1_u32, 2, 4] {
+                let opts = RcOptions {
+                    room_volume: Some(volume),
+                    high_basis: basis.into(),
+                    high_transition: transition,
+                    ..options()
+                };
+                let band = correction_band(&refs, &opts).unwrap();
+                errors.compare(
+                    &format!("{name}/{basis}/{transition}"),
+                    &[
+                        band.schroeder.unwrap(),
+                        band.lenient.unwrap_or(0.0),
+                        band.lenient_t60_s.unwrap_or(0.0),
+                        band.high,
+                    ],
+                    &[
+                        number(&fixture["outputs"]["strict"]),
+                        if basis == "lenient" {
+                            expected_lenient
+                        } else {
+                            0.0
+                        },
+                        if basis == "lenient" {
+                            expected_lenient_t60
+                        } else {
+                            0.0
+                        },
+                        number(&fixture["outputs"]["rc_hi"][fixture_key][transition.to_string()]),
+                    ],
+                    Comparison::Rebuilt,
+                );
+            }
+        }
+    }
+    errors.finish("s2r_upper_demo_rebuilt");
+}
+
+#[test]
+fn room_tuning2_s2r_hp8() {
+    let fixture = fixture_r("hp8");
+    let mut errors = Errors::default();
+    errors.compare(
+        "hp8/coefficients",
+        &primitives::hp8_coefficients(),
+        &array(&fixture["outputs"]["coefficients"]),
+        Comparison::Exact,
+    );
+    let frequencies = grid();
+    for cutoff in [10.0, 25.0, 27.0, 50.0] {
+        let response = primitives::hp8(&frequencies, cutoff);
+        let got = sampled_complex(&response);
+        let expected = complex(&fixture["outputs"]["response"][cutoff.to_string()]);
+        errors.compare(
+            &format!("hp8/{cutoff}"),
+            &got.iter()
+                .flat_map(|value| [value.re, value.im])
+                .collect::<Vec<_>>(),
+            &expected
+                .iter()
+                .flat_map(|value| [value.re, value.im])
+                .collect::<Vec<_>>(),
+            Comparison::Exact,
+        );
+        let probes = [
+            cutoff,
+            cutoff / 2_f64.sqrt(),
+            cutoff / 2.0,
+            cutoff * 2_f64.sqrt(),
+        ];
+        let magnitude_db: Vec<_> = primitives::hp8(&probes, cutoff)
+            .iter()
+            .map(|value| 20.0 * value.norm().log10())
+            .collect();
+        errors.compare(
+            &format!("hp8/{cutoff}/magnitude_db"),
+            &magnitude_db,
+            &array(&fixture["outputs"]["magnitude_db"][cutoff.to_string()]),
+            Comparison::Exact,
+        );
+    }
+    let full = primitives::hp8(&frequencies, 25.0);
+    let expected_full = complex(&fixture["outputs"]["response"]["25_full"]);
+    errors.compare(
+        "hp8/25_full",
+        &full
+            .iter()
+            .flat_map(|value| [value.re, value.im])
+            .collect::<Vec<_>>(),
+        &expected_full
+            .iter()
+            .flat_map(|value| [value.re, value.im])
+            .collect::<Vec<_>>(),
+        Comparison::Exact,
+    );
+    errors.finish("s2r_hp8_exact");
+}
+
+fn fixture_pair_responses(fixture: &Value) -> (Vec<f64>, Vec<PairPhaseResponse>) {
+    let frequencies = if fixture["inputs"].get("f").is_some() {
+        array(&fixture["inputs"]["f"])
+    } else {
+        array(&fixture["inputs"]["band_f"])
+    };
+    let responses = fixture["inputs"]["responses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|response| {
+            let values = complex(&response["response"]);
+            PairPhaseResponse {
+                speaker: response["role"].as_str().unwrap().to_owned(),
+                left: values.clone(),
+                right: values,
+            }
+        })
+        .collect();
+    (frequencies, responses)
+}
+
+fn flatten_phase_bands(values: &[PairPhaseBand]) -> Vec<f64> {
+    values
+        .iter()
+        .flat_map(|band| [band.low_hz, band.high_hz, band.phase_deg, band.loss_db])
+        .collect()
+}
+
+#[test]
+fn room_tuning2_s2r_pair_phase() {
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("pair_phase_") {
+        let (frequencies, responses) = fixture_pair_responses(&fixture);
+        let expected_pairs = fixture["outputs"]["bands"].as_array().unwrap();
+        let mut pair_index = 0;
+        for a in 0..responses.len() {
+            for b in a + 1..responses.len() {
+                let expected = &expected_pairs[pair_index];
+                assert_eq!(responses[a].speaker, expected["a"]);
+                assert_eq!(responses[b].speaker, expected["b"]);
+                errors.compare(
+                    &format!("{name}/bands/{a}/{b}"),
+                    &flatten_phase_bands(&pair_phase_bands(
+                        &frequencies,
+                        &responses[a].left,
+                        &responses[b].left,
+                    )),
+                    &expected["bands"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .flat_map(array)
+                        .collect::<Vec<_>>(),
+                    Comparison::Exact,
+                );
+                pair_index += 1;
+            }
+        }
+        let got = pair_phase_report(&frequencies, &responses);
+        let expected = fixture["outputs"]["notes"].as_array().unwrap();
+        assert_eq!(got.len(), expected.len(), "{name}/notes length");
+        for (index, (got, expected)) in got.iter().zip(expected).enumerate() {
+            assert_eq!(got.a, expected["a"], "{name}/notes/{index}/a");
+            assert_eq!(got.b, expected["b"], "{name}/notes/{index}/b");
+            errors.compare(
+                &format!("{name}/notes/{index}"),
+                &flatten_phase_bands(&got.left),
+                &expected["bands"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .flat_map(array)
+                    .collect::<Vec<_>>(),
+                Comparison::Exact,
+            );
+        }
+    }
+    errors.finish("s2r_pair_phase_exact");
+}
+
+#[test]
+fn room_tuning2_s2r_rc_upper_mixed() {
+    let mut errors = Errors::default();
+    let mut report = RcReportOnly::default();
+    let mut seen = BTreeSet::new();
+    for (name, fixture) in fixtures_r("rc_") {
+        if !name.ends_with("_upper_mixed") {
+            continue;
+        }
+        let speaker = fixture["inputs"]["speaker"].as_str().unwrap();
+        assert!(
+            seen.insert(speaker.to_owned()),
+            "duplicate upper RC case {speaker}"
+        );
+        let speaker_points = points(speaker);
+        let opts = RcOptions {
+            room_volume: Some(number(&fixture["inputs"]["settings"]["room_volume_m3"])),
+            high_basis: "lenient".into(),
+            high_transition: 2,
+            ..options()
+        };
+        let band = correction_band(&[&speaker_points], &opts).unwrap();
+        errors.compare(
+            &format!("{name}/limit"),
+            &[
+                band.high,
+                band.schroeder.unwrap(),
+                band.lenient.unwrap(),
+                band.lenient_t60_s.unwrap(),
+            ],
+            &[
+                number(&fixture["outputs"]["rc_hi"]),
+                number(&fixture["outputs"]["rc_limit"]["schroeder_hz"]),
+                number(&fixture["outputs"]["rc_limit"]["band_hz"]),
+                number(&fixture["outputs"]["rc_limit"]["band_t60_s"]),
+            ],
+            Comparison::Rebuilt,
+        );
+        let result = design_rc(&speaker_points, &opts, &band, None, None).unwrap();
+        errors.compare(
+            &format!("{name}/design"),
+            &sampled(&result.design_db),
+            &array(&fixture["outputs"]["design_db"]),
+            Comparison::Rebuilt,
+        );
+        match (result.rolloff_hz, fixture["outputs"]["rolloff_hz"].as_f64()) {
+            (Some(got), Some(expected)) => errors.compare(
+                &format!("{name}/rolloff"),
+                &[got],
+                &[expected],
+                Comparison::Rebuilt,
+            ),
+            (None, None) => (),
+            _ => panic!("{name}: rolloff presence differs"),
+        }
+        compare_rc_notes(
+            &name,
+            &actual_rc_notes(speaker, &opts, &result),
+            fixture["outputs"]["notes"].as_array().unwrap(),
+            &mut errors,
+        );
+        let expected_peq = bands(&fixture["outputs"]["peq"]);
+        for (got, expected) in result.peq.iter().zip(&expected_peq) {
+            report.peq_f = report.peq_f.max((got.0 - expected.0).abs());
+            report.peq_q = report.peq_q.max((got.1 - expected.1).abs());
+            report.peq_gain = report.peq_gain.max((got.2 - expected.2).abs());
+        }
+        report.fir = report.fir.max(
+            result
+                .fir
+                .iter()
+                .zip(array(&fixture["outputs"]["fir"]))
+                .map(|(got, expected)| (got - expected).abs())
+                .fold(0.0, f64::max),
+        );
+        let expected_response = complex(&fixture["outputs"]["response"]);
+        report.response_db = report.response_db.max(
+            sampled_complex(&result.response)
+                .iter()
+                .zip(expected_response)
+                .map(|(got, expected)| {
+                    (20.0 * (got.norm() + 1e-12).log10() - 20.0 * (expected.norm() + 1e-12).log10())
+                        .abs()
+                })
+                .fold(0.0, f64::max),
+        );
+        report.phase_strength = report
+            .phase_strength
+            .max((result.phase_strength - number(&fixture["outputs"]["phase_strength"])).abs());
+    }
+    assert_eq!(
+        seen,
+        ["BL", "BR", "FC", "FL", "FR", "SL", "SR"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        "upper RC family must contain all seven speakers"
+    );
+    println!(
+        "REPORT s2r_rc_upper_mixed: peq_f={:.9e} peq_q={:.9e} peq_gain={:.9e} fir={:.9e} response_db={:.9e} phase_strength={:.9e}",
+        report.peq_f,
+        report.peq_q,
+        report.peq_gain,
+        report.fir,
+        report.response_db,
+        report.phase_strength
+    );
+    errors.finish("s2r_rc_upper_mixed_rebuilt");
 }

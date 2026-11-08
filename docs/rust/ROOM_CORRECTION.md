@@ -535,6 +535,9 @@ progress increment. `room_range`, `room_max_boost` and every v1 option
 | `room_tuning2_lf_align` | false | true / false (3.14.0) |
 | `room_tuning2_mode_decay` | false | true / false (3.14.0) |
 | `room_tuning2_hf_phase` | false | true / false (3.14.0) |
+| `room_tuning2_high_basis` | `"strict"` | `strict`, `lenient` (3.15.0) |
+| `room_tuning2_high_transition` | 1 | 1, 2, 4 (3.15.0) |
+| `room_tuning2_input_hp` | `"off"` | `off` or 10–50 Hz (3.15.0) |
 
 `room_tuning2_mode`, `room_tuning2_high` and `room_tuning2_mimo_low` accept
 strings or numbers in JSON and are stored as decimal strings, like v1's
@@ -559,6 +562,20 @@ low-end protection in `linear` and x ms modes, whose phase-resolution choice
 `room_tuning2_hf_phase` act on the FIR only: in `zero` mode they are accepted
 and do nothing, and the service logs `cli_room_tuning2_zero_inert` once.
 `room_tuning2_mode_decay` works in every mode.
+
+The three options of 3.15.0 complete the next part (ADR 0015, bundle 3): the
+basis of the automatic upper limit and the multiplier that reaches into the
+transition region above it ("Correction band"), and a high-pass common to every
+input (`room_tuning2_input_hp`, "Input high-pass"). The bundle also adds a
+report that is always on in this mode and changes no output: the corrected
+low-frequency phase between speaker pairs ("Pair phase"). With the defaults
+every output file is byte-identical to 3.14.0; the report adds log lines and
+README text only. `room_tuning2_high_transition` is an integer and must be 1, 2
+or 4. `room_tuning2_high_basis` rejects any other word, including SECS 2R's
+`agreement` (not reproduced). `room_tuning2_input_hp` accepts `off` or a number
+from 10 to 50 inclusive, as a string or a number in JSON, stored as a decimal
+string like `room_tuning2_mimo_low`. With a numeric `room_tuning2_high` the two
+upper-limit options do nothing. The input high-pass works in every mode.
 
 Modes (FIR taps at 48 kHz, PEQ bands, lift = design delay, phase resolution β):
 
@@ -635,6 +652,11 @@ largest absolute arrival ("Arrival alignment"). The total-phase sum of the
 arrival alignment runs over the same positions as the excess-phase sum V (both
 ears, ADR 0015 §2). Under SECS's policy all three use p0 only.
 
+The lenient upper-limit basis (3.15.0) pools every position and every speaker
+under both policies, as SECS 2R does; only its strict estimate uses p0 alone
+under SECS's policy. The pair-phase report (3.15.0) is measured at each ear
+separately.
+
 ### Shared numerical primitives
 
 - **Smoothing** `S_b(X)`, b a scalar or one value per bin: `h_k = 2^(0.5/b_k)`,
@@ -654,6 +676,18 @@ ears, ADR 0015 §2). Under SECS's policy all three use p0 only.
   `P = (b0 + b1*z + b2*z*z)/(a0 + a1*z + a2*z*z)`. A PEQ is the product of its
   bands in order, starting from 1.
 - **HP4** `(s²/(s²+√2 s+1))²`, `s = j*f/fc`.
+- **HP8** `HP8(f; f_c)` (3.15.0), the analog order-8 Butterworth high-pass, in
+  this arithmetic order. Poles `p_i = −(cos θ_i + j*sin θ_i)` with
+  `θ_i = (π*(2i − 7))/16`, i = 0…7. Starting from the coefficient list `[1]`,
+  multiply by `(s − p_i)` for i = 0…7 in turn: the new list has one more entry,
+  `new[k] += old[k]` and `new[k+1] −= p_i*old[k]` in complex arithmetic. Keep the
+  real parts `a_0 … a_8` (highest power first, a_0 = 1). With
+  `s = j*(f*(1/f_c))` (the reciprocal taken first): `den = (…((0*s + a_0)*s + a_1)…)*s + a_8`
+  (Horner from zero), `num` = eight successive products `s*…*s` starting from 1,
+  and `HP8 = num/den` by the division: if `|Re d| ≥ |Im d|`, `r = Im d/Re d`,
+  `t = 1/(Re d + Im d*r)`, `(Re n + Im n*r)*t + j*(Im n − Re n*r)*t`; otherwise
+  `r = Re d/Im d`, `t = 1/(Re d*r + Im d)`, `(Re n*r + Im n)*t + j*(Im n*r − Re n)*t`.
+  `|HP8|` is −3 dB at f_c and −48 dB an octave below.
 - **Low rate** `LR(X, n)`: `fl = rfftfreq(2n, 1/600)`;
   `X_l = interp(fl, f, Re X) + j*interp(fl, f, Im X)`;
   `X_l *= clip((285 − fl)/60, 0, 1)`; `x = irfft_(2n)(X_l)[:n]`.
@@ -710,6 +744,32 @@ cumulative energy E, `D = 10*log10(E/(E_0+1e-30) + 1e-30)`, i5 / i25 the first
 indices with D < −5 / < −25 (0 if none), and keep `3*(i25−i5)/fs` when
 `i25 > i5 > 0`. `T60 = median`, `f_S = 2000*sqrt(T60/V)`. Then `hi = 500` when
 there is no f_S or `f_S > 500`, else `max(f_S, 100)`.
+
+**Upper-limit basis and transition** (3.15.0). The rule above is the strict
+basis with multiplier 1. In general, with `m = room_tuning2_high_transition`:
+
+- **Lenient value** ℓ, only when `room_tuning2_high_basis = lenient`, `V` is set
+  and `schroeder_freq` is not. For each centre `c` of 100, 125, 160, 200, 250,
+  315, 400, 500 Hz in this order: filter every omni IR (every position and every
+  speaker, under both position policies) with an order-4 Butterworth band-pass
+  `[c/2^(1/6), c*2^(1/6)]` (SOS, `2^(1/6)` computed once) and keep its decay
+  `3*(i25−i5)/fs` exactly as the strict estimate does. When at least one decay is
+  kept, `T_c = median` and `g_c = 2000*sqrt(T_c/V)`; the centre is a candidate when
+  `g_c ≥ c`. ℓ is the **centre** c of the last candidate in this order (a later
+  candidate replaces an earlier one; candidates need not be adjacent), and
+  `T_ℓ` its T_c. No candidate, no ℓ.
+- **Combination.** `v = max(f_S, ℓ)` when both exist, else whichever exists.
+  `hi = 500` when there is no v (the multiplier is not applied), else
+  `hi = clamp(v*m, 100, 500*m)`. With m = 1 and no ℓ this is the rule above bit
+  for bit.
+- With `schroeder_freq` set, f_S is that value and ℓ is not computed (the
+  override is the Schroeder frequency); the multiplier still applies. Without
+  `room_volume` and `schroeder_freq` there is no v: hi is 500 Hz and both options
+  do nothing (`cli_room_tuning2_high_no_volume`, "Diagnostics").
+
+`hi` then enters the band set, the design and every later step as before. SECS 2R
+also has a basis from the agreement of three or more positions; it is not
+reproduced.
 
 **Band set** (3.13.0). `bands = merge([(lo, hi)] ++ extras)`: sort the pairs by
 their lower edge and merge a pair whose lower edge is at or below the previous
@@ -1073,6 +1133,12 @@ have an RC), in speaker order; every speaker with a BRIR may support.
   `w = h[a : a+2*fs]`, last `int(0.1*len(w))` samples half-Hann tapered;
   `B = rfft_N(w)*exp(−j*2π*f*(a−b)/fs)`, b the earliest left-ear onset over all
   speakers (any common b gives the same supports).
+- **Input high-pass** (3.15.0). With `room_tuning2_input_hp = f_c`, every long
+  spectrum, of every speaker at both ears, is multiplied by `HP8(f; f_c)` before
+  anything below uses it, so the support bands, the input x, the paths and the
+  guard all see the cut, as the supports will play it (SECS 2R designs its MIMO
+  on responses that include the cut). `B` below means that product. The strength
+  ratio's denominator `||LR(F_total,i, n)||²` does not contain the cut.
 - **Support bands.** For each speaker: `D = 10*log10(S_3(mean_e |B_e|²) + 1e-30)`,
   `ref = median D over 200–1000 Hz`, `start = min(200, Fsiso)`. Walking
   `geomspace(start, 15, 200)` (D interpolated), `low` is the first point below
@@ -1137,6 +1203,54 @@ by D_s. The frequency-domain taper reproduces the band limit the design saw;
 its small non-causal part wraps to the end of q_ij and falls outside the kept
 samples.
 
+**Input high-pass** (`room_tuning2_input_hp = f_c`, 3.15.0). It is the last
+operation of the stage and comes after every diagnostic of "Diagnostics" and the
+pair-phase report have been measured, so they read the same with the cut on or
+off. With `hp = irfft_N(HP8(f; f_c))`, every speaker's response r at each ear,
+measured or not and in every mode, becomes the first `len(r)` samples of the
+linear convolution `r ⊛ hp`, the last 5 ms faded by a falling half-Hann. Without
+ear-position measurements the RC and MIMO do not run (`cli_room_tuning_no_data`),
+D_s = 0, and the cut still applies to every BRIR. Every speaker passes the same
+filter, so the phase between speakers above the cut is unchanged and only the
+drive below it falls; the bass arrives later by the cut's group delay. As in SECS
+2R the RC never sees the cut (multiplied into the measurement it would read as a
+deficit to boost), while the MIMO design does ("MIMO supports"). The virtual
+bass stage runs later and its added bass does not pass this cut.
+
+### Pair phase (report, 3.15.0)
+
+Always on in this mode; it changes no output. It reproduces SECS 2R's check of the
+corrected low-frequency phase between main channels, made per ear here (ADR 0015
+§2). The omni spectra cannot carry the phase between speakers: each sits on its
+own onset, and the files have unrelated latencies. The aligned in-ear BRIRs share
+one time base, so the check uses their long spectra `B_e,i` ("MIMO supports",
+without the input high-pass), computed for this purpose whether or not MIMO is on.
+
+For every speaker i with a correction filter, in speaker order, and each ear e,
+`R_e,i = B_e,i * 10^(g_i/20) * F_total,i` at the grid bins with `40 ≤ f_k ≤ 200`:
+the RC only, no supports and no cut (the common lift cancels in a pair). With
+fewer than two such speakers nothing is checked.
+
+- **Bands.** Centres 50, 63, 80, 100, 125, 160 Hz. Edges `E_0 = 40`,
+  `E_m = sqrt(c_(m−1)*c_m)` for m = 1…5, `E_6 = 200`; band m holds the bins with
+  `E_m ≤ f < E_(m+1)`, and the last band also `f = 200`. A band without bins is
+  omitted.
+- **One band of a pair (a, b)**, sums over its bins in bin order starting from
+  zero: `X = Σ R_a*conj(R_b)`; `φ = atan2(Im X, Re X)*57.29577951308232` (the
+  f64 nearest 180/π, as Rust's `to_degrees`), and φ ≤ −180 becomes 180;
+  `num = Σ |R_a + R_b|²` (re² + im²); `den = Σ (|R_a| + |R_b|)²` (|·| the hypot,
+  the square a product). The band is omitted when φ, num or den is not finite.
+  Otherwise `loss = 0` when den = 0, else `10*log10(num/den)`, then
+  `loss = max(loss, −30)`. In phase the loss is 0 dB, at 90° −3 dB, at 120° −6 dB.
+- **Report.** A pair is reported when some band at either ear has `loss ≤ −6`.
+  Its record lists, per ear, those bands as `(E_m, E_(m+1), φ, loss)`; its worst
+  value is the smallest such loss over both ears. Reported pairs are sorted by
+  worst value (total order), then by the first speaker's order, then the
+  second's, and at most six are kept.
+
+The cancellation happens only when two speakers play the same signal, and the
+check cannot tell which of the two is wrong, so it is a note, not a warning.
+
 ### Diagnostics
 
 Log `cli_room_tuning2` once with mode, latency (ms), lo and hi (Hz, rounded).
@@ -1177,6 +1291,31 @@ With the 3.14.0 options, per speaker:
 `cli_room_tuning2_zero_inert` once in `zero` mode when `room_tuning2_lf_align`
 or `room_tuning2_hf_phase` is on (the option names, comma-separated). The README
 lists the same under each speaker.
+
+With the 3.15.0 options and report, once per run unless stated:
+
+- `cli_room_tuning2_high` when the band is automatic and the basis is `lenient`
+  or the multiplier above 1: basis, multiplier, f_S in Hz rounded (the
+  `schroeder_freq` value when set) or `none`, ℓ in Hz and T_ℓ in s to two
+  decimals or `none`, and hi in Hz rounded.
+  `cli_room_tuning2_high_no_volume` (warning) in its place when neither
+  `room_volume` nor `schroeder_freq` is set: hi stays 500 Hz and the options do
+  nothing.
+- `cli_room_tuning2_input_hp` when `room_tuning2_input_hp` is on: f_c in Hz to
+  one decimal.
+- `cli_room_tuning2_pair_phase` for each reported pair and each ear with
+  affected bands, in report order (left ear first): the two speakers, the ear
+  (`left` or `right`) and the spans. Consecutive affected bands form one span
+  from the first band's lower edge to the last band's upper edge, written
+  `<lo>-<hi> Hz <|φ|>° <loss> dB` with the edges and |φ| rounded and the loss to
+  one decimal; φ and loss come from the span's band with the smallest loss (the
+  first one on a tie). Spans are joined by `, `.
+  `cli_room_tuning2_pair_phase_hint` once when a pair is reported in a FIR mode
+  with `room_tuning2_lf_align` off (the arrival alignment brings the speakers'
+  bass phase closer).
+
+The README lists the upper-limit basis with the band, the cut with the mode,
+and the pair-phase records in a section of their own.
 
 ### Reference acceptance
 
@@ -1234,6 +1373,14 @@ mode-decay cuts (cut rule, refinement, decay at 48 kHz, the whole cut search and
 its effect on the design curve), the high-frequency unwind (range, realization
 with its intermediate sums) and end-to-end runs in `mixed`, `linear` and `zero`
 modes; `tests/migration/README-secs2r.md` lists them with their gate classes.
+The 3.15.0 additions add families for the band decays of both upper-limit bases
+on every demo omni IR, the combination rule, HP8 (coefficients and response) and
+the pair-phase bands and report, on synthetic responses and on the oracle's own
+corrected responses. Two parts have no oracle: SECS 2R refuses MIMO with fewer
+than three positions, so the MIMO design with the cut is checked against its own
+definition (every long spectrum times HP8), and the final convolution with the
+cut is Impulcifer's own; tests check them directly and brir-3x checks their bytes
+against thread count.
 
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of
@@ -1262,11 +1409,15 @@ ring 30 ms, common-phase positions, long-mode boost 3 dB, guard 1 dB, 180
 support taps). From SECS 2R (ADR 0015): the position-agreement basis of the
 upper limit (it needs three positions), the subwoofer, bus and bundle parts of
 its low-end protection and its subwoofer high-pass export, and the no-boost
-mask's own criterion (its only use here is the rolloff clamp).
+mask's own criterion (its only use here is the rolloff clamp). From bundle 3: the
+input high-pass's DSP exports and the scorecard that divides the cut back out
+(here every diagnostic is measured before the cut), its LFE input (no LFE is
+tuned here), and the pair-phase check's exclusion of subwoofers (there are
+none).
 
 Virtual room tuning v2 reproduces the correction method of SECS 2 by the
-Speaker Gallery (DCinside), released under GPL-3.0, and the 3.13.0 and 3.14.0
-options reproduce improvements the maintainer made in SECS 2R
+Speaker Gallery (DCinside), released under GPL-3.0, and the 3.13.0, 3.14.0 and
+3.15.0 options reproduce improvements the maintainer made in SECS 2R
 (GPL-3.0/AGPL-3.0).
 Impulcifer's implementation is independent and contains no SECS or SECS 2R
 code; both were used only as oracles to produce the reference numbers.

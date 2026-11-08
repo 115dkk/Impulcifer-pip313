@@ -8,7 +8,7 @@ fn args(s: &[&str]) -> Vec<String> {
 #[test]
 fn cli_room_tuning2_options_parse_and_validate() {
     assert_eq!(
-        EXTENSION_OPTIONS[EXTENSION_OPTIONS.len() - 6..]
+        EXTENSION_OPTIONS[EXTENSION_OPTIONS.len() - 9..]
             .iter()
             .map(|option| option.dest)
             .collect::<Vec<_>>(),
@@ -19,6 +19,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
             "room_tuning2_lf_align",
             "room_tuning2_mode_decay",
             "room_tuning2_hf_phase",
+            "room_tuning2_high_basis",
+            "room_tuning2_high_transition",
+            "room_tuning2_input_hp",
         ]
     );
     let Parsed::Kwargs(baseline) = parse(&args(&["impulcifer", "--dir_path=data/demo"])).unwrap()
@@ -39,6 +42,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "lf_align",
         "mode_decay",
         "hf_phase",
+        "high_basis",
+        "high_transition",
+        "input_hp",
     ] {
         assert!(!baseline.contains_key(&format!("room_tuning2_{name}")));
     }
@@ -60,6 +66,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "--room_tuning2_lf_align=true",
         "--room_tuning2_mode_decay=true",
         "--room_tuning2_hf_phase=true",
+        "--room_tuning2_high_basis=lenient",
+        "--room_tuning2_high_transition=4",
+        "--room_tuning2_input_hp=25",
     ]))
     .unwrap() else {
         panic!()
@@ -79,6 +88,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
     assert!(config.room_tuning2_lf_align);
     assert!(config.room_tuning2_mode_decay);
     assert!(config.room_tuning2_hf_phase);
+    assert_eq!(config.room_tuning2_high_basis, "lenient");
+    assert_eq!(config.room_tuning2_high_transition, 4);
+    assert_eq!(config.room_tuning2_input_hp, "25");
     assert_eq!(config.room_tuning2_bands, "1000-3000, 20-500");
     assert_eq!(
         config.room_tuning2_bands(),
@@ -114,6 +126,11 @@ fn cli_room_tuning2_options_parse_and_validate() {
         ("lf_align", "yes"),
         ("mode_decay", "yes"),
         ("hf_phase", "yes"),
+        ("high_basis", "agreement"),
+        ("high_transition", "3"),
+        ("input_hp", "9"),
+        ("input_hp", "51"),
+        ("input_hp", "NaN"),
         ("bands", "bad"),
         ("bands", "20-30,40-50,60-70,80-90,100-110"),
     ] {
@@ -137,6 +154,9 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "--room_tuning2_hf_phase=false",
         "--room_tuning2_high=auto",
         "--room_tuning2_mimo_low=auto",
+        "--room_tuning2_high_basis=strict",
+        "--room_tuning2_high_transition=1",
+        "--room_tuning2_input_hp=off",
     ]))
     .unwrap() else {
         panic!()

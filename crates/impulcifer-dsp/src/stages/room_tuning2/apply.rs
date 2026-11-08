@@ -8,6 +8,7 @@ pub struct Tuning2Options {
     pub rc: RcOptions,
     pub level_match: bool,
     pub mimo: Option<MimoOptions>,
+    pub input_hp: Option<f64>,
     pub pairs: Vec<v1::PairMeasurement>,
 }
 #[derive(Clone, Debug)]
@@ -61,6 +62,8 @@ pub struct Tuning2Report {
     pub band: Option<CorrectionBand>,
     pub speakers: Vec<Speaker2Report>,
     pub mimo: Option<MimoDesign>,
+    pub pair_phase: Vec<PairPhaseReport>,
+    pub input_hp: Option<f64>,
     pub pair_checks: Vec<v1::PairCheck>,
     pub dip_limit: bool,
     pub low_protect: bool,
@@ -75,6 +78,14 @@ pub fn prepare_tuning2(
     calibration: Option<&FrequencyResponse>,
     target: Option<&FrequencyResponse>,
 ) -> Result<Tuning2Plan, DspError> {
+    if options
+        .input_hp
+        .is_some_and(|value| !value.is_finite() || !(10.0..=50.0).contains(&value))
+    {
+        return Err(DspError::InvalidArgument(
+            "invalid tuning2 input high-pass".into(),
+        ));
+    }
     let mut options = options.clone();
     options.rc.policy = PositionPolicy::Symmetric;
     let points: Vec<Vec<_>> = omni
@@ -127,6 +138,27 @@ pub fn apply_tuning2(hrir: &mut Hrir, plan: &Tuning2Plan) -> Result<Tuning2Repor
 pub fn apply_tuning2_full(hrir: &mut Hrir, plan: &Tuning2Plan) -> Result<Tuning2Report, DspError> {
     apply_impl(hrir, plan, true)
 }
+
+fn apply_input_high_pass(hrir: &mut Hrir, cutoff: f64) {
+    let n = analysis_len(hrir.fs);
+    let filter = fft::irfft(&hp8(&grid(n, hrir.fs as f64), cutoff), n);
+    let fade_len = (0.005 * hrir.fs as f64).round() as usize;
+    for ir in hrir
+        .speakers
+        .iter_mut()
+        .flat_map(|speaker| speaker.left.iter_mut().chain(&mut speaker.right))
+    {
+        let original_len = ir.len();
+        let mut data = conv::convolve(&ir.data, &filter, conv::Mode::Full);
+        data.truncate(original_len);
+        let start = data.len().saturating_sub(fade_len);
+        for (index, value) in data[start..].iter_mut().enumerate() {
+            *value *= 0.5 * (1.0 + (PI * index as f64 / fade_len as f64).cos());
+        }
+        ir.data = data;
+    }
+}
+
 fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2Report, DspError> {
     if hrir.fs != plan.fs {
         return Err(DspError::InvalidArgument(
@@ -146,6 +178,8 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
         band: plan.band.clone(),
         speakers: vec![],
         mimo: None,
+        pair_phase: vec![],
+        input_hp: plan.options.input_hp,
         pair_checks: vec![],
         dip_limit: plan.options.rc.dip_limit,
         low_protect: plan.options.rc.low_protect,
@@ -155,6 +189,9 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
         hf_phase: plan.options.rc.hf_phase,
     };
     if measured.is_empty() {
+        if let Some(cutoff) = plan.options.input_hp {
+            apply_input_high_pass(hrir, cutoff);
+        }
         return Ok(report);
     }
     let refs: Vec<_> = measured
@@ -249,9 +286,41 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
             .collect();
         report.mimo = Some(design_supports(hrir, &inputs, opts)?);
     }
+    let n = analysis_len(hrir.fs);
+    let frequencies = grid(n, hrir.fs as f64);
+    let common_onset = hrir
+        .speakers
+        .iter()
+        .filter(|speaker| speaker.left.is_some() && speaker.right.is_some())
+        .filter_map(|speaker| speaker.left.as_ref())
+        .map(|ir| onset(&ir.data))
+        .min()
+        .unwrap_or(0);
+    let phase_responses: Vec<_> = measured
+        .iter()
+        .zip(&report.speakers)
+        .filter_map(|(speaker, speaker_report)| {
+            let ears = hrir.get(&speaker.speaker)?;
+            let left = ears.left.as_ref()?;
+            let right = ears.right.as_ref()?;
+            let gain = 10_f64.powf(speaker_report.trim_db / 20.0);
+            let corrected = |ir: &ImpulseResponse| {
+                mimo::long_spectrum(ir, common_onset, n)
+                    .into_iter()
+                    .zip(&speaker.rc.response)
+                    .map(|(value, correction)| value * gain * correction)
+                    .collect()
+            };
+            Some(PairPhaseResponse {
+                speaker: speaker.speaker.clone(),
+                left: corrected(left),
+                right: corrected(right),
+            })
+        })
+        .collect();
+    report.pair_phase = pair_phase_report(&frequencies, &phase_responses);
     let original = hrir.clone();
     let fs = hrir.fs;
-    let n = analysis_len(fs);
     let updates: Result<Vec<_>, DspError> = report
         .speakers
         .par_iter()
@@ -403,5 +472,68 @@ fn apply_impl(hrir: &mut Hrir, plan: &Tuning2Plan, full: bool) -> Result<Tuning2
             .unwrap();
         report.speakers[index] = r;
     }
+    if let Some(cutoff) = plan.options.input_hp {
+        apply_input_high_pass(hrir, cutoff);
+    }
     Ok(report)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hrir::SpeakerIrs;
+
+    fn impulse() -> ImpulseResponse {
+        let mut data = vec![0.0; 2048];
+        data[0] = 1.0;
+        ImpulseResponse {
+            fs: 48_000,
+            data,
+            recording: None,
+        }
+    }
+
+    #[test]
+    fn input_high_pass_runs_on_every_unmeasured_speaker_in_the_no_data_path() {
+        let mut hrir = Hrir {
+            fs: 48_000,
+            speakers: vec![SpeakerIrs {
+                speaker: "FL".into(),
+                left: Some(impulse()),
+                right: Some(impulse()),
+            }],
+        };
+        let before = hrir.clone();
+        let options = Tuning2Options {
+            rc: RcOptions::default(),
+            level_match: true,
+            mimo: None,
+            input_hp: Some(25.0),
+            pairs: Vec::new(),
+        };
+        let plan = Tuning2Plan {
+            fs: 48_000,
+            band: None,
+            speakers: Vec::new(),
+            options,
+        };
+        let report = apply_tuning2(&mut hrir, &plan).unwrap();
+        assert!(report.speakers.is_empty());
+        assert_eq!(report.latency_samples, 0);
+        for (got, original) in hrir.speakers[0]
+            .left
+            .iter()
+            .chain(&hrir.speakers[0].right)
+            .zip(
+                before.speakers[0]
+                    .left
+                    .iter()
+                    .chain(&before.speakers[0].right),
+            )
+        {
+            assert_eq!(got.len(), original.len());
+            assert_ne!(got.data, original.data);
+            assert!(got.data.iter().all(|value| value.is_finite()));
+        }
+    }
 }

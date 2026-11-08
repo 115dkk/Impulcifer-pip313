@@ -1841,6 +1841,42 @@ status = "implemented"
 tests = ["impulcifer-dsp::room_tuning2_realize_synthetic_matches_secs2r", "impulcifer-dsp::room_tuning2_s2r_decay_cut_and_hf_region", "impulcifer-service::room_tuning2_bundle2_options_log_on_demo"]
 
 [[feature]]
+id = "config.room_tuning2_high_basis"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_high_transition"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_input_hp"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "room.tuning2_high_basis"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_s2r_upper_demo", "impulcifer-dsp::room_tuning2_s2r_upper_rule"]
+
+[[feature]]
+id = "room.tuning2_input_hp"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_s2r_hp8"]
+
+[[feature]]
+id = "room.tuning2_pair_phase"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_s2r_pair_phase"]
+
+[[feature]]
 id = "room.virtual_tuning2"
 kind = "stage"
 status = "implemented"

@@ -131,6 +131,45 @@ pub(super) fn tuning2_representation(
             / s.representation_rms_db.len() as f64
     })
 }
+pub(crate) fn tuning2_high_key(
+    band: &impulcifer_dsp::stages::room_tuning2::CorrectionBand,
+) -> Option<&'static str> {
+    use impulcifer_dsp::stages::room_tuning2::BandSource;
+    if band.source == BandSource::Manual || (band.basis == "strict" && band.transition == 1) {
+        None
+    } else if band.automatic_basis_configured {
+        Some("cli_room_tuning2_high")
+    } else {
+        Some("cli_room_tuning2_high_no_volume")
+    }
+}
+
+pub(crate) fn pair_phase_spans(
+    bands: &[impulcifer_dsp::stages::room_tuning2::PairPhaseBand],
+) -> String {
+    let mut spans = Vec::new();
+    let mut start = 0;
+    while start < bands.len() {
+        let mut end = start + 1;
+        while end < bands.len() && bands[end - 1].high_hz == bands[end].low_hz {
+            end += 1;
+        }
+        let worst = bands[start..end]
+            .iter()
+            .min_by(|left, right| left.loss_db.total_cmp(&right.loss_db))
+            .unwrap();
+        spans.push(format!(
+            "{:.0}-{:.0} Hz {:.0}° {:.1} dB",
+            bands[start].low_hz,
+            bands[end - 1].high_hz,
+            worst.phase_deg.abs(),
+            worst.loss_db
+        ));
+        start = end;
+    }
+    spans.join(", ")
+}
+
 fn tuning2_readme(
     report: &impulcifer_dsp::stages::room_tuning2::Tuning2Report,
     catalog: &Catalog,
@@ -151,6 +190,34 @@ fn tuning2_readme(
         out.push_str(&format!(
             " Band: {:.0}–{:.0} Hz ({source}).",
             band.low, band.high
+        ));
+        match tuning2_high_key(band) {
+            Some("cli_room_tuning2_high_no_volume") => {
+                out.push('\n');
+                out.push_str(&catalog.translate("cli_room_tuning2_high_no_volume", &json!({})));
+            }
+            Some("cli_room_tuning2_high") => {
+                out.push('\n');
+                out.push_str(&catalog.translate(
+                    "cli_room_tuning2_high",
+                    &json!({
+                        "basis":band.basis,
+                        "factor":band.transition,
+                        "schroeder":band.schroeder.map_or_else(|| "none".into(), |value| format!("{:.0}",value)),
+                        "band":band.lenient.map_or_else(|| "none".into(), |value| format!("{value:.0}")),
+                        "band_t60":band.lenient_t60_s.map_or_else(|| "none".into(), |value| format!("{value:.2}")),
+                        "high":format!("{:.0}",band.high),
+                    }),
+                ));
+            }
+            Some(_) | None => {}
+        }
+    }
+    if let Some(cutoff) = report.input_hp {
+        out.push('\n');
+        out.push_str(&catalog.translate(
+            "cli_room_tuning2_input_hp",
+            &json!({"freq":format!("{cutoff:.1}")}),
         ));
     }
     out.push_str("\n\n| Speaker | Points | Level (dB) | Trim (dB) | Source | PEQ bands | Phase strength | Phase resolution | Long modes (Hz) | Representation RMS (dB) | LF EDT before / after (ms, information) | Median excess GD before / after (ms, information) | Weak |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
@@ -302,6 +369,31 @@ fn tuning2_readme(
         || report.mode_decay
         || report.hf_phase
     {
+        out.push('\n');
+    }
+    if !report.pair_phase.is_empty() {
+        out.push_str("\n### Pair phase\n");
+        for pair in &report.pair_phase {
+            for (ear, bands) in [("left", &pair.left), ("right", &pair.right)] {
+                if bands.is_empty() {
+                    continue;
+                }
+                out.push('\n');
+                out.push_str(&catalog.translate(
+                    "cli_room_tuning2_pair_phase",
+                    &json!({
+                        "a":pair.a,
+                        "b":pair.b,
+                        "ear":ear,
+                        "spans":pair_phase_spans(bands),
+                    }),
+                ));
+            }
+        }
+        if report.mode != impulcifer_types::config::Tuning2Mode::Zero && !report.lf_align {
+            out.push('\n');
+            out.push_str(&catalog.translate("cli_room_tuning2_pair_phase_hint", &json!({})));
+        }
         out.push('\n');
     }
     out.push_str("\nPre-echo uses the first −18 dB direct peak and a 2 ms guard, against the louder of the speaker's two direct sounds. Warn only above −30 dB and at least 6 dB above the same untuned ear. Weak means mean omni/in-ear magnitude RMS exceeds 4 dB (30–300 Hz, level matched at 100–300 Hz); EDT and excess GD are information only.\n\n| Speaker | Ear | Pre-echo untuned / tuned (dB) | Warning |\n| --- | --- | --- | --- |\n");
@@ -789,8 +881,45 @@ pub(crate) fn write_outputs_checked(
 
 #[cfg(test)]
 mod tests {
-    use super::local_date;
+    use super::{local_date, tuning2_high_key};
     use chrono::{Local, NaiveDateTime, TimeZone};
+    use impulcifer_dsp::{
+        ir::ImpulseResponse,
+        stages::room_tuning2::{RcOptions, correction_band},
+    };
+
+    #[test]
+    fn upper_limit_warning_depends_on_setting_presence_not_decay_result() {
+        let point = ImpulseResponse {
+            fs: 48_000,
+            data: vec![0.0; 64],
+            recording: None,
+        };
+        let options = RcOptions {
+            high_basis: "lenient".into(),
+            high_transition: 2,
+            ..Default::default()
+        };
+        let no_volume = correction_band(&[std::slice::from_ref(&point)], &options).unwrap();
+        assert_eq!(
+            tuning2_high_key(&no_volume),
+            Some("cli_room_tuning2_high_no_volume")
+        );
+        let with_volume = correction_band(
+            &[std::slice::from_ref(&point)],
+            &RcOptions {
+                room_volume: Some(50.0),
+                ..options
+            },
+        )
+        .unwrap();
+        assert_eq!(with_volume.schroeder, None);
+        assert_eq!(with_volume.lenient, None);
+        assert_eq!(
+            tuning2_high_key(&with_volume),
+            Some("cli_room_tuning2_high")
+        );
+    }
 
     #[test]
     fn local_date_has_python_format_and_current_clock() {

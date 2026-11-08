@@ -72,6 +72,7 @@ fn options() -> Tuning2Options {
         rc: RcOptions::default(),
         level_match: true,
         mimo: None,
+        input_hp: None,
         pairs: vec![],
     }
 }
@@ -150,6 +151,7 @@ fn room_tuning2_matches_secs2_mimo() {
             &MimoOptions {
                 fsiso: entry["fsiso"].as_f64().unwrap(),
                 low: entry["f_low"].as_f64(),
+                input_hp: None,
             },
             &|speaker, stages| {
                 if setting.starts_with("mixed/") {
@@ -381,6 +383,7 @@ fn room_tuning2_mimo_reduces_late_energy_at_the_ears() {
     p.options.mimo = Some(MimoOptions {
         fsiso: 150.,
         low: None,
+        input_hp: None,
     });
     let mut tuned = brir.clone();
     let report = apply_tuning2(&mut tuned, &p).unwrap();
@@ -438,6 +441,82 @@ fn room_tuning2_no_data_changes_nothing() {
         );
     }
 }
+
+#[test]
+fn room_tuning2_input_high_pass_does_not_change_diagnostics() {
+    let (brir, plan) = cached();
+    let mut without_cut = brir.clone();
+    let without_report = apply_tuning2(&mut without_cut, plan).unwrap();
+    let mut cut_plan = plan.clone();
+    cut_plan.options.input_hp = Some(25.0);
+    let mut with_cut = brir.clone();
+    let with_report = apply_tuning2(&mut with_cut, &cut_plan).unwrap();
+    assert_eq!(
+        format!("{:?}", without_report.band),
+        format!("{:?}", with_report.band)
+    );
+    assert_eq!(
+        format!("{:?}", without_report.speakers),
+        format!("{:?}", with_report.speakers)
+    );
+    assert_eq!(without_report.pair_phase, with_report.pair_phase);
+    assert_ne!(
+        without_cut.speakers[0].left.as_ref().unwrap().data,
+        with_cut.speakers[0].left.as_ref().unwrap().data
+    );
+}
+
+#[test]
+fn room_tuning2_final_high_pass_matches_linear_convolution_for_measured_and_unmeasured() {
+    let (brir, plan) = cached();
+    let mut plan = plan.clone();
+    plan.speakers.truncate(1);
+    let measured = plan.speakers[0].speaker.clone();
+
+    let mut expected = brir.clone();
+    apply_tuning2(&mut expected, &plan).unwrap();
+    let n = analysis_len(expected.fs);
+    let filter = fft::irfft(
+        &primitives::hp8(&primitives::grid(n, expected.fs as f64), 25.0),
+        n,
+    );
+    let fade_len = (0.005 * expected.fs as f64).round() as usize;
+    for ir in expected
+        .speakers
+        .iter_mut()
+        .flat_map(|speaker| speaker.left.iter_mut().chain(&mut speaker.right))
+    {
+        let keep = ir.len();
+        let mut data =
+            impulcifer_dsp::conv::convolve(&ir.data, &filter, impulcifer_dsp::conv::Mode::Full);
+        data.truncate(keep);
+        let start = data.len().saturating_sub(fade_len);
+        for (index, value) in data[start..].iter_mut().enumerate() {
+            *value *= 0.5 * (1.0 + (std::f64::consts::PI * index as f64 / fade_len as f64).cos());
+        }
+        ir.data = data;
+    }
+
+    plan.options.input_hp = Some(25.0);
+    let mut actual = brir.clone();
+    apply_tuning2(&mut actual, &plan).unwrap();
+    let mut checked_measured = false;
+    let mut checked_unmeasured = false;
+    for (actual, expected) in actual.speakers.iter().zip(&expected.speakers) {
+        checked_measured |= actual.speaker == measured;
+        checked_unmeasured |= actual.speaker != measured;
+        for (actual, expected) in actual
+            .left
+            .iter()
+            .chain(&actual.right)
+            .zip(expected.left.iter().chain(&expected.right))
+        {
+            assert_eq!(actual.data, expected.data);
+        }
+    }
+    assert!(checked_measured && checked_unmeasured);
+}
+
 #[test]
 fn room_tuning2_one_filter_per_speaker() {
     let (brir, plan) = cached();
@@ -580,6 +659,7 @@ fn room_tuning2_runs_on_the_demo_dsp() {
         Some(MimoOptions {
             fsiso: 150.,
             low: None,
+            input_hp: None,
         }),
     ] {
         let mut p = plan.clone();
@@ -641,6 +721,7 @@ fn room_tuning2_is_thread_count_free() {
     plan.options.mimo = Some(MimoOptions {
         fsiso: 150.,
         low: None,
+        input_hp: None,
     });
     let run = |threads| {
         rayon::ThreadPoolBuilder::new()
@@ -676,6 +757,7 @@ fn room_tuning2_supports_are_band_limited() {
     plan.options.mimo = Some(MimoOptions {
         fsiso: 150.,
         low: None,
+        input_hp: None,
     });
     let mut tuned = brir.clone();
     let report = apply_tuning2_full(&mut tuned, &plan).unwrap();

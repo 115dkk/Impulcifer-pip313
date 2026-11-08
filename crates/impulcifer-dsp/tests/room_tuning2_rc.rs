@@ -541,6 +541,11 @@ fn room_tuning2_rejects_invalid_inputs() {
         high: 500.,
         source: BandSource::Default,
         schroeder: None,
+        basis: "strict".into(),
+        transition: 1,
+        lenient: None,
+        lenient_t60_s: None,
+        automatic_basis_configured: false,
         bands: vec![(20.0, 500.0)],
     };
     assert!(design_rc(&[], &opts, &band, None, None).is_err());

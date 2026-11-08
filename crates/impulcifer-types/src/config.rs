@@ -65,6 +65,10 @@ pub struct ProcessingConfig {
     pub room_tuning2_lf_align: bool,
     pub room_tuning2_mode_decay: bool,
     pub room_tuning2_hf_phase: bool,
+    pub room_tuning2_high_basis: String,
+    pub room_tuning2_high_transition: u32,
+    #[serde(deserialize_with = "string_or_number")]
+    pub room_tuning2_input_hp: String,
     pub vbass_mode: String,
     pub layout_files: String,
     pub missing_speakers: String,
@@ -138,6 +142,9 @@ impl Default for ProcessingConfig {
             room_tuning2_lf_align: false,
             room_tuning2_mode_decay: false,
             room_tuning2_hf_phase: false,
+            room_tuning2_high_basis: "strict".into(),
+            room_tuning2_high_transition: 1,
+            room_tuning2_input_hp: "off".into(),
             vbass_mode: "auto".into(),
             layout_files: "auto".into(),
             missing_speakers: "silent".into(),
@@ -206,7 +213,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 35] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 38] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -242,6 +249,9 @@ pub const EXTENSION_FIELD_NAMES: [&str; 35] = [
     "room_tuning2_lf_align",
     "room_tuning2_mode_decay",
     "room_tuning2_hf_phase",
+    "room_tuning2_high_basis",
+    "room_tuning2_high_transition",
+    "room_tuning2_input_hp",
 ];
 
 fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
@@ -466,6 +476,27 @@ impl ProcessingConfig {
         }
         parse_tuning2_bands(&self.room_tuning2_bands)
             .map_err(|reason| invalid("room_tuning2_bands", reason))?;
+        if !["strict", "lenient"].contains(&self.room_tuning2_high_basis.as_str()) {
+            return Err(invalid(
+                "room_tuning2_high_basis",
+                "must be strict or lenient",
+            ));
+        }
+        if ![1, 2, 4].contains(&self.room_tuning2_high_transition) {
+            return Err(invalid("room_tuning2_high_transition", "must be 1, 2 or 4"));
+        }
+        if self.room_tuning2_input_hp != "off" {
+            self.room_tuning2_input_hp
+                .parse::<f64>()
+                .ok()
+                .filter(|value| value.is_finite() && (10.0..=50.0).contains(value))
+                .ok_or_else(|| {
+                    invalid(
+                        "room_tuning2_input_hp",
+                        "must be off or between 10 and 50 Hz",
+                    )
+                })?;
+        }
         for (field, value, lo, hi) in [
             ("room_tuning2_high", &self.room_tuning2_high, 100.0, 20000.0),
             (
@@ -553,6 +584,18 @@ impl ProcessingConfig {
                 return Err(ConfigError::Invalid {
                     field: key.clone(),
                     reason: "expected a string".into(),
+                });
+            }
+            if key == "room_tuning2_input_hp" && !(value.is_string() || value.is_number()) {
+                return Err(ConfigError::Invalid {
+                    field: key.clone(),
+                    reason: "expected a string or number".into(),
+                });
+            }
+            if key == "room_tuning2_high_transition" && value.as_u64().is_none() {
+                return Err(ConfigError::Invalid {
+                    field: key.clone(),
+                    reason: "expected a non-negative integer".into(),
                 });
             }
             if FIELD_NAMES.contains(&key.as_str()) || EXTENSION_FIELD_NAMES.contains(&key.as_str())

@@ -48,6 +48,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEMO = Path("data") / "demo"
 TEST_SIGNAL = Path("data") / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
+VOLUME = 95
 
 # (name, CLI arguments, first 3.x version whose CLI runs it). The demo has
 # speaker-ear room recordings, so every scenario without --no_room_correction
@@ -117,6 +118,36 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "room_tuning2_hf_phase",
         ("--room_mode=tuning2", "--room_tuning2_hf_phase=true"),
         "3.14.0",
+    ),
+    (
+        "room_tuning2_volume",
+        ("--room_mode=tuning2", f"--room_volume={VOLUME}"),
+        "3.5.0",
+    ),
+    (
+        "room_tuning2_high_lenient",
+        (
+            "--room_mode=tuning2",
+            f"--room_volume={VOLUME}",
+            "--room_tuning2_high_basis=lenient",
+            "--room_tuning2_high_transition=2",
+        ),
+        "3.15.0",
+    ),
+    (
+        "room_tuning2_input_hp",
+        ("--room_mode=tuning2", "--room_tuning2_input_hp=25"),
+        "3.15.0",
+    ),
+    (
+        "room_tuning2_input_hp_mimo",
+        (
+            "--room_mode=tuning2",
+            "--room_tuning2_mimo=true",
+            "--room_tuning2_fsiso=120",
+            "--room_tuning2_input_hp=25",
+        ),
+        "3.15.0",
     ),
     ("room_tuning2_zero", ("--room_mode=tuning2", "--room_tuning2_mode=zero"), "3.5.0"),
     ("room_tuning2_linear", ("--room_mode=tuning2", "--room_tuning2_mode=linear"), "3.5.0"),

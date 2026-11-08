@@ -24,6 +24,11 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | `decay_cut`, `mode_t60_48k_*`, `refine_*`, `mode_decay_*` | 모드 감쇠 컷, 전체 샘플레이트 T60, 공진 정련, 스피커별 컷 설계 |
 | `hf_region_*`, `realize_*` | 고역 위상 보정 구간과 실현 함수의 저역 상한·고역 위상 보정 결과 |
 | `rc_*` | 선택별·스피커별 끝단 설계 곡선, PEQ, FIR, 응답, 위상 강도와 진단 |
+| `band_sos`, `band_t60_*` | 엄격한 옥타브와 너그러운 1/3옥타브 대역 필터, 교차점과 감쇠 시간 |
+| `upper_demo_*`, `upper_rule` | 엄격한 값, 너그러운 대역 근거와 선택, 전이 배수를 적용한 상한 |
+| `hp8` | 8차 버터워스 하이패스 계수와 복소 응답 |
+| `pair_phase_*` | 스피커 짝의 대역별 위상과 상쇄량, 보고할 짝의 순서와 여섯 쌍 제한 |
+| `rc_*_upper_mixed` | 너그러운 상한과 2배 전이를 쓴 끝단 RC 설계 및 진단 |
 
 ## Gates
 
@@ -62,6 +67,14 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | realization synthetic cases | `Exact` + `Curve` | 7.105427357601002e-15 | 7.072561793909911e-15 |
 | mode-decay design | `Rebuilt` | 2.3386093062072177e-10 | 9.129288844769646e-12 |
 | RC design and complete notes | `Exact` + `Rebuilt` + `FitDependent` | 1.939670646322611e-10 | 5.335245331134957e-12 |
+| upper-limit band SOS | `Curve` | 4.440892098500626e-16 | 1.2109958378534601e-16 |
+| upper-limit band T60 (synthetic and demo) | `Exact` + `Rebuilt` | 0 | 0 |
+| upper-limit rule and demo evidence | `Exact` + `Rebuilt` | 0 | 0 |
+| HP8 | `Exact` | 0 | 0 |
+| pair phase | `Exact` | 1.9984014443252818e-15 | 5.287077574998131e-18 |
+| upper-limit RC design | `Rebuilt` + `FitDependent` | 4.263256414560601e-14 | 1.2185139258003184e-14 |
+
+상한 대역 SOS는 Impulcifer가 3.5.0부터 엄격한 추정에 쓰던 Butterworth 포트를 그대로 사용한다. 기본 출력의 바이트를 지켜야 하므로 오라클의 설계 연산으로 바꾸지 않는다. Debian glibc 2.41에서도 일부 계수가 1~2 ULP 달랐고, 최대 절대 오차는 4.440892098500626e-16, 최대 상대 L2 오차는 1.2109958378534601e-16이었다. 따라서 SOS 계수는 `Curve`로 판정하며, 같은 필터로 얻은 감쇠 교차 인덱스는 오라클과 정확히 같아 계속 exact로 검사한다.
 
 같은 libm을 쓴 Ubuntu 실행에서는 FFT 차이 때문에 `Rebuilt` 값이 다음만큼 달랐다. 이 값은 1e-9 게이트 안이다.
 

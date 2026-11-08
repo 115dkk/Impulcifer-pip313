@@ -207,6 +207,97 @@ pub fn hp4(f: &[f64], fc: f64) -> Vec<Complex64> {
         })
         .collect()
 }
+
+/// Coefficients of the normalized analog order-eight Butterworth denominator.
+pub fn hp8_coefficients() -> [f64; 9] {
+    let mut coefficients = vec![Complex64::new(1.0, 0.0)];
+    for i in 0..8 {
+        let theta = PI * (2.0 * i as f64 - 7.0) / 16.0;
+        let pole = -Complex64::new(theta.cos(), theta.sin());
+        let mut next = vec![Complex64::new(0.0, 0.0); coefficients.len() + 1];
+        for (k, value) in coefficients.iter().enumerate() {
+            next[k] += value;
+            next[k + 1] -= pole * value;
+        }
+        coefficients = next;
+    }
+    std::array::from_fn(|index| coefficients[index].re)
+}
+
+fn stable_complex_division(numerator: Complex64, denominator: Complex64) -> Complex64 {
+    if denominator.re.abs() >= denominator.im.abs() {
+        let ratio = denominator.im / denominator.re;
+        let scale = 1.0 / (denominator.re + denominator.im * ratio);
+        Complex64::new(
+            (numerator.re + numerator.im * ratio) * scale,
+            (numerator.im - numerator.re * ratio) * scale,
+        )
+    } else {
+        let ratio = denominator.re / denominator.im;
+        let scale = 1.0 / (denominator.re * ratio + denominator.im);
+        Complex64::new(
+            (numerator.re * ratio + numerator.im) * scale,
+            (numerator.im * ratio - numerator.re) * scale,
+        )
+    }
+}
+
+/// Analog order-eight Butterworth high-pass response in the specified operation order.
+pub fn hp8(frequencies: &[f64], cutoff: f64) -> Vec<Complex64> {
+    let coefficients = hp8_coefficients();
+    let reciprocal_cutoff = 1.0 / cutoff;
+    frequencies
+        .iter()
+        .map(|frequency| {
+            let s = Complex64::new(0.0, frequency * reciprocal_cutoff);
+            let mut denominator = Complex64::new(0.0, 0.0);
+            for coefficient in coefficients {
+                denominator = denominator * s + coefficient;
+            }
+            let mut numerator = Complex64::new(1.0, 0.0);
+            for _ in 0..8 {
+                numerator *= s;
+            }
+            stable_complex_division(numerator, denominator)
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BandDecay {
+    pub i5: usize,
+    pub i25: usize,
+    pub decay_s: Option<f64>,
+}
+
+/// Decay used by the strict and lenient automatic tuning2 upper-limit estimates.
+pub fn band_decay(ir: &[f64], fs: f64, low_hz: f64, high_hz: f64) -> BandDecay {
+    let filtered = filters::sosfilt(
+        &filters::butter_bandpass(4, low_hz / (fs / 2.0), high_hz / (fs / 2.0)),
+        ir,
+    );
+    let mut energy = vec![0.0; filtered.len()];
+    let mut total = 0.0;
+    for index in (0..filtered.len()).rev() {
+        total += filtered[index] * filtered[index];
+        energy[index] = total;
+    }
+    let decay_db: Vec<_> = energy
+        .iter()
+        .map(|energy| 10.0 * (energy / (total + 1e-30) + 1e-30).log10())
+        .collect();
+    let i5 = decay_db.iter().position(|value| *value < -5.0).unwrap_or(0);
+    let i25 = decay_db
+        .iter()
+        .position(|value| *value < -25.0)
+        .unwrap_or(0);
+    BandDecay {
+        i5,
+        i25,
+        decay_s: (i25 > i5 && i5 > 0).then(|| 3.0 * (i25 - i5) as f64 / fs),
+    }
+}
+
 /// Symmetric Hamming-window low-pass, normalized to unit DC gain.
 pub fn firwin(taps: usize, cutoff: f64, fs: f64) -> Vec<f64> {
     let fc = cutoff / (fs / 2.);
