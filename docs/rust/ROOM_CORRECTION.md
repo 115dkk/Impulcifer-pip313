@@ -538,6 +538,8 @@ progress increment. `room_range`, `room_max_boost` and every v1 option
 | `room_tuning2_high_basis` | `"strict"` | `strict`, `lenient` (3.15.0) |
 | `room_tuning2_high_transition` | 1 | 1, 2, 4 (3.15.0) |
 | `room_tuning2_input_hp` | `"off"` | `off` or 10–50 Hz (3.15.0) |
+| `room_tuning2_mimo_early` | 60 | 5–60 ms (3.16.0) |
+| `room_tuning2_mimo_ear_guard` | false | true / false (3.16.0) |
 
 `room_tuning2_mode`, `room_tuning2_high` and `room_tuning2_mimo_low` accept
 strings or numbers in JSON and are stored as decimal strings, like v1's
@@ -576,6 +578,15 @@ or 4. `room_tuning2_high_basis` rejects any other word, including SECS 2R's
 from 10 to 50 inclusive, as a string or a number in JSON, stored as a decimal
 string like `room_tuning2_mimo_low`. With a numeric `room_tuning2_high` the two
 upper-limit options do nothing. The input high-pass works in every mode.
+
+The two options of 3.16.0 complete the MIMO part (ADR 0015, bundle 4): the early
+window after the direct sound that the supports leave alone
+(`room_tuning2_mimo_early`) and a guard that judges each ear on its own instead of
+their sum (`room_tuning2_mimo_ear_guard`), both in "MIMO supports". Like
+`room_tuning2_fsiso` they are read only with `room_tuning2_mimo` on and do nothing
+otherwise. With the defaults every output is byte-identical to 3.15.0.
+`room_tuning2_mimo_early` is a finite number of milliseconds from 5 to 60 inclusive
+(a JSON number, not a string); `room_tuning2_mimo_ear_guard` is a boolean.
 
 Modes (FIR taps at 48 kHz, PEQ bands, lift = design delay, phase resolution β):
 
@@ -1152,8 +1163,12 @@ have an RC), in speaker order; every speaker with a BRIR may support.
   support path `G_e,j = B_e,j * HP4(f; low_j)`, `γ_e,j = LR(G_e,j, n)`;
   `ℓ = firwin(31, Fsiso, fs=600)` (Hamming, unit DC gain). Candidates C for input
   i: the supporting speakers except i, R = |C|.
-- **Least squares.** Per ear: `k_e = first index with |x_e| > 0.1*max|x_e|`,
-  late window `L_e[t] = 1` for `t ≥ k_e + 36` (60 ms), else 0. For each
+- **Least squares.** Per ear: `k_e = first index with |x_e| > 0.1*max|x_e|`
+  (0 if none). The early window is `E = room_tuning2_mimo_early` ms, or
+  `e = max(round(E*600/1000), 3)` samples at 600 Hz, rounded half away from zero
+  (60 ms → 36, 30 ms → 18, 20 ms → 12, 7.5 ms → 5, 5 ms → 3; before 3.16.0 e was
+  always 36). Late window `L_e[t] = 1` for `t ≥ k_e + e`, else 0 (all 0 when
+  `k_e + e ≥ n`). For each
   candidate `c_e,j = (γ_e,j ⊛ ℓ)[:n]` and the n × 180 convolution matrix
   `C(c)[t, k] = c[t−k]` (t ≥ k). Stack `A_e = [C(c_e,1) … C(c_e,R)]`. Rows: the
   late blocks `L_e·A_e` for left then right, then the early blocks
@@ -1172,15 +1187,44 @@ have an RC), in speaker order; every speaker with a BRIR may support.
   no supports (`cli_room_tuning2_mimo_off`).
   *Band change:* on `rfftfreq(1440, 1/600)`, bands `[e_m, e_(m+1))` between
   consecutive edges `e = 20*2^a`, a the elements of
-  `numpy.arange(0, log2(Fsiso/20) + 1e-9, 1/3)` (20–127 Hz for 150 Hz), plus `[p − 1.5, p + 1.5)` for each p in `LP({x_e}, 6)`. Sum the band energy of
-  `|rfft_1440(L_e*x_e)|²` (before) and `|rfft_1440(L_e*y_e)|²` (after) over both
+  `numpy.arange(0, log2(Fsiso/20) + 1e-9, 1/3)` (20–127 Hz for 150 Hz), plus `[p − 1.5, p + 1.5)` for each p in `LP({x_e}, 6)`. The guard has its
+  own late window `W_e[t] = 1` for `t ≥ k_e + 36`, else 0; it stays at 60 ms
+  whatever `room_tuning2_mimo_early` is. Sum the band energy of
+  `|rfft_1440(W_e*x_e)|²` (before) and `|rfft_1440(W_e*y_e)|²` (after) over both
   ears; the change is the largest `10*log10((after + 1e-30)/before)` over bands
   with energy before (−99 if none).
   *Tail change:* modes = sorted set of `round(p, 1)` over `LP({x_e}, 6)` and
   `LP({y_e}, 6)`. For each mode, order-2 Butterworth band-pass
   `[max(p−1.5, 1), p+1.5]` at 600 Hz; a = Σ_e Σ_(t ≥ k_e+180) of the filtered
-  x_e squared, b the same for y_e (same k_e). Over modes with `a > 0` and
+  x_e squared, b the same for y_e (same k_e; the 300 ms start does not follow
+  `room_tuning2_mimo_early` either). Over modes with `a > 0` and
   `a ≥ 0.01*max a`, the largest `10*log10((b + 1e-30)/a)` (−99 if none).
+- **Ear guard** (`room_tuning2_mimo_ear_guard`, 3.16.0). Off, both changes
+  compare energies summed over the two ears, as above, so a support that helps
+  one ear more than it hurts the other passes. On, each ear is judged on its own
+  and the worse ear decides. With
+  `c(a, b) = 10*log10((b + 1e-30)/(a + 1e-30))` when `a > 0`, `+99` when `a = 0`
+  and `b > 0`, and no value when both are 0 (the floor is on both sides here,
+  unlike the summed form; a support that puts energy where an ear had none is a
+  violation, an ear with none before and after says nothing):
+  *Band change:* with `a_e,m` and `b_e,m` ear e's band-m energy before and after
+  (each ear's own sum over the band's bins, same bands and windows as above),
+  the change is the largest of −99 and every `c(a_e,m, b_e,m)` over ears and
+  bands. Scan ears in order (left, then right) and, within an ear, the bands in
+  the order above, starting from −99; only a strictly larger value replaces the
+  current one (this decides which ear and band are recorded on a tie).
+  *Tail change:* the modes, filters and starts are as above. A mode is used when
+  its energy summed over the ears, `a = Σ_e a_e`, satisfies `a > 0` and
+  `a ≥ 0.01*max a` (the same selection as off). Its value is the largest of −99
+  and `c(a_e, b_e)` over the ears (left first, strictly larger replaces), and the
+  change is the largest of −99 and the used modes' values, scanned in ascending
+  frequency (strictly larger replaces).
+  The scales, the order of trials and the 1 dB limits do not change. For the
+  diagnostics the design keeps, for the last scale the guard rejected (none if
+  the first scale passed), which ear set the band change and the band
+  `[lo, hi)`, when that change was above 1 dB, and which ear set the tail change
+  and the mode's frequency, when that change was above 1 dB, each with its value
+  in dB. Off, none of this is kept.
 - **Result.** `s_ij = scale*s_j`, level `10*log10(max(ratio*scale², 1e-30))` dB,
   logged per input as `cli_room_tuning2_mimo`.
 
@@ -1317,6 +1361,23 @@ With the 3.15.0 options and report, once per run unless stated:
 The README lists the upper-limit basis with the band, the cut with the mode,
 and the pair-phase records in a section of their own.
 
+With the 3.16.0 options, only when `room_tuning2_mimo` is on:
+
+- `cli_room_tuning2_mimo_early` once when `room_tuning2_mimo_early` is not 60:
+  E in ms to one decimal.
+- With `room_tuning2_mimo_ear_guard` on, per input whose guard rejected at least
+  one scale, after that input's `cli_room_tuning2_mimo` or
+  `cli_room_tuning2_mimo_off` line and for the last rejected scale:
+  `cli_room_tuning2_mimo_ear_band` (speaker, the rejected scale in dB as an
+  integer, the ear `left` or `right`, lo and hi in Hz to one decimal, the change
+  in dB to one decimal) when the band change set it, and
+  `cli_room_tuning2_mimo_ear_tail` (speaker, the rejected scale, the ear, the
+  mode in Hz to one decimal, the change in dB to one decimal) when the tail
+  change set it. Both lines when both did.
+
+The README lists the early window and the ear guard with the MIMO settings, and
+the same ear records under each input.
+
 ### Reference acceptance
 
 The port is gated like the 2.x migration: `tests/migration/export_goldens_secs2.py`
@@ -1382,6 +1443,20 @@ definition (every long spectrum times HP8), and the final convolution with the
 cut is Impulcifer's own; tests check them directly and brir-3x checks their bytes
 against thread count.
 
+The 3.16.0 additions go under that refusal: SECS 2R checks the position count
+only around its whole MIMO run, so the exporter feeds the two-ear stage
+boundaries of the `s2_mimo_*` fixtures (SECS 2's x, paths, low-pass and direct
+energy per input) to SECS 2R's own early-window conversion, normal equations,
+guards and per-input design. The families are the early-window and ear-guard
+rules as tables, the normal equations at several early windows, the whole design
+per input (bisection, every guard trial with the ear that set it, supports,
+level) at 60, 20 and 5 ms with the ear guard off and on, and guard evaluations
+on constructed responses (one ear worse, both better, new energy at a silent ear,
+an ear with no late energy, a tie). The 60 ms runs with the guard off reproduce
+the `s2_mimo_*` results and serve as the control. The demo BRIRs pass through
+Impulcifer's own RC before MIMO, so end to end there is still no oracle;
+brir-3x checks those bytes against thread count.
+
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of
 N = 131072) for 62 runs on the demo omni files: every file/speaker as one
@@ -1413,11 +1488,15 @@ mask's own criterion (its only use here is the rolloff clamp). From bundle 3: th
 input high-pass's DSP exports and the scorecard that divides the cut back out
 (here every diagnostic is measured before the cut), its LFE input (no LFE is
 tuned here), and the pair-phase check's exclusion of subwoofers (there are
-none).
+none). From bundle 4: the early window's effect on SECS 2R's support ranking
+(the ranking exists only for the per-input support limit, which is not
+reproduced) and on its IIR realization (not reproduced), the seat guard's IIR
+guards, and the project-file and note formats (the ear records above take the
+notes' place).
 
 Virtual room tuning v2 reproduces the correction method of SECS 2 by the
-Speaker Gallery (DCinside), released under GPL-3.0, and the 3.13.0, 3.14.0 and
-3.15.0 options reproduce improvements the maintainer made in SECS 2R
+Speaker Gallery (DCinside), released under GPL-3.0, and the 3.13.0, 3.14.0,
+3.15.0 and 3.16.0 options reproduce improvements the maintainer made in SECS 2R
 (GPL-3.0/AGPL-3.0).
 Impulcifer's implementation is independent and contains no SECS or SECS 2R
 code; both were used only as oracles to produce the reference numbers.
