@@ -2440,6 +2440,8 @@ function updateRoomRows() {
     "bf-room-tuning2-mimo-row": tuning2,
     "bf-room-tuning2-fsiso-row": tuning2 && mimo,
     "bf-room-tuning2-mimo-low-row": tuning2 && mimo,
+    "bf-room-tuning2-mimo-early-row": tuning2 && mimo,
+    "bf-room-tuning2-mimo-ear-guard-row": tuning2 && mimo,
   };
   for (const [id, shown] of Object.entries(rows)) $(id).hidden = !shown;
   for (const id of ["bf-room-tuning2-lf-align", "bf-room-tuning2-hf-phase"]) {
@@ -2495,6 +2497,8 @@ function applyRoomDefaults() {
   el("bf-room-tuning2-mimo", HTMLInputElement).checked = defaults.room_tuning2_mimo === true;
   el("bf-room-tuning2-fsiso", HTMLInputElement).value = String(brirDefault("room_tuning2_fsiso", 150));
   el("bf-room-tuning2-mimo-low", HTMLInputElement).value = numberSpecText(defaults.room_tuning2_mimo_low);
+  el("bf-room-tuning2-mimo-early", HTMLInputElement).value = String(brirDefault("room_tuning2_mimo_early", 60));
+  el("bf-room-tuning2-mimo-ear-guard", HTMLInputElement).checked = defaults.room_tuning2_mimo_ear_guard === true;
   setRoomMode(isRoomMode(defaults.room_mode) ? defaults.room_mode : "eq");
 }
 
@@ -2596,6 +2600,8 @@ function addRoomTuning2Args(args) {
   if (mimo) {
     args.room_tuning2_fsiso = numOr("bf-room-tuning2-fsiso", brirDefault("room_tuning2_fsiso", 150));
     args.room_tuning2_mimo_low = numOrNull("bf-room-tuning2-mimo-low") ?? "auto";
+    args.room_tuning2_mimo_early = numOr("bf-room-tuning2-mimo-early", brirDefault("room_tuning2_mimo_early", 60));
+    args.room_tuning2_mimo_ear_guard = checked("bf-room-tuning2-mimo-ear-guard");
   }
 }
 
