@@ -23,7 +23,8 @@ ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
                   + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 3 * (2 * 2 * 2) + 2 * 2 + 2 * 2
                   + 2 * 2 * 2  # bundle 2: mixed and zero, English/Korean, dark/light
-                  + 2 * 2)  # bundle 3: lenient, ×2 and input high-pass, English/Korean, dark/light
+                  + 2 * 2  # bundle 3: lenient, ×2 and input high-pass, English/Korean, dark/light
+                  + 2 * 2)  # bundle 4: MIMO early interval and ear guard, English/Korean, dark/light
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -1217,7 +1218,9 @@ def room_tuning2_checks(browser):
               "#bf-room-tuning-curtain-row", "#bf-room-tuning-delay-row", "#bf-room-phase-limit-row",
               "#bf-room-phase-schroeder-row")
     facts = ("#bf-room-volume-row", "#bf-schroeder-freq-row")
-    mimo_rows = ("#bf-room-tuning2-fsiso-row", "#bf-room-tuning2-mimo-low-row")
+    mimo_rows = ("#bf-room-tuning2-fsiso-row", "#bf-room-tuning2-mimo-low-row",
+                 "#bf-room-tuning2-mimo-early-row", "#bf-room-tuning2-mimo-ear-guard-row")
+    mimo_keys = {"room_tuning2_fsiso", "room_tuning2_mimo_low", "room_tuning2_mimo_early", "room_tuning2_mimo_ear_guard"}
     latency = "#bf-room-tuning2-latency-row"
     for skin in SKINS:
         context, page, errors = open_page(browser, skin, "dark", "en", "idle")
@@ -1249,8 +1252,8 @@ def room_tuning2_checks(browser):
         assert sent["room_tuning2_max_boost"] == 10 and sent["room_tuning2_low"] == 20, sent
         assert sent["room_tuning2_high"] == "auto" and sent["room_tuning2_mimo"] is False, sent
         assert sent["room_tuning_level_match"] is True and {"room_volume", "schroeder_freq"} <= sent.keys(), sent
-        assert not {"room_tuning2_fsiso", "room_tuning2_mimo_low", "room_range", "room_max_boost", "fr_combination_method",
-                    "room_tuning_delay", "room_tuning_phase_limit", "room_tuning_max_boost", "room_tuning_curtain"} & sent.keys(), sent
+        assert not (mimo_keys | {"room_range", "room_max_boost", "fr_combination_method", "room_tuning_delay",
+                                 "room_tuning_phase_limit", "room_tuning_max_boost", "room_tuning_curtain"}) & sent.keys(), sent
         assert sent["room_tuning2_dip_limit"] is False and sent["room_tuning2_low_protect"] is False, sent
         assert sent["room_tuning2_bands"] == "", sent
         assert all(shown(high_rows + (hp_row,))) and not page.locator(volume_hint).is_visible(), skin
@@ -1352,14 +1355,33 @@ def room_tuning2_checks(browser):
         sent = request()
         assert sent["room_tuning2_mimo"] is True and sent["room_tuning2_fsiso"] == 150, sent
         assert sent["room_tuning2_mimo_low"] == "auto", sent
+        early = page.locator("#bf-room-tuning2-mimo-early")
+        ear_guard = page.locator("#bf-room-tuning2-mimo-ear-guard")
+        assert early.input_value() == "60" and not ear_guard.is_checked(), skin
+        assert sent["room_tuning2_mimo_early"] == 60 and sent["room_tuning2_mimo_ear_guard"] is False, sent
+        early.fill("")
+        assert request()["room_tuning2_mimo_early"] == 60, skin
+        early.fill("20")
+        ear_guard.check()
         page.locator("#bf-room-tuning2-fsiso").fill("100")
         page.locator("#bf-room-tuning2-mimo-low").fill("40")
         sent = request()
         assert sent["room_tuning2_fsiso"] == 100 and sent["room_tuning2_mimo_low"] == 40, sent
+        assert sent["room_tuning2_mimo_early"] == 20 and sent["room_tuning2_mimo_ear_guard"] is True, sent
+        for other_mode in ("eq", "tuning"):
+            page.locator(f"#bf-room-mode-{other_mode}").click()
+            assert not any(shown(mimo_rows)) and not mimo_keys & request().keys(), (skin, other_mode)
+        page.locator("#bf-room-mode-tuning2").click()
+        assert all(shown(mimo_rows)), skin
+        page.locator("#bf-room-tuning2-mimo").uncheck()
+        assert not any(shown(mimo_rows)) and not mimo_keys & request().keys(), skin
+        page.locator("#bf-room-tuning2-mimo").check()
+        assert early.input_value() == "20" and ear_guard.is_checked(), skin
         assert page.locator("#bf-room-tuning2-high").get_attribute("placeholder") == page.evaluate(
             "t('placeholder_room_tuning2_auto')")
         page.evaluate("state.brirDefaults = {room_mode: 'tuning2', room_tuning2_mode: '60', room_tuning2_high: '250',"
                       " room_tuning2_mimo: true, room_tuning2_mimo_low: 'auto', room_tuning2_fsiso: 120,"
+                      " room_tuning2_mimo_early: 30, room_tuning2_mimo_ear_guard: true,"
                       " room_tuning2_dip_limit: true, room_tuning2_low_protect: true,"
                       " room_tuning2_mode_decay: true, room_tuning2_lf_align: true, room_tuning2_hf_phase: true,"
                       " room_tuning2_high_basis: 'lenient', room_tuning2_high_transition: 4, room_tuning2_input_hp: '30',"
@@ -1369,6 +1391,11 @@ def room_tuning2_checks(browser):
         assert page.locator("#bf-room-tuning2-mimo").is_checked()
         assert page.locator("#bf-room-tuning2-mimo-low").input_value() == ""
         assert page.locator("#bf-room-tuning2-fsiso").input_value() == "120"
+        assert early.input_value() == "30" and ear_guard.is_checked(), skin
+        sent = request()
+        assert sent["room_tuning2_mimo_early"] == 30 and sent["room_tuning2_mimo_ear_guard"] is True, sent
+        early.fill("")
+        assert request()["room_tuning2_mimo_early"] == 30, skin
         assert page.locator("#bf-room-tuning2-dip-limit").is_checked()
         assert page.locator("#bf-room-tuning2-low-protect").is_checked()
         assert page.locator("#bf-room-tuning2-bands").input_value() == "1200-2400"
@@ -1395,6 +1422,8 @@ def room_tuning2_checks(browser):
         assert page.locator("#bf-room-mode-eq").get_attribute("aria-checked") == "true"
         assert mode.input_value() == "mixed" and page.locator("#bf-room-tuning2-high").input_value() == ""
         assert not page.locator("#bf-room-tuning2-mimo").is_checked()
+        assert early.input_value() == "60" and not ear_guard.is_checked(), skin
+        assert not any(shown(mimo_rows)), skin
         assert not page.locator("#bf-room-tuning2-dip-limit").is_checked()
         assert not page.locator("#bf-room-tuning2-low-protect").is_checked()
         assert page.locator("#bf-room-tuning2-bands").input_value() == ""
@@ -1411,7 +1440,8 @@ def room_tuning2_checks(browser):
         context.close()
     print("Gallery room tuning 2 checks: rows per mode, filters and latency, automatic band facts, MIMO limits, "
           "dip limit, low-end protection, extra bands, mode decay, bass arrival, treble phase, FIR-only state, "
-          "upper-limit basis and multiplier, volume hint, input high-pass, tooltips, defaults, both skins OK", flush=True)
+          "upper-limit basis and multiplier, volume hint, input high-pass, MIMO early interval and ear guard, "
+          "tooltips, defaults, both skins OK", flush=True)
 
 
 def room_file_checks(browser):
@@ -1779,6 +1809,7 @@ def tooltip_checks(browser):
                 assert page.evaluate("document.activeElement.getAttribute('aria-describedby')") == tip, (skin, tip)
         expected = {"bf-room-mode-tip", "bf-room-range-tip", "bf-room-tuning-curtain-tip", "bf-room-tuning-level-match-tip",
                     "bf-room-tuning2-mode-tip", "bf-room-tuning2-high-tip", "bf-room-tuning2-mimo-tip",
+                    "bf-room-tuning2-mimo-early-tip", "bf-room-tuning2-mimo-ear-guard-tip",
                     "bf-room-tuning2-bands-tip", "bf-room-tuning2-dip-limit-tip", "bf-room-tuning2-low-protect-tip",
                     "bf-room-tuning2-mode-decay-tip", "bf-room-tuning2-lf-align-tip", "bf-room-tuning2-hf-phase-tip",
                     "bf-room-tuning2-high-basis-tip", "bf-room-tuning2-high-transition-tip", "bf-room-tuning2-input-hp-tip",
@@ -2014,6 +2045,11 @@ def render_gallery(output):
                 assert page.locator("#bf-room-tuning2-high-volume-hint").is_visible()
                 page.locator("#bf-room-tuning2-high-basis-row").scroll_into_view_if_needed()
                 shots.append(shoot(page, output, f"processing-tuning2-bundle3-studio-{language}-{theme}", errors))
+                page.locator("#bf-room-tuning2-mimo").check()
+                page.locator("#bf-room-tuning2-mimo-early").fill("20")
+                page.locator("#bf-room-tuning2-mimo-ear-guard").check()
+                page.locator("#bf-room-tuning2-mimo-ear-guard-row").scroll_into_view_if_needed()
+                shots.append(shoot(page, output, f"processing-tuning2-bundle4-studio-{language}-{theme}", errors))
             context.close()
         for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
             context, page, errors = open_page(browser, skin, theme, language, "idle")

@@ -156,6 +156,26 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         ("--room_mode=tuning2", "--room_tuning2_mimo=true", "--room_tuning2_fsiso=120"),
         "3.5.0",
     ),
+    (
+        "room_tuning2_mimo_early",
+        (
+            "--room_mode=tuning2",
+            "--room_tuning2_mimo=true",
+            "--room_tuning2_fsiso=120",
+            "--room_tuning2_mimo_early=20",
+        ),
+        "3.16.0",
+    ),
+    (
+        "room_tuning2_mimo_ear_guard",
+        (
+            "--room_mode=tuning2",
+            "--room_tuning2_mimo=true",
+            "--room_tuning2_fsiso=120",
+            "--room_tuning2_mimo_ear_guard=true",
+        ),
+        "3.16.0",
+    ),
     ("no_room_correction", ("--no_room_correction",), "3.0.0"),
     ("virtual_bass", ("--vbass", "--vbass_freq=250"), "3.0.0"),
     ("virtual_bass_auto", ("--vbass",), "3.0.0"),

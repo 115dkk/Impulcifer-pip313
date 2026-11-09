@@ -519,6 +519,8 @@ fn mimo_bench() {
             fsiso: 150.,
             low: None,
             input_hp: None,
+            early_ms: 60.0,
+            ear_guard: false,
         }),
         input_hp: None,
         pairs: vec![],

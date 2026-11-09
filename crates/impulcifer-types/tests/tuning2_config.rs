@@ -16,6 +16,8 @@ fn config_room_tuning2_defaults_and_validation() {
             "room_tuning2_high_basis",
             "room_tuning2_high_transition",
             "room_tuning2_input_hp",
+            "room_tuning2_mimo_early",
+            "room_tuning2_mimo_ear_guard",
         ]
     );
     let defaults = serde_json::to_value(ProcessingConfig::default()).unwrap();
@@ -36,6 +38,8 @@ fn config_room_tuning2_defaults_and_validation() {
         ("high_basis", json!("strict")),
         ("high_transition", json!(1)),
         ("input_hp", json!("off")),
+        ("mimo_early", json!(60.0)),
+        ("mimo_ear_guard", json!(false)),
     ] {
         let key = format!("room_tuning2_{key}");
         assert_eq!(defaults[&key], value);
@@ -71,10 +75,21 @@ fn config_room_tuning2_defaults_and_validation() {
         ("room_tuning2_max_boost", 0.0, 10.0),
         ("room_tuning2_low", 10.0, 200.0),
         ("room_tuning2_fsiso", 50.0, 150.0),
+        ("room_tuning2_mimo_early", 5.0, 60.0),
     ] {
         for (n, valid) in [(lo, true), (hi, true), (lo - 0.1, false), (hi + 0.1, false)] {
             check(key, json!(n), valid);
         }
+    }
+    check("room_tuning2_mimo_early", json!(4.99), false);
+    check("room_tuning2_mimo_early", json!(60.01), false);
+    for value in [f64::NAN, f64::INFINITY] {
+        let config = ProcessingConfig {
+            room_tuning2_mimo_early: value,
+            ..Default::default()
+        };
+        let error = config.validate_room_options().unwrap_err().to_string();
+        assert!(error.contains("room_tuning2_mimo_early"), "{error}");
     }
     for key in ["room_tuning2_high", "room_tuning2_mimo_low"] {
         check(key, json!("auto"), true);
@@ -87,6 +102,7 @@ fn config_room_tuning2_defaults_and_validation() {
             "room_tuning2_lf_align",
             "room_tuning2_mode_decay",
             "room_tuning2_hf_phase",
+            "room_tuning2_mimo_ear_guard",
         ] {
             check(key, json!(value), true);
         }

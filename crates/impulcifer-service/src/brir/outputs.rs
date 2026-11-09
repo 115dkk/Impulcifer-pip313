@@ -410,7 +410,11 @@ fn tuning2_readme(
         }
     }
     if let Some(mimo) = &report.mimo {
-        out.push_str("\n### MIMO supports\n\n| Input | Supports | Support level (dB) | Guard | Band change (dB) | Tail change (dB) |\n| --- | --- | --- | --- | --- | --- |\n");
+        out.push_str(&format!(
+            "\n### MIMO supports\n\nEarly window: {:.1} ms. Ear guard: {}.\n\n| Input | Supports | Support level (dB) | Guard | Band change (dB) | Tail change (dB) |\n| --- | --- | --- | --- | --- | --- |\n",
+            mimo.early_ms,
+            if mimo.ear_guard { "on" } else { "off" }
+        ));
         for input in &mimo.inputs {
             let supports = if input.supports.is_empty() {
                 "—".into()
@@ -434,6 +438,38 @@ fn tuning2_readme(
                 input.band_change_db,
                 input.tail_change_db
             ));
+        }
+        for input in &mimo.inputs {
+            if let Some(limit) = &input.ear_limit {
+                let ear = |index| if index == 0 { "left" } else { "right" };
+                if let Some(band) = &limit.band {
+                    out.push_str(&catalog.translate(
+                        "cli_room_tuning2_mimo_ear_band",
+                        &json!({
+                            "speaker":input.speaker,
+                            "scale":limit.scale_db.round() as i64,
+                            "ear":ear(band.ear),
+                            "lo":format!("{:.1}",band.lo),
+                            "hi":format!("{:.1}",band.hi),
+                            "db":format!("{:.1}",band.db),
+                        }),
+                    ));
+                    out.push('\n');
+                }
+                if let Some(tail) = &limit.tail {
+                    out.push_str(&catalog.translate(
+                        "cli_room_tuning2_mimo_ear_tail",
+                        &json!({
+                            "speaker":input.speaker,
+                            "scale":limit.scale_db.round() as i64,
+                            "ear":ear(tail.ear),
+                            "freq":format!("{:.1}",tail.hz),
+                            "db":format!("{:.1}",tail.db),
+                        }),
+                    ));
+                    out.push('\n');
+                }
+            }
         }
     }
     out.push_str("\nVirtual room tuning v2 reproduces the correction method of SECS 2 by the Speaker Gallery (DCinside), released under GPL-3.0. Impulcifer's implementation is independent and contains no SECS code; SECS 2 was used only as a black box to produce the reference numbers.\n\n");

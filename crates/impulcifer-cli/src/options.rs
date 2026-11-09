@@ -449,6 +449,24 @@ pub static EXTENSION_OPTIONS: &[CliOption] = &[
         default: CliDefault::Suppressed,
         help: "Common eighth-order input high-pass: off (default) or 10–50 Hz.",
     },
+    CliOption {
+        flag: "--room_tuning2_mimo_early",
+        short: None,
+        dest: "room_tuning2_mimo_early",
+        kind: CliType::Float,
+        choices: &[],
+        default: CliDefault::Suppressed,
+        help: "Early window left unchanged by tuning2 MIMO supports in ms (5–60, default 60).",
+    },
+    CliOption {
+        flag: "--room_tuning2_mimo_ear_guard",
+        short: None,
+        dest: "room_tuning2_mimo_ear_guard",
+        kind: CliType::Str,
+        choices: &["true", "false"],
+        default: CliDefault::Suppressed,
+        help: "Judge tuning2 MIMO guard changes separately at each ear (default false).",
+    },
 ];
 
 pub const OPTIONS: &[CliOption] = &[

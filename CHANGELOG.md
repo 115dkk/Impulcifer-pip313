@@ -4,6 +4,13 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.16.0 - 2026-11-09
+### 가상 룸 튜닝 2 MIMO의 초기 구간과 귀별 가드
+
+#### ⭐ 새로운 기능 / 개선
+- **MIMO 초기 구간** (`room_tuning2_mimo_early`): MIMO 서포트가 건드리지 않는 직접음 뒤 구간을 5~60 ms에서 정합니다. 줄이면 서포트가 더 일찍 작용해 초기 저음 울림도 줄일 수 있지만, 서포트를 더 세게 구동하므로 가드가 크기를 줄이는 일이 잦아집니다. 대역·꼬리 가드가 보는 늦은 구간(60 ms, 300 ms)은 그대로입니다. 기본값 60 ms에서는 출력이 3.15.0과 바이트 단위로 같습니다. SECS 2R의 동작을 ADR 0015의 클린룸 방식으로 재현했습니다.
+- **MIMO 귀별 가드** (`room_tuning2_mimo_ear_guard`): 두 귀의 에너지를 합쳐 판정하던 대역·꼬리 가드를 귀마다 검사해, 한쪽 귀가 나빠지는 서포트의 크기를 줄이거나 적용하지 않습니다. 마지막으로 거부한 크기와 해당 귀를 작업 기록과 결과 README에 남깁니다. 기본값은 꺼짐이며 출력은 3.15.0과 바이트 단위로 같습니다. SECS 2R의 동작을 ADR 0015의 클린룸 방식으로 재현했습니다.
+
 ## 3.15.0 - 2026-11-08
 ### 가상 룸 튜닝 2의 상한 기준과 전이 배수, 입력 하이패스, 짝 위상 보고
 

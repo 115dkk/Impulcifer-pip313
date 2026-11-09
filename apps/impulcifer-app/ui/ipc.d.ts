@@ -144,11 +144,13 @@ interface ProcessingRequest {
      reads the room_tuning2_* fields and room_tuning_level_match, and ignores the other room_tuning_*
      fields and the Room EQ fields. room_tuning2_mode is "zero", "mixed", "linear", "long" or a
      latency in ms (30–200). room_tuning2_high is "auto" or Hz (100–20000); room_volume and
-     schroeder_freq apply only when it is "auto". room_tuning2_fsiso (50–150 Hz) and
-     room_tuning2_mimo_low ("auto" or 15–150 Hz) are read only with room_tuning2_mimo. */
+     schroeder_freq apply only when it is "auto". room_tuning2_fsiso (50–150 Hz),
+     room_tuning2_mimo_low ("auto" or 15–150 Hz), room_tuning2_mimo_early (5–60 ms) and
+     room_tuning2_mimo_ear_guard are read only with room_tuning2_mimo. */
   room_tuning2_mode?: Exclude<Tuning2Filter, "custom"> | number; room_tuning2_max_boost?: number;
   room_tuning2_low?: number; room_tuning2_high?: "auto" | number; room_tuning2_mimo?: boolean;
   room_tuning2_fsiso?: number; room_tuning2_mimo_low?: "auto" | number;
+  room_tuning2_mimo_early?: number; room_tuning2_mimo_ear_guard?: boolean;
   /* 3.13.0 (ADR 0015). Dip limiting and low-end protection are optional; extra bands are a
      comma-separated string of up to four lo-hi pairs in Hz (20–20000), empty for none. */
   room_tuning2_dip_limit?: boolean; room_tuning2_low_protect?: boolean; room_tuning2_bands?: string;
