@@ -6,9 +6,13 @@
 # 단일 claude -p 세션에서 실행합니다.
 # 직전 감사 이후 코드 변경이 없으면(문서 등 제외) 실행하지 않습니다.
 #
-# 모델: claude-mythos-5-1
+# 모델: claude-mythos-5-2
 # Effort: xhigh
-# 인증: Workload Identity Federation(Claude API 크레딧)
+# 인증: Workload Identity Federation(Claude API 크레딧, 워크스페이스 치토스)
+#
+# API가 사이버 검증 프로그램(CVP)을 적용받아 Mythos 5.2를 쓸 수 있게
+# 되었습니다(2026-11-09). Claude Code는 2.1.321부터 이 모델을 알고, 아래
+# 설치 단계는 판을 고정하지 않으므로 매번 이 모델을 아는 판을 받습니다.
 #
 # 필요 사항:
 #   1. Workload Identity Federation. 이 실행의 GitHub OIDC 토큰을 수명이
@@ -26,7 +30,7 @@
 #          && claims.repository_owner == "115dkk"
 #          && claims.repository == "115dkk/Impulcifer-pip313"
 #          && claims.event_name in ["schedule", "workflow_dispatch"]
-#      대상 서비스 계정은 auto-audit, 워크스페이스는 Default, OAuth 범위는
+#      대상 서비스 계정은 auto-audit, 워크스페이스는 치토스, OAuth 범위는
 #      workspace:developer입니다. audience는 비워 두십시오
 #      (https://api.anthropic.com).
 #      토큰 유효 기간은 기본값(600초)으로 두십시오. GitHub 토큰은 약 5분,
@@ -61,7 +65,7 @@
 #   ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / CLAUDE_CODE_OAUTH_TOKEN 중
 #   하나라도 있으면 Claude Code는 페더레이션보다 그것을 우선해 다른 계정에
 #   청구합니다. 이 workflow는 Claude 실행 직전에 세 변수를 제거합니다.
-#   그리고 availableModels로 감사 모델 하나만 허용합니다. Fable 5.1의
+#   그리고 availableModels로 감사 모델 하나만 허용합니다. 감사 모델의
 #   안전장치에 걸린 요청을 Claude Code가 다른 모델로 다시 돌리지 못하게
 #   하려는 것이라, 걸리면 세션이 오류로 끝나고 감사가 실패합니다.
 #
@@ -174,7 +178,7 @@ jobs:
       ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
       ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
       ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
-      AUDIT_MODEL: claude-mythos-5-1
+      AUDIT_MODEL: claude-mythos-5-2
     steps:
       # 변수 누락, 이 실행과 맞지 않는 규칙, 조직이 쓸 수 없는 모델을 세션을
       # 띄우기 전에 몇 초 만에 잡습니다. 여기서 한 번 교환하면 Console의
@@ -356,8 +360,9 @@ jobs:
           }
           trap stop_identity_refresh EXIT
 
-          # Fable 5.1의 안전장치는 걸린 요청을 다른 모델(Opus 4.8)로 조용히
-          # 다시 돌리고 세션을 거기 머물게 할 수 있습니다. availableModels에
+          # availableModels 제한은 Fable 5.1로 감사하던 때 넣었습니다. 그
+          # 모델의 안전장치는 걸린 요청을 다른 모델(Opus 4.8)로 조용히 다시
+          # 돌리고 세션을 거기 머물게 할 수 있었습니다. availableModels에
           # 감사 모델 하나만 두면 모델을 바꿔야 하는 순간 세션이 오류로
           # 끝나므로, 다른 모델로 감사하거나 다른 모델에 토큰을 쓰는 일이
           # 없습니다. 가용성 폴백은 --fallback-model로만 켜지며 두지 않습니다.
