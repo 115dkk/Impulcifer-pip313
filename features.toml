@@ -1859,6 +1859,18 @@ status = "implemented"
 tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
 
 [[feature]]
+id = "config.room_tuning2_mimo_early"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
+id = "config.room_tuning2_mimo_ear_guard"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::config_room_tuning2_defaults_and_validation", "impulcifer-service::config_room_tuning2_defaults_and_validation", "impulcifer-cli::cli_room_tuning2_options_parse_and_validate"]
+
+[[feature]]
 id = "room.tuning2_high_basis"
 kind = "stage"
 status = "implemented"
@@ -1887,6 +1899,18 @@ id = "room.tuning2_mimo"
 kind = "stage"
 status = "implemented"
 tests = ["impulcifer-dsp::room_tuning2_mimo_fast_normal_equations", "impulcifer-dsp::room_tuning2_mimo_reduces_late_energy_at_the_ears", "impulcifer-service::room_tuning2_mimo_on_the_demo"]
+
+[[feature]]
+id = "room.tuning2_mimo_early"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_s2r_mimo_early_samples", "impulcifer-dsp::room_tuning2_s2r_mimo_normal_equations", "impulcifer-dsp::room_tuning2_s2r_mimo_design"]
+
+[[feature]]
+id = "room.tuning2_mimo_ear_guard"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-dsp::room_tuning2_s2r_mimo_seat_change", "impulcifer-dsp::room_tuning2_s2r_mimo_guard", "impulcifer-dsp::room_tuning2_s2r_mimo_design"]
 
 [[feature]]
 id = "room.tuning2_secs2_reference"

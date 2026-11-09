@@ -400,6 +400,8 @@ pub fn load_inputs(
                         fsiso: config.room_tuning2_fsiso,
                         low: config.room_tuning2_mimo_low.parse().ok(),
                         input_hp: config.room_tuning2_input_hp.parse().ok(),
+                        early_ms: config.room_tuning2_mimo_early,
+                        ear_guard: config.room_tuning2_mimo_ear_guard,
                     }),
                     input_hp: config.room_tuning2_input_hp.parse().ok(),
                     pairs: room_pairs,

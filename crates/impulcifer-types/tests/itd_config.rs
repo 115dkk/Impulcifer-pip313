@@ -14,7 +14,7 @@ fn itd_config_defaults_and_validation() {
     let defaults = ProcessingConfig::default();
     assert_eq!(defaults.itd_mode, "off");
     assert_eq!(defaults.head_radius, None);
-    assert_eq!(EXTENSION_FIELD_NAMES.len(), 38);
+    assert_eq!(EXTENSION_FIELD_NAMES.len(), 40);
     assert!(EXTENSION_FIELD_NAMES.contains(&"itd_mode"));
     assert!(EXTENSION_FIELD_NAMES.contains(&"head_radius"));
 

@@ -69,6 +69,8 @@ pub struct ProcessingConfig {
     pub room_tuning2_high_transition: u32,
     #[serde(deserialize_with = "string_or_number")]
     pub room_tuning2_input_hp: String,
+    pub room_tuning2_mimo_early: f64,
+    pub room_tuning2_mimo_ear_guard: bool,
     pub vbass_mode: String,
     pub layout_files: String,
     pub missing_speakers: String,
@@ -145,6 +147,8 @@ impl Default for ProcessingConfig {
             room_tuning2_high_basis: "strict".into(),
             room_tuning2_high_transition: 1,
             room_tuning2_input_hp: "off".into(),
+            room_tuning2_mimo_early: 60.0,
+            room_tuning2_mimo_ear_guard: false,
             vbass_mode: "auto".into(),
             layout_files: "auto".into(),
             missing_speakers: "silent".into(),
@@ -213,7 +217,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 38] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 40] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -252,6 +256,8 @@ pub const EXTENSION_FIELD_NAMES: [&str; 38] = [
     "room_tuning2_high_basis",
     "room_tuning2_high_transition",
     "room_tuning2_input_hp",
+    "room_tuning2_mimo_early",
+    "room_tuning2_mimo_ear_guard",
 ];
 
 fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
@@ -537,6 +543,13 @@ impl ProcessingConfig {
                 Some(self.room_tuning2_fsiso),
                 50.0,
                 150.0,
+                false,
+            ),
+            (
+                "room_tuning2_mimo_early",
+                Some(self.room_tuning2_mimo_early),
+                5.0,
+                60.0,
                 false,
             ),
             (

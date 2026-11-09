@@ -258,6 +258,8 @@ sweep 파일을 따로 준비하지 않아도 됩니다. 녹음 화면은 기본
 | `--room_tuning2_high_basis strict\|lenient` | `strict` | 자동 보정 상한을 엄격한 슈뢰더 추정으로 정하거나, 100~500 Hz의 1/3옥타브 감쇠를 함께 살펴 더 높은 값을 고릅니다. `--schroeder_freq`를 직접 주면 엄격한 값만 씁니다. |
 | `--room_tuning2_high_transition 1\|2\|4` | `1` | 자동 상한에 곱해 보정이 전이 구간까지 이어지는 배수를 정합니다. 상한을 숫자로 직접 주면 이 설정과 상한 기준은 적용하지 않습니다. |
 | `--room_tuning2_input_hp off\|HZ` | `off` | 모든 스피커 입력에 공통 8차 버터워스 하이패스를 겁니다. 차단 주파수는 10~50 Hz이며, 귀 위치 측정이 없거나 보정하지 않은 스피커에도 적용합니다. |
+| `--room_tuning2_mimo_early MS` | `60` | MIMO 서포트가 건드리지 않는 직접음 뒤 초기 구간을 5~60 ms에서 정합니다. |
+| `--room_tuning2_mimo_ear_guard true\|false` | `false` | MIMO 가드가 두 귀의 합 대신 귀마다 대역과 꼬리 변화를 검사하고 더 나빠진 귀를 기준으로 서포트 크기를 정합니다. |
 | `--specific_limit HZ` | `400` | 스피커·귀별 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. `--room_range legacy`에서만 씁니다. |
 | `--generic_limit HZ` | `300` | 공통 룸 보정의 상한 주파수입니다. `0`이면 제한을 끕니다. `--room_range legacy`에서만 씁니다. |
 | `--bass_boost DB` | 사용 안 함 | 저역 셸프 부스트입니다. `6`처럼 게인만 주거나(Fc 105 Hz, Q 0.76) `6,150,0.69`처럼 게인, Fc, Q를 줍니다. |

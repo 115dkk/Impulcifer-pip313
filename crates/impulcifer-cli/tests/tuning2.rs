@@ -8,7 +8,7 @@ fn args(s: &[&str]) -> Vec<String> {
 #[test]
 fn cli_room_tuning2_options_parse_and_validate() {
     assert_eq!(
-        EXTENSION_OPTIONS[EXTENSION_OPTIONS.len() - 9..]
+        EXTENSION_OPTIONS[EXTENSION_OPTIONS.len() - 11..]
             .iter()
             .map(|option| option.dest)
             .collect::<Vec<_>>(),
@@ -22,6 +22,8 @@ fn cli_room_tuning2_options_parse_and_validate() {
             "room_tuning2_high_basis",
             "room_tuning2_high_transition",
             "room_tuning2_input_hp",
+            "room_tuning2_mimo_early",
+            "room_tuning2_mimo_ear_guard",
         ]
     );
     let Parsed::Kwargs(baseline) = parse(&args(&["impulcifer", "--dir_path=data/demo"])).unwrap()
@@ -45,6 +47,8 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "high_basis",
         "high_transition",
         "input_hp",
+        "mimo_early",
+        "mimo_ear_guard",
     ] {
         assert!(!baseline.contains_key(&format!("room_tuning2_{name}")));
     }
@@ -69,6 +73,8 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "--room_tuning2_high_basis=lenient",
         "--room_tuning2_high_transition=4",
         "--room_tuning2_input_hp=25",
+        "--room_tuning2_mimo_early=20",
+        "--room_tuning2_mimo_ear_guard=true",
     ]))
     .unwrap() else {
         panic!()
@@ -91,6 +97,8 @@ fn cli_room_tuning2_options_parse_and_validate() {
     assert_eq!(config.room_tuning2_high_basis, "lenient");
     assert_eq!(config.room_tuning2_high_transition, 4);
     assert_eq!(config.room_tuning2_input_hp, "25");
+    assert_eq!(config.room_tuning2_mimo_early, 20.0);
+    assert!(config.room_tuning2_mimo_ear_guard);
     assert_eq!(config.room_tuning2_bands, "1000-3000, 20-500");
     assert_eq!(
         config.room_tuning2_bands(),
@@ -131,6 +139,10 @@ fn cli_room_tuning2_options_parse_and_validate() {
         ("input_hp", "9"),
         ("input_hp", "51"),
         ("input_hp", "NaN"),
+        ("mimo_early", "4.99"),
+        ("mimo_early", "60.01"),
+        ("mimo_early", "NaN"),
+        ("mimo_ear_guard", "yes"),
         ("bands", "bad"),
         ("bands", "20-30,40-50,60-70,80-90,100-110"),
     ] {
@@ -157,6 +169,8 @@ fn cli_room_tuning2_options_parse_and_validate() {
         "--room_tuning2_high_basis=strict",
         "--room_tuning2_high_transition=1",
         "--room_tuning2_input_hp=off",
+        "--room_tuning2_mimo_early=60",
+        "--room_tuning2_mimo_ear_guard=false",
     ]))
     .unwrap() else {
         panic!()
@@ -167,4 +181,6 @@ fn cli_room_tuning2_options_parse_and_validate() {
     assert_eq!(kwargs["room_tuning2_lf_align"], json!(false));
     assert_eq!(kwargs["room_tuning2_mode_decay"], json!(false));
     assert_eq!(kwargs["room_tuning2_hf_phase"], json!(false));
+    assert_eq!(kwargs["room_tuning2_mimo_early"], json!(60.0));
+    assert_eq!(kwargs["room_tuning2_mimo_ear_guard"], json!(false));
 }

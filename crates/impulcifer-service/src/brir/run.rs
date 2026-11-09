@@ -275,6 +275,13 @@ impl StageObserver for Observer<'_, '_> {
                 json!({"freq":format!("{cutoff:.1}")}),
             );
         }
+        if self.config.room_tuning2_mimo && self.config.room_tuning2_mimo_early != 60.0 {
+            self.events.log(
+                "info",
+                "cli_room_tuning2_mimo_early",
+                json!({"ms":format!("{:.1}", self.config.room_tuning2_mimo_early)}),
+            );
+        }
         if !self.config.room_tuning2_bands.trim().is_empty()
             && let Some(band) = &report.band
         {
@@ -449,6 +456,36 @@ impl StageObserver for Observer<'_, '_> {
                         "cli_room_tuning2_mimo_off",
                         json!({"speaker":speaker.speaker}),
                     );
+                }
+                if let Some(limit) = input.and_then(|input| input.ear_limit.as_ref()) {
+                    let ear = |index| if index == 0 { "left" } else { "right" };
+                    if let Some(band) = &limit.band {
+                        self.events.log(
+                            "info",
+                            "cli_room_tuning2_mimo_ear_band",
+                            json!({
+                                "speaker":speaker.speaker,
+                                "scale":limit.scale_db.round() as i64,
+                                "ear":ear(band.ear),
+                                "lo":format!("{:.1}",band.lo),
+                                "hi":format!("{:.1}",band.hi),
+                                "db":format!("{:.1}",band.db),
+                            }),
+                        );
+                    }
+                    if let Some(tail) = &limit.tail {
+                        self.events.log(
+                            "info",
+                            "cli_room_tuning2_mimo_ear_tail",
+                            json!({
+                                "speaker":speaker.speaker,
+                                "scale":limit.scale_db.round() as i64,
+                                "ear":ear(tail.ear),
+                                "freq":format!("{:.1}",tail.hz),
+                                "db":format!("{:.1}",tail.db),
+                            }),
+                        );
+                    }
                 }
             }
         }

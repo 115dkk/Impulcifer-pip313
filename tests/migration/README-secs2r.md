@@ -29,6 +29,10 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | `hp8` | 8차 버터워스 하이패스 계수와 복소 응답 |
 | `pair_phase_*` | 스피커 짝의 대역별 위상과 상쇄량, 보고할 짝의 순서와 여섯 쌍 제한 |
 | `rc_*_upper_mixed` | 너그러운 상한과 2배 전이를 쓴 끝단 RC 설계 및 진단 |
+| `mimo_early_samples`, `mimo_seat_change` | MIMO 초기 구간의 표본 변환과 귀별 에너지 변화 규칙 |
+| `mimo_normal_*` | 여러 초기 구간에서 만든 MIMO 정규 방정식과 우변 |
+| `mimo_design_*` | 초기 구간·귀별 가드 조합별 MIMO 풀이, 모든 가드 시도, 서포트와 귀 기록 |
+| `mimo_guard_*` | 합산 가드와 귀별 가드의 합성 사례, 귀별 대역 에너지 |
 
 ## Gates
 
@@ -73,6 +77,10 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | HP8 | `Exact` | 0 | 0 |
 | pair phase | `Exact` | 1.9984014443252818e-15 | 5.287077574998131e-18 |
 | upper-limit RC design | `Rebuilt` + `FitDependent` | 4.263256414560601e-14 | 1.2185139258003184e-14 |
+| MIMO early samples and seat change | `Exact` | 0 | 0 |
+| MIMO normal equations | `Curve` | 4.440892098500626e-15 | 3.7305743002381116e-15 |
+| MIMO guard evaluation and band energies | `Curve` + exact decisions | 2.509104035652854e-13 (guard), 1.7763568394002505e-15 (energy) | 4.080288248210585e-14 (guard), 1.7666563505222917e-16 (energy) |
+| MIMO design | `Curve` + exact decisions | 3.771757661752417e-8 (ratio), 1.021405182655144e-12 (support) | 1.3473578830673903e-9 (ratio), 1.1873105152459935e-12 (support) |
 
 상한 대역 SOS는 Impulcifer가 3.5.0부터 엄격한 추정에 쓰던 Butterworth 포트를 그대로 사용한다. 기본 출력의 바이트를 지켜야 하므로 오라클의 설계 연산으로 바꾸지 않는다. Debian glibc 2.41에서도 일부 계수가 1~2 ULP 달랐고, 최대 절대 오차는 4.440892098500626e-16, 최대 상대 L2 오차는 1.2109958378534601e-16이었다. 따라서 SOS 계수는 `Curve`로 판정하며, 같은 필터로 얻은 감쇠 교차 인덱스는 오라클과 정확히 같아 계속 exact로 검사한다.
 
@@ -95,6 +103,8 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | `all` | 1.587310403e1 | 3.164880375 | 1.035219351e1 | 1.113121823e-3 | 1.284493722 | 0 |
 
 저역 보호 진단의 `reduced`와 `cuts`는 두 번째 PEQ를 제한할 때 만든 결과를 최종 FIR 응답 제한까지 이어서 누적한 값이며, `limited`도 최종 응답을 기준으로 한다. 오라클이 만든 데모 픽스처에서는 최종 FIR 응답 제한이 새로 줄인 밴드가 없었다. PEQ 정련 결과에 따라 이 결정이 달라지므로 `rc_*`의 세 값은 모든 플랫폼에서 `FitDependent`로 보고한다.
+
+MIMO 가드 합성 사례(`mimo_guard_*`)는 늦은 부분 전체에 같은 배율을 곱하므로 모든 대역이 같은 dB만큼 바뀐다. 그래서 기록되는 대역은 반올림 끝자리로 정해지고, 오라클끼리도 libm에 따라 다르다(같은 `one_ear_worse`의 귀별 가드에서 glibc는 77.0~80.0 Hz, msvcrt는 31.7~40.0 Hz를 기록했다). 시험은 오라클이 저장한 귀·대역별 에너지로 후보값을 다시 만든다. 최댓값이 다른 후보보다 1e-9 dB 넘게 크면 기록 대역과 귀를 정확히 비교하고, 그 안에서 여럿이 같으면 Impulcifer와 오라클의 선택이 둘 다 그 후보 안에 있는지 본다. 동점이 없는 실제 입력(`mimo_design_*` 70개)에서는 모든 시도의 대역·모드·귀를 정확히 비교한다. 대역 에너지는 libm과 무관한 |rfft|² 합이므로 모든 플랫폼에서 상대 1e-12로 비교한다. SECS 2는 대역 가드가 이미 넘친 시도에서 꼬리 가드를 계산하지 않아 `s2_mimo_*`의 `guard_tail`이 `guard_band_db`보다 짧을 수 있다. 묶음 4 가족은 오라클이 모든 시도에서 두 가드를 다 계산한 값이다.
 
 ## Regeneration
 

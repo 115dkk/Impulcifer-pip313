@@ -10,11 +10,37 @@ use faer::{
 use rayon::prelude::*;
 use std::f64::consts::PI;
 
+pub const MIMO_EARLY_MS_DEFAULT: f64 = 60.0;
+const MIMO_EARLY_SAMPLES_DEFAULT: usize = 36;
+const GUARD_BAND_SAMPLES: usize = 36;
+const GUARD_TAIL_SAMPLES: usize = 180;
+
 #[derive(Clone, Debug)]
 pub struct MimoOptions {
     pub fsiso: f64,
     pub low: Option<f64>,
     pub input_hp: Option<f64>,
+    pub early_ms: f64,
+    pub ear_guard: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MimoRule {
+    pub early: usize,
+    pub ear_guard: bool,
+}
+impl Default for MimoRule {
+    fn default() -> Self {
+        Self {
+            early: MIMO_EARLY_SAMPLES_DEFAULT,
+            ear_guard: false,
+        }
+    }
+}
+
+/// Convert the configurable 600 Hz MIMO early window from milliseconds to samples.
+pub fn early_samples(early_ms: f64) -> usize {
+    (early_ms * 600.0 / 1000.0).round().max(3.0) as usize
 }
 pub struct MimoInput<'a> {
     pub speaker: &'a str,
@@ -28,6 +54,25 @@ pub struct MimoSupport {
     pub fir: Vec<f64>,
 }
 #[derive(Clone, Debug, PartialEq)]
+pub struct MimoEarBand {
+    pub ear: usize,
+    pub lo: f64,
+    pub hi: f64,
+    pub db: f64,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct MimoEarTail {
+    pub ear: usize,
+    pub hz: f64,
+    pub db: f64,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct MimoEarLimit {
+    pub scale_db: f64,
+    pub band: Option<MimoEarBand>,
+    pub tail: Option<MimoEarTail>,
+}
+#[derive(Clone, Debug, PartialEq)]
 pub struct MimoInputResult {
     pub speaker: String,
     pub candidates: Vec<String>,
@@ -36,11 +81,24 @@ pub struct MimoInputResult {
     pub scale_db: Option<f64>,
     pub band_change_db: f64,
     pub tail_change_db: f64,
+    pub ear_limit: Option<MimoEarLimit>,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct MimoDesign {
     pub ranges: Vec<(String, Option<(f64, f64)>)>,
     pub inputs: Vec<MimoInputResult>,
+    pub early_ms: f64,
+    pub ear_guard: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GuardEvaluation {
+    pub band_db: f64,
+    pub band_hz: Option<(f64, f64)>,
+    pub band_ear: Option<usize>,
+    pub tail_db: f64,
+    pub mode_hz: Option<f64>,
+    pub tail_ear: Option<usize>,
 }
 /// Stage boundaries retained for the deterministic oracle gate.
 #[derive(Clone, Debug)]
@@ -57,6 +115,7 @@ pub struct MimoStages {
     pub u: Vec<f64>,
     pub guard_band: Vec<f64>,
     pub guard_tail: Vec<f64>,
+    pub guard_steps: Vec<GuardEvaluation>,
 }
 const N: usize = 720;
 const TAPS: usize = 180;
@@ -91,13 +150,21 @@ pub fn normal_equations(
     x: &[Vec<f64>],
     c: &[Vec<Vec<f64>>],
 ) -> Result<(Mat<f64>, Vec<f64>), DspError> {
+    normal_equations_with(x, c, MIMO_EARLY_SAMPLES_DEFAULT)
+}
+
+pub fn normal_equations_with(
+    x: &[Vec<f64>],
+    c: &[Vec<Vec<f64>>],
+    early_samples: usize,
+) -> Result<(Mat<f64>, Vec<f64>), DspError> {
     validate_paths(x, c)?;
     let r = c[0].len();
     let m = r * TAPS;
     let mut a = Mat::zeros(m, m);
     let mut b = vec![0.; m];
     for (x, c) in x.iter().zip(c) {
-        let early = (first(x) + 36).min(N);
+        let early = first(x).saturating_add(early_samples).min(N);
         for j in 0..r {
             for k in 0..TAPS {
                 b[j * TAPS + k] -= (early.max(k)..N).map(|t| c[j][t - k] * x[t]).sum::<f64>();
@@ -251,7 +318,26 @@ pub fn bisect(
     }
     Ok((logs, ratios, kept, best))
 }
-fn guard(x: &[Vec<f64>], y: &[Vec<f64>], fsiso: f64) -> (f64, f64) {
+/// The ear guard's per-ear change `c(a, b)` in dB: the floor on both sides when
+/// the ear had energy before, `+99` for energy where it had none, no value when
+/// it had none before and after. An overflowing ratio stays `+inf`; only the
+/// energies, not the ratio, select the `+99` case.
+pub fn seat_change(a: f64, b: f64) -> Option<f64> {
+    if a > 0.0 {
+        Some(10.0 * ((b + 1e-30) / (a + 1e-30)).log10())
+    } else if b > 0.0 {
+        Some(99.0)
+    } else {
+        None
+    }
+}
+
+pub fn guard_evaluation(
+    x: &[Vec<f64>],
+    y: &[Vec<f64>],
+    fsiso: f64,
+    ear_guard: bool,
+) -> GuardEvaluation {
     let peaks = late_mode_frequencies(x, 6);
     let mut edges = Vec::new();
     let mut i = 0;
@@ -261,36 +347,88 @@ fn guard(x: &[Vec<f64>], y: &[Vec<f64>], fsiso: f64) -> (f64, f64) {
     }
     let mut bands: Vec<_> = edges.windows(2).map(|p| (p[0], p[1])).collect();
     bands.extend(peaks.iter().map(|p| (p - 1.5, p + 1.5)));
-    let mut before = vec![0.; N + 1];
-    let mut after = before.clone();
-    for (x, y) in x.iter().zip(y) {
-        let end = (first(x) + 36).min(N);
-        let mut a = x.clone();
-        let mut b = y.clone();
-        a[..end].fill(0.);
-        b[..end].fill(0.);
-        for (out, v) in before.iter_mut().zip(rfft(&a, 2 * N)) {
-            *out += v.norm_sqr();
-        }
-        for (out, v) in after.iter_mut().zip(rfft(&b, 2 * N)) {
-            *out += v.norm_sqr();
-        }
-    }
     let f = grid(2 * N, 600.);
-    let mut band: f64 = -99.;
-    for (lo, hi) in bands {
-        let mut a = 0.;
-        let mut b = 0.;
-        for k in 0..f.len() {
-            if f[k] >= lo && f[k] < hi {
-                a += before[k];
-                b += after[k];
+
+    let mut band_db = -99.0;
+    let mut band_hz = None;
+    let mut band_ear = None;
+    if ear_guard {
+        let mut before = Vec::with_capacity(x.len());
+        let mut after = Vec::with_capacity(y.len());
+        for (x, y) in x.iter().zip(y) {
+            let end = (first(x) + GUARD_BAND_SAMPLES).min(N);
+            let mut a = x.clone();
+            let mut b = y.clone();
+            a[..end].fill(0.);
+            b[..end].fill(0.);
+            before.push(
+                rfft(&a, 2 * N)
+                    .into_iter()
+                    .map(|v| v.norm_sqr())
+                    .collect::<Vec<_>>(),
+            );
+            after.push(
+                rfft(&b, 2 * N)
+                    .into_iter()
+                    .map(|v| v.norm_sqr())
+                    .collect::<Vec<_>>(),
+            );
+        }
+        for ear in 0..before.len() {
+            for &(lo, hi) in &bands {
+                let mut a = 0.0;
+                let mut b = 0.0;
+                for k in 0..f.len() {
+                    if f[k] >= lo && f[k] < hi {
+                        a += before[ear][k];
+                        b += after[ear][k];
+                    }
+                }
+                if let Some(value) = seat_change(a, b)
+                    && value > band_db
+                {
+                    band_db = value;
+                    band_hz = Some((lo, hi));
+                    band_ear = Some(ear);
+                }
             }
         }
-        if a > 0. {
-            band = band.max(10. * ((b + 1e-30) / a).log10());
+    } else {
+        // Keep the pre-3.16.0 accumulation order bit for bit.
+        let mut before = vec![0.; N + 1];
+        let mut after = before.clone();
+        for (x, y) in x.iter().zip(y) {
+            let end = (first(x) + GUARD_BAND_SAMPLES).min(N);
+            let mut a = x.clone();
+            let mut b = y.clone();
+            a[..end].fill(0.);
+            b[..end].fill(0.);
+            for (out, v) in before.iter_mut().zip(rfft(&a, 2 * N)) {
+                *out += v.norm_sqr();
+            }
+            for (out, v) in after.iter_mut().zip(rfft(&b, 2 * N)) {
+                *out += v.norm_sqr();
+            }
+        }
+        for &(lo, hi) in &bands {
+            let mut a = 0.;
+            let mut b = 0.;
+            for k in 0..f.len() {
+                if f[k] >= lo && f[k] < hi {
+                    a += before[k];
+                    b += after[k];
+                }
+            }
+            if a > 0. {
+                let value = 10. * ((b + 1e-30) / a).log10();
+                if value > band_db {
+                    band_db = value;
+                    band_hz = Some((lo, hi));
+                }
+            }
         }
     }
+
     let mut modes: Vec<_> = peaks
         .into_iter()
         .chain(late_mode_frequencies(y, 6))
@@ -298,34 +436,81 @@ fn guard(x: &[Vec<f64>], y: &[Vec<f64>], fsiso: f64) -> (f64, f64) {
         .collect();
     modes.sort_by(f64::total_cmp);
     modes.dedup();
-    let energy: Vec<_> = modes
+    let energy: Vec<Vec<(f64, f64)>> = modes
         .iter()
         .map(|p| {
             let sos = filters::butter_bandpass(2, (p - 1.5).max(1.) / 300., (p + 1.5) / 300.);
-            let mut a = 0.;
-            let mut b = 0.;
-            for (x, y) in x.iter().zip(y) {
-                let k = (first(x) + 180).min(N);
-                a += filters::sosfilt(&sos, x)[k..]
-                    .iter()
-                    .map(|v| v * v)
-                    .sum::<f64>();
-                b += filters::sosfilt(&sos, y)[k..]
-                    .iter()
-                    .map(|v| v * v)
-                    .sum::<f64>();
+            x.iter()
+                .zip(y)
+                .map(|(x, y)| {
+                    let k = (first(x) + GUARD_TAIL_SAMPLES).min(N);
+                    let a = filters::sosfilt(&sos, x)[k..]
+                        .iter()
+                        .map(|v| v * v)
+                        .sum::<f64>();
+                    let b = filters::sosfilt(&sos, y)[k..]
+                        .iter()
+                        .map(|v| v * v)
+                        .sum::<f64>();
+                    (a, b)
+                })
+                .collect()
+        })
+        .collect();
+    let summed: Vec<_> = energy
+        .iter()
+        .map(|ears| {
+            let mut a = 0.0;
+            let mut b = 0.0;
+            for &(ear_a, ear_b) in ears {
+                a += ear_a;
+                b += ear_b;
             }
             (a, b)
         })
         .collect();
-    let max = energy.iter().map(|v| v.0).fold(0., f64::max);
-    let tail = energy
-        .iter()
-        .filter(|(a, _)| *a > 0. && *a >= 0.01 * max)
-        .map(|(a, b)| 10. * ((b + 1e-30) / a).log10())
-        .fold(-99., f64::max);
-    (band, tail)
+    let max = summed.iter().map(|v| v.0).fold(0., f64::max);
+    let mut tail_db = -99.0;
+    let mut mode_hz = None;
+    let mut tail_ear = None;
+    for (index, &(a, b)) in summed.iter().enumerate() {
+        if a <= 0.0 || a < 0.01 * max {
+            continue;
+        }
+        if ear_guard {
+            let mut mode_db = -99.0;
+            let mut mode_ear = None;
+            for (ear, &(ear_a, ear_b)) in energy[index].iter().enumerate() {
+                if let Some(value) = seat_change(ear_a, ear_b)
+                    && value > mode_db
+                {
+                    mode_db = value;
+                    mode_ear = Some(ear);
+                }
+            }
+            if mode_db > tail_db {
+                tail_db = mode_db;
+                mode_hz = Some(modes[index]);
+                tail_ear = mode_ear;
+            }
+        } else {
+            let value = 10. * ((b + 1e-30) / a).log10();
+            if value > tail_db {
+                tail_db = value;
+                mode_hz = Some(modes[index]);
+            }
+        }
+    }
+    GuardEvaluation {
+        band_db,
+        band_hz,
+        band_ear,
+        tail_db,
+        mode_hz,
+        tail_ear,
+    }
 }
+
 /// Design from oracle path boundaries, also used by the production chain.
 pub fn design_paths(
     speaker: &str,
@@ -335,6 +520,29 @@ pub fn design_paths(
     lp: Vec<f64>,
     direct: f64,
     fsiso: f64,
+) -> Result<(MimoInputResult, MimoStages), DspError> {
+    design_paths_with(
+        speaker,
+        candidates,
+        x,
+        g,
+        lp,
+        direct,
+        fsiso,
+        MimoRule::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn design_paths_with(
+    speaker: &str,
+    candidates: &[(String, f64)],
+    x: Vec<Vec<f64>>,
+    g: Vec<Vec<Vec<f64>>>,
+    lp: Vec<f64>,
+    direct: f64,
+    fsiso: f64,
+    rule: MimoRule,
 ) -> Result<(MimoInputResult, MimoStages), DspError> {
     validate_paths(&x, &g)?;
     if candidates.len() != g[0].len()
@@ -364,7 +572,7 @@ pub fn design_paths(
                 .collect()
         })
         .collect();
-    let (normal, rhs) = normal_equations(&x, &c)?;
+    let (normal, rhs) = normal_equations_with(&x, &c, rule.early)?;
     let (logs, ratios, kept, u) = bisect(&normal, &rhs, &lp, direct)?;
     let supports: Vec<_> = u.chunks(TAPS).map(|u| convolution(&lp, u)).collect();
     let mut result = MimoInputResult {
@@ -375,9 +583,12 @@ pub fn design_paths(
         scale_db: None,
         band_change_db: -99.,
         tail_change_db: -99.,
+        ear_limit: None,
     };
     let mut guard_band = vec![];
     let mut guard_tail = vec![];
+    let mut guard_steps = vec![];
+    let mut last_rejected = None;
     for db in [0., -3., -6., -9., -12.] {
         let scale = 10_f64.powf(db / 20.);
         let mut y = x.clone();
@@ -389,13 +600,31 @@ pub fn design_paths(
                 }
             }
         }
-        let (band, tail) = guard(&x, &y, fsiso);
-        guard_band.push(band);
-        guard_tail.push(tail);
-        if band <= 1. && tail <= 1. {
+        let evaluation = guard_evaluation(&x, &y, fsiso, rule.ear_guard);
+        guard_band.push(evaluation.band_db);
+        guard_tail.push(evaluation.tail_db);
+        guard_steps.push(evaluation.clone());
+        let accepted = evaluation.band_db <= 1. && evaluation.tail_db <= 1.;
+        if !accepted && rule.ear_guard {
+            last_rejected = Some(MimoEarLimit {
+                scale_db: db,
+                band: (evaluation.band_db > 1.0).then(|| MimoEarBand {
+                    ear: evaluation.band_ear.expect("ear guard band has an ear"),
+                    lo: evaluation.band_hz.expect("ear guard band has a range").0,
+                    hi: evaluation.band_hz.expect("ear guard band has a range").1,
+                    db: evaluation.band_db,
+                }),
+                tail: (evaluation.tail_db > 1.0).then(|| MimoEarTail {
+                    ear: evaluation.tail_ear.expect("ear guard tail has an ear"),
+                    hz: evaluation.mode_hz.expect("ear guard tail has a mode"),
+                    db: evaluation.tail_db,
+                }),
+            });
+        }
+        if accepted {
             result.scale_db = Some(db);
-            result.band_change_db = band;
-            result.tail_change_db = tail;
+            result.band_change_db = evaluation.band_db;
+            result.tail_change_db = evaluation.tail_db;
             result.level_db = 10. * (ratios[kept] * scale * scale).max(1e-30).log10();
             result.supports = candidates
                 .iter()
@@ -409,6 +638,7 @@ pub fn design_paths(
             break;
         }
     }
+    result.ear_limit = last_rejected;
     Ok((
         result,
         MimoStages {
@@ -424,6 +654,7 @@ pub fn design_paths(
             u,
             guard_band,
             guard_tail,
+            guard_steps,
         },
     ))
 }
@@ -482,6 +713,8 @@ fn design_supports_observed_with_spectra(
         || opts
             .input_hp
             .is_some_and(|value| !value.is_finite() || !(10.0..=50.0).contains(&value))
+        || !opts.early_ms.is_finite()
+        || !(5.0..=60.0).contains(&opts.early_ms)
         || brirs
             .speakers
             .iter()
@@ -618,6 +851,7 @@ fn design_supports_observed_with_spectra(
                 scale_db: None,
                 band_change_db: -99.,
                 tail_change_db: -99.,
+                ear_limit: None,
             });
         }
         let candidates: Vec<_> = indices
@@ -646,7 +880,7 @@ fn design_supports_observed_with_spectra(
             })
             .collect();
         let direct = low_rate(input.response, &f, N).iter().map(|v| v * v).sum();
-        design_paths(
+        design_paths_with(
             input.speaker,
             &candidates,
             x,
@@ -654,6 +888,10 @@ fn design_supports_observed_with_spectra(
             firwin(31, opts.fsiso, 600.),
             direct,
             opts.fsiso,
+            MimoRule {
+                early: early_samples(opts.early_ms),
+                ear_guard: opts.ear_guard,
+            },
         )
         .map(|(result, stages)| {
             observe(input.speaker, &stages);
@@ -674,6 +912,8 @@ fn design_supports_observed_with_spectra(
     Ok(MimoDesign {
         ranges,
         inputs: results.into_iter().collect::<Result<_, _>>()?,
+        early_ms: opts.early_ms,
+        ear_guard: opts.ear_guard,
     })
 }
 pub fn support_response(
@@ -716,6 +956,109 @@ pub fn support_response(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configurable_early_window_and_default_wrappers_match() {
+        assert_eq!(early_samples(5.0), 3);
+        assert_eq!(early_samples(7.5), 5);
+        assert_eq!(early_samples(60.0), 36);
+
+        let mut x = vec![vec![0.0; N]; 2];
+        x[0][4] = 1.0;
+        x[0][90] = 0.2;
+        x[1][7] = 0.8;
+        x[1][110] = -0.15;
+        let mut c = vec![vec![vec![0.0; N]]; 2];
+        c[0][0][3] = 0.7;
+        c[0][0][80] = 0.1;
+        c[1][0][5] = -0.6;
+        c[1][0][100] = 0.12;
+        let (default_matrix, default_rhs) = normal_equations(&x, &c).unwrap();
+        let (explicit_matrix, explicit_rhs) =
+            normal_equations_with(&x, &c, MIMO_EARLY_SAMPLES_DEFAULT).unwrap();
+        assert_eq!(default_rhs, explicit_rhs);
+        for column in 0..default_matrix.ncols() {
+            assert!(
+                default_matrix
+                    .col(column)
+                    .iter()
+                    .zip(explicit_matrix.col(column).iter())
+                    .all(|(left, right)| left.to_bits() == right.to_bits())
+            );
+        }
+    }
+
+    #[test]
+    fn seat_change_reserves_ninety_nine_for_new_energy_only() {
+        assert_eq!(seat_change(0.0, 0.0), None);
+        assert_eq!(seat_change(0.0, 1e-300), Some(99.0));
+        assert_eq!(seat_change(1.0, 1.0), Some(0.0));
+        // Finite energies whose ratio overflows keep the logarithmic branch.
+        assert_eq!(seat_change(1e-31, 1e300), Some(f64::INFINITY));
+        assert!(seat_change(1e-31, 1e300) > Some(120.0));
+        // An early window far past the response leaves no late samples.
+        let mut x = vec![vec![0.0; N]; 2];
+        x[0][1] = 1.0;
+        x[1][1] = 1.0;
+        let c = vec![vec![vec![0.5; N]]; 2];
+        let (_, rhs) = normal_equations_with(&x, &c, usize::MAX).unwrap();
+        assert!(rhs.iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn ear_guard_rejects_a_change_hidden_by_the_ear_sum() {
+        let mut x = vec![vec![0.0; N]; 2];
+        let mut y = vec![vec![0.0; N]; 2];
+        for ear in 0..2 {
+            x[ear][0] = 1.0;
+            x[ear][100] = 0.5;
+            x[ear][250] = 0.5;
+            y[ear][0] = 1.0;
+        }
+        for index in [100, 250] {
+            y[0][index] = 0.25;
+            y[1][index] = 0.65;
+        }
+        let summed = guard_evaluation(&x, &y, 150.0, false);
+        let per_ear = guard_evaluation(&x, &y, 150.0, true);
+        assert!(summed.band_db <= 1.0 && summed.tail_db <= 1.0);
+        assert!(per_ear.band_db > 1.0 || per_ear.tail_db > 1.0);
+        assert_eq!(per_ear.band_ear, Some(1));
+    }
+
+    #[test]
+    fn default_design_wrapper_matches_explicit_rule() {
+        let mut x = vec![vec![0.0; N]; 2];
+        let mut g = vec![vec![vec![0.0; N]]; 2];
+        for ear in 0..2 {
+            x[ear][0] = 1.0;
+            x[ear][100 + ear * 10] = 0.2;
+            g[ear][0][5 + ear] = 0.8;
+            g[ear][0][120 + ear * 10] = 0.1;
+        }
+        let mut lp = vec![0.0; 31];
+        lp[15] = 1.0;
+        let candidates = vec![("FR".to_owned(), 50.0)];
+        let default = design_paths(
+            "FL",
+            &candidates,
+            x.clone(),
+            g.clone(),
+            lp.clone(),
+            1.0,
+            150.0,
+        )
+        .unwrap();
+        let explicit =
+            design_paths_with("FL", &candidates, x, g, lp, 1.0, 150.0, MimoRule::default())
+                .unwrap();
+        assert_eq!(default.0, explicit.0);
+        assert_eq!(default.1.rhs, explicit.1.rhs);
+        assert_eq!(default.1.logs, explicit.1.logs);
+        assert_eq!(default.1.ratios, explicit.1.ratios);
+        assert_eq!(default.1.guard_steps, explicit.1.guard_steps);
+        assert!(default.0.ear_limit.is_none());
+    }
 
     #[test]
     fn input_high_pass_reaches_every_mimo_design_boundary_bit_for_bit() {
@@ -777,6 +1120,8 @@ mod tests {
                 fsiso: 120.0,
                 low: None,
                 input_hp: Some(25.0),
+                early_ms: MIMO_EARLY_MS_DEFAULT,
+                ear_guard: false,
             },
             Some(raw.clone()),
             &|_, stages| *cut_stages.lock().unwrap() = Some(stages.clone()),
@@ -798,6 +1143,8 @@ mod tests {
                 fsiso: 120.0,
                 low: None,
                 input_hp: None,
+                early_ms: MIMO_EARLY_MS_DEFAULT,
+                ear_guard: false,
             },
             Some(premultiplied),
             &|_, stages| *premultiplied_stages.lock().unwrap() = Some(stages.clone()),

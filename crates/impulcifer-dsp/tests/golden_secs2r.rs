@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 //! Clean-room gates for the SECS 2R (`s2r_*`) fixtures from ADR 0015 bundle 1.
 mod golden_secs2_helpers;
-use golden_secs2_helpers::{array, bands, complex, fixture_r, fixtures_r, number, sha256};
+use golden_secs2_helpers::{
+    Errors as NumericErrors, array, bands, complex, fixture, fixture_r, fixtures_r, number, sha256,
+};
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     fft::Complex64,
@@ -2741,4 +2743,526 @@ fn room_tuning2_s2r_rc_upper_mixed() {
         report.phase_strength
     );
     errors.finish("s2r_rc_upper_mixed_rebuilt");
+}
+
+fn mimo_fixture_paths(setting: &str, input: &str) -> (Vec<Vec<f64>>, Vec<Vec<Vec<f64>>>) {
+    let source = fixture(&format!("mimo_{setting}_{input}"));
+    let outputs = &source["outputs"];
+    let x = outputs["x"].as_array().unwrap().iter().map(array).collect();
+    let g = outputs["g"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|ear| {
+            array(ear)
+                .chunks(720)
+                .map(|path| path.to_vec())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    (x, g)
+}
+
+fn mimo_convolution(a: &[f64], b: &[f64]) -> Vec<f64> {
+    let mut result = vec![0.0; a.len() + b.len() - 1];
+    for (i, a) in a.iter().enumerate() {
+        for (j, b) in b.iter().enumerate() {
+            result[i + j] += a * b;
+        }
+    }
+    result
+}
+
+fn optional_fixture_number(value: &Value) -> Option<f64> {
+    (!value.is_null()).then(|| number(value))
+}
+
+#[test]
+fn room_tuning2_s2r_mimo_early_samples() {
+    let fixture = fixture_r("mimo_early_samples");
+    let mut errors = Errors::default();
+    for (index, row) in fixture["outputs"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        let row = row.as_array().unwrap();
+        let got = mimo::early_samples(number(&row[0]));
+        let expected = row[1].as_u64().unwrap() as usize;
+        assert_eq!(got, expected, "row {index}");
+        errors.compare(
+            &format!("mimo_early_samples/{index}"),
+            &[got as f64],
+            &[expected as f64],
+            Comparison::Exact,
+        );
+    }
+    errors.finish("s2r_mimo_early_samples");
+}
+
+#[test]
+fn room_tuning2_s2r_mimo_seat_change() {
+    let fixture = fixture_r("mimo_seat_change");
+    let mut errors = Errors::default();
+    for (index, row) in fixture["outputs"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        let row = row.as_array().unwrap();
+        let got = mimo::seat_change(number(&row[0]), number(&row[1]));
+        let expected = optional_fixture_number(&row[2]);
+        match (got, expected) {
+            (Some(got), Some(expected)) => errors.compare(
+                &format!("mimo_seat_change/{index}"),
+                &[got],
+                &[expected],
+                Comparison::Exact,
+            ),
+            (None, None) => (),
+            _ => panic!("mimo_seat_change/{index}: presence differs"),
+        }
+    }
+    errors.finish("s2r_mimo_seat_change");
+}
+
+#[test]
+fn room_tuning2_s2r_mimo_normal_equations() {
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("mimo_normal_") {
+        let settings = &fixture["meta"]["settings"];
+        let setting = settings["setting"].as_str().unwrap();
+        let input = settings["input"].as_str().unwrap();
+        let early = settings["early_samples"].as_u64().unwrap() as usize;
+        let (x, g) = mimo_fixture_paths(setting, input);
+        let lp = array(&fixture["inputs"]["lp"]);
+        let c: Vec<Vec<Vec<f64>>> = g
+            .iter()
+            .map(|ear| {
+                ear.iter()
+                    .map(|path| {
+                        let mut value = mimo_convolution(path, &lp);
+                        value.truncate(720);
+                        value
+                    })
+                    .collect()
+            })
+            .collect();
+        let (normal, rhs) = mimo::normal_equations_with(&x, &c, early).unwrap();
+        let m = rhs.len();
+        errors.compare(
+            &format!("{name}/diagonal"),
+            &(0..m).map(|i| normal[(i, i)]).collect::<Vec<_>>(),
+            &array(&fixture["outputs"]["diagonal"]),
+            Comparison::Curve,
+        );
+        let candidates = m / 180;
+        let mut rows = Vec::new();
+        for j in 0..candidates {
+            for jj in 0..candidates {
+                for l in 0..180 {
+                    rows.push(normal[(j * 180, jj * 180 + l)]);
+                }
+            }
+        }
+        errors.compare(
+            &format!("{name}/block_first_rows"),
+            &rows,
+            &array(&fixture["outputs"]["block_first_rows"]),
+            Comparison::Curve,
+        );
+        errors.compare(
+            &format!("{name}/Atb"),
+            &rhs,
+            &array(&fixture["outputs"]["Atb"]),
+            Comparison::Curve,
+        );
+        let frobenius = normal
+            .col_iter()
+            .flat_map(|column| column.iter())
+            .map(|v| v * v)
+            .sum::<f64>()
+            .sqrt();
+        let trace = (0..m).map(|i| normal[(i, i)]).sum::<f64>();
+        errors.compare(
+            &format!("{name}/norms"),
+            &[frobenius, trace],
+            &[
+                number(&fixture["outputs"]["frobenius"]),
+                number(&fixture["outputs"]["trace"]),
+            ],
+            Comparison::Curve,
+        );
+    }
+    errors.finish("s2r_mimo_normal_equations");
+}
+
+fn compare_optional_hz(name: &str, got: Option<f64>, expected: &Value) {
+    match (got, optional_fixture_number(expected)) {
+        (Some(got), Some(expected)) => assert_eq!(got, expected, "{name}"),
+        (None, None) => (),
+        _ => panic!("{name}: presence differs"),
+    }
+}
+
+#[test]
+fn room_tuning2_s2r_mimo_guard() {
+    let mut errors = Errors::default();
+    let mut energy_relative: f64 = 0.0;
+    let mut energy_count = 0;
+    for (name, fixture) in fixtures_r("mimo_guard_") {
+        let input = &fixture["inputs"];
+        let x = vec![array(&input["x0"]), array(&input["x1"])];
+        let y = vec![array(&input["y0"]), array(&input["y1"])];
+        let fsiso = number(&input["fsiso"]);
+        let stored_energy = &fixture["outputs"]["seat_on"]["band_energies"];
+        let stored_bands: Vec<_> = stored_energy["bands_hz"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|band| (number(&band[0]), number(&band[1])))
+            .collect();
+        let frequencies = primitives::grid(1440, 600.0);
+        for (ear, (before, after)) in x.iter().zip(&y).enumerate() {
+            let peak = before.iter().map(|value| value.abs()).fold(0.0, f64::max);
+            let first = before
+                .iter()
+                .position(|value| value.abs() > 0.1 * peak)
+                .unwrap_or(0);
+            let end = (first + 36).min(before.len());
+            let mut before = before.clone();
+            let mut after = after.clone();
+            before[..end].fill(0.0);
+            after[..end].fill(0.0);
+            let before = primitives::rfft(&before, 1440);
+            let after = primitives::rfft(&after, 1440);
+            for (label, spectrum, expected) in [
+                ("before", &before, &stored_energy["before"][ear]),
+                ("after", &after, &stored_energy["after"][ear]),
+            ] {
+                let got: Vec<f64> = stored_bands
+                    .iter()
+                    .map(|(low, high)| {
+                        frequencies
+                            .iter()
+                            .zip(spectrum)
+                            .filter(|(frequency, _)| **frequency >= *low && **frequency < *high)
+                            .map(|(_, value)| value.norm_sqr())
+                            .sum()
+                    })
+                    .collect();
+                // Relative 1e-12 on every platform: the helper's foreign-libm
+                // widening does not apply to these plain sums of |rfft|².
+                let expected = array(expected);
+                assert_eq!(got.len(), expected.len(), "{name}/band_energy shape");
+                for (band, (g, e)) in got.iter().zip(&expected).enumerate() {
+                    let error = (g - e).abs();
+                    assert!(
+                        error <= 1e-12 * e.abs() + 1e-30,
+                        "{name}/band_energy/{ear}/{label}[{band}]: got={g:e} expected={e:e}"
+                    );
+                    energy_relative = energy_relative.max(error / e.abs().max(1e-30));
+                    energy_count += 1;
+                }
+            }
+        }
+        let stored = |key: &str| -> Vec<Vec<f64>> {
+            (0..2).map(|ear| array(&stored_energy[key][ear])).collect()
+        };
+        let (before, after) = (stored("before"), stored("after"));
+        for (label, enabled) in [("seat_off", false), ("seat_on", true)] {
+            let got = mimo::guard_evaluation(&x, &y, fsiso, enabled);
+            let expected = &fixture["outputs"][label];
+            let expected_band_db = number(&expected["band"]["db"]);
+            errors.compare(
+                &format!("{name}/{label}/values"),
+                &[got.band_db, got.tail_db],
+                &[expected_band_db, number(&expected["tail"]["db"])],
+                Comparison::Curve,
+            );
+            // The band choice is the strict-replacement maximum. Rebuild every
+            // candidate from the oracle's own band energies: when the oracle's
+            // maximum is unique by more than the value budget the choice must be
+            // the oracle's exactly; when several (ear, band) candidates are equal
+            // within rounding (a uniformly scaled late part changes every band by
+            // the same dB) the last bits decide, and the choice must be one of them.
+            let mut candidates: Vec<(Option<usize>, (f64, f64), f64)> = vec![];
+            for (m, &band) in stored_bands.iter().enumerate() {
+                if enabled {
+                    for ear in 0..2 {
+                        if let Some(value) = mimo::seat_change(before[ear][m], after[ear][m]) {
+                            candidates.push((Some(ear), band, value));
+                        }
+                    }
+                } else {
+                    let a = before[0][m] + before[1][m];
+                    let b = after[0][m] + after[1][m];
+                    if a > 0.0 {
+                        candidates.push((None, band, 10.0 * ((b + 1e-30) / a).log10()));
+                    }
+                }
+            }
+            if let Some(top) = candidates.iter().map(|c| c.2).reduce(f64::max)
+                && top > -99.0
+            {
+                assert!(
+                    (top - expected_band_db).abs() <= 1e-9,
+                    "{name}/{label}: stored energies give {top} dB, oracle {expected_band_db} dB"
+                );
+            }
+            let expected_choice = (
+                expected["band"]["position"].as_u64().map(|v| v as usize),
+                expected["band"]["hz"]
+                    .as_array()
+                    .map(|v| (number(&v[0]), number(&v[1]))),
+            );
+            let got_choice = (got.band_ear, got.band_hz);
+            let tied: Vec<_> = candidates
+                .iter()
+                .filter(|c| c.2 >= expected_band_db - 1e-9)
+                .map(|c| (c.0, Some(c.1)))
+                .collect();
+            if tied.len() <= 1 {
+                assert_eq!(got_choice, expected_choice, "{name}/{label}/band choice");
+            } else {
+                assert!(
+                    tied.contains(&got_choice) && tied.contains(&expected_choice),
+                    "{name}/{label}: {got_choice:?} is not among the {} candidates tied at the maximum",
+                    tied.len()
+                );
+                println!(
+                    "REPORT {name}/{label}/band: {} candidates tied within 1e-9 dB; got {got_choice:?}, oracle {expected_choice:?}",
+                    tied.len()
+                );
+            }
+            assert_eq!(
+                got.mode_hz,
+                optional_fixture_number(&expected["tail"]["hz"]),
+                "{name}/{label}/mode_hz"
+            );
+            assert_eq!(
+                got.tail_ear,
+                expected["tail"]["position"].as_u64().map(|v| v as usize),
+                "{name}/{label}/tail_ear"
+            );
+        }
+    }
+    errors.finish("s2r_mimo_guard");
+    println!(
+        "MEASURE s2r_mimo_guard_band_energies: max_relative={energy_relative:e}, values={energy_count}, budget=1e-12 relative on every platform"
+    );
+}
+
+#[test]
+fn room_tuning2_s2r_mimo_design() {
+    let mut solve = NumericErrors::default();
+    let mut guards = NumericErrors::default();
+    let mut supports = NumericErrors::default();
+    let mut cases = 0;
+    for (name, fixture) in fixtures_r("mimo_design_") {
+        cases += 1;
+        let settings = &fixture["meta"]["settings"];
+        let setting = settings["setting"].as_str().unwrap();
+        let input = settings["input"].as_str().unwrap();
+        let fsiso = number(&settings["fsiso"]);
+        let early = fixture["outputs"]["early_samples"].as_u64().unwrap() as usize;
+        let ear_guard = settings["seat_guard"].as_bool().unwrap();
+        let candidates: Vec<_> = fixture["inputs"]["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| (value.as_str().unwrap().to_owned(), 50.0))
+            .collect();
+        let (x, g) = mimo_fixture_paths(setting, input);
+        let (result, stages) = mimo::design_paths_with(
+            input,
+            &candidates,
+            x,
+            g,
+            array(&fixture["inputs"]["lp"]),
+            number(&fixture["inputs"]["direct_energy"]),
+            fsiso,
+            mimo::MimoRule { early, ear_guard },
+        )
+        .unwrap();
+        let trajectory = fixture["outputs"]["trajectory"].as_array().unwrap();
+        assert_eq!(
+            stages.logs.len(),
+            trajectory.len(),
+            "{name}/trajectory length"
+        );
+        for (index, (log, ratio)) in stages.logs.iter().zip(&stages.ratios).enumerate() {
+            assert_eq!(
+                *log,
+                number(&trajectory[index]["mid"]),
+                "{name}/log/{index}"
+            );
+            assert_eq!(
+                *ratio <= 10_f64.powf(-1.2),
+                trajectory[index]["accepted"].as_bool().unwrap(),
+                "{name}/decision/{index}"
+            );
+        }
+        solve.compare(
+            &format!("{name}/ratios"),
+            &stages.ratios,
+            &trajectory
+                .iter()
+                .map(|row| number(&row["ratio"]))
+                .collect::<Vec<_>>(),
+            3e-9,
+            1e-12,
+        );
+        assert_eq!(
+            stages.logs[stages.kept],
+            number(&fixture["outputs"]["log_lambda"]),
+            "{name}/kept"
+        );
+        solve.compare(
+            &format!("{name}/kept_ratio"),
+            &[stages.ratios[stages.kept]],
+            &[number(&fixture["outputs"]["ratio"])],
+            3e-9,
+            1e-12,
+        );
+        let expected_guards = fixture["outputs"]["guards"].as_array().unwrap();
+        assert_eq!(
+            stages.guard_steps.len(),
+            expected_guards.len(),
+            "{name}/guards"
+        );
+        for (index, (got, expected)) in stages.guard_steps.iter().zip(expected_guards).enumerate() {
+            let expected_scale = number(&expected["scale"]);
+            let db = [0.0, -3.0, -6.0, -9.0, -12.0][index];
+            let got_scale = 10_f64.powf(db / 20.0);
+            assert!(
+                (got_scale - expected_scale).abs() <= 1e-14 * expected_scale.abs().max(1.0),
+                "{name}/scale/{index}"
+            );
+            guards.compare(
+                &format!("{name}/guard/{index}"),
+                &[got.band_db, got.tail_db],
+                &[number(&expected["band_db"]), number(&expected["tail_db"])],
+                0.0,
+                1e-9,
+            );
+            assert_eq!(
+                got.band_hz,
+                expected["band_hz"]
+                    .as_array()
+                    .map(|v| (number(&v[0]), number(&v[1]))),
+                "{name}/band_hz/{index}"
+            );
+            compare_optional_hz(
+                &format!("{name}/mode_hz/{index}"),
+                got.mode_hz,
+                &expected["mode_hz"],
+            );
+            assert_eq!(
+                got.band_ear,
+                expected["band_position"].as_u64().map(|v| v as usize),
+                "{name}/band_ear/{index}"
+            );
+            assert_eq!(
+                got.tail_ear,
+                expected["tail_position"].as_u64().map(|v| v as usize),
+                "{name}/tail_ear/{index}"
+            );
+            assert_eq!(
+                got.band_db <= 1.0 && got.tail_db <= 1.0,
+                expected["passes"].as_bool().unwrap(),
+                "{name}/passes/{index}"
+            );
+        }
+        let expected_scale = number(&fixture["outputs"]["guard_scale"]);
+        let expected_step = (expected_scale > 0.0).then(|| expected_guards.len() - 1);
+        let actual_step = result.scale_db.map(|db| (-db / 3.0).round() as usize);
+        assert_eq!(actual_step, expected_step, "{name}/accepted step");
+        let expected_names: Vec<_> = fixture["outputs"]["support_names"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            result
+                .supports
+                .iter()
+                .map(|v| v.speaker.as_str())
+                .collect::<Vec<_>>(),
+            expected_names,
+            "{name}/support names"
+        );
+        let expected_supports = array(&fixture["outputs"]["supports"]);
+        let actual_supports: Vec<_> = result
+            .supports
+            .iter()
+            .flat_map(|support| support.fir.iter().copied())
+            .collect();
+        supports.compare(
+            &format!("{name}/supports"),
+            &actual_supports,
+            &expected_supports,
+            1e-9,
+            1e-12,
+        );
+        supports.compare(
+            &format!("{name}/level"),
+            &[result.level_db],
+            &[number(&fixture["outputs"]["level_db"])],
+            0.0,
+            1e-9,
+        );
+        if ear_guard && !fixture["outputs"]["guard_cause"].is_null() {
+            let got = result.ear_limit.as_ref().expect("ear limit");
+            let expected = &fixture["outputs"]["guard_cause"];
+            assert_eq!(
+                (-got.scale_db / 3.0).round(),
+                (-number(&expected["rejected_db"]) / 3.0).round(),
+                "{name}/limit step"
+            );
+            match (&got.band, expected["band"].as_array()) {
+                (Some(got), Some(expected_band)) => {
+                    assert_eq!(
+                        got.ear,
+                        expected["band_position"].as_u64().unwrap() as usize
+                    );
+                    guards.compare(
+                        &format!("{name}/limit band"),
+                        &[got.lo, got.hi, got.db],
+                        &array(&Value::Array(expected_band.clone())),
+                        0.0,
+                        1e-9,
+                    );
+                }
+                (None, None) => (),
+                _ => panic!("{name}/limit band presence"),
+            }
+            match (&got.tail, expected["tail"].as_array()) {
+                (Some(got), Some(expected_tail)) => {
+                    assert_eq!(
+                        got.ear,
+                        expected["tail_position"].as_u64().unwrap() as usize
+                    );
+                    guards.compare(
+                        &format!("{name}/limit tail"),
+                        &[got.hz, got.db],
+                        &array(&Value::Array(expected_tail.clone())),
+                        0.0,
+                        1e-9,
+                    );
+                }
+                (None, None) => (),
+                _ => panic!("{name}/limit tail presence"),
+            }
+        } else {
+            assert!(result.ear_limit.is_none(), "{name}/ear limit off");
+        }
+    }
+    assert_eq!(cases, 70);
+    solve.finish("s2r_mimo_design_solve");
+    guards.finish("s2r_mimo_design_guard");
+    supports.finish("s2r_mimo_design_supports");
 }

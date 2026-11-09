@@ -2,7 +2,7 @@
 mod golden_secs2_helpers;
 use faer::{Mat, linalg::solvers::Solve};
 use golden_secs2_helpers::*;
-use impulcifer_dsp::stages::room_tuning2::mimo::{bisect, normal_equations};
+use impulcifer_dsp::stages::room_tuning2::mimo::{bisect, normal_equations, normal_equations_with};
 #[test]
 fn diagnostic_inputs_are_checked() {
     use impulcifer_dsp::{DspError, stages::room_tuning2::mimo::*};
@@ -118,6 +118,54 @@ fn room_tuning2_mimo_fast_normal_equations() {
     .sqrt();
     println!("MEASURE dense normal matrix={matrix_rel:e} rhs={rhs_rel:e}");
     assert!(matrix_rel < 1e-12 && rhs_rel < 1e-12);
+
+    let (fast12, rhs12) = normal_equations_with(&x, &c, 12).unwrap();
+    let mut a12 = Mat::<f64>::zeros(2880, m);
+    let mut b12 = vec![0.; 2880];
+    for e in 0..2 {
+        let peak = x[e].iter().map(|v| v.abs()).fold(0., f64::max);
+        let early = x[e].iter().position(|v| v.abs() > 0.1 * peak).unwrap() + 12;
+        for t in 0..720 {
+            let row = if t >= early {
+                e * 720 + t
+            } else {
+                1440 + e * 720 + t
+            };
+            let weight = if t >= early { 1. } else { 10_f64.sqrt() };
+            if t >= early {
+                b12[row] = -x[e][t];
+            }
+            for j in 0..6 {
+                for k in 0..180.min(t + 1) {
+                    a12[(row, j * 180 + k)] = weight * c[e][j][t - k];
+                }
+            }
+        }
+    }
+    let dense12 = a12.transpose() * &a12;
+    let rb12: Vec<_> = (0..m)
+        .map(|i| (0..2880).map(|t| a12[(t, i)] * b12[t]).sum::<f64>())
+        .collect();
+    let matrix12_rel = ((0..m)
+        .flat_map(|i| (0..m).map(move |j| (i, j)))
+        .map(|(i, j)| (fast12[(i, j)] - dense12[(i, j)]).powi(2))
+        .sum::<f64>()
+        / dense12
+            .col_iter()
+            .flat_map(|column| column.iter())
+            .map(|v| v * v)
+            .sum::<f64>())
+    .sqrt();
+    let rhs12_rel = (rhs12
+        .iter()
+        .zip(&rb12)
+        .map(|(a, b)| (a - b).powi(2))
+        .sum::<f64>()
+        / rb12.iter().map(|b| b * b).sum::<f64>())
+    .sqrt();
+    println!("MEASURE dense early=12 normal matrix={matrix12_rel:e} rhs={rhs12_rel:e}");
+    assert!(matrix12_rel < 1e-12 && rhs12_rel < 1e-12);
+
     let (logs, ratios, kept, u) = bisect(&fast, &rhs, &lp, direct).unwrap();
     let sigma = (0..m).map(|i| dense[(i, i)]).sum::<f64>() / m as f64;
     let (mut lo, mut hi) = (-8., 4.);

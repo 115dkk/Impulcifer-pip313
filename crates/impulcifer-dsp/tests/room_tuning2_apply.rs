@@ -152,6 +152,8 @@ fn room_tuning2_matches_secs2_mimo() {
                 fsiso: entry["fsiso"].as_f64().unwrap(),
                 low: entry["f_low"].as_f64(),
                 input_hp: None,
+                early_ms: 60.0,
+                ear_guard: false,
             },
             &|speaker, stages| {
                 if setting.starts_with("mixed/") {
@@ -384,6 +386,8 @@ fn room_tuning2_mimo_reduces_late_energy_at_the_ears() {
         fsiso: 150.,
         low: None,
         input_hp: None,
+        early_ms: 60.0,
+        ear_guard: false,
     });
     let mut tuned = brir.clone();
     let report = apply_tuning2(&mut tuned, &p).unwrap();
@@ -660,6 +664,8 @@ fn room_tuning2_runs_on_the_demo_dsp() {
             fsiso: 150.,
             low: None,
             input_hp: None,
+            early_ms: 60.0,
+            ear_guard: false,
         }),
     ] {
         let mut p = plan.clone();
@@ -722,6 +728,8 @@ fn room_tuning2_is_thread_count_free() {
         fsiso: 150.,
         low: None,
         input_hp: None,
+        early_ms: 60.0,
+        ear_guard: false,
     });
     let run = |threads| {
         rayon::ThreadPoolBuilder::new()
@@ -758,6 +766,8 @@ fn room_tuning2_supports_are_band_limited() {
         fsiso: 150.,
         low: None,
         input_hp: None,
+        early_ms: 60.0,
+        ear_guard: false,
     });
     let mut tuned = brir.clone();
     let report = apply_tuning2_full(&mut tuned, &plan).unwrap();
