@@ -1457,6 +1457,13 @@ the `s2_mimo_*` results and serve as the control. The demo BRIRs pass through
 Impulcifer's own RC before MIMO, so end to end there is still no oracle;
 brir-3x checks those bytes against thread count.
 
+Bundle 5 (3.17.0) is not part of the room tuning: SECS 2R's relative speaker
+polarity check runs in the recording check on the in-ear takes and is
+specified in `docs/rust/ALIGNMENT.md` ("Speaker polarity"). Its `s2r_polarity_*`
+families hold the band weight, the direct-sound window, the correlation of two
+windows, the verdict on synthetic pulses and on the demo's aligned in-ear BRIRs
+with each ear as one of the oracle's positions.
+
 `tests/migration/goldens/room_tuning_secs2_rc.json` holds SECS's correction
 responses (|F_total| dB and phase with the lift removed, at FFT bins of
 N = 131072) for 62 runs on the demo omni files: every file/speaker as one
