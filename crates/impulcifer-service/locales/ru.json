@@ -450,6 +450,8 @@
   "record_check_ear_silent_left": "{speaker}: левый микрофон записал звук на {db_diff} dB тише правого. Проверьте, вставлен ли левый микрофон в ухо и подключён ли он, затем запишите заново.",
   "record_check_ear_silent_right": "{speaker}: правый микрофон записал звук на {db_diff} dB тише левого. Проверьте, вставлен ли правый микрофон в ухо и подключён ли он, затем запишите заново.",
   "record_check_polarity": "{speaker}: полярность сигнала одного микрофона противоположна полярности другого. Проверьте проводку микрофонов или настройку полярности аудиоинтерфейса, затем запишите заново.",
+  "record_check_speaker_polarity": "{speaker}: its polarity is opposite to most of the other speakers ({opposite} of {compared} comparisons, correlation {confidence}). Check its + and − wiring, then record it again.",
+  "record_check_speaker_polarity_split": "Speakers {group_a} and {group_b} have opposite polarity, and no other speaker shows which side is reversed (correlation {confidence}). Check their + and − wiring.",
   "record_check_mics_swapped": "Похоже, левый и правый микрофоны перепутаны: звук динамиков сначала достиг противоположного уха. Поменяйте местами микрофоны или входные каналы, затем запишите заново.",
   "record_check_distortion": "{speaker}: динамик искажает звук (уровень гармоник {distortion_db} dB). Уменьшите громкость воспроизведения, затем запишите заново.",
   "record_check_itd_mismatch": "{speaker}: разница времени прихода звука к ушам составляет {itd_us} µs, а для {reference} под тем же углом измерено {reference_itd_us} µs (расхождение {diff_us} µs). При одном из двух измерений вы повернулись на другой угол. Повторите запись с неверным углом.",

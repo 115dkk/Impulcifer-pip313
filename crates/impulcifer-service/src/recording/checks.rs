@@ -4,11 +4,19 @@ use impulcifer_dsp::{
     estimator::SweepEstimator,
     filters::{self, BType},
     itd::{band_level_db, direct_arrival, estimate},
+    polarity::{self, PolarityInput, Side, Verdict},
 };
 use impulcifer_types::layouts::SLOTS;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::{collections::BTreeMap, f64::consts::PI};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DirectSound {
+    pub fs: u32,
+    pub left: Vec<f64>,
+    pub right: Vec<f64>,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ReferenceMeasurement {
@@ -17,9 +25,10 @@ pub struct ReferenceMeasurement {
     pub lf_db: Option<f64>,
     pub lf_ild_db: Option<f64>,
     pub azimuth: Option<f64>,
+    pub direct: Option<DirectSound>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Measurement {
     pub speaker: String,
     pub peak_db: f64,
@@ -28,6 +37,8 @@ pub struct Measurement {
     pub lf_db: Option<f64>,
     pub lf_ild_db: Option<f64>,
     pub azimuth: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direct: Option<DirectSound>,
 }
 
 #[derive(Debug, Serialize)]
@@ -277,6 +288,20 @@ fn mismatch_issue(
     });
 }
 
+fn polarity_issue(
+    checks: &mut Vec<RecordingCheck>,
+    key: &'static str,
+    speaker: &str,
+    values: Map<String, Value>,
+) {
+    checks.push(RecordingCheck {
+        key,
+        speaker: speaker.to_owned(),
+        severity: "warning",
+        values,
+    });
+}
+
 fn median(mut values: Vec<f64>) -> Option<f64> {
     if values.is_empty() {
         return None;
@@ -353,31 +378,39 @@ pub fn check_recording(
                     .map(|(left, right)| left - right);
                 let headphone_left_db = band_level_db(&left_ir, fs, 200.0, 2_000.0);
                 let headphone_right_db = band_level_db(&right_ir, fs, 200.0, 2_000.0);
+                let direct = polarity::direct_window(&left_ir, fs)
+                    .zip(polarity::direct_window(&right_ir, fs))
+                    .map(|(left, right)| DirectSound {
+                        fs,
+                        left: left.samples,
+                        right: right.samples,
+                    });
                 (
                     itd,
                     impulse,
                     lf_ild_db,
                     headphone_left_db,
                     headphone_right_db,
+                    direct,
                 )
             })
         } else {
             None
         };
-        let itd = analysis.as_ref().and_then(|(itd, _, _, _, _)| *itd);
+        let itd = analysis.as_ref().and_then(|(itd, _, _, _, _, _)| *itd);
         let lf_ild_db = analysis
             .as_ref()
-            .and_then(|(_, _, level, _, _)| *level)
+            .and_then(|(_, _, level, _, _, _)| *level)
             .filter(|_| snr_db >= 6.0 && !ear_silent);
         let headphone_left_db = analysis
             .as_ref()
-            .and_then(|(_, _, _, level, _)| *level)
+            .and_then(|(_, _, _, level, _, _)| *level)
             .filter(|_| snr_db >= 6.0);
         let headphone_right_db = analysis
             .as_ref()
-            .and_then(|(_, _, _, _, level)| *level)
+            .and_then(|(_, _, _, _, level, _)| *level)
             .filter(|_| snr_db >= 6.0);
-        let measurement = Measurement {
+        let mut measurement = Measurement {
             speaker: segment.speaker.clone(),
             peak_db: rounded(peak_db, 1),
             snr_db: rounded(snr_db, 1),
@@ -389,6 +422,7 @@ pub fn check_recording(
             lf_db,
             lf_ild_db,
             azimuth,
+            direct: None,
         };
 
         if snr_db < 6.0 {
@@ -461,7 +495,7 @@ pub fn check_recording(
         }
         // Second-harmonic energy at -20 dB (10 %) or more is audible distortion.
         if !headphones
-            && let Some((_, impulse, _, _, _)) = &analysis
+            && let Some((_, impulse, _, _, _, _)) = &analysis
             && let Some(distortion_db) = impulse.distortion_db
             && distortion_db >= -20.0
         {
@@ -563,6 +597,21 @@ pub fn check_recording(
                 }
             }
         }
+        let has_distortion = analysis.as_ref().is_some_and(|(_, impulse, _, _, _, _)| {
+            impulse
+                .distortion_db
+                .is_some_and(|distortion_db| distortion_db >= -20.0)
+        });
+        if !headphones
+            && !ear_silent
+            && !wrong_side
+            && !itd.is_some_and(|value| value.inverted)
+            && !has_distortion
+        {
+            measurement.direct = analysis
+                .as_ref()
+                .and_then(|(_, _, _, _, _, direct)| direct.clone());
+        }
         takes.push(MeasuredTake {
             measurement,
             ear_silent,
@@ -587,6 +636,7 @@ pub fn check_recording(
             lf_db: reference.lf_db,
             lf_ild_db: reference.lf_ild_db,
             azimuth: reference.azimuth,
+            direct: reference.direct.clone(),
         })
         .collect();
     let comparison_references: Vec<_> = references
@@ -744,6 +794,81 @@ pub fn check_recording(
             "error",
             &[],
         );
+    }
+
+    let polarity_measurements = SLOTS
+        .iter()
+        .filter_map(|slot| {
+            takes
+                .iter()
+                .map(|take| &take.measurement)
+                .chain(comparison_references.iter().copied())
+                .find(|measurement| measurement.speaker == slot.code)
+                .filter(|measurement| measurement.direct.is_some())
+        })
+        .collect::<Vec<_>>();
+    let polarity_inputs = polarity_measurements
+        .iter()
+        .map(|measurement| {
+            let direct = measurement.direct.as_ref().unwrap();
+            let side = match direction(&measurement.speaker, measurement.azimuth)
+                .expect("known speaker has a direction")
+                .side
+            {
+                1 => Side::Left,
+                -1 => Side::Right,
+                _ => Side::Centre,
+            };
+            PolarityInput {
+                fs: direct.fs,
+                side,
+                left: Some(&direct.left),
+                right: Some(&direct.right),
+            }
+        })
+        .collect::<Vec<_>>();
+    let polarity_pairs = polarity::pair_matrix(&polarity_inputs);
+    for verdict in polarity::verdicts(&polarity_pairs) {
+        match verdict {
+            Verdict::Reversed {
+                index,
+                confidence,
+                compared,
+                opposite,
+            } => polarity_issue(
+                &mut checks,
+                "record_check_speaker_polarity",
+                &polarity_measurements[index].speaker,
+                [
+                    ("compared".to_owned(), json!(compared)),
+                    ("opposite".to_owned(), json!(opposite)),
+                    ("confidence".to_owned(), json!(format!("{confidence:.2}"))),
+                ]
+                .into_iter()
+                .collect(),
+            ),
+            Verdict::Split { a, b, confidence } => {
+                let group = |indices: &[usize]| {
+                    indices
+                        .iter()
+                        .map(|index| polarity_measurements[*index].speaker.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                polarity_issue(
+                    &mut checks,
+                    "record_check_speaker_polarity_split",
+                    &polarity_measurements[a[0]].speaker,
+                    [
+                        ("group_a".to_owned(), json!(group(&a))),
+                        ("group_b".to_owned(), json!(group(&b))),
+                        ("confidence".to_owned(), json!(format!("{confidence:.2}"))),
+                    ]
+                    .into_iter()
+                    .collect(),
+                );
+            }
+        }
     }
 
     CheckResults {

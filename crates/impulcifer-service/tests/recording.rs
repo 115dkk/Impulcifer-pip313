@@ -260,11 +260,17 @@ fn expected_azimuths_validate_against_the_sweep() {
 
 #[test]
 fn reference_measurements_validate_shape_limit_and_speakers() {
+    let direct = json!({
+        "fs":48_000,
+        "left":vec![0.0; 288],
+        "right":vec![0.0; 288]
+    });
     let valid = request::validate(&json!({
         "record_dir":"missing",
         "sweep":{"speakers":["FR"]},
         "reference_measurements":[{
-            "speaker":"fl","itd_us":250,"lf_db":-20.5,"lf_ild_db":-6.5,"azimuth":30
+            "speaker":"fl","itd_us":250,"lf_db":-20.5,"lf_ild_db":-6.5,"azimuth":30,
+            "direct":direct
         }]
     }))
     .unwrap();
@@ -274,6 +280,10 @@ fn reference_measurements_validate_shape_limit_and_speakers() {
     assert_eq!(reference.lf_db, Some(-20.5));
     assert_eq!(reference.lf_ild_db, Some(-6.5));
     assert_eq!(reference.azimuth, Some(30.0));
+    let direct = reference.direct.as_ref().unwrap();
+    assert_eq!(direct.fs, 48_000);
+    assert_eq!(direct.left.len(), 288);
+    assert_eq!(direct.right.len(), 288);
 
     let invalid = [
         json!({}),
@@ -295,6 +305,60 @@ fn reference_measurements_validate_shape_limit_and_speakers() {
         .unwrap_err();
         assert_eq!(error["error"]["code"], "INVALID_REQUEST");
     }
+    let direct_invalid = [
+        (json!("bad"), "direct"),
+        (json!({"fs":7_999,"left":[],"right":[]}), "direct.fs"),
+        (json!({"fs":768_001,"left":[],"right":[]}), "direct.fs"),
+        (json!({"fs":48_000.5,"left":[],"right":[]}), "direct.fs"),
+        (
+            json!({"fs":48_000,"left":"bad","right":vec![0.0;288]}),
+            "direct.left",
+        ),
+        (
+            json!({"fs":48_000,"left":vec![0.0;287],"right":vec![0.0;288]}),
+            "direct.left",
+        ),
+        (
+            json!({"fs":48_000,"left":vec![0.0;288],"right":vec!["bad";288]}),
+            "direct.right",
+        ),
+        (json!({"fs":768_000,"left":[],"right":[]}), "direct length"),
+        (
+            json!({"fs":48_000,"left":vec![0.0;288],"right":vec![0.0;288],"extra":0}),
+            "direct fields",
+        ),
+    ];
+    for (direct, named_field) in direct_invalid {
+        let error = request::validate(&json!({
+            "record_dir":"missing","sweep":{"speakers":["FL"]},
+            "reference_measurements":[{
+                "speaker":"FL","itd_us":null,"lf_db":null,"azimuth":null,"direct":direct
+            }]
+        }))
+        .unwrap_err();
+        assert_eq!(error["error"]["code"], "INVALID_REQUEST");
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(named_field),
+            "{error}"
+        );
+    }
+
+    let null_direct = request::validate(&json!({
+        "record_dir":"missing","sweep":{"speakers":["FL"]},
+        "reference_measurements":[{
+            "speaker":"FL","itd_us":null,"lf_db":null,"azimuth":null,"direct":null
+        }]
+    }))
+    .unwrap();
+    assert!(
+        null_direct.reference_measurements.unwrap()[0]
+            .direct
+            .is_none()
+    );
+
     let headphones = request::validate(&json!({
         "mode":"headphones","record_dir":"missing","sweep":{},
         "reference_measurements":[{

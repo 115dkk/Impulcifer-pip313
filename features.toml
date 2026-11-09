@@ -1501,6 +1501,13 @@ status = "implemented"
 tests = ["impulcifer-service::take_checks_report_the_input_balance", "impulcifer-service::headphone_take_checks_predict_the_final_balance"]
 
 [[feature]]
+id = "recording.speaker_polarity_check"
+kind = "recording"
+status = "implemented"
+tests = ["impulcifer-dsp::recording_polarity_s2r_demo", "impulcifer-dsp::recording_polarity_s2r_check", "impulcifer-service::speaker_polarity_reports_one_reversed_speaker", "impulcifer-service::speaker_polarity_reports_an_equal_split_without_choosing_a_side", "impulcifer-service::speaker_polarity_reports_a_reversed_reference_speaker", "impulcifer-service::rerecorded_speaker_replaces_its_polarity_reference", "impulcifer-service::headphone_runs_emit_no_direct_sound_or_speaker_polarity_checks", "impulcifer-service::reference_measurements_validate_shape_limit_and_speakers"]
+note = "ADR 0015 bundle 5: qualifying in-ear speaker takes compare direct-sound polarity at the shared same-side ear; a minority speaker is reported as reversed, an equal split is reported without choosing a side, current takes replace session references, and headphone takes do not participate"
+
+[[feature]]
 id = "recording.progress"
 kind = "recording"
 status = "implemented"

@@ -9,6 +9,10 @@ use impulcifer_dsp::{
     fft::Complex64,
     hrir::Hrir,
     ir::ImpulseResponse,
+    polarity::{
+        DirectWindow, PolarityInput, Side, Verdict, band_weight, direct_window, pair_matrix,
+        verdicts, window_correlation,
+    },
     stages::{room, room_tuning2::*},
 };
 use impulcifer_io::read_wav;
@@ -3265,4 +3269,429 @@ fn room_tuning2_s2r_mimo_design() {
     solve.finish("s2r_mimo_design_solve");
     guards.finish("s2r_mimo_design_guard");
     supports.finish("s2r_mimo_design_supports");
+}
+
+fn compare_polarity_window(name: &str, got: &DirectWindow, expected: &Value, errors: &mut Errors) {
+    assert_eq!(
+        got.onset,
+        expected["onset"].as_u64().unwrap() as usize,
+        "{name}/onset"
+    );
+    assert_eq!(
+        got.peak,
+        expected["peak"].as_u64().unwrap() as usize,
+        "{name}/peak"
+    );
+    assert_eq!(
+        got.start,
+        expected["start"].as_i64().unwrap() as isize,
+        "{name}/start"
+    );
+    assert_eq!(
+        got.samples.len(),
+        expected["length"].as_u64().unwrap() as usize,
+        "{name}/length"
+    );
+    assert_eq!(
+        got.taper,
+        expected["taper"].as_u64().unwrap() as usize,
+        "{name}/taper"
+    );
+    errors.compare(
+        &format!("{name}/samples"),
+        &got.samples,
+        &array(&expected["window"]),
+        Comparison::Exact,
+    );
+}
+
+#[test]
+fn recording_polarity_s2r_weight() {
+    let fixture = fixture_r("polarity_weight");
+    let mut errors = Errors::default();
+    let explicit = array(&fixture["inputs"]["frequencies_hz"])
+        .into_iter()
+        .map(band_weight)
+        .collect::<Vec<_>>();
+    errors.compare(
+        "polarity_weight/explicit",
+        &explicit,
+        &array(&fixture["outputs"]["explicit"]),
+        Comparison::Exact,
+    );
+    for fs in fixture["inputs"]["bin_sample_rates"].as_array().unwrap() {
+        let fs = fs.as_u64().unwrap() as u32;
+        let got = (0..=2048)
+            .map(|bin| band_weight(bin as f64 * f64::from(fs) / 4096.0))
+            .collect::<Vec<_>>();
+        errors.compare(
+            &format!("polarity_weight/{fs}"),
+            &got,
+            &array(&fixture["outputs"]["bin_weights"][fs.to_string()]),
+            Comparison::Exact,
+        );
+    }
+    errors.finish("s2r_polarity_weight");
+}
+
+#[test]
+fn recording_polarity_s2r_window() {
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("polarity_window_") {
+        let got = direct_window(
+            &array(&fixture["inputs"]["ir"]),
+            fixture["inputs"]["sample_rate"].as_u64().unwrap() as u32,
+        )
+        .expect("fixture window");
+        compare_polarity_window(&name, &got, &fixture["outputs"], &mut errors);
+    }
+    errors.finish("s2r_polarity_window");
+}
+
+#[test]
+fn recording_polarity_s2r_pair() {
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("polarity_pair_") {
+        let fs = fixture["inputs"]["sample_rate"].as_u64().unwrap() as u32;
+        let expected = &fixture["outputs"];
+        let compare = |label: &str,
+                       got: Option<impulcifer_dsp::polarity::Correlation>,
+                       errors: &mut Errors| {
+            if expected["value"].is_null() {
+                assert!(got.is_none(), "{name}/{label}");
+            } else {
+                let got = got.expect("fixture correlation");
+                assert_eq!(
+                    got.lag,
+                    expected["lag"].as_i64().unwrap() as isize,
+                    "{name}/{label}/lag"
+                );
+                errors.compare(
+                    &format!("{name}/{label}"),
+                    &[got.value, got.energy],
+                    &[number(&expected["value"]), number(&expected["energy"])],
+                    Comparison::Curve,
+                );
+            }
+        };
+        compare(
+            "stored_windows",
+            window_correlation(
+                &array(&fixture["inputs"]["window_a"]),
+                &array(&fixture["inputs"]["window_b"]),
+                fs,
+            ),
+            &mut errors,
+        );
+        let a = direct_window(&array(&fixture["inputs"]["ir_a"]), fs).unwrap();
+        let b = direct_window(&array(&fixture["inputs"]["ir_b"]), fs).unwrap();
+        compare(
+            "rebuilt_windows",
+            window_correlation(&a.samples, &b.samples, fs),
+            &mut errors,
+        );
+    }
+    errors.finish("s2r_polarity_pair");
+}
+
+#[derive(Clone)]
+struct OwnedPolarityInput {
+    role: String,
+    fs: u32,
+    side: Side,
+    left: Option<DirectWindow>,
+    right: Option<DirectWindow>,
+}
+
+fn polarity_side(role: &str) -> Side {
+    match role {
+        "FL" | "SL" | "BL" => Side::Left,
+        "FR" | "SR" | "BR" => Side::Right,
+        "FC" | "BC" => Side::Centre,
+        _ => panic!("fixture has unknown polarity side: {role}"),
+    }
+}
+
+fn polarity_inputs(owned: &[OwnedPolarityInput]) -> Vec<PolarityInput<'_>> {
+    owned
+        .iter()
+        .map(|input| PolarityInput {
+            fs: input.fs,
+            side: input.side,
+            left: input.left.as_ref().map(|window| window.samples.as_slice()),
+            right: input.right.as_ref().map(|window| window.samples.as_slice()),
+        })
+        .collect()
+}
+
+fn fixture_windows_from_irs(fixture: &Value) -> Vec<OwnedPolarityInput> {
+    let fs = fixture["meta"]["settings"]["sample_rate"].as_u64().unwrap() as u32;
+    let mains = fixture["meta"]["mains"].as_array().unwrap();
+    mains
+        .iter()
+        .map(|role| {
+            let role = role.as_str().unwrap();
+            let ear_ir = |ear: &str| {
+                fixture["inputs"]["irs"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|entry| entry["role"] == role && entry["ear"] == ear)
+                    .map(|entry| {
+                        direct_window(&array(&entry["ir"]), fs).expect("fixture direct window")
+                    })
+            };
+            OwnedPolarityInput {
+                role: role.to_owned(),
+                fs,
+                side: polarity_side(role),
+                left: ear_ir("left"),
+                right: ear_ir("right"),
+            }
+        })
+        .collect()
+}
+
+fn demo_prefixes() -> BTreeMap<(String, String), Vec<f64>> {
+    let fixture = fixture_r("polarity_demo_base");
+    fixture["inputs"]["prefixes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| {
+            (
+                (
+                    entry["role"].as_str().unwrap().to_owned(),
+                    entry["ear"].as_str().unwrap().to_owned(),
+                ),
+                array(entry),
+            )
+        })
+        .collect()
+}
+
+fn fixture_demo_windows(fixture: &Value) -> Vec<OwnedPolarityInput> {
+    let fs = fixture["meta"]["settings"]["sample_rate"].as_u64().unwrap() as u32;
+    let prefixes = demo_prefixes();
+    let included = fixture["inputs"]["included"].as_array().unwrap();
+    let flipped = fixture["inputs"]["flipped"].as_array().unwrap();
+    fixture["meta"]["mains"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|role| included.contains(role))
+        .map(|role| {
+            let role = role.as_str().unwrap();
+            let sign = if flipped.iter().any(|value| value == role) {
+                -1.0
+            } else {
+                1.0
+            };
+            let ear_window = |ear: &str| {
+                let ir = prefixes[&(role.to_owned(), ear.to_owned())]
+                    .iter()
+                    .map(|sample| sample * sign)
+                    .collect::<Vec<_>>();
+                Some(direct_window(&ir, fs).expect("demo direct window"))
+            };
+            OwnedPolarityInput {
+                role: role.to_owned(),
+                fs,
+                side: polarity_side(role),
+                left: ear_window("left"),
+                right: ear_window("right"),
+            }
+        })
+        .collect()
+}
+
+fn compare_polarity_case(
+    name: &str,
+    fixture: &Value,
+    owned: &[OwnedPolarityInput],
+    errors: &mut Errors,
+) {
+    for expected in fixture["outputs"]["windows"].as_array().unwrap() {
+        let role = expected["role"].as_str().unwrap();
+        let ear = expected["ear"].as_str().unwrap();
+        let input = owned.iter().find(|input| input.role == role).unwrap();
+        let window = if ear == "left" {
+            input.left.as_ref().unwrap()
+        } else {
+            input.right.as_ref().unwrap()
+        };
+        compare_polarity_window(
+            &format!("{name}/window/{role}/{ear}"),
+            window,
+            expected,
+            errors,
+        );
+    }
+
+    for expected in fixture["outputs"]["compared_pairs"].as_array().unwrap() {
+        let first = owned
+            .iter()
+            .find(|input| input.role == expected["a"].as_str().unwrap())
+            .unwrap();
+        let second = owned
+            .iter()
+            .find(|input| input.role == expected["b"].as_str().unwrap())
+            .unwrap();
+        let left = expected["ear"] == "left";
+        let a = if left {
+            first.left.as_ref()
+        } else {
+            first.right.as_ref()
+        }
+        .unwrap();
+        let b = if left {
+            second.left.as_ref()
+        } else {
+            second.right.as_ref()
+        }
+        .unwrap();
+        let got = window_correlation(&a.samples, &b.samples, first.fs).unwrap();
+        assert_eq!(
+            got.lag,
+            expected["lag"].as_i64().unwrap() as isize,
+            "{name}/pair lag"
+        );
+        errors.compare(
+            &format!(
+                "{name}/pair/{}/{}/{}",
+                first.role,
+                second.role,
+                expected["ear"].as_str().unwrap()
+            ),
+            &[got.value, got.energy],
+            &[number(&expected["value"]), number(&expected["energy"])],
+            Comparison::Curve,
+        );
+    }
+
+    let got_pairs = pair_matrix(&polarity_inputs(owned));
+    let expected_pairs = fixture["outputs"]["pair_results"].as_array().unwrap();
+    assert_eq!(got_pairs.len(), expected_pairs.len(), "{name}/pair rows");
+    for (row, expected_row) in got_pairs.iter().zip(expected_pairs) {
+        for (got, expected) in row.iter().zip(expected_row.as_array().unwrap()) {
+            match (got, expected.is_null()) {
+                (None, true) => {}
+                (Some(got), false) => errors.compare(
+                    &format!("{name}/decided_pair"),
+                    &[*got],
+                    &[number(expected)],
+                    Comparison::Curve,
+                ),
+                _ => panic!("{name}/decided pair presence differs"),
+            }
+        }
+    }
+
+    let got_verdicts = verdicts(&got_pairs);
+    let expected_notes = fixture["outputs"]["notes"].as_array().unwrap();
+    assert_eq!(
+        got_verdicts.len(),
+        expected_notes.len(),
+        "{name}/verdict count"
+    );
+    for (got, expected) in got_verdicts.iter().zip(expected_notes) {
+        match got {
+            Verdict::Reversed {
+                index,
+                confidence,
+                compared,
+                opposite,
+            } => {
+                assert_eq!(expected["kind"], "PolarityReversed", "{name}/kind");
+                assert_eq!(
+                    owned[*index].role,
+                    expected["role"].as_str().unwrap(),
+                    "{name}/role"
+                );
+                assert_eq!(
+                    *compared,
+                    expected["compared"].as_u64().unwrap() as usize,
+                    "{name}/compared"
+                );
+                assert_eq!(
+                    *opposite,
+                    expected["opposite"].as_u64().unwrap() as usize,
+                    "{name}/opposite"
+                );
+                errors.compare(
+                    &format!("{name}/confidence"),
+                    &[*confidence],
+                    &[number(&expected["confidence"])],
+                    Comparison::Curve,
+                );
+            }
+            Verdict::Split { a, b, confidence } => {
+                assert_eq!(expected["kind"], "PolaritySplit", "{name}/kind");
+                let roles = |indices: &[usize]| {
+                    indices
+                        .iter()
+                        .map(|index| owned[*index].role.as_str())
+                        .collect::<Vec<_>>()
+                };
+                let groups = expected["groups"].as_array().unwrap();
+                assert_eq!(
+                    roles(a),
+                    groups[0]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|role| role.as_str().unwrap())
+                        .collect::<Vec<_>>(),
+                    "{name}/group a"
+                );
+                assert_eq!(
+                    roles(b),
+                    groups[1]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|role| role.as_str().unwrap())
+                        .collect::<Vec<_>>(),
+                    "{name}/group b"
+                );
+                errors.compare(
+                    &format!("{name}/confidence"),
+                    &[*confidence],
+                    &[number(&expected["confidence"])],
+                    Comparison::Curve,
+                );
+            }
+        }
+    }
+
+    if name.starts_with("polarity_demo_") {
+        println!(
+            "DEMO {name}: pairs got={got_pairs:?} oracle={:?}",
+            fixture["outputs"]["pair_results"]
+        );
+        println!(
+            "DEMO {name}: verdicts got={got_verdicts:?} oracle={:?}",
+            fixture["outputs"]["notes"]
+        );
+    }
+}
+
+#[test]
+fn recording_polarity_s2r_demo() {
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("polarity_demo_") {
+        let owned = fixture_demo_windows(&fixture);
+        compare_polarity_case(&name, &fixture, &owned, &mut errors);
+    }
+    errors.finish("s2r_polarity_demo");
+}
+
+#[test]
+fn recording_polarity_s2r_check() {
+    let mut errors = Errors::default();
+    for (name, fixture) in fixtures_r("polarity_check_") {
+        let owned = fixture_windows_from_irs(&fixture);
+        compare_polarity_case(&name, &fixture, &owned, &mut errors);
+    }
+    errors.finish("s2r_polarity_check");
 }

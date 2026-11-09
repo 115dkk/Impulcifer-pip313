@@ -33,6 +33,8 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | `mimo_normal_*` | 여러 초기 구간에서 만든 MIMO 정규 방정식과 우변 |
 | `mimo_design_*` | 초기 구간·귀별 가드 조합별 MIMO 풀이, 모든 가드 시도, 서포트와 귀 기록 |
 | `mimo_guard_*` | 합산 가드와 귀별 가드의 합성 사례, 귀별 대역 에너지 |
+| `polarity_weight`, `polarity_window_*`, `polarity_pair_*` | 스피커 상대 극성 검사의 대역 가중치, 직접음 구간, 구간 상관 |
+| `polarity_demo_*`, `polarity_check_*` | 데모와 합성 응답에서 얻은 귀별 상관, 판정 행렬, 극성 경고 |
 
 ## Gates
 
@@ -81,6 +83,11 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | MIMO normal equations | `Curve` | 4.440892098500626e-15 | 3.7305743002381116e-15 |
 | MIMO guard evaluation and band energies | `Curve` + exact decisions | 2.509104035652854e-13 (guard), 1.7763568394002505e-15 (energy) | 4.080288248210585e-14 (guard), 1.7666563505222917e-16 (energy) |
 | MIMO design | `Curve` + exact decisions | 3.771757661752417e-8 (ratio), 1.021405182655144e-12 (support) | 1.3473578830673903e-9 (ratio), 1.1873105152459935e-12 (support) |
+| 극성 대역 가중치 | `Exact` | 1.6653345369377348e-16 | 1.4344662340420389e-17 |
+| 극성 직접음 구간 | 인덱스 exact, 표본 `Exact` | 0 | 0 |
+| 극성 구간 상관 | lag와 값 유무 exact, 값·에너지 `Curve` | 1.1102230246251565e-16 | 7.59249780745935e-17 |
+| 극성 데모 | 구간 `Exact`, 상관·판정값·신뢰도 `Curve`, 판정과 경고 exact | 2.220446049250313e-16 | 2.454474234760896e-16 |
+| 극성 합성 점검 | 구간 `Exact`, 상관·판정값·신뢰도 `Curve`, 판정과 경고 exact | 0 | 0 |
 
 상한 대역 SOS는 Impulcifer가 3.5.0부터 엄격한 추정에 쓰던 Butterworth 포트를 그대로 사용한다. 기본 출력의 바이트를 지켜야 하므로 오라클의 설계 연산으로 바꾸지 않는다. Debian glibc 2.41에서도 일부 계수가 1~2 ULP 달랐고, 최대 절대 오차는 4.440892098500626e-16, 최대 상대 L2 오차는 1.2109958378534601e-16이었다. 따라서 SOS 계수는 `Curve`로 판정하며, 같은 필터로 얻은 감쇠 교차 인덱스는 오라클과 정확히 같아 계속 exact로 검사한다.
 
