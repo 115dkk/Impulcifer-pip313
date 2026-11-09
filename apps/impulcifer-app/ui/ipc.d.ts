@@ -87,14 +87,18 @@ interface RecordingRequest {
   append?: boolean; debug_plots?: boolean; confirm_warnings?: boolean;
   /* The azimuth each speaker should be heard at (ITU degrees); enables the turn-angle checks. */
   expected_azimuths?: Record<string, number>;
-  /* Earlier takes in the same folder, compared with speakers that should share their angle. */
-  reference_measurements?: { speaker: string; itd_us: number | null; lf_db: number | null; azimuth: number | null; lf_ild_db?: number | null }[];
+  /* Earlier speaker takes in the same folder; direct carries their two direct-sound windows for polarity checks. */
+  reference_measurements?: { speaker: string; itd_us: number | null; lf_db: number | null; azimuth: number | null; lf_ild_db?: number | null; direct?: DirectSound | null }[];
 }
 /* A finding of the post-recording checks; `key` is a catalog key, `values` its placeholders. */
 interface RecordingCheck { key: string; speaker: string; severity: "error" | "warning"; values: Record<string, number | string> }
+/* The two direct-sound windows at the take's sample rate, for speaker polarity checks. */
+interface DirectSound { fs: number; left: number[]; right: number[] }
 interface RecordingMeasurement {
   speaker: string; peak_db: number; snr_db: number; itd_us: number | null;
   lf_db?: number | null; azimuth?: number | null; lf_ild_db?: number | null;
+  /* Present only when a speaker take qualifies for the polarity check. */
+  direct?: DirectSound | null;
 }
 interface RecordingResult {
   /* record_dir is the folder as requested; record_path may be in a subfolder of it

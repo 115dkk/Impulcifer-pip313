@@ -24,7 +24,8 @@ EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 
                   + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 3 * (2 * 2 * 2) + 2 * 2 + 2 * 2
                   + 2 * 2 * 2  # bundle 2: mixed and zero, English/Korean, dark/light
                   + 2 * 2  # bundle 3: lenient, ×2 and input high-pass, English/Korean, dark/light
-                  + 2 * 2)  # bundle 4: MIMO early interval and ear guard, English/Korean, dark/light
+                  + 2 * 2  # bundle 4: MIMO early interval and ear guard, English/Korean, dark/light
+                  + 2)  # bundle 5: speaker polarity warnings, English/Korean, dark
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -205,15 +206,22 @@ def mock_script(skin, theme, language, scenario):
           {kind: "share_mode_refused", share_mode: "exclusive", reason: "AUDCLNT_E_DEVICE_IN_USE"}).error}, events: [], next_seq: 1});
         const share = {requested: lastRequest.share_mode, output: "exclusive", input: "shared_auto_convert"};
         // A guided step that turned too far: the rear pair's BR reads 170° instead of 150°.
-        const checks = (lastRequest.expected_azimuths || {}).BR === undefined ? []
-          : [{key: "record_check_angle_too_far", speaker: "BR", severity: "warning",
-              values: {itd_us: 89, measured: 170, expected: 150}}];
+        const checks = scenario === "polarity"
+          ? [{key: "record_check_speaker_polarity", speaker: "SL", severity: "warning",
+              values: {compared: 3, opposite: 3, confidence: "0.78"}},
+             {key: "record_check_speaker_polarity_split", speaker: "FL", severity: "warning",
+              values: {group_a: "FL", group_b: "FC", confidence: "1.00"}}]
+          : (lastRequest.expected_azimuths || {}).BR === undefined ? []
+            : [{key: "record_check_angle_too_far", speaker: "BR", severity: "warning",
+                values: {itd_us: 89, measured: 170, expected: 150}}];
         return ok({job: {...job("succeeded"), result: {mode: lastRequest.mode,
           record_path: `${lastRequest.record_dir}/${lastRequest.mode === "headphones" ? "headphones" : lastRequest.sweep?.speakers || "FL,FR"}.wav`,
           summary: null,
           sweep: null, sidecar_path: null, share, checks,
           measurements: Object.entries(lastRequest.expected_azimuths || {}).map(([speaker, azimuth]) => ({
-            speaker, peak_db: -12, snr_db: 60, itd_us: Math.sign(azimuth) * 250, lf_db: -20, lf_ild_db: -6.5, azimuth}))}},
+            speaker, peak_db: -12, snr_db: 60, itd_us: Math.sign(azimuth) * 250, lf_db: -20, lf_ild_db: -6.5, azimuth,
+            ...(lastRequest.mode === "speakers" ? {direct: {fs: 48000,
+              left: [0, azimuth / 180, -0.25], right: [0, 0.125, -azimuth / 180]}} : {})}))}},
           events: [{seq: 1, timestamp_ms: 0, type: "log",
             payload: {level: "info", key: "recording_share_mode_opened", message: "untranslated fixture", share}}], next_seq: 1});
       }
@@ -960,15 +968,24 @@ def itd_checks(browser):
     # Missing older fields become null; headphone measurements never replace
     # the session's speaker references, and a different folder sees none.
     page.evaluate("""() => {
-      const measurements = [{speaker: 'FL', peak_db: -12, snr_db: 60, itd_us: 250, lf_ild_db: -6.5},
+      const direct = {fs: 48000, left: [0, 0.5, -0.25], right: [0, 0.25, -0.125]};
+      const measurements = [{speaker: 'FL', peak_db: -12, snr_db: 60, itd_us: 250, lf_ild_db: -6.5, direct},
         {speaker: 'FR', peak_db: -12, snr_db: 60, itd_us: -250}];
+      // A retake replaces the old window, including clearing it when absent.
+      rememberMeasurements({mode: 'speakers', record_dir: 'data/my_hrir',
+        measurements: measurements.map(item => ({...item, direct: {fs: 48000, left: [1], right: [-1]}}))});
       rememberMeasurements({mode: 'speakers', record_dir: 'data/my_hrir', measurements});
       rememberMeasurements({mode: 'headphones', record_dir: 'data/my_hrir',
-        measurements: [{...measurements[0], lf_ild_db: 7}]});
+        measurements: [{...measurements[0], lf_ild_db: 7, direct: null}]});
     }""")
     refs = page.evaluate("gatherRecordingPayload('headphones').reference_measurements")
     assert [(item["speaker"], item["lf_ild_db"]) for item in refs] == [("FL", -6.5), ("FR", None)], refs
+    assert refs[0]["direct"] == {"fs": 48000, "left": [0, 0.5, -0.25], "right": [0, 0.25, -0.125]}, refs
+    assert refs[1]["direct"] is None, refs
+    assert page.evaluate("gatherRecordingPayload('speakers').reference_measurements") == refs
     assert page.evaluate("state.takeMeasurements[folderKey('data/my_hrir')][1].lf_ild_db") is None
+    assert page.evaluate("state.takeMeasurements[folderKey('data/my_hrir')][1].direct") is None
+    assert "direct" not in page.evaluate("gatherRecordingPayload('headphones')")
     navigate(page, "recorder")
     page.locator("#btn-record-headphones").click()
     answer(page)
@@ -977,6 +994,9 @@ def itd_checks(browser):
     assert sent["mode"] == "headphones" and sent["reference_measurements"] == refs, sent
     page.locator("#rf-record-dir").fill("data/other_hrir")
     assert page.evaluate("gatherRecordingPayload('headphones').reference_measurements") == []
+    assert page.evaluate("gatherRecordingPayload('speakers').reference_measurements") == []
+    page.locator("#rf-record-dir").fill("data/my_hrir")
+    assert page.evaluate("gatherRecordingPayload('speakers').reference_measurements") == refs
     assert not errors, errors
     context.close()
     print("Gallery ITD checks: defaults, reset, report success/start/failure/cancel, warning badges, headphone references OK", flush=True)
@@ -1018,6 +1038,9 @@ def guided_checks(browser):
     references = page.evaluate(f"{starts}.at(-1).args[0]")["reference_measurements"]
     assert [(item["speaker"], item["azimuth"]) for item in references] == [("FL", 30), ("FR", -30)], references
     assert all(item["lf_ild_db"] == -6.5 for item in references), references
+    for item, azimuth in zip(references, (30, -30), strict=True):
+        assert item["direct"] == {"fs": 48000, "left": [0, azimuth / 180, -0.25],
+                                  "right": [0, 0.125, -azimuth / 180]}, references
     page.wait_for_function("document.querySelectorAll('#gd-steps .gd-step')[1].dataset.status === 'warning'")
     assert steps.nth(1).get_attribute("aria-current") == "step"
     warning = page.locator('#gd-checks .gd-check[data-severity="warning"]')
@@ -1059,6 +1082,35 @@ def guided_checks(browser):
     assert not errors, errors
     context.close()
     print("Gallery guided checks: steps, turn and ear text, diagram, request angles, countdown, warnings OK", flush=True)
+
+
+def polarity_take(page):
+    """Show both speaker-polarity warnings through the recording result."""
+    navigate(page, "recorder")
+    page.locator("#gd-setup").select_option("stereo")
+    page.locator("#gd-steps .gd-step").nth(2).click()  # SL
+    page.evaluate("document.getElementById('guided-card').dataset.countdown = '0'")
+    page.locator("#btn-gd-record").click()
+    page.wait_for_function("document.querySelectorAll('#gd-steps .gd-step')[2].dataset.status === 'warning'")
+    warnings = page.locator('#gd-checks .gd-check[data-severity="warning"]')
+    assert warnings.count() == 2
+    polarity, split = warnings.all_text_contents()
+    assert all(value in polarity for value in ("SL", "3", "0.78")), polarity
+    assert all(value in split for value in ("FL", "FC", "1.00")), split
+    assert "{" not in polarity + split and "record_check_" not in polarity + split
+    log = page.locator("#view-recorder [data-log]").inner_text()
+    assert polarity in log and split in log, log
+    page.locator("#gd-checks").scroll_into_view_if_needed()
+
+
+def polarity_checks(browser):
+    for language in LANGUAGES:
+        context, page, errors = open_page(browser, "studio", "dark", language, "polarity")
+        polarity_take(page)
+        assert not errors, errors
+        context.close()
+    print("Gallery polarity checks: direct windows round-trip, missing windows null, retakes, folder/headphone isolation, "
+          "both warnings in English/Korean OK", flush=True)
 
 
 def room_phase_checks(browser):
@@ -1892,6 +1944,7 @@ def render_gallery(output):
         advanced_checks(browser)
         layout_checks(browser)
         guided_checks(browser)
+        polarity_checks(browser)
         room_phase_checks(browser)
         room_tuning2_checks(browser)
         room_file_checks(browser)
@@ -2107,6 +2160,11 @@ def render_gallery(output):
             page.locator("#gd-setup").select_option("stereo")
             page.locator("#gd-steps .gd-step").nth(3).click()
             shots.append(shoot(page, output, f"recorder-guided-{language}-{theme}", errors))
+            context.close()
+        for language in LANGUAGES:
+            context, page, errors = open_page(browser, "studio", "dark", language, "polarity")
+            polarity_take(page)
+            shots.append(shoot(page, output, f"recorder-polarity-studio-{language}-dark", errors))
             context.close()
         browser.close()
     assert len(shots) == EXPECTED_SHOTS, f"expected {EXPECTED_SHOTS}, got {len(shots)}"
