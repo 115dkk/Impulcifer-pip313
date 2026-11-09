@@ -1,7 +1,7 @@
 //! Ordered Python request validation. Do not deserialize before checking errors.
 use super::{
     channel_order::ChannelOrder,
-    checks::ReferenceMeasurement,
+    checks::{DirectSound, ReferenceMeasurement},
     naming,
     sweep::{SweepSpec, validate_sweep_spec},
 };
@@ -354,7 +354,14 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
                 .ok_or_else(|| invalid("reference_measurements entries must be objects."))?;
             unknown(
                 object,
-                &["speaker", "itd_us", "lf_db", "lf_ild_db", "azimuth"],
+                &[
+                    "speaker",
+                    "itd_us",
+                    "lf_db",
+                    "lf_ild_db",
+                    "azimuth",
+                    "direct",
+                ],
                 "Unknown reference_measurements fields.",
             )?;
             let speaker = object
@@ -387,12 +394,70 @@ pub fn validate(request: &Value) -> Result<ValidatedRecording, Value> {
                     "reference_measurements.azimuth must be from -180 to 180.",
                 ));
             }
+            let direct = match object.get("direct") {
+                None | Some(Value::Null) => None,
+                Some(value) => {
+                    let direct = value.as_object().ok_or_else(|| {
+                        invalid("reference_measurements.direct must be an object or null.")
+                    })?;
+                    unknown(
+                        direct,
+                        &["fs", "left", "right"],
+                        "Unknown reference_measurements.direct fields.",
+                    )?;
+                    let fs = direct
+                        .get("fs")
+                        .and_then(Value::as_u64)
+                        .filter(|fs| (8_000..=768_000).contains(fs))
+                        .and_then(|fs| u32::try_from(fs).ok())
+                        .ok_or_else(|| {
+                            invalid(
+                                "reference_measurements.direct.fs must be an integer from 8000 to 768000.",
+                            )
+                        })?;
+                    let length = (6.0 * f64::from(fs) / 1000.0).round() as usize;
+                    if length > 4096 {
+                        return Err(invalid(
+                            "reference_measurements.direct length must not exceed 4096.",
+                        ));
+                    }
+                    let samples = |name: &str| -> Result<Vec<f64>, Value> {
+                        let values =
+                            direct.get(name).and_then(Value::as_array).ok_or_else(|| {
+                                invalid(format!(
+                                    "reference_measurements.direct.{name} must be an array."
+                                ))
+                            })?;
+                        if values.len() != length {
+                            return Err(invalid(format!(
+                                "reference_measurements.direct.{name} must contain exactly {length} numbers."
+                            )));
+                        }
+                        values
+                            .iter()
+                            .map(|value| {
+                                value.as_f64().filter(|value| value.is_finite()).ok_or_else(|| {
+                                    invalid(format!(
+                                        "reference_measurements.direct.{name} must contain only finite numbers."
+                                    ))
+                                })
+                            })
+                            .collect()
+                    };
+                    Some(DirectSound {
+                        fs,
+                        left: samples("left")?,
+                        right: samples("right")?,
+                    })
+                }
+            };
             references.push(ReferenceMeasurement {
                 speaker,
                 itd_us: optional_number("itd_us")?,
                 lf_db: optional_number("lf_db")?,
                 lf_ild_db: optional_number("lf_ild_db")?,
                 azimuth,
+                direct,
             });
         }
         Some(references)

@@ -33,6 +33,8 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | `mimo_normal_*` | 여러 초기 구간에서 만든 MIMO 정규 방정식과 우변 |
 | `mimo_design_*` | 초기 구간·귀별 가드 조합별 MIMO 풀이, 모든 가드 시도, 서포트와 귀 기록 |
 | `mimo_guard_*` | 합산 가드와 귀별 가드의 합성 사례, 귀별 대역 에너지 |
+| `polarity_weight`, `polarity_window_*`, `polarity_pair_*` | 스피커 상대 극성 검사의 대역 가중치, 직접음 구간, 구간 상관 |
+| `polarity_demo_*`, `polarity_check_*` | 데모와 합성 응답에서 얻은 귀별 상관, 판정 행렬, 극성 경고 |
 
 ## Gates
 
@@ -81,6 +83,11 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 | MIMO normal equations | `Curve` | 4.440892098500626e-15 | 3.7305743002381116e-15 |
 | MIMO guard evaluation and band energies | `Curve` + exact decisions | 2.509104035652854e-13 (guard), 1.7763568394002505e-15 (energy) | 4.080288248210585e-14 (guard), 1.7666563505222917e-16 (energy) |
 | MIMO design | `Curve` + exact decisions | 3.771757661752417e-8 (ratio), 1.021405182655144e-12 (support) | 1.3473578830673903e-9 (ratio), 1.1873105152459935e-12 (support) |
+| 극성 대역 가중치 | `Exact` | 1.6653345369377348e-16 | 1.4344662340420389e-17 |
+| 극성 직접음 구간 | 인덱스 exact, 표본 `Exact` | 0 | 0 |
+| 극성 구간 상관 | lag와 값 유무 exact, 값·에너지 `Curve` | 1.1102230246251565e-16 | 7.59249780745935e-17 |
+| 극성 데모 | 구간 `Exact`, 상관·판정값·신뢰도 `Curve`, 판정과 경고 exact | 2.220446049250313e-16 | 2.454474234760896e-16 |
+| 극성 합성 점검 | 구간 `Exact`, 상관·판정값·신뢰도 `Curve`, 판정과 경고 exact | 0 | 0 |
 
 상한 대역 SOS는 Impulcifer가 3.5.0부터 엄격한 추정에 쓰던 Butterworth 포트를 그대로 사용한다. 기본 출력의 바이트를 지켜야 하므로 오라클의 설계 연산으로 바꾸지 않는다. Debian glibc 2.41에서도 일부 계수가 1~2 ULP 달랐고, 최대 절대 오차는 4.440892098500626e-16, 최대 상대 L2 오차는 1.2109958378534601e-16이었다. 따라서 SOS 계수는 `Curve`로 판정하며, 같은 필터로 얻은 감쇠 교차 인덱스는 오라클과 정확히 같아 계속 exact로 검사한다.
 
@@ -110,7 +117,7 @@ MIMO 가드 합성 사례(`mimo_guard_*`)는 늦은 부분 전체에 같은 배�
 
 픽스처는 유지보수자와 명세를 쓰는 주 세션만 다시 만든다. 옵션을 구현하는 사람은 이 절차를 돌리지 않고, 내보내기 프로그램을 열지도 않는다.
 
-1. **입력.** 이 저장소에서 `cargo run --release -p impulcifer-dsp --example secs2_inputs -- <inputs>`를 돌려 데모의 자르지 않은 무지향 귀 위치 IR을 `<inputs>/omni/`에 쓴다(`s2_*`와 같은 입력).
+1. **입력.** 이 저장소에서 `cargo run --release -p impulcifer-dsp --example secs2_inputs -- <inputs>`를 돌려 데모의 자르지 않은 무지향 귀 위치 IR을 `<inputs>/omni/`에, 정렬된 귀속 BRIR을 `<inputs>/brir/`에 쓴다(`s2_*`와 같은 입력. 묶음 5의 극성 가족은 `brir/`의 앞 4096표본을 쓰고 그 사본을 `s2r_polarity_demo_base`에 둔다).
 2. **오라클.** SECS 2R 06183335(v0.55.0) 체크아웃에 내보내기 디프(기능 플래그 `oracle-fixtures`, 예제 `impulcifer_fixtures`)를 적용한다. 이 디프는 GPL 저장소의 코드이므로 이 저장소에 두지 않고 SECS 2R 작업 사본에 둔다.
 3. **내보내기.** Debian glibc(WSL Debian, glibc 2.41에서 확인)에서 `S2R_BINS=<이 저장소>/tests/migration/goldens/s2_bins.json`과 `S2R_GOLDENS=<이 저장소>/tests/migration/goldens`(묶음 4의 MIMO 가족이 읽는 `s2_mimo_*` 입력, 비우면 `S2R_BINS`의 폴더)를 주고 `cargo run --release -p secs-engine --features oracle-fixtures --example impulcifer_fixtures -- <inputs> <out>`를 두 번 돌린다. 두 번째 실행은 파일을 하나도 바꾸지 않아야 한다. 내보내기는 자기가 쓰지 않은 `s2r_*` 파일이 `<out>`에 있으면 실패하므로 빈 폴더나 앞선 출력 폴더를 쓴다. glibc에서 내는 까닭은 CI의 ubuntu 러너가 같은 libm을 써서 `Exact`·`Curve` 게이트가 그곳에서 비트 단위로 맞기 때문이다.
 4. **반영.** `<out>`의 파일을 `tests/migration/goldens/`에 그대로 복사하고, 앞선 묶음의 파일이 바이트 단위로 그대로인지 `git diff --stat`으로 확인한다.

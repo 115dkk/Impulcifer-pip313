@@ -29,6 +29,7 @@ pub mod mic_deviation;
 pub mod optimize;
 pub mod peaks;
 pub mod pipeline;
+pub mod polarity;
 pub mod resample;
 pub mod smoothing;
 pub mod spectrogram;

@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use impulcifer_service::recording::{
-    checks::{CheckResults, ReferenceMeasurement, check_recording},
+    checks::{CheckResults, DirectSound, Measurement, ReferenceMeasurement, check_recording},
     sweep::{SweepSpec, build_sweep_playback},
 };
 use std::collections::BTreeMap;
@@ -285,7 +285,7 @@ fn custom_take(
             .iter()
             .map(|speaker| (*speaker).to_owned())
             .collect(),
-        tracks: "stereo".into(),
+        tracks: if speakers.len() > 2 { "7.1" } else { "stereo" }.into(),
     })
     .unwrap();
     let n = playback.tracks[0].len() + 128;
@@ -293,8 +293,12 @@ fn custom_take(
     for (segment_index, segment) in playback.segments.iter().enumerate() {
         let source_start = (segment.start * FS as f64).round() as usize;
         let source_end = (segment.end * FS as f64).round() as usize;
-        let source = &playback.tracks[segment_index.min(playback.tracks.len() - 1)]
-            [source_start..source_end];
+        let source = playback
+            .tracks
+            .iter()
+            .map(|track| &track[source_start..source_end])
+            .find(|samples| samples.iter().any(|sample| *sample != 0.0))
+            .unwrap_or_else(|| panic!("missing sweep for segment {segment_index}"));
         for (i, sample) in source.iter().enumerate() {
             tracks[0][source_start + i + delays[segment_index].0] +=
                 sample * gains[segment_index].0;
@@ -366,6 +370,8 @@ fn take_checks_detect_reversed_microphone_polarity_without_changing_itd() {
         false,
     );
     assert!(has(&result, "record_check_polarity"), "{:?}", result.checks);
+    assert!(result.measurements[0].direct.is_none());
+    assert!(!has(&result, "record_check_speaker_polarity"));
     assert!((result.measurements[0].itd_us.unwrap() - 250.0).abs() <= 25.0);
 }
 
@@ -405,6 +411,7 @@ fn take_checks_compare_same_angle_current_and_reference_measurements() {
             lf_db: None,
             lf_ild_db: None,
             azimuth: Some(30.0),
+            direct: None,
         },
         ReferenceMeasurement {
             speaker: "FR".into(),
@@ -412,6 +419,7 @@ fn take_checks_compare_same_angle_current_and_reference_measurements() {
             lf_db: None,
             lf_ild_db: None,
             azimuth: Some(-30.0),
+            direct: None,
         },
     ];
     let result = custom_take(
@@ -473,12 +481,15 @@ fn take_checks_detect_speaker_distortion() {
         .find(|check| check.key == "record_check_distortion")
         .and_then(|check| check.values["distortion_db"].as_f64())
         .expect("nonlinear sweep must report distortion");
+    assert!(distorted.measurements[0].direct.is_none());
+    assert!(!has(&distorted, "record_check_speaker_polarity"));
     let clean = nonlinear_take(0.0);
     assert!(
         !has(&clean, "record_check_distortion"),
         "{:?}",
         clean.checks
     );
+    assert!(clean.measurements[0].direct.is_some());
     eprintln!("recording impulse checks: distortion_db={distortion_db}, clean_distortion=none");
 }
 
@@ -491,6 +502,7 @@ fn take_checks_detect_level_change_and_swapped_microphones() {
             lf_db: Some(-20.0),
             lf_ild_db: None,
             azimuth: Some(-30.0),
+            direct: None,
         },
         ReferenceMeasurement {
             speaker: "FL".into(),
@@ -498,6 +510,7 @@ fn take_checks_detect_level_change_and_swapped_microphones() {
             lf_db: Some(-20.0),
             lf_ild_db: None,
             azimuth: Some(30.0),
+            direct: None,
         },
     ];
     let expected = BTreeMap::from([("FC".into(), 0.0)]);
@@ -606,6 +619,7 @@ fn headphone_take(right_gain_db: f64, reference_balance_db: f64) -> CheckResults
         lf_db: None,
         lf_ild_db: Some(reference_balance_db),
         azimuth: Some(0.0),
+        direct: None,
     }];
     check_recording(
         &tracks,
@@ -642,6 +656,7 @@ fn superseded_references_do_not_hide_swapped_microphones() {
             lf_db: Some(-20.0),
             lf_ild_db: None,
             azimuth: Some(30.0),
+            direct: None,
         },
         ReferenceMeasurement {
             speaker: "FR".into(),
@@ -649,6 +664,7 @@ fn superseded_references_do_not_hide_swapped_microphones() {
             lf_db: Some(-20.0),
             lf_ild_db: None,
             azimuth: Some(-30.0),
+            direct: None,
         },
     ];
     let expected = BTreeMap::from([("FL".into(), 30.0), ("FR".into(), -30.0)]);
@@ -664,4 +680,210 @@ fn superseded_references_do_not_hide_swapped_microphones() {
         "{:?}",
         result.checks
     );
+}
+
+fn polarity_expected() -> BTreeMap<String, f64> {
+    BTreeMap::from([
+        ("FL".into(), 30.0),
+        ("SL".into(), 90.0),
+        ("BL".into(), 150.0),
+    ])
+}
+
+fn polarity_take(
+    speakers: &[&str],
+    gains: &[(f64, f64)],
+    references: Option<&[ReferenceMeasurement]>,
+) -> CheckResults {
+    custom_take(
+        speakers,
+        &vec![(0, 12); speakers.len()],
+        gains,
+        Some(&polarity_expected()),
+        references,
+    )
+}
+
+/// The speaker-polarity checks in order, after asserting they are all
+/// warnings and come after every other check.
+fn polarity_checks(result: &CheckResults) -> Vec<(&'static str, String)> {
+    let is_polarity = |key: &str| key.starts_with("record_check_speaker_polarity");
+    let first = result
+        .checks
+        .iter()
+        .position(|check| is_polarity(check.key))
+        .unwrap_or(result.checks.len());
+    assert!(
+        result.checks[first..]
+            .iter()
+            .all(|check| is_polarity(check.key) && check.severity == "warning"),
+        "{:?}",
+        result.checks
+    );
+    result.checks[first..]
+        .iter()
+        .map(|check| (check.key, check.speaker.clone()))
+        .collect()
+}
+
+#[test]
+fn speaker_polarity_reports_one_reversed_speaker() {
+    let result = polarity_take(
+        &["FL", "SL", "BL"],
+        &[(0.2, 0.2), (-0.2, -0.2), (0.2, 0.2)],
+        None,
+    );
+    assert_eq!(
+        polarity_checks(&result),
+        [("record_check_speaker_polarity", "SL".to_owned())]
+    );
+    let warning = result
+        .checks
+        .iter()
+        .find(|check| check.key == "record_check_speaker_polarity")
+        .unwrap_or_else(|| panic!("{:?}", result.checks));
+    assert_eq!(warning.speaker, "SL");
+    assert_eq!(warning.severity, "warning");
+    assert_eq!(warning.values["compared"], 2);
+    assert_eq!(warning.values["opposite"], 2);
+    assert_eq!(warning.values["confidence"], "1.00");
+    assert!(
+        result
+            .measurements
+            .iter()
+            .all(|measurement| measurement.direct.is_some())
+    );
+}
+
+#[test]
+fn speaker_polarity_reports_an_equal_split_without_choosing_a_side() {
+    let result = polarity_take(&["FL", "SL"], &[(0.2, 0.2), (-0.2, -0.2)], None);
+    assert_eq!(
+        polarity_checks(&result),
+        [("record_check_speaker_polarity_split", "FL".to_owned())]
+    );
+    let warning = result
+        .checks
+        .iter()
+        .find(|check| check.key == "record_check_speaker_polarity_split")
+        .unwrap_or_else(|| panic!("{:?}", result.checks));
+    assert_eq!(warning.speaker, "FL");
+    assert_eq!(warning.values["group_a"], "FL");
+    assert_eq!(warning.values["group_b"], "SL");
+    assert_eq!(warning.values["confidence"], "1.00");
+}
+
+fn reversed_bl_reference() -> ReferenceMeasurement {
+    let mut earlier = polarity_take(&["BL"], &[(0.2, 0.2)], None);
+    let mut direct = earlier.measurements.remove(0).direct.unwrap();
+    direct.left.iter_mut().for_each(|sample| *sample = -*sample);
+    direct
+        .right
+        .iter_mut()
+        .for_each(|sample| *sample = -*sample);
+    ReferenceMeasurement {
+        speaker: "BL".into(),
+        itd_us: Some(250.0),
+        lf_db: None,
+        lf_ild_db: None,
+        azimuth: Some(150.0),
+        direct: Some(DirectSound {
+            fs: direct.fs,
+            left: direct.left,
+            right: direct.right,
+        }),
+    }
+}
+
+#[test]
+fn speaker_polarity_reports_a_reversed_reference_speaker() {
+    let reference = [reversed_bl_reference()];
+    let result = polarity_take(&["FL", "SL"], &[(0.2, 0.2), (0.2, 0.2)], Some(&reference));
+    let warning = result
+        .checks
+        .iter()
+        .find(|check| check.key == "record_check_speaker_polarity")
+        .unwrap_or_else(|| panic!("{:?}", result.checks));
+    assert_eq!(warning.speaker, "BL");
+}
+
+#[test]
+fn rerecorded_speaker_replaces_its_polarity_reference() {
+    let reference = [reversed_bl_reference()];
+    let result = polarity_take(
+        &["FL", "SL", "BL"],
+        &[(0.2, 0.2), (0.2, 0.2), (0.2, 0.2)],
+        Some(&reference),
+    );
+    assert!(!has(&result, "record_check_speaker_polarity"));
+    assert!(!has(&result, "record_check_speaker_polarity_split"));
+}
+
+#[test]
+fn rerecorded_speaker_without_signal_still_replaces_its_polarity_reference() {
+    // The new BL take has no signal, so it carries no window; the earlier,
+    // reversed BL reference must not come back in its place.
+    let reference = [reversed_bl_reference()];
+    let result = polarity_take(
+        &["FL", "SL", "BL"],
+        &[(0.2, 0.2), (0.2, 0.2), (0.0, 0.0)],
+        Some(&reference),
+    );
+    let bl = result
+        .measurements
+        .iter()
+        .find(|measurement| measurement.speaker == "BL")
+        .unwrap();
+    assert!(bl.direct.is_none());
+    assert!(
+        result
+            .checks
+            .iter()
+            .any(|check| check.key == "record_check_no_signal" && check.speaker == "BL"),
+        "{:?}",
+        result.checks
+    );
+    assert!(polarity_checks(&result).is_empty(), "{:?}", result.checks);
+}
+
+#[test]
+fn headphone_runs_emit_no_direct_sound_or_speaker_polarity_checks() {
+    let result = headphone_take(0.0, 0.0);
+    assert!(
+        result
+            .measurements
+            .iter()
+            .all(|measurement| measurement.direct.is_none())
+    );
+    assert!(!has(&result, "record_check_speaker_polarity"));
+    assert!(!has(&result, "record_check_speaker_polarity_split"));
+}
+
+#[test]
+fn measurement_direct_serializes_only_when_present() {
+    let mut measurement = Measurement {
+        speaker: "FL".into(),
+        peak_db: -12.3,
+        snr_db: 40.0,
+        itd_us: Some(250.0),
+        lf_db: Some(-20.5),
+        lf_ild_db: Some(0.0),
+        azimuth: Some(30.0),
+        direct: None,
+    };
+    assert!(
+        serde_json::to_value(&measurement)
+            .unwrap()
+            .get("direct")
+            .is_none()
+    );
+    measurement.direct = Some(DirectSound {
+        fs: 8_000,
+        left: vec![0.0; 48],
+        right: vec![0.0; 48],
+    });
+    let value = serde_json::to_value(&measurement).unwrap();
+    assert_eq!(value["direct"]["fs"], 8_000);
+    assert_eq!(value["direct"]["left"].as_array().unwrap().len(), 48);
+    assert_eq!(value["direct"]["right"].as_array().unwrap().len(), 48);
 }

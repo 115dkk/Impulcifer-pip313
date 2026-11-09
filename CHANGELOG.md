@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.17.0 - 2026-11-09
+### 녹음 점검에 스피커 상대 극성 검사
+
+#### ⭐ 새로운 기능 / 개선
+- **스피커 상대 극성 검사**: 스피커마다 직접음의 300~3000 Hz를 같은 쪽 귀에서 견주고, 가운데 스피커끼리는 두 귀의 결과를 평균합니다. 신호 대 잡음비가 6 dB 이상이고 양쪽 귀에 신호가 있으며 방향이 맞는 스피커 녹음만 검사합니다. 마이크 한쪽의 극성이 반대이거나 왜곡이 큰 녹음은 뺍니다. 같은 폴더에 앞서 녹음한 스피커와도 앱을 켜 둔 동안 비교합니다. 다른 스피커 대부분과 극성이 반대면 해당 스피커를 `record_check_speaker_polarity`로 알리고, 스피커 수가 같아 어느 쪽이 반대인지 정할 수 없으면 `record_check_speaker_polarity_split`으로 알립니다. 둘 다 경고이며 출력 파일은 바뀌지 않습니다. SECS 2R의 동작을 ADR 0015의 클린룸 방식으로 재현했습니다.
+
 ## 3.16.0 - 2026-11-09
 ### 가상 룸 튜닝 2 MIMO의 초기 구간과 귀별 가드
 

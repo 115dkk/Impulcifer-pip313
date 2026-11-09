@@ -4,7 +4,9 @@ Specification for ADR 0014. The Rust pipeline measures the interaural time
 difference (ITD) of every speaker, reports it, and optionally corrects it.
 The report also carries the left/right level balance of the recording chain
 and, with headphone compensation, the balance of the final BRIR it predicts.
-With `itd_mode = off` (the default) every output stays byte-identical.
+With `itd_mode = off` (the default) every output stays byte-identical. The
+recording check's relative speaker polarity (3.17.0, ADR 0015 bundle 5) is
+specified under "Recording checks".
 
 Sign conventions, used everywhere in this document, in the code, in the job
 result and in the catalog texts:
@@ -273,6 +275,80 @@ field; the request validator accepts it).
 
 The existing checks and their numbers do not change.
 
+### Speaker polarity (3.17.0)
+
+The relative polarity of the speakers, from SECS 2R (its D55, ADR 0015 bundle 5),
+measured on the in-ear takes of the recording check rather than in the room
+tuning: correlating the in-ear responses of speakers at different angles blurs
+through the HRTF, so each speaker is compared only at the ear on its own side.
+`fs` is the take's sample rate, `s(ms) = round(ms*fs/1000)` with `f64::round`
+(half away from zero). The check changes no output file.
+
+**Direct-sound window**, per ear, from the deconvolved IR `h` the ITD estimate
+uses:
+- `p0` = the first index of the largest `|h|` (a later sample replaces it only
+  when strictly larger); `onset` = the first index `≤ p0` with
+  `|h| ≥ 0.1*|h[p0]|`.
+- `peak` = over `onset ..= min(onset + s(5), len − 1)`, the **last** index of
+  the largest `|h|`.
+- `L = s(6)` samples from `peak − s(1.5)` (`h` is 0 outside its range); no
+  window when `L = 0` or `L > 4096`. Taper `t = max(round(0.1*L), 1)`; for
+  `i < min(t, L)`, `g = 0.5*(1 − cos(π*i/t))` multiplies `w[i]` and `w[L−1−i]`.
+
+**Correlation of two windows** (same `fs`, else no value): zero-pad both to 4096,
+`A`, `B` their `rfft_4096`. Weight of bin `k` at `f = k*fs/4096`: 0 outside
+`[300/√2, 3000*√2]`; `0.5*(1 − cos(2π*log2(f/(300/√2))))` below 300 Hz; 1 from
+300 to 3000 Hz; `0.5*(1 + cos(2π*log2(f/3000)))` above. `E(X) = Σ_k m_k*|X_k|²*w_k/4096`
+with `m = 1` at `k = 0` and `k = 2048`, else 2; `e = sqrt(E(A)*E(B))`; no value
+when `e` is not finite or `e ≤ f64::EPSILON`. `c = irfft_4096(A*conj(B)*w)`
+(with the `1/4096` of the inverse, so a window against itself gives 1). With
+`D = min(s(1), 2048)`, over the offsets `−D ..= D` (offset `o < 0` at index
+`4096 + o`) take `r = c/e` with the largest `|r|`, the **last** on a tie, and
+clamp it to `[−1, 1]`.
+
+**Takes that take part.** Speaker recordings (not headphone ones) with two
+tracks and a sweep estimator, where the take has signal (`snr ≥ 6 dB`), no
+silent ear, is not on the wrong side, raised no `record_check_polarity` (one
+microphone inverted against the other in that take would read as an inverted
+speaker) and no `record_check_distortion` (at −20 dB or more the sweep's
+harmonic products, which the deconvolution places before the direct sound, can
+take over the onset). Such a take reports `Measurement.direct =
+{fs, left, right}` (the two windows, `L` samples each); other takes report
+none. `ReferenceMeasurement.direct` (optional) carries the same from the
+folder's earlier takes, which the UI keeps for the app session like the other
+reference values; a speaker recorded in this run replaces its reference.
+
+**Sides and pairs.** A speaker's side is that of the existing direction rule
+(`direction(speaker, azimuth)`, the request's azimuth else the slot's): left
+(`side > 0`) uses the left ear, right (`side < 0`) the right ear, centre
+(lateral under 5°) both ears. Two speakers are compared at the ears they share:
+left with left or centre at the left ear, right with right or centre at the
+right ear, centre with centre at both; a left speaker is never compared with a
+right one. The pair's value is the plain mean of its per-ear correlations that
+have a value (none if none), and the pair is decided when `|mean| ≥ 0.5`.
+Speakers are taken in the canonical slot order (`SLOTS`) everywhere below.
+
+**Verdict.** From each speaker, in order, that has a decided pair and was not
+reached yet, a breadth-first search over decided pairs gives signs (the start
+is +, a negative pair flips the sign, neighbours are scanned in order). A
+speaker reached again with the other sign makes the component contradict
+itself, and it gets no verdict. In a consistent component whose members do not
+all share one sign, the members split into group a (the first member's sign)
+and group b, each in order. The smaller group is reversed: each of its speakers
+gives `record_check_speaker_polarity` (warning) with `{compared}` (its decided
+pairs), `{opposite}` (the negative ones) and `{confidence}` (the median of their
+`|value|`, two decimals). Equal groups give one
+`record_check_speaker_polarity_split` (warning, on group a's first speaker) with
+`{group_a}` and `{group_b}` (speaker codes joined by `, `) and `{confidence}`
+(the median `|value|` of the decided pairs between the groups). A reversed
+speaker is reported whether it was recorded in this run or earlier. The median
+of an even count is the mean of the middle two. These checks follow the
+existing ones.
+
+Not reproduced from SECS 2R: inverting a speaker by configuration (a reversed
+speaker is re-wired and recorded again, ADR 0015) and its listening-position
+weight (the two ears weigh the same).
+
 ## Registration
 
 - `crates/impulcifer-types/src/config.rs`: fields, defaults, `EXTENSION_FIELD_NAMES`
@@ -293,3 +369,11 @@ The existing checks and their numbers do not change.
 - `.github/scripts/brir_3x_integrity.py`: scenarios `itd_symmetric`
   (`--itd_mode=symmetric`) and `itd_model` (`--itd_mode=model --head_radius=8.75`),
   since 3.12.0.
+- Speaker polarity (3.17.0): `recording/checks.rs` (window, correlation,
+  pairs and verdict; `Measurement.direct`), `recording/request.rs`
+  (`ReferenceMeasurement.direct`: `fs` from 8000 to 768000, `left` and `right`
+  each exactly `round(6*fs/1000)` finite values, at most 4096), `features.toml`
+  (`recording.speaker_polarity_check`), the two catalog keys in the nine
+  overlay files, `ipc.d.ts` (the measurement and reference types), `app.js`
+  (keeping `direct` with the take and sending it back), gallery mocks. No
+  brir-3x scenario: no output file changes.

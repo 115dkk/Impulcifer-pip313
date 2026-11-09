@@ -450,6 +450,8 @@
   "record_check_ear_silent_left": "{speaker}: 左のマイクが拾った音は右より{db_diff} dB小さくなっています。左のマイクが耳に挿入され、接続されているか確認し、再録音してください。",
   "record_check_ear_silent_right": "{speaker}: 右のマイクが拾った音は左より{db_diff} dB小さくなっています。右のマイクが耳に挿入され、接続されているか確認し、再録音してください。",
   "record_check_polarity": "{speaker}: 片方のマイク信号の極性がもう片方と反転しています。マイクの配線またはオーディオインターフェースの極性設定を確認し、再録音してください。",
+  "record_check_speaker_polarity": "{speaker}: 直接音の極性が、このフォルダーに録音したスピーカーの多数と逆です（同じ側の耳での比較{compared}件中{opposite}件が逆、相関の強さの中央値{confidence}）。スピーカーまたはアンプの＋と−の接続が逆になっている可能性があります。配線を確認して直し、再録音してください。",
+  "record_check_speaker_polarity_split": "スピーカー{group_a}のグループと{group_b}のグループは極性が逆です（相関の強さの中央値{confidence}）。両グループの台数が同じなので、どちらが逆接続かは判断できません。両グループとも、スピーカーとアンプの＋と−の接続を確認してください。",
   "record_check_mics_swapped": "左右のマイクが入れ替わっているようです。スピーカーの音が反対側の耳に先に届きました。マイクまたは入力チャンネルの左右を入れ替えて再録音してください。",
   "record_check_distortion": "{speaker}: スピーカーの音が歪んでいます（高調波 {distortion_db} dB）。再生音量を下げて再録音してください。",
   "record_check_itd_mismatch": "{speaker}: 両耳に音が届く時間差は{itd_us} µsですが、同じ角度で測定した{reference}では{reference_itd_us} µsで、{diff_us} µsの差があります。どちらかの測定で向きを変えた角度が違っていました。角度がずれているほうを再録音してください。",

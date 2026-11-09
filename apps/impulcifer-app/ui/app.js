@@ -1586,11 +1586,11 @@ function gatherRecordingPayload(mode) {
   } else {
     payload.play_path = val("rf-play");
   }
-  // Earlier speaker takes in this folder, for angle checks and for comparing
-  // the speaker and headphone recordings' left/right balance.
+  // Earlier speaker takes in this folder, for angle and polarity checks and for
+  // comparing the speaker and headphone recordings' left/right balance.
   payload.reference_measurements = (state.takeMeasurements[folderKey(payload.record_dir)] || []).map((item) => ({
     speaker: item.speaker, itd_us: item.itd_us, lf_db: item.lf_db ?? null, azimuth: item.azimuth ?? null,
-    lf_ild_db: item.lf_ild_db ?? null,
+    lf_ild_db: item.lf_ild_db ?? null, direct: item.direct ?? null,
   }));
   if (mode === "speakers") {
     payload.force_channels = checked("rf-force-channels");
@@ -1831,7 +1831,7 @@ function rememberMeasurements(result) {
   const fresh = new Set(result.measurements.map((item) => item.speaker));
   state.takeMeasurements[dir] = [
     ...(state.takeMeasurements[dir] || []).filter((item) => !fresh.has(item.speaker)),
-    ...result.measurements.map((item) => ({ ...item, lf_ild_db: item.lf_ild_db ?? null })),
+    ...result.measurements.map((item) => ({ ...item, lf_ild_db: item.lf_ild_db ?? null, direct: item.direct ?? null })),
   ];
 }
 
