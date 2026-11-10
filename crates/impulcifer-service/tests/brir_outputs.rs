@@ -113,6 +113,7 @@ fn outputs(compact: bool) -> (PipelineOutputs, SweepEstimator) {
                 )
             })
             .collect(),
+        lfe: Vec::new(),
         hrir,
     };
     (output, estimator)

@@ -1,7 +1,7 @@
 use super::{
     BrirError, BrirEvents,
     discovery::MeasurementDir,
-    sweep_grid::{detect_sweep_parameters, snap_sweep_samples},
+    sweep_grid::{detect_recording_file, detect_sweep_parameters, snap_sweep_samples},
 };
 use impulcifer_dsp::estimator::SweepEstimator;
 use impulcifer_io::{ffmpeg, read_wav, sweep_files::sweep_file_name, write_wav};
@@ -24,13 +24,23 @@ pub fn open_estimator(
     dir: &MeasurementDir,
     test_signal: Option<&str>,
 ) -> Result<SweepEstimator, BrirError> {
-    open_with_events(dir, test_signal, &crate::default_data_dir(), false, None)
+    open_with_events(
+        dir,
+        test_signal,
+        &crate::default_data_dir(),
+        false,
+        None,
+        false,
+        None,
+    )
 }
 pub(crate) fn open_with_events(
     dir: &MeasurementDir,
     test_signal: Option<&str>,
     data: &Path,
     external_brir: bool,
+    recording_file: Option<(&Path, usize)>,
+    recording_sweep: bool,
     mut events: Option<&mut dyn BrirEvents>,
 ) -> Result<SweepEstimator, BrirError> {
     let mut log = |level, key, args| {
@@ -71,9 +81,12 @@ pub(crate) fn open_with_events(
         if let Some(sidecar) = &dir.test_signal {
             path = Some(sidecar.clone());
         } else {
-            let skip_detection = external_brir && dir.recordings.is_empty();
+            let skip_detection = recording_sweep
+                || (recording_file.is_none() && external_brir && dir.recordings.is_empty());
             let detection = if skip_detection {
                 None
+            } else if let Some((path, entries)) = recording_file {
+                detect_recording_file(path, entries)
             } else {
                 detect_sweep_parameters(&dir.dir)?
             };

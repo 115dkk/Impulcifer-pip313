@@ -3,11 +3,16 @@ mod brir_support;
 #[path = "support/room_measurement.rs"]
 mod room_builder;
 use brir_support::*;
+use impulcifer_jobs::registry::JobRegistry;
 use impulcifer_service::brir::{
-    BrirError, BrirEvents, discovery::discover, estimator::open_estimator, inputs::load_inputs,
+    BrirError, BrirEvents, Catalog, discovery::discover, estimator::open_estimator,
+    inputs::load_inputs, run::run_brir,
 };
-use impulcifer_types::config::ProcessingConfig;
-use serde_json::Value;
+use impulcifer_types::{
+    config::ProcessingConfig,
+    job::{JobKind, JobStatus},
+};
+use serde_json::{Value, json};
 use std::path::Path;
 #[derive(Default)]
 struct Events(Vec<String>, Vec<(String, Value)>);
@@ -288,6 +293,7 @@ fn brir_measurement_file_preserves_rew_time_axis_and_replaces_folder() {
     let mut events = Events::default();
     let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
     assert_eq!(inputs.hrir.speakers.len(), 1);
+    assert!(inputs.lfe.is_empty());
     let speaker = &inputs.hrir.speakers[0];
     let left = speaker.left.as_ref().unwrap();
     let right = speaker.right.as_ref().unwrap();
@@ -485,4 +491,356 @@ fn headphone_recording_without_two_sweeps_names_the_test_signal() {
     // ingestion's text about columns as an internal error.
     impulcifer_io::write_wav(&headphones, 48000, &vec![vec![0.0; 4 * 48000]; 2], 32).unwrap();
     failure(4.0);
+}
+
+fn run_config(config: ProcessingConfig) -> impulcifer_jobs::registry::PollResult {
+    let jobs = JobRegistry::new();
+    let job = jobs
+        .start(JobKind::Brir, true, move |ctx| {
+            let run = run_brir(&config, &Catalog::english(), ctx)?;
+            Ok(json!({"output_path":run.output_path}))
+        })
+        .unwrap();
+    wait(&jobs, &job.job_id)
+}
+
+fn service_log_sweep(fs: u32, seconds: f64, low: f64, high: f64) -> Vec<f64> {
+    let length = (seconds * f64::from(fs)).round() as usize;
+    let ratio = high / low;
+    let scale = 2.0 * std::f64::consts::PI * low * seconds / ratio.ln();
+    (0..length)
+        .map(|index| {
+            let time = index as f64 / f64::from(fs);
+            (scale * (ratio.powf(time / seconds) - 1.0)).sin()
+        })
+        .collect()
+}
+
+fn foreign_sequence(temp: &Temp, sweep_rate: u32) -> (std::path::PathBuf, std::path::PathBuf) {
+    let fs = 8_000;
+    let sweep = service_log_sweep(fs, 1.0, 10.0, 3_500.0);
+    let starts = [1_000, 11_500, 22_000, 32_500, 43_000];
+    let gains = [1.0, 0.8, 0.65, 0.5, 0.4];
+    let mut tracks = vec![vec![0.0; 52_000]; 2];
+    for (sequence, (start, gain)) in starts.into_iter().zip(gains).enumerate() {
+        for (ear, track) in tracks.iter_mut().enumerate() {
+            let delay = 3 + sequence + ear * 2;
+            for (index, sample) in sweep.iter().copied().enumerate() {
+                track[start + delay + index] += gain * sample;
+                track[start + delay + 23 + index] += 0.15 * gain * sample;
+            }
+        }
+    }
+    let recording = temp.0.join("foreign-two-ear.wav");
+    let sweep_path = temp.0.join("foreign-sweep.wav");
+    impulcifer_io::write_wav(&recording, fs, &tracks, 32).unwrap();
+    impulcifer_io::write_wav(&sweep_path, sweep_rate, &[sweep], 32).unwrap();
+    (recording, sweep_path)
+}
+
+#[test]
+fn recording_file_without_sweep_matches_the_folder_recording() {
+    let folder = Temp::new();
+    let imported = Temp::new();
+    let outside = Temp::new();
+    let source = root().join("data/demo/FL,FR.wav");
+    std::fs::copy(&source, folder.0.join("FL,FR.wav")).unwrap();
+    let arbitrary = outside.0.join("arbitrary-name.wav");
+    std::fs::copy(source, &arbitrary).unwrap();
+    // This discovered recording must neither affect auto detection nor be read.
+    std::fs::write(imported.0.join("FC.wav"), b"not a WAV").unwrap();
+
+    let common = |directory: &Path| ProcessingConfig {
+        dir_path: Some(directory.to_string_lossy().into_owned()),
+        do_room_correction: false,
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let folder_poll = run_config(common(&folder.0));
+    assert_eq!(
+        folder_poll.job.status,
+        JobStatus::Succeeded,
+        "{:?}",
+        folder_poll.job.error
+    );
+    let imported_poll = run_config(ProcessingConfig {
+        brir_recording_file: Some(arbitrary.to_string_lossy().into_owned()),
+        brir_recording_speakers: Some("FL,FR".into()),
+        ..common(&imported.0)
+    });
+    assert_eq!(
+        imported_poll.job.status,
+        JobStatus::Succeeded,
+        "{:?}",
+        imported_poll.job.error
+    );
+    assert!(
+        imported_poll
+            .events
+            .iter()
+            .any(|event| { event.payload["key"] == "cli_brir_recording_replaces_folder" })
+    );
+    assert_eq!(
+        std::fs::read(folder.0.join("hesuvi.wav")).unwrap(),
+        std::fs::read(imported.0.join("hesuvi.wav")).unwrap()
+    );
+
+    // Only the first two tracks are the ears. A folder recording would take
+    // tracks 3 and 4 as the next speaker's pair, so FR would come from them
+    // instead of from the second sweep.
+    let four_tracks = Temp::new();
+    let wav = impulcifer_io::read_wav(&arbitrary).unwrap();
+    let mut tracks = wav.tracks.clone();
+    tracks.push(wav.tracks[1].iter().map(|x| -x).collect());
+    tracks.push(wav.tracks[0].iter().map(|x| 0.5 * x).collect());
+    let wide = outside.0.join("four-tracks.wav");
+    impulcifer_io::write_wav(&wide, wav.sample_rate, &tracks, 32).unwrap();
+    let two = outside.0.join("two-tracks.wav");
+    impulcifer_io::write_wav(&two, wav.sample_rate, &wav.tracks, 32).unwrap();
+    let narrow = Temp::new();
+    for (directory, file) in [(&four_tracks, &wide), (&narrow, &two)] {
+        let poll = run_config(ProcessingConfig {
+            brir_recording_file: Some(file.to_string_lossy().into_owned()),
+            brir_recording_speakers: Some("FL,FR".into()),
+            ..common(&directory.0)
+        });
+        assert_eq!(
+            poll.job.status,
+            JobStatus::Succeeded,
+            "{:?}",
+            poll.job.error
+        );
+    }
+    assert_eq!(
+        std::fs::read(narrow.0.join("hesuvi.wav")).unwrap(),
+        std::fs::read(four_tracks.0.join("hesuvi.wav")).unwrap()
+    );
+
+    // One track is not a pair of ears.
+    let mono = outside.0.join("mono.wav");
+    impulcifer_io::write_wav(&mono, wav.sample_rate, &wav.tracks[..1], 32).unwrap();
+    let mono_output = Temp::new();
+    let poll = run_config(ProcessingConfig {
+        brir_recording_file: Some(mono.to_string_lossy().into_owned()),
+        brir_recording_speakers: Some("FL,FR".into()),
+        ..common(&mono_output.0)
+    });
+    assert_eq!(poll.job.status, JobStatus::Failed);
+    assert_eq!(
+        poll.job.error.as_ref().unwrap()["message"],
+        "brir_recording_file must have at least two tracks"
+    );
+}
+
+#[test]
+fn recording_file_with_sweep_reads_a_foreign_sequence() {
+    let temp = Temp::new();
+    let (recording, sweep) = foreign_sequence(&temp, 8_000);
+    let poll = run_config(ProcessingConfig {
+        dir_path: Some(temp.0.to_string_lossy().into_owned()),
+        test_signal: Some("generate:1.0s@8000".into()),
+        brir_recording_file: Some(recording.to_string_lossy().into_owned()),
+        brir_recording_speakers: Some("FL,FC,X,FR,LFE".into()),
+        brir_recording_sweep: Some(sweep.to_string_lossy().into_owned()),
+        layout_files: "9.1.4".into(),
+        do_room_correction: false,
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    });
+    assert_eq!(
+        poll.job.status,
+        JobStatus::Succeeded,
+        "{:?}",
+        poll.job.error
+    );
+    poll.events
+        .iter()
+        .find(|event| event.payload["key"] == "cli_brir_recording_loaded")
+        .expect("loaded log");
+    assert!(
+        poll.events
+            .iter()
+            .any(|event| event.payload["key"] == "cli_brir_measurement_file_itd")
+    );
+
+    let hrir = impulcifer_io::read_wav(&temp.0.join("hrir.wav")).unwrap();
+    for name in [
+        "FL-left", "FL-right", "FC-left", "FC-right", "FR-left", "FR-right",
+    ] {
+        let index = impulcifer_types::constants::HEXADECAGONAL_TRACK_ORDER
+            .iter()
+            .position(|track| *track == name)
+            .unwrap();
+        assert!(
+            hrir.tracks[index].iter().any(|sample| *sample != 0.0),
+            "{name}"
+        );
+    }
+    let layout = impulcifer_types::layouts::IMMERSIVE_LAYOUTS
+        .iter()
+        .find(|layout| layout.id == "9.1.4")
+        .unwrap();
+    let lfe = layout
+        .channels
+        .iter()
+        .position(|channel| channel.label == "LFE")
+        .unwrap();
+    let output = impulcifer_io::read_wav(&temp.0.join("atmos_9.1.4.wav")).unwrap();
+    assert!(output.tracks[2 * lfe].iter().any(|sample| *sample != 0.0));
+    assert!(
+        output.tracks[2 * lfe + 1]
+            .iter()
+            .any(|sample| *sample != 0.0)
+    );
+}
+
+#[test]
+fn recording_file_errors_name_the_cause() {
+    let temp = Temp::new();
+    let (recording, sweep) = foreign_sequence(&temp, 8_000);
+    let estimator = impulcifer_dsp::estimator::SweepEstimator::new(1.0, 8_000).unwrap();
+    let base = |speakers: &str| ProcessingConfig {
+        brir_recording_file: Some(recording.to_string_lossy().into_owned()),
+        brir_recording_speakers: Some(speakers.into()),
+        brir_recording_sweep: Some(sweep.to_string_lossy().into_owned()),
+        do_room_correction: false,
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let config = base("FL,FC,X,FR");
+    let dir = discover(&temp.0, &config).unwrap();
+    let error = load_inputs(&dir, &estimator, &config, &mut Events::default()).unwrap_err();
+    assert!(matches!(error, BrirError::RecordingSweepCount { .. }));
+    let assert_error = |error: &BrirError, message: &str, details: Value| {
+        let envelope = error.envelope();
+        assert_eq!(envelope["error"]["code"], "INVALID_REQUEST");
+        assert_eq!(envelope["error"]["message"], message);
+        assert_eq!(envelope["error"]["details"], details);
+        assert_eq!(envelope["error"]["retryable"], false);
+    };
+    assert_error(
+        &error,
+        "The recording does not hold the listed number of sweeps.",
+        json!({"path": recording, "found": 5, "listed": 4,
+            "starts_seconds": [0.13, 1.44, 2.75, 4.06, 5.38]}),
+    );
+    assert_eq!(
+        error.to_string(),
+        "Found 5 sweeps in the recording but the list has 4 entries. Sweeps start at 0.13, 1.44, 2.75, 4.06, 5.38 s. Write X for a sweep to skip."
+    );
+
+    for config in [
+        ProcessingConfig {
+            brir_recording_file: Some(recording.to_string_lossy().into_owned()),
+            brir_recording_speakers: Some("FC,FR".into()),
+            ..Default::default()
+        },
+        ProcessingConfig {
+            brir_recording_file: Some(recording.to_string_lossy().into_owned()),
+            brir_recording_speakers: Some("FL,FR".into()),
+            brir_measurement_file: Some("project.mdat".into()),
+            ..Default::default()
+        },
+    ] {
+        assert!(config.validate_room_options().is_err());
+    }
+
+    let missing = ProcessingConfig {
+        brir_recording_file: Some(temp.0.join("missing.wav").to_string_lossy().into_owned()),
+        brir_recording_speakers: Some("FL".into()),
+        do_room_correction: false,
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &missing).unwrap();
+    let error = load_inputs(&dir, &estimator, &missing, &mut Events::default()).unwrap_err();
+    assert_eq!(error.envelope()["error"]["code"], "FILE_NOT_FOUND");
+    assert!(error.to_string().contains("missing.wav"));
+
+    let (_, wrong_rate) = foreign_sequence(&temp, 44_100);
+    let wrong = ProcessingConfig {
+        brir_recording_sweep: Some(wrong_rate.to_string_lossy().into_owned()),
+        ..base("FL,FC,X,FR,LFE")
+    };
+    let dir = discover(&temp.0, &wrong).unwrap();
+    let error = load_inputs(&dir, &estimator, &wrong, &mut Events::default()).unwrap_err();
+    assert!(matches!(error, BrirError::RecordingSweepRate { .. }));
+    assert_error(
+        &error,
+        "The sweep file and the recording have different sampling rates.",
+        json!({"path": wrong_rate, "sweep_fs": 44100, "recording_fs": 8000}),
+    );
+    assert_eq!(
+        error.to_string(),
+        "The sweep file (44100 Hz) and the recording (8000 Hz) have different sampling rates."
+    );
+
+    // A valid reference with a silent recording reports zero found, not an internal error.
+    foreign_sequence(&temp, 8_000);
+    impulcifer_io::write_wav(&recording, 8000, &vec![vec![0.0; 52_000]; 2], 32).unwrap();
+    let config = base("FL,FC,X,FR,LFE");
+    let dir = discover(&temp.0, &config).unwrap();
+    let error = load_inputs(&dir, &estimator, &config, &mut Events::default()).unwrap_err();
+    assert!(matches!(
+        error,
+        BrirError::RecordingSweepCount { found: 0, .. }
+    ));
+    assert_error(
+        &error,
+        "The recording does not hold the listed number of sweeps.",
+        json!({"path": recording, "found": 0, "listed": 5, "starts_seconds": []}),
+    );
+
+    // Each trim failure and a full-length linear sweep use the same translated error.
+    foreign_sequence(&temp, 8_000);
+    let linear: Vec<_> = (0..8000)
+        .map(|index| {
+            let time = f64::from(index) / 8000.0;
+            (2.0 * std::f64::consts::PI * (10.0 * time + 0.5 * 3490.0 * time * time)).sin()
+        })
+        .collect();
+    for reference in [vec![0.0; 8000], vec![1.0; 100], vec![1.0; 1000], linear] {
+        impulcifer_io::write_wav(&sweep, 8000, &[reference], 32).unwrap();
+        let error = load_inputs(&dir, &estimator, &config, &mut Events::default()).unwrap_err();
+        assert!(matches!(error, BrirError::RecordingSweepFile { .. }));
+        assert_error(
+            &error,
+            "The sweep file is not a logarithmic sweep.",
+            json!({"path": sweep}),
+        );
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "The sweep file is not a logarithmic sweep covering 200–2000 Hz: {}",
+                sweep.display()
+            )
+        );
+    }
+
+    let folder_recording = root().join("data/demo/FL,FR.wav");
+    let no_sweep = ProcessingConfig {
+        brir_recording_file: Some(folder_recording.to_string_lossy().into_owned()),
+        brir_recording_speakers: Some("FL,FR".into()),
+        do_room_correction: false,
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &no_sweep).unwrap();
+    let wrong_estimator = open_estimator(&dir, Some("generate:12.3s@48000")).unwrap();
+    let error = load_inputs(&dir, &wrong_estimator, &no_sweep, &mut Events::default()).unwrap_err();
+    assert!(matches!(error, BrirError::RecordingTestSignal { .. }));
+    assert_error(
+        &error,
+        "The test signal does not match the recording file.",
+        json!({"path": folder_recording, "read": 1, "listed": 2}),
+    );
+    assert_eq!(
+        error.to_string(),
+        "The recording holds 1 of the 2 listed sweeps for this test signal. A recording made with another sweep needs brir_recording_sweep."
+    );
 }

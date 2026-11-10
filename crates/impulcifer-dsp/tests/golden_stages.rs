@@ -21,7 +21,7 @@ use impulcifer_dsp::{
     },
     virtual_bass::{VirtualBassOptions, apply_virtual_bass},
 };
-use impulcifer_types::{config::ProcessingConfig, constants::*, stages::StageKey};
+use impulcifer_types::{config::ProcessingConfig, constants::*, layouts::layout, stages::StageKey};
 use serde_json::{Value, json};
 use std::{fs, path::PathBuf, sync::OnceLock};
 thread_local! { static FAILURES: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
@@ -317,6 +317,7 @@ fn inputs() -> &'static PipelineInputs {
         PipelineInputs {
             estimator,
             hrir,
+            lfe: Vec::new(),
             vbass: None,
             room,
             headphone: Some(headphone_compensation(&hp).unwrap()),
@@ -618,6 +619,142 @@ fn golden_default_pipeline_matches_python() {
     let expected = fixture("readme");
     check_readme(&output.readme, &expected);
 }
+
+#[test]
+fn measured_lfe_takes_the_output_stages_only() {
+    let mut config = ProcessingConfig::oracle_defaults();
+    config.do_room_correction = false;
+    config.do_headphone_compensation = true;
+    config.do_equalization = false;
+    config.layout_files = "9.1".into();
+
+    let fs = inputs().estimator.fs;
+    let impulse = |peak: usize, gain: f64| {
+        let mut data = vec![0.0; 8_192];
+        for (offset, sample) in data[peak..].iter_mut().enumerate() {
+            *sample = gain * (-(offset as f64) / 450.0).exp() * (offset as f64 * 0.2).cos();
+        }
+        impulcifer_dsp::ir::ImpulseResponse {
+            data,
+            fs,
+            recording: None,
+        }
+    };
+    let synthetic = Hrir {
+        fs,
+        speakers: vec![impulcifer_dsp::hrir::SpeakerIrs {
+            speaker: "FL".into(),
+            left: Some(impulse(100, 1.0)),
+            right: Some(impulse(109, 0.8)),
+        }],
+    };
+    let raw_lfe = impulcifer_dsp::hrir::SpeakerIrs {
+        speaker: "LFE".into(),
+        left: Some(impulse(140, 0.6)),
+        right: Some(impulse(143, 0.5)),
+    };
+    let mut without_inputs = inputs().clone();
+    without_inputs.hrir = synthetic;
+    without_inputs.lfe.clear();
+    without_inputs.room = None;
+    let without =
+        pipeline::run_pipeline(&config, without_inputs.clone(), &mut Observer::default()).unwrap();
+
+    let mut with_inputs = without_inputs;
+    with_inputs.lfe = vec![raw_lfe.clone()];
+    let with = pipeline::run_pipeline(&config, with_inputs, &mut Observer::default()).unwrap();
+
+    assert_eq!(with.applied_gain_db, without.applied_gain_db);
+    assert_eq!(with.responses_tracks, without.responses_tracks);
+    assert_eq!(with.hrir_tracks, without.hrir_tracks);
+    assert_eq!(with.hesuvi_tracks, without.hesuvi_tracks);
+    for (actual, reference) in with.hrir.speakers.iter().zip(&without.hrir.speakers) {
+        assert_eq!(actual.speaker, reference.speaker);
+        assert_eq!(
+            actual.left.as_ref().map(|ir| &ir.data),
+            reference.left.as_ref().map(|ir| &ir.data)
+        );
+        assert_eq!(
+            actual.right.as_ref().map(|ir| &ir.data),
+            reference.right.as_ref().map(|ir| &ir.data)
+        );
+    }
+
+    let tail = without.responses_tracks[0].len();
+    let prepare_expected = |hp: Option<&HeadphoneCompensation>| {
+        let mut expected = Hrir {
+            fs,
+            speakers: vec![raw_lfe.clone()],
+        };
+        expected
+            .crop_heads_without_speaker_delay(config.head_ms)
+            .unwrap();
+        expected.crop_tails_to(&inputs().estimator, tail).unwrap();
+        let target = create_target(
+            inputs().estimator.fs,
+            config.bass_boost_gain,
+            config.bass_boost_fc,
+            config.bass_boost_q,
+            config.tilt,
+        );
+        equalize_hrir(
+            &mut expected,
+            &EqInputs {
+                room_frs: None,
+                hp,
+                eq_left: None,
+                eq_right: None,
+                target: &target,
+                fs: inputs().estimator.fs,
+            },
+        )
+        .unwrap();
+        let scalar = 10.0_f64.powf(with.applied_gain_db / 20.0);
+        expected.for_each_ir(|ir| ir.data.iter_mut().for_each(|sample| *sample *= scalar));
+        expected
+    };
+    let expected = prepare_expected(inputs().headphone.as_ref());
+    let target_only = prepare_expected(None);
+    let measured = &with.lfe[0];
+    assert_eq!(
+        measured.left.as_ref().unwrap().data.len(),
+        with.hrir_tracks[0].len()
+    );
+    assert_eq!(
+        measured.left.as_ref().unwrap().data,
+        expected.pair("LFE").unwrap().0.data
+    );
+    assert_eq!(
+        measured.right.as_ref().unwrap().data,
+        expected.pair("LFE").unwrap().1.data
+    );
+    assert_ne!(
+        measured.left.as_ref().unwrap().data,
+        target_only.pair("LFE").unwrap().0.data,
+        "the headphone term must be applied to measured LFE"
+    );
+
+    let layout_output = with
+        .layouts
+        .iter()
+        .find(|output| output.layout.id == "9.1")
+        .unwrap();
+    let lfe_index = layout("9.1")
+        .unwrap()
+        .channels
+        .iter()
+        .position(|channel| channel.slot == "LFE")
+        .unwrap();
+    assert_eq!(
+        layout_output.tracks[2 * lfe_index],
+        measured.left.as_ref().unwrap().data
+    );
+    assert_eq!(
+        layout_output.tracks[2 * lfe_index + 1],
+        measured.right.as_ref().unwrap().data
+    );
+}
+
 /// Python write_readme numeric state at its actual stage; pipeline_stages.py:525-687; p10_readme.
 fn check_readme(got: &impulcifer_dsp::stages::readme::ReadmeData, expected: &Value) {
     assert_eq!(got.fs as u64, expected["fs"].as_u64().unwrap());
@@ -1329,6 +1466,7 @@ fn golden_optional_outputs_match_python() {
             PipelineInputs {
                 estimator: inputs().estimator.clone(),
                 hrir,
+                lfe: Vec::new(),
                 vbass: None,
                 room: None,
                 headphone: None,

@@ -132,6 +132,7 @@ native.run(
 | `room-target.csv` | 룸 보정 목표 응답입니다. 없으면 평탄한 목표를 씁니다. |
 | `room-mic-calibration.csv` 또는 `room-mic-calibration.txt` | 룸 측정 마이크 보정 파일입니다. 없으면 마이크 보정을 건너뜁니다. |
 | REW `.mdat` 또는 Dirac Live `.liveproject` | 폴더의 스피커 측정 파일, `headphones.wav`, `room-*.wav`를 대신할 수 있는 측정입니다. 폴더 밖에 있어도 됩니다. 아래 [REW와 Dirac Live 측정 파일](#rew와-dirac-live-측정-파일)을 참고하세요. |
+| 녹음 파일 하나 | 모든 스피커의 sweep을 한 파일에 이어 녹음한 WAV입니다. 폴더의 스피커 측정 파일을 대신하고, 폴더 밖에 있어도 됩니다. 아래 [한 파일에 이어 녹음한 스피커 측정](#한-파일에-이어-녹음한-스피커-측정)을 참고하세요. |
 | `eq.csv`, `eq-left.csv`, `eq-right.csv` | Custom EQ 파일입니다. `eq.csv`는 양쪽 공통, `eq-left.csv`와 `eq-right.csv`는 좌우 개별 EQ입니다. 같은 이름의 `.txt`(예: `eq.txt`)도 읽습니다. |
 | `test.wav` | 녹음 때 쓴 sweep입니다. 녹음 화면에서 sweep 설정을 바꿔 녹음하면 자동으로 저장되고, 처리할 때 그대로 씁니다. |
 
@@ -168,7 +169,20 @@ REW가 저장한 측정 파일(`.mdat`)과 Dirac Live 프로젝트(`.liveproject
 * **REW:** 측정 이름에서 스피커와 귀를 읽습니다. `FL left`는 FL의 왼쪽 귀 위치이고, `L P1`처럼 귀가 없으면 두 귀 위치에 같은 측정을 씁니다. 임펄스 응답이 없는 측정(주파수 응답만 가져온 것 등)은 쓸 수 없습니다.
 * **Dirac Live:** 스피커 이름(`Left`, `LeftSurround` 등)에서 스피커를 읽고, 두 귀 위치에 위치 1(Dirac Live의 주 청취 위치)을 씁니다. 다른 위치를 귀 위치로 고를 수도 있습니다. Dirac Live의 응답은 0.68초라서, 룸 EQ가 측정의 잡음 바닥으로 부스트를 제한하는 검사(1초 이상 필요)는 건너뜁니다. 최대 부스트와 저역 롤오프 검출은 그대로 적용됩니다. 프로젝트에 마이크 보정 곡선이 들어 있으면, 마이크 보정 파일을 따로 정하지 않았을 때 그 곡선을 씁니다. 프로젝트의 측정만 읽고 필터 설계는 읽지 않습니다.
 
-BRIR에는 서브우퍼 채널이 없으므로, 서브우퍼 측정은 스피커를 직접 고를 때만 씁니다. 두 형식의 세부와 자동 대응 규칙은 [외부 측정 문서](docs/rust/EXTERNAL_MEASUREMENTS.md)에, 결정 근거는 ADR 0010(룸 측정)과 ADR 0011(BRIR·헤드폰 측정)에 있습니다.
+BRIR 측정의 서브우퍼는 `LFE`와 `LFE2`에 대응합니다. 자동 대응은 서브우퍼로 표시된 스피커를 차례로 `LFE`, `LFE2`에 놓고, 그 응답이 채널 순서 파일의 LFE 트랙이 됩니다. 룸 보정은 LFE에 걸지 않으므로 룸 측정의 서브우퍼는 쓰지 않습니다. 두 형식의 세부와 자동 대응 규칙은 [외부 측정 문서](docs/rust/EXTERNAL_MEASUREMENTS.md)에, 결정 근거는 ADR 0010(룸 측정), ADR 0011(BRIR·헤드폰 측정), ADR 0016(서브우퍼와 LFE)에 있습니다.
+
+### 한 파일에 이어 녹음한 스피커 측정
+
+Dirac Live나 REW가 스피커마다 sweep을 내는 동안 귓속 마이크를 따로 녹음했다면, 그 녹음 파일 하나를 BRIR 측정으로 쓸 수 있습니다. 앱에서는 입력 파일 칸의 BRIR 측정에서 '단일 녹음 파일'을 고르고, CLI에서는 `--brir_recording_file`을 지정하세요. 파일 이름은 자유이고 폴더 밖에 있어도 됩니다. 결과 파일과 나머지 입력은 녹음 폴더를 씁니다.
+
+* **스피커 순서:** 녹음에 든 sweep을 재생한 순서대로 적으세요(`--brir_recording_speakers=FL,FC,FR,SR,BR,BL,SL,LFE,X`). 코드는 스피커 측정 파일의 이름에 쓰는 것과 같습니다. 서브우퍼는 `LFE`와 `LFE2`, 쓰지 않을 sweep은 `X`입니다. Dirac Live는 마지막에 첫 스피커를 한 번 더 재생하므로 그 자리에는 `X`를 적으세요. FL은 꼭 있어야 합니다.
+* **Impulcifer의 sweep으로 녹음한 파일:** sweep은 따로 정하지 않아도 됩니다. 폴더의 스피커 측정 파일과 같은 방법으로 읽으므로, 파일 이름을 스피커 목록으로 바꿔 폴더에 둔 것과 결과가 같습니다.
+* **다른 프로그램의 sweep으로 녹음한 파일:** 재생한 sweep의 WAV를 함께 지정하세요(`--brir_recording_sweep`). 로그 sweep이어야 합니다. 캡처한 파일이어도 되고, 앞뒤의 무음은 알아서 잘라냅니다. Impulcifer는 그 sweep으로 녹음에서 sweep의 자리를 찾고 응답을 풉니다. sweep 사이의 간격이 일정하지 않아도 됩니다.
+* 찾은 sweep의 개수가 적어 준 순서의 개수와 다르면 처리를 멈추고, 찾은 개수와 시각을 알려 줍니다.
+* 헤드폰 녹음과 테스트 신호 설정은 이 sweep과 무관합니다. `headphones.wav`를 Impulcifer로 녹음했다면 테스트 신호는 그 녹음에 맞게 두세요.
+* 서브우퍼(`LFE`, `LFE2`)의 응답은 채널 순서 파일의 LFE 트랙이 됩니다. 스피커와 같은 헤드폰 보정과 레벨을 받지만, 룸 보정과 가상 베이스, 스피커 사이의 정렬은 받지 않습니다.
+
+세부 규칙은 [단일 녹음 파일 문서](docs/rust/SINGLE_RECORDING.md)에, 결정 근거는 ADR 0016에 있습니다.
 
 ## 출력 파일
 
@@ -176,7 +190,7 @@ BRIR에는 서브우퍼 채널이 없으므로, 서브우퍼 측정은 스피커
 
 * **`hesuvi.wav`:** HeSuVi(Equalizer APO)용 BRIR입니다.
 * **`hrir.wav`:** 스피커 순서대로 늘어놓은 BRIR입니다.
-* **`atmos_9.1.wav`, `atmos_9.1.4.wav`, `atmos_9.1.6.wav`, `nhk_22.2.wav`, `auro_13.1.wav`, `atmos_24.1.10.wav`, `dtsx_30.2.wav`:** 측정한 스피커가 Dolby Atmos 9.1·9.1.4·9.1.6, NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10, DTS:X Pro 30.2의 채널을 모두 측정했으면, 같은 BRIR을 그 포맷의 공식 채널 순서로 한 번 더 저장합니다. 9.1 계열에서는 빠짐없이 측정한 가장 큰 배치 하나만 씁니다(9.1.6을 측정하면 `atmos_9.1.6.wav`만 생깁니다). 채널마다 왼쪽 귀, 오른쪽 귀 트랙이고 LFE 자리는 기본으로 무음입니다(`--lfe_mode`로 채울 수 있습니다). 9.1.6은 Apple과 AWS MediaConvert가 쓰는 교환 순서이고, 9.1과 9.1.4는 그 순서에서 없는 채널을 뺀 순서입니다. 22.2는 SMPTE ST 2036-2, Auro는 Auro의 WAV 백서, DTS는 ETSI TS 103 491 표 B-5의 순서입니다. Dolby는 9.1.6보다 큰 배치의 순서를 공개하지 않아서, 24.1.10 파일은 9.1.6 교환 순서 뒤에 Dolby 설치 지침의 나열 순서를 붙인 Impulcifer의 순서를 씁니다. `README.md`에 파일마다 채널과 스피커 코드의 대응표가 적힙니다.
+* **`atmos_9.1.wav`, `atmos_9.1.4.wav`, `atmos_9.1.6.wav`, `nhk_22.2.wav`, `auro_13.1.wav`, `atmos_24.1.10.wav`, `dtsx_30.2.wav`:** 측정한 스피커가 Dolby Atmos 9.1·9.1.4·9.1.6, NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10, DTS:X Pro 30.2의 채널을 모두 측정했으면, 같은 BRIR을 그 포맷의 공식 채널 순서로 한 번 더 저장합니다. 9.1 계열에서는 빠짐없이 측정한 가장 큰 배치 하나만 씁니다(9.1.6을 측정하면 `atmos_9.1.6.wav`만 생깁니다). 채널마다 왼쪽 귀, 오른쪽 귀 트랙이고 LFE 자리는 기본으로 무음입니다(`--lfe_mode`로 채울 수 있고, 서브우퍼를 귀에서 쟀으면 그 측정을 씁니다). 9.1.6은 Apple과 AWS MediaConvert가 쓰는 교환 순서이고, 9.1과 9.1.4는 그 순서에서 없는 채널을 뺀 순서입니다. 22.2는 SMPTE ST 2036-2, Auro는 Auro의 WAV 백서, DTS는 ETSI TS 103 491 표 B-5의 순서입니다. Dolby는 9.1.6보다 큰 배치의 순서를 공개하지 않아서, 24.1.10 파일은 9.1.6 교환 순서 뒤에 Dolby 설치 지침의 나열 순서를 붙인 Impulcifer의 순서를 씁니다. `README.md`에 파일마다 채널과 스피커 코드의 대응표가 적힙니다.
 * **`responses.wav`, `headphone-responses.wav`, `room-responses.wav`:** 처리 중간의 임펄스 응답입니다.
 * **`README.md`:** 출력 샘플레이트, 적용한 정규화 게인, 스피커·귀별 PNR·ITD·RT60, 반사음 레벨을 적은 요약입니다. 양 귀 도착 시차 절에는 스피커마다 측정한 시차와 구형 머리 모델의 값, 보정 뒤의 값, 머리 회전 추정, 센터 자리의 공통 오프셋, 120 Hz 아래 좌우 레벨 차(입력 체인 불균형)가 있고, 헤드폰 보정을 켰으면 헤드폰 녹음의 좌우 차와 최종 BRIR의 예상 좌우 차도 적습니다(ADR 0014). 같은 내용을 앱의 작업 화면에서도 표로 표시합니다.
 * **`plots/`:** 헤드폰 보정 그래프와 결과 그래프입니다. `--plot`을 주면 스피커·귀별 응답 그래프와 양이 레벨차(ILD)·위상차(IPD)·IACC 그래프 등을 더 저장합니다(데모에서는 모두 55장).
@@ -203,6 +217,9 @@ BRIR에는 서브우퍼 채널이 없으므로, 서브우퍼 측정은 스피커
 | `--room_measurement_map MAP` | `auto` | 측정 파일의 어느 측정을 어느 스피커와 귀 위치에 쓸지 정합니다. REW는 측정 순번(`FL.left=1,FL.right=2`), Dirac Live는 `스피커 번호@위치`(`FL=1@1,FR=2@1`, 두 귀 위치에 같은 측정)입니다. 비우거나 `auto`면 이름에서 정합니다. |
 | `--brir_measurement_file PATH` | 없음 | 폴더의 스피커 측정 파일 대신 쓸 REW 측정 파일(`.mdat`)이나 Dirac Live 프로젝트(`.liveproject`)입니다. |
 | `--brir_measurement_map MAP` | `auto` | 측정 파일의 어느 측정을 어느 스피커의 어느 귀에 쓸지 정합니다. 항목 하나가 귀 하나입니다(REW는 `FL.left=1,FL.right=2`, Dirac Live는 `FL.left=1@1,FL.right=1@2`). 비우거나 `auto`면 이름에서 정합니다. |
+| `--brir_recording_file PATH` | 없음 | 폴더의 스피커 측정 파일 대신 쓸, 모든 스피커의 sweep을 이어 녹음한 WAV입니다. `--brir_measurement_file`과 함께 쓸 수 없습니다. |
+| `--brir_recording_speakers LIST` | 없음 | 녹음에 든 sweep의 순서입니다(`FL,FC,FR,LFE,X`). `X`는 건너뛸 sweep, `LFE`·`LFE2`는 서브우퍼입니다. `--brir_recording_file`을 주면 꼭 있어야 합니다. |
+| `--brir_recording_sweep PATH` | 없음 | 그 녹음에 재생한 sweep의 WAV입니다(Dirac Live나 REW의 로그 sweep). 비우면 `--test_signal`의 sweep으로 녹음한 것으로 보고 폴더 녹음과 같은 방법으로 읽습니다. |
 | `--headphone_measurement_file PATH` | 없음 | `headphones.wav` 대신 쓸 REW 측정 파일이나 Dirac Live 프로젝트입니다. |
 | `--headphone_measurement_map MAP` | `auto` | 왼쪽 귀에서 잰 왼쪽 이어컵과 오른쪽 귀에서 잰 오른쪽 이어컵의 측정입니다(`left=1,right=2`). 비우거나 `auto`면 이름에서 정합니다. |
 | `--headphone_compensation_file PATH` | `dir_path/headphones.wav` | 헤드폰 보정 측정 WAV입니다. 폴더를 주면 흔히 쓰는 파일 이름을 찾아봅니다. 테스트 신호와 다른 sweep으로 녹음한 파일이면 작업이 테스트 신호가 헤드폰 녹음과 맞지 않는다는 오류로 멈춥니다. |
@@ -281,7 +298,7 @@ sweep 파일을 따로 준비하지 않아도 됩니다. 녹음 화면은 기본
 | `--output_truehd_layouts` | 꺼짐 | TrueHD용 레이아웃 출력을 추가로 저장합니다. |
 | `--layout_files auto\|none\|<포맷 목록>` | `auto` | 몰입형 포맷의 공식 채널 순서 파일입니다. `auto`는 채널을 모두 측정한 포맷만 쓰고, `none`은 쓰지 않습니다. 9.1 계열(`9.1`, `9.1.4`, `9.1.6`)은 빠짐없이 측정한 가장 큰 배치 하나만 씁니다. `9.1`, `9.1.4`, `9.1.6`, `13.1`, `22.2`, `24.1.10`, `30.2`를 쉼표로 나열하면 그 포맷은 스피커가 빠져도 쓰고, 빠진 스피커의 트랙은 무음으로 둡니다(`--missing_speakers=neighbor`면 옆 스피커로 채웁니다)(예: 9.1.6 측정에서 9.1.4 파일도 필요하면 `--layout_files=9.1.4`). |
 | `--missing_speakers silent\|neighbor` | `silent` | 재지 않은 스피커의 트랙입니다. `silent`는 무음으로 두고, `neighbor`는 같은 쪽·같은 높이에서 방향이 가장 가까운 측정 스피커를 그대로 씁니다. 센터처럼 가운데 자리는 양옆의 대칭 쌍을 1/√2씩 더해 만듭니다. 높이 채널은 귀 높이 스피커로 채우지 않습니다. `hesuvi.wav`와 `hrir.wav`는 2.x 기본 스피커만, 채널 순서 파일은 LFE를 뺀 모든 채널을 채웁니다(ADR 0013). |
-| `--lfe_mode none\|center\|all` | `none` | 채널 순서 파일의 LFE 트랙입니다. `none`은 무음, `center`는 FC(없으면 FL·FR 팬텀)를 씁니다. `all`은 측정한 모든 스피커의 120 Hz 아래 저음을 전력 평균해 최소 위상 응답 하나로 만들고, 모든 스피커에 지연 하나를 씁니다. 방향마다 다른 방 모드의 피크와 딥이 고르게 됩니다. `hesuvi.wav`와 `hrir.wav`에는 LFE 트랙이 없습니다. |
+| `--lfe_mode none\|center\|all` | `none` | 채널 순서 파일의 LFE 트랙입니다. `none`은 무음, `center`는 FC(없으면 FL·FR 팬텀)를 씁니다. `all`은 측정한 모든 스피커의 120 Hz 아래 저음을 전력 평균해 최소 위상 응답 하나로 만들고, 모든 스피커에 지연 하나를 씁니다. 방향마다 다른 방 모드의 피크와 딥이 고르게 됩니다. 서브우퍼를 `LFE`에 대응한 측정이 있으면 이 설정과 관계없이 그 측정을 씁니다. `hesuvi.wav`와 `hrir.wav`에는 LFE 트랙이 없습니다. |
 | `--info` | 꺼짐 | 버전, 운영체제, CPU 코어 수, 데이터 폴더 등을 출력하고 끝냅니다. |
 | `-V`, `--version` | 꺼짐 | 버전을 출력하고 끝냅니다. |
 

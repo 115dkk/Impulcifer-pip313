@@ -47,3 +47,34 @@ fn cli_room_measurement_options_parse() {
     assert!(ProcessingConfig::default().room_measurement_file.is_none());
     assert!(ProcessingConfig::default().room_measurement_map.is_none());
 }
+
+#[test]
+fn cli_recording_file_options_parse() {
+    let args = [
+        "impulcifer",
+        "--dir_path=data/demo",
+        "--brir_recording_file",
+        "recording.wav",
+        "--brir_recording_speakers",
+        "FL, FC, X, FR, LFE",
+        "--brir_recording_sweep",
+        "sweep.wav",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    let Parsed::Kwargs(kwargs) = parse(&args).unwrap() else {
+        panic!("expected config")
+    };
+    let config = ProcessingConfig::from_kwargs(&kwargs).unwrap();
+    assert_eq!(config.brir_recording_file.as_deref(), Some("recording.wav"));
+    assert_eq!(
+        config.brir_recording_speakers.as_deref(),
+        Some("FL, FC, X, FR, LFE")
+    );
+    assert_eq!(config.brir_recording_sweep.as_deref(), Some("sweep.wav"));
+    config.validate_room_options().unwrap();
+    let defaults = ProcessingConfig::default();
+    assert!(defaults.brir_recording_file.is_none());
+    assert!(defaults.brir_recording_speakers.is_none());
+    assert!(defaults.brir_recording_sweep.is_none());
+}

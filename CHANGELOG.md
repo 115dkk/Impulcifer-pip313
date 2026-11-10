@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.18.0 - 2026-11-11
+### 녹음 파일 하나로 BRIR 측정, 잰 서브우퍼의 LFE, 화면 정리
+
+#### ⭐ 새로운 기능 / 개선
+- **BRIR 측정을 녹음 파일 하나에서 읽기(ADR 0016)**: 합성 탭의 BRIR 측정에 '단일 녹음 파일'이 생겼습니다. 모든 스피커의 sweep을 한 파일에 이어 녹음한 WAV를 고르고 스피커 순서를 적으면(`FL,FC,FR,…`, 건너뛸 sweep은 `X`, 서브우퍼는 `LFE`·`LFE2`) 폴더의 스피커 녹음 대신 그 파일을 씁니다. CLI 옵션은 `--brir_recording_file`, `--brir_recording_speakers`, `--brir_recording_sweep`입니다. Impulcifer의 sweep으로 녹음한 파일은 폴더 녹음과 같은 방법으로 읽어 결과가 바이트 단위로 같습니다.
+- **다른 프로그램의 sweep으로 녹음한 파일**: Dirac Live나 REW가 sweep을 내는 동안 귓속 마이크를 녹음한 파일은 '이 녹음의 sweep'에 재생한 sweep의 WAV를 지정하면 읽습니다. 그 sweep과의 상관으로 녹음 속 sweep의 자리를 찾으므로 간격이 일정하지 않아도 되고, 응답은 녹음 전체를 그 sweep으로 나누어 얻습니다. 로그 sweep만 받으며, 캡처한 sweep 파일의 앞뒤 무음은 잘라냅니다. 찾은 sweep의 개수가 적어 준 순서와 다르면 개수와 시작 시각을 알리고 멈춥니다. 유지보수자의 Dirac Live 녹음 두 개에서 sweep을 모두 찾았습니다. sweep 개수가 맞지 않거나 sweep 파일이 로그 sweep이 아닐 때의 오류는 화면의 언어로 나옵니다.
+- **잰 서브우퍼가 LFE 채널이 됨**: BRIR 측정 파일(REW·Dirac Live)의 대응과 단일 녹음의 스피커 순서에서 `LFE`와 `LFE2`를 받습니다. 측정 파일의 자동 대응은 서브우퍼로 표시된 스피커를 차례로 놓습니다. 잰 LFE는 머리와 꼬리 자르기, 헤드폰 보정·EQ·목표 곡선, 스피커와 같은 정규화 이득, 리샘플을 받고, 채널 순서 파일의 LFE 트랙에서 `--lfe_mode`의 합성보다 앞섭니다. 룸 보정과 가상 베이스, 스피커 사이의 정렬은 받지 않습니다. `hesuvi.wav`와 `hrir.wav`는 그대로입니다. 측정 대응 표의 서브우퍼 안내도 이에 맞게 고쳤습니다.
+- **출력 파일 탭의 설명을 i 툴팁으로**: 채널 순서 파일, 재지 않은 스피커, LFE 채널, 무음 채널 제거의 설명 줄을 라벨 옆 i 툴팁으로 옮겼습니다. 고른 값에 따라 툴팁의 문장이 바뀌고, 무음 채널 제거의 경고는 켰을 때만 보입니다.
+- **가상 룸 튜닝 2의 설정을 다섯 묶음으로**: 한 줄로 이어지던 스무 개 남짓한 행을 필터, 보정 구간, 보호, 시간과 위상, 스피커 사이로 나눴습니다. 방 부피와 슈레더 주파수는 상한 기준 바로 아래로 옮겼고, 상한을 직접 적으면 기준과 배수는 비활성으로 보입니다. MIMO의 세부 설정은 MIMO를 켰을 때만 나옵니다.
+
+#### 🔧 빌드 / 설정 변경
+- **brir-3x 시나리오 둘 추가**: 데모의 `FL,FR.wav`를 단일 녹음 파일로 읽는 시나리오 둘(sweep을 지정하지 않은 것과 지정한 것)을 더해 44개가 됐습니다.
+
 ## 3.17.1 - 2026-11-10
 ### 테스트 신호가 녹음과 맞지 않으면 알림
 

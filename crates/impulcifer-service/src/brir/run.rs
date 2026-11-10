@@ -1,7 +1,11 @@
 use super::{
-    BrirError, BrirEvents, Catalog, discovery::discover, eq_select::EqChoices,
-    estimator::open_with_events, inputs::load_inputs, outputs::write_outputs_checked,
-    sweep_grid::test_signal_mismatches,
+    BrirError, BrirEvents, Catalog,
+    discovery::discover,
+    eq_select::EqChoices,
+    estimator::open_with_events,
+    inputs::load_inputs,
+    outputs::write_outputs_checked,
+    sweep_grid::{recording_test_signal_mismatch, test_signal_mismatches},
 };
 use impulcifer_dsp::{
     DspError,
@@ -14,7 +18,7 @@ use impulcifer_dsp::{
 };
 use impulcifer_jobs::registry::{JobContext, JobFailure};
 use impulcifer_types::{
-    config::ProcessingConfig,
+    config::{ProcessingConfig, parse_recording_speakers},
     ipc::{self, ErrorCode},
     stages::StageKey,
 };
@@ -799,25 +803,60 @@ pub(crate) fn run_with_choices(
         events.check_cancelled()?;
         let mut dir = discover(Path::new(config.dir_path.as_deref().unwrap_or("")), config)?;
         eq.apply(&mut dir.eq);
+        let recording_source = config
+            .brir_recording_file
+            .as_deref()
+            .filter(|file| !file.trim().is_empty())
+            .map(|file| {
+                let entries = parse_recording_speakers(
+                    config
+                        .brir_recording_speakers
+                        .as_deref()
+                        .unwrap_or_default(),
+                )
+                .map_err(BrirError::Unsupported)?;
+                Ok::<_, BrirError>((PathBuf::from(file), entries.len()))
+            })
+            .transpose()?;
+        let recording_sweep = config
+            .brir_recording_sweep
+            .as_deref()
+            .is_some_and(|sweep| !sweep.trim().is_empty());
         events.step("cli_creating_estimator", json!({}))?;
         let estimator = open_with_events(
             &dir,
             config.test_signal.as_deref(),
             data_dir,
             config.brir_measurement_file.is_some(),
+            recording_source
+                .as_ref()
+                .map(|(path, entries)| (path.as_path(), *entries)),
+            recording_sweep,
             Some(&mut events),
         )?;
         events.same_fs = config.fs == Some(estimator.fs);
         // A test signal the recordings were not made with gives responses
         // that mean nothing, often without any error: say so before the work.
         let signal_seconds = estimator.test_signal.len() as f64 / f64::from(estimator.fs);
-        for mismatch in test_signal_mismatches(
+        let mut mismatches = test_signal_mismatches(
             &dir,
-            config.brir_measurement_file.is_none(),
+            config.brir_measurement_file.is_none() && recording_source.is_none(),
             config.do_headphone_compensation && config.headphone_measurement_file.is_none(),
             estimator.fs,
             estimator.test_signal.len(),
-        ) {
+        );
+        if !recording_sweep
+            && let Some((path, entries)) = &recording_source
+            && let Some(mismatch) = recording_test_signal_mismatch(
+                path,
+                *entries,
+                estimator.fs,
+                estimator.test_signal.len(),
+            )
+        {
+            mismatches.insert(0, mismatch);
+        }
+        for mismatch in mismatches {
             events.log(
                 "warning",
                 "cli_warning_test_signal_mismatch",

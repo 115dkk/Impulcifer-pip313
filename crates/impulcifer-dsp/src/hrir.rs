@@ -123,7 +123,7 @@ pub fn ingest_recording(
             let Some(&speaker) = speakers.get(i / 2 * columns.len() + j) else {
                 continue;
             };
-            if !SPEAKER_NAMES.contains(&speaker) {
+            if !SPEAKER_NAMES.contains(&speaker) && !matches!(speaker, "LFE" | "LFE2") {
                 continue;
             }
             if out.get(speaker).is_none() {
@@ -364,6 +364,17 @@ impl Hrir {
     /// Python crop_heads, core/hrir.py:567-631; p08_demo_crop_heads.json.
     /// Estimator-rate validation belongs to callers: this fixed type owns no estimator.
     pub fn crop_heads(&mut self, head_ms: f64) -> Result<(), DspError> {
+        self.crop_heads_with_delays(head_ms, true)
+    }
+    /// Crop measured LFE pairs with the speaker algorithm but no named-speaker delay.
+    pub fn crop_heads_without_speaker_delay(&mut self, head_ms: f64) -> Result<(), DspError> {
+        self.crop_heads_with_delays(head_ms, false)
+    }
+    fn crop_heads_with_delays(
+        &mut self,
+        head_ms: f64,
+        use_speaker_delays: bool,
+    ) -> Result<(), DspError> {
         if !head_ms.is_finite() || head_ms < 0.0 {
             return Err(DspError::InvalidArgument(
                 "head duration must be nonnegative".into(),
@@ -380,11 +391,16 @@ impl Hrir {
                     "both ears required for head cropping".into(),
                 ));
             };
-            let index = SPEAKER_NAMES
-                .iter()
-                .position(|name| *name == s.speaker)
-                .ok_or_else(|| DspError::InvalidArgument("unknown speaker delay".into()))?;
-            let delay = decay::py_round(SPEAKER_DELAYS[index] * self.fs as f64) as usize + head;
+            let speaker_delay = if use_speaker_delays {
+                let index = SPEAKER_NAMES
+                    .iter()
+                    .position(|name| *name == s.speaker)
+                    .ok_or_else(|| DspError::InvalidArgument("unknown speaker delay".into()))?;
+                decay::py_round(SPEAKER_DELAYS[index] * self.fs as f64) as usize
+            } else {
+                0
+            };
+            let delay = speaker_delay + head;
             let start = left
                 .peak_index(0, None, 0.12589)
                 .min(right.peak_index(0, None, 0.12589))
@@ -416,27 +432,39 @@ impl Hrir {
         let Some(max) = tails.into_iter().max() else {
             return Ok(0);
         };
-        let seconds =
-            estimator.test_signal.len() as f64 / estimator.fs as f64 / estimator.n_octaves;
-        let half = (self.fs as f64 * seconds * (1.0 / 24.0)) as usize;
-        let window = windows::hann(half * 2, true);
         let tail = lengths
             .into_iter()
             .min()
             .unwrap()
             .min(fft::next_fast_len_legacy(max));
+        self.crop_tails_to(estimator, tail)?;
+        Ok(tail)
+    }
+    /// Match a known speaker tail length and apply the estimator's half-Hann fade-out.
+    pub fn crop_tails_to(
+        &mut self,
+        estimator: &SweepEstimator,
+        tail: usize,
+    ) -> Result<(), DspError> {
+        if self.fs != estimator.fs {
+            return Err(DspError::InvalidArgument("Refusing to crop tails because HRIR sampling rate doesn't match estimator sampling rate.".into()));
+        }
+        let seconds =
+            estimator.test_signal.len() as f64 / estimator.fs as f64 / estimator.n_octaves;
+        let half = (self.fs as f64 * seconds * (1.0 / 24.0)) as usize;
         if tail < half {
             return Err(DspError::InvalidArgument(
                 "tail shorter than fade window".into(),
             ));
         }
+        let window = windows::hann(half * 2, true);
         self.for_each_ir(|ir| {
-            ir.data.truncate(tail);
+            ir.data.resize(tail, 0.0);
             for (x, w) in ir.data[tail - half..].iter_mut().zip(&window[half..]) {
                 *x *= w;
             }
         });
-        Ok(tail)
+        Ok(())
     }
     /// Python equalize, core/hrir.py:877-907; P08 properties, p08_ir.json.
     pub fn equalize(&mut self, left_fir: &[f64], right_fir: &[f64]) {

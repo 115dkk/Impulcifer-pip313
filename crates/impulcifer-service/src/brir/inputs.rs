@@ -2,7 +2,7 @@ use super::{BrirError, BrirEvents, discovery::MeasurementDir};
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     fr::FrequencyResponse,
-    hrir::{Hrir, NO_VALID_COLUMNS, ingest_recording},
+    hrir::{Hrir, NO_VALID_COLUMNS, SpeakerIrs, ingest_recording},
     pipeline::PipelineInputs,
     stages::{
         eq_files::{finalize_eq, looks_like_eqapo_config, read_eq_settings, select_eq_pair},
@@ -91,7 +91,7 @@ fn open_measurements(
     estimator: &SweepEstimator,
     config: &ProcessingConfig,
     events: &mut dyn BrirEvents,
-) -> Result<Hrir, BrirError> {
+) -> Result<(Hrir, Vec<SpeakerIrs>), BrirError> {
     if let Some(file) = &config.brir_measurement_file {
         let path = std::path::PathBuf::from(file);
         if !dir.recordings.is_empty() {
@@ -101,13 +101,42 @@ fn open_measurements(
                 json!({"count":dir.recordings.len()}),
             );
         }
-        let (hrir, _) = super::measurement_file::load_brir(
+        let (hrir, lfe, _) = super::measurement_file::load_brir(
             &path,
             config.brir_measurement_map.as_deref().unwrap_or(""),
             estimator.fs,
             events,
         )?;
-        return Ok(hrir);
+        return Ok((hrir, lfe));
+    }
+    if let Some(file) = config
+        .brir_recording_file
+        .as_deref()
+        .filter(|file| !file.trim().is_empty())
+    {
+        if !dir.recordings.is_empty() {
+            events.log(
+                "info",
+                "cli_brir_recording_replaces_folder",
+                json!({"count":dir.recordings.len()}),
+            );
+        }
+        let path = std::path::PathBuf::from(file);
+        let sweep = config
+            .brir_recording_sweep
+            .as_deref()
+            .filter(|sweep| !sweep.trim().is_empty())
+            .map(std::path::PathBuf::from);
+        return super::recording_file::load(
+            &path,
+            config
+                .brir_recording_speakers
+                .as_deref()
+                .unwrap_or_default(),
+            sweep.as_deref(),
+            estimator,
+            events,
+        );
     }
     let mut hrir = empty(estimator.fs);
     for (path, names) in &dir.recordings {
@@ -120,7 +149,7 @@ fn open_measurements(
             estimator,
         )?;
     }
-    Ok(hrir)
+    Ok((hrir, Vec::new()))
 }
 
 fn external_format(format: impulcifer_io::external::ExternalFormat) -> &'static str {
@@ -256,7 +285,7 @@ pub fn load_inputs(
     let mut opened_hrir = None;
     let mut vbass_plan = None;
     if config.vbass && mode != VirtualBassMode::Legacy {
-        let hrir = open_measurements(dir, estimator, config, events)?;
+        let (hrir, lfe) = open_measurements(dir, estimator, config, events)?;
         let mut cropped = hrir.clone();
         cropped.crop_heads(config.head_ms)?;
         cropped.crop_tails(estimator)?;
@@ -265,7 +294,7 @@ pub fn load_inputs(
             config.vbass_freq as f64,
             &cropped,
         )?);
-        opened_hrir = Some(hrir);
+        opened_hrir = Some((hrir, lfe));
     }
     let mut room_result = None;
     if config.do_room_correction {
@@ -707,8 +736,8 @@ pub fn load_inputs(
     }
     events.step("cli_creating_target", json!({}))?;
     events.step("cli_opening_measurements", json!({}))?;
-    let hrir = match opened_hrir {
-        Some(hrir) => hrir,
+    let (hrir, lfe) = match opened_hrir {
+        Some(opened) => opened,
         None => open_measurements(dir, estimator, config, events)?,
     };
     if hrir.speakers.is_empty() {
@@ -720,6 +749,7 @@ pub fn load_inputs(
     Ok(PipelineInputs {
         estimator: estimator.clone(),
         hrir,
+        lfe,
         vbass: vbass_plan,
         room: room_result,
         headphone,

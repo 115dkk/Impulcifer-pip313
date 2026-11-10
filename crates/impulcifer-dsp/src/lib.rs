@@ -35,5 +35,6 @@ pub mod smoothing;
 pub mod spectrogram;
 pub mod stages;
 pub mod stats;
+pub mod sweep_import;
 pub mod virtual_bass;
 pub mod windows;

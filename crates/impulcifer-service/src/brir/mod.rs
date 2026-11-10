@@ -6,6 +6,7 @@ pub mod inputs;
 pub mod measurement_file;
 pub mod outputs;
 pub mod plots;
+pub(crate) mod recording_file;
 pub mod run;
 pub mod sweep_grid;
 pub(crate) mod validation;
@@ -39,17 +40,72 @@ pub enum BrirError {
         sweep_seconds: f64,
         needed_seconds: f64,
     },
+    #[error("Found {found} sweeps in the recording but the list has {listed} entries. Sweeps start at {times} s. Write X for a sweep to skip.", times = sweep_start_times(.starts_seconds))]
+    RecordingSweepCount {
+        path: std::path::PathBuf,
+        found: usize,
+        listed: usize,
+        starts_seconds: Vec<f64>,
+    },
+    #[error(
+        "The recording holds {read} of the {listed} listed sweeps for this test signal. A recording made with another sweep needs brir_recording_sweep."
+    )]
+    RecordingTestSignal {
+        path: std::path::PathBuf,
+        read: usize,
+        listed: usize,
+    },
+    #[error("The sweep file is not a logarithmic sweep covering 200–2000 Hz: {path}", path = .path.display())]
+    RecordingSweepFile { path: std::path::PathBuf },
+    #[error(
+        "The sweep file ({sweep_fs} Hz) and the recording ({recording_fs} Hz) have different sampling rates."
+    )]
+    RecordingSweepRate {
+        path: std::path::PathBuf,
+        sweep_fs: u32,
+        recording_fs: u32,
+    },
     #[error("cancelled")]
     Cancelled,
 }
+fn sweep_start_times(seconds: &[f64]) -> String {
+    seconds
+        .iter()
+        .map(|seconds| format!("{seconds:.2}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 impl BrirError {
+    // IPC uses stable messages for translation; Display keeps the CLI's numbers.
+    fn ipc_message(&self) -> String {
+        match self {
+            Self::RecordingSweepCount { .. } => {
+                "The recording does not hold the listed number of sweeps.".into()
+            }
+            Self::RecordingTestSignal { .. } => {
+                "The test signal does not match the recording file.".into()
+            }
+            Self::RecordingSweepFile { .. } => "The sweep file is not a logarithmic sweep.".into(),
+            Self::RecordingSweepRate { .. } => {
+                "The sweep file and the recording have different sampling rates.".into()
+            }
+            _ => self.to_string(),
+        }
+    }
+
     pub fn envelope(&self) -> Value {
         let code = match self {
             Self::Missing(_) => ErrorCode::FileNotFound,
             Self::Fs(e) | Self::Io(IoError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
                 ErrorCode::FileNotFound
             }
-            Self::Unsupported(_) | Self::HeadphoneTestSignal { .. } => ErrorCode::InvalidRequest,
+            Self::Unsupported(_)
+            | Self::HeadphoneTestSignal { .. }
+            | Self::RecordingSweepCount { .. }
+            | Self::RecordingTestSignal { .. }
+            | Self::RecordingSweepFile { .. }
+            | Self::RecordingSweepRate { .. } => ErrorCode::InvalidRequest,
             _ => ErrorCode::InternalError,
         };
         let hundredths = |seconds: &f64| (seconds * 100.0).round() / 100.0;
@@ -65,9 +121,29 @@ impl BrirError {
                 "sweep_seconds": hundredths(sweep_seconds),
                 "needed_seconds": hundredths(needed_seconds),
             }),
+            Self::RecordingSweepCount {
+                path,
+                found,
+                listed,
+                starts_seconds,
+            } => json!({
+                "path": path,
+                "found": found,
+                "listed": listed,
+                "starts_seconds": starts_seconds.iter().map(hundredths).collect::<Vec<_>>(),
+            }),
+            Self::RecordingTestSignal { path, read, listed } => {
+                json!({"path": path, "read": read, "listed": listed})
+            }
+            Self::RecordingSweepFile { path } => json!({"path": path}),
+            Self::RecordingSweepRate {
+                path,
+                sweep_fs,
+                recording_fs,
+            } => json!({"path": path, "sweep_fs": sweep_fs, "recording_fs": recording_fs}),
             _ => json!({}),
         };
-        ipc::error(code, self.to_string(), details, false)
+        ipc::error(code, self.ipc_message(), details, false)
     }
     pub fn failure(self) -> JobFailure {
         JobFailure {

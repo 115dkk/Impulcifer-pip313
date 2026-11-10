@@ -5,7 +5,7 @@ use crate::{
     channel_balance::{ChannelBalance, correct_channel_balance},
     estimator::SweepEstimator,
     fr::FrequencyResponse,
-    hrir::{Hrir, compact_tracks},
+    hrir::{Hrir, SpeakerIrs, compact_tracks},
     itd::{self, AlignmentReport, Correction, ItdMode},
     mic_deviation::{
         MicDeviationAnalysis, MicDeviationOptions, apply_mic_deviation_correction_with_analysis,
@@ -35,6 +35,7 @@ use impulcifer_types::{
 pub struct PipelineInputs {
     pub estimator: SweepEstimator,
     pub hrir: Hrir,
+    pub lfe: Vec<SpeakerIrs>,
     pub vbass: Option<VirtualBassPlan>,
     pub room: Option<RoomCorrection>,
     pub headphone: Option<HeadphoneCompensation>,
@@ -102,6 +103,7 @@ pub struct LayoutOutput {
 #[derive(Clone, Debug)]
 pub struct PipelineOutputs {
     pub hrir: Hrir,
+    pub lfe: Vec<SpeakerIrs>,
     pub alignment: AlignmentReport,
     pub applied_gain_db: f64,
     pub readme: ReadmeData,
@@ -191,6 +193,27 @@ fn normalize(hrir: &mut Hrir, c: &ProcessingConfig) -> Result<f64, DspError> {
         c.target_level,
     )
 }
+fn apply_gain_db(hrir: &mut Hrir, gain_db: f64) {
+    let scalar = 10.0_f64.powf(gain_db / 20.0);
+    hrir.for_each_ir(|ir| ir.data.iter_mut().for_each(|sample| *sample *= scalar));
+}
+fn match_lengths(source: &mut Hrir, reference: &Hrir) -> Result<(), DspError> {
+    if source.fs != reference.fs {
+        return Err(DspError::InvalidArgument(
+            "measured LFE and speaker sample rates differ".into(),
+        ));
+    }
+    let length = reference
+        .speakers
+        .iter()
+        .flat_map(|speaker| speaker.left.iter().chain(speaker.right.iter()))
+        .next()
+        .ok_or_else(|| DspError::InvalidArgument("No speaker IR available for LFE output".into()))?
+        .data
+        .len();
+    source.for_each_ir(|ir| ir.data.resize(length, 0.0));
+    Ok(())
+}
 /// Python _stage_write_brirs, core/pipeline.py:873-895; p10_default_final.
 /// The tracks of hrir.wav or hesuvi.wav and, when compacted, the names of the
 /// tracks kept (empty otherwise).
@@ -227,12 +250,17 @@ pub fn run_pipeline(
     let PipelineInputs {
         estimator,
         mut hrir,
+        lfe,
         vbass,
         room,
         headphone,
         eq_left,
         eq_right,
     } = inputs;
+    let mut lfe = Hrir {
+        fs: hrir.fs,
+        speakers: lfe,
+    };
     let total = total_steps(config);
     let mut step = 0;
     let mut target = None;
@@ -280,6 +308,7 @@ pub fn run_pipeline(
             }
             StageKey::CropAndAlign => {
                 hrir.crop_heads(config.head_ms)?;
+                lfe.crop_heads_without_speaker_delay(config.head_ms)?;
                 let mut report = itd::analyze(&hrir, config.head_radius, 1.5);
                 let mode = ItdMode::parse(&config.itd_mode)
                     .ok_or_else(|| DspError::InvalidArgument("invalid itd_mode".into()))?;
@@ -293,7 +322,8 @@ pub fn run_pipeline(
                 itd::measure_after(&hrir, &mut report, 1.5);
                 observer.on_alignment(&report, &corrections)?;
                 alignment = Some(report);
-                hrir.crop_tails(&estimator)?;
+                let tail = hrir.crop_tails(&estimator)?;
+                lfe.crop_tails_to(&estimator, tail)?;
                 if config.do_room_correction
                     && config.room_mode == "tuning"
                     && let Some(plan) = room.as_ref().and_then(|r| r.tuning.as_ref())
@@ -373,22 +403,25 @@ pub fn run_pipeline(
                 responses_tracks = hrir.stack_tracks(&HEXADECAGONAL_TRACK_ORDER, false)?
             }
             StageKey::Equalize => {
-                let applied = equalize_hrir(
-                    &mut hrir,
-                    &EqInputs {
-                        room_frs: room
-                            .as_ref()
-                            .filter(|_| config.do_room_correction)
-                            .map(|r| &r.frs),
-                        hp: headphone
-                            .as_ref()
-                            .filter(|_| config.do_headphone_compensation),
-                        eq_left: eq_left.as_ref().filter(|_| config.do_equalization),
-                        eq_right: eq_right.as_ref().filter(|_| config.do_equalization),
-                        target: target.as_ref().unwrap(),
-                        fs: estimator.fs,
-                    },
-                )?;
+                let eq_inputs = EqInputs {
+                    room_frs: room
+                        .as_ref()
+                        .filter(|_| config.do_room_correction)
+                        .map(|r| &r.frs),
+                    hp: headphone
+                        .as_ref()
+                        .filter(|_| config.do_headphone_compensation),
+                    eq_left: eq_left.as_ref().filter(|_| config.do_equalization),
+                    eq_right: eq_right.as_ref().filter(|_| config.do_equalization),
+                    target: target.as_ref().unwrap(),
+                    fs: estimator.fs,
+                };
+                let applied = equalize_hrir(&mut hrir, &eq_inputs)?;
+                let lfe_inputs = EqInputs {
+                    room_frs: None,
+                    ..eq_inputs
+                };
+                equalize_hrir(&mut lfe, &lfe_inputs)?;
                 observer.on_equalized(&applied)?;
             }
             StageKey::Decay => {
@@ -404,7 +437,10 @@ pub fn run_pipeline(
                 &mut hrir,
                 ChannelBalance::parse(config.channel_balance.as_ref().unwrap())?,
             )?,
-            StageKey::Normalize => applied_gain_db = normalize(&mut hrir, config)?,
+            StageKey::Normalize => {
+                applied_gain_db = normalize(&mut hrir, config)?;
+                apply_gain_db(&mut lfe, applied_gain_db);
+            }
             StageKey::WriteReadme => {
                 let mut data = readme_data(&hrir, config.fs.unwrap_or(hrir.fs), applied_gain_db);
                 data.tuning = tuning_report.take();
@@ -414,10 +450,15 @@ pub fn run_pipeline(
             StageKey::Resample => {
                 if let Some(fs) = config.fs.filter(|fs| *fs != hrir.fs) {
                     hrir.resample(fs)?;
-                    normalize(&mut hrir, config)?;
+                    lfe.resample(fs)?;
+                    let gain = normalize(&mut hrir, config)?;
+                    apply_gain_db(&mut lfe, gain);
                 }
             }
             StageKey::WriteBrirs => {
+                if !lfe.speakers.is_empty() {
+                    match_lengths(&mut lfe, &hrir)?;
+                }
                 fn output_targets<'a>(order: &'a [&'a str]) -> Vec<&'a str> {
                     order[..base_channel_count(order)]
                         .iter()
@@ -427,6 +468,7 @@ pub fn run_pipeline(
                 }
                 let filled_hrir = fill_output(
                     &hrir,
+                    &lfe.speakers,
                     &output_targets(&HEXADECAGONAL_TRACK_ORDER),
                     &config.missing_speakers,
                     "none",
@@ -439,6 +481,7 @@ pub fn run_pipeline(
                 hrir_filled = filled_hrir.filled;
                 let filled_hesuvi = fill_output(
                     &hrir,
+                    &lfe.speakers,
                     &output_targets(&HESUVI_TRACK_ORDER),
                     &config.missing_speakers,
                     "none",
@@ -459,6 +502,7 @@ pub fn run_pipeline(
                             layout.channels.iter().map(|channel| channel.slot).collect();
                         let filled_output = fill_output(
                             &hrir,
+                            &lfe.speakers,
                             &targets,
                             &config.missing_speakers,
                             &config.lfe_mode,
@@ -528,6 +572,7 @@ pub fn run_pipeline(
     }
     Ok(PipelineOutputs {
         hrir,
+        lfe: lfe.speakers,
         alignment: alignment.expect("crop and align always runs"),
         applied_gain_db,
         readme: readme.unwrap(),

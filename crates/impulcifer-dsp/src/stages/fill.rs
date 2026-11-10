@@ -311,9 +311,25 @@ pub fn fill_lfe(
     }
 }
 
-/// Assemble an output-only HRIR, filling speakers first and LFE only from measured sources.
+fn measured_lfe(measured: &[SpeakerIrs], target: &str) -> Option<SpeakerIrs> {
+    [target, if target == "LFE" { "LFE2" } else { "LFE" }]
+        .into_iter()
+        .find_map(|source| {
+            measured
+                .iter()
+                .find(|pair| pair.speaker == source && pair.left.is_some() && pair.right.is_some())
+                .cloned()
+        })
+        .map(|mut pair| {
+            pair.speaker = target.into();
+            pair
+        })
+}
+
+/// Assemble an output-only HRIR, filling speakers first and preferring measured LFE.
 pub fn fill_output(
     hrir: &Hrir,
+    measured_lfe_pairs: &[SpeakerIrs],
     targets: &[&str],
     missing_mode: &str,
     lfe_mode: &str,
@@ -331,9 +347,13 @@ pub fn fill_output(
         )));
     };
     for lfe in ["LFE", "LFE2"] {
-        if targets.contains(&lfe)
-            && let Some((pair, source)) = fill_lfe(hrir, lfe, lfe_mode)?
-        {
+        if !targets.contains(&lfe) {
+            continue;
+        }
+        if let Some(pair) = measured_lfe(measured_lfe_pairs, lfe) {
+            result.hrir.speakers.push(pair);
+            result.filled.push((lfe, "measured".into()));
+        } else if let Some((pair, source)) = fill_lfe(hrir, lfe, lfe_mode)? {
             result.hrir.speakers.push(pair);
             result.filled.push((lfe, source));
         }
