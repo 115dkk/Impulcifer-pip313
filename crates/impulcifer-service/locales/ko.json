@@ -192,6 +192,7 @@
   "cli_brir_measurement_file_itd_zero": "모든 측면 스피커의 소리가 두 귀에 동시에 도착합니다. 타이밍 기준 없이 두 귀를 따로 측정했다면 두 귀의 시간차가 사라진 것입니다.",
   "cli_headphone_measurement_file_loaded": "헤드폰 측정: {file}({format}), 왼쪽 {left}, 오른쪽 {right}",
   "cli_headphone_measurement_file_replaces_folder": "헤드폰 측정 파일을 지정했으므로 폴더의 {file} 파일은 쓰지 않습니다",
+  "cli_headphone_own_sweep": "헤드폰 녹음은 {duration}초 스윕으로 녹음한 것이어서, 이 작업의 테스트 신호({job}초) 대신 그 스윕으로 읽습니다",
   "label_room_tuning2_mode": "필터:",
   "option_room_tuning2_mode_zero": "PEQ만 (지연 없음)",
   "option_room_tuning2_mode_mixed": "저지연 (8 ms)",

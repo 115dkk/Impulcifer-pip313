@@ -192,6 +192,7 @@
   "cli_brir_measurement_file_itd_zero": "所有侧面扬声器的声音都同时到达双耳。如果没有时间参考，分别测量两只耳朵会丢失双耳时间差。",
   "cli_headphone_measurement_file_loaded": "耳机测量来自 {file}（{format}），左侧 {left}，右侧 {right}",
   "cli_headphone_measurement_file_replaces_folder": "已指定耳机测量文件，因此不使用文件夹中的 {file}",
+  "cli_headphone_own_sweep": "耳机录音使用的是 {duration} 秒的扫频信号，因此按该扫频信号读取，而不是本次处理的测试信号（{job} 秒）",
   "label_room_tuning2_mode": "滤波器：",
   "option_room_tuning2_mode_zero": "仅 PEQ（无延迟）",
   "option_room_tuning2_mode_mixed": "低延迟（8 ms）",

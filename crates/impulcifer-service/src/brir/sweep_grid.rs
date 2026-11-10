@@ -180,10 +180,15 @@ fn wav_header(path: &Path) -> Result<WavHeader, IoError> {
     })
 }
 
-pub fn snap_sweep_samples(estimate: f64, fs: u32) -> (usize, usize, f64) {
+/// Samples in one unit of the M-grid: every generated sweep is a whole number
+/// of these long.
+fn grid_unit(fs: u32) -> f64 {
     let p = (fs as f64 / 10.0).log2().ceil();
     let power = 2.0_f64.powf(p);
-    let unit = 2.0 * power.ln() * power;
+    2.0 * power.ln() * power
+}
+pub fn snap_sweep_samples(estimate: f64, fs: u32) -> (usize, usize, f64) {
+    let unit = grid_unit(fs);
     let m = (estimate / unit).round_ties_even().max(1.0) as usize;
     (
         m,
@@ -299,6 +304,90 @@ fn envelope_estimate(tracks: &[Vec<f64>], fs: u32) -> Option<(f64, usize)> {
         runs.first().map(|(s, e)| ((e - s) as f64, 1))
     }
 }
+/// Largest distance from the M-grid, in grid units, that still counts as a
+/// sweep of that grid length (core/sweep_detection.py).
+const GRID_TOLERANCE: f64 = 0.15;
+/// Sweep length a recording of `count` sweeps holds, were its length exactly
+/// the sequence the recorder plays: 2 s of silence around every sweep.
+fn length_estimate(header: &WavHeader, count: usize) -> f64 {
+    let fs = f64::from(header.rate);
+    (header.frames as f64 - 2.0 * fs * (count + 1) as f64) / count as f64
+}
+/// Grid sweep of one recording as `(fs, m, samples, deviation, segments)`: its
+/// length snapped to the grid, or the spacing of its sweeps when the length is
+/// off the grid (an edited recording). None for an unreadable file and for one
+/// too short to say anything.
+fn recording_grid(
+    path: &Path,
+    count: usize,
+    decode: &mut impl FnMut(&Path) -> Result<impulcifer_io::wav::Wav, IoError>,
+) -> Option<(u32, usize, usize, f64, usize)> {
+    let header = wav_header(path).ok()?;
+    debug_assert!(header.channels > 0);
+    let fs = header.rate;
+    let estimate = length_estimate(&header, count);
+    let (mut m, mut n, mut deviation) = if estimate > 0.0 {
+        snap_sweep_samples(estimate, fs)
+    } else {
+        (0, 0, 0.0)
+    };
+    let mut segments = count;
+    if estimate <= 0.0 || deviation > GRID_TOLERANCE {
+        let wav = decode(path).ok()?;
+        if let Some((estimate, count)) = envelope_estimate(&wav.tracks, fs) {
+            (m, n, deviation) = snap_sweep_samples(estimate, fs);
+            segments = count;
+        } else if estimate <= 0.0 {
+            return None;
+        }
+    }
+    Some((fs, m, n, deviation, segments))
+}
+/// Length in samples of the grid sweep a recording of `count` sweeps was made
+/// with, when that is not the job's test signal (`job_sweep` samples at
+/// `job_fs`). A headphone recording is often made apart from the speaker
+/// measurement, with the recorder's own sweep, while the job's test signal
+/// belongs to the speaker measurement: cut with the wrong length, the second
+/// sweep does not fit and the right earcup has no response.
+///
+/// The recorder writes exactly the sequence it plays, so a file length that
+/// lands on a grid sweep names that sweep. The job's signal is kept whenever
+/// it explains the length at least as well (a custom signal near the grid, an
+/// edited recording), and for another sampling rate, which ingestion rejects.
+pub(crate) fn own_grid_sweep(
+    path: &Path,
+    count: usize,
+    job_fs: u32,
+    job_sweep: usize,
+) -> Option<usize> {
+    let header = wav_header(path).ok()?;
+    if header.rate != job_fs {
+        return None;
+    }
+    let job = job_sweep as f64;
+    let nearer_grid = |estimate: f64, n: usize, deviation: f64| {
+        (deviation <= GRID_TOLERANCE
+            && n != job_sweep
+            && (n as f64 - estimate).abs() < (job - estimate).abs())
+        .then_some(n)
+    };
+    let estimate = length_estimate(&header, count);
+    if estimate > 0.0 {
+        let (_, n, deviation) = snap_sweep_samples(estimate, job_fs);
+        if deviation <= GRID_TOLERANCE {
+            return nearer_grid(estimate, n, deviation);
+        }
+        // Off the grid, yet the job's own (custom) signal explains the length.
+        if (estimate - job).abs() / grid_unit(job_fs) <= GRID_TOLERANCE {
+            return None;
+        }
+    }
+    // An edited recording: its length says nothing, the spacing of its sweeps does.
+    let wav = read_wav(path).ok()?;
+    let (estimate, _) = envelope_estimate(&wav.tracks, job_fs)?;
+    let (_, n, deviation) = snap_sweep_samples(estimate, job_fs);
+    nearer_grid(estimate, n, deviation)
+}
 pub fn detect_sweep_parameters(dir: &Path) -> Result<Option<SweepDetection>, BrirError> {
     detect_with_reader(dir, read_wav)
 }
@@ -316,31 +405,7 @@ fn detect_with_reader(
         let names = recording_speakers(file).unwrap();
         let count = names.len();
         speakers.extend(names);
-        let path = dir.join(file);
-        let Ok(header) = wav_header(&path) else {
-            continue;
-        };
-        debug_assert!(header.channels > 0);
-        let fs = header.rate;
-        let estimate = (header.frames as f64 - 2.0 * fs as f64 * (count + 1) as f64) / count as f64;
-        let (mut m, mut n, mut deviation) = if estimate > 0.0 {
-            snap_sweep_samples(estimate, fs)
-        } else {
-            (0, 0, 0.0)
-        };
-        let mut segments = count;
-        if estimate <= 0.0 || deviation > 0.15 {
-            let Ok(wav) = decode(&path) else {
-                continue;
-            };
-            if let Some((estimate, count)) = envelope_estimate(&wav.tracks, fs) {
-                (m, n, deviation) = snap_sweep_samples(estimate, fs);
-                segments = count;
-            } else if estimate <= 0.0 {
-                continue;
-            }
-        }
-        results.push((fs, m, n, deviation, segments));
+        results.extend(recording_grid(&dir.join(file), count, &mut decode));
     }
     let Some(&(fs, m, n, _, _)) = results.first() else {
         return Ok(None);
@@ -449,6 +514,57 @@ mod tests {
         assert_eq!(envelope_estimate(&burst, 1000), Some((3000.0, 2)));
         assert_eq!(percentile(&[4.0, 1.0, 3.0, 2.0], 0.1), 1.3);
         assert_eq!(percentile(&[7.0], 0.1), 7.0);
+    }
+
+    #[test]
+    fn own_grid_sweep_names_a_generated_sweep_the_job_does_not_use() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("headphones.wav");
+        let rate = 48000;
+        let (_, default, _) = snap_sweep_samples(300000.0, rate);
+        let (_, long, _) = snap_sweep_samples(600000.0, rate);
+        let recorded = |sweep: usize| 6 * rate as usize + 2 * sweep;
+        // Two default sweeps, exactly as the recorder writes them.
+        wav(&path, recorded(default), rate);
+        assert_eq!(own_grid_sweep(&path, 2, rate, default), None);
+        assert_eq!(own_grid_sweep(&path, 2, rate, long), Some(default));
+        // A test signal file off the grid (13.04 s), the reported case.
+        assert_eq!(own_grid_sweep(&path, 2, rate, 625919), Some(default));
+        // The file length is exactly a grid sweep, so that sweep wins over a
+        // custom signal that is merely close to it.
+        assert_eq!(own_grid_sweep(&path, 2, rate, 288000), Some(default));
+        // Another sampling rate is left to ingestion, which rejects it.
+        assert_eq!(own_grid_sweep(&path, 2, 44100, default), None);
+        // Recorded with the job's own custom signal: near the grid, yet the
+        // job's signal explains the length exactly.
+        wav(&path, recorded(288000), rate);
+        assert_eq!(own_grid_sweep(&path, 2, rate, 288000), None);
+        // The same off the grid, with nothing to read from the envelope.
+        wav(&path, recorded(240000), rate);
+        assert_eq!(own_grid_sweep(&path, 2, rate, 240000), None);
+        assert_eq!(own_grid_sweep(&path, 2, rate, long), None);
+        assert_eq!(
+            own_grid_sweep(&temp.path().join("missing.wav"), 2, rate, long),
+            None
+        );
+    }
+
+    #[test]
+    fn own_grid_sweep_reads_the_spacing_of_an_edited_recording() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("headphones.wav");
+        let rate = 1000;
+        let (_, short, _) = snap_sweep_samples(1242.0, rate);
+        let (_, long, _) = snap_sweep_samples(2484.0, rate);
+        assert_eq!((short, long), (1242, 2484));
+        // Two short sweeps with the trailing silence cut off: the length is
+        // off the grid, the onsets are still one sweep and 2 s apart.
+        let mut tracks = vec![vec![0.0; 4 * rate as usize + 2 * short]; 2];
+        tracks[0][2000..2000 + short].fill(0.5);
+        tracks[1][4000 + short..4000 + 2 * short].fill(0.5);
+        impulcifer_io::write_wav(&path, rate, &tracks, 16).unwrap();
+        assert_eq!(own_grid_sweep(&path, 2, rate, long), Some(short));
+        assert_eq!(own_grid_sweep(&path, 2, rate, short), None);
     }
 
     #[test]

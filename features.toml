@@ -27,6 +27,13 @@ tests = ["impulcifer-io::headphone_automatic_assignment_follows_rew_and_dirac_ru
 note = "ADR 0011: two measurements of a REW or Dirac Live file (left earcup at the left ear, right earcup at the right ear; map left=ID,right=ID) replace headphones.wav; both are cut to the shorter length and feed the existing compensation."
 
 [[feature]]
+id = "headphone.recording_own_sweep"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-service::own_grid_sweep_names_a_generated_sweep_the_job_does_not_use", "impulcifer-service::own_grid_sweep_reads_the_spacing_of_an_edited_recording", "impulcifer-service::headphone_recording_made_with_another_sweep_is_read_with_its_own", "impulcifer-service::headphone_recording_too_short_for_two_sweeps_says_so_and_writes_nothing"]
+note = "3.17.1: a headphone recording whose length names a generated (M-grid) sweep other than the job's test signal is read with that sweep, an edited one by the spacing of its sweeps; the job's signal is kept whenever it explains the length at least as well, so the default output is unchanged. A recording that still yields one sweep fails with its length and the length two sweeps need, before headphone-responses.wav is written. 2.x cuts every recording with the job's signal and such a job ended in 'FR right headphone measurement missing' (a 13 s Dirac sweep as the test signal, headphones recorded with the default 6.15 s sweep)."
+
+[[feature]]
 id = "config.brir_measurement_file"
 kind = "config"
 status = "implemented"

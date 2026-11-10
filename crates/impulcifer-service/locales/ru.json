@@ -192,6 +192,7 @@
   "cli_brir_measurement_file_itd_zero": "Звук всех боковых динамиков достигает обоих ушей одновременно. Если уши измерялись отдельно без временной привязки, разница времени между ними теряется.",
   "cli_headphone_measurement_file_loaded": "Измерение наушников из {file} ({format}), слева {left}, справа {right}",
   "cli_headphone_measurement_file_replaces_folder": "Файл {file} из папки не используется, поскольку задан файл измерения наушников",
+  "cli_headphone_own_sweep": "Запись наушников сделана со свип-сигналом длительностью {duration} с, поэтому она читается с ним, а не с тестовым сигналом этого задания ({job} с)",
   "label_room_tuning2_mode": "Фильтр:",
   "option_room_tuning2_mode_zero": "Только PEQ (без задержки)",
   "option_room_tuning2_mode_mixed": "Малая задержка (8 мс)",

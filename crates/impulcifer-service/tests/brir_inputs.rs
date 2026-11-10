@@ -91,6 +91,8 @@ fn room_and_eq_inputs_use_real_measurements_and_write_responses() {
         assert_eq!(wav.sample_rate, 48000);
     }
     assert!(events.0.iter().any(|k| k == "cli_eq_plain_gain_curve"));
+    // The demo headphones were recorded with the job's own sweep.
+    assert!(!events.0.iter().any(|k| k == "cli_headphone_own_sweep"));
 }
 #[test]
 fn eqapo_input_is_parsed_and_logged() {
@@ -440,4 +442,88 @@ fn headphone_measurement_file_replaces_folder_and_is_not_opened_when_disabled() 
     off.do_headphone_compensation = false;
     off.headphone_measurement_file = Some("missing.mdat".into());
     load_inputs(&dir, &estimator, &off, &mut Events::default()).unwrap();
+}
+
+#[test]
+fn headphone_recording_made_with_another_sweep_is_read_with_its_own() {
+    // The job's test signal belongs to the speaker measurement (12.3 s here),
+    // the demo headphones were recorded with the default 6.15 s sweep. Cut
+    // with the job's sweep only one sweep fits, FR has no response and the
+    // job ended in "FR right headphone measurement missing".
+    let temp = Temp::new();
+    std::fs::copy(
+        root().join("data/demo/headphones.wav"),
+        temp.0.join("headphones.wav"),
+    )
+    .unwrap();
+    let config = ProcessingConfig {
+        do_room_correction: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    let job = open_estimator(&dir, Some("generate:12.3s@48000")).unwrap();
+    impulcifer_io::write_wav(
+        &temp.0.join("FL,FR.wav"),
+        job.fs,
+        &job.sweep_sequence(&["FL", "FR"], "stereo").unwrap(),
+        32,
+    )
+    .unwrap();
+    let dir = discover(&temp.0, &config).unwrap();
+    let mut events = Events::default();
+    let own = load_inputs(&dir, &job, &config, &mut events)
+        .unwrap()
+        .headphone
+        .unwrap();
+    assert!(events.1.contains(&(
+        "cli_headphone_own_sweep".into(),
+        serde_json::json!({"duration":"6.15","job":"12.30"})
+    )));
+    // The same responses as a job whose test signal is that sweep.
+    let default = open_estimator(&dir, Some("default")).unwrap();
+    let mut events = Events::default();
+    let reference = load_inputs(&dir, &default, &config, &mut events)
+        .unwrap()
+        .headphone
+        .unwrap();
+    assert!(!events.0.iter().any(|k| k == "cli_headphone_own_sweep"));
+    assert_eq!(own.left, reference.left);
+    assert_eq!(own.right, reference.right);
+    assert_eq!(own.responses_tracks, reference.responses_tracks);
+}
+
+#[test]
+fn headphone_recording_too_short_for_two_sweeps_says_so_and_writes_nothing() {
+    // 16 s made with a 5 s signal that is neither the job's nor a generated
+    // sweep: nothing names its sweep, and one 12.3 s sweep is all that fits.
+    let temp = Temp::new();
+    let rate = 48000;
+    let mut tracks = vec![vec![0.0; 16 * rate]; 2];
+    for (track, start) in [(0, 2 * rate), (1, 9 * rate)] {
+        for (i, sample) in tracks[track][start..start + 5 * rate]
+            .iter_mut()
+            .enumerate()
+        {
+            *sample = 0.5 * (i as f64 * 0.05).sin();
+        }
+    }
+    impulcifer_io::write_wav(&temp.0.join("headphones.wav"), rate as u32, &tracks, 32).unwrap();
+    let config = ProcessingConfig {
+        do_room_correction: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    let job = open_estimator(&dir, Some("generate:12.3s@48000")).unwrap();
+    let mut events = Events::default();
+    let error = load_inputs(&dir, &job, &config, &mut events)
+        .expect_err("one sweep is not a headphone measurement");
+    assert!(!events.0.iter().any(|k| k == "cli_headphone_own_sweep"));
+    assert_eq!(error.envelope()["error"]["code"], "INVALID_REQUEST");
+    let message = error.to_string();
+    for part in ["16.00 s long", "two 12.30 s sweeps", "(28.61 s)"] {
+        assert!(message.contains(part), "{message}");
+    }
+    assert!(!temp.0.join("headphone-responses.wav").exists());
 }

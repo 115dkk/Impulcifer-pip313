@@ -4,6 +4,13 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.17.1 - 2026-11-10
+### 헤드폰 녹음을 그 녹음의 스윕으로 읽음
+
+#### 🐛 버그 수정
+- **테스트 신호와 다른 스윕으로 녹음한 헤드폰 파일에서 작업이 실패하던 문제**: 스피커 측정의 테스트 신호를 파일로 지정하고(13초짜리 Dirac 스윕 등) 헤드폰은 녹음기의 기본 6.15초 스윕으로 녹음하면, 헤드폰 보정 단계가 `FR right headphone measurement missing`으로 실패했습니다. 헤드폰 녹음까지 작업의 테스트 신호 길이로 잘라서, 두 번째 스윕이 구간에 들어가지 않았기 때문입니다. 이제 헤드폰 녹음의 길이가 녹음기가 만드는 스윕 길이와 맞고 작업의 테스트 신호와는 맞지 않으면, 그 스윕으로 헤드폰 녹음을 읽고 작업 기록에 알립니다(`cli_headphone_own_sweep`). 잘라 내서 길이가 달라진 녹음은 스윕 사이의 간격으로 판단합니다. 작업의 테스트 신호가 녹음 길이와 맞으면 전과 같이 읽으므로 기존 출력은 바이트 단위로 그대로입니다.
+- **스윕 두 개가 들어가지 않는 헤드폰 녹음의 오류 문구**: 어느 스윕으로도 두 구간을 얻지 못하면 녹음 길이와 필요한 길이를 적은 오류로 멈춥니다. 전에는 오른쪽 이어컵 측정이 없다는 말만 나왔고, 실패한 작업이 잘못 자른 `headphone-responses.wav`를 폴더에 남겼습니다.
+
 ## 3.17.0 - 2026-11-09
 ### 녹음 점검에 스피커 상대 극성 검사
 

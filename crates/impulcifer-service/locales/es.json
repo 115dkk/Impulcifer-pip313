@@ -192,6 +192,7 @@
   "cli_brir_measurement_file_itd_zero": "El sonido de todos los altavoces laterales llega a ambos oídos al mismo tiempo. Si los oídos se midieron por separado sin una referencia temporal, se pierde la diferencia de tiempo entre ellos.",
   "cli_headphone_measurement_file_loaded": "Medición de auriculares de {file} ({format}), izquierda {left}, derecha {right}",
   "cli_headphone_measurement_file_replaces_folder": "No se usa {file} de la carpeta porque se ha elegido un archivo de medición de auriculares",
+  "cli_headphone_own_sweep": "La grabación de auriculares contiene barridos de {duration} s, así que se lee con ese barrido y no con la señal de prueba de este trabajo ({job} s)",
   "label_room_tuning2_mode": "Filtro:",
   "option_room_tuning2_mode_zero": "Solo PEQ (sin latencia)",
   "option_room_tuning2_mode_mixed": "Baja latencia (8 ms)",

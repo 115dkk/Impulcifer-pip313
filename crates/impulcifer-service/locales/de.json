@@ -192,6 +192,7 @@
   "cli_brir_measurement_file_itd_zero": "Alle seitlichen Lautsprecher erreichen beide Ohren gleichzeitig. Wurden die Ohren ohne Zeitreferenz getrennt gemessen, geht der Zeitunterschied zwischen ihnen verloren.",
   "cli_headphone_measurement_file_loaded": "Kopfhörermessung aus {file} ({format}), links {left}, rechts {right}",
   "cli_headphone_measurement_file_replaces_folder": "{file} im Ordner wird nicht verwendet, da eine Kopfhörermessdatei festgelegt ist",
+  "cli_headphone_own_sweep": "Die Kopfhöreraufnahme enthält Sweeps von {duration} s und wird deshalb mit diesem Sweep gelesen, nicht mit dem Testsignal dieses Auftrags ({job} s)",
   "label_room_tuning2_mode": "Filtertyp:",
   "option_room_tuning2_mode_zero": "Nur PEQ (ohne Latenz)",
   "option_room_tuning2_mode_mixed": "Niedrige Latenz (8 ms)",

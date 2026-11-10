@@ -192,6 +192,7 @@
   "cli_brir_measurement_file_itd_zero": "すべての側方スピーカーの音が両耳に同時に届いています。タイミング基準なしで両耳を別々に測定した場合、両耳間の時間差は失われます。",
   "cli_headphone_measurement_file_loaded": "ヘッドホン測定: {file}（{format}）、左 {left}、右 {right}",
   "cli_headphone_measurement_file_replaces_folder": "ヘッドホン測定ファイルが指定されているため、フォルダーの {file} は使いません",
+  "cli_headphone_own_sweep": "ヘッドホン録音は {duration} 秒のスイープ信号で録音されているため、この処理のテスト信号（{job} 秒）ではなく、そのスイープ信号で読み込みます",
   "label_room_tuning2_mode": "フィルター:",
   "option_room_tuning2_mode_zero": "PEQ のみ（遅延なし）",
   "option_room_tuning2_mode_mixed": "低遅延（8 ms）",

@@ -1,4 +1,4 @@
-use super::{BrirError, BrirEvents, discovery::MeasurementDir};
+use super::{BrirError, BrirEvents, discovery::MeasurementDir, sweep_grid::own_grid_sweep};
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     fr::FrequencyResponse,
@@ -27,6 +27,8 @@ fn empty(fs: u32) -> Hrir {
         speakers: Vec::new(),
     }
 }
+/// Seconds of silence the recorder plays before every sweep.
+const SILENCE: f64 = 2.0;
 fn ingest(
     hrir: &mut Hrir,
     path: &Path,
@@ -35,8 +37,65 @@ fn ingest(
     estimator: &SweepEstimator,
 ) -> Result<(), BrirError> {
     let wav = read_wav(path)?;
-    hrir.open_recording_samples(estimator, wav.sample_rate, &wav.tracks, names, side, 2.0)?;
+    hrir.open_recording_samples(
+        estimator,
+        wav.sample_rate,
+        &wav.tracks,
+        names,
+        side,
+        SILENCE,
+    )?;
     Ok(())
+}
+/// The two earcups of a headphone recording, FL then FR. The recording is read
+/// with its own sweep when its length names a generated sweep other than the
+/// job's test signal (`own_grid_sweep`): headphones are often recorded apart
+/// from the speakers, and the job's test signal belongs to the speakers. Any
+/// other recording is read with the job's estimator, as 2.x reads all of them.
+fn open_headphones(
+    path: &Path,
+    estimator: &SweepEstimator,
+    events: &mut dyn BrirEvents,
+) -> Result<Hrir, BrirError> {
+    let fs = estimator.fs;
+    let seconds = |samples: usize| samples as f64 / f64::from(fs);
+    let own = own_grid_sweep(path, 2, fs, estimator.test_signal.len())
+        .map(|n| SweepEstimator::new((n - 1) as f64 / f64::from(fs), fs))
+        .transpose()?;
+    if let Some(own) = &own {
+        events.log(
+            "info",
+            "cli_headphone_own_sweep",
+            json!({
+                "duration":format!("{:.2}", seconds(own.test_signal.len())),
+                "job":format!("{:.2}", seconds(estimator.test_signal.len())),
+            }),
+        );
+    }
+    let used = own.as_ref().unwrap_or(estimator);
+    let wav = read_wav(path)?;
+    let mut hp = empty(fs);
+    hp.open_recording_samples(
+        used,
+        wav.sample_rate,
+        &wav.tracks,
+        &["FL", "FR"],
+        None,
+        SILENCE,
+    )?;
+    // One sweep cut out of the file leaves FR without a response, and the
+    // compensation would only say that the right earcup is missing.
+    let left = hp.get("FL").is_some_and(|s| s.left.is_some());
+    let right = hp.get("FR").is_some_and(|s| s.right.is_some());
+    if !(left && right) {
+        let sweep = seconds(used.test_signal.len());
+        return Err(BrirError::Unsupported(format!(
+            "The headphone recording is {:.2} s long, too short for two {sweep:.2} s sweeps and the {SILENCE:.0} s of silence before each ({:.2} s). It was probably recorded with another test signal. Record the headphones again with this job's test signal or with a sweep the recorder generates.",
+            seconds(wav.tracks.first().map_or(0, Vec::len)),
+            2.0 * (SILENCE + sweep),
+        )));
+    }
+    Ok(hp)
 }
 fn open_measurements(
     dir: &MeasurementDir,
@@ -602,9 +661,7 @@ pub fn load_inputs(
             } else {
                 let path = dir.headphones.as_ref().expect("checked");
                 events.log("info", "cli_info_using_hp_file", json!({"file":path}));
-                let mut hp = empty(fs);
-                ingest(&mut hp, path, &["FL", "FR"], None, estimator)?;
-                hp
+                open_headphones(path, estimator, events)?
             };
             // Python writes before computing headphone compensation curves.
             write_wav(

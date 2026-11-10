@@ -192,6 +192,7 @@
   "cli_brir_measurement_file_itd_zero": "Every side speaker reaches both ears at the same moment. If the ears were measured separately without a timing reference, the time difference between them is lost.",
   "cli_headphone_measurement_file_loaded": "Headphone measurement from {file} ({format}), left {left}, right {right}",
   "cli_headphone_measurement_file_replaces_folder": "{file} in the folder is not used because a headphone measurement file is set",
+  "cli_headphone_own_sweep": "The headphone recording holds {duration} s sweeps, so it is read with that sweep, not with this job's test signal ({job} s)",
   "label_room_tuning2_mode": "Filter:",
   "option_room_tuning2_mode_zero": "PEQ only (no latency)",
   "option_room_tuning2_mode_mixed": "Low latency (8 ms)",
