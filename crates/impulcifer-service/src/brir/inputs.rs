@@ -2,7 +2,7 @@ use super::{BrirError, BrirEvents, discovery::MeasurementDir};
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     fr::FrequencyResponse,
-    hrir::{Hrir, ingest_recording},
+    hrir::{Hrir, NO_VALID_COLUMNS, ingest_recording},
     pipeline::PipelineInputs,
     stages::{
         eq_files::{finalize_eq, looks_like_eqapo_config, read_eq_settings, select_eq_pair},
@@ -27,6 +27,8 @@ fn empty(fs: u32) -> Hrir {
         speakers: Vec::new(),
     }
 }
+/// Seconds of silence the recorder plays before every sweep.
+const SILENCE: f64 = 2.0;
 fn ingest(
     hrir: &mut Hrir,
     path: &Path,
@@ -35,8 +37,54 @@ fn ingest(
     estimator: &SweepEstimator,
 ) -> Result<(), BrirError> {
     let wav = read_wav(path)?;
-    hrir.open_recording_samples(estimator, wav.sample_rate, &wav.tracks, names, side, 2.0)?;
+    hrir.open_recording_samples(
+        estimator,
+        wav.sample_rate,
+        &wav.tracks,
+        names,
+        side,
+        SILENCE,
+    )?;
     Ok(())
+}
+/// The two earcups of a headphone recording, FL then FR, cut with the job's
+/// test signal as 2.x cuts them. A recording made with another test signal
+/// rarely holds two sweeps of this one: with one, FR has no response and the
+/// compensation only said that the right earcup is missing; with none, the
+/// job ended in the ingestion's text about columns. Both end here instead, in
+/// an error that names the test signal and carries the lengths.
+fn open_headphones(path: &Path, estimator: &SweepEstimator) -> Result<Hrir, BrirError> {
+    let fs = estimator.fs;
+    let wav = read_wav(path)?;
+    let mut hp = empty(fs);
+    let opened = hp.open_recording_samples(
+        estimator,
+        wav.sample_rate,
+        &wav.tracks,
+        &["FL", "FR"],
+        None,
+        SILENCE,
+    );
+    let no_sweep = matches!(
+        &opened,
+        Err(impulcifer_dsp::DspError::InvalidArgument(text)) if text.starts_with(NO_VALID_COLUMNS)
+    );
+    if !no_sweep {
+        opened?;
+    }
+    let left = hp.get("FL").is_some_and(|s| s.left.is_some());
+    let right = hp.get("FR").is_some_and(|s| s.right.is_some());
+    if !(left && right) {
+        let seconds = |samples: usize| samples as f64 / f64::from(fs);
+        let sweep_seconds = seconds(estimator.test_signal.len());
+        return Err(BrirError::HeadphoneTestSignal {
+            path: path.to_path_buf(),
+            recording_seconds: seconds(wav.tracks.first().map_or(0, Vec::len)),
+            sweep_seconds,
+            needed_seconds: 2.0 * (SILENCE + sweep_seconds),
+        });
+    }
+    Ok(hp)
 }
 fn open_measurements(
     dir: &MeasurementDir,
@@ -602,9 +650,7 @@ pub fn load_inputs(
             } else {
                 let path = dir.headphones.as_ref().expect("checked");
                 events.log("info", "cli_info_using_hp_file", json!({"file":path}));
-                let mut hp = empty(fs);
-                ingest(&mut hp, path, &["FL", "FR"], None, estimator)?;
-                hp
+                open_headphones(path, estimator)?
             };
             // Python writes before computing headphone compensation curves.
             write_wav(

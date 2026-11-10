@@ -1,6 +1,7 @@
 use super::{
     BrirError, BrirEvents, Catalog, discovery::discover, eq_select::EqChoices,
     estimator::open_with_events, inputs::load_inputs, outputs::write_outputs_checked,
+    sweep_grid::test_signal_mismatches,
 };
 use impulcifer_dsp::{
     DspError,
@@ -807,6 +808,26 @@ pub(crate) fn run_with_choices(
             Some(&mut events),
         )?;
         events.same_fs = config.fs == Some(estimator.fs);
+        // A test signal the recordings were not made with gives responses
+        // that mean nothing, often without any error: say so before the work.
+        let signal_seconds = estimator.test_signal.len() as f64 / f64::from(estimator.fs);
+        for mismatch in test_signal_mismatches(
+            &dir,
+            config.brir_measurement_file.is_none(),
+            config.do_headphone_compensation && config.headphone_measurement_file.is_none(),
+            estimator.fs,
+            estimator.test_signal.len(),
+        ) {
+            events.log(
+                "warning",
+                "cli_warning_test_signal_mismatch",
+                json!({
+                    "file":mismatch.file,
+                    "recording":format!("{:.2}", mismatch.seconds),
+                    "signal":format!("{signal_seconds:.2}"),
+                }),
+            );
+        }
         events.check_cancelled()?;
         let inputs = load_inputs(&dir, &estimator, config, &mut events)?;
         let vbass_crossover = inputs

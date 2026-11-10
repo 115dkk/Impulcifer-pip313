@@ -486,7 +486,14 @@ impl ImpulciferService {
                 Ok(json!({"job":snapshot(&job)}))
             }
             IpcMethod::DetectSweep | IpcMethod::GenerateSweepSet => {
-                args.count(1, 1)?;
+                args.count(
+                    1,
+                    if method == IpcMethod::DetectSweep {
+                        2
+                    } else {
+                        1
+                    },
+                )?;
                 let raw = paths::text(&args, 0, "dir_path")?;
                 let path = std::path::Path::new(raw.as_deref().unwrap_or(""));
                 if !path.is_dir() {
@@ -503,10 +510,22 @@ impl ImpulciferService {
                     let detection = brir::sweep_grid::detect_sweep_parameters(path)
                         .map_err(|e| e.envelope())?;
                     let sidecar = path.join("test.wav").is_file();
-                    Ok(detection.map_or_else(
+                    let mut payload = detection.map_or_else(
                         || json!({"found":false,"sidecar":sidecar}),
                         |d| d.payload(sidecar),
-                    ))
+                    );
+                    // The optional second argument asks whether a test signal
+                    // file fits the recordings the job would read.
+                    if let Some(check) = test_signal_check_request(args.get(1))? {
+                        payload["test_signal"] = brir::sweep_grid::test_signal_check(
+                            path,
+                            std::path::Path::new(&check.test_signal),
+                            check.speakers,
+                            check.headphone_file.as_deref(),
+                        )
+                        .map_err(|e| e.envelope())?;
+                    }
+                    Ok(payload)
                 }
             }
             IpcMethod::ResolveRecordingPaths => paths::resolve(&args, &self.recording_sessions()),
@@ -728,6 +747,42 @@ fn os_platform_name() -> &'static str {
         "macos" => "macOS",
         other => other,
     }
+}
+
+/// The second `detect_sweep` argument: `{test_signal, speakers?, headphone_file?}`.
+struct TestSignalCheck {
+    test_signal: String,
+    /// Whether the job reads the folder's speaker recordings (not when the
+    /// BRIR measurement comes from a REW or Dirac Live file).
+    speakers: bool,
+    /// The headphone compensation request, empty for the folder's own
+    /// recording; None when the job reads no headphone recording.
+    headphone_file: Option<String>,
+}
+fn test_signal_check_request(value: &Value) -> Result<Option<TestSignalCheck>, Value> {
+    let fields = match value {
+        Value::Null => return Ok(None),
+        Value::Object(fields) => fields,
+        _ => return Err(args::invalid("check must be an object.")),
+    };
+    let text = |name: &str| match fields.get(name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(text)) => Ok(Some(text.trim().to_owned())),
+        Some(_) => Err(args::invalid(format!("{name} must be a string."))),
+    };
+    let test_signal = text("test_signal")?
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| args::invalid("test_signal is required."))?;
+    let speakers = match fields.get("speakers") {
+        None | Some(Value::Null) => true,
+        Some(Value::Bool(speakers)) => *speakers,
+        Some(_) => return Err(args::invalid("speakers must be a boolean.")),
+    };
+    Ok(Some(TestSignalCheck {
+        test_signal,
+        speakers,
+        headphone_file: text("headphone_file")?,
+    }))
 }
 
 #[cfg(test)]

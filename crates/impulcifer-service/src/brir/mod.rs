@@ -30,6 +30,15 @@ pub enum BrirError {
     Unsupported(String),
     #[error("FFmpeg is required for TrueHD/MLP input")]
     FfmpegMissing,
+    /// The headphone recording does not hold two sweeps of the job's test
+    /// signal; the lengths, in seconds, go out as the error details.
+    #[error("The test signal does not match the headphone recording.")]
+    HeadphoneTestSignal {
+        path: std::path::PathBuf,
+        recording_seconds: f64,
+        sweep_seconds: f64,
+        needed_seconds: f64,
+    },
     #[error("cancelled")]
     Cancelled,
 }
@@ -40,10 +49,25 @@ impl BrirError {
             Self::Fs(e) | Self::Io(IoError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
                 ErrorCode::FileNotFound
             }
-            Self::Unsupported(_) => ErrorCode::InvalidRequest,
+            Self::Unsupported(_) | Self::HeadphoneTestSignal { .. } => ErrorCode::InvalidRequest,
             _ => ErrorCode::InternalError,
         };
-        ipc::error(code, self.to_string(), json!({}), false)
+        let hundredths = |seconds: &f64| (seconds * 100.0).round() / 100.0;
+        let details = match self {
+            Self::HeadphoneTestSignal {
+                path,
+                recording_seconds,
+                sweep_seconds,
+                needed_seconds,
+            } => json!({
+                "path": path,
+                "recording_seconds": hundredths(recording_seconds),
+                "sweep_seconds": hundredths(sweep_seconds),
+                "needed_seconds": hundredths(needed_seconds),
+            }),
+            _ => json!({}),
+        };
+        ipc::error(code, self.to_string(), details, false)
     }
     pub fn failure(self) -> JobFailure {
         JobFailure {

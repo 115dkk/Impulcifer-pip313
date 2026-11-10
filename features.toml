@@ -27,6 +27,13 @@ tests = ["impulcifer-io::headphone_automatic_assignment_follows_rew_and_dirac_ru
 note = "ADR 0011: two measurements of a REW or Dirac Live file (left earcup at the left ear, right earcup at the right ear; map left=ID,right=ID) replace headphones.wav; both are cut to the shorter length and feed the existing compensation."
 
 [[feature]]
+id = "brir.test_signal_mismatch"
+kind = "stage"
+status = "implemented"
+tests = ["impulcifer-service::mismatched_sweep_names_the_sweep_a_recording_was_made_with", "impulcifer-service::mismatched_sweep_reads_the_spacing_of_an_edited_recording", "impulcifer-service::test_signal_mismatches_cover_the_recordings_a_job_reads", "impulcifer-service::headphone_recording_without_two_sweeps_names_the_test_signal", "impulcifer-service::start_brir_warns_of_a_test_signal_the_recordings_were_not_made_with", "impulcifer-service::detect_sweep_checks_a_test_signal_file_against_the_recordings"]
+note = "3.17.1: a BRIR job compares the sweep length each speaker recording and the headphone recording holds (from the file length; from the spacing of the sweep onsets when the length does not fit, as in an edited recording) with the test signal and logs cli_warning_test_signal_mismatch for each one that differs, also when a shorter signal still cuts columns out of it. A headphone recording that yields fewer than two sweeps ends the job in 'The test signal does not match the headphone recording.' (INVALID_REQUEST, lengths in the details) before headphone-responses.wav is written; 2.x and 3.17.0 ended in 'FR right headphone measurement missing'. detect_sweep takes an optional second argument {test_signal, speakers?, headphone_file?} and answers with test_signal.mismatches, which the Compose tab shows under the test signal file field."
+
+[[feature]]
 id = "config.brir_measurement_file"
 kind = "config"
 status = "implemented"
@@ -216,7 +223,7 @@ note = "sweep variants included"
 id = "ipc.detect_sweep"
 kind = "ipc"
 status = "implemented"
-tests = ["impulcifer-service::detect_sweep_reports_demo_parameters", "impulcifer-service::snap_sweep_samples_matches_python", "impulcifer-service::envelope_splits_sweeps_above_a_noise_floor_and_skips_short_bursts"]
+tests = ["impulcifer-service::detect_sweep_reports_demo_parameters", "impulcifer-service::snap_sweep_samples_matches_python", "impulcifer-service::envelope_splits_sweeps_above_a_noise_floor_and_skips_short_bursts", "impulcifer-service::detect_sweep_checks_a_test_signal_file_against_the_recordings"]
 note = "2.14.3/3.x: the envelope threshold also sits 10 dB over the noise floor and regions shorter than half the longest are dropped (noisy captures and lead-in bursts were detected as 21.5 s and 3.08 s sweeps in the real-measurement run)"
 
 [[feature]]

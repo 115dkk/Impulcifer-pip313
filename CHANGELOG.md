@@ -4,6 +4,19 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.17.1 - 2026-11-10
+### 테스트 신호가 녹음과 맞지 않으면 알림
+
+#### 🐛 버그 수정
+- **헤드폰 보정 단계의 원인 모를 오류**: 녹음에 쓰지 않은 스윕 파일을 테스트 신호로 지정하면(기본 6.15초 스윕으로 녹음한 폴더에 13초짜리 스윕 파일을 고른 경우 등) 헤드폰 보정 단계가 `FR right headphone measurement missing`으로 실패했습니다. 헤드폰 녹음을 테스트 신호의 길이로 자르면 스윕 구간이 하나만 나오기 때문인데, 오류 문구로는 그 원인을 알 수 없었습니다. 이제 이런 작업은 테스트 신호가 헤드폰 녹음과 맞지 않는다는 오류로 멈추고, 녹음 길이와 스윕 두 개에 필요한 길이를 함께 알립니다. 스윕 구간이 하나도 나오지 않는 짧은 녹음도 같은 오류로 알립니다. 실패한 작업은 잘못 자른 `headphone-responses.wav`를 폴더에 남기지 않습니다.
+
+#### ⭐ 새로운 기능 / 개선
+- **테스트 신호와 녹음이 맞지 않을 때의 경고**: 작업을 시작할 때 스피커 녹음과 헤드폰 녹음마다 그 녹음의 스윕 길이를 테스트 신호와 비교하고, 맞지 않는 파일을 작업 기록에 경고로 알립니다(`cli_warning_test_signal_mismatch`). 테스트 신호가 녹음의 스윕보다 짧으면 구간은 나오지만 응답은 엉뚱한데, 전에는 이런 작업이 아무 알림 없이 끝났습니다. 스윕 길이는 녹음 파일의 길이에서 계산하고, 잘라 내거나 무음을 덧붙여 길이가 달라진 녹음은 스윕이 시작하는 간격으로 판단합니다.
+- **합성 탭의 테스트 신호 파일 경고**: 테스트 신호를 '파일'로 고르면, 그 파일이 폴더의 스피커 녹음이나 고른 헤드폰 녹음과 맞지 않을 때 파일 칸 아래에 어느 녹음이 몇 초짜리 스윕으로 녹음되었는지 표시합니다. 확인에는 `detect_sweep`의 두 번째 인자를 씁니다.
+
+#### 🔧 빌드 / 설정 변경
+- **CI의 Ubuntu 테스트 잡을 24.04에 고정**: GitHub의 `ubuntu-latest`가 2026-11-10 실행부터 26.04 이미지로 바뀌어 두 잡이 실패했습니다. `test.yml`의 Python 테스트는 26.04의 `libportaudio2`가 PulseAudio 서버 없이는 초기화되지 않아 `test_gui_modules_importable`에서 실패했고, `rust.yml`의 Ubuntu `cargo test`는 정확히 같아야 하는 `room_tuning2_s2r_pair_phase` 골든이 1~8 ulp 어긋났습니다. 두 잡을 `ubuntu-24.04`로 고정했습니다. 26.04로 옮기는 일은 이 판에 넣지 않았습니다.
+
 ## 3.17.0 - 2026-11-09
 ### 녹음 점검에 스피커 상대 극성 검사
 

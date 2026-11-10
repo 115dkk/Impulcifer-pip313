@@ -25,7 +25,8 @@ EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 
                   + 2 * 2 * 2  # bundle 2: mixed and zero, English/Korean, dark/light
                   + 2 * 2  # bundle 3: lenient, ×2 and input high-pass, English/Korean, dark/light
                   + 2 * 2  # bundle 4: MIMO early interval and ear guard, English/Korean, dark/light
-                  + 2)  # bundle 5: speaker polarity warnings, English/Korean, dark
+                  + 2  # bundle 5: speaker polarity warnings, English/Korean, dark
+                  + 2)  # test signal file the recordings were not made with, English/Korean, dark
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -302,7 +303,18 @@ def mock_script(skin, theme, language, scenario):
         map: purpose === "headphones" ? "left=1,right=2" : "FL.left=1,FL.right=2", auto: true, purpose});
     },
     open_path: path => ok({path}), open_url: url => ok({url}),
-    generate_sweep_set: () => ok({files: [], play_path: null}), detect_sweep: () => ok({found: false, sidecar: false}),
+    generate_sweep_set: () => ok({files: [], play_path: null}), detect_sweep: (dir, check) => {
+      // A check (the second argument) asks whether a test signal file fits the
+      // recordings; the Dirac sweep is 13.04 s, the folder was recorded with 6.15 s.
+      if (!check) return ok({found: false, sidecar: false});
+      const wrong = check.test_signal.includes("dirac");
+      const mismatches = wrong ? [
+        ...(check.speakers === false ? [] : ["FL,FR.wav", "FC.wav"]),
+        ...(typeof check.headphone_file === "string" ? [check.headphone_file || "headphones.wav"] : []),
+      ].map(file => ({file, duration_seconds: 6.15})) : [];
+      return ok({found: false, sidecar: false,
+        test_signal: {readable: true, fs: 48000, duration_seconds: wrong ? 13.04 : 6.15, mismatches}});
+    },
     inspect_eq: request => {
       const grid = Array.from({length: 121}, (_, i) => 20 * 2 ** (i / 12)).filter(f => f <= 20000.02);
       const bell = (gain, center, width) => grid.map(f => gain * Math.exp(-(Math.log2(f / center) ** 2) / width));
@@ -1781,6 +1793,67 @@ def headphone_file_checks(browser):
           "recording file, same/missing blocks only while on, Dirac option names, folder source OK", flush=True)
 
 
+def test_signal_take(page):
+    """Choose a test signal file the recordings were not made with and return the note."""
+    navigate(page, "processing")
+    disclosure(page, "headphone", True)
+    page.locator("#bf-test-signal-source").select_option("file")
+    page.locator("#bf-test-signal").fill("C:/Measurements/Original sweep dirac.wav")
+    page.locator("#bf-ts-warning:not([hidden])").wait_for()
+    return page.locator("#bf-ts-warning").inner_text()
+
+
+def test_signal_checks(browser):
+    """A test signal file the recordings were not made with: the note under the
+    file field names the recordings that hold another sweep and their sweep
+    length. It asks only about the recordings the job would read (no headphone
+    recording while compensation is off or read from a measurement file, no
+    speaker recordings while the BRIR measurement is a file), and it goes away
+    with a fitting file and with any other test signal source."""
+    def last_check(page):
+        return page.evaluate("galleryCalls.filter(c => c.method === 'detect_sweep').at(-1).args[1]")
+
+    def wait_check(page, expression):
+        page.wait_for_function("(() => { const check = galleryCalls.filter(c => c.method === 'detect_sweep').at(-1).args[1];"
+                               f" return check && ({expression}); }})()")
+
+    for language in LANGUAGES:
+        context, page, errors = open_page(browser, "studio", "dark", language, "idle")
+        note = page.locator("#bf-ts-warning")
+        navigate(page, "processing")
+        assert note.is_hidden() and _starts(page, "detect_sweep") == 0
+        text = test_signal_take(page)
+        assert all(part in text for part in ("FL,FR.wav", "FC.wav", "headphones.wav", "6.15", "13.04")), text
+        assert "{" not in text and "message_test_signal" not in text, text
+        assert last_check(page) == {"test_signal": "C:/Measurements/Original sweep dirac.wav", "speakers": True,
+                                    "headphone_file": ""}
+        page.locator("#bf-headphone-file").fill("D:/takes/hd600.wav")
+        wait_check(page, "check.headphone_file === 'D:/takes/hd600.wav'")
+        page.wait_for_function("document.querySelector('#bf-ts-warning').innerText.includes('D:/takes/hd600.wav')")
+        disclosure(page, "headphone", False)
+        wait_check(page, "check.headphone_file === null")
+        page.wait_for_function("!document.querySelector('#bf-ts-warning').innerText.includes('hd600')")
+        assert "FL,FR.wav" in note.inner_text()
+        page.locator("#bf-brir-source").select_option("file")
+        wait_check(page, "check.speakers === false")
+        note.wait_for(state="hidden")
+        page.locator("#bf-brir-source").select_option("folder")
+        note.wait_for(state="visible")
+        page.locator("#bf-test-signal").fill("data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav")
+        note.wait_for(state="hidden")
+        page.locator("#bf-test-signal").fill("C:/Measurements/Original sweep dirac.wav")
+        note.wait_for(state="visible")
+        before = _starts(page, "detect_sweep")
+        page.locator("#bf-test-signal-source").select_option("auto")
+        note.wait_for(state="hidden")
+        page.wait_for_timeout(400)
+        assert _starts(page, "detect_sweep") == before
+        assert not errors, errors
+        context.close()
+    print("Gallery test signal checks: mismatch note with files and lengths, headphone and BRIR source scope, "
+          "fitting file and other sources clear it, English/Korean OK", flush=True)
+
+
 def vbass_checks(browser):
     """Virtual bass crossover modes: Automatic hides the frequency and sends no
     vbass_freq, Manual and Legacy show and send it, the tooltip follows the
@@ -1951,6 +2024,7 @@ def render_gallery(output):
         brir_file_checks(browser)
         headphone_file_checks(browser)
         vbass_checks(browser)
+        test_signal_checks(browser)
         tooltip_checks(browser)
         shell_checks(browser)
         for skin, theme, language in itertools.product(SKINS, THEMES, LANGUAGES):
@@ -2165,6 +2239,11 @@ def render_gallery(output):
             context, page, errors = open_page(browser, "studio", "dark", language, "polarity")
             polarity_take(page)
             shots.append(shoot(page, output, f"recorder-polarity-studio-{language}-dark", errors))
+            context.close()
+        for language in LANGUAGES:
+            context, page, errors = open_page(browser, "studio", "dark", language, "idle")
+            test_signal_take(page)
+            shots.append(shoot(page, output, f"processing-test-signal-studio-{language}-dark", errors))
             context.close()
         browser.close()
     assert len(shots) == EXPECTED_SHOTS, f"expected {EXPECTED_SHOTS}, got {len(shots)}"

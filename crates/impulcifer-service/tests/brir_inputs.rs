@@ -8,6 +8,7 @@ use impulcifer_service::brir::{
 };
 use impulcifer_types::config::ProcessingConfig;
 use serde_json::Value;
+use std::path::Path;
 #[derive(Default)]
 struct Events(Vec<String>, Vec<(String, Value)>);
 impl BrirEvents for Events {
@@ -440,4 +441,48 @@ fn headphone_measurement_file_replaces_folder_and_is_not_opened_when_disabled() 
     off.do_headphone_compensation = false;
     off.headphone_measurement_file = Some("missing.mdat".into());
     load_inputs(&dir, &estimator, &off, &mut Events::default()).unwrap();
+}
+
+#[test]
+fn headphone_recording_without_two_sweeps_names_the_test_signal() {
+    // The reported job: the test signal was a 13 s sweep file and the
+    // headphones were recorded with the default 6.15 s sweep. One sweep of the
+    // job's length fits into that recording, FR gets no response, and the job
+    // ended in "FR right headphone measurement missing". Here the job's signal
+    // is the 12.3 s generated sweep and the recording the demo's.
+    let temp = Temp::new();
+    let headphones = temp.0.join("headphones.wav");
+    std::fs::copy(root().join("data/demo/headphones.wav"), &headphones).unwrap();
+    let config = ProcessingConfig {
+        do_room_correction: false,
+        do_equalization: false,
+        ..Default::default()
+    };
+    let dir = discover(&temp.0, &config).unwrap();
+    let job = open_estimator(&dir, Some("generate:12.3s@48000")).unwrap();
+    let failure = |seconds: f64| {
+        let envelope = load_inputs(&dir, &job, &config, &mut Events::default())
+            .expect_err("the recording does not hold two sweeps")
+            .envelope();
+        let error = &envelope["error"];
+        assert_eq!(error["code"], "INVALID_REQUEST");
+        assert_eq!(
+            error["message"],
+            "The test signal does not match the headphone recording."
+        );
+        assert_eq!(error["details"]["recording_seconds"], seconds);
+        assert_eq!(error["details"]["sweep_seconds"], 12.3);
+        assert_eq!(error["details"]["needed_seconds"], 28.61);
+        assert_eq!(
+            Path::new(error["details"]["path"].as_str().unwrap()),
+            dir.headphones.as_ref().unwrap()
+        );
+        // A failed job leaves no responses cut with the wrong signal behind.
+        assert!(!temp.0.join("headphone-responses.wav").exists());
+    };
+    failure(18.3);
+    // Four seconds hold no sweep at all: the same error instead of the
+    // ingestion's text about columns as an internal error.
+    impulcifer_io::write_wav(&headphones, 48000, &vec![vec![0.0; 4 * 48000]; 2], 32).unwrap();
+    failure(4.0);
 }

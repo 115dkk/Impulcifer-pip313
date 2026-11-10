@@ -193,6 +193,147 @@ fn detect_sweep_reports_demo_parameters() {
     assert_eq!(result["data"]["is_default"], true);
 }
 #[test]
+fn detect_sweep_checks_a_test_signal_file_against_the_recordings() {
+    let temp = Temp::demo();
+    let service = service(&temp, JobRegistry::new());
+    let check = |check: Value| {
+        let result = service.call("detect_sweep", vec![json!(temp.0), check]);
+        assert_eq!(result["ok"], true, "{result}");
+        result["data"].clone()
+    };
+    let files = |data: &Value| -> Vec<String> {
+        data["test_signal"]["mismatches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| format!("{} {}", m["file"].as_str().unwrap(), m["duration_seconds"]))
+            .collect()
+    };
+    // Without the second argument the answer is the one 2.x gives.
+    let plain = service.call("detect_sweep", vec![json!(temp.0)]);
+    assert!(plain["data"].get("test_signal").is_none());
+    // The sweep the demo was recorded with fits every recording.
+    let default = root().join("data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav");
+    let data = check(json!({"test_signal":default,"headphone_file":""}));
+    assert_eq!(data["found"], true);
+    assert_eq!(data["test_signal"]["readable"], true);
+    assert_eq!(data["test_signal"]["fs"], 48000);
+    assert_eq!(data["test_signal"]["duration_seconds"], 6.15);
+    assert!(files(&data).is_empty(), "{data}");
+    // A 12.3 s signal fits none of them: the speaker recordings and the
+    // headphone recording the job would read.
+    let long = temp.0.join("long-sweep.wav");
+    impulcifer_io::write_wav(&long, 48000, &[vec![0.0; 590540]], 16).unwrap();
+    let data = check(json!({"test_signal":long,"headphone_file":""}));
+    assert_eq!(data["test_signal"]["duration_seconds"], 12.3);
+    assert_eq!(
+        files(&data),
+        [
+            "BL,SL.wav 6.15",
+            "FC.wav 6.15",
+            "FL,FR.wav 6.15",
+            "SR,BR.wav 6.15",
+            "headphones.wav 6.15"
+        ]
+    );
+    // The headphone recording is left out when the job reads none, the
+    // speaker recordings when the BRIR measurement comes from a file.
+    let data = check(json!({"test_signal":long}));
+    assert_eq!(files(&data).len(), 4);
+    let data = check(json!({"test_signal":long,"speakers":false,"headphone_file":null}));
+    assert!(files(&data).is_empty());
+    // A named headphone recording replaces the folder's own.
+    let other = temp.0.join("other.wav");
+    impulcifer_io::write_wav(
+        &other,
+        48000,
+        &vec![vec![0.0; 6 * 48000 + 2 * 590540]; 2],
+        16,
+    )
+    .unwrap();
+    let data = check(json!({"test_signal":long,"speakers":false,"headphone_file":other}));
+    assert!(files(&data).is_empty());
+    // A file that is no WAV gets no verdict; the job explains it.
+    let text = temp.0.join("notes.txt");
+    std::fs::write(&text, "not a sweep").unwrap();
+    let data = check(json!({"test_signal":text,"headphone_file":""}));
+    assert_eq!(data["test_signal"]["readable"], false);
+    assert!(files(&data).is_empty());
+    for invalid in [
+        json!("long-sweep.wav"),
+        json!({"test_signal":""}),
+        json!({"test_signal":long,"speakers":"yes"}),
+        json!({"test_signal":long,"headphone_file":1}),
+    ] {
+        let result = service.call("detect_sweep", vec![json!(temp.0), invalid]);
+        assert_eq!(result["error"]["code"], "INVALID_REQUEST", "{result}");
+    }
+}
+#[test]
+fn start_brir_warns_of_a_test_signal_the_recordings_were_not_made_with() {
+    let temp = Temp::demo();
+    let jobs = JobRegistry::new();
+    let service = service(&temp, jobs.clone());
+    let run = |test_signal: &str| {
+        let result = service.call(
+            "start_brir",
+            vec![json!({
+                "dir_path":temp.0,
+                "test_signal":test_signal,
+                "do_room_correction":false,
+                "do_equalization":false
+            })],
+        );
+        assert_eq!(result["ok"], true, "{result}");
+        wait(&jobs, result["data"]["job"]["job_id"].as_str().unwrap())
+    };
+    let warnings = |poll: &impulcifer_jobs::registry::PollResult| -> Vec<String> {
+        poll.events
+            .iter()
+            .filter(|e| e.payload["key"] == "cli_warning_test_signal_mismatch")
+            .map(|e| {
+                assert_eq!(e.payload["level"], "WARNING");
+                e.payload["message"].as_str().unwrap().to_owned()
+            })
+            .collect()
+    };
+    // The demo was recorded with the default sweep; a 12.3 s signal fits no
+    // recording. The job says so for every file before it reads them, and
+    // then stops at the headphone recording with an error about the signal.
+    let poll = run("generate:12.3s@48000");
+    let lines = warnings(&poll);
+    assert_eq!(lines.len(), 5, "{lines:?}");
+    for (line, file) in lines.iter().zip([
+        "BL,SL.wav",
+        "FC.wav",
+        "FL,FR.wav",
+        "SR,BR.wav",
+        "headphones.wav",
+    ]) {
+        assert!(
+            line.starts_with(file) && line.contains("6.15 s") && line.contains("12.30 s"),
+            "{line}"
+        );
+    }
+    assert_eq!(poll.job.status, JobStatus::Failed);
+    let error = poll.job.error.unwrap();
+    assert_eq!(error["code"], "INVALID_REQUEST");
+    assert_eq!(
+        error["message"],
+        "The test signal does not match the headphone recording."
+    );
+    assert!(!temp.0.join("headphone-responses.wav").exists());
+    // The signal the recordings were made with draws no warning.
+    let poll = run("default");
+    assert_eq!(
+        poll.job.status,
+        JobStatus::Succeeded,
+        "{:?}",
+        poll.job.error
+    );
+    assert!(warnings(&poll).is_empty());
+}
+#[test]
 fn generate_sweep_set_writes_named_files_and_sidecar() {
     let temp = Temp::new();
     let service = service(&temp, JobRegistry::new());

@@ -270,9 +270,18 @@ type JobEvent = { seq: number; timestamp_ms: number } & (
   { type: "status"; payload: { status: JobStatus } }
 );
 interface JobPoll { job: Job; events: JobEvent[]; next_seq: number }
-type SweepDetection = { found: false; sidecar: boolean } | { found: true; sidecar: boolean; confidence: string;
+/* Asks detect_sweep whether a test signal file fits the recordings a job would
+   read: the folder's speaker recordings unless `speakers` is false, and the
+   headphone recording when `headphone_file` is a string (empty for the folder's
+   own headphones.wav). */
+interface TestSignalCheck { test_signal: string; speakers?: boolean; headphone_file?: string | null }
+/* `mismatches` lists the recordings that hold sweeps of another length, with
+   that length; a test signal that is not a readable WAV gets no verdict. */
+interface TestSignalReport { readable: boolean; fs?: number; duration_seconds?: number;
+  mismatches: { file: string; duration_seconds: number }[] }
+type SweepDetection = ({ found: false; sidecar: boolean } | { found: true; sidecar: boolean; confidence: string;
   fs: number; duration_seconds: number; n_segments: number; source_files: string[];
-  speakers: string[]; is_default: boolean; generate_spec: string };
+  speakers: string[]; is_default: boolean; generate_spec: string }) & { test_signal?: TestSignalReport };
 interface IpcApi {
   bootstrap(): Promise<Envelope<Bootstrap>>;
   list_audio_devices(host_api?: string | null): Promise<Envelope<AudioDevices>>;
@@ -291,7 +300,7 @@ interface IpcApi {
   set_frontend(frontend: string): Promise<Envelope<{ frontend: string }>>;
   get_system_info(): Promise<Envelope<SystemInfo>>;
   resolve_recording_paths(record_dir: string, play_path?: string | null, mode?: string, sweep?: SweepRequest | null, append?: boolean): Promise<Envelope<{ record_path: string }>>;
-  detect_sweep(dir_path: string): Promise<Envelope<SweepDetection>>;
+  detect_sweep(dir_path: string, check?: TestSignalCheck | null): Promise<Envelope<SweepDetection>>;
   generate_sweep_set(dir_path: string): Promise<Envelope<{ files: string[]; play_path: string | null }>>;
   open_path(path?: string | null): Promise<Envelope<{ path: string }>>;
   check_for_updates(): Promise<Envelope<UpdateInfo>>;
@@ -324,6 +333,7 @@ interface AppState {
   recoveryRunRevision: number; recoveryRequestKey: string;
   eqChoices: Record<EqSlotName, EqChoice>; eqInspection: EqInspection | null; eqError: IpcError | null;
   eqRevision: number; eqTimer: number | undefined;
+  testSignalRevision: number; testSignalTimer: number | undefined;
   mfiles: Record<MeasurementPurpose, MeasurementFileState>;
 }
 interface Window {
