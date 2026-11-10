@@ -10,7 +10,11 @@ on:
 jobs:
   test:
     name: Test on Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    # ubuntu-latest는 2026-11-10 실행부터 26.04 이미지다. 그 이미지의
+    # libportaudio2는 PulseAudio 서버가 없으면 초기화에 실패해서, sounddevice를
+    # 임포트하는 테스트(test_gui_modules_importable)가 PortAudioError로 끝난다.
+    # 26.04에서 돌 준비를 마칠 때까지 24.04에 둔다.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
