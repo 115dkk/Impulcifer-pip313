@@ -239,7 +239,8 @@ def mock_script(skin, theme, language, scenario):
           pairs: [{left: "FL", right: "FR", sum_us: -21, yaw_deg: -0.9},
             {left: "BL", right: "BR", sum_us: 2, yaw_deg: 4.4},
             {left: "SL", right: "SR", sum_us: 8, yaw_deg: null}]};
-        return ok({job: {...job(status), result: status === "succeeded" ? {output_path: directory, alignment} : null},
+        return ok({job: {...job(status), error: status === "failed" ? window.galleryBrirError || null : null,
+          result: status === "succeeded" ? {output_path: directory, alignment} : null},
           events: [], next_seq: 1});
       }
       const result = {...meta, created_files: plan(lastRequest).planned_files.map(file => file.path)};
@@ -843,14 +844,16 @@ def layout_checks(browser):
     assert "layout_files" not in brir_request(page)
     adv_switch(page, "output", True)
     assert brir_request(page)["layout_files"] == "auto"
-    # Each mode explains what it writes; the format list opens only when the
-    # user asks for formats with speakers missing, and its picks count only there.
+    # Each mode explains what it writes in the row's tooltip; the format list opens
+    # only when the user asks for formats with speakers missing, and its picks count only there.
     row = page.locator("#ba-layout-files-row")
     pick = row.locator(".layout-force-pick")
     mode = page.locator("#ba-layout-files")
-    assert row.locator('[data-layout-mode="auto"]').is_visible() and not pick.is_visible()
+    layout_tip = lambda: page.locator("#ba-layout-files-tip").text_content()
+    assert layout_tip() == page.evaluate("t('hint_layout_files_auto')") and not pick.is_visible()
+    assert page.locator("#ba-layout-files").get_attribute("aria-describedby") == "ba-layout-files-tip"
     mode.select_option("listed")
-    assert pick.is_visible() and not row.locator('[data-layout-mode="auto"]').is_visible()
+    assert pick.is_visible() and layout_tip() == page.evaluate("t('hint_layout_files')")
     assert brir_request(page)["layout_files"] == "auto"
     pick.locator(".file-opt", has_text="atmos_24.1.10.wav").click()
     pick.locator(".file-opt", has_text="dtsx_30.2.wav").click()
@@ -858,7 +861,7 @@ def layout_checks(browser):
     mode.select_option("auto")
     assert not pick.is_visible() and brir_request(page)["layout_files"] == "auto"
     mode.select_option("none")
-    assert row.locator('[data-layout-mode="none"]').is_visible() and not pick.is_visible()
+    assert layout_tip() == page.evaluate("t('hint_layout_files_none')") and not pick.is_visible()
     assert disabled(page, "#ba-layout-force-5")
     assert brir_request(page)["layout_files"] == "none"
     page.locator("#adv-reset-output").click()
@@ -904,9 +907,14 @@ def fill_lfe_checks(browser):
     adv_switch(page, "output", True)
     request = brir_request(page)
     assert request["missing_speakers"] == "silent" and request["lfe_mode"] == "none", request
-    row = page.locator("#ba-lfe-mode-row")
-    hints = lambda: [mode for mode in ("none", "center", "all")
-                     if row.locator(f'[data-lfe-mode="{mode}"]').is_visible()]
+    # The tooltip's first paragraph explains the chosen mode, the second a measured subwoofer.
+    hint_text = {mode: page.evaluate(f"t('hint_lfe_mode_{mode}')") for mode in ("none", "center", "all")}
+    measured = page.evaluate("t('hint_lfe_measured')")
+
+    def hints():
+        paragraphs = page.locator("#ba-lfe-mode-tip .tip-para").all_text_contents()
+        assert len(paragraphs) == 2 and paragraphs[1] == measured, paragraphs
+        return [mode for mode, text in hint_text.items() if text == paragraphs[0]]
     assert hints() == ["none"]
     page.locator("#ba-missing-speakers").select_option("neighbor")
     page.locator("#ba-lfe-mode").select_option("all")
@@ -935,8 +943,8 @@ def fill_lfe_checks(browser):
     assert not page.locator('#bf-itd-mode-row [data-itd-mode="off"]').is_visible()
     page.locator("#bf-missing-speakers").select_option("neighbor")
     page.locator("#bf-lfe-mode").select_option("all")
-    assert page.locator('#bf-lfe-mode-row [data-lfe-mode="all"]').is_visible()
-    assert not page.locator('#bf-lfe-mode-row [data-lfe-mode="none"]').is_visible()
+    assert page.locator("#bf-lfe-mode-tip .tip-para").all_text_contents() == [
+        page.evaluate("t('hint_lfe_mode_all')"), page.evaluate("t('hint_lfe_measured')")]
     payload = page.evaluate("gatherBrirPayload()")
     assert payload["missing_speakers"] == "neighbor" and payload["lfe_mode"] == "all", payload
     assert not errors, errors
@@ -1405,15 +1413,19 @@ def room_tuning2_checks(browser):
         assert request()["room_tuning2_mode"] == 200
         page.locator("#bf-room-tuning2-latency").fill("60")
         assert request()["room_tuning2_mode"] == 60
-        # A manual upper end hides the automatic controls, not the independent high-pass.
+        # A manual upper end hides the room facts and disables the basis and the reach
+        # (still in view), not the independent high-pass.
         page.locator("#bf-room-tuning2-high").fill("300")
-        assert not any(shown(facts + high_rows + (volume_hint,))) and page.locator(hp_row).is_visible(), skin
+        assert not any(shown(facts + (volume_hint,))) and page.locator(hp_row).is_visible(), skin
+        assert all(shown(high_rows)) and disabled(page, "#bf-room-tuning2-high-basis"), skin
+        assert disabled(page, "#bf-room-tuning2-high-transition"), skin
         sent = request()
         assert sent["room_tuning2_high"] == 300 and not {"room_volume", "schroeder_freq"} & sent.keys(), sent
         assert sent["room_tuning2_high_basis"] == "lenient" and sent["room_tuning2_high_transition"] == 2, sent
         assert sent["room_tuning2_input_hp"] == 25, sent
         page.locator("#bf-room-tuning2-high").fill("")
         assert all(shown(facts + high_rows + (volume_hint, hp_row))), skin
+        assert not disabled(page, "#bf-room-tuning2-high-basis"), skin
         page.locator("#bf-room-tuning2-mimo").check()
         assert all(shown(mimo_rows))
         sent = request()
@@ -1547,6 +1559,8 @@ def room_file_checks(browser):
             return rows.nth(i).locator('select[data-room-field="side"]')
 
         assert [slot(i).input_value() for i in range(4)] == ["FL", "FL", "", ""]
+        # Room measurements have no LFE assignment (only BRIR measurements do).
+        assert "LFE" not in slot(0).locator("option").evaluate_all("nodes => nodes.map(n => n.value)")
         assert [side(i).input_value() for i in range(2)] == ["left", "right"]
         assert rows.nth(2).get_attribute("data-state") == "skipped" and slot(2).is_disabled()
         assert side(3).is_disabled()
@@ -1649,6 +1663,9 @@ def brir_file_checks(browser):
         rows = page.locator("#bf-brir-file-result tbody tr")
         rows.nth(3).wait_for()
         assert page.evaluate("galleryCalls.some(c => c.method === 'inspect_room_measurements' && c.args[0].purpose === 'brir')")
+        # A BRIR measurement may stand for a subwoofer: LFE and LFE2 follow the slot codes.
+        codes = rows.first.locator('select[data-room-field="slot"] option').evaluate_all("nodes => nodes.map(n => n.value)")
+        assert codes[-2:] == ["LFE", "LFE2"], codes
         status = page.locator("#bf-brir-file-status")
 
         def slot(i, rows=rows):
@@ -1692,6 +1709,11 @@ def brir_file_checks(browser):
         request = request_brir(page)
         assert request["brir_measurement_map"] == ("FL.left=1@1,FL.right=1@2,FR.left=2@1,FR.right=2@2,"
                                                    "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2"), request
+        assert rows.nth(4).locator(".room-map-note").inner_text() == catalog("en")["brir_file_subwoofer"]
+        slot(4).select_option("LFE")
+        slot(5).select_option("LFE2")
+        request = request_brir(page)
+        assert request["brir_measurement_map"].endswith("LFE.left=5@1,LFE.right=5@2,LFE2.left=6@1,LFE2.right=6@2"), request
         positions.nth(1).select_option("1")
         assert status.inner_text() == page.evaluate("t('brir_file_same_position')")
         assert _blocked(page)
@@ -1711,14 +1733,183 @@ def brir_file_checks(browser):
         page.wait_for_function("document.querySelector('#bf-brir-file-status')?.textContent === t('brir_file_one_position')")
         assert _blocked(page)
 
+        # ADR 0016: one recording file is the third source; it is not the measurement file mode.
+        page.locator("#bf-brir-source").select_option("recording")
+        assert page.locator("#bf-brir-recording-block").is_visible() and not page.locator("#bf-brir-file-block").is_visible()
+        assert page.evaluate("mfileMode('brir')") is False
+        assert page.locator("#bf-brir-recording-status").is_visible()
+        assert page.locator("#bf-brir-recording-status").inner_text() == catalog("en")["brir_recording_choose"]
+        assert not page.locator("#bf-brir-recording-sweep-row").is_visible()
+        page.locator("#bf-brir-recording-sweep-source").select_option("file")
+        assert page.locator("#bf-brir-recording-sweep-row").is_visible()
+        page.locator("#bf-brir-recording-sweep-source").select_option("test-signal")
+        assert not page.locator("#bf-brir-recording-sweep-row").is_visible()
+        page.locator("#bf-brir-source").select_option("file")
+        assert not page.locator("#bf-brir-recording-block").is_visible() and page.locator("#bf-brir-file-block").is_visible()
+
         page.locator("#bf-brir-source").select_option("folder")
         assert not page.locator("#bf-brir-file-block").is_visible()
+        assert not page.locator("#bf-brir-recording-block").is_visible()
         request = request_brir(page)
         assert "brir_measurement_file" not in request and "brir_measurement_map" not in request, request
         assert not errors, errors
         context.close()
     print("Gallery BRIR file checks: source row, brir purpose, one ear per REW measurement, incomplete/FL/duplicate "
           "blocks, Dirac ear positions, one-position block, no calibration line, folder source OK", flush=True)
+
+
+def brir_recording_checks(browser):
+    """ADR 0016: list validation, start gate, language refresh and source-scoped
+    requests for one recording, with or without another program's sweep."""
+    recording_keys = {"brir_recording_file", "brir_recording_speakers", "brir_recording_sweep"}
+    for skin, language in itertools.product(SKINS, LANGUAGES):
+        context, page, errors = open_page(browser, skin, "dark", language, "idle")
+        navigate(page, "processing")
+        source = page.locator("#bf-brir-source")
+        path = page.locator("#bf-brir-recording-file")
+        speakers = page.locator("#bf-brir-recording-speakers")
+        sweep_source = page.locator("#bf-brir-recording-sweep-source")
+        sweep = page.locator("#bf-brir-recording-sweep")
+        status = page.locator("#bf-brir-recording-status")
+        generate = page.locator("#btn-generate-brir")
+        source.select_option("recording")
+        assert page.locator("#bf-brir-recording-block").is_visible()
+        assert status.get_attribute("data-state") == "ok" and status.inner_text() == catalog(language)["brir_recording_choose"]
+        assert generate.is_disabled() and generate.get_attribute("title") == catalog(language)["brir_recording_choose"]
+        path.fill("D:/Measurements/ears.wav")
+        assert generate.is_disabled()
+        valid = " FL , FR, LFE, LFE2, X, X "
+        speakers.fill(valid)
+        assert status.get_attribute("data-state") == "ok"
+        expected = catalog(language)["brir_recording_status"].format(speakers=2, lfe=2, skipped=2)
+        assert status.inner_text() == expected and generate.is_enabled(), (skin, language, status.inner_text())
+        parsed = page.evaluate("text => parseRecordingSpeakers(text)", valid)
+        assert parsed == {"entries": ["FL", "FR", "LFE", "LFE2", "X", "X"], "speakers": 2,
+                          "lfe": 2, "skipped": 2, "problem": None}, parsed
+        # Every canonical slot is accepted; FL is still required if only LFE is listed.
+        all_slots = page.evaluate("parseRecordingSpeakers(mfileSlotCodes().join(','))")
+        assert all_slots["speakers"] == len(SPEAKER_NAMES) and all_slots["problem"] is None, all_slots
+        for text, key, entry in (("FL,,FR", "empty", None), (",FL", "empty", None), ("FL,", "empty", None),
+                                 ("FL,fl", "unknown", "fl"), ("FL,LFE3", "unknown", "LFE3"),
+                                 ("FL,FR,FR", "duplicate", "FR"), ("FL,LFE,LFE", "duplicate", "LFE"),
+                                 ("FL,LFE2,LFE2", "duplicate", "LFE2"), ("FR,LFE,X", "needs_fl", None),
+                                 ("FR,unknown,FR", "unknown", "unknown")):
+            speakers.fill(text)
+            expected = catalog(language)["brir_recording_error_" + key].format(entry=entry)
+            assert status.get_attribute("data-state") == "error" and status.inner_text() == expected, text
+            assert generate.is_disabled() and generate.get_attribute("title") == expected, text
+            before = _starts(page, "start_brir")
+            # A synthetic click also exercises the handler's guard, not just the disabled button.
+            generate.dispatch_event("click")
+            assert _starts(page, "start_brir") == before, text
+        speakers.fill("   ")
+        assert status.get_attribute("data-state") == "ok" and generate.is_disabled()
+        assert status.inner_text() == catalog(language)["brir_recording_choose"]
+        speakers.fill(valid)
+        path.fill("")
+        assert status.get_attribute("data-state") == "ok" and generate.is_disabled()
+        assert status.inner_text() == catalog(language)["brir_recording_choose"]
+        speakers.fill("FL,FL")
+        assert status.get_attribute("data-state") == "error"
+        assert status.inner_text() == catalog(language)["brir_recording_error_duplicate"].format(entry="FL")
+        speakers.fill(valid)
+        path.fill("D:/Measurements/ears.wav")
+        sweep_source.select_option("file")
+        assert page.locator("#bf-brir-recording-sweep-row").is_visible() and generate.is_disabled()
+        assert generate.get_attribute("title") == catalog(language)["brir_recording_choose_sweep"]
+        assert status.get_attribute("data-state") == "ok"
+        assert status.inner_text() == catalog(language)["brir_recording_choose_sweep"]
+        sweep.fill("  D:/Sweeps/reference.wav  ")
+        assert generate.is_enabled() and generate.get_attribute("title") == ""
+
+        def request():
+            sent = brir_request(page)
+            page.wait_for_function("state.jobId === null")
+            if page.locator("#job-modal").is_visible():
+                page.locator("#job-modal-close").click()
+            return sent
+
+        sent = request()
+        assert {key: sent[key] for key in recording_keys} == {
+            "brir_recording_file": "D:/Measurements/ears.wav", "brir_recording_speakers": "FL,FR,LFE,LFE2,X,X",
+            "brir_recording_sweep": "D:/Sweeps/reference.wav"}, sent
+        assert not {"brir_measurement_file", "brir_measurement_map"} & sent.keys(), sent
+        sweep_source.select_option("test-signal")
+        assert "brir_recording_sweep" not in request()
+        # Source changes retain the fields but never send an inactive source's settings.
+        for mode in ("folder", "file"):
+            source.select_option(mode)
+            assert status.get_attribute("data-state") == "empty" and status.text_content() == ""
+            if mode == "file":
+                page.locator("#bf-brir-file").fill("D:/Measurements/living room.mdat")
+                page.locator("#bf-brir-file-result tbody tr").first.wait_for()
+            assert not recording_keys & request().keys(), mode
+        source.select_option("recording")
+        assert speakers.input_value() == valid and path.input_value() == "D:/Measurements/ears.wav"
+        assert sweep.input_value().strip() == "D:/Sweeps/reference.wav"
+        # A job refresh cannot re-enable Generate after an edit makes the list invalid.
+        page.evaluate("window.galleryBrirStatus = 'running'")
+        generate.click()
+        page.wait_for_function("state.jobId !== null")
+        assert generate.is_disabled()
+        speakers.fill("FL,FL")
+        page.evaluate("window.galleryBrirStatus = 'succeeded'")
+        page.wait_for_function("state.jobId === null")
+        assert generate.is_disabled()
+        if page.locator("#job-modal").is_visible():
+            page.locator("#job-modal-close").click()
+        other = "ko" if language == "en" else "en"
+        navigate(page, "settings")
+        page.locator("#sf-language").select_option(other)
+        page.wait_for_function(f"document.documentElement.lang === '{other}'")
+        expected = catalog(other)["brir_recording_error_duplicate"].format(entry="FL")
+        assert status.text_content() == expected and generate.get_attribute("title") == expected
+        navigate(page, "processing")
+        speakers.fill(valid)
+        assert status.inner_text() == catalog(other)["brir_recording_status"].format(speakers=2, lfe=2, skipped=2)
+        assert generate.is_enabled()
+        assert not errors, errors
+        context.close()
+    print("Gallery single-recording checks: exact slot rules, counts, empty/error/ok, missing-file gates, "
+          "requests with optional sweep, source isolation, retained fields, job refresh, language refresh, both skins OK", flush=True)
+
+
+def brir_recording_error_checks(browser):
+    """Fixed IPC messages select page-language text; numbers never come from English prose."""
+    cases = [
+        ("The recording does not hold the listed number of sweeps.",
+         {"found": 5, "listed": 4, "starts_seconds": [0.13, 1.4, 2.75, 4.06, 5.38]},
+         "error_brir_recording_count", {"found": 5, "listed": 4, "starts": "0.13, 1.40, 2.75, 4.06, 5.38"}),
+        ("The recording does not hold the listed number of sweeps.",
+         {"found": 0, "listed": 4, "starts_seconds": []}, "error_brir_recording_none", {}),
+        ("The test signal does not match the recording file.",
+         {"read": 1, "listed": 2}, "error_brir_recording_test_signal", {"read": 1, "listed": 2}),
+        ("The sweep file is not a logarithmic sweep.", {}, "error_brir_recording_sweep_file", {}),
+        ("The sweep file and the recording have different sampling rates.",
+         {"sweep_fs": 44100, "recording_fs": 8000}, "error_brir_recording_sweep_rate", {"sweep": 44100, "recording": 8000}),
+    ]
+    for skin, language in itertools.product(SKINS, ALL_LANGUAGES):
+        context, page, errors = open_page(browser, skin, "dark", language, "idle")
+        navigate(page, "processing")
+        for message, details, key, values in cases:
+            error = {"code": "INVALID_REQUEST", "message": message,
+                     "details": {"path": "D:/Measurements/input.wav", **details}, "retryable": False}
+            expected = catalog(language)[key].format(**values)
+            assert page.evaluate("error => errorSentence(error)", error) == expected, (language, key)
+            # The failure also reaches the visible job log in Studio or the dialog's log in Stable.
+            page.evaluate("error => { window.galleryBrirStatus = 'failed'; window.galleryBrirError = error; }", error)
+            before = _starts(page, "start_brir")
+            page.locator("#btn-generate-brir").click()
+            page.wait_for_function(f"galleryCalls.filter(c => c.method === 'start_brir').length > {before} && state.jobId === null")
+            page.wait_for_function("text => [...document.querySelectorAll('[data-log]')].some(n => n.textContent.includes(text))", arg=expected)
+            assert page.evaluate("state.lastJob.status") == "failed"
+            if page.locator("#job-modal").is_visible():
+                page.locator("#job-modal-close").click()
+        assert not errors, errors
+        context.close()
+    assert "'" + catalog("ko")["label_brir_recording_sweep"].rstrip(":") + "'" in catalog("ko")["error_brir_recording_test_signal"]
+    print("Gallery single-recording error checks: fixed messages, counts and decimal times, zero sweeps, test signal, "
+          "invalid sweep and sample rates, failed-job logs, nine languages, both skins OK", flush=True)
 
 
 def headphone_file_checks(browser):
@@ -1836,6 +2027,16 @@ def test_signal_checks(browser):
         assert "FL,FR.wav" in note.inner_text()
         page.locator("#bf-brir-source").select_option("file")
         wait_check(page, "check.speakers === false")
+        note.wait_for(state="hidden")
+        page.locator("#bf-brir-source").select_option("recording")
+        wait_check(page, "check.speakers === false")
+        note.wait_for(state="hidden")
+        disclosure(page, "headphone", True)
+        wait_check(page, "check.speakers === false && check.headphone_file === 'D:/takes/hd600.wav'")
+        note.wait_for(state="visible")
+        text = note.inner_text()
+        assert "hd600.wav" in text and "FL,FR.wav" not in text and "FC.wav" not in text, text
+        disclosure(page, "headphone", False)
         note.wait_for(state="hidden")
         page.locator("#bf-brir-source").select_option("folder")
         note.wait_for(state="visible")
@@ -2022,6 +2223,8 @@ def render_gallery(output):
         room_tuning2_checks(browser)
         room_file_checks(browser)
         brir_file_checks(browser)
+        brir_recording_checks(browser)
+        brir_recording_error_checks(browser)
         headphone_file_checks(browser)
         vbass_checks(browser)
         test_signal_checks(browser)

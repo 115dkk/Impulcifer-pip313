@@ -12,7 +12,7 @@ interface UiSettings {
   first_run: boolean; languages: Language[]; strings: Record<string, string>;
 }
 /* ADR 0007: a format whose BRIR is also written in its own channel order. Each channel reads one
-   Impulcifer speaker code (slot); LFE channels read "LFE"/"LFE2" and are never measured. */
+   Impulcifer speaker code (slot); LFE channels read "LFE"/"LFE2", measured or synthesized (ADR 0016). */
 interface ImmersiveLayoutInfo { id: string; name: string; file_name: string; channels: { label: string; slot: string }[] }
 interface SweepDefaults {
   layouts: string[]; default_fs: number; default_duration: number; speaker_names: string[];
@@ -122,6 +122,9 @@ interface ProcessingRequest {
   /* 3.x only (ADR 0011). The same files instead of the folder's speaker recordings ("FL.left=1,FL.right=2",
      one ear per entry) and instead of headphones.wav ("left=1,right=2"). */
   brir_measurement_file?: string | null; brir_measurement_map?: string | null;
+  /* ADR 0016: one stereo recording, comma-separated slots/LFE/LFE2/X in playback order,
+     and optionally the logarithmic sweep WAV it was recorded with (omitted: the job's test signal). */
+  brir_recording_file?: string | null; brir_recording_speakers?: string | null; brir_recording_sweep?: string | null;
   headphone_measurement_file?: string | null; headphone_measurement_map?: string | null;
   /* Custom EQ slots: omitted/null follows the folder, false is off, a path is read in place. */
   eq_file?: string | false | null; eq_left_file?: string | false | null; eq_right_file?: string | false | null;

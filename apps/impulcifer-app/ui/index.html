@@ -275,7 +275,38 @@
                 <select id="bf-brir-source">
                   <option value="folder" selected data-i18n="option_brir_measurements_folder">Speaker recordings in the recording folder</option>
                   <option value="file" data-i18n="option_room_measurements_file">A REW or Dirac Live file</option>
+                  <option value="recording" data-i18n="option_brir_measurements_recording">One recording file</option>
                 </select>
+              </div>
+              <!-- ADR 0016: one recording of the ear microphones while a program played a sweep per
+                   speaker. The speaker order names the sweeps in playing order; the status line under
+                   it is filled by the list check (data-state empty, ok or error). The sweep that was
+                   played is the job's test signal unless another program's sweep file is chosen. -->
+              <div class="room-file" id="bf-brir-recording-block" hidden>
+                <div class="field-row">
+                  <label for="bf-brir-recording-file" data-i18n="label_brir_recording_file">Recording file:</label>
+                  <input id="bf-brir-recording-file" class="mono" spellcheck="false" placeholder="recording.wav">
+                  <button class="btn-link" data-browse="audio" data-target="bf-brir-recording-file" data-i18n="button_browse">Browse</button>
+                </div>
+                <div class="field-row recording-speakers-row">
+                  <span class="field-label"><label for="bf-brir-recording-speakers" data-i18n="label_brir_recording_speakers">Speaker order:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-brir-recording-speakers-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-brir-recording-speakers-tip" class="tip-bubble" data-i18n="tooltip_brir_recording_speakers">The sweeps in the recording in the order they played, separated by commas. Subwoofers are LFE and LFE2, and a sweep to leave out is X. Dirac Live plays the first speaker once more at the end.</span></span></span>
+                  <div class="adv-stack">
+                    <input id="bf-brir-recording-speakers" class="mono" spellcheck="false" autocomplete="off" placeholder="FL,FC,FR,SR,BR,BL,SL,LFE,X" aria-describedby="bf-brir-recording-speakers-tip bf-brir-recording-status">
+                    <p class="recording-status" id="bf-brir-recording-status" aria-live="polite" data-state="empty"></p>
+                  </div>
+                </div>
+                <div class="field-row">
+                  <span class="field-label"><label for="bf-brir-recording-sweep-source" data-i18n="label_brir_recording_sweep">Sweep of this recording:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-brir-recording-sweep-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-brir-recording-sweep-tip" class="tip-bubble" data-i18n="tooltip_brir_recording_sweep">Leave this as it is if you recorded with Impulcifer's sweep. If another program such as Dirac Live or REW played its own sweep, choose that sweep's WAV. It has to be a logarithmic sweep; silence before and after it is trimmed.</span></span></span>
+                  <select id="bf-brir-recording-sweep-source" aria-describedby="bf-brir-recording-sweep-tip">
+                    <option value="test-signal" selected data-i18n="option_brir_recording_sweep_test_signal">Impulcifer's sweep (the test signal setting below)</option>
+                    <option value="file" data-i18n="option_brir_recording_sweep_file">Another program's sweep file</option>
+                  </select>
+                </div>
+                <div class="field-row" id="bf-brir-recording-sweep-row" hidden>
+                  <label for="bf-brir-recording-sweep" data-i18n="label_brir_recording_sweep_file">Sweep file:</label>
+                  <input id="bf-brir-recording-sweep" class="mono" spellcheck="false" placeholder="sweep.wav">
+                  <button class="btn-link" data-browse="audio" data-target="bf-brir-recording-sweep" data-i18n="button_browse">Browse</button>
+                </div>
               </div>
               <div class="room-file" id="bf-brir-file-block" hidden>
                 <div class="field-row">
@@ -355,8 +386,13 @@
                       <button type="button" class="seg-btn" role="radio" id="bf-room-mode-tuning2" aria-checked="false" tabindex="-1" data-i18n="option_room_mode_tuning2">Virtual room tuning 2</button>
                     </div>
                   </div>
-                  <!-- Virtual room tuning 2 (ADR 0008). The filter decides whether the latency row shows,
-                       so that row sits right under it; the band's upper end decides the room facts below. -->
+                  <!-- Virtual room tuning 2 (ADR 0008) shows its rows in five headed groups: filter,
+                       correction band, protection, time and phase, between speakers. The headings are
+                       siblings of the rows (no wrappers), because the last group starts with the level
+                       match row the first tuning shares; app.js updateRoomRows shows them in tuning 2
+                       only and moves the room volume and Schroeder rows into the band group there.
+                       The filter decides whether the latency row shows, so that row sits right under it. -->
+                  <h4 class="t2-head" id="bf-room-tuning2-head-filter" data-i18n="section_room_tuning2_filter" hidden>Filter</h4>
                   <div class="field-row" id="bf-room-tuning2-mode-row" hidden>
                     <span class="field-label"><label for="bf-room-tuning2-mode" data-i18n="label_room_tuning2_mode">Filter:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mode-tip" class="tip-bubble">PEQ and an FIR with 8 ms latency. The FIR corrects part of the room's bass timing within that latency.</span></span></span>
                     <select id="bf-room-tuning2-mode" aria-describedby="bf-room-tuning2-mode-tip">
@@ -375,6 +411,9 @@
                     <label for="bf-room-tuning2-max-boost" data-i18n="label_room_max_boost">Max boost (dB):</label>
                     <input type="number" id="bf-room-tuning2-max-boost" class="num mono" value="10" min="0" max="10" step="0.5">
                   </div>
+                  <h4 class="t2-head" id="bf-room-tuning2-head-band" data-i18n="section_room_tuning2_band" hidden>Correction band</h4>
+                  <!-- The two ends of the band share a line where the card is wide enough. -->
+                  <div class="t2-pair" id="bf-room-tuning2-band-pair" hidden>
                   <div class="field-row" id="bf-room-tuning2-low-row" hidden>
                     <label for="bf-room-tuning2-low" data-i18n="label_room_tuning2_low">Correct from (Hz):</label>
                     <input type="number" id="bf-room-tuning2-low" class="num mono" value="20" min="10" max="200" step="1">
@@ -383,6 +422,8 @@
                     <span class="field-label"><label for="bf-room-tuning2-high" data-i18n="label_room_tuning2_high">Correct up to (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-high-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-high-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_high">Auto multiplies the Schroeder frequency of the chosen basis by the reach, with a minimum of 100 Hz and a maximum of 500 Hz times the reach. Without a room volume or a Schroeder frequency it is 500 Hz.</span></span></span>
                     <input type="number" id="bf-room-tuning2-high" class="num mono" min="100" max="20000" step="any" placeholder="auto" aria-describedby="bf-room-tuning2-high-tip">
                   </div>
+                  </div>
+                  <!-- The basis and the reach act only on an automatic upper end; a typed end disables them. -->
                   <div class="field-row" id="bf-room-tuning2-high-basis-row" hidden>
                     <span class="field-label"><label for="bf-room-tuning2-high-basis" data-i18n="label_room_tuning2_high_basis">Upper limit from:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-high-basis-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-high-basis-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_high_basis">Strict uses the room decay at 500 Hz and 1 kHz. Lenient also measures the decay in third-octave bands from 100 to 500 Hz and takes the highest band whose own Schroeder estimate reaches it; it is never below the strict value. Treated rooms usually ring longer in the bass, so lenient goes higher there.</span></span></span>
                     <select id="bf-room-tuning2-high-basis" aria-describedby="bf-room-tuning2-high-basis-tip">
@@ -398,15 +439,13 @@
                       <option value="4">×4</option>
                     </select>
                   </div>
-                  <p class="hint" id="bf-room-tuning2-high-volume-hint" data-i18n="hint_room_tuning2_high_needs_volume" hidden>The basis and the reach need the room volume or a Schroeder frequency below. Without them the limit stays at 500 Hz.</p>
+                  <!-- In tuning 2 the room volume and Schroeder rows are moved here, above this line. -->
+                  <p class="hint t2-facts-hint" id="bf-room-tuning2-high-volume-hint" data-i18n="hint_room_tuning2_high_needs_facts" hidden>The basis and the reach need the room volume or the Schroeder frequency. Without either the upper limit stays at 500 Hz.</p>
                   <div class="field-row" id="bf-room-tuning2-bands-row" hidden>
                     <span class="field-label"><label for="bf-room-tuning2-bands" data-i18n="label_room_tuning2_bands">Extra bands (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-bands-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-bands-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_bands">Corrects up to four more ranges above the main band, written as low-high pairs in Hz and separated by commas, for example 1000-3000. Each range fades in over half an octave below its low edge and out over half an octave above its high edge. Leave empty for none.</span></span></span>
                     <input type="text" id="bf-room-tuning2-bands" class="mono" value="" placeholder="1000-3000, 6000-9000" spellcheck="false" aria-describedby="bf-room-tuning2-bands-tip">
                   </div>
-                  <div class="field-row" id="bf-room-tuning2-input-hp-row" hidden>
-                    <span class="field-label"><label for="bf-room-tuning2-input-hp" data-i18n="label_room_tuning2_input_hp">Cut all speakers below (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-input-hp-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-input-hp-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_input_hp">An 8th-order high-pass at this frequency on every speaker, 10 to 50 Hz, applied after the correction is designed. All speakers pass the same filter, so their phase relation above the cut stays the same while the deepest bass is not driven. Leave empty for none.</span></span></span>
-                    <input type="number" id="bf-room-tuning2-input-hp" class="num mono" min="10" max="50" step="any" placeholder="off" aria-describedby="bf-room-tuning2-input-hp-tip">
-                  </div>
+                  <h4 class="t2-head" id="bf-room-tuning2-head-protect" data-i18n="section_room_tuning2_protect" hidden>Protection</h4>
                   <div class="check-row" id="bf-room-tuning2-dip-limit-row" hidden>
                     <input type="checkbox" id="bf-room-tuning2-dip-limit" aria-describedby="bf-room-tuning2-dip-limit-tip">
                     <label for="bf-room-tuning2-dip-limit" data-i18n="checkbox_room_tuning2_dip_limit">Fill narrow dips only partly</label>
@@ -417,6 +456,11 @@
                     <label for="bf-room-tuning2-low-protect" data-i18n="checkbox_room_tuning2_low_protect">Protect the speaker's bass rolloff</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-low-protect-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-low-protect-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_low_protect">Finds where the speaker's own response rolls off (10 dB below its 200 to 1000 Hz level) and allows no boost below that frequency, with the boost limit ramping up over the octave above it. The PEQ bands and the FIR are checked afterwards so no boost leaks below the rolloff. Without a rolloff above 20 Hz nothing changes.</span></span>
                   </div>
+                  <div class="field-row" id="bf-room-tuning2-input-hp-row" hidden>
+                    <span class="field-label"><label for="bf-room-tuning2-input-hp" data-i18n="label_room_tuning2_input_hp">Cut all speakers below (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-input-hp-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-input-hp-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_input_hp">An 8th-order high-pass at this frequency on every speaker, 10 to 50 Hz, applied after the correction is designed. All speakers pass the same filter, so their phase relation above the cut stays the same while the deepest bass is not driven. Leave empty for none.</span></span></span>
+                    <input type="number" id="bf-room-tuning2-input-hp" class="num mono" min="10" max="50" step="any" placeholder="off" aria-describedby="bf-room-tuning2-input-hp-tip">
+                  </div>
+                  <h4 class="t2-head" id="bf-room-tuning2-head-timing" data-i18n="section_room_tuning2_timing" hidden>Time and phase</h4>
                   <div class="check-row" id="bf-room-tuning2-mode-decay-row" hidden>
                     <input type="checkbox" id="bf-room-tuning2-mode-decay" aria-describedby="bf-room-tuning2-mode-decay-tip">
                     <label for="bf-room-tuning2-mode-decay" data-i18n="checkbox_room_tuning2_mode_decay">Shorten long room modes</label>
@@ -452,6 +496,7 @@
                     <span class="field-label"><label for="bf-room-tuning-curtain" data-i18n="label_room_tuning_curtain">Detailed correction up to (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning-curtain-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning-curtain-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_curtain">Above this frequency only a broad tone correction is applied; the detailed correction fades out over the next octave.</span></span></span>
                     <input type="number" id="bf-room-tuning-curtain" class="num mono" value="300" min="100" max="5000" step="10" aria-describedby="bf-room-tuning-curtain-tip">
                   </div>
+                  <h4 class="t2-head" id="bf-room-tuning2-head-speakers" data-i18n="section_room_tuning2_speakers" hidden>Between speakers</h4>
                   <div class="check-row" id="bf-room-tuning-level-match-row" hidden>
                     <input type="checkbox" id="bf-room-tuning-level-match" checked aria-describedby="bf-room-tuning-level-match-tip">
                     <label for="bf-room-tuning-level-match" data-i18n="checkbox_room_tuning_level_match">Match speaker levels</label>
@@ -462,6 +507,9 @@
                     <label for="bf-room-tuning2-mimo" data-i18n="checkbox_room_tuning2_mimo">Cancel late bass with the other speakers (MIMO)</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo">Adds to each speaker low-frequency copies played by the other speakers, designed to cancel the bass that lingers at the ears after the first 60 ms (adjustable below). Works only below the upper limit, and a check keeps every band from getting worse.</span></span>
                   </div>
+                  <!-- MIMO's own settings open under its checkbox, indented. -->
+                  <div class="t2-nested" id="bf-room-tuning2-mimo-detail" hidden>
+                  <div class="t2-pair" id="bf-room-tuning2-mimo-pair">
                   <div class="field-row" id="bf-room-tuning2-fsiso-row" hidden>
                     <label for="bf-room-tuning2-fsiso" data-i18n="label_room_tuning2_fsiso">MIMO up to (Hz):</label>
                     <input type="number" id="bf-room-tuning2-fsiso" class="num mono" value="150" min="50" max="150" step="1">
@@ -469,6 +517,7 @@
                   <div class="field-row" id="bf-room-tuning2-mimo-low-row" hidden>
                     <label for="bf-room-tuning2-mimo-low" data-i18n="label_room_tuning2_mimo_low">MIMO from (Hz):</label>
                     <input type="number" id="bf-room-tuning2-mimo-low" class="num mono" min="15" max="150" step="any" placeholder="auto">
+                  </div>
                   </div>
                   <div class="field-row" id="bf-room-tuning2-mimo-early-row" hidden>
                     <span class="field-label"><label for="bf-room-tuning2-mimo-early" data-i18n="label_room_tuning2_mimo_early">MIMO starts after (ms):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-early-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-early-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo_early">How long after the direct sound the MIMO copies may start to act. A shorter time lets them also shorten the early bass decay, but drives them harder, so the check turns them down more often. 60 ms is the earlier behaviour.</span></span></span>
@@ -478,6 +527,7 @@
                     <input type="checkbox" id="bf-room-tuning2-mimo-ear-guard" aria-describedby="bf-room-tuning2-mimo-ear-guard-tip">
                     <label for="bf-room-tuning2-mimo-ear-guard" data-i18n="checkbox_room_tuning2_mimo_ear_guard">Check each ear separately</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-ear-guard-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-ear-guard-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo_ear_guard">The check that turns the MIMO copies down looks at both ears together, so a copy that helps one ear more than it hurts the other gets through. With this on, the copies are turned down whenever either ear gets worse. The README names the ear that set the limit.</span></span>
+                  </div>
                   </div>
                   <div class="field-row" id="bf-room-phase-limit-row" hidden>
                     <span class="field-label"><label for="bf-room-phase-limit" data-i18n="label_room_tuning_phase_limit">Timing correction up to:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-phase-limit-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-phase-limit-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_phase_limit">Up to the Schroeder frequency, the room's bass timing is corrected. Higher limits also correct the speaker's own timing, for example around its crossover, where the room measurements at both ear positions agree. Off corrects the frequency response only and adds no delay.</span></span></span>
@@ -698,11 +748,13 @@
                     <input type="number" id="bf-head-radius" class="num mono" min="5" max="15" step="0.1" placeholder="auto">
                     <span class="hint" data-i18n="hint_head_radius">Empty: estimated from the side pair of the recording.</span>
                   </div>
+                  <!-- The warning under the box shows only while it is ticked (styles.css .silent-warning). -->
                   <div class="check-row">
-                    <input type="checkbox" id="bf-remove-silent-channels">
+                    <input type="checkbox" id="bf-remove-silent-channels" aria-describedby="bf-remove-silent-channels-tip">
                     <label for="bf-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label>
+                    <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-remove-silent-channels-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-remove-silent-channels-tip" class="tip-bubble" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</span></span>
                   </div>
-                  <p class="hint" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
+                  <p class="silent-warning" id="bf-remove-silent-channels-warning" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
                   <div class="check-row">
                     <input type="checkbox" id="bf-jamesdsp">
                     <label for="bf-jamesdsp" data-i18n="checkbox_jamesdsp">JamesDSP true stereo IR</label>
@@ -719,15 +771,16 @@
                     <input type="checkbox" id="bf-truehd">
                     <label for="bf-truehd" data-i18n="checkbox_truehd_layouts">TrueHD layouts</label>
                   </div>
+                  <!-- The tooltips of the channel-order files and the LFE channel follow the chosen
+                       mode (app.js updateLayoutForce, updateLfeHint), so they carry no data-i18n. -->
                   <div class="field-row top layout-files-row" id="bf-layout-files-row">
-                    <label for="bf-layout-files" data-i18n="label_layout_files">Channel-order files:</label>
+                    <span class="field-label"><label for="bf-layout-files" data-i18n="label_layout_files">Channel-order files:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-layout-files-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-layout-files-tip" class="tip-bubble">When the measured speakers cover every channel of a format, the BRIR is saved again in that format's channel order (for example atmos_9.1.6.wav). Of 9.1, 9.1.4 and 9.1.6 only the largest is saved.</span></span></span>
                     <div class="adv-stack">
-                      <select id="bf-layout-files">
+                      <select id="bf-layout-files" aria-describedby="bf-layout-files-tip">
                         <option value="auto" selected data-i18n="option_layout_files_auto">Formats with every speaker measured</option>
                         <option value="listed" data-i18n="option_layout_files_listed">Also the formats I pick, with speakers missing</option>
                         <option value="none" data-i18n="option_layout_files_none">Off</option>
                       </select>
-                      <p class="hint" data-layout-mode="auto" data-i18n="hint_layout_files_auto">When the measured speakers cover every channel of a format, the BRIR is saved again in that format's channel order (for example atmos_9.1.6.wav). Of 9.1, 9.1.4 and 9.1.6 only the largest is saved.</p>
                       <div class="layout-force-pick" data-layout-mode="listed" hidden>
                         <p class="layout-force-caption" data-i18n="label_layout_files_force">Formats to save even with speakers missing:</p>
                         <div class="layout-force">
@@ -739,35 +792,25 @@
                           <div class="check-row"><input type="checkbox" id="bf-layout-force-5" data-layout="24.1.10"><label for="bf-layout-force-5">Dolby Atmos 24.1.10</label></div>
                           <div class="check-row"><input type="checkbox" id="bf-layout-force-6" data-layout="30.2"><label for="bf-layout-force-6">DTS:X Pro 30.2</label></div>
                         </div>
-                        <p class="hint" data-i18n="hint_layout_files">Missing speakers get silent tracks. Formats you leave unchecked are still saved when every speaker is measured.</p>
                       </div>
-                      <p class="hint" data-layout-mode="none" data-i18n="hint_layout_files_none" hidden>Only hrir.wav and hesuvi.wav are saved.</p>
                     </div>
                   </div>
                   <!-- ADR 0013: what the output files carry for speakers that were not
                        measured and for the LFE channel. The defaults keep today's files. -->
-                  <div class="field-row top" id="bf-missing-speakers-row">
-                    <label for="bf-missing-speakers" data-i18n="label_missing_speakers">Unmeasured speakers:</label>
-                    <div class="adv-stack">
-                      <select id="bf-missing-speakers">
-                        <option value="silent" selected data-i18n="option_missing_speakers_silent">Silent tracks</option>
-                        <option value="neighbor" data-i18n="option_missing_speakers_neighbor">Copy the nearest measured speaker</option>
-                      </select>
-                      <p class="hint" data-i18n="hint_missing_speakers">For hesuvi.wav, hrir.wav and the channel-order files. The nearest measured speaker on the same side and at the same height is copied, and a missing center speaker is made from the pair beside it. Height channels are never filled from ear-level speakers.</p>
-                    </div>
+                  <div class="field-row" id="bf-missing-speakers-row">
+                    <span class="field-label"><label for="bf-missing-speakers" data-i18n="label_missing_speakers">Unmeasured speakers:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-missing-speakers-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-missing-speakers-tip" class="tip-bubble" data-i18n="hint_missing_speakers">For hesuvi.wav, hrir.wav and the channel-order files. The nearest measured speaker on the same side and at the same height is copied, and a missing center speaker is made from the pair beside it. Height channels are never filled from ear-level speakers.</span></span></span>
+                    <select id="bf-missing-speakers" aria-describedby="bf-missing-speakers-tip">
+                      <option value="silent" selected data-i18n="option_missing_speakers_silent">Silent tracks</option>
+                      <option value="neighbor" data-i18n="option_missing_speakers_neighbor">Copy the nearest measured speaker</option>
+                    </select>
                   </div>
-                  <div class="field-row top" id="bf-lfe-mode-row">
-                    <label for="bf-lfe-mode" data-i18n="label_lfe_mode">LFE channel:</label>
-                    <div class="adv-stack">
-                      <select id="bf-lfe-mode">
-                        <option value="none" selected data-i18n="option_lfe_mode_none">Silent</option>
-                        <option value="center" data-i18n="option_lfe_mode_center">Copy the center speaker</option>
-                        <option value="all" data-i18n="option_lfe_mode_all">Bass from every direction</option>
-                      </select>
-                      <p class="hint" data-lfe-mode="none" data-i18n="hint_lfe_mode_none">The LFE tracks of the channel-order files stay silent. hesuvi.wav and hrir.wav have no LFE track.</p>
-                      <p class="hint" data-lfe-mode="center" data-i18n="hint_lfe_mode_center" hidden>The LFE tracks use the center speaker, or the two front speakers when the center was not measured.</p>
-                      <p class="hint" data-lfe-mode="all" data-i18n="hint_lfe_mode_all" hidden>The LFE tracks are made from the bass of every measured speaker below 120 Hz. Averaging the directions evens out the peaks and dips of any one position, as several subwoofers do in a room.</p>
-                    </div>
+                  <div class="field-row" id="bf-lfe-mode-row">
+                    <span class="field-label"><label for="bf-lfe-mode" data-i18n="label_lfe_mode">LFE channel:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-lfe-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-lfe-mode-tip" class="tip-bubble">The LFE tracks of the channel-order files stay silent. hesuvi.wav and hrir.wav have no LFE track.</span></span></span>
+                    <select id="bf-lfe-mode" aria-describedby="bf-lfe-mode-tip">
+                      <option value="none" selected data-i18n="option_lfe_mode_none">Silent</option>
+                      <option value="center" data-i18n="option_lfe_mode_center">Copy the center speaker</option>
+                      <option value="all" data-i18n="option_lfe_mode_all">Bass from every direction</option>
+                    </select>
                   </div>
                   <div class="check-row">
                     <input type="checkbox" id="bf-mic-deviation">
@@ -896,15 +939,16 @@
                       <label class="file-opt"><input type="checkbox" id="ba-truehd"><span class="file-name" data-i18n="studio_adv_truehd">TrueHD layouts</span><span class="file-path mono">truehd_11ch · truehd_13ch</span></label>
                     </div>
                   </div>
+                  <!-- The tooltips of the channel-order files and the LFE channel follow the chosen
+                       mode (app.js updateLayoutForce, updateLfeHint), so they carry no data-i18n. -->
                   <div class="field-row top layout-files-row" id="ba-layout-files-row">
-                    <label for="ba-layout-files" data-i18n="label_layout_files">Channel-order files:</label>
+                    <span class="field-label"><label for="ba-layout-files" data-i18n="label_layout_files">Channel-order files:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="ba-layout-files-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="ba-layout-files-tip" class="tip-bubble">When the measured speakers cover every channel of a format, the BRIR is saved again in that format's channel order (for example atmos_9.1.6.wav). Of 9.1, 9.1.4 and 9.1.6 only the largest is saved.</span></span></span>
                     <div class="adv-stack">
-                      <select id="ba-layout-files">
+                      <select id="ba-layout-files" aria-describedby="ba-layout-files-tip">
                         <option value="auto" selected data-i18n="option_layout_files_auto">Formats with every speaker measured</option>
                         <option value="listed" data-i18n="option_layout_files_listed">Also the formats I pick, with speakers missing</option>
                         <option value="none" data-i18n="option_layout_files_none">Off</option>
                       </select>
-                      <p class="hint" data-layout-mode="auto" data-i18n="hint_layout_files_auto">When the measured speakers cover every channel of a format, the BRIR is saved again in that format's channel order (for example atmos_9.1.6.wav). Of 9.1, 9.1.4 and 9.1.6 only the largest is saved.</p>
                       <div class="layout-force-pick" data-layout-mode="listed" hidden>
                         <p class="layout-force-caption" data-i18n="label_layout_files_force">Formats to save even with speakers missing:</p>
                         <div class="file-grid layout-grid">
@@ -916,35 +960,25 @@
                           <label class="file-opt"><input type="checkbox" id="ba-layout-force-5" data-layout="24.1.10"><span class="file-name">Dolby Atmos 24.1.10</span><span class="file-path mono">atmos_24.1.10.wav</span></label>
                           <label class="file-opt"><input type="checkbox" id="ba-layout-force-6" data-layout="30.2"><span class="file-name">DTS:X Pro 30.2</span><span class="file-path mono">dtsx_30.2.wav</span></label>
                         </div>
-                        <p class="hint" data-i18n="hint_layout_files">Missing speakers get silent tracks. Formats you leave unchecked are still saved when every speaker is measured.</p>
                       </div>
-                      <p class="hint" data-layout-mode="none" data-i18n="hint_layout_files_none" hidden>Only hrir.wav and hesuvi.wav are saved.</p>
                     </div>
                   </div>
                   <!-- ADR 0013: what the output files carry for speakers that were not
                        measured and for the LFE channel. The defaults keep today's files. -->
-                  <div class="field-row top" id="ba-missing-speakers-row">
-                    <label for="ba-missing-speakers" data-i18n="label_missing_speakers">Unmeasured speakers:</label>
-                    <div class="adv-stack">
-                      <select id="ba-missing-speakers">
-                        <option value="silent" selected data-i18n="option_missing_speakers_silent">Silent tracks</option>
-                        <option value="neighbor" data-i18n="option_missing_speakers_neighbor">Copy the nearest measured speaker</option>
-                      </select>
-                      <p class="hint" data-i18n="hint_missing_speakers">For hesuvi.wav, hrir.wav and the channel-order files. The nearest measured speaker on the same side and at the same height is copied, and a missing center speaker is made from the pair beside it. Height channels are never filled from ear-level speakers.</p>
-                    </div>
+                  <div class="field-row" id="ba-missing-speakers-row">
+                    <span class="field-label"><label for="ba-missing-speakers" data-i18n="label_missing_speakers">Unmeasured speakers:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="ba-missing-speakers-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="ba-missing-speakers-tip" class="tip-bubble" data-i18n="hint_missing_speakers">For hesuvi.wav, hrir.wav and the channel-order files. The nearest measured speaker on the same side and at the same height is copied, and a missing center speaker is made from the pair beside it. Height channels are never filled from ear-level speakers.</span></span></span>
+                    <select id="ba-missing-speakers" aria-describedby="ba-missing-speakers-tip">
+                      <option value="silent" selected data-i18n="option_missing_speakers_silent">Silent tracks</option>
+                      <option value="neighbor" data-i18n="option_missing_speakers_neighbor">Copy the nearest measured speaker</option>
+                    </select>
                   </div>
-                  <div class="field-row top" id="ba-lfe-mode-row">
-                    <label for="ba-lfe-mode" data-i18n="label_lfe_mode">LFE channel:</label>
-                    <div class="adv-stack">
-                      <select id="ba-lfe-mode">
-                        <option value="none" selected data-i18n="option_lfe_mode_none">Silent</option>
-                        <option value="center" data-i18n="option_lfe_mode_center">Copy the center speaker</option>
-                        <option value="all" data-i18n="option_lfe_mode_all">Bass from every direction</option>
-                      </select>
-                      <p class="hint" data-lfe-mode="none" data-i18n="hint_lfe_mode_none">The LFE tracks of the channel-order files stay silent. hesuvi.wav and hrir.wav have no LFE track.</p>
-                      <p class="hint" data-lfe-mode="center" data-i18n="hint_lfe_mode_center" hidden>The LFE tracks use the center speaker, or the two front speakers when the center was not measured.</p>
-                      <p class="hint" data-lfe-mode="all" data-i18n="hint_lfe_mode_all" hidden>The LFE tracks are made from the bass of every measured speaker below 120 Hz. Averaging the directions evens out the peaks and dips of any one position, as several subwoofers do in a room.</p>
-                    </div>
+                  <div class="field-row" id="ba-lfe-mode-row">
+                    <span class="field-label"><label for="ba-lfe-mode" data-i18n="label_lfe_mode">LFE channel:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="ba-lfe-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="ba-lfe-mode-tip" class="tip-bubble">The LFE tracks of the channel-order files stay silent. hesuvi.wav and hrir.wav have no LFE track.</span></span></span>
+                    <select id="ba-lfe-mode" aria-describedby="ba-lfe-mode-tip">
+                      <option value="none" selected data-i18n="option_lfe_mode_none">Silent</option>
+                      <option value="center" data-i18n="option_lfe_mode_center">Copy the center speaker</option>
+                      <option value="all" data-i18n="option_lfe_mode_all">Bass from every direction</option>
+                    </select>
                   </div>
                   <div class="field-row">
                     <label for="ba-resample" id="ba-resample-label" data-i18n="studio_adv_label_resample">Resample:</label>
@@ -957,8 +991,9 @@
                   <div class="field-row top">
                     <span data-i18n="studio_adv_label_channel_layout">Channel layout:</span>
                     <div class="adv-stack">
-                      <div class="check-row"><input type="checkbox" id="ba-remove-silent-channels"><label for="ba-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label></div>
-                      <p class="hint" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
+                      <div class="check-row"><input type="checkbox" id="ba-remove-silent-channels" aria-describedby="ba-remove-silent-channels-tip"><label for="ba-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="ba-remove-silent-channels-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="ba-remove-silent-channels-tip" class="tip-bubble" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</span></span></div>
+                      <!-- Shows only while the box is ticked (styles.css .silent-warning). -->
+                      <p class="silent-warning" id="ba-remove-silent-channels-warning" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
                     </div>
                   </div>
                 </fieldset>

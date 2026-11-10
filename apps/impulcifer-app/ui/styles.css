@@ -481,7 +481,15 @@ input[type="range"]:focus-visible::-moz-range-thumb {
    (app.js wireTips places and opens it). The visible circle is 16px; the
    button is 24px and a pseudo-element widens the hit area to 40×40 without
    growing the line: negative vertical margins keep the line box at 16px. */
+/* The label may wrap, but the button stays on its last word's line. The
+   label's end padding holds the button's place (2px gap + 24px button), so the
+   last word wraps together with that room; the button then moves back into it.
+   Without this the line breaks before the button and leaves it alone below. */
 .field-label { min-width: 0; }
+.field-label:has(> .tip) > :first-child { padding-right: 26px; }
+.field-label > .tip { margin-left: -24px; }
+/* Korean breaks between words, not inside one ('스피 / 커:'). */
+:root:lang(ko) .field-label > :first-child { word-break: keep-all; }
 
 .tip {
   display: inline-block;
@@ -547,6 +555,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 }
 
 .tip-bubble[data-open] { visibility: visible; opacity: 1; pointer-events: auto; }
+/* A bubble of two paragraphs (the LFE channel's). */
+.tip-para { display: block; }
+.tip-para + .tip-para { margin-top: 6px; }
 
 @media (prefers-reduced-motion: reduce) {
   .info-tip, .tip-bubble { transition: none; }
@@ -820,8 +831,7 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .adv-sub:disabled :is(input, select):disabled { opacity: 1; }
 
 .adv-panel .field-row { grid-template-columns: 150px minmax(0, 1fr); }
-.adv-panel .field-row.top { align-items: start; }
-.adv-sub-head { margin: 0; font-size: 14px; font-weight: 700; color: var(--fg-0); }
+.adv-panel .field-row.top { align-items: start; }.adv-sub-head { margin: 0; font-size: 14px; font-weight: 700; color: var(--fg-0); }
 .adv-sep { height: 1px; background: var(--line-soft); }
 .adv-stack { display: grid; gap: 4px; min-width: 0; }
 .adv-nested { display: grid; gap: 10px; margin-left: 24px; }
@@ -927,6 +937,15 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 
 .room-file { display: grid; gap: 10px; }
 .room-file[hidden] { display: none; }
+/* A single recording (ADR 0016): the speaker list runs under the browse
+   column too, so a long list of codes fits on one line, and its check result
+   sits right under it. Empty, the line takes no room. */
+.recording-speakers-row { align-items: start; }
+.recording-speakers-row > .field-label { padding-top: 8px; }
+.recording-speakers-row > .adv-stack { grid-column: 2 / -1; }
+.recording-status { margin: 0; font-size: 13px; color: var(--fg-2); line-height: 1.45; }
+.recording-status[data-state="empty"], .recording-status:empty { display: none; }
+.recording-status[data-state="error"] { color: var(--err); }
 .room-file-result { display: grid; gap: 8px; }
 .room-file-result:empty { display: none; }
 .room-file-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
@@ -1362,6 +1381,8 @@ input[type="range"]:focus-visible::-moz-range-thumb {
   .room-map select { min-width: 0; }
   .room-file-picks label > span { flex-basis: 100%; }
   .adv-panel .field-row, .adv-panel .adv-nested .field-row { grid-template-columns: 1fr; }
+  .recording-speakers-row > .adv-stack { grid-column: auto; }
+  .recording-speakers-row > .field-label { padding-top: 0; }
   .file-grid { grid-template-columns: 1fr; }
   .ch-grid { grid-template-columns: repeat(3, max-content); }
 }
@@ -1418,7 +1439,80 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .layout-force-pick { display: grid; gap: 4px; margin-top: 4px; }
 .layout-force-caption { margin: 4px 0 2px; color: var(--fg-1); }
 .layout-files-row { align-items: start; }
-.layout-files-row > label { padding-top: 8px; }
+.layout-files-row > :is(label, .field-label) { padding-top: 8px; }
+
+/* Removing silent channels moves tracks, so its warning stands under the box
+   while it is ticked; unticked, the same text waits in the box's tooltip. The
+   indent puts the line under the label (16px box + 8px gap). */
+.silent-warning {
+  display: none;
+  margin: 0 0 0 24px;
+  padding: 6px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--fg-0);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.check-row:has(> input:checked) + .silent-warning { display: block; }
+
+/* ------------------------------------- virtual room tuning 2 groups (ADR 0008)
+   The tuning 2 rows sit under five headings (index.html #dis-room). A heading
+   opens its group with a hairline above it; the rows keep the card's row gap.
+   The band's two ends and MIMO's two limits share a line where the card is
+   wide enough, and MIMO's settings are indented under its checkbox. */
+#dis-room .disclosure-body { container: room-body / inline-size; }
+
+.t2-head {
+  margin: 6px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--fg-0);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.t2-pair { display: grid; gap: 10px; min-width: 0; }
+
+/* 1px rule + 15px + 8px = 24px in; the 126px label column keeps the fields
+   in line with the 150px column of the rows above. */
+.t2-nested {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin-left: 8px;
+  padding-left: 15px;
+  border-left: 1px solid var(--line);
+}
+.t2-nested .field-row { grid-template-columns: 126px minmax(0, 1fr) auto; }
+
+/* Under a typed upper end the basis and the reach are disabled; their labels dim with them. */
+#dis-room .field-row:has(> select:disabled) > .field-label > label { color: var(--fg-3); }
+
+.t2-facts-hint { margin: -4px 0 0; font-size: 12px; }
+
+/* The microphone calibration and target curve rows serve every mode; in tuning 2
+   a hairline keeps them from reading as part of the last group. */
+#dis-room .disclosure-body:has(> #bf-room-tuning2-head-speakers:not([hidden])) > .field-row:has(#bf-mic-calibration) {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+@container room-body (min-width: 420px) {
+  /* Under the fields, not under the labels. */
+  .t2-facts-hint { margin-left: 160px; }
+}
+
+@container room-body (min-width: 600px) {
+  .t2-pair { grid-template-columns: max-content minmax(0, max-content); column-gap: 28px; }
+  .t2-pair > .field-row { grid-template-columns: 150px auto; }
+  .t2-nested .t2-pair > .field-row:first-child { grid-template-columns: 126px auto; }
+  /* The second field of a pair has no column to line up with; a long label wraps. */
+  .t2-pair > .field-row + .field-row { grid-template-columns: minmax(0, max-content) auto; }
+}
 
 /* Head-turn measurement: step chips, a top-view diagram and the step's text. */
 .gd-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; padding: 0; list-style: none; }

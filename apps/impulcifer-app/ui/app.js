@@ -149,6 +149,9 @@ function applyStrings() {
   renderEq();
   for (const purpose of MFILE_PURPOSES) renderMfile(purpose);
   refreshStudioAdvanced();
+  // Stable's tooltips that follow a choice (Studio's are set by refreshStudioAdvanced).
+  updateLayoutForce("bf");
+  updateLfeHint("bf");
   updateItdHint("bf");
   updateItdHint("ba");
   if (state.lastJob?.kind === "brir" && state.lastJob.status === "succeeded") renderAlignment(state.lastJob.result?.alignment ?? null);
@@ -267,6 +270,20 @@ function errorSentence(error) {
       return fmt(t("message_play_file_not_exist"), { file: path });
     case "Another job is already running.":
       return t("error_job_busy");
+    case "The recording does not hold the listed number of sweeps.":
+      if (details.found === 0) return t("error_brir_recording_none");
+      return fmt(t("error_brir_recording_count"), {
+        found: details.found,
+        listed: details.listed,
+        starts: Array.isArray(details.starts_seconds)
+          ? details.starts_seconds.map((seconds) => Number(seconds).toFixed(2)).join(", ") : "",
+      });
+    case "The test signal does not match the recording file.":
+      return fmt(t("error_brir_recording_test_signal"), { read: details.read, listed: details.listed });
+    case "The sweep file is not a logarithmic sweep.":
+      return t("error_brir_recording_sweep_file");
+    case "The sweep file and the recording have different sampling rates.":
+      return fmt(t("error_brir_recording_sweep_rate"), { sweep: details.sweep_fs, recording: details.recording_fs });
     case "The test signal does not match the headphone recording.": {
       /** @param {unknown} value */
       const seconds = (value) => Number(value).toFixed(2);
@@ -326,6 +343,10 @@ function updateStartControls(job) {
   /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("[data-start]")).forEach((button) => {
     button.disabled = busy;
   });
+  const recordingProblem = brirRecordingProblem();
+  const generate = el("btn-generate-brir", HTMLButtonElement);
+  generate.disabled = busy || recordingProblem !== null;
+  generate.title = recordingProblem || "";
   el("btn-cancel-brir", HTMLButtonElement).disabled = !active || !job?.cancellable;
   // Studio cancels a recording from the page header; Stable from its job dialog.
   el("btn-cancel-recording", HTMLButtonElement).hidden =
@@ -2074,7 +2095,7 @@ function scheduleTestSignalCheck(delay = 250) {
     try {
       const response = await api().detect_sweep(dir, {
         test_signal: file,
-        speakers: !mfileMode("brir"),
+        speakers: val("bf-brir-source") === "folder",
         headphone_file: isOpen("dis-headphone") && !mfileMode("headphones") ? val("bf-headphone-file") : null,
       });
       report = response.ok ? response.data.test_signal : undefined;
@@ -2440,6 +2461,31 @@ function roomRangeHint(range) {
   }
 }
 
+/* The room volume and Schroeder rows serve every mode. Tuning 2 shows them in
+   its correction-band group, right under the reach they feed; the other modes
+   keep them where the markup puts them. Moving the nodes, not reordering them
+   with styles, keeps the tab order the same as the order on screen. A row moves
+   only when it is out of place, so typing in it (its input event comes here)
+   never re-inserts the focused field. */
+/** @type {Comment | null} */
+let roomFactsHome = null;
+
+/** @param {boolean} tuning2 */
+function placeRoomFacts(tuning2) {
+  const volume = $("bf-room-volume-row");
+  const schroeder = $("bf-schroeder-freq-row");
+  if (!roomFactsHome) {
+    roomFactsHome = document.createComment("room volume and Schroeder rows outside tuning 2");
+    volume.before(roomFactsHome);
+  }
+  const hint = $("bf-room-tuning2-high-volume-hint");
+  if (tuning2) {
+    if (volume.nextElementSibling !== schroeder || schroeder.nextElementSibling !== hint) hint.before(volume, schroeder);
+  } else if (roomFactsHome.nextSibling !== volume) {
+    roomFactsHome.after(volume, schroeder);
+  }
+}
+
 /* Applies the mode, the range and the timing limit together: which rows
    show, the delay's lock, the readout and the mode and range tooltips. */
 function updateRoomRows() {
@@ -2471,10 +2517,19 @@ function updateRoomRows() {
     "bf-room-tuning2-mode-row": tuning2,
     "bf-room-tuning2-latency-row": tuning2 && tuning2Filter() === "custom",
     "bf-room-tuning2-max-boost-row": tuning2,
+    // Tuning 2's group headings and the wrappers that pair or indent its rows.
+    "bf-room-tuning2-head-filter": tuning2,
+    "bf-room-tuning2-head-band": tuning2,
+    "bf-room-tuning2-head-protect": tuning2,
+    "bf-room-tuning2-head-timing": tuning2,
+    "bf-room-tuning2-head-speakers": tuning2,
+    "bf-room-tuning2-band-pair": tuning2,
+    "bf-room-tuning2-mimo-detail": tuning2 && mimo,
     "bf-room-tuning2-low-row": tuning2,
     "bf-room-tuning2-high-row": tuning2,
-    "bf-room-tuning2-high-basis-row": tuning2 && roomFacts,
-    "bf-room-tuning2-high-transition-row": tuning2 && roomFacts,
+    // A typed upper end leaves the basis and the reach nothing to do: they stay in view, disabled.
+    "bf-room-tuning2-high-basis-row": tuning2,
+    "bf-room-tuning2-high-transition-row": tuning2,
     "bf-room-tuning2-high-volume-hint": tuning2 && roomFacts
       && (val("bf-room-tuning2-high-basis") === "lenient" || val("bf-room-tuning2-high-transition") !== "1")
       && val("bf-room-volume").trim() === "" && val("bf-schroeder-freq").trim() === "",
@@ -2493,6 +2548,10 @@ function updateRoomRows() {
     "bf-room-tuning2-mimo-ear-guard-row": tuning2 && mimo,
   };
   for (const [id, shown] of Object.entries(rows)) $(id).hidden = !shown;
+  placeRoomFacts(tuning2);
+  for (const id of ["bf-room-tuning2-high-basis", "bf-room-tuning2-high-transition"]) {
+    el(id, HTMLSelectElement).disabled = tuning2 && !roomFacts;
+  }
   for (const id of ["bf-room-tuning2-lf-align", "bf-room-tuning2-hf-phase"]) {
     el(id, HTMLInputElement).disabled = tuning2Filter() === "zero";
   }
@@ -2665,6 +2724,11 @@ function gatherBrirPayload() {
     do_equalization: isOpen("dis-eq"),
   };
   if (mfileMode("brir")) addMfileArgs(args, "brir");
+  if (val("bf-brir-source") === "recording") {
+    args.brir_recording_file = val("bf-brir-recording-file");
+    args.brir_recording_speakers = parseRecordingSpeakers(val("bf-brir-recording-speakers")).entries.join(",");
+    if (val("bf-brir-recording-sweep-source") === "file") args.brir_recording_sweep = val("bf-brir-recording-sweep");
+  }
   if (isOpen("dis-room")) {
     const mode = roomMode();
     args.room_target = val("bf-room-target") || null;
@@ -2870,13 +2934,20 @@ function renderAlignment(report) {
   block.hidden = false;
 }
 
-/* ADR 0013: each LFE choice shows its own explanation. */
+/* ADR 0013: each LFE choice has its own explanation, in the row's tooltip. A
+   second paragraph says that a measured subwoofer (assigned to LFE in a BRIR
+   measurement file) is used whatever the choice. */
 /** @param {string} p */
 function updateLfeHint(p) {
-  const mode = val(`${p}-lfe-mode`) || "none";
-  for (const node of $(`${p}-lfe-mode-row`).querySelectorAll("[data-lfe-mode]")) {
-    if (node instanceof HTMLElement) node.hidden = node.dataset.lfeMode !== mode;
-  }
+  const mode = val(`${p}-lfe-mode`);
+  const choice = document.createElement("span");
+  choice.className = "tip-para";
+  choice.textContent = mode === "center" ? t("hint_lfe_mode_center")
+    : mode === "all" ? t("hint_lfe_mode_all") : t("hint_lfe_mode_none");
+  const measured = document.createElement("span");
+  measured.className = "tip-para";
+  measured.textContent = t("hint_lfe_measured");
+  $(`${p}-lfe-mode-tip`).replaceChildren(choice, measured);
 }
 
 /* The seven formats a channel-order file can be forced for, in page order:
@@ -2899,8 +2970,8 @@ function layoutFilesValue(p) {
   return forced.length ? forced.join(",") : "auto";
 }
 
-/* Each mode shows its own explanation, and the format list opens only when
-   the user asks for formats with speakers missing. */
+/* Each mode has its own explanation in the row's tooltip, and the format list
+   opens only when the user asks for formats with speakers missing. */
 /** @param {string} p */
 function updateLayoutForce(p) {
   const mode = val(`${p}-layout-files`);
@@ -2908,6 +2979,8 @@ function updateLayoutForce(p) {
     if (node instanceof HTMLElement) node.hidden = node.dataset.layoutMode !== mode;
   }
   for (const box of layoutForceBoxes(p)) box.disabled = mode !== "listed";
+  $(`${p}-layout-files-tip`).textContent = mode === "listed" ? t("hint_layout_files")
+    : mode === "none" ? t("hint_layout_files_none") : t("hint_layout_files_auto");
 }
 
 /** @param {ProcessingRequest} args @param {string} p */
@@ -3573,6 +3646,8 @@ function mfileSlotSelect(purpose, key, labelText, disabled) {
   select.setAttribute("aria-label", `${labelText}: ${t("room_file_col_speaker")}`);
   select.add(mfileOption("", t("option_room_file_unused")));
   for (const code of mfileSlotCodes()) select.add(mfileOption(code, code));
+  // A measured subwoofer becomes the LFE track of the channel-order files (BRIR only).
+  if (purpose === "brir") for (const code of ["LFE", "LFE2"]) select.add(mfileOption(code, code));
   select.value = state.mfiles[purpose].choices?.rows[key]?.slot || "";
   select.disabled = disabled;
   return select;
@@ -3626,7 +3701,7 @@ function renderMfileDiracRow(purpose, speaker) {
   if (speaker.subwoofer) {
     const note = document.createElement("span");
     note.className = "room-map-note";
-    note.textContent = t("room_file_subwoofer");
+    note.textContent = purpose === "brir" ? t("brir_file_subwoofer") : t("room_file_subwoofer");
     name.append(note);
   }
   const slot = document.createElement("td");
@@ -3692,8 +3767,74 @@ function mfileTableHead(headings) {
   return head;
 }
 
+/* ADR 0016: preserve playback order and case. X alone may repeat; the first
+   invalid entry wins over the missing-FL check, as in the service. Counts
+   describe the valid entries (LFE channels are not speakers). */
+/** @param {string} text
+ * @returns {{ entries: string[]; speakers: number; lfe: number; skipped: number; problem: string | null }} */
+function parseRecordingSpeakers(text) {
+  const entries = text.trim() ? text.split(",").map((entry) => entry.trim()) : [];
+  const slots = new Set(mfileSlotCodes());
+  const seen = new Set();
+  let speakers = 0, lfe = 0, skipped = 0;
+  /** @type {string | null} */
+  let problem = entries.length ? null : t("brir_recording_choose");
+  for (const entry of entries) {
+    if (!entry) { problem = t("brir_recording_error_empty"); break; }
+    if (entry === "X") { skipped += 1; continue; }
+    if (!slots.has(entry) && entry !== "LFE" && entry !== "LFE2") {
+      problem = fmt(t("brir_recording_error_unknown"), { entry });
+      break;
+    }
+    if (seen.has(entry)) {
+      problem = fmt(t("brir_recording_error_duplicate"), { entry });
+      break;
+    }
+    seen.add(entry);
+    if (entry === "LFE" || entry === "LFE2") lfe += 1;
+    else speakers += 1;
+  }
+  if (!problem && !seen.has("FL")) problem = t("brir_recording_error_needs_fl");
+  return { entries, speakers, lfe, skipped, problem };
+}
+
+/** The first reason a single-recording job cannot start; inactive sources never block. */
+function brirRecordingProblem() {
+  if (val("bf-brir-source") !== "recording") return null;
+  const text = val("bf-brir-recording-speakers");
+  const { problem } = parseRecordingSpeakers(text);
+  if (text && problem) return problem;
+  if (!val("bf-brir-recording-file") || !text) return t("brir_recording_choose");
+  if (val("bf-brir-recording-sweep-source") === "file" && !val("bf-brir-recording-sweep")) {
+    return t("brir_recording_choose_sweep");
+  }
+  return null;
+}
+
+/* List errors take priority over missing files. Missing input is a neutral
+   prompt, not an error; outside recording mode the line stays empty. */
+function updateBrirRecordingStatus() {
+  const active = val("bf-brir-source") === "recording";
+  const text = val("bf-brir-recording-speakers");
+  const parsed = parseRecordingSpeakers(text);
+  const status = $("bf-brir-recording-status");
+  status.dataset.state = !active ? "empty" : text && parsed.problem ? "error" : "ok";
+  status.textContent = !active ? "" : brirRecordingProblem() || fmt(t("brir_recording_status"), parsed);
+  updateStartControls(state.lastJob);
+}
+
+/* ADR 0016: the BRIR measurements' third source, one recording with a sweep
+   per speaker. Its block shows for that source only, and the sweep file row
+   only when the recording's sweep is another program's file. */
+function updateBrirRecordingRows() {
+  $("bf-brir-recording-block").hidden = val("bf-brir-source") !== "recording";
+  $("bf-brir-recording-sweep-row").hidden = val("bf-brir-recording-sweep-source") !== "file";
+  updateBrirRecordingStatus();
+}
+
 /** @param {MeasurementPurpose} purpose */
 function renderMfile(purpose) {
+  if (purpose === "brir") updateBrirRecordingRows();
   const ids = MFILE[purpose];
   const fileMode = mfileMode(purpose);
   $(`${ids.prefix}-block`).hidden = !fileMode;
@@ -4093,6 +4234,11 @@ function wireEvents() {
     el(id, HTMLSelectElement).addEventListener("change", updateRoomRows);
   }
   el("bf-room-tuning2-mimo", HTMLInputElement).addEventListener("change", updateRoomRows);
+  // The source select also renders the file block (below); this one shows the sweep file row.
+  el("bf-brir-recording-sweep-source", HTMLSelectElement).addEventListener("change", updateBrirRecordingRows);
+  for (const id of ["bf-brir-recording-file", "bf-brir-recording-speakers", "bf-brir-recording-sweep"]) {
+    el(id, HTMLInputElement).addEventListener("input", updateBrirRecordingStatus);
+  }
   el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
   for (const purpose of MFILE_PURPOSES) {
     const ids = MFILE[purpose];
@@ -4146,6 +4292,11 @@ function wireEvents() {
   }
 
   el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () => {
+    if (brirRecordingProblem()) {
+      updateBrirRecordingStatus();
+      $("bf-brir-recording-block").scrollIntoView({ block: "center" });
+      return;
+    }
     const blocked = MFILE_PURPOSES.find((purpose) => mfileActive(purpose) && mfileBlocked(purpose));
     if (blocked) {
       renderMfile(blocked);
