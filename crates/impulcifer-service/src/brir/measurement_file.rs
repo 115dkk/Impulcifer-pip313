@@ -8,7 +8,10 @@ use impulcifer_dsp::{
 };
 use impulcifer_io::external::{
     ExternalFile, ExternalFormat, Skip,
-    assign::{EarSide, Purpose, check_assignments, format_map_for, parse_map_for, slot_for_label},
+    assign::{
+        EarSide, Purpose, auto_assign_for, check_assignments, format_map_for, parse_map_for,
+        slot_for_label,
+    },
     read_external,
 };
 use impulcifer_types::layouts::SLOTS;
@@ -60,7 +63,7 @@ pub(crate) fn load_brir(
     map: &str,
     fs: u32,
     events: &mut dyn BrirEvents,
-) -> Result<(Hrir, ExternalFormat), BrirError> {
+) -> Result<(Hrir, Vec<SpeakerIrs>, ExternalFormat), BrirError> {
     let file = read(path)?;
     let mapping = parse_map_for(&file, map, Purpose::Brir)
         .map_err(|error| BrirError::Unsupported(error.to_string()))?;
@@ -96,17 +99,13 @@ pub(crate) fn load_brir(
             "measurements do not overlap in time".into(),
         ));
     }
-    let mut hrir = Hrir {
-        fs: file.sample_rate,
-        speakers: Vec::new(),
-    };
-    for slot in SLOTS.iter().map(|slot| slot.code) {
+    let build_pair = |slot: &'static str| {
         let selected: Vec<_> = responses
             .iter()
             .filter(|(assignment, _)| assignment.slot == slot)
             .collect();
         if selected.is_empty() {
-            continue;
+            return None;
         }
         let mut speaker = SpeakerIrs {
             speaker: slot.into(),
@@ -124,10 +123,22 @@ pub(crate) fn load_brir(
                 EarSide::Right => speaker.right = ir,
             }
         }
-        hrir.speakers.push(speaker);
-    }
+        Some(speaker)
+    };
+    let mut hrir = Hrir {
+        fs: file.sample_rate,
+        speakers: SLOTS
+            .iter()
+            .filter_map(|slot| build_pair(slot.code))
+            .collect(),
+    };
+    let mut lfe_hrir = Hrir {
+        fs: file.sample_rate,
+        speakers: ["LFE", "LFE2"].into_iter().filter_map(build_pair).collect(),
+    };
     if hrir.fs != fs {
         hrir.resample(fs)?;
+        lfe_hrir.resample(fs)?;
     }
     events.log(
         "info",
@@ -141,8 +152,15 @@ pub(crate) fn load_brir(
             "count": hrir.speakers.len(),
         }),
     );
+    if !lfe_hrir.speakers.is_empty() {
+        events.log(
+            "info",
+            "cli_brir_measurement_file_lfe",
+            json!({"list":lfe_hrir.speakers.iter().map(|speaker| speaker.speaker.as_str()).collect::<Vec<_>>().join(", ")}),
+        );
+    }
     log_itd(&hrir, events);
-    Ok((hrir, file.format))
+    Ok((hrir, lfe_hrir.speakers, file.format))
 }
 
 pub(crate) fn load_headphones(
@@ -242,7 +260,7 @@ fn build_direct(
     hrir
 }
 
-fn log_itd(hrir: &Hrir, events: &mut dyn BrirEvents) {
+pub(crate) fn log_itd(hrir: &Hrir, events: &mut dyn BrirEvents) {
     let mut list = Vec::new();
     let mut off_median = Vec::new();
     for speaker in &hrir.speakers {
@@ -302,15 +320,23 @@ pub fn inspect(request: &Value) -> Result<Value, Value> {
     let path = std::path::absolute(Path::new(path)).map_err(|error| invalid(error.to_string()))?;
     let file = read(&path).map_err(|error| error.envelope())?;
     let mapping = parse_map_for(&file, map, purpose).map_err(|error| invalid(error.to_string()))?;
+    let automatic = auto_assign_for(&file, purpose);
     let mut used = HashSet::new();
     let speakers: Vec<_> = file
         .speakers
         .iter()
         .map(|speaker| {
-            let slot = (!speaker.subwoofer)
-                .then(|| slot_for_label(&speaker.name))
-                .flatten()
-                .filter(|slot| used.insert(*slot));
+            let slot = if speaker.subwoofer && purpose == Purpose::Brir {
+                let prefix = format!("{}@", speaker.index);
+                automatic
+                    .iter()
+                    .find(|assignment| assignment.id.starts_with(&prefix))
+                    .map(|assignment| assignment.slot)
+            } else if speaker.subwoofer {
+                None
+            } else {
+                slot_for_label(&speaker.name).filter(|slot| used.insert(*slot))
+            };
             json!({"index":speaker.index,"name":speaker.name,"subwoofer":speaker.subwoofer,"slot":slot})
         })
         .collect();

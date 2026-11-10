@@ -3,7 +3,9 @@ mod brir_support;
 #[path = "support/room_measurement.rs"]
 mod builder;
 use brir_support::*;
+use impulcifer_io::read_wav;
 use impulcifer_jobs::registry::JobRegistry;
+use impulcifer_types::{job::JobStatus, layouts::layout};
 use serde_json::{Value, json};
 
 fn inspect(request: Value) -> Value {
@@ -119,4 +121,94 @@ fn inspect_room_measurements_reports_a_dirac_project() {
         .map(|m| m["id"].as_str().unwrap())
         .collect();
     assert_eq!(ids, ["1@1", "2@1", "3@1", "1@2", "2@2", "3@2"]);
+
+    let brir = inspect(json!({"path":path,"purpose":"brir"}));
+    assert_eq!(brir["ok"], true, "{brir}");
+    assert_eq!(brir["data"]["speakers"][2]["slot"], "LFE");
+    assert!(
+        brir["data"]["map"]
+            .as_str()
+            .unwrap()
+            .ends_with("LFE.left=3@1,LFE.right=3@2")
+    );
+}
+
+#[test]
+fn brir_measurement_file_reads_subwoofers_as_lfe() {
+    fn run_case(include_lfe: bool) -> (Temp, impulcifer_jobs::registry::PollResult) {
+        let temp = Temp::demo();
+        let path = temp.0.join("ears.liveproject");
+        std::fs::write(&path, builder::dirac_project(48_000)).unwrap();
+        let map = if include_lfe {
+            "FL.left=1@1,FL.right=1@2,LFE.left=3@1,LFE.right=3@2"
+        } else {
+            "FL.left=1@1,FL.right=1@2"
+        };
+        let jobs = JobRegistry::new();
+        let result = service(&temp, jobs.clone()).call(
+            "start_brir",
+            vec![json!({
+                "dir_path":temp.0,
+                "brir_measurement_file":path,
+                "brir_measurement_map":map,
+                "layout_files":"9.1",
+                "do_room_correction":false,
+                "do_headphone_compensation":false,
+                "do_equalization":false
+            })],
+        );
+        assert_eq!(result["ok"], true, "{result}");
+        let poll = wait(&jobs, result["data"]["job"]["job_id"].as_str().unwrap());
+        assert_eq!(
+            poll.job.status,
+            JobStatus::Succeeded,
+            "{:?}",
+            poll.job.error
+        );
+        (temp, poll)
+    }
+
+    let (measured, poll) = run_case(true);
+    let format = layout("9.1").unwrap();
+    let lfe = format
+        .channels
+        .iter()
+        .position(|channel| channel.slot == "LFE")
+        .unwrap();
+    let wav = read_wav(&measured.0.join(format.file_name)).unwrap();
+    for track in [&wav.tracks[2 * lfe], &wav.tracks[2 * lfe + 1]] {
+        assert!(track.iter().any(|sample| *sample != 0.0));
+    }
+    let lfe_loaded = poll
+        .events
+        .iter()
+        .find(|event| event.payload["key"] == "cli_brir_measurement_file_lfe")
+        .unwrap();
+    assert_eq!(
+        lfe_loaded.payload["message"],
+        "Measured subwoofer channels: LFE"
+    );
+    let lfe_filled = poll
+        .events
+        .iter()
+        .find(|event| event.payload["key"] == "cli_info_lfe_filled")
+        .unwrap();
+    assert!(
+        lfe_filled.payload["message"]
+            .as_str()
+            .unwrap()
+            .contains("the measured subwoofer")
+    );
+    let readme = std::fs::read_to_string(measured.0.join("README.md")).unwrap();
+    assert!(
+        readme.contains("The LFE tracks use the measured subwoofer."),
+        "{readme}"
+    );
+    let measured_hesuvi = std::fs::read(measured.0.join("hesuvi.wav")).unwrap();
+
+    let (without, _) = run_case(false);
+    assert_eq!(
+        measured_hesuvi,
+        std::fs::read(without.0.join("hesuvi.wav")).unwrap()
+    );
 }

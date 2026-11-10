@@ -458,7 +458,7 @@ const CANONICAL_IPC: [&str; 26] = [
     "select_directory",
     "open_url",
 ];
-const CANONICAL_CONFIG: [&str; 63] = [
+const CANONICAL_CONFIG: [&str; 66] = [
     "dir_path",
     "test_signal",
     "room_target",
@@ -522,6 +522,9 @@ const CANONICAL_CONFIG: [&str; 63] = [
     "vbass_freq",
     "vbass_hp",
     "vbass_polarity",
+    "brir_recording_file",
+    "brir_recording_speakers",
+    "brir_recording_sweep",
 ];
 const CANONICAL_STAGES: [&str; 26] = [
     "estimator",

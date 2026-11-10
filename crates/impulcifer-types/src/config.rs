@@ -24,6 +24,9 @@ pub struct ProcessingConfig {
     pub room_measurement_map: Option<String>,
     pub brir_measurement_file: Option<String>,
     pub brir_measurement_map: Option<String>,
+    pub brir_recording_file: Option<String>,
+    pub brir_recording_speakers: Option<String>,
+    pub brir_recording_sweep: Option<String>,
     pub headphone_measurement_file: Option<String>,
     pub headphone_measurement_map: Option<String>,
     pub headphone_compensation_file: Option<String>,
@@ -109,6 +112,9 @@ impl Default for ProcessingConfig {
             room_measurement_map: None,
             brir_measurement_file: None,
             brir_measurement_map: None,
+            brir_recording_file: None,
+            brir_recording_speakers: None,
+            brir_recording_sweep: None,
             headphone_measurement_file: None,
             headphone_measurement_map: None,
             headphone_compensation_file: None,
@@ -217,7 +223,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 40] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 43] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -245,6 +251,9 @@ pub const EXTENSION_FIELD_NAMES: [&str; 40] = [
     "room_measurement_map",
     "brir_measurement_file",
     "brir_measurement_map",
+    "brir_recording_file",
+    "brir_recording_speakers",
+    "brir_recording_sweep",
     "headphone_measurement_file",
     "headphone_measurement_map",
     "room_tuning2_dip_limit",
@@ -270,6 +279,34 @@ fn string_or_number<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result
 
 fn trimmed_string<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
     String::deserialize(deserializer).map(|value| value.trim().to_owned())
+}
+
+/// Parse the playback-order list of a single BRIR recording.
+///
+/// Speaker slot codes are case-sensitive. `LFE` and `LFE2` name measured
+/// subwoofers, while `X` may appear more than once to skip recorded sweeps.
+pub fn parse_recording_speakers(value: &str) -> Result<Vec<String>, String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut entries = Vec::new();
+    for (index, raw) in value.split(',').enumerate() {
+        let entry = raw.trim();
+        if entry.is_empty() {
+            return Err(format!("recording speaker entry {} is empty", index + 1));
+        }
+        let known = crate::layouts::SLOTS.iter().any(|slot| slot.code == entry)
+            || matches!(entry, "LFE" | "LFE2" | "X");
+        if !known {
+            return Err(format!("unknown recording speaker entry: {entry}"));
+        }
+        if entry != "X" && !seen.insert(entry.to_owned()) {
+            return Err(format!("recording speaker entry is listed twice: {entry}"));
+        }
+        entries.push(entry.to_owned());
+    }
+    if !entries.iter().any(|entry| entry == "FL") {
+        return Err("recording speaker list must contain FL".into());
+    }
+    Ok(entries)
 }
 
 fn parse_tuning2_bands(value: &str) -> Result<Vec<(f64, f64)>, &'static str> {
@@ -436,6 +473,44 @@ impl ProcessingConfig {
             field: field.into(),
             reason: reason.into(),
         };
+        let set = |value: &Option<String>| {
+            value
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+        };
+        let recording_file = set(&self.brir_recording_file);
+        if recording_file && set(&self.brir_measurement_file) {
+            return Err(invalid(
+                "brir_recording_file",
+                "cannot be used with brir_measurement_file",
+            ));
+        }
+        if recording_file && !set(&self.brir_recording_speakers) {
+            return Err(invalid(
+                "brir_recording_speakers",
+                "is required with brir_recording_file",
+            ));
+        }
+        if !recording_file && set(&self.brir_recording_speakers) {
+            return Err(invalid(
+                "brir_recording_speakers",
+                "requires brir_recording_file",
+            ));
+        }
+        if !recording_file && set(&self.brir_recording_sweep) {
+            return Err(invalid(
+                "brir_recording_sweep",
+                "requires brir_recording_file",
+            ));
+        }
+        if recording_file {
+            parse_recording_speakers(
+                self.brir_recording_speakers
+                    .as_deref()
+                    .expect("checked as set"),
+            )
+            .map_err(|reason| invalid("brir_recording_speakers", &reason))?;
+        }
         if !["legacy", "modes", "schroeder", "extreme"].contains(&self.room_range.as_str()) {
             return Err(invalid(
                 "room_range",

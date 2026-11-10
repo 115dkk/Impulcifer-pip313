@@ -54,6 +54,9 @@ pub(crate) fn validate(value: &Value) -> Result<Request, Value> {
         "room_mic_calibration",
         "room_measurement_file",
         "brir_measurement_file",
+        "brir_recording_file",
+        "brir_recording_speakers",
+        "brir_recording_sweep",
         "headphone_measurement_file",
         "headphone_compensation_file",
     ] {
@@ -151,14 +154,22 @@ pub(crate) fn validate(value: &Value) -> Result<Request, Value> {
                     false,
                 )
             })?;
-            candidate.validate_room_options().map_err(|e| {
-                ipc::error(
-                    ErrorCode::InvalidRequest,
-                    e.to_string(),
-                    json!({"field":name}),
-                    false,
-                )
-            })?;
+            if ![
+                "brir_recording_file",
+                "brir_recording_speakers",
+                "brir_recording_sweep",
+            ]
+            .contains(&name)
+            {
+                candidate.validate_room_options().map_err(|e| {
+                    ipc::error(
+                        ErrorCode::InvalidRequest,
+                        e.to_string(),
+                        json!({"field":name}),
+                        false,
+                    )
+                })?;
+            }
         }
     }
     let config = ProcessingConfig::from_kwargs(&params).map_err(|e| invalid(e.to_string()))?;

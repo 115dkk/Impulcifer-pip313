@@ -375,13 +375,26 @@ const SPACING_TOLERANCE: f64 = 0.15;
 pub(crate) fn mismatched_sweep(path: &Path, speakers: usize, fs: u32, sweep: usize) -> Option<f64> {
     let header = wav_header(path).ok()?;
     let pairs = usize::from(header.channels / 2);
-    if header.rate != fs || pairs == 0 || speakers == 0 {
+    if pairs == 0 || speakers == 0 {
         return None;
     }
     let columns = ((speakers as f64 / pairs as f64).round_ties_even() as usize).max(1);
+    mismatched_sweep_columns(path, &header, columns, fs, sweep)
+}
+
+fn mismatched_sweep_columns(
+    path: &Path,
+    header: &WavHeader,
+    columns: usize,
+    fs: u32,
+    sweep: usize,
+) -> Option<f64> {
+    if header.rate != fs || columns == 0 {
+        return None;
+    }
     let tolerance = GRID_TOLERANCE * grid_unit(fs);
     let fits = |estimate: f64| (estimate - sweep as f64).abs() <= tolerance;
-    let length = length_estimate(&header, columns);
+    let length = length_estimate(header, columns);
     if fits(length) {
         return None;
     }
@@ -407,6 +420,22 @@ pub struct SweepMismatch {
     pub file: String,
     pub seconds: f64,
 }
+
+/// A configured single recording that was not made with the job's test signal.
+pub(crate) fn recording_test_signal_mismatch(
+    path: &Path,
+    entries: usize,
+    fs: u32,
+    sweep: usize,
+) -> Option<SweepMismatch> {
+    let header = wav_header(path).ok()?;
+    let samples = mismatched_sweep_columns(path, &header, entries, fs, sweep)?;
+    Some(SweepMismatch {
+        file: path.file_name()?.to_string_lossy().into_owned(),
+        seconds: samples / f64::from(fs),
+    })
+}
+
 /// Recordings of a measurement folder that were not made with the test signal
 /// (`sweep` samples at `fs`): the speaker recordings when `speakers`, the
 /// headphone recording the job would read when `headphones`.
@@ -468,6 +497,28 @@ pub fn test_signal_check(
 pub fn detect_sweep_parameters(dir: &Path) -> Result<Option<SweepDetection>, BrirError> {
     detect_with_reader(dir, read_wav)
 }
+
+/// Apply the folder detector's per-file rule to a recording whose speaker list
+/// comes from configuration rather than its file name.
+pub(crate) fn detect_recording_file(path: &Path, entries: usize) -> Option<SweepDetection> {
+    let (fs, m, sweep_samples, deviation, n_segments) =
+        recording_grid(path, entries, &mut read_wav)?;
+    Some(SweepDetection {
+        fs,
+        m,
+        sweep_samples,
+        n_segments,
+        speakers: Vec::new(),
+        confidence: if deviation <= GRID_TOLERANCE {
+            "high"
+        } else {
+            "low"
+        },
+        deviation,
+        source_files: vec![path.file_name()?.to_string_lossy().into_owned()],
+    })
+}
+
 fn detect_with_reader(
     dir: &Path,
     mut decode: impl FnMut(&Path) -> Result<impulcifer_io::wav::Wav, IoError>,
@@ -642,6 +693,19 @@ mod tests {
         .unwrap();
         assert_eq!(mismatched_sweep(&path, 2, rate, default), None);
         assert_eq!(mismatched_sweep(&path, 2, rate, long), Some(default as f64));
+        // A configured single recording always reads its first two tracks and
+        // therefore uses the list's entry count even when the WAV has extras.
+        impulcifer_io::write_wav(&path, rate, &vec![vec![0.0; recorded(default)]; 4], 16).unwrap();
+        assert_eq!(
+            recording_test_signal_mismatch(&path, 2, rate, default),
+            None
+        );
+        assert_eq!(
+            recording_test_signal_mismatch(&path, 2, rate, long)
+                .unwrap()
+                .seconds,
+            default as f64 / f64::from(rate)
+        );
     }
 
     #[test]

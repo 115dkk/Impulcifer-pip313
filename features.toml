@@ -1033,6 +1033,38 @@ tests = ["impulcifer-dsp::lfe_center_copies_fc_or_the_front_phantom", "impulcife
 note = "ADR 0013: layout LFE tracks can use FC/front phantom or the 120 Hz low-pass power average of measured speakers; defaults remain silent"
 
 [[feature]]
+id = "config.brir_recording_file"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_recording_file_options_parse", "impulcifer-service::recording_file_errors_name_the_cause"]
+
+[[feature]]
+id = "config.brir_recording_speakers"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::recording_speaker_list_parses_and_rejects", "impulcifer-cli::cli_recording_file_options_parse"]
+
+[[feature]]
+id = "config.brir_recording_sweep"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-cli::cli_recording_file_options_parse", "impulcifer-service::recording_file_with_sweep_reads_a_foreign_sequence"]
+
+[[feature]]
+id = "input.brir_recording_file"
+kind = "input"
+status = "implemented"
+tests = ["impulcifer-service::recording_file_without_sweep_matches_the_folder_recording", "impulcifer-service::recording_file_with_sweep_reads_a_foreign_sequence", "impulcifer-dsp::import_finds_irregular_sweeps_and_recovers_the_responses"]
+note = "ADR 0016: one two-ear WAV can replace the folder's speaker recordings; it either follows the folder test-signal method exactly or locates an arbitrary logarithmic sweep sequence and deconvolves both full tracks before assigning speakers, skipped sweeps and measured LFE."
+
+[[feature]]
+id = "input.measured_lfe"
+kind = "input"
+status = "implemented"
+tests = ["impulcifer-io::lfe_targets_are_brir_only_and_need_both_ears", "impulcifer-io::brir_automatic_assignment_puts_subwoofers_on_lfe", "impulcifer-dsp::measured_lfe_takes_the_output_stages_only", "impulcifer-dsp::measured_lfe_precedes_lfe_mode_and_fills_the_other_track", "impulcifer-service::brir_measurement_file_reads_subwoofers_as_lfe"]
+note = "ADR 0016: measured BRIR subwoofers are processed separately and take precedence over synthetic LFE in layout files"
+
+[[feature]]
 id = "output.recovery_immersive_layouts"
 kind = "output"
 status = "implemented"

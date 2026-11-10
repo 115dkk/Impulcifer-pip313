@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 #[test]
 fn config_room_tuning2_defaults_and_validation() {
     assert_eq!(
-        &EXTENSION_FIELD_NAMES[29..],
+        &EXTENSION_FIELD_NAMES[32..],
         &[
             "room_tuning2_dip_limit",
             "room_tuning2_low_protect",

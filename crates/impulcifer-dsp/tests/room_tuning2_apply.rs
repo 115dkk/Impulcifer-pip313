@@ -352,6 +352,7 @@ fn room_tuning2_observer() {
         let inputs = PipelineInputs {
             estimator: estimator.clone(),
             hrir: hrir.clone(),
+            lfe: Vec::new(),
             vbass: None,
             headphone: None,
             eq_left: None,

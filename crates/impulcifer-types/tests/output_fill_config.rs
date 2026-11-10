@@ -19,7 +19,7 @@ fn output_fill_config_defaults_and_validation_messages() {
     let defaults = ProcessingConfig::default();
     assert_eq!(defaults.missing_speakers, "silent");
     assert_eq!(defaults.lfe_mode, "none");
-    assert_eq!(EXTENSION_FIELD_NAMES.len(), 40);
+    assert_eq!(EXTENSION_FIELD_NAMES.len(), 43);
     assert!(EXTENSION_FIELD_NAMES.contains(&"missing_speakers"));
     assert!(EXTENSION_FIELD_NAMES.contains(&"lfe_mode"));
 

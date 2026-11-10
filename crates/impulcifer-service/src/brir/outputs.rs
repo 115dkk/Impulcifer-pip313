@@ -106,10 +106,10 @@ fn lfe_source<'a>(filled: &'a [(&'static str, String)]) -> Option<&'a str> {
         .map(|(_, source)| source.as_str())
 }
 fn display_lfe_source(catalog: &Catalog, source: &str) -> String {
-    if source == "all" {
-        catalog.translate("cli_lfe_source_all", &json!({}))
-    } else {
-        source.into()
+    match source {
+        "all" => catalog.translate("cli_lfe_source_all", &json!({})),
+        "measured" => catalog.translate("cli_lfe_source_measured", &json!({})),
+        _ => source.into(),
     }
 }
 

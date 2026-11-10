@@ -103,6 +103,67 @@ fn external_brir_without_folder_recordings_runs_without_sweep_fallback_warning()
 }
 
 #[test]
+fn start_brir_forwards_recording_file_fields_and_names_validation_fields() {
+    let temp = Temp::new();
+    let recording = temp.0.join("arbitrary.wav");
+    std::fs::copy(root().join("data/demo/FL,FR.wav"), &recording).unwrap();
+    let jobs = JobRegistry::new();
+    let service = service(&temp, jobs.clone());
+    let missing_sweep = temp.0.join("missing-sweep.wav");
+    let result = service.call(
+        "start_brir",
+        vec![json!({
+            "dir_path":temp.0,
+            "brir_recording_file":recording,
+            "brir_recording_speakers":"FL,FR",
+            "brir_recording_sweep":missing_sweep,
+            "do_room_correction":false,
+            "do_headphone_compensation":false,
+            "do_equalization":false
+        })],
+    );
+    assert_eq!(result["ok"], true, "{result}");
+    let poll = wait(&jobs, result["data"]["job"]["job_id"].as_str().unwrap());
+    assert_eq!(poll.job.status, JobStatus::Failed);
+    let error = poll.job.error.unwrap();
+    assert_eq!(error["code"], "FILE_NOT_FOUND");
+    assert!(
+        error["message"]
+            .as_str()
+            .unwrap()
+            .contains("missing-sweep.wav")
+    );
+
+    let cases = [
+        (
+            json!({"dir_path":temp.0,"brir_recording_file":recording}),
+            "brir_recording_speakers",
+        ),
+        (
+            json!({"dir_path":temp.0,"brir_recording_speakers":"FL"}),
+            "brir_recording_speakers",
+        ),
+        (
+            json!({"dir_path":temp.0,"brir_recording_sweep":"sweep.wav"}),
+            "brir_recording_sweep",
+        ),
+        (
+            json!({"dir_path":temp.0,"brir_recording_file":recording,"brir_recording_speakers":"FL","brir_measurement_file":"project.mdat"}),
+            "brir_recording_file",
+        ),
+        (
+            json!({"dir_path":temp.0,"brir_recording_file":recording,"brir_recording_speakers":"FL,unknown"}),
+            "brir_recording_speakers",
+        ),
+    ];
+    for (request, field) in cases {
+        let result = service.call("start_brir", vec![request]);
+        assert_eq!(result["error"]["code"], "INVALID_REQUEST", "{result}");
+        assert_eq!(result["error"]["details"]["field"], field, "{result}");
+    }
+}
+
+#[test]
 fn start_brir_cancel_mid_run_reports_cancelled() {
     let temp = Temp::demo();
     let jobs = JobRegistry::new();
@@ -333,6 +394,60 @@ fn start_brir_warns_of_a_test_signal_the_recordings_were_not_made_with() {
     );
     assert!(warnings(&poll).is_empty());
 }
+#[test]
+fn recording_file_test_signal_warnings_follow_the_selected_speaker_source() {
+    let temp = Temp::new();
+    let recording = temp.0.join("outside-name.wav");
+    let demo = root().join("data/demo/FL,FR.wav");
+    std::fs::copy(&demo, &recording).unwrap();
+    std::fs::copy(demo, temp.0.join("FC.wav")).unwrap();
+    let jobs = JobRegistry::new();
+    let service = service(&temp, jobs.clone());
+    let run = |sweep: Option<&str>| {
+        let mut request = json!({
+            "dir_path":temp.0,
+            "test_signal":"generate:12.3s@48000",
+            "brir_recording_file":recording,
+            "brir_recording_speakers":"FL,FR",
+            "do_room_correction":false,
+            "do_headphone_compensation":false,
+            "do_equalization":false
+        });
+        if let Some(sweep) = sweep {
+            request["brir_recording_sweep"] = json!(sweep);
+        }
+        let result = service.call("start_brir", vec![request]);
+        assert_eq!(result["ok"], true, "{result}");
+        wait(&jobs, result["data"]["job"]["job_id"].as_str().unwrap())
+    };
+    let warnings = |poll: &impulcifer_jobs::registry::PollResult| -> Vec<String> {
+        poll.events
+            .iter()
+            .filter(|event| event.payload["key"] == "cli_warning_test_signal_mismatch")
+            .map(|event| event.payload["message"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let without_sweep = run(None);
+    assert_eq!(without_sweep.job.status, JobStatus::Failed);
+    let error = without_sweep.job.error.as_ref().unwrap();
+    assert_eq!(error["code"], "INVALID_REQUEST");
+    assert_eq!(
+        error["message"],
+        "The test signal does not match the recording file."
+    );
+    assert_eq!(
+        error["details"],
+        json!({"path": recording, "read": 1, "listed": 2})
+    );
+    let lines = warnings(&without_sweep);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].starts_with("outside-name.wav"), "{}", lines[0]);
+    assert!(!lines[0].contains("FC.wav"), "{}", lines[0]);
+
+    let with_sweep = run(Some("missing-sweep.wav"));
+    assert!(warnings(&with_sweep).is_empty());
+}
+
 #[test]
 fn generate_sweep_set_writes_named_files_and_sidecar() {
     let temp = Temp::new();
