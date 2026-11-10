@@ -251,6 +251,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 감사 태그는 세션이 끝난 뒤의 HEAD가 아니라 이 커밋에 답니다. 세션이
+      # 커밋을 만들어도 아무도 검토하지 않은 코드에 태그가 붙지 않게 하려는
+      # 것입니다.
+      - name: Record the audited commit
+        id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -313,6 +320,8 @@ jobs:
 
       - name: Run combined audit
         id: audit
+        env:
+          AUDITED_SHA: ${{ steps.head.outputs.sha }}
         run: |
           # 셋 중 하나라도 남아 있으면 CLI가 페더레이션보다 그것을 우선해
           # 페더레이션된 서비스 계정이 아닌 곳에 청구합니다.
@@ -369,9 +378,17 @@ jobs:
           # -p 세션은 TaskCreate, TaskUpdate, TaskList를 기본으로 끕니다.
           # CLAUDE_CODE_ENABLE_TASKS와 CLAUDE_CODE_ENABLE_TODO_TOOLS로 켜 두면
           # 감사가 차원별로 할 일을 세우고 차례로 처리합니다.
+          # --append-system-prompt에는 Anthropic의 Fable 5.2 프롬프트 안내서
+          # ('Say who owns the code')에 나오는 코드 소유 문장을 넣습니다. 이
+          # 문장이 없으면 5.2 모델은 기존 구조에 덧붙이기만 하고 주변 문제를
+          # 보고하는 데 그쳐, 주인처럼 설계를 판단하지 않습니다. 같은 안내서에
+          # 따르면 이 문장은 아무도 요청하지 않은 코드 수정도 늘리므로,
+          # 프롬프트가 보고서 두 개만 잡 밖으로 나간다는 것과 고치고 싶은
+          # 것은 발견 항목에 적으라는 것을 함께 알립니다.
           set +e
           CLAUDE_CODE_ENABLE_TASKS=1 CLAUDE_CODE_ENABLE_TODO_TOOLS=1 claude \
             --model "$AUDIT_MODEL" \
+            --append-system-prompt "This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it." \
             --effort xhigh \
             --settings "{\"availableModels\": [\"$AUDIT_MODEL\"]}" \
             --permission-mode auto \
@@ -384,6 +401,15 @@ jobs:
 
           You will perform two analyses in sequence within this
           single session. Output everything to stdout.
+
+          Only the two report files and what you print leave this job.
+          Any other change you make in this checkout is discarded when
+          the job ends, so the repository keeps the code you were given.
+          When you find something you would fix or restructure, write
+          the change into its finding (what to change, where, and why)
+          instead of making it, and judge every finding, including
+          whether an earlier one is resolved, against the code as you
+          were given it. Do not commit.
 
           GLOBAL RULES:
           - Completely ignore all .ipynb (Jupyter notebook) files.
@@ -421,6 +447,14 @@ jobs:
           " > "$REPORT" 2>&1
           CLAUDE_EXIT=$?
           set -e
+
+          # 프롬프트는 커밋하지 말라고 하지만, 세션이 커밋했다면 알립니다.
+          # 그 경우 보고서가 저장소에 없는 코드를 기준으로 적혔을 수 있습니다.
+          # 감사 태그는 어느 쪽이든 감사한 커밋에 답니다.
+          if [ "$(git rev-parse HEAD)" != "$AUDITED_SHA" ]; then
+            echo "::warning::The audit session committed on top of the audited commit ${AUDITED_SHA}. Check findings marked resolved against that commit."
+            git log --oneline "$AUDITED_SHA..HEAD" || true
+          fi
 
           if [ "$CLAUDE_EXIT" -eq 0 ] && [ ! -s ARCHITECTURE_AUDIT.md ]; then
             echo "::error::Claude audit completed without ARCHITECTURE_AUDIT.md."
@@ -625,11 +659,13 @@ jobs:
           retention-days: 90
 
       - name: Tag audit checkpoint
+        env:
+          AUDITED_SHA: ${{ steps.head.outputs.sha }}
         run: |
           AUDIT_TAG="audit/$(date +%Y%m%d-%H%M%S)"
-          git tag "$AUDIT_TAG"
-          git push origin "$AUDIT_TAG"
-          echo "Tagged: $AUDIT_TAG"
+          git tag "$AUDIT_TAG" "$AUDITED_SHA"
+          git push origin "refs/tags/$AUDIT_TAG"
+          echo "Tagged $AUDITED_SHA as $AUDIT_TAG."
 
   # ── 3단계: 다음 감사의 기준 결과 커밋 ─────────────────────
   commit-baseline:
