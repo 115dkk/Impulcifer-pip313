@@ -1,7 +1,7 @@
 //! core/sweep_detection.py, including edited-recording envelope fallback.
 use super::{
     BrirError,
-    discovery::{listing, recording_speakers},
+    discovery::{MeasurementDir, discover, listing, recording_speakers},
 };
 use impulcifer_io::{IoError, read_wav};
 use serde_json::{Value, json};
@@ -343,50 +343,127 @@ fn recording_grid(
     }
     Some((fs, m, n, deviation, segments))
 }
-/// Length in samples of the grid sweep a recording of `count` sweeps was made
-/// with, when that is not the job's test signal (`job_sweep` samples at
-/// `job_fs`). A headphone recording is often made apart from the speaker
-/// measurement, with the recorder's own sweep, while the job's test signal
-/// belongs to the speaker measurement: cut with the wrong length, the second
-/// sweep does not fit and the right earcup has no response.
-///
-/// The recorder writes exactly the sequence it plays, so a file length that
-/// lands on a grid sweep names that sweep. The job's signal is kept whenever
-/// it explains the length at least as well (a custom signal near the grid, an
-/// edited recording), and for another sampling rate, which ingestion rejects.
-pub(crate) fn own_grid_sweep(
-    path: &Path,
-    count: usize,
-    job_fs: u32,
-    job_sweep: usize,
-) -> Option<usize> {
+/// Rate and frame count of a WAV file, read from its header alone.
+pub(crate) fn wav_length(path: &Path) -> Option<(u32, usize)> {
     let header = wav_header(path).ok()?;
-    if header.rate != job_fs {
+    Some((header.rate, header.frames as usize))
+}
+/// Share of the test signal's length by which the spacing of the sweep onsets
+/// may differ from it and still fit.
+const SPACING_TOLERANCE: f64 = 0.15;
+/// Sweep length in samples that a recording named for `speakers` speakers
+/// appears to hold, when that is not the test signal (`sweep` samples at
+/// `fs`). None when the test signal fits the recording and when the recording
+/// says nothing either way.
+///
+/// The recorder writes exactly the sequence it plays, so the file length
+/// gives the sweep length. A length that does not fit is not proof: a
+/// recording cut or padded afterwards still shows its sweep in the spacing of
+/// the sweep onsets, and that is asked before anything is reported. With one
+/// sweep in the file, or silence, there is no spacing, and only a length that
+/// lands on a generated sweep counts.
+///
+/// The spacing is coarse. An onset is where a sweep rises out of the noise,
+/// and that moment differs between two speakers or earcups with their bass
+/// (the reported headphone recording reads 6.64 s between sweeps of 6.15 s),
+/// so the test signal fits a spacing within `SPACING_TOLERANCE` of its
+/// length, and a length that lands on the grid is reported before a spacing.
+///
+/// Sweeps follow each other in time once per two tracks, as ingestion cuts
+/// them (`ingest_recording`): a four-track file named FL,FR holds one column.
+/// A file at another sampling rate is left to ingestion, which rejects it.
+pub(crate) fn mismatched_sweep(path: &Path, speakers: usize, fs: u32, sweep: usize) -> Option<f64> {
+    let header = wav_header(path).ok()?;
+    let pairs = usize::from(header.channels / 2);
+    if header.rate != fs || pairs == 0 || speakers == 0 {
         return None;
     }
-    let job = job_sweep as f64;
-    let nearer_grid = |estimate: f64, n: usize, deviation: f64| {
-        (deviation <= GRID_TOLERANCE
-            && n != job_sweep
-            && (n as f64 - estimate).abs() < (job - estimate).abs())
-        .then_some(n)
-    };
-    let estimate = length_estimate(&header, count);
-    if estimate > 0.0 {
-        let (_, n, deviation) = snap_sweep_samples(estimate, job_fs);
-        if deviation <= GRID_TOLERANCE {
-            return nearer_grid(estimate, n, deviation);
-        }
-        // Off the grid, yet the job's own (custom) signal explains the length.
-        if (estimate - job).abs() / grid_unit(job_fs) <= GRID_TOLERANCE {
-            return None;
-        }
+    let columns = ((speakers as f64 / pairs as f64).round_ties_even() as usize).max(1);
+    let tolerance = GRID_TOLERANCE * grid_unit(fs);
+    let fits = |estimate: f64| (estimate - sweep as f64).abs() <= tolerance;
+    let length = length_estimate(&header, columns);
+    if fits(length) {
+        return None;
     }
-    // An edited recording: its length says nothing, the spacing of its sweeps does.
-    let wav = read_wav(path).ok()?;
-    let (estimate, _) = envelope_estimate(&wav.tracks, job_fs)?;
-    let (_, n, deviation) = snap_sweep_samples(estimate, job_fs);
-    nearer_grid(estimate, n, deviation)
+    let spacing = read_wav(path)
+        .ok()
+        .and_then(|wav| envelope_estimate(&wav.tracks, fs))
+        .filter(|(_, sweeps)| *sweeps >= 2)
+        .map(|(estimate, _)| estimate);
+    let loose = tolerance.max(SPACING_TOLERANCE * sweep as f64);
+    if spacing.is_some_and(|estimate| (estimate - sweep as f64).abs() <= loose) {
+        return None;
+    }
+    let on_grid = |estimate: f64| {
+        let (_, n, deviation) = snap_sweep_samples(estimate.max(0.0), fs);
+        (estimate > 0.0 && deviation <= GRID_TOLERANCE).then_some(n as f64)
+    };
+    on_grid(length).or_else(|| spacing.map(|estimate| on_grid(estimate).unwrap_or(estimate)))
+}
+/// A recording the test signal does not fit, with the sweep length in
+/// seconds it appears to hold.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SweepMismatch {
+    pub file: String,
+    pub seconds: f64,
+}
+/// Recordings of a measurement folder that were not made with the test signal
+/// (`sweep` samples at `fs`): the speaker recordings when `speakers`, the
+/// headphone recording the job would read when `headphones`.
+pub(crate) fn test_signal_mismatches(
+    dir: &MeasurementDir,
+    speakers: bool,
+    headphones: bool,
+    fs: u32,
+    sweep: usize,
+) -> Vec<SweepMismatch> {
+    let recordings = dir
+        .recordings
+        .iter()
+        .filter(|_| speakers)
+        .map(|(path, names)| (path, names.len()));
+    let headphone = dir.headphones.iter().filter(|_| headphones).map(|p| (p, 2));
+    recordings
+        .chain(headphone)
+        .filter_map(|(path, count)| {
+            let samples = mismatched_sweep(path, count, fs, sweep)?;
+            Some(SweepMismatch {
+                file: path.file_name()?.to_string_lossy().into_owned(),
+                seconds: samples / f64::from(fs),
+            })
+        })
+        .collect()
+}
+/// The `test_signal` part of a `detect_sweep` answer: whether a test signal
+/// file fits the recordings a job on `dir` would read. `headphone_file` is the
+/// headphone compensation request of that job (empty for the folder's own
+/// headphones.wav), or None when the job reads no headphone recording.
+/// A file that is not a readable WAV gets no verdict: the job explains it.
+pub fn test_signal_check(
+    dir: &Path,
+    test_signal: &Path,
+    speakers: bool,
+    headphone_file: Option<&str>,
+) -> Result<Value, BrirError> {
+    let Some((fs, frames)) = wav_length(test_signal) else {
+        return Ok(json!({"readable":false,"mismatches":[]}));
+    };
+    let config = impulcifer_types::config::ProcessingConfig {
+        headphone_compensation_file: headphone_file.filter(|s| !s.is_empty()).map(str::to_owned),
+        ..Default::default()
+    };
+    let dir = discover(dir, &config)?;
+    let mismatches: Vec<_> =
+        test_signal_mismatches(&dir, speakers, headphone_file.is_some(), fs, frames)
+            .into_iter()
+            .map(|m| json!({"file":m.file,"duration_seconds":(m.seconds * 100.0).round() / 100.0}))
+            .collect();
+    Ok(json!({
+        "readable":true,
+        "fs":fs,
+        "duration_seconds":(frames as f64 / f64::from(fs) * 100.0).round() / 100.0,
+        "mismatches":mismatches,
+    }))
 }
 pub fn detect_sweep_parameters(dir: &Path) -> Result<Option<SweepDetection>, BrirError> {
     detect_with_reader(dir, read_wav)
@@ -517,54 +594,124 @@ mod tests {
     }
 
     #[test]
-    fn own_grid_sweep_names_a_generated_sweep_the_job_does_not_use() {
+    fn mismatched_sweep_names_the_sweep_a_recording_was_made_with() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("headphones.wav");
         let rate = 48000;
         let (_, default, _) = snap_sweep_samples(300000.0, rate);
         let (_, long, _) = snap_sweep_samples(600000.0, rate);
         let recorded = |sweep: usize| 6 * rate as usize + 2 * sweep;
+        let stereo = |frames: usize| {
+            impulcifer_io::write_wav(&path, rate, &vec![vec![0.0; frames]; 2], 16).unwrap();
+        };
         // Two default sweeps, exactly as the recorder writes them.
-        wav(&path, recorded(default), rate);
-        assert_eq!(own_grid_sweep(&path, 2, rate, default), None);
-        assert_eq!(own_grid_sweep(&path, 2, rate, long), Some(default));
-        // A test signal file off the grid (13.04 s), the reported case.
-        assert_eq!(own_grid_sweep(&path, 2, rate, 625919), Some(default));
-        // The file length is exactly a grid sweep, so that sweep wins over a
-        // custom signal that is merely close to it.
-        assert_eq!(own_grid_sweep(&path, 2, rate, 288000), Some(default));
-        // Another sampling rate is left to ingestion, which rejects it.
-        assert_eq!(own_grid_sweep(&path, 2, 44100, default), None);
-        // Recorded with the job's own custom signal: near the grid, yet the
-        // job's signal explains the length exactly.
-        wav(&path, recorded(288000), rate);
-        assert_eq!(own_grid_sweep(&path, 2, rate, 288000), None);
-        // The same off the grid, with nothing to read from the envelope.
-        wav(&path, recorded(240000), rate);
-        assert_eq!(own_grid_sweep(&path, 2, rate, 240000), None);
-        assert_eq!(own_grid_sweep(&path, 2, rate, long), None);
+        stereo(recorded(default));
+        assert_eq!(mismatched_sweep(&path, 2, rate, default), None);
+        // The reported case: a 13.04 s test signal file. And the other way
+        // round, where a shorter signal still cuts two columns out of it.
         assert_eq!(
-            own_grid_sweep(&temp.path().join("missing.wav"), 2, rate, long),
+            mismatched_sweep(&path, 2, rate, 625919),
+            Some(default as f64)
+        );
+        assert_eq!(mismatched_sweep(&path, 2, rate, long), Some(default as f64));
+        stereo(recorded(long));
+        assert_eq!(mismatched_sweep(&path, 2, rate, default), Some(long as f64));
+        // A custom signal the recording was made with fits, on or off the grid.
+        stereo(recorded(288000));
+        assert_eq!(mismatched_sweep(&path, 2, rate, 288000), None);
+        stereo(recorded(240000));
+        assert_eq!(mismatched_sweep(&path, 2, rate, 240000), None);
+        // Off the grid with nothing to read from the envelope: no verdict.
+        assert_eq!(mismatched_sweep(&path, 2, rate, long), None);
+        // Another sampling rate and a mono file are left to ingestion.
+        stereo(recorded(default));
+        assert_eq!(mismatched_sweep(&path, 2, 44100, default), None);
+        wav(&path, recorded(default), rate);
+        assert_eq!(mismatched_sweep(&path, 2, rate, long), None);
+        assert_eq!(
+            mismatched_sweep(&temp.path().join("missing.wav"), 2, rate, long),
             None
         );
+        // Four tracks named FL,FR hold one sweep per pair of tracks.
+        impulcifer_io::write_wav(
+            &path,
+            rate,
+            &vec![vec![0.0; 4 * rate as usize + default]; 4],
+            16,
+        )
+        .unwrap();
+        assert_eq!(mismatched_sweep(&path, 2, rate, default), None);
+        assert_eq!(mismatched_sweep(&path, 2, rate, long), Some(default as f64));
     }
 
     #[test]
-    fn own_grid_sweep_reads_the_spacing_of_an_edited_recording() {
+    fn mismatched_sweep_reads_the_spacing_of_an_edited_recording() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("headphones.wav");
         let rate = 1000;
         let (_, short, _) = snap_sweep_samples(1242.0, rate);
         let (_, long, _) = snap_sweep_samples(2484.0, rate);
         assert_eq!((short, long), (1242, 2484));
-        // Two short sweeps with the trailing silence cut off: the length is
-        // off the grid, the onsets are still one sweep and 2 s apart.
-        let mut tracks = vec![vec![0.0; 4 * rate as usize + 2 * short]; 2];
-        tracks[0][2000..2000 + short].fill(0.5);
-        tracks[1][4000 + short..4000 + 2 * short].fill(0.5);
+        let write = |frames: usize| {
+            let mut tracks = vec![vec![0.0; frames]; 2];
+            tracks[0][2000..2000 + short].fill(0.5);
+            tracks[1][4000 + short..4000 + 2 * short].fill(0.5);
+            impulcifer_io::write_wav(&path, rate, &tracks, 16).unwrap();
+        };
+        // Two short sweeps with the trailing silence cut off: the length fits
+        // neither signal, the onsets are still one sweep and 2 s apart.
+        write(4 * rate as usize + 2 * short);
+        assert_eq!(mismatched_sweep(&path, 2, rate, short), None);
+        assert_eq!(mismatched_sweep(&path, 2, rate, long), Some(short as f64));
+        // The same sweeps with a second of silence appended instead.
+        write(7 * rate as usize + 2 * short);
+        assert_eq!(mismatched_sweep(&path, 2, rate, short), None);
+        assert_eq!(mismatched_sweep(&path, 2, rate, long), Some(short as f64));
+        // Two long sweeps with the tail cut, the second audible 0.3 s late (a
+        // speaker with less bass): a spacing 12 % off still fits the long
+        // signal, and for the short one it is all there is to report.
+        let mut tracks = vec![vec![0.0; 4 * rate as usize + 2 * long]; 2];
+        tracks[0][2000..2000 + long].fill(0.5);
+        tracks[1][4300 + long..4000 + 2 * long].fill(0.5);
         impulcifer_io::write_wav(&path, rate, &tracks, 16).unwrap();
-        assert_eq!(own_grid_sweep(&path, 2, rate, long), Some(short));
-        assert_eq!(own_grid_sweep(&path, 2, rate, short), None);
+        assert_eq!(mismatched_sweep(&path, 2, rate, long), None);
+        assert_eq!(mismatched_sweep(&path, 2, rate, short), Some(2784.0));
+    }
+
+    #[test]
+    fn test_signal_mismatches_cover_the_recordings_a_job_reads() {
+        let temp = tempfile::tempdir().unwrap();
+        let rate = 48000;
+        let (_, default, _) = snap_sweep_samples(300000.0, rate);
+        let (_, long, _) = snap_sweep_samples(600000.0, rate);
+        let stereo = |name: &str, sweeps: usize, sweep: usize| {
+            let frames = 2 * rate as usize * (sweeps + 1) + sweeps * sweep;
+            impulcifer_io::write_wav(
+                &temp.path().join(name),
+                rate,
+                &vec![vec![0.0; frames]; 2],
+                16,
+            )
+            .unwrap();
+        };
+        stereo("FL,FR.wav", 2, long);
+        stereo("FC.wav", 1, long);
+        stereo("headphones.wav", 2, default);
+        let config = impulcifer_types::config::ProcessingConfig::default();
+        let dir = super::super::discovery::discover(temp.path(), &config).unwrap();
+        let files = |speakers, headphones, sweep| -> Vec<String> {
+            test_signal_mismatches(&dir, speakers, headphones, rate, sweep)
+                .into_iter()
+                .map(|m| format!("{} {:.2}", m.file, m.seconds))
+                .collect()
+        };
+        assert_eq!(files(true, true, long), ["headphones.wav 6.15"]);
+        assert!(files(true, false, long).is_empty());
+        assert_eq!(
+            files(true, true, default),
+            ["FC.wav 12.30", "FL,FR.wav 12.30"]
+        );
+        assert!(files(false, true, default).is_empty());
     }
 
     #[test]

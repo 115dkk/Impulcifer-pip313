@@ -23,6 +23,11 @@ pub struct ReflectionLevels {
     pub late_db: f64,
 }
 
+/// First line of the error `ingest_recording` returns when no sweep can be cut
+/// out of a recording, for callers that explain it in their own words.
+pub const NO_VALID_COLUMNS: &str =
+    "No valid columns could be extracted even with fallback methods.";
+
 /// Python _ingest_recording, core/hrir.py:77-364; p08_demo_open.json.
 /// Side-specific tracks deliberately retain Python's hard-coded i // 2 mapping.
 pub fn ingest_recording(
@@ -102,7 +107,7 @@ pub fn ingest_recording(
         }
         if columns.is_empty() {
             return Err(DspError::InvalidArgument(format!(
-                "No valid columns could be extracted even with fallback methods.\nRecording length ({available} samples, {:.2}s) is too short for the required estimator length ({sweep} samples, {:.2}s).\nSolutions:\n  1. Re-record with longer duration (minimum {:.1}s)\n  2. Use a shorter test signal\n  3. Check if the correct test signal file was used for recording",
+                "{NO_VALID_COLUMNS}\nRecording length ({available} samples, {:.2}s) is too short for the required estimator length ({sweep} samples, {:.2}s).\nSolutions:\n  1. Re-record with longer duration (minimum {:.1}s)\n  2. Use a shorter test signal\n  3. Check if the correct test signal file was used for recording",
                 available as f64 / fs as f64,
                 sweep as f64 / fs as f64,
                 (sweep + silence) as f64 / fs as f64

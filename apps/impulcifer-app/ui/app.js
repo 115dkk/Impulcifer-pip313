@@ -42,6 +42,7 @@ const state = {
   recoveryRequestKey: "",
   eqChoices: { both: { mode: "folder" }, left: { mode: "folder" }, right: { mode: "folder" } },
   eqInspection: null, eqError: null, eqRevision: 0, eqTimer: undefined,
+  testSignalRevision: 0, testSignalTimer: undefined,
   mfiles: {
     room: { data: null, error: null, choices: null, input: "", revision: 0, timer: undefined },
     brir: { data: null, error: null, choices: null, input: "", revision: 0, timer: undefined },
@@ -266,6 +267,15 @@ function errorSentence(error) {
       return fmt(t("message_play_file_not_exist"), { file: path });
     case "Another job is already running.":
       return t("error_job_busy");
+    case "The test signal does not match the headphone recording.": {
+      /** @param {unknown} value */
+      const seconds = (value) => Number(value).toFixed(2);
+      return fmt(t("error_headphone_test_signal"), {
+        recording: seconds(details.recording_seconds),
+        sweep: seconds(details.sweep_seconds),
+        needed: seconds(details.needed_seconds),
+      });
+    }
   }
   if (error.code === "FILE_NOT_FOUND") return `${t("error_file_not_found")}: ${path || error.message}`;
   return error.message;
@@ -2041,6 +2051,45 @@ async function detectSweep() {
   } finally {
     button.disabled = false;
   }
+}
+
+/* A test signal file the recordings were not made with gives responses that
+   mean nothing, or a job that stops half way. While the source is a file, the
+   service compares its length with the sweeps in the recordings the job
+   would read (the folder's speaker recordings and the headphone recording),
+   and the note under the field names the ones that do not fit. */
+function scheduleTestSignalCheck(delay = 250) {
+  window.clearTimeout(state.testSignalTimer);
+  const revision = ++state.testSignalRevision;
+  const note = $("bf-ts-warning");
+  const dir = val("bf-dir-path");
+  const file = val("bf-test-signal");
+  if ((val("bf-test-signal-source") || "auto") !== "file" || !dir || !file || !window.pywebview) {
+    note.hidden = true;
+    return;
+  }
+  state.testSignalTimer = window.setTimeout(async () => {
+    /** @type {TestSignalReport | undefined} */
+    let report;
+    try {
+      const response = await api().detect_sweep(dir, {
+        test_signal: file,
+        speakers: !mfileMode("brir"),
+        headphone_file: isOpen("dis-headphone") && !mfileMode("headphones") ? val("bf-headphone-file") : null,
+      });
+      report = response.ok ? response.data.test_signal : undefined;
+    } catch { report = undefined; }
+    if (revision !== state.testSignalRevision) return;
+    const mismatches = report?.mismatches ?? [];
+    note.hidden = mismatches.length === 0;
+    if (!mismatches.length) return;
+    note.textContent = fmt(t("message_test_signal_mismatch"), {
+      signal: (report?.duration_seconds ?? 0).toFixed(2),
+      files: mismatches
+        .map((m) => fmt(t("message_test_signal_mismatch_item"), { file: m.file, duration: m.duration_seconds.toFixed(2) }))
+        .join(", "),
+    });
+  }, delay);
 }
 
 /* --------------------------------------------------------- info tooltips
@@ -3935,6 +3984,7 @@ function wireEvents() {
     const toggle = () => {
       head.parentElement?.classList.toggle("open");
       refreshStudioAdvanced();
+      scheduleTestSignalCheck(0);
     };
     head.addEventListener("click", toggle);
     head.querySelector(".switch")?.addEventListener("keydown", (event) => {
@@ -4006,7 +4056,13 @@ function wireEvents() {
     el(`${p}-lfe-mode`, HTMLSelectElement).addEventListener("change", () => updateLfeHint(p));
     el(`${p}-itd-mode`, HTMLSelectElement).addEventListener("change", () => updateItdHint(p));
   }
-  el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", updateTestSignalVisibility);
+  el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", () => {
+    updateTestSignalVisibility();
+    scheduleTestSignalCheck(0);
+  });
+  for (const id of ["bf-test-signal", "bf-dir-path", "bf-headphone-file"]) {
+    el(id, HTMLInputElement).addEventListener("input", () => scheduleTestSignalCheck());
+  }
   el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRows);
   el("bf-vbass-mode", HTMLSelectElement).addEventListener("change", updateVbassRows);
   ROOM_MODES.forEach((mode, index) => {
@@ -4043,6 +4099,7 @@ function wireEvents() {
     el(ids.source, HTMLSelectElement).addEventListener("change", () => {
       renderMfile(purpose);
       scheduleMfileInspection(purpose, 0);
+      scheduleTestSignalCheck(0);
     });
     el(ids.prefix, HTMLInputElement).addEventListener("input", () => scheduleMfileInspection(purpose));
     $(`${ids.prefix}-result`).addEventListener("change", (event) => onMfileChange(purpose, event));

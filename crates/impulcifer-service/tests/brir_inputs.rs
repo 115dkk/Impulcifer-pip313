@@ -8,6 +8,7 @@ use impulcifer_service::brir::{
 };
 use impulcifer_types::config::ProcessingConfig;
 use serde_json::Value;
+use std::path::Path;
 #[derive(Default)]
 struct Events(Vec<String>, Vec<(String, Value)>);
 impl BrirEvents for Events {
@@ -91,8 +92,6 @@ fn room_and_eq_inputs_use_real_measurements_and_write_responses() {
         assert_eq!(wav.sample_rate, 48000);
     }
     assert!(events.0.iter().any(|k| k == "cli_eq_plain_gain_curve"));
-    // The demo headphones were recorded with the job's own sweep.
-    assert!(!events.0.iter().any(|k| k == "cli_headphone_own_sweep"));
 }
 #[test]
 fn eqapo_input_is_parsed_and_logged() {
@@ -445,17 +444,15 @@ fn headphone_measurement_file_replaces_folder_and_is_not_opened_when_disabled() 
 }
 
 #[test]
-fn headphone_recording_made_with_another_sweep_is_read_with_its_own() {
-    // The job's test signal belongs to the speaker measurement (12.3 s here),
-    // the demo headphones were recorded with the default 6.15 s sweep. Cut
-    // with the job's sweep only one sweep fits, FR has no response and the
-    // job ended in "FR right headphone measurement missing".
+fn headphone_recording_without_two_sweeps_names_the_test_signal() {
+    // The reported job: the test signal was a 13 s sweep file and the
+    // headphones were recorded with the default 6.15 s sweep. One sweep of the
+    // job's length fits into that recording, FR gets no response, and the job
+    // ended in "FR right headphone measurement missing". Here the job's signal
+    // is the 12.3 s generated sweep and the recording the demo's.
     let temp = Temp::new();
-    std::fs::copy(
-        root().join("data/demo/headphones.wav"),
-        temp.0.join("headphones.wav"),
-    )
-    .unwrap();
+    let headphones = temp.0.join("headphones.wav");
+    std::fs::copy(root().join("data/demo/headphones.wav"), &headphones).unwrap();
     let config = ProcessingConfig {
         do_room_correction: false,
         do_equalization: false,
@@ -463,67 +460,29 @@ fn headphone_recording_made_with_another_sweep_is_read_with_its_own() {
     };
     let dir = discover(&temp.0, &config).unwrap();
     let job = open_estimator(&dir, Some("generate:12.3s@48000")).unwrap();
-    impulcifer_io::write_wav(
-        &temp.0.join("FL,FR.wav"),
-        job.fs,
-        &job.sweep_sequence(&["FL", "FR"], "stereo").unwrap(),
-        32,
-    )
-    .unwrap();
-    let dir = discover(&temp.0, &config).unwrap();
-    let mut events = Events::default();
-    let own = load_inputs(&dir, &job, &config, &mut events)
-        .unwrap()
-        .headphone
-        .unwrap();
-    assert!(events.1.contains(&(
-        "cli_headphone_own_sweep".into(),
-        serde_json::json!({"duration":"6.15","job":"12.30"})
-    )));
-    // The same responses as a job whose test signal is that sweep.
-    let default = open_estimator(&dir, Some("default")).unwrap();
-    let mut events = Events::default();
-    let reference = load_inputs(&dir, &default, &config, &mut events)
-        .unwrap()
-        .headphone
-        .unwrap();
-    assert!(!events.0.iter().any(|k| k == "cli_headphone_own_sweep"));
-    assert_eq!(own.left, reference.left);
-    assert_eq!(own.right, reference.right);
-    assert_eq!(own.responses_tracks, reference.responses_tracks);
-}
-
-#[test]
-fn headphone_recording_too_short_for_two_sweeps_says_so_and_writes_nothing() {
-    // 16 s made with a 5 s signal that is neither the job's nor a generated
-    // sweep: nothing names its sweep, and one 12.3 s sweep is all that fits.
-    let temp = Temp::new();
-    let rate = 48000;
-    let mut tracks = vec![vec![0.0; 16 * rate]; 2];
-    for (track, start) in [(0, 2 * rate), (1, 9 * rate)] {
-        for (i, sample) in tracks[track][start..start + 5 * rate]
-            .iter_mut()
-            .enumerate()
-        {
-            *sample = 0.5 * (i as f64 * 0.05).sin();
-        }
-    }
-    impulcifer_io::write_wav(&temp.0.join("headphones.wav"), rate as u32, &tracks, 32).unwrap();
-    let config = ProcessingConfig {
-        do_room_correction: false,
-        do_equalization: false,
-        ..Default::default()
+    let failure = |seconds: f64| {
+        let envelope = load_inputs(&dir, &job, &config, &mut Events::default())
+            .expect_err("the recording does not hold two sweeps")
+            .envelope();
+        let error = &envelope["error"];
+        assert_eq!(error["code"], "INVALID_REQUEST");
+        assert_eq!(
+            error["message"],
+            "The test signal does not match the headphone recording."
+        );
+        assert_eq!(error["details"]["recording_seconds"], seconds);
+        assert_eq!(error["details"]["sweep_seconds"], 12.3);
+        assert_eq!(error["details"]["needed_seconds"], 28.61);
+        assert_eq!(
+            Path::new(error["details"]["path"].as_str().unwrap()),
+            dir.headphones.as_ref().unwrap()
+        );
+        // A failed job leaves no responses cut with the wrong signal behind.
+        assert!(!temp.0.join("headphone-responses.wav").exists());
     };
-    let dir = discover(&temp.0, &config).unwrap();
-    let job = open_estimator(&dir, Some("generate:12.3s@48000")).unwrap();
-    let mut events = Events::default();
-    let error = load_inputs(&dir, &job, &config, &mut events)
-        .expect_err("one sweep is not a headphone measurement");
-    assert!(!events.0.iter().any(|k| k == "cli_headphone_own_sweep"));
-    assert_eq!(error.envelope()["error"]["code"], "INVALID_REQUEST");
-    let message = error.to_string();
-    for part in ["16.00 s long", "two 12.30 s sweeps", "(28.61 s)"] {
-        assert!(message.contains(part), "{message}");
-    }
-    assert!(!temp.0.join("headphone-responses.wav").exists());
+    failure(18.3);
+    // Four seconds hold no sweep at all: the same error instead of the
+    // ingestion's text about columns as an internal error.
+    impulcifer_io::write_wav(&headphones, 48000, &vec![vec![0.0; 4 * 48000]; 2], 32).unwrap();
+    failure(4.0);
 }

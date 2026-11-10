@@ -1,8 +1,8 @@
-use super::{BrirError, BrirEvents, discovery::MeasurementDir, sweep_grid::own_grid_sweep};
+use super::{BrirError, BrirEvents, discovery::MeasurementDir};
 use impulcifer_dsp::{
     estimator::SweepEstimator,
     fr::FrequencyResponse,
-    hrir::{Hrir, ingest_recording},
+    hrir::{Hrir, NO_VALID_COLUMNS, ingest_recording},
     pipeline::PipelineInputs,
     stages::{
         eq_files::{finalize_eq, looks_like_eqapo_config, read_eq_settings, select_eq_pair},
@@ -47,53 +47,42 @@ fn ingest(
     )?;
     Ok(())
 }
-/// The two earcups of a headphone recording, FL then FR. The recording is read
-/// with its own sweep when its length names a generated sweep other than the
-/// job's test signal (`own_grid_sweep`): headphones are often recorded apart
-/// from the speakers, and the job's test signal belongs to the speakers. Any
-/// other recording is read with the job's estimator, as 2.x reads all of them.
-fn open_headphones(
-    path: &Path,
-    estimator: &SweepEstimator,
-    events: &mut dyn BrirEvents,
-) -> Result<Hrir, BrirError> {
+/// The two earcups of a headphone recording, FL then FR, cut with the job's
+/// test signal as 2.x cuts them. A recording made with another test signal
+/// rarely holds two sweeps of this one: with one, FR has no response and the
+/// compensation only said that the right earcup is missing; with none, the
+/// job ended in the ingestion's text about columns. Both end here instead, in
+/// an error that names the test signal and carries the lengths.
+fn open_headphones(path: &Path, estimator: &SweepEstimator) -> Result<Hrir, BrirError> {
     let fs = estimator.fs;
-    let seconds = |samples: usize| samples as f64 / f64::from(fs);
-    let own = own_grid_sweep(path, 2, fs, estimator.test_signal.len())
-        .map(|n| SweepEstimator::new((n - 1) as f64 / f64::from(fs), fs))
-        .transpose()?;
-    if let Some(own) = &own {
-        events.log(
-            "info",
-            "cli_headphone_own_sweep",
-            json!({
-                "duration":format!("{:.2}", seconds(own.test_signal.len())),
-                "job":format!("{:.2}", seconds(estimator.test_signal.len())),
-            }),
-        );
-    }
-    let used = own.as_ref().unwrap_or(estimator);
     let wav = read_wav(path)?;
     let mut hp = empty(fs);
-    hp.open_recording_samples(
-        used,
+    let opened = hp.open_recording_samples(
+        estimator,
         wav.sample_rate,
         &wav.tracks,
         &["FL", "FR"],
         None,
         SILENCE,
-    )?;
-    // One sweep cut out of the file leaves FR without a response, and the
-    // compensation would only say that the right earcup is missing.
+    );
+    let no_sweep = matches!(
+        &opened,
+        Err(impulcifer_dsp::DspError::InvalidArgument(text)) if text.starts_with(NO_VALID_COLUMNS)
+    );
+    if !no_sweep {
+        opened?;
+    }
     let left = hp.get("FL").is_some_and(|s| s.left.is_some());
     let right = hp.get("FR").is_some_and(|s| s.right.is_some());
     if !(left && right) {
-        let sweep = seconds(used.test_signal.len());
-        return Err(BrirError::Unsupported(format!(
-            "The headphone recording is {:.2} s long, too short for two {sweep:.2} s sweeps and the {SILENCE:.0} s of silence before each ({:.2} s). It was probably recorded with another test signal. Record the headphones again with this job's test signal or with a sweep the recorder generates.",
-            seconds(wav.tracks.first().map_or(0, Vec::len)),
-            2.0 * (SILENCE + sweep),
-        )));
+        let seconds = |samples: usize| samples as f64 / f64::from(fs);
+        let sweep_seconds = seconds(estimator.test_signal.len());
+        return Err(BrirError::HeadphoneTestSignal {
+            path: path.to_path_buf(),
+            recording_seconds: seconds(wav.tracks.first().map_or(0, Vec::len)),
+            sweep_seconds,
+            needed_seconds: 2.0 * (SILENCE + sweep_seconds),
+        });
     }
     Ok(hp)
 }
@@ -661,7 +650,7 @@ pub fn load_inputs(
             } else {
                 let path = dir.headphones.as_ref().expect("checked");
                 events.log("info", "cli_info_using_hp_file", json!({"file":path}));
-                open_headphones(path, estimator, events)?
+                open_headphones(path, estimator)?
             };
             // Python writes before computing headphone compensation curves.
             write_wav(
