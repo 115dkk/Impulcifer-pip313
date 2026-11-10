@@ -585,6 +585,52 @@ fn recording_file_without_sweep_matches_the_folder_recording() {
         std::fs::read(folder.0.join("hesuvi.wav")).unwrap(),
         std::fs::read(imported.0.join("hesuvi.wav")).unwrap()
     );
+
+    // Only the first two tracks are the ears. A folder recording would take
+    // tracks 3 and 4 as the next speaker's pair, so FR would come from them
+    // instead of from the second sweep.
+    let four_tracks = Temp::new();
+    let wav = impulcifer_io::read_wav(&arbitrary).unwrap();
+    let mut tracks = wav.tracks.clone();
+    tracks.push(wav.tracks[1].iter().map(|x| -x).collect());
+    tracks.push(wav.tracks[0].iter().map(|x| 0.5 * x).collect());
+    let wide = outside.0.join("four-tracks.wav");
+    impulcifer_io::write_wav(&wide, wav.sample_rate, &tracks, 32).unwrap();
+    let two = outside.0.join("two-tracks.wav");
+    impulcifer_io::write_wav(&two, wav.sample_rate, &wav.tracks, 32).unwrap();
+    let narrow = Temp::new();
+    for (directory, file) in [(&four_tracks, &wide), (&narrow, &two)] {
+        let poll = run_config(ProcessingConfig {
+            brir_recording_file: Some(file.to_string_lossy().into_owned()),
+            brir_recording_speakers: Some("FL,FR".into()),
+            ..common(&directory.0)
+        });
+        assert_eq!(
+            poll.job.status,
+            JobStatus::Succeeded,
+            "{:?}",
+            poll.job.error
+        );
+    }
+    assert_eq!(
+        std::fs::read(narrow.0.join("hesuvi.wav")).unwrap(),
+        std::fs::read(four_tracks.0.join("hesuvi.wav")).unwrap()
+    );
+
+    // One track is not a pair of ears.
+    let mono = outside.0.join("mono.wav");
+    impulcifer_io::write_wav(&mono, wav.sample_rate, &wav.tracks[..1], 32).unwrap();
+    let mono_output = Temp::new();
+    let poll = run_config(ProcessingConfig {
+        brir_recording_file: Some(mono.to_string_lossy().into_owned()),
+        brir_recording_speakers: Some("FL,FR".into()),
+        ..common(&mono_output.0)
+    });
+    assert_eq!(poll.job.status, JobStatus::Failed);
+    assert_eq!(
+        poll.job.error.as_ref().unwrap()["message"],
+        "brir_recording_file must have at least two tracks"
+    );
 }
 
 #[test]

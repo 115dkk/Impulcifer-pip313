@@ -29,9 +29,11 @@ recording folder.
 
 ## Without `brir_recording_sweep`: the folder method
 
-The file is read exactly as a folder recording whose name is the list: the same call
-(`Hrir::open_recording_samples(estimator, fs, tracks, names, None, 2.0)`), so the result is byte-identical to
-renaming the file to `<list>.wav` and putting it in an otherwise empty folder. `X` entries are skipped as they
+The file's first two tracks are read exactly as a folder recording whose name is the list: the same call
+(`Hrir::open_recording_samples(estimator, fs, tracks, names, None, 2.0)`), so for a two-track file the result is
+byte-identical to renaming it to `<list>.wav` and putting it in an otherwise empty folder. Later tracks are
+ignored (a folder recording would take each further pair of tracks as further speakers), and a file with fewer
+than two tracks is an error, as it is with a sweep. `X` entries are skipped as they
 are in `FC,X.wav`. `LFE` and `LFE2` entries are ingested like speakers and then moved to the LFE list (see
 "Measured LFE").
 

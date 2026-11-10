@@ -60,10 +60,12 @@ fn folder_method(
         speakers: Vec::new(),
     };
     let names: Vec<_> = entries.iter().map(String::as_str).collect();
+    // Only the two ear tracks: a folder recording takes every further pair of
+    // tracks as further speakers, which this file's later tracks are not.
     let opened = hrir.open_recording_samples(
         estimator,
         wav.sample_rate,
-        &wav.tracks,
+        &wav.tracks[..2],
         &names,
         None,
         SILENCE,
@@ -122,11 +124,6 @@ fn located_method(
     events: &mut dyn BrirEvents,
     recording_path: &Path,
 ) -> Result<(Hrir, Vec<SpeakerIrs>), BrirError> {
-    if recording.tracks.len() < 2 {
-        return Err(BrirError::Unsupported(
-            "brir_recording_file must have at least two tracks".into(),
-        ));
-    }
     let sweep = read_recording(sweep_path)?;
     if sweep.sample_rate != recording.sample_rate {
         return Err(BrirError::RecordingSweepRate {
@@ -241,6 +238,12 @@ pub(crate) fn load(
 ) -> Result<(Hrir, Vec<SpeakerIrs>), BrirError> {
     let entries = parse_recording_speakers(speakers).map_err(BrirError::Unsupported)?;
     let recording = read_recording(path)?;
+    // The first two tracks are the two ears, in both methods; later tracks are ignored.
+    if recording.tracks.len() < 2 {
+        return Err(BrirError::Unsupported(
+            "brir_recording_file must have at least two tracks".into(),
+        ));
+    }
     match sweep {
         Some(sweep) => located_method(&recording, &entries, sweep, estimator, events, path),
         None => folder_method(path, &recording, &entries, estimator),
