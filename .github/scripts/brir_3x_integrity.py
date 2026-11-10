@@ -213,6 +213,26 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     # default (off) is covered by every other scenario.
     ("itd_symmetric", ("--itd_mode=symmetric",), "3.12.0"),
     ("itd_model", ("--itd_mode=model", "--head_radius=8.75"), "3.12.0"),
+    # ADR 0016: one recording file instead of the folder's speaker recordings.
+    # Without a sweep it is read as the folder recording it is; with the sweep
+    # given, the sweeps are located by correlation and divided out.
+    (
+        "brir_recording_file",
+        (
+            f"--brir_recording_file={PROJECT_ROOT / DEMO / 'FL,FR.wav'}",
+            "--brir_recording_speakers=FL,FR",
+        ),
+        "3.18.0",
+    ),
+    (
+        "brir_recording_file_sweep",
+        (
+            f"--brir_recording_file={PROJECT_ROOT / DEMO / 'FL,FR.wav'}",
+            "--brir_recording_speakers=FL,FR",
+            f"--brir_recording_sweep={PROJECT_ROOT / TEST_SIGNAL}",
+        ),
+        "3.18.0",
+    ),
 )
 
 
