@@ -16,6 +16,7 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **CI의 Ubuntu 테스트 잡을 24.04에 고정**: GitHub의 `ubuntu-latest`가 2026-11-10 실행부터 26.04 이미지로 바뀌어 두 잡이 실패했습니다. `test.yml`의 Python 테스트는 26.04의 `libportaudio2`가 PulseAudio 서버 없이는 초기화되지 않아 `test_gui_modules_importable`에서 실패했고, `rust.yml`의 Ubuntu `cargo test`는 정확히 같아야 하는 `room_tuning2_s2r_pair_phase` 골든이 1~8 ulp 어긋났습니다. 두 잡을 `ubuntu-24.04`로 고정했습니다. 26.04로 옮기는 일은 이 판에 넣지 않았습니다.
+- **월간 감사에 코드 소유 문장을 시스템 프롬프트로 넣음** (릴리스 후 추가, 출하물 변화 없음): `monthly-audit.yml`이 감사 세션에 `--append-system-prompt`로 Anthropic의 Fable 5.2 프롬프트 안내서에 나오는 문장("This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it.")을 붙입니다. 이 문장이 없으면 5.2 모델은 기존 구조에 덧붙이고 주변 문제를 보고하는 데 그친다고 안내서는 설명합니다. 같은 문장이 요청하지 않은 코드 수정도 늘리므로, 프롬프트에 보고서 두 개만 잡 밖으로 나간다는 것과 고치고 싶은 것은 발견 항목에 적고 지난 항목의 해결 여부도 받은 코드 그대로를 기준으로 판정하라는 것을 더했습니다. 감사 태그는 세션 뒤의 HEAD 대신 세션 전에 기록한 커밋에 달고, 세션이 커밋을 만들면 경고합니다.
 
 ## 3.17.0 - 2026-11-09
 ### 녹음 점검에 스피커 상대 극성 검사
