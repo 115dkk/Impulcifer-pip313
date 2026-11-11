@@ -105,21 +105,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ubuntu-latest는 2026-11-10 실행부터 26.04 이미지다. 그 이미지에서는
-        # 정확히 같아야 하는 s2r 골든(room_tuning2_s2r_pair_phase)이 1~8 ulp
-        # 어긋났다. 골든을 그 이미지에서 다시 확인할 때까지 24.04에 둔다.
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # The Linux leg runs on the ubuntu-latest (26.04) host inside the plain
+    # ubuntu:26.04 image. The runner image installs libc6 as the amd64v3
+    # variant, built for x86-64-v3 with FMA compiled in, and its libm rounds
+    # hypot, log10, log and pow differently from the generic build in a few
+    # cases (GLIBC_TUNABLES cannot switch it back). The s2r fixtures come from
+    # the generic glibc (Debian 2.41, bit-identical to generic 2.43), and their
+    # Exact gates must stay bit-exact on this leg; on the bare runner
+    # room_tuning2_s2r_pair_phase was 1-8 ulp off. See
+    # tests/migration/README-secs2r.md.
+    container: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu:26.04' || '' }}
     steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Tauri and audio system libraries (Linux)
+      # The container starts bare: git must exist before checkout so the
+      # workspace is a real clone, and the Tauri/ALSA headers, a C toolchain,
+      # pkg-config and Node.js (apps/impulcifer-app/tests/smoke.rs) follow.
+      - name: Install build tools, Tauri and audio system libraries (Linux)
         if: runner.os == 'Linux'
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential pkg-config nodejs \
             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev libasound2-dev patchelf
+          dpkg -s libc6 | grep -E '^(Version|Architecture)'
+
+      - uses: actions/checkout@v5
+
+      - name: Install rustup (Linux container)
+        if: runner.os == 'Linux'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --default-toolchain none --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Install toolchain (rust-toolchain.toml)
         run: rustup show
@@ -131,13 +152,31 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rust-test-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: rust-test-${{ runner.os }}-
+          # The container leg keeps its own cache: target/ fingerprints hold the
+          # workspace path, which differs between the host and the container.
+          key: rust-test-${{ runner.os }}${{ matrix.os == 'ubuntu-latest' && '-container2604' || '' }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: rust-test-${{ runner.os }}${{ matrix.os == 'ubuntu-latest' && '-container2604' || '' }}-
+
+      # Container steps run as root, and root writes through read-only file
+      # permissions, so brir_outputs' output_readonly_file_failure_preserves_
+      # existing_bytes cannot fail the write it depends on. Hand the workspace
+      # and the toolchain to an ordinary user (uid 1001, the host runner's) and
+      # run cargo as that user. The cache steps stay root and still read it all.
+      - name: cargo test --workspace and --doc as an unprivileged user (Linux container)
+        if: runner.os == 'Linux'
+        run: |
+          useradd --create-home --uid 1001 tester
+          chown -R tester: "$GITHUB_WORKSPACE" "$HOME"
+          as_tester() { runuser -u tester -- env HOME="$HOME" PATH="$PATH" "$@"; }
+          as_tester cargo test --workspace --all-targets
+          as_tester cargo test --workspace --doc
 
       - name: cargo test --workspace
+        if: runner.os != 'Linux'
         run: cargo test --workspace --all-targets
 
       - name: cargo test --doc
+        if: runner.os != 'Linux'
         run: cargo test --workspace --doc
 
   wheel:

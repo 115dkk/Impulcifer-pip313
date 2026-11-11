@@ -16,6 +16,7 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **brir-3x 시나리오 둘 추가**: 데모의 `FL,FR.wav`를 단일 녹음 파일로 읽는 시나리오 둘(sweep을 지정하지 않은 것과 지정한 것)을 더해 44개가 됐습니다.
+- **CI의 Ubuntu 테스트 잡을 26.04로 옮김** (릴리스 후 추가, 출하물 변화 없음): 3.17.1에서 24.04에 고정했던 두 잡을 다시 26.04에서 돌립니다. `test.yml`의 Python 테스트는 PulseAudio 데몬(널 싱크)을 띄운 뒤 실행합니다. 26.04의 `libportaudio2`는 PulseAudio 서버에 닿지 못하면 초기화 전체가 실패하기 때문입니다. Python 3.9 레그만은 `actions/setup-python`이 Ubuntu 26.04용 3.9를 내놓지 않아 24.04에 남겼습니다. `rust.yml`의 Linux `cargo test`는 26.04 러너 위의 `ubuntu:26.04` 컨테이너에서 돕니다. 러너 이미지는 `libc6`을 x86-64-v3용 `amd64v3` 판으로 설치하는데, 그 libm은 일부 입력에서 `hypot`·`log10`·`log`·`pow`의 결과가 일반 빌드와 달라 `room_tuning2_s2r_pair_phase`가 1~8 ulp 어긋났습니다. 컨테이너의 일반 빌드 glibc 2.43은 s2r 픽스처를 낸 Debian glibc 2.41과 비트 단위로 같으므로, 정확히 같아야 하는 게이트를 그대로 둡니다.
 
 ## 3.17.1 - 2026-11-10
 ### 테스트 신호가 녹음과 맞지 않으면 알림

@@ -10,11 +10,10 @@ on:
 jobs:
   test:
     name: Test on Python ${{ matrix.python-version }}
-    # ubuntu-latest는 2026-11-10 실행부터 26.04 이미지다. 그 이미지의
-    # libportaudio2는 PulseAudio 서버가 없으면 초기화에 실패해서, sounddevice를
-    # 임포트하는 테스트(test_gui_modules_importable)가 PortAudioError로 끝난다.
-    # 26.04에서 돌 준비를 마칠 때까지 24.04에 둔다.
-    runs-on: ubuntu-24.04
+    # actions/python-versions publishes no 3.9 build for Ubuntu 26.04 (3.9 reached
+    # end of life in 2025-10; setup-python fails with "version '3.9' ... was not
+    # found for Ubuntu 26.04"). That leg stays on 24.04 while 3.9 is supported.
+    runs-on: ${{ matrix.python-version == '3.9' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -39,10 +38,16 @@ jobs:
     # sounddevice needs the PortAudio C library at import time; the
     # application-service tests exercise the recorder job path, which
     # imports core.recorder even though playback itself is monkeypatched.
-    - name: Install PortAudio
+    # Ubuntu 26.04's libportaudio2 (19.7.0+git20260206) has a PulseAudio host
+    # API, and Pa_Initialize fails as a whole when that API cannot reach a
+    # server ("PulseAudio_Initialize: Can't connect to server"). A desktop has
+    # one; the runner does not, so start a PulseAudio daemon with its null sink.
+    - name: Install PortAudio and start a PulseAudio server
       run: |
         sudo apt-get update
-        sudo apt-get install -y libportaudio2
+        sudo apt-get install -y libportaudio2 pulseaudio
+        pulseaudio --check || pulseaudio --daemonize=yes --exit-idle-time=-1
+        pactl info
 
     - name: Install dependencies
       run: |

@@ -113,11 +113,19 @@ Virtual room tuning 2의 3.13.0 선택 세 가지는 ADR 0015에 따라 SECS 2R�
 
 MIMO 가드 합성 사례(`mimo_guard_*`)는 늦은 부분 전체에 같은 배율을 곱하므로 모든 대역이 같은 dB만큼 바뀐다. 그래서 기록되는 대역은 반올림 끝자리로 정해지고, 오라클끼리도 libm에 따라 다르다(같은 `one_ear_worse`의 귀별 가드에서 glibc는 77.0~80.0 Hz, msvcrt는 31.7~40.0 Hz를 기록했다). 시험은 오라클이 저장한 귀·대역별 에너지로 후보값을 다시 만든다. 최댓값이 다른 후보보다 1e-9 dB 넘게 크면 기록 대역과 귀를 정확히 비교하고, 그 안에서 여럿이 같으면 Impulcifer와 오라클의 선택이 둘 다 그 후보 안에 있는지 본다. 동점이 없는 실제 입력(`mimo_design_*` 70개)에서는 모든 시도의 대역·모드·귀를 정확히 비교한다. 대역 에너지는 libm과 무관한 |rfft|² 합이므로 모든 플랫폼에서 상대 1e-12로 비교한다. SECS 2는 대역 가드가 이미 넘친 시도에서 꼬리 가드를 계산하지 않아 `s2_mimo_*`의 `guard_tail`이 `guard_band_db`보다 짧을 수 있다. 묶음 4 가족은 오라클이 모든 시도에서 두 가드를 다 계산한 값이다.
 
+## Linux CI의 libm
+
+GitHub의 `ubuntu-26.04` 러너 이미지(2026-11부터 `ubuntu-latest`)는 `libc6`을 `amd64v3` 판(`Architecture-Variant: amd64v3`)으로 설치한다. x86-64-v3로 빌드해 FMA 명령이 코드에 들어간 판이다. 같은 무작위 입력 20만 개를 넣었을 때 이 libm의 `hypot`, `log10`, `log`, `pow`는 일반 빌드와 결과가 달랐고 `atan2`, `exp`, `sin`, `cos`는 같았다. `GLIBC_TUNABLES=glibc.cpu.hwcaps=-FMA,-AVX2`를 주면 일반 빌드의 결과는 바뀌지만 이 판의 결과는 그대로다. 이 러너에서 바로 돌린 `room_tuning2_s2r_pair_phase`는 `hypot`과 `log10`을 거치는 `loss_db`가 1~8 ulp 어긋났고, `atan2`를 거치는 위상은 같았다.
+
+일반 빌드인 `ubuntu:26.04` 이미지의 glibc 2.43은 같은 비교에서 Debian glibc 2.41과 비트 단위로 같았고, 그 위에서 `golden_secs2r` 전체가 통과했다(`room_tuning2_s2r_pair_phase`의 최대 오차 0). 그래서 `rust.yml`의 Linux `cargo test`는 26.04 러너 위의 `ubuntu:26.04` 컨테이너에서 돈다.
+
+`room_tuning2_s2r_libm_probe`는 이 판을 다른 libm으로 알아보지 못했다. 로그 간격으로 놓은 입력 400개에서는 여덟 함수가 모두 같게 나왔고, `hypot`은 검사 대상에 없다. 다음에 픽스처를 다시 낼 때 `hypot`과 `atan2`를 넣고 입력을 늘리면 이 판을 다른 libm으로 판정할 수 있다.
+
 ## Regeneration
 
 픽스처는 유지보수자와 명세를 쓰는 주 세션만 다시 만든다. 옵션을 구현하는 사람은 이 절차를 돌리지 않고, 내보내기 프로그램을 열지도 않는다.
 
 1. **입력.** 이 저장소에서 `cargo run --release -p impulcifer-dsp --example secs2_inputs -- <inputs>`를 돌려 데모의 자르지 않은 무지향 귀 위치 IR을 `<inputs>/omni/`에, 정렬된 귀속 BRIR을 `<inputs>/brir/`에 쓴다(`s2_*`와 같은 입력. 묶음 5의 극성 가족은 `brir/`의 앞 4096표본을 쓰고 그 사본을 `s2r_polarity_demo_base`에 둔다).
 2. **오라클.** SECS 2R 06183335(v0.55.0) 체크아웃에 내보내기 디프(기능 플래그 `oracle-fixtures`, 예제 `impulcifer_fixtures`)를 적용한다. 이 디프는 GPL 저장소의 코드이므로 이 저장소에 두지 않고 SECS 2R 작업 사본에 둔다.
-3. **내보내기.** Debian glibc(WSL Debian, glibc 2.41에서 확인)에서 `S2R_BINS=<이 저장소>/tests/migration/goldens/s2_bins.json`과 `S2R_GOLDENS=<이 저장소>/tests/migration/goldens`(묶음 4의 MIMO 가족이 읽는 `s2_mimo_*` 입력, 비우면 `S2R_BINS`의 폴더)를 주고 `cargo run --release -p secs-engine --features oracle-fixtures --example impulcifer_fixtures -- <inputs> <out>`를 두 번 돌린다. 두 번째 실행은 파일을 하나도 바꾸지 않아야 한다. 내보내기는 자기가 쓰지 않은 `s2r_*` 파일이 `<out>`에 있으면 실패하므로 빈 폴더나 앞선 출력 폴더를 쓴다. glibc에서 내는 까닭은 CI의 ubuntu 러너가 같은 libm을 써서 `Exact`·`Curve` 게이트가 그곳에서 비트 단위로 맞기 때문이다.
+3. **내보내기.** Debian glibc(WSL Debian, glibc 2.41에서 확인)에서 `S2R_BINS=<이 저장소>/tests/migration/goldens/s2_bins.json`과 `S2R_GOLDENS=<이 저장소>/tests/migration/goldens`(묶음 4의 MIMO 가족이 읽는 `s2_mimo_*` 입력, 비우면 `S2R_BINS`의 폴더)를 주고 `cargo run --release -p secs-engine --features oracle-fixtures --example impulcifer_fixtures -- <inputs> <out>`를 두 번 돌린다. 두 번째 실행은 파일을 하나도 바꾸지 않아야 한다. 내보내기는 자기가 쓰지 않은 `s2r_*` 파일이 `<out>`에 있으면 실패하므로 빈 폴더나 앞선 출력 폴더를 쓴다. glibc에서 내는 까닭은 CI의 Linux `cargo test`가 같은 결과를 내는 일반 빌드 glibc 위에서 돌아 `Exact`·`Curve` 게이트가 그곳에서 비트 단위로 맞기 때문이다(아래 'Linux CI의 libm'). x86-64-v3로 빌드한 glibc(GitHub 러너 이미지의 `amd64v3` 판 등)에서 낸 픽스처는 CI와 결과가 다르다.
 4. **반영.** `<out>`의 파일을 `tests/migration/goldens/`에 그대로 복사하고, 앞선 묶음의 파일이 바이트 단위로 그대로인지 `git diff --stat`으로 확인한다.
