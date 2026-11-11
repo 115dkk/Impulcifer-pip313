@@ -78,3 +78,88 @@ pub fn dirac_project_with_delays(fs: u32, delays: &[usize; 6]) -> Vec<u8> {
     ]
     .concat()
 }
+
+#[allow(dead_code)]
+pub fn dirac_project_three_speakers_and_sub(fs: u32) -> Vec<u8> {
+    fn var(mut n: u64) -> Vec<u8> {
+        let mut out = Vec::new();
+        while n >= 128 {
+            out.push((n as u8 & 127) | 128);
+            n >>= 7;
+        }
+        out.push(n as u8);
+        out
+    }
+    fn int(field: u64, n: u64) -> Vec<u8> {
+        [var(field << 3), var(n)].concat()
+    }
+    fn bytes(field: u64, data: &[u8]) -> Vec<u8> {
+        [var(field << 3 | 2), var(data.len() as u64), data.to_vec()].concat()
+    }
+    let speakers = [
+        ("Left", 1_u64),
+        ("Right", 1_u64),
+        ("Center", 1_u64),
+        ("Subwoofer", 4_u64),
+    ];
+    let mut matrix = [int(1, fs.into()), int(2, speakers.len() as u64), int(3, 2)].concat();
+    for position in 0..2 {
+        for speaker in 0..speakers.len() {
+            let peak = 100 + position * 3 + speaker;
+            let gain = 30_000.0 * (1.0 - speaker as f64 * 0.08);
+            let codes: Vec<u8> = (0..(fs as usize * 2))
+                .flat_map(|index| {
+                    let code: i16 = if index == peak {
+                        gain as i16
+                    } else if index > peak {
+                        (0.4 * gain
+                            * (-((index - peak) as f64) / 700.0).exp()
+                            * (index as f64 * 0.08).cos()) as i16
+                    } else {
+                        0
+                    };
+                    code.to_be_bytes()
+                })
+                .collect();
+            let element = [
+                int(1, fs.into()),
+                var(5 << 3 | 5),
+                1_f32.to_le_bytes().to_vec(),
+                bytes(6, &codes),
+            ]
+            .concat();
+            matrix.extend(bytes(4, &element));
+        }
+    }
+    let frequency: Vec<u8> = [10_f32, 100., 1000., 10000., 24000.]
+        .into_iter()
+        .flat_map(f32::to_le_bytes)
+        .collect();
+    let gains: Vec<u8> = [0_f32; 5].into_iter().flat_map(f32::to_le_bytes).collect();
+    let mut message = [
+        int(3, fs.into()),
+        bytes(12, &matrix),
+        bytes(14, &frequency),
+        bytes(15, &gains),
+        bytes(24, "Test microphone".as_bytes()),
+    ]
+    .concat();
+    for (name, kind) in speakers {
+        message.extend(bytes(
+            30,
+            &[bytes(1, name.as_bytes()), int(2, kind)].concat(),
+        ));
+    }
+    let title: Vec<u8> = "Test room"
+        .encode_utf16()
+        .flat_map(u16::to_be_bytes)
+        .collect();
+    [
+        10_u32.to_be_bytes().to_vec(),
+        (title.len() as u32).to_be_bytes().to_vec(),
+        title,
+        (message.len() as u32).to_be_bytes().to_vec(),
+        message,
+    ]
+    .concat()
+}

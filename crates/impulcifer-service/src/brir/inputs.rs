@@ -3,12 +3,13 @@ use impulcifer_dsp::{
     estimator::SweepEstimator,
     fr::FrequencyResponse,
     hrir::{Hrir, NO_VALID_COLUMNS, SpeakerIrs, ingest_recording},
-    pipeline::PipelineInputs,
+    pipeline::{LfeInputs, PipelineInputs},
     stages::{
         eq_files::{finalize_eq, looks_like_eqapo_config, read_eq_settings, select_eq_pair},
         eqapo::EqApoLoader,
         headphone::headphone_compensation,
-        room::{self, FrCombination, RoomCorrectionOptions},
+        lfe,
+        room::{self, FrCombination, RoomCorrectionOptions, RoomFrs, RoomTerm},
     },
     virtual_bass::{VirtualBassMode, VirtualBassPlan},
 };
@@ -261,6 +262,33 @@ fn eq(
     }
     Ok(Some((left, right)))
 }
+fn shared_level_speakers(brir: &Hrir, room: &Hrir) -> usize {
+    brir.speakers
+        .iter()
+        .filter(|speaker| {
+            speaker.left.is_some()
+                && speaker.right.is_some()
+                && room
+                    .get(&speaker.speaker)
+                    .is_some_and(|room| room.left.is_some() || room.right.is_some())
+        })
+        .count()
+}
+
+fn scale_lfe_pair(pair: &SpeakerIrs, left_db: f64, right_db: f64) -> SpeakerIrs {
+    let mut pair = pair.clone();
+    for (response, db) in [(&mut pair.left, left_db), (&mut pair.right, right_db)] {
+        let scalar = 10.0_f64.powf(db / 20.0);
+        if let Some(response) = response {
+            response
+                .data
+                .iter_mut()
+                .for_each(|sample| *sample *= scalar);
+        }
+    }
+    pair
+}
+
 fn cp1252(b: u8) -> char {
     const HIGH: [char; 32] = [
         '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8d}', 'Ž',
@@ -297,6 +325,10 @@ pub fn load_inputs(
         opened_hrir = Some((hrir, lfe));
     }
     let mut room_result = None;
+    let mut room_lfe_pairs = Vec::new();
+    let mut room_lfe_corrections: Vec<(String, Side, lfe::LfeCorrection)> = Vec::new();
+    let mut room_speakers_uncropped = None;
+    let mut prepared_room_calibration = None;
     if config.do_room_correction {
         events.step("cli_running_room_correction", json!({}))?;
         // Python _open_room_target: a target path that is not a file, even one
@@ -321,11 +353,12 @@ pub fn load_inputs(
             // Read in place like room_target and room_mic_calibration, so the
             // job and inspect_room_measurements open the same file.
             let path = std::path::PathBuf::from(path);
-            let (rir, calibration, format) = super::measurement_file::load_room(
+            let (rir, lfe_pairs, calibration, format) = super::measurement_file::load_room(
                 &path,
                 config.room_measurement_map.as_deref().unwrap_or(""),
                 fs,
             )?;
+            room_lfe_pairs = lfe_pairs;
             project_calibration = calibration;
             if !dir.room.recordings.is_empty() {
                 events.log(
@@ -360,6 +393,7 @@ pub fn load_inputs(
         .as_ref()
         .map(|fr| room::prepare_mic_calibration(fr, fs))
         .transpose()?;
+        prepared_room_calibration = calibration.clone();
         let mut room_pairs = Vec::new();
         if config.room_measurement_file.is_none() {
             // Each worker consults the job before its decode, so a cancel still
@@ -417,6 +451,24 @@ pub fn load_inputs(
         } else {
             Vec::new()
         };
+        if !room_lfe_pairs.is_empty() {
+            room_speakers_uncropped = Some(rir.clone());
+            for pair in &room_lfe_pairs {
+                for (side, response) in [(Side::Left, &pair.left), (Side::Right, &pair.right)] {
+                    if let Some(response) = response {
+                        room_lfe_corrections.push((
+                            pair.speaker.clone(),
+                            side,
+                            lfe::room_correction(
+                                response,
+                                &target,
+                                prepared_room_calibration.as_ref(),
+                            )?,
+                        ));
+                    }
+                }
+            }
+        }
         let options = RoomCorrectionOptions {
             fr_combination_method: if config.fr_combination_method == "conservative" {
                 FrCombination::Conservative
@@ -736,7 +788,7 @@ pub fn load_inputs(
     }
     events.step("cli_creating_target", json!({}))?;
     events.step("cli_opening_measurements", json!({}))?;
-    let (hrir, lfe) = match opened_hrir {
+    let (hrir, measured_lfe) = match opened_hrir {
         Some(opened) => opened,
         None => open_measurements(dir, estimator, config, events)?,
     };
@@ -745,11 +797,131 @@ pub fn load_inputs(
             "No HRIR recordings found in the directory.".into(),
         ));
     }
+
+    let needs_room_transfer = room_lfe_pairs.iter().any(|room_pair| {
+        !measured_lfe.iter().any(|measured| {
+            measured.speaker == room_pair.speaker
+                && measured.left.is_some()
+                && measured.right.is_some()
+        })
+    });
+    let shared = room_speakers_uncropped
+        .as_ref()
+        .map_or(0, |room| shared_level_speakers(&hrir, room));
+    let transfer = if needs_room_transfer {
+        room_speakers_uncropped
+            .as_ref()
+            .map(|room| lfe::level_transfer(&hrir, room, prepared_room_calibration.as_ref()))
+            .transpose()?
+            .flatten()
+    } else {
+        None
+    };
+    let mut lfe_inputs = LfeInputs::default();
+    let mut correction_entries = Vec::new();
+    for slot in ["LFE", "LFE2"] {
+        let measured = measured_lfe
+            .iter()
+            .find(|pair| pair.speaker == slot && pair.left.is_some() && pair.right.is_some());
+        let room_pair = room_lfe_pairs.iter().find(|pair| pair.speaker == slot);
+        let has_correction = room_lfe_corrections
+            .iter()
+            .any(|(candidate, _, _)| candidate == slot);
+        let (pair, label) = if let Some(measured) = measured {
+            if has_correction {
+                (Some(measured.clone()), "measured_corrected")
+            } else {
+                if config.do_room_correction {
+                    events.log("info", "cli_room_lfe_uncorrected", json!({"slot":slot}));
+                }
+                (Some(measured.clone()), "measured")
+            }
+        } else if let Some(room_pair) = room_pair {
+            if let Some(transfer) = &transfer {
+                events.log(
+                    "info",
+                    "cli_room_lfe_created",
+                    json!({"slot":slot,"count":transfer.speakers}),
+                );
+                if transfer.spread_db > 3.0 {
+                    events.log(
+                        "warning",
+                        "cli_room_lfe_level_spread",
+                        json!({"slot":slot,"spread":format!("{:.1}",transfer.spread_db)}),
+                    );
+                }
+                (
+                    Some(scale_lfe_pair(
+                        room_pair,
+                        transfer.left_db,
+                        transfer.right_db,
+                    )),
+                    "room",
+                )
+            } else {
+                events.log(
+                    "warning",
+                    "cli_room_lfe_no_level",
+                    json!({"slot":slot,"count":shared}),
+                );
+                (None, "room")
+            }
+        } else {
+            (None, "measured")
+        };
+        let Some(pair) = pair else {
+            continue;
+        };
+        lfe_inputs.pairs.push(pair);
+        lfe_inputs.labels.push((slot.into(), label.into()));
+        let selected: Vec<_> = room_lfe_corrections
+            .iter()
+            .filter(|(candidate, _, _)| candidate == slot)
+            .collect();
+        if !selected.is_empty() {
+            let low = selected
+                .iter()
+                .map(|(_, _, correction)| correction.low)
+                .fold(f64::INFINITY, f64::min);
+            let high = selected
+                .iter()
+                .map(|(_, _, correction)| correction.high)
+                .fold(f64::NEG_INFINITY, f64::max);
+            events.log(
+                "info",
+                "cli_room_lfe_correction",
+                json!({"slot":slot,"low":low.round() as i64,"high":high.round() as i64}),
+            );
+            for (_, side, correction) in selected {
+                let mut fr = correction.fr.clone();
+                if label == "room"
+                    && let Some(calibration) = &prepared_room_calibration
+                {
+                    if fr.equalization.len() != calibration.raw.len() {
+                        return Err(BrirError::Dsp(impulcifer_dsp::DspError::InvalidArgument(
+                            "LFE calibration grid lengths differ".into(),
+                        )));
+                    }
+                    for (gain, calibration) in fr.equalization.iter_mut().zip(&calibration.raw) {
+                        *gain -= calibration;
+                    }
+                }
+                correction_entries.push((slot.into(), *side, fr));
+            }
+        }
+    }
+    if !correction_entries.is_empty() {
+        lfe_inputs.correction = Some(RoomFrs {
+            term: RoomTerm::Gain,
+            entries: correction_entries,
+        });
+    }
+
     events.check_cancelled()?;
     Ok(PipelineInputs {
         estimator: estimator.clone(),
         hrir,
-        lfe,
+        lfe: lfe_inputs,
         vbass: vbass_plan,
         room: room_result,
         headphone,

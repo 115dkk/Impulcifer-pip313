@@ -293,7 +293,7 @@ fn brir_measurement_file_preserves_rew_time_axis_and_replaces_folder() {
     let mut events = Events::default();
     let inputs = load_inputs(&dir, &estimator, &config, &mut events).unwrap();
     assert_eq!(inputs.hrir.speakers.len(), 1);
-    assert!(inputs.lfe.is_empty());
+    assert!(inputs.lfe.pairs.is_empty());
     let speaker = &inputs.hrir.speakers[0];
     let left = speaker.left.as_ref().unwrap();
     let right = speaker.right.as_ref().unwrap();
@@ -694,6 +694,155 @@ fn recording_file_with_sweep_reads_a_foreign_sequence() {
             .iter()
             .any(|sample| *sample != 0.0)
     );
+}
+
+#[test]
+fn room_measurement_subwoofer_makes_the_lfe_track() {
+    fn run(include_subwoofer: bool) -> (Temp, impulcifer_jobs::registry::PollResult) {
+        let temp = Temp::demo();
+        let project = temp.0.join("room.liveproject");
+        std::fs::write(
+            &project,
+            room_builder::dirac_project_three_speakers_and_sub(48_000),
+        )
+        .unwrap();
+        let map = if include_subwoofer {
+            ""
+        } else {
+            "FL=1@1,FR=2@1,FC=3@1"
+        };
+        let poll = run_config(ProcessingConfig {
+            dir_path: Some(temp.0.to_string_lossy().into_owned()),
+            room_measurement_file: Some(project.to_string_lossy().into_owned()),
+            room_measurement_map: Some(map.into()),
+            layout_files: "9.1.4".into(),
+            do_headphone_compensation: false,
+            do_equalization: false,
+            ..Default::default()
+        });
+        assert_eq!(
+            poll.job.status,
+            JobStatus::Succeeded,
+            "{:?}",
+            poll.job.error
+        );
+        (temp, poll)
+    }
+
+    let (with_subwoofer, poll) = run(true);
+    for key in ["cli_room_lfe_created", "cli_room_lfe_correction"] {
+        assert!(
+            poll.events.iter().any(|event| event.payload["key"] == key),
+            "missing {key}: {:?}",
+            poll.events
+        );
+    }
+    let layout = impulcifer_types::layouts::layout("9.1.4").unwrap();
+    let lfe = layout
+        .channels
+        .iter()
+        .position(|channel| channel.slot == "LFE")
+        .unwrap();
+    let wav = impulcifer_io::read_wav(&with_subwoofer.0.join(layout.file_name)).unwrap();
+    assert!(wav.tracks[2 * lfe].iter().any(|sample| *sample != 0.0));
+    assert!(wav.tracks[2 * lfe + 1].iter().any(|sample| *sample != 0.0));
+    let readme = std::fs::read_to_string(with_subwoofer.0.join("README.md")).unwrap();
+    assert!(readme.contains("The LFE tracks use the room measurement's subwoofer."));
+    let hesuvi = std::fs::read(with_subwoofer.0.join("hesuvi.wav")).unwrap();
+
+    let (without_subwoofer, _) = run(false);
+    assert_eq!(
+        hesuvi,
+        std::fs::read(without_subwoofer.0.join("hesuvi.wav")).unwrap()
+    );
+}
+
+#[test]
+fn room_measurement_subwoofer_corrects_the_measured_lfe() {
+    let source = Temp::new();
+    let (recording, sweep) = foreign_sequence(&source, 8_000);
+    let project = source.0.join("room.liveproject");
+    std::fs::write(&project, room_builder::dirac_project(8_000)).unwrap();
+    let run = |map: &str| {
+        let output = Temp::new();
+        let poll = run_config(ProcessingConfig {
+            dir_path: Some(output.0.to_string_lossy().into_owned()),
+            test_signal: Some("generate:1.0s@8000".into()),
+            brir_recording_file: Some(recording.to_string_lossy().into_owned()),
+            brir_recording_speakers: Some("FL,FC,X,FR,LFE".into()),
+            brir_recording_sweep: Some(sweep.to_string_lossy().into_owned()),
+            room_measurement_file: Some(project.to_string_lossy().into_owned()),
+            room_measurement_map: Some(map.into()),
+            layout_files: "9.1.4".into(),
+            do_headphone_compensation: false,
+            do_equalization: false,
+            ..Default::default()
+        });
+        assert_eq!(
+            poll.job.status,
+            JobStatus::Succeeded,
+            "{:?}",
+            poll.job.error
+        );
+        (output, poll)
+    };
+
+    let (corrected, poll) = run("");
+    assert!(poll.events.iter().any(|event| {
+        event.payload["key"] == "cli_info_lfe_filled"
+            && event.payload["message"].as_str().is_some_and(|message| {
+                message.contains("the measured subwoofer, corrected with the room measurement")
+            })
+    }));
+    assert!(
+        std::fs::read_to_string(corrected.0.join("README.md"))
+            .unwrap()
+            .contains("the measured subwoofer, corrected with the room measurement")
+    );
+
+    let (_, uncorrected) = run("FL=1@1,FR=2@1");
+    assert!(
+        uncorrected
+            .events
+            .iter()
+            .any(|event| event.payload["key"] == "cli_room_lfe_uncorrected")
+    );
+}
+
+#[test]
+fn room_lfe_needs_three_shared_speakers() {
+    let temp = Temp::demo();
+    let project = temp.0.join("room.liveproject");
+    std::fs::write(&project, room_builder::dirac_project(48_000)).unwrap();
+    let poll = run_config(ProcessingConfig {
+        dir_path: Some(temp.0.to_string_lossy().into_owned()),
+        room_measurement_file: Some(project.to_string_lossy().into_owned()),
+        layout_files: "9.1.4".into(),
+        do_headphone_compensation: false,
+        do_equalization: false,
+        ..Default::default()
+    });
+    assert_eq!(
+        poll.job.status,
+        JobStatus::Succeeded,
+        "{:?}",
+        poll.job.error
+    );
+    let event = poll
+        .events
+        .iter()
+        .find(|event| event.payload["key"] == "cli_room_lfe_no_level")
+        .expect("no-level warning");
+    assert_eq!(
+        event.payload["message"],
+        "LFE: the room measurement shares only 2 speakers with the BRIR measurements (3 are needed), so no LFE track is made from its subwoofer"
+    );
+    assert!(!poll.events.iter().any(|event| {
+        event.payload["key"] == "cli_info_lfe_filled"
+            && event.payload["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("room measurement's subwoofer"))
+    }));
 }
 
 #[test]

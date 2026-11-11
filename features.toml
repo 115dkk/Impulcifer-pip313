@@ -1061,8 +1061,15 @@ note = "ADR 0016: one two-ear WAV can replace the folder's speaker recordings; i
 id = "input.measured_lfe"
 kind = "input"
 status = "implemented"
-tests = ["impulcifer-io::lfe_targets_are_brir_only_and_need_both_ears", "impulcifer-io::brir_automatic_assignment_puts_subwoofers_on_lfe", "impulcifer-dsp::measured_lfe_takes_the_output_stages_only", "impulcifer-dsp::measured_lfe_precedes_lfe_mode_and_fills_the_other_track", "impulcifer-service::brir_measurement_file_reads_subwoofers_as_lfe"]
+tests = ["impulcifer-io::lfe_targets_are_valid_for_room_and_brir_only", "impulcifer-io::brir_automatic_assignment_puts_subwoofers_on_lfe", "impulcifer-dsp::measured_lfe_takes_the_output_stages_only", "impulcifer-dsp::measured_lfe_precedes_lfe_mode_and_fills_the_other_track", "impulcifer-service::brir_measurement_file_reads_subwoofers_as_lfe"]
 note = "ADR 0016: measured BRIR subwoofers are processed separately and take precedence over synthetic LFE in layout files"
+
+[[feature]]
+id = "input.room_lfe"
+kind = "input"
+status = "implemented"
+tests = ["impulcifer-io::lfe_targets_are_valid_for_room_and_brir_only", "impulcifer-io::room_automatic_assignment_puts_subwoofers_on_lfe", "impulcifer-dsp::lfe_onset_finds_the_start_of_the_first_lobe", "impulcifer-dsp::lfe_level_transfer_recovers_the_gain_between_microphones", "impulcifer-dsp::lfe_room_correction_cuts_modes_within_the_subwoofer_band", "impulcifer-dsp::lfe_band_limit_is_the_lr4_low_pass", "impulcifer-dsp::room_lfe_correction_reaches_the_lfe_track", "impulcifer-service::room_measurement_subwoofer_makes_the_lfe_track", "impulcifer-service::room_measurement_subwoofer_corrects_the_measured_lfe", "impulcifer-service::room_lfe_needs_three_shared_speakers", "impulcifer-service::inspect_room_measurements_reports_a_dirac_project"]
+note = "ADR 0017: a subwoofer in a room measurement file can make or correct LFE tracks, with shared-speaker level transfer, room correction, common onset placement and a 120 Hz LR4 band limit"
 
 [[feature]]
 id = "output.recovery_immersive_layouts"

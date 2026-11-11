@@ -3646,8 +3646,9 @@ function mfileSlotSelect(purpose, key, labelText, disabled) {
   select.setAttribute("aria-label", `${labelText}: ${t("room_file_col_speaker")}`);
   select.add(mfileOption("", t("option_room_file_unused")));
   for (const code of mfileSlotCodes()) select.add(mfileOption(code, code));
-  // A measured subwoofer becomes the LFE track of the channel-order files (BRIR only).
-  if (purpose === "brir") for (const code of ["LFE", "LFE2"]) select.add(mfileOption(code, code));
+  // A measured subwoofer is an LFE track of the channel-order files (BRIR, ADR 0016); a room
+  // measurement's subwoofer makes or corrects one (ADR 0017). Headphone measurements have none.
+  if (purpose === "brir" || purpose === "room") for (const code of ["LFE", "LFE2"]) select.add(mfileOption(code, code));
   select.value = state.mfiles[purpose].choices?.rows[key]?.slot || "";
   select.disabled = disabled;
   return select;

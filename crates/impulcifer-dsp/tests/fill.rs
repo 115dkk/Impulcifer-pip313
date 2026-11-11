@@ -205,9 +205,17 @@ fn measured_lfe_precedes_lfe_mode_and_fills_the_other_track() {
     let speakers = tagged(&["FL", "FR", "FC"]);
     let one = tagged(&["LFE"]).speakers;
     for mode in ["center", "all"] {
-        let result = fill_output(&speakers, &one, &["LFE", "LFE2"], "silent", mode).unwrap();
+        let result = fill_output(
+            &speakers,
+            &one,
+            &[("LFE".into(), "room".into())],
+            &["LFE", "LFE2"],
+            "silent",
+            mode,
+        )
+        .unwrap();
         for target in ["LFE", "LFE2"] {
-            assert_eq!(source(&result.filled, target), Some("measured"));
+            assert_eq!(source(&result.filled, target), Some("room"));
             assert_eq!(
                 result.hrir.pair(target).unwrap().0.data,
                 one[0].left.as_ref().unwrap().data,
@@ -217,9 +225,23 @@ fn measured_lfe_precedes_lfe_mode_and_fills_the_other_track() {
     }
 
     let two = tagged(&["LFE", "LFE2"]).speakers;
-    let result = fill_output(&speakers, &two, &["LFE", "LFE2"], "silent", "all").unwrap();
-    for (index, target) in ["LFE", "LFE2"].into_iter().enumerate() {
-        assert_eq!(source(&result.filled, target), Some("measured"));
+    let result = fill_output(
+        &speakers,
+        &two,
+        &[
+            ("LFE".into(), "measured_corrected".into()),
+            ("LFE2".into(), "room".into()),
+        ],
+        &["LFE", "LFE2"],
+        "silent",
+        "all",
+    )
+    .unwrap();
+    for (index, (target, label)) in [("LFE", "measured_corrected"), ("LFE2", "room")]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(source(&result.filled, target), Some(label));
         assert_eq!(
             result.hrir.pair(target).unwrap().0.data,
             two[index].left.as_ref().unwrap().data
@@ -231,8 +253,8 @@ fn measured_lfe_precedes_lfe_mode_and_fills_the_other_track() {
 fn defaults_leave_every_output_unchanged() {
     let input = tagged(&["FL", "FR", "FC", "BL", "BR", "SL", "SR"]);
     let targets = ["FL", "FR", "FC", "BL", "BR", "SL", "SR"];
-    let defaults = fill_output(&input, &[], &targets, "silent", "none").unwrap();
-    let enabled = fill_output(&input, &[], &targets, "neighbor", "all").unwrap();
+    let defaults = fill_output(&input, &[], &[], &targets, "silent", "none").unwrap();
+    let enabled = fill_output(&input, &[], &[], &targets, "neighbor", "all").unwrap();
     let names: Vec<_> = targets
         .iter()
         .flat_map(|speaker| [format!("{speaker}-left"), format!("{speaker}-right")])
