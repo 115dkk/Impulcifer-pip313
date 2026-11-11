@@ -105,10 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ubuntu-latest는 2026-11-10 실행부터 26.04 이미지다. 그 이미지에서는
-        # 정확히 같아야 하는 s2r 골든(room_tuning2_s2r_pair_phase)이 1~8 ulp
-        # 어긋났다. 골든을 그 이미지에서 다시 확인할 때까지 24.04에 둔다.
-        os: [ubuntu-24.04, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
