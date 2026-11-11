@@ -146,7 +146,8 @@ say it in the page language; the CLI prints the English sentence with the number
 
 - the list of a single recording;
 - `brir_measurement_map` (`LFE.left=ID,LFE.right=ID`, same for `LFE2`); both ears are required like any slot.
-  `room_measurement_map` and `headphone_measurement_map` reject them.
+  `headphone_measurement_map` rejects them. (`room_measurement_map` accepts them since ADR 0017; see
+  `docs/rust/LFE.md`.)
 - Automatic BRIR assignment of a measurement file: Dirac speakers flagged as subwoofers go to `LFE`, then `LFE2`,
   in project order (a third is left unassigned); a REW title with a subwoofer word and an ear word goes to `LFE`,
   or to `LFE2` when the word ends in `2`. The canonical map lists `LFE` and `LFE2` after the slots.
@@ -154,31 +155,12 @@ say it in the page language; the CLI prints the English sentence with the number
 The service hands them to the pipeline apart from the speakers (`PipelineInputs.lfe`, empty by default). They
 take no part in the FL requirement, the speaker count, virtual-bass planning or the ITD log.
 
-Processing, in pipeline order:
-
-| Stage | Measured LFE |
-| --- | --- |
-| Head crop | Cropped like a speaker with no speaker delay: start at the earlier ear's peak (`peak_index(0, None, 0.12589)`) minus `head_ms`, the same Hann fade-in. |
-| ITD report and correction, speaker alignment | Not applied. |
-| Tail crop | Truncated (or zero-padded) to the speakers' tail length, with the same fade-out window. |
-| Room correction (`eq`, `tuning`, `tuning2`), virtual bass, microphone deviation | Not applied. |
-| Equalisation | The headphone, EQ and target terms of the same stage; no room term. Runs whenever the stage runs. |
-| Decay, channel balance | Not applied. |
-| Normalisation | The gain computed from the speakers is applied; the LFE does not enter the computation. |
-| Resampling | Resampled with the speakers, then the speakers' second gain is applied. |
-
-Output:
-
-- Format files (`layout_files`): an `LFE`/`LFE2` track uses the measured channel of that name; if only one of the
-  two was measured, both tracks use it. A measured channel takes precedence over `lfe_mode`. `filled` reports the
-  source as `measured`.
-- `hesuvi.wav`, `hrir.wav`, `responses.wav`, the TrueHD layouts, JamesDSP and Hangloose are unchanged.
-- The job log and the README name the measured LFE with the existing LFE lines (`cli_info_lfe_filled`,
-  `cli_readme_lfe_filled`) and the source text `cli_lfe_source_measured`.
+Processing and output of the LFE tracks (timing, band limit, room correction, which track a format file uses,
+the source shown in the log and README) are specified in `docs/rust/LFE.md`. Since ADR 0017 (3.19.0) a measured
+LFE is placed by its onset rather than cropped by its peak, gets the 120 Hz LFE band limit, and is corrected with
+the room measurement's subwoofer when room correction runs.
 
 ## Deliberately out of scope
 
 - Linear sweeps, MLS and other signals.
-- Room correction of the LFE, and using a room measurement's subwoofer (an omnidirectional microphone) for the
-  LFE track.
 - Recovering the LFE from `responses.wav`.
