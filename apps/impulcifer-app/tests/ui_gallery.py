@@ -272,7 +272,9 @@ def mock_script(skin, theme, language, scenario):
         ? new Promise(resolve => setTimeout(() => resolve(response), 1500)) : response;
       if (path.endsWith(".liveproject")) {
         const names = ["Left", "Right", "LeftSurround", "RightSurround", "Subwoofer", "Subwoofer"];
-        const slots = ["FL", "FR", "SL", "SR", null, null];
+        // Subwoofers take LFE and LFE2 for room and BRIR measurements (ADR 0016, 0017), not for headphones.
+        const slots = purpose === "headphones" ? ["FL", "FR", "SL", "SR", null, null]
+          : ["FL", "FR", "SL", "SR", "LFE", "LFE2"];
         const positions = path.includes("single") ? [1] : [1, 2, 3, 4, 5, 6, 7, 8, 9];
         // "partial": the Right speaker was not measured at position 2 (no matrix element).
         const missing = path.includes("partial") ? new Set(["2@2"]) : new Set();
@@ -283,7 +285,7 @@ def mock_script(skin, theme, language, scenario):
             .filter(entry => !missing.has(entry.id));
         const map = purpose === "headphones" ? `left=1@1,right=2@${right}`
           : purpose === "brir" ? mapping.map(e => `${e.slot}.${e.side}=${e.id}`).join(",")
-          : "FL=1@1,FR=2@1,SL=3@1,SR=4@1";
+          : "FL=1@1,FR=2@1,SL=3@1,SR=4@1,LFE=5@1,LFE2=6@1";
         return answer(ok({format: "dirac", path, title: "Living room", sample_rate: 48000,
           microphone: "Umik-1  Gain: 18dB", mic_calibration: true, positions,
           speakers: names.map((name, i) => ({index: i + 1, name, subwoofer: i >= 4, slot: slots[i]})),
@@ -1559,8 +1561,9 @@ def room_file_checks(browser):
             return rows.nth(i).locator('select[data-room-field="side"]')
 
         assert [slot(i).input_value() for i in range(4)] == ["FL", "FL", "", ""]
-        # Room measurements have no LFE assignment (only BRIR measurements do).
-        assert "LFE" not in slot(0).locator("option").evaluate_all("nodes => nodes.map(n => n.value)")
+        # A room measurement may stand for a subwoofer too (ADR 0017): LFE and LFE2 follow the slot codes.
+        codes = slot(0).locator("option").evaluate_all("nodes => nodes.map(n => n.value)")
+        assert codes[-2:] == ["LFE", "LFE2"], codes
         assert [side(i).input_value() for i in range(2)] == ["left", "right"]
         assert rows.nth(2).get_attribute("data-state") == "skipped" and slot(2).is_disabled()
         assert side(3).is_disabled()
@@ -1590,13 +1593,18 @@ def room_file_checks(browser):
         assert page.evaluate("galleryCalls.filter(c => c.method === 'start_brir').length") == before
         page.locator("#bf-room-file-result .room-file-positions select").first.wait_for()
         assert rows.count() == 6
-        assert [slot(i).input_value() for i in range(6)] == ["FL", "FR", "SL", "SR", "", ""]
+        assert [slot(i).input_value() for i in range(6)] == ["FL", "FR", "SL", "SR", "LFE", "LFE2"]
         assert "Subwoofer" in rows.nth(4).inner_text()
+        assert rows.nth(4).locator(".room-map-note").inner_text() == catalog("en")["room_file_subwoofer"]
         assert "calibration" in page.locator("#bf-room-file-result").inner_text()
         page.locator('#bf-room-file-result .room-file-positions select[data-room-field="right"]').select_option("2")
         request = request_brir(page)
         assert request["room_measurement_map"] == ("FL.left=1@1,FL.right=1@2,FR.left=2@1,FR.right=2@2,"
-                                                   "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2"), request
+                                                   "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2,"
+                                                   "LFE.left=5@1,LFE.right=5@2,LFE2.left=6@1,LFE2.right=6@2"), request
+        # Back to one position: the subwoofer rows go out in the room form, both ears from one measurement.
+        page.locator('#bf-room-file-result .room-file-positions select[data-room-field="right"]').select_option("1")
+        assert request_brir(page)["room_measurement_map"].endswith(",LFE=5@1,LFE2=6@1")
 
         page.locator("#bf-room-file").fill("D:/Dirac/partial living room.liveproject")
         page.wait_for_function("document.querySelector('#bf-room-file-status')?.textContent === t('hint_room_file')")
@@ -1708,8 +1716,12 @@ def brir_file_checks(browser):
         assert page.evaluate("t('room_file_microphone_calibrated').split('.')[1].trim()") not in text
         request = request_brir(page)
         assert request["brir_measurement_map"] == ("FL.left=1@1,FL.right=1@2,FR.left=2@1,FR.right=2@2,"
-                                                   "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2"), request
+                                                   "SL.left=3@1,SL.right=3@2,SR.left=4@1,SR.right=4@2,"
+                                                   "LFE.left=5@1,LFE.right=5@2,LFE2.left=6@1,LFE2.right=6@2"), request
         assert rows.nth(4).locator(".room-map-note").inner_text() == catalog("en")["brir_file_subwoofer"]
+        slot(4).select_option("")
+        slot(5).select_option("")
+        assert "LFE" not in request_brir(page)["brir_measurement_map"]
         slot(4).select_option("LFE")
         slot(5).select_option("LFE2")
         request = request_brir(page)

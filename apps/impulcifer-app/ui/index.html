@@ -391,7 +391,9 @@
                        siblings of the rows (no wrappers), because the last group starts with the level
                        match row the first tuning shares; app.js updateRoomRows shows them in tuning 2
                        only and moves the room volume and Schroeder rows into the band group there.
-                       The filter decides whether the latency row shows, so that row sits right under it. -->
+                       The filter decides whether the latency row shows, so that row sits right under it.
+                       The on/off options of a group sit in a .t2-toggles wrapper: Stable lays it out as
+                       if it were not there (display: contents), Studio makes its rows toggle tiles. -->
                   <h4 class="t2-head" id="bf-room-tuning2-head-filter" data-i18n="section_room_tuning2_filter" hidden>Filter</h4>
                   <div class="field-row" id="bf-room-tuning2-mode-row" hidden>
                     <span class="field-label"><label for="bf-room-tuning2-mode" data-i18n="label_room_tuning2_mode">Filter:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mode-tip" class="tip-bubble">PEQ and an FIR with 8 ms latency. The FIR corrects part of the room's bass timing within that latency.</span></span></span>
@@ -446,6 +448,7 @@
                     <input type="text" id="bf-room-tuning2-bands" class="mono" value="" placeholder="1000-3000, 6000-9000" spellcheck="false" aria-describedby="bf-room-tuning2-bands-tip">
                   </div>
                   <h4 class="t2-head" id="bf-room-tuning2-head-protect" data-i18n="section_room_tuning2_protect" hidden>Protection</h4>
+                  <div class="t2-toggles">
                   <div class="check-row" id="bf-room-tuning2-dip-limit-row" hidden>
                     <input type="checkbox" id="bf-room-tuning2-dip-limit" aria-describedby="bf-room-tuning2-dip-limit-tip">
                     <label for="bf-room-tuning2-dip-limit" data-i18n="checkbox_room_tuning2_dip_limit">Fill narrow dips only partly</label>
@@ -456,11 +459,13 @@
                     <label for="bf-room-tuning2-low-protect" data-i18n="checkbox_room_tuning2_low_protect">Protect the speaker's bass rolloff</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-low-protect-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-low-protect-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_low_protect">Finds where the speaker's own response rolls off (10 dB below its 200 to 1000 Hz level) and allows no boost below that frequency, with the boost limit ramping up over the octave above it. The PEQ bands and the FIR are checked afterwards so no boost leaks below the rolloff. Without a rolloff above 20 Hz nothing changes.</span></span>
                   </div>
+                  </div>
                   <div class="field-row" id="bf-room-tuning2-input-hp-row" hidden>
                     <span class="field-label"><label for="bf-room-tuning2-input-hp" data-i18n="label_room_tuning2_input_hp">Cut all speakers below (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-input-hp-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-input-hp-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_input_hp">An 8th-order high-pass at this frequency on every speaker, 10 to 50 Hz, applied after the correction is designed. All speakers pass the same filter, so their phase relation above the cut stays the same while the deepest bass is not driven. Leave empty for none.</span></span></span>
                     <input type="number" id="bf-room-tuning2-input-hp" class="num mono" min="10" max="50" step="any" placeholder="off" aria-describedby="bf-room-tuning2-input-hp-tip">
                   </div>
                   <h4 class="t2-head" id="bf-room-tuning2-head-timing" data-i18n="section_room_tuning2_timing" hidden>Time and phase</h4>
+                  <div class="t2-toggles">
                   <div class="check-row" id="bf-room-tuning2-mode-decay-row" hidden>
                     <input type="checkbox" id="bf-room-tuning2-mode-decay" aria-describedby="bf-room-tuning2-mode-decay-tip">
                     <label for="bf-room-tuning2-mode-decay" data-i18n="checkbox_room_tuning2_mode_decay">Shorten long room modes</label>
@@ -475,6 +480,7 @@
                     <input type="checkbox" id="bf-room-tuning2-hf-phase" aria-describedby="bf-room-tuning2-hf-phase-tip">
                     <label for="bf-room-tuning2-hf-phase" data-i18n="checkbox_room_tuning2_hf_phase">Match the treble phase above the band</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-hf-phase-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-hf-phase-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_hf_phase">Above the correction band the FIR leaves a fixed phase turn that differs from speaker to speaker. This undoes it over the three octaves above the band, only by adding delay there, so every speaker's treble keeps the same phase.</span></span>
+                  </div>
                   </div>
                   <p class="hint" id="bf-room-tuning2-fir-hint" data-i18n="hint_room_tuning2_fir_only" hidden>PEQ only has no FIR, so the bass arrival and the treble phase stay as recorded.</p>
                   <!-- app.js updateRoomRows shows the rows of the chosen mode. A row that the timing
@@ -497,6 +503,7 @@
                     <input type="number" id="bf-room-tuning-curtain" class="num mono" value="300" min="100" max="5000" step="10" aria-describedby="bf-room-tuning-curtain-tip">
                   </div>
                   <h4 class="t2-head" id="bf-room-tuning2-head-speakers" data-i18n="section_room_tuning2_speakers" hidden>Between speakers</h4>
+                  <div class="t2-toggles">
                   <div class="check-row" id="bf-room-tuning-level-match-row" hidden>
                     <input type="checkbox" id="bf-room-tuning-level-match" checked aria-describedby="bf-room-tuning-level-match-tip">
                     <label for="bf-room-tuning-level-match" data-i18n="checkbox_room_tuning_level_match">Match speaker levels</label>
@@ -506,6 +513,7 @@
                     <input type="checkbox" id="bf-room-tuning2-mimo" aria-describedby="bf-room-tuning2-mimo-tip">
                     <label for="bf-room-tuning2-mimo" data-i18n="checkbox_room_tuning2_mimo">Cancel late bass with the other speakers (MIMO)</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo">Adds to each speaker low-frequency copies played by the other speakers, designed to cancel the bass that lingers at the ears after the first 60 ms (adjustable below). Works only below the upper limit, and a check keeps every band from getting worse.</span></span>
+                  </div>
                   </div>
                   <!-- MIMO's own settings open under its checkbox, indented. -->
                   <div class="t2-nested" id="bf-room-tuning2-mimo-detail" hidden>
@@ -523,10 +531,12 @@
                     <span class="field-label"><label for="bf-room-tuning2-mimo-early" data-i18n="label_room_tuning2_mimo_early">MIMO starts after (ms):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-early-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-early-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo_early">How long after the direct sound the MIMO copies may start to act. A shorter time lets them also shorten the early bass decay, but drives them harder, so the check turns them down more often. 60 ms is the earlier behaviour.</span></span></span>
                     <input type="number" id="bf-room-tuning2-mimo-early" class="num mono" value="60" min="5" max="60" step="any" aria-describedby="bf-room-tuning2-mimo-early-tip">
                   </div>
+                  <div class="t2-toggles">
                   <div class="check-row" id="bf-room-tuning2-mimo-ear-guard-row" hidden>
                     <input type="checkbox" id="bf-room-tuning2-mimo-ear-guard" aria-describedby="bf-room-tuning2-mimo-ear-guard-tip">
                     <label for="bf-room-tuning2-mimo-ear-guard" data-i18n="checkbox_room_tuning2_mimo_ear_guard">Check each ear separately</label>
                     <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-ear-guard-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-ear-guard-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo_ear_guard">The check that turns the MIMO copies down looks at both ears together, so a copy that helps one ear more than it hurts the other gets through. With this on, the copies are turned down whenever either ear gets worse. The README names the ear that set the limit.</span></span>
+                  </div>
                   </div>
                   </div>
                   <div class="field-row" id="bf-room-phase-limit-row" hidden>

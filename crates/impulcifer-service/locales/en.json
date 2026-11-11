@@ -155,7 +155,7 @@
   "option_room_file_left": "Left ear",
   "option_room_file_right": "Right ear",
   "room_file_skipped": "No impulse response, so it cannot be used",
-  "room_file_subwoofer": "A subwoofer. Room correction is not applied to the LFE track, so this measurement is used only if you assign it to a speaker.",
+  "room_file_subwoofer": "A subwoofer. When assigned to LFE, this measurement is used to correct the LFE track and to create it if no subwoofer was measured in the ears.",
   "hint_room_file": "Only the measurements assigned here are used. The folder's room-*.wav files are not read.",
   "room_file_choose": "Choose a .mdat or .liveproject file.",
   "room_file_missing": "The file does not exist. Check the path.",
@@ -499,5 +499,12 @@
   "cli_readme_filled_channels": "Unmeasured channels filled from the nearest measured speaker: {list}",
   "cli_readme_lfe_filled": "The LFE tracks use {source}.",
   "cli_lfe_source_all": "the low frequencies of every measured speaker (below 120 Hz)",
-  "cli_lfe_source_measured": "the measured subwoofer"
+  "cli_lfe_source_measured": "the measured subwoofer",
+  "cli_room_lfe_created": "{slot}: created the LFE track from the room measurement's subwoofer, with its level matched using {count} speakers",
+  "cli_room_lfe_level_spread": "{slot}: the level difference between the in-ear and the room measurements varies by {spread} dB across speakers; they may have been measured at different seats",
+  "cli_room_lfe_no_level": "{slot}: the room measurement shares only {count} speakers with the BRIR measurements (3 are needed), so no LFE track is made from its subwoofer",
+  "cli_room_lfe_correction": "{slot}: corrected with the room measurement's subwoofer, {low}–{high} Hz",
+  "cli_room_lfe_uncorrected": "{slot}: the room measurement has no subwoofer for this LFE track, so it is not corrected",
+  "cli_lfe_source_measured_corrected": "the measured subwoofer, corrected with the room measurement",
+  "cli_lfe_source_room": "the room measurement's subwoofer"
 }

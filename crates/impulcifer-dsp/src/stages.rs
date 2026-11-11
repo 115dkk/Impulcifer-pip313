@@ -6,6 +6,7 @@ pub mod eqapo;
 pub mod equalize;
 pub mod fill;
 pub mod headphone;
+pub mod lfe;
 pub mod readme;
 pub mod room;
 pub mod room_tuning;

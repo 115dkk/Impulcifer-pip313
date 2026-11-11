@@ -155,7 +155,7 @@
   "option_room_file_left": "Linkes Ohr",
   "option_room_file_right": "Rechtes Ohr",
   "room_file_skipped": "Keine Impulsantwort vorhanden, daher nicht verwendbar",
-  "room_file_subwoofer": "Subwoofer. Auf die LFE-Spur wird keine Raumkorrektur angewendet. Diese Messung wird daher nur verwendet, wenn Sie sie einem Lautsprecher zuordnen.",
+  "room_file_subwoofer": "Subwoofer. Bei Zuordnung zu LFE wird diese Messung zur Korrektur der LFE-Spur verwendet. Liegt keine In-Ear-Messung des Subwoofers vor, wird die LFE-Spur daraus erstellt.",
   "hint_room_file": "Nur die hier zugeordneten Messungen werden verwendet. Die room-*.wav-Dateien im Ordner werden nicht gelesen.",
   "room_file_choose": "Wählen Sie eine .mdat- oder .liveproject-Datei.",
   "room_file_missing": "Die Datei existiert nicht. Prüfen Sie den Pfad.",
@@ -499,5 +499,12 @@
   "cli_readme_filled_channels": "Nicht gemessene Kanäle, gefüllt mit dem nächstgelegenen gemessenen Lautsprecher: {list}",
   "cli_readme_lfe_filled": "Die LFE-Spuren verwenden {source}.",
   "cli_lfe_source_all": "die tiefen Frequenzen aller gemessenen Lautsprecher (unterhalb von 120 Hz)",
-  "cli_lfe_source_measured": "den gemessenen Subwoofer"
+  "cli_lfe_source_measured": "den gemessenen Subwoofer",
+  "cli_room_lfe_created": "{slot}: LFE-Spur aus dem Subwoofer der Raummessung erstellt, Pegel anhand von {count} Lautsprechern abgeglichen",
+  "cli_room_lfe_level_spread": "{slot}: Der Pegelunterschied zwischen In-Ear- und Raummessungen variiert je nach Lautsprecher um {spread} dB. Möglicherweise wurden die Messungen an unterschiedlichen Sitzplätzen durchgeführt",
+  "cli_room_lfe_no_level": "{slot}: Raum- und BRIR-Messungen haben nur {count} Lautsprecher gemeinsam (3 sind erforderlich). Daher wird aus dem Subwoofer der Raummessung keine LFE-Spur erstellt",
+  "cli_room_lfe_correction": "{slot}: Mit dem Subwoofer der Raummessung von {low} bis {high} Hz korrigiert",
+  "cli_room_lfe_uncorrected": "{slot}: Die Raummessung enthält keinen Subwoofer für diese LFE-Spur, daher wird sie nicht korrigiert",
+  "cli_lfe_source_measured_corrected": "den gemessenen Subwoofer, korrigiert anhand der Raummessung",
+  "cli_lfe_source_room": "den Subwoofer der Raummessung"
 }

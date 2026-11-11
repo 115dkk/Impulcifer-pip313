@@ -311,7 +311,7 @@ pub fn fill_lfe(
     }
 }
 
-fn measured_lfe(measured: &[SpeakerIrs], target: &str) -> Option<SpeakerIrs> {
+fn measured_lfe(measured: &[SpeakerIrs], target: &str) -> Option<(SpeakerIrs, String)> {
     [target, if target == "LFE" { "LFE2" } else { "LFE" }]
         .into_iter()
         .find_map(|source| {
@@ -319,10 +319,11 @@ fn measured_lfe(measured: &[SpeakerIrs], target: &str) -> Option<SpeakerIrs> {
                 .iter()
                 .find(|pair| pair.speaker == source && pair.left.is_some() && pair.right.is_some())
                 .cloned()
+                .map(|pair| (pair, source.to_owned()))
         })
-        .map(|mut pair| {
+        .map(|(mut pair, source)| {
             pair.speaker = target.into();
-            pair
+            (pair, source)
         })
 }
 
@@ -330,6 +331,7 @@ fn measured_lfe(measured: &[SpeakerIrs], target: &str) -> Option<SpeakerIrs> {
 pub fn fill_output(
     hrir: &Hrir,
     measured_lfe_pairs: &[SpeakerIrs],
+    measured_lfe_labels: &[(String, String)],
     targets: &[&str],
     missing_mode: &str,
     lfe_mode: &str,
@@ -350,9 +352,14 @@ pub fn fill_output(
         if !targets.contains(&lfe) {
             continue;
         }
-        if let Some(pair) = measured_lfe(measured_lfe_pairs, lfe) {
+        if let Some((pair, source_slot)) = measured_lfe(measured_lfe_pairs, lfe) {
+            let source = measured_lfe_labels
+                .iter()
+                .find(|(slot, _)| slot == &source_slot)
+                .map_or("measured", |(_, label)| label.as_str())
+                .to_owned();
             result.hrir.speakers.push(pair);
-            result.filled.push((lfe, "measured".into()));
+            result.filled.push((lfe, source));
         } else if let Some((pair, source)) = fill_lfe(hrir, lfe, lfe_mode)? {
             result.hrir.speakers.push(pair);
             result.filled.push((lfe, source));

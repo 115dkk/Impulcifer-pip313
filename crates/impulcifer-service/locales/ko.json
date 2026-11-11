@@ -155,7 +155,7 @@
   "option_room_file_left": "왼쪽 귀",
   "option_room_file_right": "오른쪽 귀",
   "room_file_skipped": "임펄스 응답이 없어 쓸 수 없습니다",
-  "room_file_subwoofer": "서브우퍼입니다. 룸 보정은 LFE 트랙에 걸지 않으므로, 스피커를 골라 배정할 때만 이 측정을 씁니다.",
+  "room_file_subwoofer": "서브우퍼입니다. LFE에 배정하면 LFE 트랙을 보정하는 데 쓰고, 귓속에서 잰 서브우퍼가 없으면 이 측정으로 LFE 트랙을 만듭니다.",
   "hint_room_file": "여기서 스피커에 배정한 측정만 씁니다. 폴더의 room-*.wav 파일은 읽지 않습니다.",
   "room_file_choose": ".mdat 또는 .liveproject 파일을 고르세요.",
   "room_file_missing": "파일이 없습니다. 경로를 확인하세요.",
@@ -499,5 +499,12 @@
   "cli_readme_filled_channels": "가장 가까운 측정 스피커로 채운 미측정 채널: {list}",
   "cli_readme_lfe_filled": "LFE 트랙에 쓰는 원본은 {source}입니다.",
   "cli_lfe_source_all": "측정한 모든 스피커의 저역(120 Hz 미만)",
-  "cli_lfe_source_measured": "측정한 서브우퍼"
+  "cli_lfe_source_measured": "측정한 서브우퍼",
+  "cli_room_lfe_created": "{slot}: 룸 측정의 서브우퍼로 LFE 트랙을 만들고 스피커 {count}개에 맞춰 레벨을 조정했습니다",
+  "cli_room_lfe_level_spread": "{slot}: 귓속 측정과 룸 측정 사이의 레벨 차이는 스피커에 따라 {spread} dB만큼 달라집니다. 두 측정의 자리가 달랐을 수 있습니다",
+  "cli_room_lfe_no_level": "{slot}: 룸 측정과 BRIR 측정에 공통된 스피커가 {count}개뿐입니다(3개 필요). 룸 측정의 서브우퍼로 LFE 트랙을 만들지 않습니다",
+  "cli_room_lfe_correction": "{slot}: 룸 측정의 서브우퍼로 {low}~{high} Hz를 보정했습니다",
+  "cli_room_lfe_uncorrected": "{slot}: 룸 측정에 이 LFE 트랙의 서브우퍼가 없어 보정하지 않습니다",
+  "cli_lfe_source_measured_corrected": "룸 측정으로 보정한 측정 서브우퍼",
+  "cli_lfe_source_room": "룸 측정의 서브우퍼"
 }
