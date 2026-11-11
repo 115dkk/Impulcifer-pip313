@@ -1072,6 +1072,13 @@ tests = ["impulcifer-io::lfe_targets_are_valid_for_room_and_brir_only", "impulci
 note = "ADR 0017: a subwoofer in a room measurement file can make or correct LFE tracks, with shared-speaker level transfer, room correction, common onset placement and a 120 Hz LR4 band limit"
 
 [[feature]]
+id = "output.lfe_sum"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-dsp::one_lfe_channel_sums_both_measured_subwoofers", "impulcifer-service::two_room_subwoofers_are_summed_for_one_lfe_channel"]
+note = "ADR 0018: a format file with one LFE channel uses the sample sum of the finished LFE and LFE2 tracks and reports the sum as the LFE source; formats with two LFE channels keep them apart"
+
+[[feature]]
 id = "output.recovery_immersive_layouts"
 kind = "output"
 status = "implemented"

@@ -327,6 +327,52 @@ fn measured_lfe(measured: &[SpeakerIrs], target: &str) -> Option<(SpeakerIrs, St
         })
 }
 
+fn complete<'a>(measured: &'a [SpeakerIrs], slot: &str) -> Option<&'a SpeakerIrs> {
+    measured
+        .iter()
+        .find(|pair| pair.speaker == slot && pair.left.is_some() && pair.right.is_some())
+}
+
+/// The one LFE channel of a format driven by both measured subwoofers (ADR 0018): the sample sum
+/// of the two finished tracks, ear by ear. The source is `sum:<LFE label>+<LFE2 label>`.
+fn summed_lfe(
+    measured: &[SpeakerIrs],
+    labels: &[(String, String)],
+    target: &str,
+) -> Result<Option<(SpeakerIrs, String)>, DspError> {
+    let (Some(first), Some(second)) = (complete(measured, "LFE"), complete(measured, "LFE2"))
+    else {
+        return Ok(None);
+    };
+    let sum = |a: &Option<ImpulseResponse>, b: &Option<ImpulseResponse>| {
+        let (a, b) = (a.as_ref().unwrap(), b.as_ref().unwrap());
+        if a.fs != b.fs || a.data.len() != b.data.len() {
+            return Err(DspError::InvalidArgument(
+                "LFE and LFE2 tracks must have equal sample rates and lengths to be summed".into(),
+            ));
+        }
+        Ok(ImpulseResponse {
+            data: a.data.iter().zip(&b.data).map(|(x, y)| x + y).collect(),
+            fs: a.fs,
+            recording: None,
+        })
+    };
+    let label = |slot: &str| {
+        labels
+            .iter()
+            .find(|(labelled, _)| labelled == slot)
+            .map_or("measured", |(_, label)| label.as_str())
+    };
+    Ok(Some((
+        SpeakerIrs {
+            speaker: target.into(),
+            left: Some(sum(&first.left, &second.left)?),
+            right: Some(sum(&first.right, &second.right)?),
+        },
+        format!("sum:{}+{}", label("LFE"), label("LFE2")),
+    )))
+}
+
 /// Assemble an output-only HRIR, filling speakers first and preferring measured LFE.
 pub fn fill_output(
     hrir: &Hrir,
@@ -352,7 +398,16 @@ pub fn fill_output(
         if !targets.contains(&lfe) {
             continue;
         }
-        if let Some((pair, source_slot)) = measured_lfe(measured_lfe_pairs, lfe) {
+        let other = if lfe == "LFE" { "LFE2" } else { "LFE" };
+        let summed = if targets.contains(&other) {
+            None
+        } else {
+            summed_lfe(measured_lfe_pairs, measured_lfe_labels, lfe)?
+        };
+        if let Some((pair, source)) = summed {
+            result.hrir.speakers.push(pair);
+            result.filled.push((lfe, source));
+        } else if let Some((pair, source_slot)) = measured_lfe(measured_lfe_pairs, lfe) {
             let source = measured_lfe_labels
                 .iter()
                 .find(|(slot, _)| slot == &source_slot)

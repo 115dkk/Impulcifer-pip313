@@ -435,7 +435,7 @@
   "hint_lfe_mode_none": "Les pistes LFE des fichiers dans l’ordre des canaux restent silencieuses. hesuvi.wav et hrir.wav n’ont pas de piste LFE.",
   "hint_lfe_mode_center": "Les pistes LFE utilisent l’enceinte centrale, ou les deux enceintes avant si l’enceinte centrale n’a pas été mesurée.",
   "hint_lfe_mode_all": "Les pistes LFE sont créées à partir des graves sous 120 Hz de toutes les enceintes mesurées. La moyenne des directions atténue les pics et les creux propres à chaque position, comme le font plusieurs caissons de graves dans une pièce.",
-  "hint_lfe_measured": "Une mesure de caisson de graves attribuée à LFE est utilisée quel que soit ce réglage.",
+  "hint_lfe_measured": "Une mesure de caisson de graves attribuée à LFE est utilisée quel que soit ce réglage. Si un caisson de graves est attribué à LFE et un autre à LFE2, les formats à un seul canal LFE reproduisent les deux ensemble.",
   "section_guided": "Mesure en tournant la tête",
   "hint_guided_intro": "Mesurez plus de positions que vous n’avez d’enceintes : asseyez-vous sur une chaise pivotante et tournez entre les enregistrements comme indiqué à chaque étape. Chaque enregistrement est sauvegardé sous le nom lu par Traitement.",
   "hint_guided_distance": "Asseyez-vous à au moins 1,5 m des enceintes ; plus près, le son paraît moins large. Marquez chaque angle avec du ruban adhésif au sol pour retrouver la même orientation.",
@@ -506,5 +506,6 @@
   "cli_room_lfe_correction": "{slot} : correction de {low} à {high} Hz avec le caisson de graves des mesures de la pièce",
   "cli_room_lfe_uncorrected": "{slot} : les mesures de la pièce ne contiennent pas de caisson de graves pour cette piste LFE, elle n’est donc pas corrigée",
   "cli_lfe_source_measured_corrected": "le caisson de graves mesuré, corrigé à partir des mesures de la pièce",
-  "cli_lfe_source_room": "le caisson de graves des mesures de la pièce"
+  "cli_lfe_source_room": "le caisson de graves des mesures de la pièce",
+  "cli_lfe_source_sum": "les deux caissons de graves ensemble (LFE : {first} ; LFE2 : {second})"
 }

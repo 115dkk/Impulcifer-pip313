@@ -758,6 +758,83 @@ fn room_measurement_subwoofer_makes_the_lfe_track() {
 }
 
 #[test]
+fn two_room_subwoofers_are_summed_for_one_lfe_channel() {
+    fn run(map: &str) -> (Temp, impulcifer_jobs::registry::PollResult) {
+        let temp = Temp::demo();
+        let project = temp.0.join("room.liveproject");
+        std::fs::write(
+            &project,
+            room_builder::dirac_project_three_speakers_and_sub(48_000),
+        )
+        .unwrap();
+        let poll = run_config(ProcessingConfig {
+            dir_path: Some(temp.0.to_string_lossy().into_owned()),
+            room_measurement_file: Some(project.to_string_lossy().into_owned()),
+            room_measurement_map: Some(map.into()),
+            layout_files: "9.1.4,22.2".into(),
+            do_headphone_compensation: false,
+            do_equalization: false,
+            ..Default::default()
+        });
+        assert_eq!(
+            poll.job.status,
+            JobStatus::Succeeded,
+            "{:?}",
+            poll.job.error
+        );
+        (temp, poll)
+    }
+    fn lfe_tracks(dir: &Temp, id: &str, slot: &str) -> (Vec<f64>, Vec<f64>) {
+        let layout = impulcifer_types::layouts::layout(id).unwrap();
+        let index = layout
+            .channels
+            .iter()
+            .position(|channel| channel.slot == slot)
+            .unwrap();
+        let wav = impulcifer_io::read_wav(&dir.0.join(layout.file_name)).unwrap();
+        (
+            wav.tracks[2 * index].clone(),
+            wav.tracks[2 * index + 1].clone(),
+        )
+    }
+
+    // The same subwoofer measurement on both slots: the sum is twice one track.
+    let (one, _) = run("FL=1@1,FR=2@1,FC=3@1,LFE=4@1");
+    let (two, poll) = run("FL=1@1,FR=2@1,FC=3@1,LFE=4@1,LFE2=4@1");
+    let single = lfe_tracks(&one, "9.1.4", "LFE");
+    let summed = lfe_tracks(&two, "9.1.4", "LFE");
+    assert!(single.0.iter().any(|sample| *sample != 0.0));
+    for (summed, single) in [(&summed.0, &single.0), (&summed.1, &single.1)] {
+        assert_eq!(summed.len(), single.len());
+        // The file holds 32-bit integers: each track is rounded to one step of 2^-31.
+        for (summed, single) in summed.iter().zip(single) {
+            assert!((*summed - 2.0 * *single).abs() <= 2.0_f64.powi(-30));
+        }
+    }
+    // A format with two LFE channels keeps the subwoofers apart.
+    assert_eq!(lfe_tracks(&two, "22.2", "LFE"), single);
+    assert_eq!(lfe_tracks(&two, "22.2", "LFE2"), single);
+
+    let sum = "both subwoofers together (LFE: the room measurement's subwoofer; LFE2: the room measurement's subwoofer)";
+    let readme = std::fs::read_to_string(two.0.join("README.md")).unwrap();
+    assert!(readme.contains(sum), "{readme}");
+    assert!(
+        poll.events.iter().any(|event| {
+            event.payload["key"] == "cli_info_lfe_filled"
+                && event.payload["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains(sum))
+        }),
+        "{:?}",
+        poll.events
+    );
+    assert_eq!(
+        std::fs::read(one.0.join("hesuvi.wav")).unwrap(),
+        std::fs::read(two.0.join("hesuvi.wav")).unwrap()
+    );
+}
+
+#[test]
 fn room_measurement_subwoofer_corrects_the_measured_lfe() {
     let source = Temp::new();
     let (recording, sweep) = foreign_sequence(&source, 8_000);

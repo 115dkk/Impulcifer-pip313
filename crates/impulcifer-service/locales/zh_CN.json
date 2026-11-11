@@ -435,7 +435,7 @@
   "hint_lfe_mode_none": "声道顺序文件的 LFE 音轨保持静音。hesuvi.wav 和 hrir.wav 没有 LFE 音轨。",
   "hint_lfe_mode_center": "LFE 音轨使用中置扬声器；如果未测量中置扬声器，则使用两个前方扬声器。",
   "hint_lfe_mode_all": "LFE 音轨由所有已测量扬声器低于 120 Hz 的低音合成。对不同方向取平均，可减小各个位置的峰谷起伏，类似于在房间内使用多个低音炮。",
-  "hint_lfe_measured": "如果有分配到 LFE 的低音炮测量，无论此处如何设置，都会使用该测量。",
+  "hint_lfe_measured": "如果有分配到 LFE 的低音炮测量，无论此处如何设置，都会使用该测量。如果 LFE 和 LFE2 各分配了一个低音炮，只有一个 LFE 声道的格式会将两者的声音叠加播放。",
   "section_guided": "转头测量",
   "hint_guided_intro": "用较少的扬声器测量更多位置：坐在转椅上，每次录音前按当前步骤的指示转向。每一步的录音都会以“处理”页面可读取的名称保存。",
   "hint_guided_distance": "请坐在距扬声器至少 1.5 m 的位置；距离过近会使声场变窄。在地板上用胶带标出各个角度，方便再次转到相同方向。",
@@ -506,5 +506,6 @@
   "cli_room_lfe_correction": "{slot}：已用房间测量中的低音炮校正 {low}～{high} Hz 频段",
   "cli_room_lfe_uncorrected": "{slot}：房间测量中没有与此 LFE 音轨对应的低音炮，因此不进行校正",
   "cli_lfe_source_measured_corrected": "经房间测量校正的实测低音炮",
-  "cli_lfe_source_room": "房间测量中的低音炮"
+  "cli_lfe_source_room": "房间测量中的低音炮",
+  "cli_lfe_source_sum": "两个低音炮叠加后的声音（LFE：{first}；LFE2：{second}）"
 }

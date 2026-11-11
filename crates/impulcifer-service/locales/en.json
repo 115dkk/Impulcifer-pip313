@@ -435,7 +435,7 @@
   "hint_lfe_mode_none": "The LFE tracks of the channel-order files stay silent. hesuvi.wav and hrir.wav have no LFE track.",
   "hint_lfe_mode_center": "The LFE tracks use the center speaker, or the two front speakers when the center was not measured.",
   "hint_lfe_mode_all": "The LFE tracks are made from the bass of every measured speaker below 120 Hz. Averaging the directions evens out the peaks and dips of any one position, as several subwoofers do in a room.",
-  "hint_lfe_measured": "A subwoofer measurement assigned to LFE is used regardless of this setting.",
+  "hint_lfe_measured": "A subwoofer measurement assigned to LFE is used regardless of this setting. With subwoofers on both LFE and LFE2, a format with one LFE channel plays the two together.",
   "section_guided": "Head-turn measurement",
   "hint_guided_intro": "Measure more speaker positions than you have speakers: sit in a swivel chair and turn between recordings as each step shows. Every step is saved under the name Processing reads.",
   "hint_guided_distance": "Sit at least 1.5 m from the speakers; closer than that narrows the sound. Tape on the floor at each angle makes the turns repeatable.",
@@ -506,5 +506,6 @@
   "cli_room_lfe_correction": "{slot}: corrected with the room measurement's subwoofer, {low}–{high} Hz",
   "cli_room_lfe_uncorrected": "{slot}: the room measurement has no subwoofer for this LFE track, so it is not corrected",
   "cli_lfe_source_measured_corrected": "the measured subwoofer, corrected with the room measurement",
-  "cli_lfe_source_room": "the room measurement's subwoofer"
+  "cli_lfe_source_room": "the room measurement's subwoofer",
+  "cli_lfe_source_sum": "both subwoofers together (LFE: {first}; LFE2: {second})"
 }

@@ -435,7 +435,7 @@
   "hint_lfe_mode_none": "Las pistas LFE de los archivos en orden de canales permanecen en silencio. hesuvi.wav y hrir.wav no tienen pista LFE.",
   "hint_lfe_mode_center": "Las pistas LFE usan el altavoz central, o los dos altavoces frontales si no se ha medido el central.",
   "hint_lfe_mode_all": "Las pistas LFE se crean con los graves por debajo de 120 Hz de todos los altavoces medidos. Promediar las direcciones suaviza los picos y valles de cada posición, como hacen varios subwoofers en una sala.",
-  "hint_lfe_measured": "Si hay una medición de subwoofer asignada a LFE, se usa independientemente de este ajuste.",
+  "hint_lfe_measured": "Si hay una medición de subwoofer asignada a LFE, se usa independientemente de este ajuste. Si hay un subwoofer asignado a LFE y otro a LFE2, los formatos con un solo canal LFE reproducen ambos juntos.",
   "section_guided": "Medición girando la cabeza",
   "hint_guided_intro": "Mide más posiciones de las que puedes cubrir con tus altavoces: siéntate en una silla giratoria y gira entre grabaciones como indica cada paso. Cada grabación se guarda con el nombre que lee Procesamiento.",
   "hint_guided_distance": "Siéntate al menos a 1,5 m de los altavoces; a menor distancia, el sonido pierde amplitud espacial. Marca cada ángulo con cinta en el suelo para poder repetir los giros.",
@@ -506,5 +506,6 @@
   "cli_room_lfe_correction": "{slot}: corregido con el subwoofer de la medición de sala, de {low} a {high} Hz",
   "cli_room_lfe_uncorrected": "{slot}: la medición de sala no contiene un subwoofer para esta pista LFE, por lo que no se corrige",
   "cli_lfe_source_measured_corrected": "el subwoofer medido, corregido con la medición de sala",
-  "cli_lfe_source_room": "el subwoofer de la medición de sala"
+  "cli_lfe_source_room": "el subwoofer de la medición de sala",
+  "cli_lfe_source_sum": "ambos subwoofers juntos (LFE: {first}; LFE2: {second})"
 }

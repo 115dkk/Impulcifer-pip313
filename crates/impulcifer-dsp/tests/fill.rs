@@ -250,6 +250,60 @@ fn measured_lfe_precedes_lfe_mode_and_fills_the_other_track() {
 }
 
 #[test]
+fn one_lfe_channel_sums_both_measured_subwoofers() {
+    let speakers = tagged(&["FL", "FR", "FC"]);
+    let two = hrir(
+        &[
+            ("LFE", vec![1.0, 2.0, 0.5], vec![-1.0, 0.25, 0.0]),
+            ("LFE2", vec![0.5, -3.0, 0.25], vec![4.0, 0.5, -2.0]),
+        ],
+        48_000,
+    )
+    .speakers;
+    let labels = [
+        ("LFE".to_owned(), "measured_corrected".to_owned()),
+        ("LFE2".to_owned(), "room".to_owned()),
+    ];
+    // A format with one LFE channel: the track is the two subwoofers together.
+    let result = fill_output(&speakers, &two, &labels, &["FL", "LFE"], "silent", "all").unwrap();
+    assert_eq!(
+        source(&result.filled, "LFE"),
+        Some("sum:measured_corrected+room")
+    );
+    let (left, right) = result.hrir.pair("LFE").unwrap();
+    assert_eq!(left.data, vec![1.5, -1.0, 0.75]);
+    assert_eq!(right.data, vec![3.0, 0.75, -2.0]);
+    assert!(result.hrir.pair("LFE2").is_none());
+
+    // A format with two LFE channels keeps them apart.
+    let apart = fill_output(&speakers, &two, &labels, &["LFE", "LFE2"], "silent", "all").unwrap();
+    assert_eq!(source(&apart.filled, "LFE"), Some("measured_corrected"));
+    assert_eq!(source(&apart.filled, "LFE2"), Some("room"));
+    assert_eq!(apart.hrir.pair("LFE").unwrap().0.data, vec![1.0, 2.0, 0.5]);
+
+    // One subwoofer alone is used as it is.
+    let alone = fill_output(
+        &speakers,
+        &two[1..],
+        &labels[1..],
+        &["FL", "LFE"],
+        "silent",
+        "none",
+    )
+    .unwrap();
+    assert_eq!(source(&alone.filled, "LFE"), Some("room"));
+    assert_eq!(
+        alone.hrir.pair("LFE").unwrap().0.data,
+        vec![0.5, -3.0, 0.25]
+    );
+
+    // Tracks of different lengths cannot be summed.
+    let mut uneven = two.clone();
+    uneven[1].left.as_mut().unwrap().data.push(0.0);
+    assert!(fill_output(&speakers, &uneven, &labels, &["LFE"], "silent", "none").is_err());
+}
+
+#[test]
 fn defaults_leave_every_output_unchanged() {
     let input = tagged(&["FL", "FR", "FC", "BL", "BR", "SL", "SR"]);
     let targets = ["FL", "FR", "FC", "BL", "BR", "SL", "SR"];

@@ -435,7 +435,7 @@
   "hint_lfe_mode_none": "채널 순서 파일의 LFE 트랙을 무음으로 둡니다. hesuvi.wav와 hrir.wav에는 LFE 트랙이 없습니다.",
   "hint_lfe_mode_center": "LFE 트랙에 센터 스피커를 쓰고, 센터를 측정하지 않았으면 앞쪽 스피커 두 개를 씁니다.",
   "hint_lfe_mode_all": "측정한 모든 스피커의 120 Hz 미만 저음으로 LFE 트랙을 만듭니다. 여러 방향의 저음을 평균하면 방에 서브우퍼를 여러 대 놓았을 때처럼 각 위치의 피크와 딥이 고르게 됩니다.",
-  "hint_lfe_measured": "서브우퍼를 LFE에 배정한 측정이 있으면 이 설정과 관계없이 그 측정을 씁니다.",
+  "hint_lfe_measured": "서브우퍼를 LFE에 배정한 측정이 있으면 이 설정과 관계없이 그 측정을 씁니다. LFE와 LFE2에 서브우퍼를 하나씩 배정하면 LFE 채널이 하나인 포맷에서는 둘을 더해 씁니다.",
   "section_guided": "머리 돌려 측정",
   "hint_guided_intro": "스피커 수보다 많은 위치를 측정할 수 있습니다. 회전의자에 앉아 단계마다 안내한 방향으로 돌아서 녹음하세요. 각 단계의 녹음은 처리 탭에서 읽는 이름으로 저장됩니다.",
   "hint_guided_distance": "스피커에서 1.5 m 이상 떨어져 앉으세요. 너무 가까우면 소리가 좁게 들립니다. 각도마다 바닥에 테이프를 붙이면 같은 방향으로 다시 돌기 쉽습니다.",
@@ -506,5 +506,6 @@
   "cli_room_lfe_correction": "{slot}: 룸 측정의 서브우퍼로 {low}~{high} Hz를 보정했습니다",
   "cli_room_lfe_uncorrected": "{slot}: 룸 측정에 이 LFE 트랙의 서브우퍼가 없어 보정하지 않습니다",
   "cli_lfe_source_measured_corrected": "룸 측정으로 보정한 측정 서브우퍼",
-  "cli_lfe_source_room": "룸 측정의 서브우퍼"
+  "cli_lfe_source_room": "룸 측정의 서브우퍼",
+  "cli_lfe_source_sum": "서브우퍼 둘을 더한 것(LFE: {first}, LFE2: {second})"
 }

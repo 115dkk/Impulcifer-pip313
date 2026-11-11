@@ -2,7 +2,8 @@
 
 The canonical specification of the LFE tracks of the format files (`layout_files`). ADR 0013 added the synthetic
 fills (`lfe_mode`), ADR 0016 the subwoofer measured at the ears, ADR 0017 the subwoofer of the room measurement,
-the shared timing rule, the LFE band limit and the LFE room correction. `hesuvi.wav`, `hrir.wav`,
+the shared timing rule, the LFE band limit and the LFE room correction, ADR 0018 the sum of two subwoofers for a
+format with one LFE channel. `hesuvi.wav`, `hrir.wav`,
 `responses.wav`, the TrueHD layouts, JamesDSP and Hangloose never carry an LFE track.
 
 With no `LFE`/`LFE2` in any measurement map (folder, single recording, BRIR file, room file), every output is
@@ -19,9 +20,20 @@ For each slot S in `LFE`, `LFE2`, in this order:
    level transfer. Label `room`. A room-derived track is always corrected.
 3. Otherwise no measured track for S.
 
-A format file's LFE target S takes the measured track S, else the other slot's measured track (`LFE` falls back
-to `LFE2` and the other way round), else the `lfe_mode` synthesis (`none`, `center`, `all`, unchanged). The source
-reported for the target is the label of the track actually used.
+A format file's LFE target S takes, in this order: the sum of both measured tracks when the format has one LFE
+channel (next section), the measured track S, the other slot's measured track (`LFE` falls back to `LFE2` and the
+other way round), the `lfe_mode` synthesis (`none`, `center`, `all`, unchanged). The source reported for the
+target is the label of the track actually used.
+
+## One LFE channel, two subwoofers (3.20.0, ADR 0018)
+
+When a format file has exactly one of the targets `LFE`/`LFE2` (every format but NHK 22.2 and DTS:X Pro 30.2,
+which have both) and measured tracks exist for both slots, each with both ears, that target's track is the sum
+of the two tracks: for each ear, `out[n] = LFE[n] + LFE2[n]`. The tracks summed are the finished ones that
+`fill_output` receives (onset placed, band-limited, equalised and corrected each on its own, the speakers' gain,
+resampled, length-matched), so the two subwoofers arrive together and no gain is applied to the sum. The two
+tracks must have the same rate and length (an error otherwise). The reported source is
+`sum:<label of LFE>+<label of LFE2>`. A format with both targets keeps the tracks apart.
 
 Room pairs exist only when `do_room_correction` is on and the room measurement comes from `room_measurement_file`
 (the folder's `room-*.wav` names have no subwoofer).
@@ -127,11 +139,13 @@ term `Gain`). The default is empty. Stages:
 | `cli_room_lfe_uncorrected` | info | `slot` | room correction runs and an in-ear track has no room pair |
 
 The existing `cli_info_lfe_filled` and `cli_readme_lfe_filled` show the source with `cli_lfe_source_measured`
-(`measured`), `cli_lfe_source_measured_corrected` (`measured_corrected`) or `cli_lfe_source_room` (`room`).
+(`measured`), `cli_lfe_source_measured_corrected` (`measured_corrected`) or `cli_lfe_source_room` (`room`). A
+summed track (`sum:a+b`) shows `cli_lfe_source_sum` with `first` and `second` set to the phrases of `a` and `b`.
 
 ## Out of scope
 
-- Summing two subwoofers into one LFE track for formats with one LFE channel.
+- Restoring the arrival-time difference between two subwoofers, correcting the sum again, or scaling the sum
+  (ADR 0018).
 - Other LFE low-pass frequencies than 120 Hz.
 - Subwoofers in the folder's `room-*.wav` recordings.
 - Using the room measurement's time axis to place the subwoofer later than the speakers (ADR 0017).

@@ -106,6 +106,19 @@ fn lfe_source<'a>(filled: &'a [(&'static str, String)]) -> Option<&'a str> {
         .map(|(_, source)| source.as_str())
 }
 fn display_lfe_source(catalog: &Catalog, source: &str) -> String {
+    // `sum:<LFE label>+<LFE2 label>`: one LFE channel driven by both subwoofers (ADR 0018).
+    if let Some((first, second)) = source
+        .strip_prefix("sum:")
+        .and_then(|labels| labels.split_once('+'))
+    {
+        return catalog.translate(
+            "cli_lfe_source_sum",
+            &json!({
+                "first": display_lfe_source(catalog, first),
+                "second": display_lfe_source(catalog, second),
+            }),
+        );
+    }
     match source {
         "all" => catalog.translate("cli_lfe_source_all", &json!({})),
         "measured" => catalog.translate("cli_lfe_source_measured", &json!({})),

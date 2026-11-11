@@ -435,7 +435,7 @@
   "hint_lfe_mode_none": "聲道順序檔案的 LFE 音軌保持靜音。hesuvi.wav 和 hrir.wav 沒有 LFE 音軌。",
   "hint_lfe_mode_center": "LFE 音軌使用中置喇叭；如果未量測中置喇叭，則使用兩個前方喇叭。",
   "hint_lfe_mode_all": "LFE 音軌由所有已量測喇叭低於 120 Hz 的低音合成。對不同方向取平均，可減小各個位置的峰谷起伏，類似於在房間內使用多個超低音喇叭。",
-  "hint_lfe_measured": "如果有指派到 LFE 的超低音喇叭量測，無論此處如何設定，都會使用該量測。",
+  "hint_lfe_measured": "如果有指派到 LFE 的超低音喇叭量測，無論此處如何設定，都會使用該量測。如果 LFE 和 LFE2 各指派了一個超低音喇叭，只有一個 LFE 聲道的格式會將兩者的聲音疊加播放。",
   "section_guided": "轉頭量測",
   "hint_guided_intro": "用較少的喇叭量測更多位置：坐在旋轉椅上，每次錄音前依照目前步驟的指示轉向。每一步的錄音都會以「處理」頁面可讀取的名稱儲存。",
   "hint_guided_distance": "請坐在距離喇叭至少 1.5 m 的位置；距離太近會使音場變窄。在地板上用膠帶標出各個角度，方便再次轉到相同方向。",
@@ -506,5 +506,6 @@
   "cli_room_lfe_correction": "{slot}：已用房間量測中的超低音喇叭校正 {low}～{high} Hz 頻段",
   "cli_room_lfe_uncorrected": "{slot}：房間量測中沒有與此 LFE 音軌對應的超低音喇叭，因此不進行校正",
   "cli_lfe_source_measured_corrected": "經房間量測校正的實測超低音喇叭",
-  "cli_lfe_source_room": "房間量測中的超低音喇叭"
+  "cli_lfe_source_room": "房間量測中的超低音喇叭",
+  "cli_lfe_source_sum": "兩個超低音喇叭疊加後的聲音（LFE：{first}；LFE2：{second}）"
 }
