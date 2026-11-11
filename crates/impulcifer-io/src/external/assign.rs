@@ -131,7 +131,9 @@ fn auto_rew_room(file: &ExternalFile) -> Vec<Assignment> {
     let mut assigned = HashSet::new();
     let mut result = Vec::new();
     for measurement in usable(file) {
-        let Some((slot, ear)) = rew_title(&measurement.name) else {
+        let target =
+            rew_subwoofer_title_room(&measurement.name).or_else(|| rew_title(&measurement.name));
+        let Some((slot, ear)) = target else {
             continue;
         };
         let sides: &[EarSide] = match ear {
@@ -200,7 +202,7 @@ fn usable(file: &ExternalFile) -> impl Iterator<Item = &super::ExternalMeasureme
     file.measurements.iter().filter(|m| m.skipped.is_none())
 }
 
-fn rew_subwoofer_title(title: &str) -> Option<(&'static str, EarSide)> {
+fn rew_subwoofer_title_room(title: &str) -> Option<(&'static str, Option<EarSide>)> {
     let tokens = title_tokens(title);
     let (index, token) = tokens
         .iter()
@@ -210,8 +212,13 @@ fn rew_subwoofer_title(title: &str) -> Option<(&'static str, EarSide)> {
     let side = tokens
         .iter()
         .enumerate()
-        .find_map(|(i, token)| (i != index).then(|| ear_word(token)).flatten())?;
+        .find_map(|(i, token)| (i != index).then(|| ear_word(token)).flatten());
     Some((slot, side))
+}
+
+fn rew_subwoofer_title(title: &str) -> Option<(&'static str, EarSide)> {
+    let (slot, side) = rew_subwoofer_title_room(title)?;
+    Some((slot, side?))
 }
 
 fn rew_title(title: &str) -> Option<(&'static str, Option<EarSide>)> {
@@ -290,9 +297,24 @@ fn auto_dirac_room(file: &ExternalFile) -> Vec<Assignment> {
         return Vec::new();
     };
     let mut used = HashSet::new();
+    let mut lfe_count = 0;
     let mut result = Vec::new();
     for speaker in &file.speakers {
         if speaker.subwoofer {
+            if lfe_count < LFE_SLOTS.len() {
+                let id = format!("{}@{position}", speaker.index);
+                if measurement_exists(file, &id) {
+                    let slot = LFE_SLOTS[lfe_count];
+                    lfe_count += 1;
+                    for side in [EarSide::Left, EarSide::Right] {
+                        result.push(Assignment {
+                            slot,
+                            side,
+                            id: id.clone(),
+                        });
+                    }
+                }
+            }
             continue;
         }
         let Some(slot) = slot_for_label(&speaker.name) else {
@@ -439,7 +461,7 @@ pub fn parse_map_for(
             .or_else(|| target.strip_suffix(".right"))
             .unwrap_or(target);
         if let Some(slot) = lfe_slot(raw_target)
-            && purpose != Purpose::Brir
+            && purpose == Purpose::Headphones
         {
             return Err(ExternalError::new(format!(
                 "speaker slot {slot} is not valid for {} measurements",
@@ -550,6 +572,29 @@ pub fn format_map_for(assignments: &[Assignment], purpose: Purpose) -> String {
             }
             if let Some(right) = right {
                 output.push(format!("{}.right={}", slot.code, right.id));
+            }
+        }
+    }
+    if purpose == Purpose::Room {
+        for slot in LFE_SLOTS {
+            let left = sorted
+                .iter()
+                .find(|a| a.slot == slot && a.side == EarSide::Left);
+            let right = sorted
+                .iter()
+                .find(|a| a.slot == slot && a.side == EarSide::Right);
+            match (left, right) {
+                (Some(left), Some(right)) if left.id == right.id => {
+                    output.push(format!("{slot}={}", left.id))
+                }
+                (Some(left), right) => {
+                    output.push(format!("{slot}.left={}", left.id));
+                    if let Some(right) = right {
+                        output.push(format!("{slot}.right={}", right.id));
+                    }
+                }
+                (None, Some(right)) => output.push(format!("{slot}.right={}", right.id)),
+                (None, None) => {}
             }
         }
     }
@@ -864,7 +909,7 @@ mod tests {
     }
 
     #[test]
-    fn lfe_targets_are_brir_only_and_need_both_ears() {
+    fn lfe_targets_are_valid_for_room_and_brir_only() {
         let file = rew(&[
             ("FL left", None),
             ("FL right", None),
@@ -884,11 +929,10 @@ mod tests {
             "FL.left=1,FL.right=2,LFE.left=3,LFE.right=4,LFE2.left=5,LFE2.right=6"
         );
         check_assignments(&assignments, Purpose::Brir).unwrap();
+        let room = parse_map_for(&file, "LFE2.right=6,LFE=3,LFE2.left=5", Purpose::Room).unwrap();
         assert_eq!(
-            parse_map_for(&file, "LFE.left=3", Purpose::Room)
-                .unwrap_err()
-                .to_string(),
-            "speaker slot LFE is not valid for room measurements"
+            format_map_for(&room, Purpose::Room),
+            "LFE=3,LFE2.left=5,LFE2.right=6"
         );
         assert_eq!(
             parse_map_for(&file, "LFE2.right=6", Purpose::Headphones)
@@ -946,6 +990,34 @@ mod tests {
         assert_eq!(
             format_map_for(&auto_assign_for(&file, Purpose::Brir), Purpose::Brir),
             "FL.left=1,FL.right=2,LFE.left=3,LFE.right=4,LFE2.left=5,LFE2.right=6"
+        );
+    }
+
+    #[test]
+    fn room_automatic_assignment_puts_subwoofers_on_lfe() {
+        let file = dirac(
+            &[
+                ("Left", false),
+                ("Sub A", true),
+                ("Sub B", true),
+                ("Sub C", true),
+            ],
+            &[1, 2],
+        );
+        assert_eq!(
+            format_map_for(&auto_assign_for(&file, Purpose::Room), Purpose::Room),
+            "FL=1@1,LFE=2@1,LFE2=3@1"
+        );
+
+        let file = rew(&[
+            ("FL", None),
+            ("subwoofer", None),
+            ("LFE2 left", None),
+            ("LFE2 right", None),
+        ]);
+        assert_eq!(
+            format_map_for(&auto_assign_for(&file, Purpose::Room), Purpose::Room),
+            "FL=1,LFE=2,LFE2.left=3,LFE2.right=4"
         );
     }
 

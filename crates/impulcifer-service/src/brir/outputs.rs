@@ -109,6 +109,8 @@ fn display_lfe_source(catalog: &Catalog, source: &str) -> String {
     match source {
         "all" => catalog.translate("cli_lfe_source_all", &json!({})),
         "measured" => catalog.translate("cli_lfe_source_measured", &json!({})),
+        "measured_corrected" => catalog.translate("cli_lfe_source_measured_corrected", &json!({})),
+        "room" => catalog.translate("cli_lfe_source_room", &json!({})),
         _ => source.into(),
     }
 }

@@ -14,8 +14,9 @@ use crate::{
         equalize::{AppliedEqualization, EqInputs, equalize_hrir},
         fill::fill_output,
         headphone::HeadphoneCompensation,
+        lfe::{band_limit, place_onsets},
         readme::{ReadmeData, readme_data},
-        room::RoomCorrection,
+        room::{RoomCorrection, RoomFrs},
     },
     virtual_bass::{
         VirtualBassMode, VirtualBassOptions, VirtualBassPlan, VirtualBassReport,
@@ -31,11 +32,17 @@ use impulcifer_types::{
     layouts::{FormatChannel, IMMERSIVE_LAYOUTS, ImmersiveLayout, LayoutFiles},
     stages::StageKey,
 };
+#[derive(Clone, Debug, Default)]
+pub struct LfeInputs {
+    pub pairs: Vec<SpeakerIrs>,
+    pub labels: Vec<(String, String)>,
+    pub correction: Option<RoomFrs>,
+}
 #[derive(Clone, Debug)]
 pub struct PipelineInputs {
     pub estimator: SweepEstimator,
     pub hrir: Hrir,
-    pub lfe: Vec<SpeakerIrs>,
+    pub lfe: LfeInputs,
     pub vbass: Option<VirtualBassPlan>,
     pub room: Option<RoomCorrection>,
     pub headphone: Option<HeadphoneCompensation>,
@@ -257,9 +264,14 @@ pub fn run_pipeline(
         eq_left,
         eq_right,
     } = inputs;
+    let LfeInputs {
+        pairs,
+        labels: lfe_labels,
+        correction: lfe_correction,
+    } = lfe;
     let mut lfe = Hrir {
         fs: hrir.fs,
-        speakers: lfe,
+        speakers: pairs,
     };
     let total = total_steps(config);
     let mut step = 0;
@@ -308,7 +320,6 @@ pub fn run_pipeline(
             }
             StageKey::CropAndAlign => {
                 hrir.crop_heads(config.head_ms)?;
-                lfe.crop_heads_without_speaker_delay(config.head_ms)?;
                 let mut report = itd::analyze(&hrir, config.head_radius, 1.5);
                 let mode = ItdMode::parse(&config.itd_mode)
                     .ok_or_else(|| DspError::InvalidArgument("invalid itd_mode".into()))?;
@@ -322,8 +333,17 @@ pub fn run_pipeline(
                 itd::measure_after(&hrir, &mut report, 1.5);
                 observer.on_alignment(&report, &corrections)?;
                 alignment = Some(report);
+                let reference = hrir
+                    .pair("FL")
+                    .ok_or_else(|| {
+                        DspError::InvalidArgument("FL needs both ears for LFE alignment".into())
+                    })?
+                    .0
+                    .peak_index(0, None, 0.12589);
+                place_onsets(&mut lfe, reference, config.head_ms);
                 let tail = hrir.crop_tails(&estimator)?;
                 lfe.crop_tails_to(&estimator, tail)?;
+                band_limit(&mut lfe);
                 if config.do_room_correction
                     && config.room_mode == "tuning"
                     && let Some(plan) = room.as_ref().and_then(|r| r.tuning.as_ref())
@@ -418,7 +438,7 @@ pub fn run_pipeline(
                 };
                 let applied = equalize_hrir(&mut hrir, &eq_inputs)?;
                 let lfe_inputs = EqInputs {
-                    room_frs: None,
+                    room_frs: lfe_correction.as_ref(),
                     ..eq_inputs
                 };
                 equalize_hrir(&mut lfe, &lfe_inputs)?;
@@ -469,6 +489,7 @@ pub fn run_pipeline(
                 let filled_hrir = fill_output(
                     &hrir,
                     &lfe.speakers,
+                    &lfe_labels,
                     &output_targets(&HEXADECAGONAL_TRACK_ORDER),
                     &config.missing_speakers,
                     "none",
@@ -482,6 +503,7 @@ pub fn run_pipeline(
                 let filled_hesuvi = fill_output(
                     &hrir,
                     &lfe.speakers,
+                    &lfe_labels,
                     &output_targets(&HESUVI_TRACK_ORDER),
                     &config.missing_speakers,
                     "none",
@@ -503,6 +525,7 @@ pub fn run_pipeline(
                         let filled_output = fill_output(
                             &hrir,
                             &lfe.speakers,
+                            &lfe_labels,
                             &targets,
                             &config.missing_speakers,
                             &config.lfe_mode,

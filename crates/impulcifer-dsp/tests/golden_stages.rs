@@ -10,7 +10,7 @@ use impulcifer_dsp::{
         MicDeviationOptions, MicMatching, apply_mic_deviation_correction,
         apply_mic_deviation_correction_with_analysis,
     },
-    pipeline::{self, PipelineInputs, StageObserver, StageProgress},
+    pipeline::{self, LfeInputs, PipelineInputs, StageObserver, StageProgress},
     stages::{
         eq_files::*,
         equalize::*,
@@ -317,7 +317,7 @@ fn inputs() -> &'static PipelineInputs {
         PipelineInputs {
             estimator,
             hrir,
-            lfe: Vec::new(),
+            lfe: LfeInputs::default(),
             vbass: None,
             room,
             headphone: Some(headphone_compensation(&hp).unwrap()),
@@ -655,13 +655,17 @@ fn measured_lfe_takes_the_output_stages_only() {
     };
     let mut without_inputs = inputs().clone();
     without_inputs.hrir = synthetic;
-    without_inputs.lfe.clear();
+    without_inputs.lfe = LfeInputs::default();
     without_inputs.room = None;
     let without =
         pipeline::run_pipeline(&config, without_inputs.clone(), &mut Observer::default()).unwrap();
 
     let mut with_inputs = without_inputs;
-    with_inputs.lfe = vec![raw_lfe.clone()];
+    with_inputs.lfe = LfeInputs {
+        pairs: vec![raw_lfe.clone()],
+        labels: vec![("LFE".into(), "measured".into())],
+        correction: None,
+    };
     let with = pipeline::run_pipeline(&config, with_inputs, &mut Observer::default()).unwrap();
 
     assert_eq!(with.applied_gain_db, without.applied_gain_db);
@@ -686,10 +690,15 @@ fn measured_lfe_takes_the_output_stages_only() {
             fs,
             speakers: vec![raw_lfe.clone()],
         };
-        expected
-            .crop_heads_without_speaker_delay(config.head_ms)
-            .unwrap();
+        let reference = without
+            .hrir
+            .pair("FL")
+            .unwrap()
+            .0
+            .peak_index(0, None, 0.12589);
+        impulcifer_dsp::stages::lfe::place_onsets(&mut expected, reference, config.head_ms);
         expected.crop_tails_to(&inputs().estimator, tail).unwrap();
+        impulcifer_dsp::stages::lfe::band_limit(&mut expected);
         let target = create_target(
             inputs().estimator.fs,
             config.bass_boost_gain,
@@ -752,6 +761,121 @@ fn measured_lfe_takes_the_output_stages_only() {
     assert_eq!(
         layout_output.tracks[2 * lfe_index + 1],
         measured.right.as_ref().unwrap().data
+    );
+}
+
+#[test]
+fn room_lfe_correction_reaches_the_lfe_track() {
+    let fs = inputs().estimator.fs;
+    let response = |peak: usize| {
+        let mut data = vec![0.0; 16_384];
+        data[peak] = 1.0;
+        impulcifer_dsp::ir::ImpulseResponse {
+            data,
+            fs,
+            recording: None,
+        }
+    };
+    let hrir = Hrir {
+        fs,
+        speakers: vec![impulcifer_dsp::hrir::SpeakerIrs {
+            speaker: "FL".into(),
+            left: Some(response(100)),
+            right: Some(response(105)),
+        }],
+    };
+    let lfe_pair = impulcifer_dsp::hrir::SpeakerIrs {
+        speaker: "LFE".into(),
+        left: Some(response(140)),
+        right: Some(response(140)),
+    };
+    let mut gain = FrequencyResponse::constant(
+        "LFE correction",
+        Some(impulcifer_dsp::fr::generate_frequencies(
+            10.0,
+            f64::from(fs) / 2.0,
+            1.01,
+        )),
+        0.0,
+        0.0,
+    )
+    .unwrap();
+    gain.equalization = gain
+        .frequency
+        .iter()
+        .map(|frequency| {
+            if (30.0..=80.0).contains(frequency) {
+                -10.0
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let empty_room = || impulcifer_dsp::stages::room::RoomCorrection {
+        frs: RoomFrs {
+            term: RoomTerm::Gain,
+            entries: vec![],
+        },
+        responses_tracks: vec![],
+        diagnostics: None,
+        tuning: None,
+        tuning2: None,
+    };
+    let make_inputs = |correction| PipelineInputs {
+        estimator: inputs().estimator.clone(),
+        hrir: hrir.clone(),
+        lfe: LfeInputs {
+            pairs: vec![lfe_pair.clone()],
+            labels: vec![("LFE".into(), "measured_corrected".into())],
+            correction,
+        },
+        vbass: None,
+        room: Some(empty_room()),
+        headphone: None,
+        eq_left: None,
+        eq_right: None,
+    };
+    let config = ProcessingConfig {
+        do_room_correction: true,
+        do_headphone_compensation: false,
+        do_equalization: true,
+        layout_files: "9.1".into(),
+        ..ProcessingConfig::oracle_defaults()
+    };
+    let without =
+        pipeline::run_pipeline(&config, make_inputs(None), &mut Observer::default()).unwrap();
+    let with = pipeline::run_pipeline(
+        &config,
+        make_inputs(Some(RoomFrs {
+            term: RoomTerm::Gain,
+            entries: vec![
+                ("LFE".into(), Side::Left, gain.clone()),
+                ("LFE".into(), Side::Right, gain),
+            ],
+        })),
+        &mut Observer::default(),
+    )
+    .unwrap();
+    for (actual, reference) in with.hrir.speakers.iter().zip(&without.hrir.speakers) {
+        assert_eq!(
+            actual.left.as_ref().unwrap().data,
+            reference.left.as_ref().unwrap().data
+        );
+        assert_eq!(
+            actual.right.as_ref().unwrap().data,
+            reference.right.as_ref().unwrap().data
+        );
+    }
+    let magnitude = |output: &impulcifer_dsp::pipeline::PipelineOutputs| {
+        let data = &output.lfe[0].left.as_ref().unwrap().data;
+        let spectrum = impulcifer_dsp::fft::rfft(data);
+        let index = (50.0 * data.len() as f64 / f64::from(output.hrir.fs)).round() as usize;
+        spectrum[index].norm()
+    };
+    let delta = 20.0 * (magnitude(&with) / magnitude(&without)).log10();
+    assert!(
+        (delta + 10.0).abs() < 1.0,
+        "LFE correction at 50 Hz was {delta} dB"
     );
 }
 
@@ -1466,7 +1590,7 @@ fn golden_optional_outputs_match_python() {
             PipelineInputs {
                 estimator: inputs().estimator.clone(),
                 hrir,
-                lfe: Vec::new(),
+                lfe: LfeInputs::default(),
                 vbass: None,
                 room: None,
                 headphone: None,

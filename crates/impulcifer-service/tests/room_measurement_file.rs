@@ -110,9 +110,9 @@ fn inspect_room_measurements_reports_a_dirac_project() {
     assert_eq!(d["positions"], json!([1, 2]));
     assert_eq!(
         d["speakers"],
-        json!([{"index":1,"name":"Left","subwoofer":false,"slot":"FL"},{"index":2,"name":"Right","subwoofer":false,"slot":"FR"},{"index":3,"name":"Subwoofer","subwoofer":true,"slot":null}])
+        json!([{"index":1,"name":"Left","subwoofer":false,"slot":"FL"},{"index":2,"name":"Right","subwoofer":false,"slot":"FR"},{"index":3,"name":"Subwoofer","subwoofer":true,"slot":"LFE"}])
     );
-    assert_eq!(d["map"], "FL=1@1,FR=2@1");
+    assert_eq!(d["map"], "FL=1@1,FR=2@1,LFE=3@1");
     assert_eq!(d["auto"], true);
     let ids: Vec<_> = d["measurements"]
         .as_array()

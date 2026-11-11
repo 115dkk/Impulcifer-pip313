@@ -61,6 +61,26 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "3.8.0",
     ),
     (
+        "room_lfe_from_room_measurement",
+        (
+            f"--room_measurement_file={PROJECT_ROOT / 'crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat'}",
+            "--room_measurement_map=FL=1,FR=2,FC=1,LFE=2",
+            "--layout_files=9.1.4",
+        ),
+        "3.19.0",
+    ),
+    (
+        "room_lfe_corrects_measured_lfe",
+        (
+            f"--brir_recording_file={PROJECT_ROOT / DEMO / 'FL,FR.wav'}",
+            "--brir_recording_speakers=FL,LFE",
+            f"--room_measurement_file={PROJECT_ROOT / 'crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat'}",
+            "--room_measurement_map=FL=1,LFE=2",
+            "--layout_files=9.1.4",
+        ),
+        "3.19.0",
+    ),
+    (
         "brir_measurement_file_rew",
         (f"--brir_measurement_file={PROJECT_ROOT / 'crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat'}",),
         "3.9.0",

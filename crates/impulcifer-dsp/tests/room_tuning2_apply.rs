@@ -306,7 +306,7 @@ fn room_tuning2_matches_secs2_mimo() {
 fn room_tuning2_observer() {
     use impulcifer_dsp::{
         DspError,
-        pipeline::{self, PipelineInputs, StageObserver, StageProgress},
+        pipeline::{self, LfeInputs, PipelineInputs, StageObserver, StageProgress},
     };
     use impulcifer_types::config::ProcessingConfig;
     struct Observer(Vec<Tuning2Report>);
@@ -352,7 +352,7 @@ fn room_tuning2_observer() {
         let inputs = PipelineInputs {
             estimator: estimator.clone(),
             hrir: hrir.clone(),
-            lfe: Vec::new(),
+            lfe: LfeInputs::default(),
             vbass: None,
             headphone: None,
             eq_left: None,

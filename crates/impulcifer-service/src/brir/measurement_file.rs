@@ -37,7 +37,15 @@ pub(crate) fn load_room(
     path: &Path,
     map: &str,
     fs: u32,
-) -> Result<(Hrir, Option<FrequencyResponse>, ExternalFormat), BrirError> {
+) -> Result<
+    (
+        Hrir,
+        Vec<SpeakerIrs>,
+        Option<FrequencyResponse>,
+        ExternalFormat,
+    ),
+    BrirError,
+> {
     let file = read(path)?;
     let mapping = parse_map_for(&file, map, Purpose::Room)
         .map_err(|error| BrirError::Unsupported(error.to_string()))?;
@@ -47,15 +55,34 @@ pub(crate) fn load_room(
                 .into(),
         ));
     }
-    let mut hrir = build_direct(&file, &mapping);
-    if hrir.fs != fs {
-        hrir.resample(fs)?;
+    let mut loaded = build_direct(&file, &mapping);
+    let mut lfe = Vec::new();
+    loaded.speakers.retain_mut(|speaker| {
+        if !matches!(speaker.speaker.as_str(), "LFE" | "LFE2") {
+            return true;
+        }
+        if speaker.left.is_none() {
+            speaker.left = speaker.right.clone();
+        }
+        if speaker.right.is_none() {
+            speaker.right = speaker.left.clone();
+        }
+        lfe.push(speaker.clone());
+        false
+    });
+    let mut lfe_hrir = Hrir {
+        fs: loaded.fs,
+        speakers: lfe,
+    };
+    if loaded.fs != fs {
+        loaded.resample(fs)?;
+        lfe_hrir.resample(fs)?;
     }
     let calibration = file
         .mic_calibration
         .map(|cal| FrequencyResponse::new("microphone", Some(cal.frequency), Some(cal.gain_db)))
         .transpose()?;
-    Ok((hrir, calibration, file.format))
+    Ok((loaded, lfe_hrir.speakers, calibration, file.format))
 }
 
 pub(crate) fn load_brir(
@@ -326,7 +353,7 @@ pub fn inspect(request: &Value) -> Result<Value, Value> {
         .speakers
         .iter()
         .map(|speaker| {
-            let slot = if speaker.subwoofer && purpose == Purpose::Brir {
+            let slot = if speaker.subwoofer && matches!(purpose, Purpose::Room | Purpose::Brir) {
                 let prefix = format!("{}@", speaker.index);
                 automatic
                     .iter()

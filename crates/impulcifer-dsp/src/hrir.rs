@@ -366,10 +366,6 @@ impl Hrir {
     pub fn crop_heads(&mut self, head_ms: f64) -> Result<(), DspError> {
         self.crop_heads_with_delays(head_ms, true)
     }
-    /// Crop measured LFE pairs with the speaker algorithm but no named-speaker delay.
-    pub fn crop_heads_without_speaker_delay(&mut self, head_ms: f64) -> Result<(), DspError> {
-        self.crop_heads_with_delays(head_ms, false)
-    }
     fn crop_heads_with_delays(
         &mut self,
         head_ms: f64,
