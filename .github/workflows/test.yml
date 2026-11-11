@@ -10,7 +10,10 @@ on:
 jobs:
   test:
     name: Test on Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    # actions/python-versions publishes no 3.9 build for Ubuntu 26.04 (3.9 reached
+    # end of life in 2025-10; setup-python fails with "version '3.9' ... was not
+    # found for Ubuntu 26.04"). That leg stays on 24.04 while 3.9 is supported.
+    runs-on: ${{ matrix.python-version == '3.9' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
