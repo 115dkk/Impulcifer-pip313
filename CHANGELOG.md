@@ -16,6 +16,7 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **brir-3x 시나리오 둘 추가**: 데모의 `FL,FR.wav`를 단일 녹음 파일로 읽는 시나리오 둘(sweep을 지정하지 않은 것과 지정한 것)을 더해 44개가 됐습니다.
+- **CI의 Ubuntu 테스트 잡을 26.04로 옮김** (릴리스 후 추가, 출하물 변화 없음): 3.17.1에서 24.04에 고정했던 두 잡을 다시 26.04에서 돌립니다. `test.yml`의 Python 테스트는 PulseAudio 데몬(널 싱크)을 띄운 뒤 실행합니다. 26.04의 `libportaudio2`는 PulseAudio 서버에 닿지 못하면 초기화 전체가 실패하기 때문입니다. Python 3.9 레그만은 `actions/setup-python`이 Ubuntu 26.04용 3.9를 내놓지 않아 24.04에 남겼습니다. `rust.yml`의 Linux `cargo test`는 26.04 러너 위의 `ubuntu:26.04` 컨테이너에서 돕니다. 러너 이미지는 `libc6`을 x86-64-v3용 `amd64v3` 판으로 설치하는데, 그 libm은 일부 입력에서 `hypot`·`log10`·`log`·`pow`의 결과가 일반 빌드와 달라 `room_tuning2_s2r_pair_phase`가 1~8 ulp 어긋났습니다. 컨테이너의 일반 빌드 glibc 2.43은 s2r 픽스처를 낸 Debian glibc 2.41과 비트 단위로 같으므로, 정확히 같아야 하는 게이트를 그대로 둡니다.
 - **UI 갤러리는 최신 것만 남김** (릴리스 후 추가, 출하물 변화 없음): 두 갤러리 워크플로(`webview-gallery.yml`, `ui-gallery-3x.yml`)가 실행마다 `webview-gallery` 브랜치에 PNG 폴더를 더하고 머지된 PR의 리뷰 이슈도 열어 둔 채여서, 브랜치에 2.x 36회·3.x 54회분이 쌓이고 저장소가 920 MB를 넘었습니다. 이제 두 워크플로가 함께 쓰는 `.github/scripts/gallery_publish.py`가 브랜치를 부모 없는 커밋 하나로 새로 만들어, 이번 실행과 아직 열린 다른 PR의 최신 실행만 남깁니다. 같은 PR에서 다시 돌면 리뷰 이슈에 댓글을 더하지 않고 본문을 최신 갤러리로 바꾸며, 닫히거나 머지된 PR의 리뷰 이슈는 새 이슈를 가리키는 댓글을 달고 닫습니다. 머지된 PR의 갤러리는 다음 갤러리 실행이 생길 때까지 그대로 있습니다. 스크린샷이 많아 이슈 본문이 GitHub 한도를 넘으면 이미지 대신 링크를 적습니다.
 
 ## 3.17.1 - 2026-11-10
