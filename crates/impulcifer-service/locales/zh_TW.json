@@ -155,7 +155,7 @@
   "option_room_file_left": "左耳",
   "option_room_file_right": "右耳",
   "room_file_skipped": "沒有脈衝響應，無法使用",
-  "room_file_subwoofer": "超低音喇叭。房間校正不套用於 LFE 音軌，因此只有將此量測指派到喇叭後才會使用。",
+  "room_file_subwoofer": "超低音喇叭。指派到 LFE 後，此量測用於校正 LFE 音軌；如果沒有超低音喇叭的耳內量測，則用此量測建立 LFE 音軌。",
   "hint_room_file": "僅使用在此指派的量測。不讀取資料夾中的 room-*.wav 檔案。",
   "room_file_choose": "請選擇 .mdat 或 .liveproject 檔案。",
   "room_file_missing": "檔案不存在。請檢查路徑。",
@@ -499,5 +499,12 @@
   "cli_readme_filled_channels": "使用最近的已量測喇叭填補的未量測聲道：{list}",
   "cli_readme_lfe_filled": "LFE 音軌使用 {source}。",
   "cli_lfe_source_all": "所有已量測喇叭的低頻（低於 120 Hz）",
-  "cli_lfe_source_measured": "實測超低音喇叭"
+  "cli_lfe_source_measured": "實測超低音喇叭",
+  "cli_room_lfe_created": "{slot}：已用房間量測中的超低音喇叭建立 LFE 音軌，並以 {count} 個喇叭為參考匹配電平",
+  "cli_room_lfe_level_spread": "{slot}：耳內量測與房間量測之間的電平差在各喇叭間有 {spread} dB 的差異，兩組量測可能是在不同座位進行的",
+  "cli_room_lfe_no_level": "{slot}：房間量測與 BRIR 量測中共有的喇叭只有 {count} 個（需要 3 個），因此不使用房間量測中的超低音喇叭建立 LFE 音軌",
+  "cli_room_lfe_correction": "{slot}：已用房間量測中的超低音喇叭校正 {low}～{high} Hz 頻段",
+  "cli_room_lfe_uncorrected": "{slot}：房間量測中沒有與此 LFE 音軌對應的超低音喇叭，因此不進行校正",
+  "cli_lfe_source_measured_corrected": "經房間量測校正的實測超低音喇叭",
+  "cli_lfe_source_room": "房間量測中的超低音喇叭"
 }

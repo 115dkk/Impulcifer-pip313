@@ -155,7 +155,7 @@
   "option_room_file_left": "左耳",
   "option_room_file_right": "右耳",
   "room_file_skipped": "インパルス応答がないため使用できません",
-  "room_file_subwoofer": "サブウーファーです。ルーム補正は LFE トラックには適用しないため、スピーカーに割り当てた場合にのみこの測定を使います。",
+  "room_file_subwoofer": "サブウーファーです。LFE に割り当てると、この測定を LFE トラックの補正に使います。サブウーファーの耳内測定がない場合は、この測定から LFE トラックを作成します。",
   "hint_room_file": "ここで割り当てた測定だけを使います。フォルダーの room-*.wav ファイルは読み込みません。",
   "room_file_choose": ".mdat または .liveproject ファイルを選んでください。",
   "room_file_missing": "ファイルがありません。パスを確認してください。",
@@ -499,5 +499,12 @@
   "cli_readme_filled_channels": "最も近い測定済みスピーカーで埋めた未測定のチャンネル: {list}",
   "cli_readme_lfe_filled": "LFEトラックには{source}を使います。",
   "cli_lfe_source_all": "測定済みの全スピーカーの低域（120 Hz未満）",
-  "cli_lfe_source_measured": "測定したサブウーファー"
+  "cli_lfe_source_measured": "測定したサブウーファー",
+  "cli_room_lfe_created": "{slot}: ルーム測定のサブウーファーから LFE トラックを作成し、{count} 台のスピーカーを基準にレベルを合わせました",
+  "cli_room_lfe_level_spread": "{slot}: 耳内測定とルーム測定のレベル差には、スピーカー間で {spread} dB のばらつきがあります。異なる座席で測定した可能性があります",
+  "cli_room_lfe_no_level": "{slot}: ルーム測定と BRIR 測定に共通するスピーカーが {count} 台しかありません（3 台必要）。ルーム測定のサブウーファーから LFE トラックは作成しません",
+  "cli_room_lfe_correction": "{slot}: ルーム測定のサブウーファーを使い、{low}～{high} Hz を補正しました",
+  "cli_room_lfe_uncorrected": "{slot}: ルーム測定にこの LFE トラックに対応するサブウーファーがないため、補正しません",
+  "cli_lfe_source_measured_corrected": "ルーム測定で補正した測定済みのサブウーファー",
+  "cli_lfe_source_room": "ルーム測定のサブウーファー"
 }

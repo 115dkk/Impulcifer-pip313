@@ -155,7 +155,7 @@
   "option_room_file_left": "Oreille gauche",
   "option_room_file_right": "Oreille droite",
   "room_file_skipped": "Pas de réponse impulsionnelle, donc inutilisable",
-  "room_file_subwoofer": "Caisson de graves. La correction acoustique ne s’applique pas à la piste LFE. Cette mesure n’est donc utilisée que si vous l’attribuez à une enceinte.",
+  "room_file_subwoofer": "Caisson de graves. Attribuée à LFE, cette mesure sert à corriger la piste LFE et, en l’absence de mesure intra-auriculaire du caisson, à la créer.",
   "hint_room_file": "Seules les mesures attribuées ici sont utilisées. Les fichiers room-*.wav du dossier ne sont pas lus.",
   "room_file_choose": "Choisissez un fichier .mdat ou .liveproject.",
   "room_file_missing": "Le fichier n’existe pas. Vérifiez le chemin.",
@@ -499,5 +499,12 @@
   "cli_readme_filled_channels": "Canaux non mesurés remplis à partir de l’enceinte mesurée la plus proche : {list}",
   "cli_readme_lfe_filled": "Les pistes LFE utilisent {source}.",
   "cli_lfe_source_all": "les basses fréquences de toutes les enceintes mesurées (sous 120 Hz)",
-  "cli_lfe_source_measured": "le caisson de graves mesuré"
+  "cli_lfe_source_measured": "le caisson de graves mesuré",
+  "cli_room_lfe_created": "{slot} : piste LFE créée à partir du caisson de graves des mesures de la pièce, avec un niveau ajusté en prenant {count} enceintes comme référence",
+  "cli_room_lfe_level_spread": "{slot} : l’écart de niveau entre les mesures intra-auriculaires et celles de la pièce varie de {spread} dB selon l’enceinte. Elles ont peut-être été réalisées à des places d’écoute différentes",
+  "cli_room_lfe_no_level": "{slot} : les mesures de la pièce et les mesures BRIR n’ont que {count} enceintes en commun (3 sont nécessaires). Aucune piste LFE n’est donc créée à partir du caisson de graves des mesures de la pièce",
+  "cli_room_lfe_correction": "{slot} : correction de {low} à {high} Hz avec le caisson de graves des mesures de la pièce",
+  "cli_room_lfe_uncorrected": "{slot} : les mesures de la pièce ne contiennent pas de caisson de graves pour cette piste LFE, elle n’est donc pas corrigée",
+  "cli_lfe_source_measured_corrected": "le caisson de graves mesuré, corrigé à partir des mesures de la pièce",
+  "cli_lfe_source_room": "le caisson de graves des mesures de la pièce"
 }

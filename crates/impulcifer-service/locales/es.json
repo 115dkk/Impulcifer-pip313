@@ -155,7 +155,7 @@
   "option_room_file_left": "Oído izquierdo",
   "option_room_file_right": "Oído derecho",
   "room_file_skipped": "No tiene respuesta al impulso, por lo que no se puede usar",
-  "room_file_subwoofer": "Subwoofer. La corrección de sala no se aplica a la pista LFE, por lo que esta medición solo se usa si la asigna a un altavoz.",
+  "room_file_subwoofer": "Subwoofer. Al asignar esta medición a LFE, se usa para corregir la pista LFE y, si no hay una medición intraaural del subwoofer, para crearla.",
   "hint_room_file": "Solo se usan las mediciones asignadas aquí. No se leen los archivos room-*.wav de la carpeta.",
   "room_file_choose": "Elija un archivo .mdat o .liveproject.",
   "room_file_missing": "El archivo no existe. Compruebe la ruta.",
@@ -499,5 +499,12 @@
   "cli_readme_filled_channels": "Canales no medidos rellenados con el altavoz medido más cercano: {list}",
   "cli_readme_lfe_filled": "Las pistas LFE usan {source}.",
   "cli_lfe_source_all": "las bajas frecuencias de todos los altavoces medidos (por debajo de 120 Hz)",
-  "cli_lfe_source_measured": "el subwoofer medido"
+  "cli_lfe_source_measured": "el subwoofer medido",
+  "cli_room_lfe_created": "{slot}: se ha creado la pista LFE a partir del subwoofer de la medición de sala, con el nivel ajustado tomando como referencia {count} altavoces",
+  "cli_room_lfe_level_spread": "{slot}: la diferencia de nivel entre las mediciones intraaurales y las de sala varía {spread} dB entre altavoces. Es posible que se hayan realizado en asientos distintos",
+  "cli_room_lfe_no_level": "{slot}: las mediciones de sala y BRIR solo tienen {count} altavoces en común (se necesitan 3), por lo que no se crea una pista LFE a partir del subwoofer de la medición de sala",
+  "cli_room_lfe_correction": "{slot}: corregido con el subwoofer de la medición de sala, de {low} a {high} Hz",
+  "cli_room_lfe_uncorrected": "{slot}: la medición de sala no contiene un subwoofer para esta pista LFE, por lo que no se corrige",
+  "cli_lfe_source_measured_corrected": "el subwoofer medido, corregido con la medición de sala",
+  "cli_lfe_source_room": "el subwoofer de la medición de sala"
 }
