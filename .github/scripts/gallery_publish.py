@@ -16,9 +16,13 @@ pushed in between). A publish keeps
 * the newest run of every other pull request that is still open,
 
 and drops everything else of its own kind: older runs of the same pull
-request, runs of closed or merged pull requests, manual runs and directories
-from before this scheme. The other kind's directory is left as it is. So after
-a pull request is merged its gallery stays until the next gallery run.
+request, runs of closed or merged pull requests and manual runs. The other
+kind's directory is left as it is. So after a pull request is merged its
+gallery stays until the next gallery run. Directories from before this scheme
+are named by the run number alone; their pull request is found through the
+workflow run's head branch, and they are kept like the others while that pull
+request is open (runs of pull requests whose branch predates this script still
+publish such names until they pick up the merged workflow).
 
 Review issues follow the same rule. A run of a pull request that already has
 an open review issue replaces that issue's body instead of adding a comment.
@@ -37,7 +41,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 BRANCH = "webview-gallery"
 BOT_NAME = "github-actions[bot]"
@@ -48,17 +52,20 @@ BODY_LIMIT = 65000
 KINDS = {
     "2x": {
         "root": "runs",
+        "workflow": "webview-gallery.yml",
         "title": "WebView UI 갤러리 리뷰",
         "heading": "WebView 프론트엔드(`webview_ui`) 갤러리",
     },
     "3x": {
         "root": "runs-3x",
+        "workflow": "ui-gallery-3x.yml",
         "title": "WebView UI 갤러리 리뷰 (3.x)",
         "heading": "3.x 화면(`apps/impulcifer-app/ui`) 갤러리",
     },
 }
 
 _RUN_DIR = re.compile(r"^(\d+)(?:-pr(\d+)|-manual)?$")
+_LEGACY_DIR = re.compile(r"^\d+$")
 _PR_TITLE = re.compile(r": PR #(\d+)$")
 
 
@@ -78,12 +85,24 @@ def parse_run_dir(name: str) -> Optional[Tuple[int, Optional[int]]]:
     return int(match.group(1)), (int(pr) if pr is not None else None)
 
 
-def retained_dirs(existing: Iterable[str], open_prs: Set[int], current: str) -> List[str]:
+def legacy_runs(names: Iterable[str]) -> List[int]:
+    """Run numbers of directories named before this scheme (number only)."""
+    return sorted(int(name) for name in names if _LEGACY_DIR.match(name))
+
+
+def retained_dirs(
+    existing: Iterable[str],
+    open_prs: Set[int],
+    current: str,
+    legacy: Optional[Dict[int, int]] = None,
+) -> List[str]:
     """Run directories of one kind that survive publishing ``current``.
 
     ``current`` stays, and so does the newest run of every other pull request
-    in ``open_prs``. Older runs of the current pull request, runs of closed
-    pull requests, manual runs and names this scheme did not produce go.
+    in ``open_prs``. ``legacy`` maps the run number of a number-only directory
+    to its pull request. Older runs of the current pull request, runs of
+    closed pull requests, manual runs, number-only runs of unknown pull
+    requests and names this scheme did not produce go.
     """
     parsed_current = parse_run_dir(current)
     if parsed_current is None:
@@ -95,6 +114,8 @@ def retained_dirs(existing: Iterable[str], open_prs: Set[int], current: str) -> 
         if parsed is None:
             continue
         run, pr = parsed
+        if pr is None and legacy and _LEGACY_DIR.match(name):
+            pr = legacy.get(run)
         if pr is None or pr == current_pr or pr not in open_prs:
             continue
         if pr not in newest or run > newest[pr][0]:
@@ -251,8 +272,14 @@ def publish(
     remote: str = "origin",
     cwd: Optional[Path] = None,
     attempts: int = 5,
+    legacy_lookup: Optional[Callable[[List[int]], Dict[int, int]]] = None,
 ) -> List[str]:
-    """Rewrite the gallery branch with the kept runs; returns the kept names."""
+    """Rewrite the gallery branch with the kept runs; returns the kept names.
+
+    ``legacy_lookup`` maps number-only run directories to pull requests.
+    """
+    legacy: Dict[int, int] = {}
+    looked_up: Set[int] = set()
     run_lines = []
     for image in images:
         blob = _git("hash-object", "-w", "--", str(image), cwd=cwd).strip()
@@ -262,7 +289,11 @@ def publish(
         base = fetch_branch(remote, cwd)
         top = _tree_entries(base, cwd)
         runs = _tree_entries(f"{base}:{root}" if base and root in top else None, cwd)
-        keep = retained_dirs(runs, open_prs, run_dir)
+        unknown = [run for run in legacy_runs(runs) if run not in looked_up]
+        if unknown and legacy_lookup is not None:
+            legacy.update(legacy_lookup(unknown))
+            looked_up.update(unknown)
+        keep = retained_dirs(runs, open_prs, run_dir, legacy)
         root_lines = [runs[name] for name in keep if name in runs and name != run_dir]
         root_lines.append(f"040000 tree {run_tree}\t{run_dir}")
         top[root] = f"040000 tree {_mktree(root_lines, cwd)}\t{root}"
@@ -295,11 +326,44 @@ def _gh(*args: str) -> str:
     raise RuntimeError(f"gh {' '.join(args[:2])} failed")
 
 
-def open_pull_requests(repository: str) -> Set[int]:
+def open_pull_requests(repository: str) -> Dict[int, str]:
+    """``{number: head branch}`` of every open pull request."""
     listed = _gh(
-        "pr", "list", "--repo", repository, "--state", "open", "--limit", "500", "--json", "number"
+        "pr", "list", "--repo", repository, "--state", "open", "--limit", "500",
+        "--json", "number,headRefName",
     )
-    return {item["number"] for item in json.loads(listed)}
+    return {item["number"]: item["headRefName"] for item in json.loads(listed)}
+
+
+def legacy_pull_requests(
+    repository: str, workflow: str, runs: Sequence[int], open_branches: Dict[str, int]
+) -> Dict[int, int]:
+    """Open pull requests of number-only run directories, via the run's branch.
+
+    The workflow run's ``pull_requests`` list is often empty once the branch
+    has moved on, so the run's head branch is matched to the open pull
+    requests instead.
+    """
+    wanted = set(runs)
+    found: Dict[int, int] = {}
+    for page in range(1, 11):
+        listed = json.loads(
+            _gh(
+                "api",
+                f"repos/{repository}/actions/workflows/{workflow}/runs?per_page=100&page={page}",
+            )
+        )
+        items = listed.get("workflow_runs", [])
+        for item in items:
+            number = item.get("run_number")
+            if number in wanted and item.get("event") == "pull_request":
+                pr = open_branches.get(item.get("head_branch") or "")
+                if pr is not None:
+                    found[number] = pr
+            wanted.discard(number)
+        if not wanted or not items:
+            break
+    return found
 
 
 def sync_issues(
@@ -366,7 +430,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     images = sorted(args.images.glob("*.png"))
     if not images:
         raise SystemExit(f"no PNG files in {args.images}")
-    open_prs = open_pull_requests(repository)
+    open_branches = open_pull_requests(repository)
+    open_prs = set(open_branches)
+    by_branch = {branch: number for number, branch in open_branches.items()}
     run_dir = run_dir_name(run_number, pr_number)
     run_path = f"{kind['root']}/{run_dir}"
     publish(
@@ -375,6 +441,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         images,
         open_prs,
         f"gallery {kind['root']}: run {run_number} ({sha})",
+        legacy_lookup=lambda runs: legacy_pull_requests(
+            repository, kind["workflow"], runs, by_branch
+        ),
     )
     title = issue_title(kind["title"], pr_number, ref_name)
     body = issue_body(
