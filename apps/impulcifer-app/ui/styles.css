@@ -1488,6 +1488,87 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 }
 .t2-nested .field-row { grid-template-columns: 126px minmax(0, 1fr) auto; }
 
+/* A group's on/off options. Stable keeps the CTk checkbox rows, as if the
+   wrapper were not there. Studio shows each as a tile in a grid: the box
+   becomes the on/off mark of its tabs (a filled dot or an empty ring), the
+   tile takes the accent when on, and the whole tile toggles (the label's
+   overlay) except the info button. A wrapper with every row hidden (another
+   mode) takes no row of the card's grid. */
+.t2-toggles { display: contents; }
+
+[data-skin="studio"] .t2-toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+[data-skin="studio"] .t2-toggles:not(:has(> .check-row:not([hidden]))) { display: none; }
+
+[data-skin="studio"] .t2-toggles > .check-row {
+  position: relative;
+  gap: 10px;
+  min-height: 42px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: transparent;
+}
+[data-skin="studio"] .t2-toggles > .check-row:hover { border-color: var(--fg-3); }
+[data-skin="studio"] .t2-toggles > .check-row:has(> input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+[data-skin="studio"] .t2-toggles > .check-row:has(> input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+[data-skin="studio"] .t2-toggles > .check-row > input[type="checkbox"] {
+  appearance: none;
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--fg-2);
+  cursor: pointer;
+}
+[data-skin="studio"] .t2-toggles > .check-row > input[type="checkbox"]:focus-visible { outline: none; }
+[data-skin="studio"] .t2-toggles > .check-row > input[type="checkbox"]:checked {
+  background: var(--accent-strong);
+  box-shadow: none;
+}
+:root[data-theme="dark"][data-skin="studio"] .t2-toggles > .check-row > input[type="checkbox"]:checked:not(:disabled) { background: var(--accent); }
+[data-skin="studio"] .t2-toggles > .check-row > label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+[data-skin="studio"] .t2-toggles > .check-row > label::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+[data-skin="studio"] .t2-toggles > .check-row:has(> input:checked:not(:disabled)) > label { color: var(--fg-0); }
+/* Korean breaks between words, not inside one ('상 / 쇄'). */
+:root:lang(ko)[data-skin="studio"] .t2-toggles > .check-row > label { word-break: keep-all; }
+[data-skin="studio"] .t2-toggles > .check-row > .tip { position: relative; z-index: 1; margin: -4px 0; }
+/* An option the filter cannot use (the FIR-only ones with PEQ only) keeps its
+   value, and its tile goes quiet: a dashed edge, no accent, a dimmed mark. */
+[data-skin="studio"] .t2-toggles > .check-row:has(> input:disabled) {
+  border-style: dashed;
+  border-color: var(--field-border);
+  background: transparent;
+}
+[data-skin="studio"] .t2-toggles > .check-row:has(> input:disabled) > label,
+[data-skin="studio"] .t2-toggles > .check-row > input[type="checkbox"]:disabled { cursor: not-allowed; }
+[data-skin="studio"] .t2-toggles > .check-row > input[type="checkbox"]:disabled { box-shadow: inset 0 0 0 1.5px var(--fg-3); opacity: 1; }
+[data-skin="studio"] .t2-toggles > .check-row > input[type="checkbox"]:disabled:checked { background: var(--fg-3); box-shadow: none; }
+
 /* Under a typed upper end the basis and the reach are disabled; their labels dim with them. */
 #dis-room .field-row:has(> select:disabled) > .field-label > label { color: var(--fg-3); }
 

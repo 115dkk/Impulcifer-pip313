@@ -4,6 +4,12 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.19.1 - 2026-11-11
+### Studio에서 가상 룸 튜닝 2의 켜고 끄는 옵션을 타일로
+
+#### ⭐ 새로운 기능 / 개선
+- **켜고 끄는 옵션을 토글 타일로**: Studio 스킨에서 가상 룸 튜닝 2의 보호, 시간과 위상, 스피커 사이 묶음에 체크박스가 줄줄이 늘어서 있던 것을 묶음마다 타일 격자로 바꿨습니다. 타일 하나가 옵션 하나이고, 켜진 타일은 테두리와 바탕이 강조색이고 점이 채워지며, 꺼진 타일은 점이 빈 고리입니다(고급 옵션 탭과 같은 표시). 타일 어디를 눌러도 켜지고 꺼지며, i 버튼은 그대로 설명을 엽니다. 'PEQ만' 필터에서 쓸 수 없는 FIR 전용 옵션은 점선 테두리에 흐린 글자로 보입니다. MIMO의 '귀마다 따로 검사'도 같은 타일입니다. 숫자와 선택 칸, Stable 스킨, 작업에 보내는 값은 그대로입니다.
+
 ## 3.19.0 - 2026-11-11
 ### 룸 측정의 서브우퍼로 LFE를 만들고 보정
 
