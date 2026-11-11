@@ -157,10 +157,26 @@ jobs:
           key: rust-test-${{ runner.os }}${{ matrix.os == 'ubuntu-latest' && '-container2604' || '' }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: rust-test-${{ runner.os }}${{ matrix.os == 'ubuntu-latest' && '-container2604' || '' }}-
 
+      # Container steps run as root, and root writes through read-only file
+      # permissions, so brir_outputs' output_readonly_file_failure_preserves_
+      # existing_bytes cannot fail the write it depends on. Hand the workspace
+      # and the toolchain to an ordinary user (uid 1001, the host runner's) and
+      # run cargo as that user. The cache steps stay root and still read it all.
+      - name: cargo test --workspace and --doc as an unprivileged user (Linux container)
+        if: runner.os == 'Linux'
+        run: |
+          useradd --create-home --uid 1001 tester
+          chown -R tester: "$GITHUB_WORKSPACE" "$HOME"
+          as_tester() { runuser -u tester -- env HOME="$HOME" PATH="$PATH" "$@"; }
+          as_tester cargo test --workspace --all-targets
+          as_tester cargo test --workspace --doc
+
       - name: cargo test --workspace
+        if: runner.os != 'Linux'
         run: cargo test --workspace --all-targets
 
       - name: cargo test --doc
+        if: runner.os != 'Linux'
         run: cargo test --workspace --doc
 
   wheel:
