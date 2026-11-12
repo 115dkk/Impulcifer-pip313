@@ -70,6 +70,16 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "3.19.0",
     ),
     (
+        # ADR 0018: 9.1.4 has one LFE channel and sums the two subwoofers; 22.2 keeps them apart.
+        "room_lfe_two_subwoofers_summed",
+        (
+            f"--room_measurement_file={PROJECT_ROOT / 'crates/impulcifer-io/tests/fixtures/rew_two_irs_and_fr.mdat'}",
+            "--room_measurement_map=FL=1,FR=2,FC=1,LFE=2,LFE2=1",
+            "--layout_files=9.1.4,22.2",
+        ),
+        "3.20.0",
+    ),
+    (
         "room_lfe_corrects_measured_lfe",
         (
             f"--brir_recording_file={PROJECT_ROOT / DEMO / 'FL,FR.wav'}",

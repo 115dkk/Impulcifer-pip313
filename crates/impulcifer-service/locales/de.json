@@ -435,7 +435,7 @@
   "hint_lfe_mode_none": "Die LFE-Spuren der Dateien in Kanalreihenfolge bleiben stumm. hesuvi.wav und hrir.wav haben keine LFE-Spur.",
   "hint_lfe_mode_center": "Die LFE-Spuren verwenden den Center-Lautsprecher oder die beiden vorderen Lautsprecher, wenn der Center-Lautsprecher nicht gemessen wurde.",
   "hint_lfe_mode_all": "Die LFE-Spuren werden aus dem Bass aller gemessenen Lautsprecher unterhalb von 120 Hz erzeugt. Die Mittelung über die Richtungen gleicht die Überhöhungen und Einbrüche einzelner Positionen aus, ähnlich wie mehrere Subwoofer in einem Raum.",
-  "hint_lfe_measured": "Eine LFE zugeordnete Subwoofermessung wird unabhängig von dieser Einstellung verwendet.",
+  "hint_lfe_measured": "Eine LFE zugeordnete Subwoofermessung wird unabhängig von dieser Einstellung verwendet. Wenn LFE und LFE2 jeweils ein Subwoofer zugeordnet ist, werden beide in einem Format mit nur einem LFE-Kanal gemeinsam wiedergegeben.",
   "section_guided": "Messung durch Kopfdrehung",
   "hint_guided_intro": "Messen Sie mehr Lautsprecherpositionen, als Sie Lautsprecher haben: Setzen Sie sich auf einen Drehstuhl und drehen Sie sich zwischen den Aufnahmen wie im jeweiligen Schritt gezeigt. Jede Aufnahme wird unter dem Namen gespeichert, den „Verarbeitung“ einliest.",
   "hint_guided_distance": "Halten Sie mindestens 1,5 m Abstand zu den Lautsprechern; bei geringerem Abstand wirkt der Klang räumlich enger. Klebeband auf dem Boden für jeden Winkel hilft, dieselbe Ausrichtung wiederzufinden.",
@@ -506,5 +506,6 @@
   "cli_room_lfe_correction": "{slot}: Mit dem Subwoofer der Raummessung von {low} bis {high} Hz korrigiert",
   "cli_room_lfe_uncorrected": "{slot}: Die Raummessung enthält keinen Subwoofer für diese LFE-Spur, daher wird sie nicht korrigiert",
   "cli_lfe_source_measured_corrected": "den gemessenen Subwoofer, korrigiert anhand der Raummessung",
-  "cli_lfe_source_room": "den Subwoofer der Raummessung"
+  "cli_lfe_source_room": "den Subwoofer der Raummessung",
+  "cli_lfe_source_sum": "beide Subwoofer gemeinsam (LFE: {first}; LFE2: {second})"
 }

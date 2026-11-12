@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.20.0 - 2026-11-12
+### LFE 채널이 하나인 포맷에서 서브우퍼 둘을 합침
+
+#### ⭐ 새로운 기능 / 개선
+- **서브우퍼 둘을 LFE 하나로(ADR 0018)**: 서브우퍼를 둘 쟀을 때(`LFE`, `LFE2`) LFE 채널이 하나인 채널 순서 파일(Dolby Atmos 9.1 계열과 24.1.10, Auro-3D 13.1)은 지금까지 `LFE`의 서브우퍼만 썼습니다. 이제 두 서브우퍼의 트랙을 귀마다 샘플 단위로 더해 씁니다. 방에서 LFE 신호 하나가 두 서브우퍼에서 함께 나오는 것과 같습니다. 두 트랙은 저마다 도착 시각 맞추기, 120 Hz 저역 통과, 룸 보정을 마친 뒤에 더하고, 더한 뒤에 레벨을 고치지 않으므로 한 대일 때보다 레벨이 높습니다. LFE 채널이 둘인 NHK 22.2와 DTS:X Pro 30.2는 그대로 따로 씁니다. 서브우퍼 하나만 쓰려면 `LFE2`를 배정하지 않으면 됩니다.
+- **합쳤다는 사실을 알림**: 작업 기록과 출력 폴더 `README.md`의 LFE 원본 줄에 '서브우퍼 둘을 더한 것'과 두 트랙의 출처(귓속 측정, 룸 측정)를 적습니다. 출력 파일 탭의 LFE 채널 설명에도 이 규칙을 적었습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **brir-3x 시나리오 하나 추가**: 룸 측정의 두 서브우퍼를 `LFE`와 `LFE2`에 놓고 9.1.4와 22.2 파일을 쓰는 시나리오를 추가해 47개가 됐습니다.
+
 ## 3.19.1 - 2026-11-11
 ### Studio에서 가상 룸 튜닝 2의 켜고 끄는 옵션을 타일로
 
