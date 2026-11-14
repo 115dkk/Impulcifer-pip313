@@ -14,6 +14,7 @@ been fixed and old features improved.
 
 #### 🔧 빌드 / 설정 변경
 - **brir-3x가 SOFA도 검사**: 무결성 검사가 `.sofa` 파일도 해시하고(날짜는 고정), SOFA를 켜고 헤드폰 EQ를 따로 내보내는 시나리오를 더해 48개가 됐습니다. PR마다 데모의 두 SOFA 파일을 원본 libmysofa(`mysofa2json -c`)와 pyfar `sofar`의 AES69 규약 검사로 열어 봅니다.
+- **시험이 임시 폴더를 남기지 않음** (릴리스 후 추가, 출하물 변화 없음): `impulcifer-service`의 `brir_plots` 시험이 데모 처리 결과를 눈으로 확인하라며 임시 폴더 네 개(약 450 MB)를 일부러 지우지 않아, 시험을 돌릴 때마다 `/tmp/impulcifer-service-test-*`가 쌓였습니다(이 세션에서 203개, 9.5 GB). 이제 필요한 HTML 내용을 결과에 담아 두고 폴더는 지웁니다. 확인용으로 남기려면 `IMPULCIFER_KEEP_TEST_OUTPUT=1`을 주면 되고, 그때는 경로를 출력합니다.
 
 ## 3.20.0 - 2026-11-12
 ### LFE 채널이 하나인 포맷에서 서브우퍼 둘을 합침
