@@ -1,4 +1,4 @@
-# P41: SOFA export through the pipeline, the service and the CLI (ADR 0019)
+# P58: SOFA export through the pipeline, the service and the CLI (ADR 0019)
 
 Repository: `/home/user/Impulcifer-pip313` (branch `ccr-083fe5e3-isoctv`). Work only inside it. Read first:
 `CLAUDE.md` (3.x workspace section: `forbid(unsafe_code)`, `features.toml`, `EXTENSION_FIELD_NAMES` /
@@ -69,16 +69,15 @@ In `src/brir/outputs.rs::write_outputs_checked`, after `hrir.wav`/`hesuvi.wav`, 
   `SOURCE_DATE_EPOCH` when that environment variable parses as an integer, else of the current Unix time.
 - With a split: `brir-no-headphone-eq.sofa` (its own title and comment) and `headphone-eq.wav` (`write_wav`, two
   tracks left/right, 32-bit like the other WAVs, output rate).
-- Push every saved path to `files`. Log (catalog keys, English text in all nine overlay catalogs
-  `crates/impulcifer-service/locales/*.json`, next to the other `cli_success_*` keys):
-  - `cli_success_sofa`: `Saved the BRIR as a SOFA file ({count} speakers): {path}`
-  - `cli_success_sofa_split`: `Saved the BRIR without headphone compensation as a SOFA file: {path}, and the headphone EQ: {eq}`
-  - `cli_info_sofa_split_skipped`: `This job does not use headphone compensation, so brir-no-headphone-eq.sofa and headphone-eq.wav were not saved.`
+- Push every saved path to `files`. Log with these catalog keys. They already exist, translated, in all nine
+  overlay catalogs `crates/impulcifer-service/locales/*.json`; use them with exactly these placeholders and do not
+  add, change or move catalog entries:
+  - `cli_success_sofa` ({count}, {path}): `Saved the BRIR as a SOFA file ({count} speakers): {path}`
+  - `cli_success_sofa_split` ({path}, {eq}): `Saved the BRIR without headphone compensation as a SOFA file: {path}, and the headphone EQ: {eq}`
+  - `cli_info_sofa_split_skipped` (no placeholder): `This job does not use headphone compensation, so brir-no-headphone-eq.sofa and headphone-eq.wav were not saved.`
 - README (`render_readme_with_layouts`): when SOFA files were saved, a section titled by `cli_readme_sofa_title`
-  (`SOFA`) with `cli_readme_sofa_note` (`brir.sofa holds the BRIRs of hrir.wav in the SOFA format (SimpleFreeFieldHRIR): one measurement per speaker at its nominal direction, 2 m away. LFE is not included.`) and, with a split, `cli_readme_sofa_split_note` (`brir-no-headphone-eq.sofa holds the same BRIRs without headphone compensation. Apply headphone-eq.wav (track 1 left ear, track 2 right ear) in the player to get brir.sofa.`).
-- The nine catalogs must keep identical key sets and placeholders (`cargo test -p impulcifer-service --test ui_catalog`).
-  The six UI keys `checkbox_sofa`, `tooltip_sofa`, `checkbox_sofa_split_headphone_eq`,
-  `tooltip_sofa_split_headphone_eq`, `tooltip_sofa_split_locked`, `studio_adv_sofa_split` already exist; leave them.
+  (`SOFA`) with `cli_readme_sofa_note` (`brir.sofa holds the BRIRs of hrir.wav in the SOFA format (SimpleFreeFieldHRIR): one measurement per speaker at its nominal direction, 2 m away. LFE is not included.`) and, with a split, `cli_readme_sofa_split_note` (`brir-no-headphone-eq.sofa holds the same BRIRs without headphone compensation. Apply headphone-eq.wav (track 1 left ear, track 2 right ear) in the player to get brir.sofa.`). These three keys have no placeholders and also exist already.
+- Check how the other `cli_success_*` / `cli_readme_*` keys are looked up and formatted, and do the same.
 
 ## 4. features.toml
 
@@ -114,7 +113,7 @@ In `src/brir/outputs.rs::write_outputs_checked`, after `hrir.wav`/`hesuvi.wav`, 
 `crates/impulcifer-dsp/src/{channel_balance.rs,pipeline.rs,stages/equalize.rs}` and `crates/impulcifer-dsp/tests/`,
 `crates/impulcifer-service/src/brir/outputs.rs` (and the request validation file if booleans are validated there),
 `crates/impulcifer-service/tests/`, `crates/impulcifer-service/Cargo.toml` (the `sofar` dev-dependency only),
-`crates/impulcifer-service/locales/*.json` (the six `cli_` keys only), `features.toml`, `Cargo.lock` (by cargo only).
+`features.toml`, `Cargo.lock` (by cargo only). Not the catalogs in `crates/impulcifer-service/locales/`.
 Do not touch `apps/`, `.github/`, docs, `crates/impulcifer-io` (unless a test proves the writer wrong), or versions.
 
 ## Verification (foreground; report the tail of each)
