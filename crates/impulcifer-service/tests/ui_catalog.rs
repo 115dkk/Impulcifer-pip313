@@ -12,14 +12,48 @@ fn ui_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/impulcifer-app/ui")
 }
 
+/// The page's scripts: every `ui/*.js` (sorted, so the order is deterministic)
+/// with its contents. index.html loads them as ordered classic scripts.
+fn ui_scripts() -> Vec<(String, String)> {
+    let mut scripts: Vec<(String, String)> = std::fs::read_dir(ui_dir())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_file() && path.extension().is_some_and(|e| e == "js"))
+        .map(|path| {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            (name, std::fs::read_to_string(&path).unwrap())
+        })
+        .collect();
+    scripts.sort();
+    assert!(
+        scripts.iter().any(|(name, _)| name == "app.js"),
+        "apps/impulcifer-app/ui/app.js is missing"
+    );
+    scripts
+}
+
+/// The `src` of every `<script>` in index.html, in load order.
+fn page_script_sources(html: &str) -> Vec<String> {
+    regex::Regex::new(r#"<script\b[^>]*\bsrc="([^"]+)""#)
+        .unwrap()
+        .captures_iter(html)
+        .map(|c| c[1].to_owned())
+        .collect()
+}
+
 /// `data-i18n="key"` in the markup and literal `t("key")` / `tOr("key", …)` calls
-/// in the script. Template keys such as `webview_status_${status}` are dynamic and
+/// in the scripts. Template keys such as `webview_status_${status}` are dynamic and
 /// are covered by the explicit status list below.
 fn literal_keys() -> BTreeSet<String> {
     let html = std::fs::read_to_string(ui_dir().join("index.html")).unwrap();
-    let js = std::fs::read_to_string(ui_dir().join("app.js")).unwrap();
+    let scripts = ui_scripts();
     let mut keys = BTreeSet::new();
-    for (haystack, prefix) in [(&html, "data-i18n=\""), (&js, "t(\""), (&js, "tOr(\"")] {
+    let mut searches = vec![(&html, "data-i18n=\"")];
+    for (_, js) in &scripts {
+        searches.push((js, "t(\""));
+        searches.push((js, "tOr(\""));
+    }
+    for (haystack, prefix) in searches {
         let mut rest = haystack.as_str();
         while let Some(start) = rest.find(prefix) {
             let after = &rest[start + prefix.len()..];
@@ -102,18 +136,50 @@ fn ui_scripts_and_markup_are_present_in_the_app_crate() {
         !html.contains("../logo/"),
         "the 3.x page must not reach outside frontendDist"
     );
+    // The page loads its scripts in order; app.js wires the page and boots it,
+    // so it comes last. Every script exists, and every ui/*.js is loaded (a
+    // file the page never loads would still be type-checked and key-scanned).
+    let sources = page_script_sources(&html);
+    for source in &sources {
+        assert!(
+            !source.contains('/') && ui_dir().join(source).is_file(),
+            "index.html loads {source}, which is not a file in apps/impulcifer-app/ui"
+        );
+    }
+    assert_eq!(
+        sources.last().map(String::as_str),
+        Some("app.js"),
+        "index.html must load app.js, last: {sources:?}"
+    );
+    let loaded: BTreeSet<&str> = sources.iter().map(String::as_str).collect();
+    assert_eq!(
+        loaded.len(),
+        sources.len(),
+        "a script is loaded twice: {sources:?}"
+    );
+    let scripts = ui_scripts();
+    let on_disk: BTreeSet<&str> = scripts.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(loaded, on_disk, "index.html must load every ui/*.js");
 }
 
-/// `errorSentence` in app.js turns a service error into a catalogue sentence
-/// by its fixed English message. Every message it matches must still be sent
-/// by the service word for word, or the page would fall back to the English
+/// `errorSentence` in the page's scripts turns a service error into a catalogue
+/// sentence by its fixed English message. Every message it matches must still be
+/// sent by the service word for word, or the page would fall back to the English
 /// text without anyone noticing.
 #[test]
 fn translated_error_messages_are_still_sent_by_the_service() {
     // Windows checkouts may carry CRLF line endings.
-    let js = std::fs::read_to_string(ui_dir().join("app.js"))
-        .unwrap()
-        .replace("\r\n", "\n");
+    let defining: Vec<String> = ui_scripts()
+        .into_iter()
+        .map(|(_, js)| js.replace("\r\n", "\n"))
+        .filter(|js| js.contains("function errorSentence("))
+        .collect();
+    assert_eq!(
+        defining.len(),
+        1,
+        "exactly one ui/*.js defines errorSentence"
+    );
+    let js = &defining[0];
     let start = js.find("function errorSentence(").unwrap();
     let body = &js[start..start + js[start..].find("\n}\n").unwrap()];
     let messages: Vec<_> = regex::Regex::new(r#"case "([^"]+)":"#)
@@ -140,7 +206,7 @@ fn translated_error_messages_are_still_sent_by_the_service() {
         .collect();
     assert!(
         stale.is_empty(),
-        "app.js translates messages the service no longer sends: {stale:?}"
+        "errorSentence translates messages the service no longer sends: {stale:?}"
     );
 }
 
