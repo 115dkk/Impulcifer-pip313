@@ -10,6 +10,10 @@ The SOFA writer already exists in `crates/impulcifer-io/src/sofa.rs` (`encode_si
 `write_simple_free_field_hrir`, `SofaMeasurement`, `SofaMetadata`, `sofa_date`). Use it; do not change it unless a
 test here proves it wrong (then say exactly what and why).
 
+Another worker is fixing `crates/impulcifer-io/src/sofa.rs` and `crates/impulcifer-io/tests/sofa.rs` at the same
+time (the public API above stays the same). Do not edit those two files. If a build fails inside them, or
+`cargo fmt --all -- --check` flags only them, wait a few minutes and run the command again; report it if it persists.
+
 Build with the shared target directory, one cargo command at a time:
 `export CARGO_TARGET_DIR=/home/user/Impulcifer-pip313/target CARGO_PROFILE_DEV_DEBUG=0`. Do not delete anything in
 that directory and do not create other target directories (the disk is small).
