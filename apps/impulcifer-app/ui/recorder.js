@@ -246,7 +246,6 @@ async function refreshResolvedPath() {
   }
   const response = await api().resolve_recording_paths(recordDir, playPath, "speakers", sweep, checked("rf-append"));
   if (response.ok) {
-    state.resolvedRecordPath = response.data.record_path;
     node.textContent = fmt(t("label_record_resolved_path"), { path: response.data.record_path });
   } else {
     node.textContent = "";

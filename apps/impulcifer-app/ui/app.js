@@ -4,46 +4,6 @@
 
 /* ---------------------------------------------------------------- wiring */
 
-function buildDecayGrid() {
-  const grid = $("bf-decay-grid");
-  for (const channel of DECAY_CHANNELS) {
-    const label = document.createElement("span");
-    label.className = "mini-label mono";
-    label.textContent = `${channel}:`;
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "0";
-    input.id = `bf-decay-${channel}`;
-    input.className = "num mono";
-    grid.append(label, input);
-  }
-}
-
-function buildStudioDecayGrid() {
-  const grid = $("ba-decay-grid");
-  for (const channel of DECAY_CHANNELS) {
-    const cell = document.createElement("label");
-    cell.className = "ch-cell";
-    const code = document.createElement("span");
-    code.className = "ch-code mono";
-    code.textContent = channel;
-    const field = document.createElement("span");
-    field.className = "unit-field";
-    const input = document.createElement("input");
-    input.type = "number";
-    input.min = "0";
-    input.placeholder = "—";
-    input.id = `ba-decay-${channel}`;
-    const unit = document.createElement("span");
-    unit.className = "unit";
-    unit.dataset.i18n = "studio_adv_unit_ms";
-    unit.textContent = t("studio_adv_unit_ms");
-    field.append(input, unit);
-    cell.append(code, field);
-    grid.append(cell);
-  }
-}
-
 function wireEvents() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".nav-item")).forEach((item) => {
     item.addEventListener("click", () => {
@@ -57,8 +17,7 @@ function wireEvents() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-disclosure]")).forEach((head) => {
     const toggle = () => {
       head.parentElement?.classList.toggle("open");
-      refreshStudioAdvanced();
-      updateSofaSplit("bf");
+      for (const p of ADV_PREFIXES) refreshAdvanced(p);
       scheduleTestSignalCheck(0);
     };
     head.addEventListener("click", toggle);
@@ -126,11 +85,7 @@ function wireEvents() {
   el("btn-gd-cancel", HTMLButtonElement).addEventListener("click", stopGuidedCountdown);
   el("btn-gd-prev", HTMLButtonElement).addEventListener("click", () => showGuidedStep(state.guided.index - 1));
   el("btn-gd-next", HTMLButtonElement).addEventListener("click", () => showGuidedStep(state.guided.index + 1));
-  for (const p of ["bf", "ba"]) {
-    el(`${p}-layout-files`, HTMLSelectElement).addEventListener("change", () => updateLayoutForce(p));
-    el(`${p}-lfe-mode`, HTMLSelectElement).addEventListener("change", () => updateLfeHint(p));
-    el(`${p}-itd-mode`, HTMLSelectElement).addEventListener("change", () => updateItdHint(p));
-  }
+  for (const p of ADV_PREFIXES) wireAdvanced(p);
   el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", () => {
     updateTestSignalVisibility();
     scheduleTestSignalCheck(0);
@@ -202,10 +157,6 @@ function wireEvents() {
   el("btn-record-headphones", HTMLButtonElement).addEventListener("click", startHeadphonesRecording);
   el("btn-sweep-set", HTMLButtonElement).addEventListener("click", generateSweepSet);
 
-  for (const id of ["bf-resample", "bf-balance", "bf-decay-per-channel", "bf-mic-deviation", "bf-sofa"]) {
-    $(id).addEventListener("change", refreshStableAdvanced);
-  }
-
   ADV_TABS.forEach((tab, index) => {
     const button = $(`adv-tab-${tab}`);
     button.addEventListener("click", () => selectAdvTab(tab));
@@ -220,10 +171,6 @@ function wireEvents() {
     $(`adv-on-${tab}`).addEventListener("click", () => setAdvOn(tab, !advOn(tab)));
     $(`adv-reset-${tab}`).addEventListener("click", () => resetAdvTab(tab));
   });
-  el("ba-bass-gain", HTMLInputElement).addEventListener("input", refreshStudioAdvanced);
-  for (const id of ["ba-balance", "ba-resample", "ba-decay-per-channel", "ba-mic-deviation", "ba-sofa"]) {
-    $(id).addEventListener("change", refreshStudioAdvanced);
-  }
 
   el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () => {
     if (brirRecordingProblem()) {
@@ -387,11 +334,11 @@ function showFirstRunLanguageModal(languages) {
   if (list.childElementCount > 0) $("language-modal").hidden = false;
 }
 
-buildDecayGrid();
-buildStudioDecayGrid();
+for (const p of ADV_PREFIXES) buildDecayGrid(p);
 wireEvents();
 wireTips();
-refreshStudioAdvanced();
+// Studio's locks follow the page from the start; Stable's markup already matches its defaults.
+refreshAdvanced("ba");
 updateChannelGuidance();
 
 window.addEventListener("pywebviewready", boot);

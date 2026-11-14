@@ -16,7 +16,6 @@ const state = {
   strings: {},
   brirDefaults: {},
   language: "en",
-  theme: "dark",
   skin: "studio",
   jobId: null,
   jobKind: null,
@@ -25,7 +24,6 @@ const state = {
   startPending: false,
   nextSeq: 0,
   pollTimer: undefined,
-  resolvedRecordPath: "",
   guided: { index: 0, results: {}, pending: null, timer: undefined, remaining: 0 },
   takeMeasurements: {},
   lastOutputDir: null,
@@ -149,13 +147,7 @@ function applyStrings() {
   renderRecoveryInventory();
   renderEq();
   for (const purpose of MFILE_PURPOSES) renderMfile(purpose);
-  refreshStudioAdvanced();
-  // Stable's tooltips that follow a choice (Studio's are set by refreshStudioAdvanced).
-  updateLayoutForce("bf");
-  updateLfeHint("bf");
-  updateItdHint("bf");
-  updateItdHint("ba");
-  updateSofaSplit("bf");
+  for (const p of ADV_PREFIXES) refreshAdvanced(p);
   if (state.lastJob?.kind === "brir" && state.lastJob.status === "succeeded") renderAlignment(state.lastJob.result?.alignment ?? null);
   if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
 }
@@ -164,7 +156,6 @@ function applyStrings() {
 
 /** @param {string} code */
 function applyTheme(code) {
-  state.theme = code;
   if (state.systemThemeQuery) {
     state.systemThemeQuery.removeEventListener("change", onSystemThemeChange);
     state.systemThemeQuery = null;

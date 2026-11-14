@@ -54,7 +54,11 @@ function gatherBrirPayload() {
 }
 
 /* Advanced options are read from one of two forms with the same field
-   suffixes: Stable's single list ("bf-") and Studio's four tabs ("ba-"). */
+   suffixes: Stable's single list ("bf-") and Studio's four tabs ("ba-").
+   Every function below that takes `p` works on either form. */
+/** @typedef {"bf" | "ba"} AdvPrefix */
+/** @type {readonly AdvPrefix[]} */
+const ADV_PREFIXES = ["bf", "ba"];
 
 /** @param {ProcessingRequest} args @param {string} p @param {boolean} equalizing */
 function addToneArgs(args, p, equalizing) {
@@ -96,7 +100,7 @@ function addTimeArgs(args, p) {
 }
 
 function applyTimeDefaults() {
-  for (const p of ["bf", "ba"]) {
+  for (const p of ADV_PREFIXES) {
     const mode = el(`${p}-itd-mode`, HTMLSelectElement);
     mode.value = brirDefault("itd_mode", "off");
     for (const option of mode.options) option.defaultSelected = option.value === mode.value;
@@ -346,59 +350,47 @@ function equalizationStageOn() {
   return isOpen("dis-room") || isOpen("dis-headphone") || isOpen("dis-eq");
 }
 
-/* Lock what cannot apply instead of explaining it: the bass boost and tilt
-   need an equalization stage, and headphone compensation already cancels the
-   microphones, so mic deviation correction is skipped while it is on. A
-   locked checkbox shows what will happen (unchecked) and gets its own
-   choice back when it unlocks. */
-function refreshStudioAdvanced() {
-  const toneEq = el("ba-tone-eq", HTMLFieldSetElement);
-  toneEq.disabled = !equalizationStageOn();
-  toneEq.title = toneEq.disabled ? t("studio_adv_locked_no_eq") : "";
-  const bassOff = numOr("ba-bass-gain", 0) === 0;
-  el("ba-bass-fc", HTMLInputElement).disabled = bassOff;
-  el("ba-bass-q", HTMLInputElement).disabled = bassOff;
-  el("ba-balance-db", HTMLInputElement).disabled = val("ba-balance") !== "number";
+/* -------------------------------------------------- rules for both forms */
 
-  const perChannel = checked("ba-decay-per-channel");
-  el("ba-decay", HTMLInputElement).disabled = perChannel;
-  $("ba-decay-channels").hidden = !perChannel;
+/* What one choice in a form enables, disables or shows in the same form, by
+   suffix. A rule reads its `when` field: a ticked checkbox, the "number"
+   choice of a select (`is: "number"`), or a number other than zero
+   (`is: "nonzero"`). A lock disables a part while the page cannot use it and
+   puts `title` (a literal t() call, so ui_catalog.rs sees the key) in the
+   tooltip of `titleOn`, the part itself by default; with `keep`, a locked
+   checkbox shows what will happen (unchecked) and gets its own choice back
+   when it unlocks. `only` keeps a rule to one form. Rules run in order, so a
+   lock comes before the rules that read the part it locks. */
+/** @typedef {{ when: string, is?: "number" | "nonzero", enables?: string[], disables?: string[],
+ *   shows?: string[], only?: AdvPrefix }} AdvRule */
+/** @typedef {{ lock: string, lockedWhen: () => boolean, title: () => string, titleOn?: string, keep?: boolean,
+ *   only?: AdvPrefix }} AdvLock */
 
-  el("ba-fs", HTMLSelectElement).disabled = !checked("ba-resample");
-  updateLayoutForce("ba");
-  updateLfeHint("ba");
-  updateItdHint("ba");
-  updateSofaSplit("ba");
+/* Studio locks what cannot apply instead of explaining it: the bass boost and
+   tilt need an equalization stage, and headphone compensation already cancels
+   the microphones, so mic deviation correction is skipped while it is on.
+   Stable leaves those fields open. */
+/** @type {(AdvRule | AdvLock)[]} */
+const ADV_RULES = [
+  { lock: "tone-eq", lockedWhen: () => !equalizationStageOn(), title: () => t("studio_adv_locked_no_eq"), only: "ba" },
+  { when: "bass-gain", is: "nonzero", enables: ["bass-fc", "bass-q"], only: "ba" },
+  { when: "balance", is: "number", enables: ["balance-db"] },
+  { when: "decay-per-channel", disables: ["decay"], shows: ["decay-channels"] },
+  { when: "resample", enables: ["fs"] },
+  { lock: "mic-deviation", lockedWhen: () => isOpen("dis-headphone"), title: () => t("studio_adv_locked_headphone"),
+    titleOn: "mic-row", keep: true, only: "ba" },
+  { when: "mic-deviation", enables: ["mic-strength", "mic-debug"] },
+];
 
-  const mic = el("ba-mic-deviation", HTMLInputElement);
-  const blocked = isOpen("dis-headphone");
-  if (blocked && !mic.disabled) {
-    mic.dataset.kept = String(mic.checked);
-    mic.checked = false;
-  } else if (!blocked && mic.disabled) {
-    mic.checked = mic.dataset.kept === "true";
-    delete mic.dataset.kept;
-  }
-  mic.disabled = blocked;
-  $("ba-mic-row").title = blocked ? t("studio_adv_locked_headphone") : "";
-  el("ba-mic-strength", HTMLInputElement).disabled = !mic.checked;
-  el("ba-mic-debug", HTMLInputElement).disabled = !mic.checked;
-}
-
-function refreshStableAdvanced() {
-  el("bf-fs", HTMLSelectElement).disabled = !checked("bf-resample");
-  el("bf-balance-db", HTMLInputElement).disabled = val("bf-balance") !== "number";
-  const perChannel = checked("bf-decay-per-channel");
-  el("bf-decay", HTMLInputElement).disabled = perChannel;
-  $("bf-decay-channels").hidden = !perChannel;
-  const mic = checked("bf-mic-deviation");
-  el("bf-mic-strength", HTMLInputElement).disabled = !mic;
-  el("bf-mic-debug", HTMLInputElement).disabled = !mic;
-  updateLayoutForce("bf");
-  updateLfeHint("bf");
-  updateItdHint("bf");
-  updateSofaSplit("bf");
-}
+/* Tooltips and rows that follow one choice; each runs with the rules and on
+   its own when that choice changes. */
+/** @type {{ on: string, update: (p: AdvPrefix) => void }[]} */
+const ADV_HINTS = [
+  { on: "layout-files", update: updateLayoutForce },
+  { on: "lfe-mode", update: updateLfeHint },
+  { on: "itd-mode", update: updateItdHint },
+  { on: "sofa", update: updateSofaSplit },
+];
 
 /** @param {string} id */
 function advField(id) {
@@ -406,6 +398,124 @@ function advField(id) {
   if (!(node instanceof HTMLInputElement || node instanceof HTMLSelectElement)) throw new Error(`Not a field: ${id}`);
   return node;
 }
+
+/** @param {string} id */
+function advControl(id) {
+  const node = $(id);
+  if (!(node instanceof HTMLInputElement || node instanceof HTMLSelectElement || node instanceof HTMLFieldSetElement)) {
+    throw new Error(`Not a control: ${id}`);
+  }
+  return node;
+}
+
+/** @param {AdvPrefix} p @param {AdvRule} rule */
+function advRuleHolds(p, rule) {
+  const id = `${p}-${rule.when}`;
+  if (rule.is === "number") return val(id) === "number";
+  if (rule.is === "nonzero") return numOr(id, 0) !== 0;
+  return checked(id);
+}
+
+/** @param {AdvPrefix} p @param {AdvLock} rule */
+function applyAdvLock(p, rule) {
+  const node = advControl(`${p}-${rule.lock}`);
+  const locked = rule.lockedWhen();
+  if (rule.keep) {
+    if (!(node instanceof HTMLInputElement && node.type === "checkbox")) throw new Error(`Not a checkbox: ${node.id}`);
+    if (locked && !node.disabled) {
+      node.dataset.kept = String(node.checked);
+      node.checked = false;
+    } else if (!locked && node.disabled) {
+      node.checked = node.dataset.kept === "true";
+      delete node.dataset.kept;
+    }
+  }
+  node.disabled = locked;
+  $(`${p}-${rule.titleOn ?? rule.lock}`).title = locked ? rule.title() : "";
+}
+
+/** @param {AdvPrefix} p */
+function refreshAdvanced(p) {
+  for (const rule of ADV_RULES) {
+    if (rule.only && rule.only !== p) continue;
+    if ("lock" in rule) {
+      applyAdvLock(p, rule);
+      continue;
+    }
+    const holds = advRuleHolds(p, rule);
+    for (const part of rule.enables ?? []) advField(`${p}-${part}`).disabled = !holds;
+    for (const part of rule.disables ?? []) advField(`${p}-${part}`).disabled = holds;
+    for (const part of rule.shows ?? []) $(`${p}-${part}`).hidden = !holds;
+  }
+  for (const hint of ADV_HINTS) hint.update(p);
+}
+
+/* The field a rule reads runs the rules again (a number field as it is
+   typed, anything else when it changes); the choice a hint follows runs that
+   hint. Locks follow the page, which runs the rules of both forms itself. */
+/** @param {AdvPrefix} p */
+function wireAdvanced(p) {
+  for (const rule of ADV_RULES) {
+    if ("lock" in rule || (rule.only && rule.only !== p)) continue;
+    const field = advField(`${p}-${rule.when}`);
+    const typed = field instanceof HTMLInputElement && field.type === "number";
+    field.addEventListener(typed ? "input" : "change", () => refreshAdvanced(p));
+  }
+  for (const hint of ADV_HINTS) advField(`${p}-${hint.on}`).addEventListener("change", () => hint.update(p));
+}
+
+/* Each form lays out a channel's decay field its own way: Stable puts "FL:"
+   and a bare field straight in the grid, Studio a cell with the code and a
+   unit. */
+/** @type {Record<AdvPrefix, { placeholder?: string, className?: string,
+ *   cell: (channel: string, input: HTMLInputElement) => HTMLElement[] }>} */
+const DECAY_CELLS = {
+  bf: {
+    className: "num mono",
+    cell: (channel, input) => {
+      const label = document.createElement("span");
+      label.className = "mini-label mono";
+      label.textContent = `${channel}:`;
+      return [label, input];
+    },
+  },
+  ba: {
+    placeholder: "—",
+    cell: (channel, input) => {
+      const cell = document.createElement("label");
+      cell.className = "ch-cell";
+      const code = document.createElement("span");
+      code.className = "ch-code mono";
+      code.textContent = channel;
+      const field = document.createElement("span");
+      field.className = "unit-field";
+      const unit = document.createElement("span");
+      unit.className = "unit";
+      unit.dataset.i18n = "studio_adv_unit_ms";
+      unit.textContent = t("studio_adv_unit_ms");
+      field.append(input, unit);
+      cell.append(code, field);
+      return [cell];
+    },
+  },
+};
+
+/** @param {AdvPrefix} p */
+function buildDecayGrid(p) {
+  const layout = DECAY_CELLS[p];
+  const grid = $(`${p}-decay-grid`);
+  for (const channel of DECAY_CHANNELS) {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    if (layout.placeholder) input.placeholder = layout.placeholder;
+    input.id = `${p}-decay-${channel}`;
+    if (layout.className) input.className = layout.className;
+    grid.append(...layout.cell(channel, input));
+  }
+}
+
+/* -------------------------------------------------- reset and carry-over */
 
 /** @param {HTMLInputElement | HTMLSelectElement} node */
 function resetField(node) {
@@ -423,7 +533,7 @@ function resetField(node) {
 /** @param {string} tab */
 function resetAdvTab(tab) {
   for (const suffix of ADV_FIELDS[tab]) resetField(advField(`ba-${suffix}`));
-  refreshStudioAdvanced();
+  refreshAdvanced("ba");
 }
 
 /* The skins keep separate forms, so a switch in the middle of a session
@@ -453,6 +563,5 @@ function syncAdvancedForms(skin) {
     if (toStudio) setAdvOn(tab, stableOpen);
   }
   if (!toStudio) $("dis-advanced").classList.toggle("open", ADV_TABS.some(advOn));
-  refreshStudioAdvanced();
-  refreshStableAdvanced();
+  for (const p of ADV_PREFIXES) refreshAdvanced(p);
 }
