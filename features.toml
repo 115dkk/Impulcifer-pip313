@@ -956,7 +956,7 @@ note = "ADR 0019: brir.sofa contains hrir.wav speakers in SLOTS order at nominal
 id = "output.sofa_split"
 kind = "output"
 status = "implemented"
-tests = ["impulcifer-service::sofa_split_reassembles_the_final_brir", "impulcifer-service::sofa_split_without_headphone_compensation_saves_only_brir_sofa"]
+tests = ["impulcifer-service::sofa_split_reassembles_the_final_brir", "impulcifer-service::sofa_split_reassembles_the_final_brir_after_resampling", "impulcifer-service::sofa_split_without_headphone_compensation_saves_only_brir_sofa"]
 note = "ADR 0019: brir-no-headphone-eq.sofa and headphone-eq.wav are written only when headphone compensation is used"
 
 [[feature]]

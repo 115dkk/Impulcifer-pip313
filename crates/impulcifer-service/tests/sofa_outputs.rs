@@ -143,18 +143,21 @@ fn worst_third_octave_db(
     worst
 }
 
-#[test]
-fn sofa_split_reassembles_the_final_brir() {
+fn assert_split_reassembles(output_fs: Option<u32>) {
     let temp = Temp::demo();
-    run(
-        &temp,
-        json!({"dir_path":temp.0,"sofa":true,"sofa_split_headphone_eq":true}),
-    );
+    let mut request = json!({"dir_path":temp.0,"sofa":true,"sofa_split_headphone_eq":true});
+    if let Some(fs) = output_fs {
+        request["fs"] = json!(fs);
+    }
+    run(&temp, request);
     for name in ["brir.sofa", "brir-no-headphone-eq.sofa", "headphone-eq.wav"] {
         assert!(temp.0.join(name).is_file(), "{name}");
     }
     let eq = impulcifer_io::read_wav(&temp.0.join("headphone-eq.wav")).unwrap();
     assert_eq!(eq.tracks.len(), 2);
+    if let Some(fs) = output_fs {
+        assert_eq!(eq.sample_rate, fs);
+    }
     let final_sofa = open(&temp.0.join("brir.sofa"), eq.sample_rate);
     let split_sofa = open(&temp.0.join("brir-no-headphone-eq.sofa"), eq.sample_rate);
     assert_eq!(final_sofa.num_measurements(), split_sofa.num_measurements());
@@ -193,16 +196,30 @@ fn sofa_split_reassembles_the_final_brir() {
         }
     }
     println!(
-        "MEASURE sofa split worst deviation: {:+.6} dB at {:.1} Hz ({}; final {:.3} dB, reconstructed {:.3} dB)",
-        worst.0, worst.2, worst.1, worst.3, worst.4
+        "MEASURE sofa split worst deviation at {} Hz: {:+.6} dB at {:.1} Hz ({}; final {:.3} dB, reconstructed {:.3} dB)",
+        eq.sample_rate, worst.0, worst.2, worst.1, worst.3, worst.4
     );
     assert!(
         worst.0.abs() <= 1.0,
-        "worst split deviation {:+.6} dB at {:.1} Hz ({})",
+        "worst split deviation at {} Hz: {:+.6} dB at {:.1} Hz ({})",
+        eq.sample_rate,
         worst.0,
         worst.2,
         worst.1
     );
+}
+
+#[test]
+fn sofa_split_reassembles_the_final_brir() {
+    assert_split_reassembles(None);
+}
+
+/// The headphone EQ FIR is resampled with the HRIR when the output rate
+/// differs; it must keep its convolution gain, which the HRIR's
+/// renormalization does not restore.
+#[test]
+fn sofa_split_reassembles_the_final_brir_after_resampling() {
+    assert_split_reassembles(Some(44_100));
 }
 
 #[test]

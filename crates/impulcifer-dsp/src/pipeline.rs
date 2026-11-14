@@ -556,8 +556,14 @@ pub fn run_pipeline(
                         split.resample(fs)?;
                     }
                     if let Some(eq) = &mut headphone_eq {
+                        // Resampling keeps a waveform's amplitude, so an FIR's sum
+                        // (its convolution gain) grows with fs / old_fs. The split
+                        // HRIR gets the final's renormalization, which does not
+                        // undo that, so scale the FIR back to keep its gain.
+                        let gain = f64::from(old_fs) / f64::from(fs);
                         for fir in eq {
                             *fir = crate::resample::nnresample(fir, fs, old_fs)?;
+                            fir.iter_mut().for_each(|sample| *sample *= gain);
                         }
                     }
                     let gain = normalize(&mut hrir, config)?;

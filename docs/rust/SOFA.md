@@ -30,7 +30,7 @@ The equalization curve of one speaker and ear is `room + headphone + user EQ - t
    - Decay: the same targets as the final BRIR (`adjust_decay`).
    - Channel balance: the correction FIRs computed on the final BRIR, applied unchanged to the copy. `correct_channel_balance` is split into a function that computes the per-group FIRs and one that applies them; the final BRIR's bytes do not change.
    - Normalize: the final BRIR's gain (`applied_gain_db`), applied unchanged.
-   - Resample: the copy is resampled like the final BRIR and then receives the final BRIR's second normalization gain unchanged. The headphone EQ FIR is resampled to the output rate with the same resampler and keeps its level.
+   - Resample: the copy is resampled like the final BRIR and then receives the final BRIR's second normalization gain unchanged. The headphone EQ FIR is resampled to the output rate with the same resampler and then multiplied by (measurement rate / output rate): resampling keeps a waveform's amplitude, so an FIR's sum, its convolution gain, would otherwise grow with the rate ratio (-0.74 dB at 44.1 kHz from 48 kHz), and the renormalization the BRIRs get does not undo it. `sofa_split_reassembles_the_final_brir_after_resampling` checks the agreement below at 44.1 kHz (worst 0.29 dB on the demo).
 4. **Agreement:** with the demo data and default settings, convolving each ear of `brir-no-headphone-eq.sofa` with the matching `headphone-eq.wav` track gives the `brir.sofa` response within ±1.0 dB on a 1/3-octave smoothed magnitude between 100 Hz and 12 kHz, for every speaker and ear. A test checks this. If the demo does not meet it, report the measured deviation; do not widen the tolerance without the maintainer.
 
 ## Convention: SimpleFreeFieldHRIR 1.0 (SOFA 2.1)
