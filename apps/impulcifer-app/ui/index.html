@@ -781,6 +781,20 @@
                     <input type="checkbox" id="bf-truehd">
                     <label for="bf-truehd" data-i18n="checkbox_truehd_layouts">TrueHD layouts</label>
                   </div>
+                  <!-- ADR 0019. The split option needs the SOFA file and headphone compensation
+                       (app.js updateSofaSplit). -->
+                  <div class="check-row">
+                    <input type="checkbox" id="bf-sofa" aria-describedby="bf-sofa-tip">
+                    <label for="bf-sofa" data-i18n="checkbox_sofa">SOFA file (brir.sofa)</label>
+                    <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-sofa-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-sofa-tip" class="tip-bubble" data-i18n="tooltip_sofa">The same BRIRs as hrir.wav in the SOFA format (SimpleFreeFieldHRIR), for players that read SOFA. Each speaker is stored at its nominal direction, 2 m away. The LFE is not included.</span></span>
+                  </div>
+                  <div class="adv-nested">
+                    <div class="check-row" id="bf-sofa-split-row">
+                      <input type="checkbox" id="bf-sofa-split" aria-describedby="bf-sofa-split-tip" disabled>
+                      <label for="bf-sofa-split" data-i18n="checkbox_sofa_split_headphone_eq">Also save it without headphone compensation, plus the headphone EQ</label>
+                      <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-sofa-split-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-sofa-split-tip" class="tip-bubble" data-i18n="tooltip_sofa_split_headphone_eq">Also saves brir-no-headphone-eq.sofa and headphone-eq.wav (left ear, right ear), so the player can apply the headphone EQ itself. brir.sofa is saved as well. Needs headphone compensation.</span></span>
+                    </div>
+                  </div>
                   <!-- The tooltips of the channel-order files and the LFE channel follow the chosen
                        mode (app.js updateLayoutForce, updateLfeHint), so they carry no data-i18n. -->
                   <div class="field-row top layout-files-row" id="bf-layout-files-row">
@@ -947,6 +961,8 @@
                       <label class="file-opt"><input type="checkbox" id="ba-jamesdsp"><span class="file-name">JamesDSP</span><span class="file-path mono">jamesdsp.wav</span></label>
                       <label class="file-opt"><input type="checkbox" id="ba-hangloose"><span class="file-name">Hangloose</span><span class="file-path mono">Hangloose/</span></label>
                       <label class="file-opt"><input type="checkbox" id="ba-truehd"><span class="file-name" data-i18n="studio_adv_truehd">TrueHD layouts</span><span class="file-path mono">truehd_11ch · truehd_13ch</span></label>
+                      <label class="file-opt" id="ba-sofa-row"><input type="checkbox" id="ba-sofa"><span class="file-name">SOFA</span><span class="file-path mono">brir.sofa</span></label>
+                      <label class="file-opt" id="ba-sofa-split-row"><input type="checkbox" id="ba-sofa-split" disabled><span class="file-name" data-i18n="studio_adv_sofa_split">SOFA + headphone EQ</span><span class="file-path mono">brir-no-headphone-eq.sofa · headphone-eq.wav</span></label>
                     </div>
                   </div>
                   <!-- The tooltips of the channel-order files and the LFE channel follow the chosen
