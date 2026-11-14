@@ -932,6 +932,34 @@ tests = ["impulcifer-audio-io::config_exact_channels_win_over_larger_float", "im
 note = "cpal (macOS, Linux) opens a device at its own channel count: CoreAudio reports only a device's current total, so a 12-channel 7.1.4 sweep on a 16-output interface, a stereo sweep on 8-channel HDMI or 2 microphone channels on a multi-input interface used to fail; playback now silences the extra device channels and capture keeps the first ones"
 
 [[feature]]
+id = "config.sofa"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::sofa_config_defaults_and_boolean_validation", "impulcifer-cli::sofa_flags_parse_appear_in_help_and_reach_config", "impulcifer-service::sofa_holds_the_speakers_of_hrir_wav"]
+note = "ADR 0019: opt-in SimpleFreeFieldHRIR export; false keeps every default output byte-identical"
+
+[[feature]]
+id = "config.sofa_split_headphone_eq"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::sofa_config_defaults_and_boolean_validation", "impulcifer-cli::sofa_flags_parse_appear_in_help_and_reach_config", "impulcifer-service::sofa_split_reassembles_the_final_brir"]
+note = "ADR 0019: opt-in BRIR without headphone compensation plus a two-track headphone FIR"
+
+[[feature]]
+id = "output.sofa"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-service::sofa_holds_the_speakers_of_hrir_wav", "impulcifer-service::sofa_files_are_reproducible_with_source_date_epoch", "impulcifer-service::sofa_off_writes_no_sofa_file"]
+note = "ADR 0019: brir.sofa contains hrir.wav speakers in SLOTS order at nominal directions and 2 m, excluding LFE"
+
+[[feature]]
+id = "output.sofa_split"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-service::sofa_split_reassembles_the_final_brir", "impulcifer-service::sofa_split_reassembles_the_final_brir_after_resampling", "impulcifer-service::sofa_split_without_headphone_compensation_saves_only_brir_sofa"]
+note = "ADR 0019: brir-no-headphone-eq.sofa and headphone-eq.wav are written only when headphone compensation is used"
+
+[[feature]]
 id = "output.hrir_wav"
 kind = "output"
 status = "implemented"
@@ -1257,6 +1285,13 @@ kind = "app"
 status = "implemented"
 tests = ["impulcifer-app::bridge_script_contract", "impulcifer-app::app_smoke_windows"]
 note = "bridge.js recreates window.pywebview.api over the single pywebview_api command and fires pywebviewready; the frozen 2.x frontend boots unchanged (M3 smoke 2026-09-08)"
+
+[[feature]]
+id = "io.sofa_writer"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::written_file_opens_in_sofar_with_the_right_shape", "impulcifer-io::written_file_is_deterministic"]
+note = "ADR 0019 and docs/rust/SOFA.md: a pure-Rust deterministic SimpleFreeFieldHRIR 1.0 (SOFA 2.1) writer emits netCDF-4/HDF5 with dense root links in a fractal heap and version-2 B-tree name index, dimension scales and global-heap DIMENSION_LIST references; no HDF5/netCDF runtime dependency"
 
 [[feature]]
 id = "io.wav_read"

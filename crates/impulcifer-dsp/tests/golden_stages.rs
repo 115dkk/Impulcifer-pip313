@@ -2,7 +2,10 @@
 //! Actual Python stage fixtures, core/pipeline.py:424-972; p10_*.
 use impulcifer_dsp::{
     DspError,
-    channel_balance::{ChannelBalance, channel_balance_firs, correct_channel_balance},
+    channel_balance::{
+        ChannelBalance, apply_channel_balance, channel_balance_corrections, channel_balance_firs,
+        correct_channel_balance,
+    },
     estimator::SweepEstimator,
     fr::{FrequencyResponse, magnitude_to_frequency_response},
     hrir::Hrir,
@@ -368,6 +371,44 @@ fn equalized() -> Hrir {
     let _ = equalize_hrir(&mut h, &eq_inputs(&t)).unwrap();
     h
 }
+#[test]
+fn headphone_eq_fir_is_minimum_phase_from_the_headphone_term_only() {
+    let hp = inputs().headphone.as_ref().unwrap();
+    for side in [Side::Left, Side::Right] {
+        let curve = headphone_eq_curve(hp, side, 48_000).unwrap();
+        let expected = curve
+            .minimum_phase_impulse_response(48_000, 5.0, false)
+            .unwrap();
+        assert_eq!(headphone_eq_fir(hp, side, 48_000).unwrap(), expected);
+
+        let source = if side == Side::Left {
+            &hp.left
+        } else {
+            &hp.right
+        };
+        assert_eq!(curve.error, source.error);
+        let mut expected_curve = FrequencyResponse::constant(
+            "expected headphone eq",
+            Some(source.frequency.clone()),
+            0.0,
+            0.0,
+        )
+        .unwrap();
+        expected_curve.error.clone_from(&source.error);
+        expected_curve.smoothen_heavy_light().unwrap();
+        expected_curve
+            .equalize(&impulcifer_dsp::fr::EqualizeParams {
+                max_gain: 40.0,
+                treble_f_lower: 10_000.0,
+                treble_f_upper: 24_000.0,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(curve.error_smoothed, expected_curve.error_smoothed);
+        assert_eq!(curve.equalization, expected_curve.equalization);
+    }
+}
+
 #[test]
 fn equalize_curve_and_fir_agree_and_one_curve_per_ear() {
     let target = create_target(48000, 0.0, 105.0, 0.76, 0.0);
@@ -1091,6 +1132,34 @@ fn golden_vbass_matches_python() {
         &manifest["vbass_final"],
     );
 }
+#[test]
+fn channel_balance_split_matches_the_single_call() {
+    for method in ["trend", "left", "right", "avg", "min", "mids", "3"] {
+        let parsed = ChannelBalance::parse(method).unwrap();
+        let mut single = equalized();
+        let mut split = single.clone();
+        correct_channel_balance(&mut single, parsed).unwrap();
+        let corrections = channel_balance_corrections(&split, parsed).unwrap();
+        apply_channel_balance(&mut split, &corrections).unwrap();
+        assert_eq!(single.speakers.len(), split.speakers.len());
+        for (single, split) in single.speakers.iter().zip(&split.speakers) {
+            assert_eq!(single.speaker, split.speaker);
+            assert_eq!(
+                single.left.as_ref().map(|ir| &ir.data),
+                split.left.as_ref().map(|ir| &ir.data),
+                "{method} {} left",
+                single.speaker
+            );
+            assert_eq!(
+                single.right.as_ref().map(|ir| &ir.data),
+                split.right.as_ref().map(|ir| &ir.data),
+                "{method} {} right",
+                single.speaker
+            );
+        }
+    }
+}
+
 /// Python channel balance; core/hrir.py:674-818; p10_channel_balance.
 #[test]
 fn golden_channel_balance_matches_python() {

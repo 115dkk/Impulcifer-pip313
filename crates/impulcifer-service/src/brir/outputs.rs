@@ -14,13 +14,19 @@ use impulcifer_dsp::{
     pipeline::{LayoutOutput, PipelineOutputs},
     stages::readme::{ReadmeData, ReverbKind},
 };
-use impulcifer_io::{brir_layout::append_track_names, write_wav};
+use impulcifer_io::{
+    SofaMeasurement, SofaMetadata, brir_layout::append_track_names, sofa_date,
+    write_simple_free_field_hrir, write_wav, write_wav_float32,
+};
 use impulcifer_types::{
     config::ProcessingConfig,
     constants::{Side, TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER},
 };
 use serde_json::json;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 pub struct WrittenOutputs {
     pub hesuvi: PathBuf,
@@ -82,6 +88,30 @@ fn pipe_table(headers: &[String], rows: &[Vec<String>]) -> String {
 }
 fn local_date() -> String {
     chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+}
+fn sofa_output_date() -> String {
+    let seconds = std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or_else(|| {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        });
+    sofa_date(seconds)
+}
+fn sofa_measurements(set: &impulcifer_dsp::pipeline::SofaSet) -> Vec<SofaMeasurement> {
+    set.speakers
+        .iter()
+        .map(|speaker| SofaMeasurement {
+            azimuth: speaker.azimuth,
+            elevation: speaker.elevation,
+            distance: 2.0,
+            left: speaker.left.clone(),
+            right: speaker.right.clone(),
+        })
+        .collect()
 }
 
 fn missing_channels(channels: &[&impulcifer_types::layouts::FormatChannel]) -> String {
@@ -544,7 +574,7 @@ fn alignment_readme(report: &impulcifer_dsp::itd::AlignmentReport, catalog: &Cat
 }
 
 pub fn render_readme(data: &ReadmeData, catalog: &Catalog, date: &str) -> String {
-    render_readme_with_layouts(data, None, catalog, date, &[], &[])
+    render_readme_with_layouts(data, None, catalog, date, &[], &[], None)
 }
 
 fn render_readme_with_layouts(
@@ -554,6 +584,7 @@ fn render_readme_with_layouts(
     date: &str,
     layouts: &[LayoutOutput],
     fixed_fills: &[(&str, &[(&'static str, String)])],
+    sofa: Option<&impulcifer_dsp::pipeline::SofaOutputs>,
 ) -> String {
     let t = |key: &str| catalog.translate(key, &json!({}));
     let mut out = format!(
@@ -682,6 +713,15 @@ fn render_readme_with_layouts(
     if !has_tuning && let Some(alignment) = alignment {
         out.push_str(&alignment_readme(alignment, catalog));
     }
+    if let Some(sofa) = sofa {
+        out.push_str(&format!("## {}\n\n", t("cli_readme_sofa_title")));
+        out.push_str(&t("cli_readme_sofa_note"));
+        out.push_str("\n\n");
+        if sofa.split.is_some() {
+            out.push_str(&t("cli_readme_sofa_split_note"));
+            out.push_str("\n\n");
+        }
+    }
     if !layouts.is_empty() {
         out.push_str(&format!("## {}\n\n", t("cli_readme_layouts_title")));
         for output in layouts {
@@ -787,6 +827,7 @@ pub(crate) fn write_outputs_checked(
             ("hrir.wav", &outputs.hrir_filled),
             ("hesuvi.wav", &outputs.hesuvi_filled),
         ],
+        outputs.sofa.as_ref(),
     );
     let content = if cfg!(windows) {
         content.replace('\n', "\r\n")
@@ -825,6 +866,56 @@ pub(crate) fn write_outputs_checked(
             );
         }
         files.push(path);
+    }
+    if let Some(sofa) = &outputs.sofa {
+        const BRIR_COMMENT: &str = "Binaural room impulse responses measured in a room with Impulcifer, stored as SimpleFreeFieldHRIR for player compatibility. Source distance is nominal. Headphone compensation is included.";
+        const SPLIT_COMMENT: &str = "Binaural room impulse responses measured in a room with Impulcifer, stored as SimpleFreeFieldHRIR for player compatibility. Source distance is nominal. Headphone compensation is not included; see headphone-eq.wav.";
+        let date = sofa_output_date();
+        let brir = dir.join("brir.sofa");
+        events.check_cancelled()?;
+        write_simple_free_field_hrir(
+            &brir,
+            sofa.brir.fs,
+            &sofa_measurements(&sofa.brir),
+            &SofaMetadata {
+                title: "Impulcifer BRIR".into(),
+                comment: BRIR_COMMENT.into(),
+                version: env!("CARGO_PKG_VERSION").into(),
+                date: date.clone(),
+            },
+        )?;
+        events.log(
+            "success",
+            "cli_success_sofa",
+            json!({"count":sofa.brir.speakers.len(),"path":brir}),
+        );
+        files.push(brir);
+        if let Some((split, eq)) = &sofa.split {
+            let split_path = dir.join("brir-no-headphone-eq.sofa");
+            let eq_path = dir.join("headphone-eq.wav");
+            events.check_cancelled()?;
+            write_simple_free_field_hrir(
+                &split_path,
+                split.fs,
+                &sofa_measurements(split),
+                &SofaMetadata {
+                    title: "Impulcifer BRIR without headphone compensation".into(),
+                    comment: SPLIT_COMMENT.into(),
+                    version: env!("CARGO_PKG_VERSION").into(),
+                    date,
+                },
+            )?;
+            write_wav_float32(&eq_path, split.fs, eq)?;
+            events.log(
+                "success",
+                "cli_success_sofa_split",
+                json!({"path":split_path,"eq":eq_path}),
+            );
+            files.push(split_path);
+            files.push(eq_path);
+        } else if sofa.split_skipped {
+            events.log("info", "cli_info_sofa_split_skipped", json!({}));
+        }
     }
     for output in &outputs.layouts {
         let layout = output.layout;

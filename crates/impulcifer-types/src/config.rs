@@ -78,6 +78,8 @@ pub struct ProcessingConfig {
     pub layout_files: String,
     pub missing_speakers: String,
     pub lfe_mode: String,
+    pub sofa: bool,
+    pub sofa_split_headphone_eq: bool,
     pub itd_mode: String,
     pub head_radius: Option<f64>,
     pub bass_boost_gain: f64,
@@ -159,6 +161,8 @@ impl Default for ProcessingConfig {
             layout_files: "auto".into(),
             missing_speakers: "silent".into(),
             lfe_mode: "none".into(),
+            sofa: false,
+            sofa_split_headphone_eq: false,
             itd_mode: "off".into(),
             head_radius: None,
             bass_boost_gain: 0.0,
@@ -223,7 +227,7 @@ pub const FIELD_NAMES: [&str; 33] = [
 ];
 
 /// 3.x-only options, separate from the frozen 2.x dataclass surface.
-pub const EXTENSION_FIELD_NAMES: [&str; 43] = [
+pub const EXTENSION_FIELD_NAMES: [&str; 45] = [
     "room_range",
     "room_volume",
     "schroeder_freq",
@@ -245,6 +249,8 @@ pub const EXTENSION_FIELD_NAMES: [&str; 43] = [
     "layout_files",
     "missing_speakers",
     "lfe_mode",
+    "sofa",
+    "sofa_split_headphone_eq",
     "itd_mode",
     "head_radius",
     "room_measurement_file",
@@ -684,6 +690,12 @@ impl ProcessingConfig {
                 return Err(ConfigError::Invalid {
                     field: key.clone(),
                     reason: "expected a non-negative integer".into(),
+                });
+            }
+            if matches!(key.as_str(), "sofa" | "sofa_split_headphone_eq") && !value.is_boolean() {
+                return Err(ConfigError::Invalid {
+                    field: key.clone(),
+                    reason: "expected a boolean".into(),
                 });
             }
             if FIELD_NAMES.contains(&key.as_str()) || EXTENSION_FIELD_NAMES.contains(&key.as_str())

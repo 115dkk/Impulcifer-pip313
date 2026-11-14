@@ -8,7 +8,7 @@ mod settings;
 
 use clap::error::{ContextKind, ErrorKind};
 use impulcifer_types::{config::ProcessingConfig, constants::SPEAKER_NAMES};
-use options::{CliType, EXTENSION_OPTIONS, OPTIONS};
+use options::{CliDefault, CliType, EXTENSION_OPTIONS, OPTIONS};
 use serde_json::{Map, Value, json};
 use std::io::Write;
 
@@ -61,6 +61,13 @@ pub fn parse(argv: &[String]) -> Result<Parsed, CliError> {
             continue;
         }
         let value = match option.kind {
+            CliType::FlagTrue | CliType::FlagFalse
+                if option.default == CliDefault::Suppressed
+                    && matches.value_source(option.dest)
+                        != Some(clap::parser::ValueSource::CommandLine) =>
+            {
+                None
+            }
             CliType::FlagTrue | CliType::FlagFalse => Some(json!(matches.get_flag(option.dest))),
             _ => match matches.get_one::<String>(option.dest) {
                 Some(raw) => {

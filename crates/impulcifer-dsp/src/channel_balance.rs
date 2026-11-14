@@ -160,8 +160,19 @@ pub fn channel_balance_firs(
         }
     }
 }
-/// Python correct_channel_balance, core/hrir.py:785-818; p10_channel_balance.
-pub fn correct_channel_balance(hrir: &mut Hrir, method: ChannelBalance) -> Result<(), DspError> {
+/// One ipsilateral group's speaker names and the left/right correction FIRs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ChannelBalanceCorrection {
+    pub speakers: Vec<&'static str>,
+    pub firs: [Vec<f64>; 2],
+}
+
+/// Compute the exact correction FIRs that `correct_channel_balance` applies.
+pub fn channel_balance_corrections(
+    hrir: &Hrir,
+    method: ChannelBalance,
+) -> Result<Vec<ChannelBalanceCorrection>, DspError> {
+    let mut corrections = Vec::new();
     for (a, b) in IPSILATERAL_PAIRS {
         let names = if a == b { vec![a] } else { vec![a, b] };
         if names.iter().any(|s| hrir.get(s).is_none()) {
@@ -206,12 +217,45 @@ pub fn correct_channel_balance(hrir: &mut Hrir, method: ChannelBalance) -> Resul
         }
         let mut right = responses.pop().unwrap();
         let mut left = responses.pop().unwrap();
-        let firs = channel_balance_firs(&mut left, &mut right, method, hrir.fs)?;
-        for name in names {
-            let pair = hrir.get_mut(name).unwrap();
-            pair.left.as_mut().unwrap().equalize(&firs[0]);
-            pair.right.as_mut().unwrap().equalize(&firs[1]);
+        corrections.push(ChannelBalanceCorrection {
+            speakers: names,
+            firs: channel_balance_firs(&mut left, &mut right, method, hrir.fs)?,
+        });
+    }
+    Ok(corrections)
+}
+
+/// Apply previously computed corrections to an HRIR.
+pub fn apply_channel_balance(
+    hrir: &mut Hrir,
+    corrections: &[ChannelBalanceCorrection],
+) -> Result<(), DspError> {
+    for correction in corrections {
+        for name in &correction.speakers {
+            let pair = hrir.get_mut(name).ok_or_else(|| {
+                DspError::InvalidArgument(format!(
+                    "channel balance correction speaker {name} is missing"
+                ))
+            })?;
+            pair.left
+                .as_mut()
+                .ok_or_else(|| {
+                    DspError::InvalidArgument("channel balance requires both ears".into())
+                })?
+                .equalize(&correction.firs[0]);
+            pair.right
+                .as_mut()
+                .ok_or_else(|| {
+                    DspError::InvalidArgument("channel balance requires both ears".into())
+                })?
+                .equalize(&correction.firs[1]);
         }
     }
     Ok(())
+}
+
+/// Python correct_channel_balance, core/hrir.py:785-818; p10_channel_balance.
+pub fn correct_channel_balance(hrir: &mut Hrir, method: ChannelBalance) -> Result<(), DspError> {
+    let corrections = channel_balance_corrections(hrir, method)?;
+    apply_channel_balance(hrir, &corrections)
 }

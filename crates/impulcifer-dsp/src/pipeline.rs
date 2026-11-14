@@ -2,7 +2,7 @@
 //! In-memory stage driver; core/pipeline.py:424-972.
 use crate::{
     DspError,
-    channel_balance::{ChannelBalance, correct_channel_balance},
+    channel_balance::{ChannelBalance, apply_channel_balance, channel_balance_corrections},
     estimator::SweepEstimator,
     fr::FrequencyResponse,
     hrir::{Hrir, SpeakerIrs, compact_tracks},
@@ -11,7 +11,7 @@ use crate::{
         MicDeviationAnalysis, MicDeviationOptions, apply_mic_deviation_correction_with_analysis,
     },
     stages::{
-        equalize::{AppliedEqualization, EqInputs, equalize_hrir},
+        equalize::{AppliedEqualization, EqInputs, equalize_hrir, headphone_eq_fir},
         fill::fill_output,
         headphone::HeadphoneCompensation,
         lfe::{band_limit, place_onsets},
@@ -29,7 +29,7 @@ use impulcifer_types::{
         HESUVI_TRACK_ORDER, HEXADECAGONAL_TRACK_ORDER, IPSILATERAL_PAIRS, SPEAKER_NAMES,
         TRUEHD_11CH_ORDER, TRUEHD_13CH_ORDER, base_channel_count,
     },
-    layouts::{FormatChannel, IMMERSIVE_LAYOUTS, ImmersiveLayout, LayoutFiles},
+    layouts::{FormatChannel, IMMERSIVE_LAYOUTS, ImmersiveLayout, LayoutFiles, SLOTS},
     stages::StageKey,
 };
 #[derive(Clone, Debug, Default)]
@@ -108,6 +108,25 @@ pub struct LayoutOutput {
     pub filled: Vec<(&'static str, String)>,
 }
 #[derive(Clone, Debug)]
+pub struct SofaSpeaker {
+    pub slot: &'static str,
+    pub azimuth: f64,
+    pub elevation: f64,
+    pub left: Vec<f64>,
+    pub right: Vec<f64>,
+}
+#[derive(Clone, Debug)]
+pub struct SofaSet {
+    pub fs: u32,
+    pub speakers: Vec<SofaSpeaker>,
+}
+#[derive(Clone, Debug)]
+pub struct SofaOutputs {
+    pub brir: SofaSet,
+    pub split: Option<(SofaSet, [Vec<f64>; 2])>,
+    pub split_skipped: bool,
+}
+#[derive(Clone, Debug)]
 pub struct PipelineOutputs {
     pub hrir: Hrir,
     pub lfe: Vec<SpeakerIrs>,
@@ -128,6 +147,7 @@ pub struct PipelineOutputs {
     pub truehd: Vec<(String, Vec<String>, Vec<Vec<f64>>)>,
     pub jamesdsp: Option<Vec<Vec<f64>>>,
     pub hangloose: Vec<(String, Vec<Vec<f64>>)>,
+    pub sofa: Option<SofaOutputs>,
 }
 /// Python bool(cfg.decay), core/pipeline.py:457; p10_stage_table.
 fn has_decay(c: &ProcessingConfig) -> bool {
@@ -203,6 +223,24 @@ fn normalize(hrir: &mut Hrir, c: &ProcessingConfig) -> Result<f64, DspError> {
 fn apply_gain_db(hrir: &mut Hrir, gain_db: f64) {
     let scalar = 10.0_f64.powf(gain_db / 20.0);
     hrir.for_each_ir(|ir| ir.data.iter_mut().for_each(|sample| *sample *= scalar));
+}
+fn sofa_set(hrir: &Hrir) -> SofaSet {
+    let speakers = SLOTS
+        .iter()
+        .filter_map(|slot| {
+            hrir.pair(slot.code).map(|(left, right)| SofaSpeaker {
+                slot: slot.code,
+                azimuth: slot.azimuth,
+                elevation: slot.elevation,
+                left: left.data.clone(),
+                right: right.data.clone(),
+            })
+        })
+        .collect();
+    SofaSet {
+        fs: hrir.fs,
+        speakers,
+    }
 }
 fn match_lengths(source: &mut Hrir, reference: &Hrir) -> Result<(), DspError> {
     if source.fs != reference.fs {
@@ -294,6 +332,11 @@ pub fn run_pipeline(
     let mut truehd = Vec::new();
     let mut jamesdsp = None;
     let mut hangloose = Vec::new();
+    let split_requested = config.sofa && config.sofa_split_headphone_eq;
+    let split_enabled = split_requested && config.do_headphone_compensation && headphone.is_some();
+    let mut split = None;
+    let mut headphone_eq = None;
+    let mut sofa = None;
     for (key, enabled, n) in stage_table(config) {
         if !enabled {
             continue;
@@ -436,6 +479,31 @@ pub fn run_pipeline(
                     target: target.as_ref().unwrap(),
                     fs: estimator.fs,
                 };
+                if split_enabled {
+                    let mut split_hrir = hrir.clone();
+                    let split_inputs = EqInputs {
+                        hp: None,
+                        ..eq_inputs
+                    };
+                    equalize_hrir(&mut split_hrir, &split_inputs)?;
+                    let hp = headphone
+                        .as_ref()
+                        .expect("split requires headphone compensation");
+                    let eq = [
+                        headphone_eq_fir(
+                            hp,
+                            impulcifer_types::constants::Side::Left,
+                            estimator.fs,
+                        )?,
+                        headphone_eq_fir(
+                            hp,
+                            impulcifer_types::constants::Side::Right,
+                            estimator.fs,
+                        )?,
+                    ];
+                    headphone_eq = Some(eq);
+                    split = Some(split_hrir);
+                }
                 let applied = equalize_hrir(&mut hrir, &eq_inputs)?;
                 let lfe_inputs = EqInputs {
                     room_frs: lfe_correction.as_ref(),
@@ -452,14 +520,26 @@ pub fn run_pipeline(
                     DecaySpec::PerChannel(m) => m.iter().map(|(s, v)| (s.clone(), *v)).collect(),
                 };
                 crate::stages::decay::adjust_decay(&mut hrir, &targets)?;
+                if let Some(split) = &mut split {
+                    crate::stages::decay::adjust_decay(split, &targets)?;
+                }
             }
-            StageKey::ChannelBalance => correct_channel_balance(
-                &mut hrir,
-                ChannelBalance::parse(config.channel_balance.as_ref().unwrap())?,
-            )?,
+            StageKey::ChannelBalance => {
+                let corrections = channel_balance_corrections(
+                    &hrir,
+                    ChannelBalance::parse(config.channel_balance.as_ref().unwrap())?,
+                )?;
+                apply_channel_balance(&mut hrir, &corrections)?;
+                if let Some(split) = &mut split {
+                    apply_channel_balance(split, &corrections)?;
+                }
+            }
             StageKey::Normalize => {
                 applied_gain_db = normalize(&mut hrir, config)?;
                 apply_gain_db(&mut lfe, applied_gain_db);
+                if let Some(split) = &mut split {
+                    apply_gain_db(split, applied_gain_db);
+                }
             }
             StageKey::WriteReadme => {
                 let mut data = readme_data(&hrir, config.fs.unwrap_or(hrir.fs), applied_gain_db);
@@ -469,10 +549,28 @@ pub fn run_pipeline(
             }
             StageKey::Resample => {
                 if let Some(fs) = config.fs.filter(|fs| *fs != hrir.fs) {
+                    let old_fs = hrir.fs;
                     hrir.resample(fs)?;
                     lfe.resample(fs)?;
+                    if let Some(split) = &mut split {
+                        split.resample(fs)?;
+                    }
+                    if let Some(eq) = &mut headphone_eq {
+                        // Resampling keeps a waveform's amplitude, so an FIR's sum
+                        // (its convolution gain) grows with fs / old_fs. The split
+                        // HRIR gets the final's renormalization, which does not
+                        // undo that, so scale the FIR back to keep its gain.
+                        let gain = f64::from(old_fs) / f64::from(fs);
+                        for fir in eq {
+                            *fir = crate::resample::nnresample(fir, fs, old_fs)?;
+                            fir.iter_mut().for_each(|sample| *sample *= gain);
+                        }
+                    }
                     let gain = normalize(&mut hrir, config)?;
                     apply_gain_db(&mut lfe, gain);
+                    if let Some(split) = &mut split {
+                        apply_gain_db(split, gain);
+                    }
                 }
             }
             StageKey::WriteBrirs => {
@@ -499,6 +597,27 @@ pub fn run_pipeline(
                     &HEXADECAGONAL_TRACK_ORDER,
                     config.remove_silent_channels,
                 )?;
+                if config.sofa {
+                    let brir = sofa_set(&filled_hrir.hrir);
+                    let split_output = if let (Some(split), Some(eq)) = (&split, &headphone_eq) {
+                        let filled_split = fill_output(
+                            split,
+                            &[],
+                            &[],
+                            &output_targets(&HEXADECAGONAL_TRACK_ORDER),
+                            &config.missing_speakers,
+                            "none",
+                        )?;
+                        Some((sofa_set(&filled_split.hrir), eq.clone()))
+                    } else {
+                        None
+                    };
+                    sofa = Some(SofaOutputs {
+                        brir,
+                        split: split_output,
+                        split_skipped: split_requested && !split_enabled,
+                    });
+                }
                 hrir_filled = filled_hrir.filled;
                 let filled_hesuvi = fill_output(
                     &hrir,
@@ -611,5 +730,6 @@ pub fn run_pipeline(
         truehd,
         jamesdsp,
         hangloose,
+        sofa,
     })
 }

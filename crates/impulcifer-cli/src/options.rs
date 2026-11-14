@@ -108,6 +108,24 @@ pub fn usage() -> String {
 
 pub static EXTENSION_OPTIONS: &[CliOption] = &[
     CliOption {
+        flag: "--sofa",
+        short: None,
+        dest: "sofa",
+        help: "Also save the BRIR as a SOFA file (brir.sofa, SimpleFreeFieldHRIR): the speakers of hrir.wav at their nominal directions, 2 m away, without LFE.",
+        kind: CliType::FlagTrue,
+        choices: &[],
+        default: CliDefault::Suppressed,
+    },
+    CliOption {
+        flag: "--sofa_split_headphone_eq",
+        short: None,
+        dest: "sofa_split_headphone_eq",
+        help: "With --sofa, also save the BRIR without headphone compensation (brir-no-headphone-eq.sofa) and the headphone EQ as a two-track FIR (headphone-eq.wav). Needs headphone compensation.",
+        kind: CliType::FlagTrue,
+        choices: &[],
+        default: CliDefault::Suppressed,
+    },
+    CliOption {
         flag: "--room_measurement_file",
         short: None,
         dest: "room_measurement_file",

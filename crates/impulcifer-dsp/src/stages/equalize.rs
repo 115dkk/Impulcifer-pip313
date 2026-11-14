@@ -10,6 +10,7 @@ use crate::{
 };
 use impulcifer_types::constants::Side;
 use rayon::prelude::*;
+#[derive(Clone, Copy)]
 pub struct EqInputs<'a> {
     pub room_frs: Option<&'a RoomFrs>,
     pub hp: Option<&'a HeadphoneCompensation>,
@@ -105,6 +106,53 @@ pub fn equalization_curve(
     })?;
     Ok(fr)
 }
+/// The smoothed and limited headphone-only correction curve for one ear.
+pub fn headphone_eq_curve(
+    hp: &HeadphoneCompensation,
+    side: Side,
+    fs: u32,
+) -> Result<FrequencyResponse, DspError> {
+    if side == Side::Center {
+        return Err(DspError::InvalidArgument(
+            "ear must be left or right".into(),
+        ));
+    }
+    let source = if side == Side::Left {
+        &hp.left
+    } else {
+        &hp.right
+    };
+    let mut fr = FrequencyResponse::constant(
+        &format!("headphone-{side:?} eq"),
+        Some(generate_frequencies(10.0, fs as f64 / 2.0, 1.01)),
+        0.0,
+        0.0,
+    )?;
+    if source.frequency != fr.frequency || source.error.len() != fr.error.len() {
+        return Err(DspError::InvalidArgument(
+            "headphone EQ grid lengths differ".into(),
+        ));
+    }
+    fr.error.clone_from(&source.error);
+    fr.smoothen_heavy_light()?;
+    fr.equalize(&EqualizeParams {
+        max_gain: 40.0,
+        treble_f_lower: 10000.0,
+        treble_f_upper: fs as f64 / 2.0,
+        ..Default::default()
+    })?;
+    Ok(fr)
+}
+
+/// The minimum-phase FIR made from the headphone term only.
+pub fn headphone_eq_fir(
+    hp: &HeadphoneCompensation,
+    side: Side,
+    fs: u32,
+) -> Result<Vec<f64>, DspError> {
+    headphone_eq_curve(hp, side, fs)?.minimum_phase_impulse_response(fs, 5.0, false)
+}
+
 /// Python process_equalization_worker, core/parallel_workers.py:69-131; p10_eq_firs.
 pub fn equalization_fir(
     inputs: &EqInputs<'_>,

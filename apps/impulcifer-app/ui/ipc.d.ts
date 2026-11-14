@@ -178,6 +178,8 @@ interface ProcessingRequest {
   layout_files?: string;
   /* ADR 0013: what output files carry for unmeasured speakers and for the LFE channel. */
   missing_speakers?: MissingSpeakers; lfe_mode?: LfeMode;
+  /** ADR 0019: brir.sofa, and with the split also brir-no-headphone-eq.sofa and headphone-eq.wav. */
+  sofa?: boolean; sofa_split_headphone_eq?: boolean;
   itd_mode?: ItdMode; head_radius?: number | null;
   confirm_warnings?: boolean;
 }

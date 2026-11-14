@@ -1,5 +1,5 @@
 use crate::test_support::*;
-use crate::{pcm32_round_trip, read_wav, write_wav};
+use crate::{pcm32_round_trip, read_wav, write_wav, write_wav_float32};
 
 fn payload(bytes: &[u8]) -> &[u8] {
     let mut pos = 12;
@@ -254,4 +254,36 @@ fn segments_match_exported_python() {
             assert_eq!(actual.end, number(field(expected, "end")));
         }
     }
+}
+#[test]
+fn float32_wav_keeps_samples_above_full_scale() {
+    let tmp = TempDir::new();
+    let left = vec![1.96, -2.5, 0.123_456_789, 0.0, -1.0e-7];
+    let right = vec![0.5, 3.25, -0.987_654_321, 1.0, 2.0];
+    for tracks in [
+        vec![left.clone(), right.clone()],
+        vec![left.clone(), right.clone(), left.clone()],
+    ] {
+        let path = tmp.0.join(format!("float{}.wav", tracks.len()));
+        write_wav_float32(&path, 48000, &tracks).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let tag = u16::from_le_bytes(bytes[20..22].try_into().unwrap());
+        assert_eq!(tag, if tracks.len() > 2 { 0xfffe } else { 3 });
+        assert_eq!(
+            u32::from_le_bytes(bytes[4..8].try_into().unwrap()) as usize + 8,
+            bytes.len()
+        );
+        let wav = read_wav(&path).unwrap();
+        assert_eq!(wav.sample_rate, 48000);
+        let expected: Vec<Vec<f64>> = tracks
+            .iter()
+            .map(|track| track.iter().map(|&x| x as f32 as f64).collect())
+            .collect();
+        assert_eq!(wav.tracks, expected);
+    }
+    let bad = tmp.0.join("bad.wav");
+    assert!(write_wav_float32(&bad, 48000, &[vec![f64::NAN]]).is_err());
+    assert!(write_wav_float32(&bad, 48000, &[vec![1.0e300]]).is_err());
+    assert!(write_wav_float32(&bad, 0, &[vec![0.0]]).is_err());
+    assert!(write_wav_float32(&bad, 48000, &[vec![0.0], vec![]]).is_err());
 }

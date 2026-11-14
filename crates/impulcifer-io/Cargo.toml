@@ -13,6 +13,9 @@ impulcifer-types = { path = "../impulcifer-types" }
 serde_json.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+sofar = { version = "=0.4.0", default-features = false }
+
 [[bench]]
 name = "perf"
 harness = false

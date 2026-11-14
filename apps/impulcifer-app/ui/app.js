@@ -154,6 +154,7 @@ function applyStrings() {
   updateLfeHint("bf");
   updateItdHint("bf");
   updateItdHint("ba");
+  updateSofaSplit("bf");
   if (state.lastJob?.kind === "brir" && state.lastJob.status === "succeeded") renderAlignment(state.lastJob.result?.alignment ?? null);
   if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
 }
@@ -2827,6 +2828,20 @@ function addOutputArgs(args, p) {
   args.layout_files = layoutFilesValue(p);
   args.missing_speakers = /** @type {MissingSpeakers} */ (val(`${p}-missing-speakers`) || "silent");
   args.lfe_mode = /** @type {LfeMode} */ (val(`${p}-lfe-mode`) || "none");
+  args.sofa = checked(`${p}-sofa`);
+  args.sofa_split_headphone_eq = args.sofa && !el(`${p}-sofa-split`, HTMLInputElement).disabled && checked(`${p}-sofa-split`);
+}
+
+/* ADR 0019: the headphone EQ can only be split off a SOFA file of a job that
+   uses headphone compensation. A locked box keeps its tick for when it unlocks;
+   addOutputArgs sends it only while unlocked. */
+/** @param {string} p */
+function updateSofaSplit(p) {
+  const locked = !checked(`${p}-sofa`) || !isOpen("dis-headphone");
+  el(`${p}-sofa-split`, HTMLInputElement).disabled = locked;
+  $(`${p}-sofa-split-row`).title = locked ? t("tooltip_sofa_split_locked")
+    : p === "ba" ? t("tooltip_sofa_split_headphone_eq") : "";
+  if (p === "ba") $("ba-sofa-row").title = t("tooltip_sofa");
 }
 
 /* ADR 0014: each ITD choice shows its own explanation, and the head radius
@@ -3011,7 +3026,7 @@ const ADV_FIELDS = {
   time: ["head-ms", "itd-mode", "head-radius", "decay", "decay-per-channel", ...DECAY_CHANNELS.map((channel) => `decay-${channel}`)],
   output: ["resample", "fs", "jamesdsp", "hangloose", "truehd", "remove-silent-channels", "layout-files",
     ...Array.from({ length: LAYOUT_FORCE_COUNT }, (_, index) => `layout-force-${index}`),
-    "missing-speakers", "lfe-mode"],
+    "missing-speakers", "lfe-mode", "sofa", "sofa-split"],
   correction: ["mic-deviation", "mic-strength", "mic-debug", "interactive-plots"],
 };
 
@@ -3065,6 +3080,7 @@ function refreshStudioAdvanced() {
   updateLayoutForce("ba");
   updateLfeHint("ba");
   updateItdHint("ba");
+  updateSofaSplit("ba");
 
   const mic = el("ba-mic-deviation", HTMLInputElement);
   const blocked = isOpen("dis-headphone");
@@ -3093,6 +3109,7 @@ function refreshStableAdvanced() {
   updateLayoutForce("bf");
   updateLfeHint("bf");
   updateItdHint("bf");
+  updateSofaSplit("bf");
 }
 
 /** @param {string} id */
@@ -4126,6 +4143,7 @@ function wireEvents() {
     const toggle = () => {
       head.parentElement?.classList.toggle("open");
       refreshStudioAdvanced();
+      updateSofaSplit("bf");
       scheduleTestSignalCheck(0);
     };
     head.addEventListener("click", toggle);
@@ -4269,7 +4287,7 @@ function wireEvents() {
   el("btn-record-headphones", HTMLButtonElement).addEventListener("click", startHeadphonesRecording);
   el("btn-sweep-set", HTMLButtonElement).addEventListener("click", generateSweepSet);
 
-  for (const id of ["bf-resample", "bf-balance", "bf-decay-per-channel", "bf-mic-deviation"]) {
+  for (const id of ["bf-resample", "bf-balance", "bf-decay-per-channel", "bf-mic-deviation", "bf-sofa"]) {
     $(id).addEventListener("change", refreshStableAdvanced);
   }
 
@@ -4288,7 +4306,7 @@ function wireEvents() {
     $(`adv-reset-${tab}`).addEventListener("click", () => resetAdvTab(tab));
   });
   el("ba-bass-gain", HTMLInputElement).addEventListener("input", refreshStudioAdvanced);
-  for (const id of ["ba-balance", "ba-resample", "ba-decay-per-channel", "ba-mic-deviation"]) {
+  for (const id of ["ba-balance", "ba-resample", "ba-decay-per-channel", "ba-mic-deviation", "ba-sofa"]) {
     $(id).addEventListener("change", refreshStudioAdvanced);
   }
 

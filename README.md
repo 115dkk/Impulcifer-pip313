@@ -210,6 +210,7 @@ Dirac Live나 REW가 스피커마다 sweep을 내는 동안 귓속 마이크를 
 * **`hesuvi.wav`:** HeSuVi(Equalizer APO)용 BRIR입니다.
 * **`hrir.wav`:** 스피커 순서대로 늘어놓은 BRIR입니다.
 * **`atmos_9.1.wav`, `atmos_9.1.4.wav`, `atmos_9.1.6.wav`, `nhk_22.2.wav`, `auro_13.1.wav`, `atmos_24.1.10.wav`, `dtsx_30.2.wav`:** 측정한 스피커가 Dolby Atmos 9.1·9.1.4·9.1.6, NHK 22.2, Auro-3D 13.1, Dolby Atmos 24.1.10, DTS:X Pro 30.2의 채널을 모두 측정했으면, 같은 BRIR을 그 포맷의 공식 채널 순서로 한 번 더 저장합니다. 9.1 계열에서는 빠짐없이 측정한 가장 큰 배치 하나만 씁니다(9.1.6을 측정하면 `atmos_9.1.6.wav`만 생깁니다). 채널마다 왼쪽 귀, 오른쪽 귀 트랙이고 LFE 자리는 기본으로 무음입니다(`--lfe_mode`로 채울 수 있고, 서브우퍼를 귀에서 쟀으면 그 측정을 씁니다). 9.1.6은 Apple과 AWS MediaConvert가 쓰는 교환 순서이고, 9.1과 9.1.4는 그 순서에서 없는 채널을 뺀 순서입니다. 22.2는 SMPTE ST 2036-2, Auro는 Auro의 WAV 백서, DTS는 ETSI TS 103 491 표 B-5의 순서입니다. Dolby는 9.1.6보다 큰 배치의 순서를 공개하지 않아서, 24.1.10 파일은 9.1.6 교환 순서 뒤에 Dolby 설치 지침의 나열 순서를 붙인 Impulcifer의 순서를 씁니다. `README.md`에 파일마다 채널과 스피커 코드의 대응표가 적힙니다.
+* **`brir.sofa`, `brir-no-headphone-eq.sofa`, `headphone-eq.wav`:** `--sofa`를 주면 `hrir.wav`와 같은 BRIR을 SOFA 파일(SimpleFreeFieldHRIR)로도 저장합니다. libmysofa를 쓰는 재생기, 3D Tune-In, Steam Audio처럼 SOFA를 읽는 재생기에서 쓸 수 있습니다. 스피커마다 측정이 하나씩 들어가고, 위치는 슬롯의 공칭 방향과 거리 2 m입니다. LFE는 들어가지 않습니다. `--sofa_split_headphone_eq`를 함께 주면 헤드폰 보정을 뺀 `brir-no-headphone-eq.sofa`와 헤드폰 EQ(`headphone-eq.wav`, 32비트 부동소수점, 1번 트랙이 왼쪽 귀, 2번 트랙이 오른쪽 귀)도 저장합니다. 재생기에서 헤드폰 EQ를 따로 걸려면 이 두 파일을 쓰십시오(ADR 0019).
 * **`responses.wav`, `headphone-responses.wav`, `room-responses.wav`:** 처리 중간의 임펄스 응답입니다.
 * **`README.md`:** 출력 샘플레이트, 적용한 정규화 게인, 스피커·귀별 PNR·ITD·RT60, 반사음 레벨을 적은 요약입니다. 양 귀 도착 시차 절에는 스피커마다 측정한 시차와 구형 머리 모델의 값, 보정 뒤의 값, 머리 회전 추정, 센터 자리의 공통 오프셋, 120 Hz 아래 좌우 레벨 차(입력 체인 불균형)가 있고, 헤드폰 보정을 켰으면 헤드폰 녹음의 좌우 차와 최종 BRIR의 예상 좌우 차도 적습니다(ADR 0014). 같은 내용을 앱의 작업 화면에서도 표로 표시합니다.
 * **`plots/`:** 헤드폰 보정 그래프와 결과 그래프입니다. `--plot`을 주면 스피커·귀별 응답 그래프와 양이 레벨차(ILD)·위상차(IPD)·IACC 그래프 등을 더 저장합니다(데모에서는 모두 55장).
@@ -318,6 +319,8 @@ sweep 파일을 따로 준비하지 않아도 됩니다. 녹음 화면은 기본
 | `--layout_files auto\|none\|<포맷 목록>` | `auto` | 몰입형 포맷의 공식 채널 순서 파일입니다. `auto`는 채널을 모두 측정한 포맷만 쓰고, `none`은 쓰지 않습니다. 9.1 계열(`9.1`, `9.1.4`, `9.1.6`)은 빠짐없이 측정한 가장 큰 배치 하나만 씁니다. `9.1`, `9.1.4`, `9.1.6`, `13.1`, `22.2`, `24.1.10`, `30.2`를 쉼표로 나열하면 그 포맷은 스피커가 빠져도 쓰고, 빠진 스피커의 트랙은 무음으로 둡니다(`--missing_speakers=neighbor`면 옆 스피커로 채웁니다)(예: 9.1.6 측정에서 9.1.4 파일도 필요하면 `--layout_files=9.1.4`). |
 | `--missing_speakers silent\|neighbor` | `silent` | 재지 않은 스피커의 트랙입니다. `silent`는 무음으로 두고, `neighbor`는 같은 쪽·같은 높이에서 방향이 가장 가까운 측정 스피커를 그대로 씁니다. 센터처럼 가운데 자리는 양옆의 대칭 쌍을 1/√2씩 더해 만듭니다. 높이 채널은 귀 높이 스피커로 채우지 않습니다. `hesuvi.wav`와 `hrir.wav`는 2.x 기본 스피커만, 채널 순서 파일은 LFE를 뺀 모든 채널을 채웁니다(ADR 0013). |
 | `--lfe_mode none\|center\|all` | `none` | 채널 순서 파일의 LFE 트랙입니다. `none`은 무음, `center`는 FC(없으면 FL·FR 팬텀)를 씁니다. `all`은 측정한 모든 스피커의 120 Hz 아래 저음을 전력 평균해 최소 위상 응답 하나로 만들고, 모든 스피커에 지연 하나를 씁니다. 방향마다 다른 방 모드의 피크와 딥이 고르게 됩니다. 서브우퍼를 `LFE`에 대응한 측정(귓속 측정, 또는 룸 보정을 켰을 때의 룸 측정)이 있으면 이 설정과 관계없이 그 측정을 씁니다. `hesuvi.wav`와 `hrir.wav`에는 LFE 트랙이 없습니다. |
+| `--sofa` | 꺼짐 | `hrir.wav`와 같은 BRIR을 `brir.sofa`(SOFA, SimpleFreeFieldHRIR)로도 저장합니다. 스피커마다 측정 하나, 위치는 슬롯의 공칭 방향과 2 m이고 LFE는 빠집니다. |
+| `--sofa_split_headphone_eq` | 꺼짐 | `--sofa`와 함께 주면 헤드폰 보정을 뺀 `brir-no-headphone-eq.sofa`와 헤드폰 EQ `headphone-eq.wav`(두 트랙 FIR)도 저장합니다. 헤드폰 보정을 쓰는 작업에서만 저장됩니다. |
 | `--info` | 꺼짐 | 버전, 운영체제, CPU 코어 수, 데이터 폴더 등을 출력하고 끝냅니다. |
 | `-V`, `--version` | 꺼짐 | 버전을 출력하고 끝냅니다. |
 
