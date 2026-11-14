@@ -4,6 +4,17 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.21.0 - 2026-11-14
+### BRIR을 SOFA 파일로 내보내기
+
+#### ⭐ 새로운 기능 / 개선
+- **SOFA 파일(ADR 0019)**: 출력 파일에서 'SOFA 파일'을 켜거나 CLI에 `--sofa`를 주면 `hrir.wav`와 같은 BRIR을 `brir.sofa`로도 저장합니다. 형식은 AES69의 `SimpleFreeFieldHRIR` 1.0이고, `hrir.wav`에 든 스피커(재지 않은 스피커를 채웠으면 그것까지)를 슬롯의 공칭 방향, 2 m 거리에 하나씩 둡니다. LFE는 넣지 않습니다. 헤드폰 보정이 들어간 최종본이므로 SOFA를 읽는 플레이어에 그대로 넣으면 됩니다.
+- **헤드폰 EQ를 따로 내보내는 옵션**: 'SOFA 파일' 아래의 '헤드폰 보정을 뺀 파일과 헤드폰 EQ도 저장'(`--sofa_split_headphone_eq`)을 켜면 헤드폰 보정을 뺀 `brir-no-headphone-eq.sofa`와 헤드폰 EQ `headphone-eq.wav`(1번 트랙 왼쪽 귀, 2번 트랙 오른쪽 귀의 최소 위상 FIR)도 저장합니다. 플레이어가 헤드폰 EQ를 따로 거는 경우에 씁니다. 보정을 뺀 BRIR은 헤드폰 항만 빼고 보정 곡선을 다시 계산하고, 감쇠와 좌우 균형, 정규화는 최종본과 같은 값으로 겁니다. 그래서 둘을 합치면 1/3옥타브로 다듬은 크기가 100 Hz~12 kHz에서 최종본과 1 dB 안으로 맞습니다. 헤드폰 보정을 쓰지 않는 작업에서는 고를 수 없고, CLI에서 주면 `brir.sofa`만 저장한다고 알립니다.
+- **플레이어가 여는 파일**: SOFA는 HDF5 파일인데, 대부분의 SOFA 플레이어가 쓰는 libmysofa는 그룹의 링크를 조밀 저장소에서만 읽습니다. 순수 Rust netCDF 작성기의 파일은 열지 못해, netCDF-C와 같은 배치로 쓰는 작성기를 `impulcifer-io`에 직접 넣었습니다. 같은 입력이면 같은 바이트를 내고, 날짜는 `SOURCE_DATE_EPOCH`를 따릅니다. 메타데이터에 사용자 이름은 넣지 않습니다.
+
+#### 🔧 빌드 / 설정 변경
+- **brir-3x가 SOFA도 검사**: 무결성 검사가 `.sofa` 파일도 해시하고(날짜는 고정), SOFA를 켜고 헤드폰 EQ를 따로 내보내는 시나리오를 더해 48개가 됐습니다. PR마다 데모의 두 SOFA 파일을 원본 libmysofa(`mysofa2json -c`)와 pyfar `sofar`의 AES69 규약 검사로 열어 봅니다.
+
 ## 3.20.0 - 2026-11-12
 ### LFE 채널이 하나인 포맷에서 서브우퍼 둘을 합침
 
