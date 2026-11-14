@@ -5,7 +5,7 @@
 base commit and from the PR, and runs this script with both binaries. Every
 scenario processes a fresh copy of ``data/demo`` with
 ``data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav``, each binary with the
-files of its own revision (``--base-root``), and hashes every WAV in the
+files of its own revision (``--base-root``), and hashes every WAV and SOFA file in the
 directory afterwards (SHA-256 of the file bytes; the CLI overwrites tracked
 files such as ``room-responses.wav``). A scenario passes when
 
@@ -49,6 +49,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEMO = Path("data") / "demo"
 TEST_SIGNAL = Path("data") / "sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
 VOLUME = 95
+SOURCE_DATE_EPOCH = "1763078400"
 
 # (name, CLI arguments, first 3.x version whose CLI runs it). The demo has
 # speaker-ear room recordings, so every scenario without --no_room_correction
@@ -224,6 +225,9 @@ SCENARIOS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("layout_files_listed", ("--layout_files=13.1,22.2,24.1.10,30.2",), "3.4.0"),
     # ADR 0009: the demo writes the three 9.1 family files with missing speakers silent.
     ("layout_files_atmos_9", ("--layout_files=9.1,9.1.4,9.1.6",), "3.7.0"),
+    # ADR 0019: brir.sofa, and the split pair (BRIR without headphone compensation
+    # plus headphone-eq.wav); the demo uses its headphones.wav.
+    ("sofa_split", ("--sofa", "--sofa_split_headphone_eq"), "3.21.0"),
     # ADR 0013: the demo's seven speakers fill the missing ear-level channels of
     # these files from their neighbours (heights stay silent) and the LFE tracks
     # from FC, or from the bass of every speaker.
@@ -294,7 +298,8 @@ def run(binary: Path, root: Path, work: Path, args: tuple[str, ...], env: dict[s
     start = time.perf_counter()
     result = subprocess.run(
         [str(binary), f"--dir_path={work}", f"--test_signal={root / TEST_SIGNAL}", *args],
-        env={**os.environ, **env},
+        # SOFA files carry a date (ADR 0019); a fixed SOURCE_DATE_EPOCH makes them reproducible.
+        env={**os.environ, "SOURCE_DATE_EPOCH": SOURCE_DATE_EPOCH, **env},
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -303,7 +308,10 @@ def run(binary: Path, root: Path, work: Path, args: tuple[str, ...], env: dict[s
         check=False,
     )
     seconds = time.perf_counter() - start
-    hashes = {str(p.relative_to(work)): sha256(p) for p in sorted(work.rglob("*.wav"))}
+    hashes = {
+        str(p.relative_to(work)): sha256(p)
+        for p in sorted([*work.rglob("*.wav"), *work.rglob("*.sofa")])
+    }
     log = (result.stdout + result.stderr)[-4000:]
     # A scenario writes about 100 MB; keep only the hashes.
     shutil.rmtree(work)

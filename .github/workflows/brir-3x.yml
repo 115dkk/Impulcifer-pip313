@@ -3,8 +3,8 @@ name: BRIR 3.x integrity
 # A PR must not change the 3.x demo BRIRs: the release CLI is built from the
 # PR's base commit and from the PR on the same runner, each processes its own
 # revision's data/demo in every scenario of .github/scripts/brir_3x_integrity.py
-# (room EQ v2 ranges, virtual room tuning, virtual bass, ...), and every WAV in
-# the output directory must hash the same (SHA-256). The PR's output must also hash the same with one rayon thread.
+# (room EQ v2 ranges, virtual room tuning, virtual bass, ...), and every WAV and
+# SOFA file in the output directory must hash the same (SHA-256). The PR's output must also hash the same with one rayon thread.
 # Bytes depend on the platform math library, so there is no stored hash.
 #
 # A PR that is meant to change the output carries the label "brir-change"; a
@@ -23,6 +23,7 @@ on:
       - "data/**"
       - "i18n/locales/**"
       - ".github/scripts/brir_3x_integrity.py"
+      - ".github/scripts/check_sofa.py"
       - ".github/workflows/brir-3x.yml"
   workflow_dispatch:
     inputs:
@@ -99,3 +100,12 @@ jobs:
           python3 .github/scripts/brir_3x_integrity.py \
             --base "$RUNNER_TEMP/impulcifer-base" --base-root "$RUNNER_TEMP/base" \
             --head "$RUNNER_TEMP/impulcifer-head" $ALLOW_CHANGE
+
+      # ADR 0019: the SOFA files must open in libmysofa (most SOFA players) and
+      # pass pyfar sofar's AES69 verification (netCDF-C and libhdf5).
+      - name: Check the SOFA files with libmysofa and pyfar
+        run: |
+          sudo apt-get install -y --no-install-recommends libmysofa-utils
+          python3 -m venv "$RUNNER_TEMP/sofa-venv"
+          "$RUNNER_TEMP/sofa-venv/bin/pip" install --quiet "sofar==1.3.0"
+          "$RUNNER_TEMP/sofa-venv/bin/python" .github/scripts/check_sofa.py --cli "$RUNNER_TEMP/impulcifer-head"
