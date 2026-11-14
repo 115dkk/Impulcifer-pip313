@@ -2,9 +2,9 @@
 //!
 //! This is intentionally a narrow encoder. It writes exactly the subset needed
 //! by `SimpleFreeFieldHRIR`: a version-2 superblock and object headers, dense
-//! root links backed by a fractal heap and a version-2 B-tree name index,
-//! contiguous little-endian datasets, compact attributes, and netCDF dimension
-//! scales with global-heap-backed `DIMENSION_LIST` object references.
+//! root links and attributes backed by fractal heaps and version-2 B-tree name
+//! indexes, contiguous little-endian datasets, compact dataset attributes, and
+//! netCDF dimension scales with global-heap-backed `DIMENSION_LIST` references.
 
 use std::{collections::BTreeMap, path::Path};
 
@@ -16,6 +16,7 @@ const ROOT_ADDRESS: u64 = SUPERBLOCK_SIZE as u64;
 const ROOT_HEADER_CAPACITY: usize = 4096;
 const OBJECT_HEADER_CAPACITY: usize = 2048;
 const LINK_HEAP_BLOCK_SIZE: usize = 1024;
+const ATTRIBUTE_HEAP_BLOCK_SIZE: usize = 2048;
 const BTREE_NODE_SIZE: usize = 512;
 const GLOBAL_HEAP_SIZE: usize = 4096;
 const NC_DIMENSION_NAME: &str = "This is a netCDF dimension but not a netCDF variable.";
@@ -131,6 +132,10 @@ struct Dataset {
 struct Layout {
     root_attributes: Vec<Attribute>,
     datasets: Vec<Dataset>,
+    attribute_heap_header: u64,
+    attribute_btree_header: u64,
+    attribute_btree_leaf: u64,
+    attribute_heap_block: u64,
     heap_header: u64,
     btree_header: u64,
     btree_leaf: u64,
@@ -345,6 +350,14 @@ fn plan_layout(
         dataset.header_address = cursor;
         cursor = align(cursor + OBJECT_HEADER_CAPACITY as u64, 8);
     }
+    let attribute_heap_header = cursor;
+    cursor += 146;
+    let attribute_btree_header = cursor;
+    cursor += 38;
+    let attribute_btree_leaf = cursor;
+    cursor += BTREE_NODE_SIZE as u64;
+    let attribute_heap_block = cursor;
+    cursor += ATTRIBUTE_HEAP_BLOCK_SIZE as u64;
     let heap_header = cursor;
     cursor += 146;
     let btree_header = cursor;
@@ -353,6 +366,8 @@ fn plan_layout(
     cursor += BTREE_NODE_SIZE as u64;
     let heap_block = cursor;
     cursor += LINK_HEAP_BLOCK_SIZE as u64;
+    let global_heap = cursor;
+    cursor += GLOBAL_HEAP_SIZE as u64;
 
     for dataset in &mut datasets {
         if !dataset.data.is_empty() {
@@ -360,12 +375,14 @@ fn plan_layout(
             cursor = align(cursor + dataset.data.len() as u64, 8);
         }
     }
-    let global_heap = cursor;
-    cursor += GLOBAL_HEAP_SIZE as u64;
 
     Ok(Layout {
         root_attributes,
         datasets,
+        attribute_heap_header,
+        attribute_btree_header,
+        attribute_btree_leaf,
+        attribute_heap_block,
         heap_header,
         btree_header,
         btree_leaf,
@@ -438,19 +455,8 @@ fn encode_layout(layout: &Layout) -> Result<Vec<u8>, IoError> {
     let root_header = object_header(&[
         message(2, link_info(layout)),
         message(10, vec![0, 0]),
-        message(21, attribute_info()),
-        message(12, attribute_message(&layout.root_attributes[0])?),
-        message(
-            16,
-            continuation_message(ROOT_ADDRESS + ROOT_HEADER_CAPACITY as u64 - 8, 0),
-        ),
+        message(21, attribute_info(layout)),
     ])?;
-    let root_attributes = &layout.root_attributes[1..];
-    let root_header = root_header_with_continuation(
-        &root_header,
-        root_attributes,
-        ROOT_ADDRESS + ROOT_HEADER_CAPACITY as u64 - 8,
-    )?;
     write_at(&mut file, ROOT_ADDRESS, &root_header)?;
 
     for dataset in &layout.datasets {
@@ -460,6 +466,27 @@ fn encode_layout(layout: &Layout) -> Result<Vec<u8>, IoError> {
             write_at(&mut file, dataset.data_address, &dataset.data)?;
         }
     }
+
+    write_at(
+        &mut file,
+        layout.attribute_heap_header,
+        &attribute_fractal_heap_header(layout)?,
+    )?;
+    write_at(
+        &mut file,
+        layout.attribute_btree_header,
+        &attribute_btree_header(layout),
+    )?;
+    write_at(
+        &mut file,
+        layout.attribute_btree_leaf,
+        &attribute_btree_leaf(layout)?,
+    )?;
+    write_at(
+        &mut file,
+        layout.attribute_heap_block,
+        &attribute_fractal_heap_block(layout)?,
+    )?;
 
     let links = layout
         .datasets
@@ -516,47 +543,6 @@ fn dataset_header(dataset: &Dataset) -> Result<Vec<u8>, IoError> {
     object_header(&messages)
 }
 
-fn root_header_with_continuation(
-    initial: &[u8],
-    attributes: &[Attribute],
-    continuation_address: u64,
-) -> Result<Vec<u8>, IoError> {
-    let mut continuation_messages = Vec::new();
-    for attribute in attributes {
-        continuation_messages.extend_from_slice(&message(12, attribute_message(attribute)?));
-    }
-    let continuation_length = continuation_messages.len() + 8;
-    if continuation_length > ROOT_HEADER_CAPACITY - 256 {
-        return Err(IoError::InvalidArgument(
-            "SOFA metadata is too large for the deterministic HDF5 header".into(),
-        ));
-    }
-    let mut initial_messages = initial.to_vec();
-    let continue_pattern = continuation_message(continuation_address, 0);
-    let continuation_offset = ROOT_HEADER_CAPACITY - continuation_length;
-    let replacement = continuation_message(
-        ROOT_ADDRESS + continuation_offset as u64,
-        continuation_length as u64,
-    );
-    let position = find_bytes(&initial_messages, &continue_pattern).ok_or_else(|| {
-        IoError::Format("internal SOFA continuation message was not found".into())
-    })?;
-    initial_messages[position..position + replacement.len()].copy_from_slice(&replacement);
-    let checksum_start = initial_messages.len() - 4;
-    let checksum = jenkins_lookup3(&initial_messages[..checksum_start]);
-    initial_messages[checksum_start..].copy_from_slice(&checksum.to_le_bytes());
-
-    let mut result = vec![0; ROOT_HEADER_CAPACITY];
-    result[..initial_messages.len()].copy_from_slice(&initial_messages);
-    let mut continuation = Vec::with_capacity(continuation_length);
-    continuation.extend_from_slice(b"OCHK");
-    continuation.extend_from_slice(&continuation_messages);
-    let checksum = jenkins_lookup3(&continuation);
-    put_u32(&mut continuation, checksum);
-    result[continuation_offset..].copy_from_slice(&continuation);
-    Ok(result)
-}
-
 fn superblock(eof: u64) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(SUPERBLOCK_SIZE);
     bytes.extend_from_slice(b"\x89HDF\r\n\x1a\n");
@@ -595,13 +581,6 @@ fn message(kind: u8, payload: Vec<u8>) -> Vec<u8> {
     bytes
 }
 
-fn continuation_message(address: u64, length: u64) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(16);
-    put_u64(&mut bytes, address);
-    put_u64(&mut bytes, length);
-    bytes
-}
-
 fn link_info(layout: &Layout) -> Vec<u8> {
     let mut bytes = vec![0, 0];
     put_u64(&mut bytes, layout.heap_header);
@@ -609,10 +588,10 @@ fn link_info(layout: &Layout) -> Vec<u8> {
     bytes
 }
 
-fn attribute_info() -> Vec<u8> {
+fn attribute_info(layout: &Layout) -> Vec<u8> {
     let mut bytes = vec![0, 0];
-    put_u64(&mut bytes, UNDEFINED);
-    put_u64(&mut bytes, UNDEFINED);
+    put_u64(&mut bytes, layout.attribute_heap_header);
+    put_u64(&mut bytes, layout.attribute_btree_header);
     bytes
 }
 
@@ -638,14 +617,20 @@ fn attribute_message(attribute: &Attribute) -> Result<Vec<u8>, IoError> {
 }
 
 fn dataspace_message(shape: &[u64]) -> Vec<u8> {
+    let flags = u8::from(!shape.is_empty());
     let mut bytes = vec![
         2,
         shape.len() as u8,
-        0,
+        flags,
         if shape.is_empty() { 0 } else { 1 },
     ];
     for &dimension in shape {
         put_u64(&mut bytes, dimension);
+    }
+    if flags != 0 {
+        for &dimension in shape {
+            put_u64(&mut bytes, dimension);
+        }
     }
     bytes
 }
@@ -706,13 +691,40 @@ fn contiguous_layout(address: u64, length: u64) -> Vec<u8> {
     bytes
 }
 
+fn attribute_fractal_heap_header(layout: &Layout) -> Result<Vec<u8>, IoError> {
+    let used = attribute_fractal_heap_objects(&layout.root_attributes)?.len();
+    Ok(fractal_heap_header_bytes(
+        layout.attribute_heap_block,
+        layout.root_attributes.len(),
+        used,
+        8,
+        ATTRIBUTE_HEAP_BLOCK_SIZE,
+    ))
+}
+
 fn fractal_heap_header(layout: &Layout, links: &[(&str, u64)]) -> Vec<u8> {
-    let managed_space = LINK_HEAP_BLOCK_SIZE as u64;
-    let used = fractal_link_bytes(links).len() as u64;
+    fractal_heap_header_bytes(
+        layout.heap_block,
+        links.len(),
+        fractal_link_bytes(links).len(),
+        7,
+        LINK_HEAP_BLOCK_SIZE,
+    )
+}
+
+fn fractal_heap_header_bytes(
+    root_block: u64,
+    objects: usize,
+    used: usize,
+    heap_id_length: u16,
+    block_size: usize,
+) -> Vec<u8> {
+    let managed_space = block_size as u64;
+    let used = used as u64;
     let mut bytes = Vec::new();
     bytes.extend_from_slice(b"FRHP");
     bytes.push(0);
-    put_u16(&mut bytes, 7);
+    put_u16(&mut bytes, heap_id_length);
     put_u16(&mut bytes, 0);
     bytes.push(2);
     put_u32(&mut bytes, 4096);
@@ -723,21 +735,87 @@ fn fractal_heap_header(layout: &Layout, links: &[(&str, u64)]) -> Vec<u8> {
     put_u64(&mut bytes, managed_space);
     put_u64(&mut bytes, managed_space);
     put_u64(&mut bytes, 0);
-    put_u64(&mut bytes, links.len() as u64);
+    put_u64(&mut bytes, objects as u64);
     put_u64(&mut bytes, 0);
     put_u64(&mut bytes, 0);
     put_u64(&mut bytes, 0);
     put_u64(&mut bytes, 0);
     put_u16(&mut bytes, 4);
-    put_u64(&mut bytes, LINK_HEAP_BLOCK_SIZE as u64);
+    put_u64(&mut bytes, block_size as u64);
     put_u64(&mut bytes, 65_536);
     put_u16(&mut bytes, 32);
     put_u16(&mut bytes, 1);
-    put_u64(&mut bytes, layout.heap_block);
+    put_u64(&mut bytes, root_block);
     put_u16(&mut bytes, 0);
     let checksum = jenkins_lookup3(&bytes);
     put_u32(&mut bytes, checksum);
     bytes
+}
+
+fn encoded_attribute_objects(attributes: &[Attribute]) -> Result<Vec<Vec<u8>>, IoError> {
+    attributes.iter().map(attribute_message).collect()
+}
+
+fn attribute_fractal_heap_objects(attributes: &[Attribute]) -> Result<Vec<u8>, IoError> {
+    let mut bytes = Vec::new();
+    for encoded in encoded_attribute_objects(attributes)? {
+        bytes.extend_from_slice(&encoded);
+    }
+    bytes.extend_from_slice(&[0; 4]);
+    Ok(bytes)
+}
+
+fn attribute_fractal_heap_block(layout: &Layout) -> Result<Vec<u8>, IoError> {
+    let objects = attribute_fractal_heap_objects(&layout.root_attributes)?;
+    if objects.len() + 21 > ATTRIBUTE_HEAP_BLOCK_SIZE {
+        return Err(IoError::InvalidArgument(
+            "SOFA metadata is too large for the deterministic HDF5 attribute heap".into(),
+        ));
+    }
+    let mut bytes = vec![0; ATTRIBUTE_HEAP_BLOCK_SIZE];
+    bytes[..4].copy_from_slice(b"FHDB");
+    bytes[4] = 0;
+    bytes[5..13].copy_from_slice(&layout.attribute_heap_header.to_le_bytes());
+    bytes[13..17].copy_from_slice(&0_u32.to_le_bytes());
+    bytes[21..21 + objects.len()].copy_from_slice(&objects);
+    let checksum = jenkins_lookup3(&bytes);
+    bytes[17..21].copy_from_slice(&checksum.to_le_bytes());
+    Ok(bytes)
+}
+
+fn attribute_btree_header(layout: &Layout) -> Vec<u8> {
+    btree_header_bytes(
+        8,
+        17,
+        layout.attribute_btree_leaf,
+        layout.root_attributes.len(),
+    )
+}
+
+fn attribute_btree_leaf(layout: &Layout) -> Result<Vec<u8>, IoError> {
+    let objects = encoded_attribute_objects(&layout.root_attributes)?;
+    let mut offsets = Vec::with_capacity(objects.len());
+    let mut offset = 21_u32;
+    for (attribute, encoded) in layout.root_attributes.iter().zip(objects) {
+        offsets.push((attribute.name.as_str(), offset, encoded.len() as u16));
+        offset += encoded.len() as u32;
+    }
+    offsets.sort_by_key(|(name, _, _)| jenkins_lookup3(name.as_bytes()));
+    let mut bytes = Vec::with_capacity(BTREE_NODE_SIZE);
+    bytes.extend_from_slice(b"BTLF");
+    bytes.push(0);
+    bytes.push(8);
+    for (creation_order, (name, offset, length)) in offsets.into_iter().enumerate() {
+        let heap_id = heap_id8(offset, length);
+        bytes.extend_from_slice(&heap_id);
+        bytes.push(0);
+        put_u32(&mut bytes, creation_order as u32);
+        put_u32(&mut bytes, jenkins_lookup3(name.as_bytes()));
+    }
+    let checksum = jenkins_lookup3(&bytes);
+    put_u32(&mut bytes, checksum);
+    bytes.resize(BTREE_NODE_SIZE, 0);
+    Ok(bytes)
 }
 
 fn fractal_link_bytes(links: &[(&str, u64)]) -> Vec<u8> {
@@ -771,14 +849,18 @@ fn hard_link(name: &str, address: u64, creation_order: u64) -> Vec<u8> {
 }
 
 fn btree_header(layout: &Layout, records: usize) -> Vec<u8> {
+    btree_header_bytes(5, 11, layout.btree_leaf, records)
+}
+
+fn btree_header_bytes(kind: u8, record_size: u16, leaf: u64, records: usize) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(38);
     bytes.extend_from_slice(b"BTHD");
-    bytes.extend_from_slice(&[0, 5]);
+    bytes.extend_from_slice(&[0, kind]);
     put_u32(&mut bytes, BTREE_NODE_SIZE as u32);
-    put_u16(&mut bytes, 11);
+    put_u16(&mut bytes, record_size);
     put_u16(&mut bytes, 0);
     bytes.extend_from_slice(&[100, 40]);
-    put_u64(&mut bytes, layout.btree_leaf);
+    put_u64(&mut bytes, leaf);
     put_u16(&mut bytes, records as u16);
     put_u64(&mut bytes, records as u64);
     let checksum = jenkins_lookup3(&bytes);
@@ -807,6 +889,13 @@ fn btree_leaf(links: &[(&str, u64)], heap_header: u64) -> Vec<u8> {
     put_u32(&mut bytes, checksum);
     bytes.resize(BTREE_NODE_SIZE, 0);
     bytes
+}
+
+fn heap_id8(offset: u32, length: u16) -> [u8; 8] {
+    let mut result = [0_u8; 8];
+    result[1..5].copy_from_slice(&offset.to_le_bytes());
+    result[5..7].copy_from_slice(&length.to_le_bytes());
+    result
 }
 
 fn heap_id(offset: u32, length: u16, _heap_header: u64) -> [u8; 7] {
@@ -889,12 +978,6 @@ fn write_at(file: &mut [u8], address: u64, value: &[u8]) -> Result<(), IoError> 
     }
     file[start..end].copy_from_slice(value);
     Ok(())
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
 }
 
 fn align(value: u64, boundary: u64) -> u64 {
