@@ -87,6 +87,17 @@ function api() {
   return window.pywebview.api;
 }
 
+/* A call that throws (the bridge itself failed, or no service) answers like a
+   refused one, so the caller has one failure path to handle. */
+/** @template T @param {() => Promise<Envelope<T>>} call @returns {Promise<Envelope<T>>} */
+async function callApi(call) {
+  try {
+    return await call();
+  } catch (error) {
+    return { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } };
+  }
+}
+
 /* ------------------------------------------------------------------ i18n */
 
 /** @param {string} key */
@@ -314,6 +325,11 @@ function setProgress(value) {
   });
 }
 
+/** @param {JobStatus} status */
+function isTerminal(status) {
+  return status === "succeeded" || status === "failed" || status === "cancelled";
+}
+
 /** @param {Job | null} job */
 function renderJobState(job) {
   state.lastJob = job;
@@ -325,13 +341,13 @@ function renderJobState(job) {
     node.textContent = label;
   });
   if (job?.kind === "output_recovery") renderRecoveryJob(job);
-  const active = Boolean(job && !["succeeded", "failed", "cancelled"].includes(job.status));
+  const active = Boolean(job && !isTerminal(job.status));
   updateJobModal(job, active);
 }
 
 /** @param {Job | null} job */
 function updateStartControls(job) {
-  const active = Boolean(job && !["succeeded", "failed", "cancelled"].includes(job.status));
+  const active = Boolean(job && !isTerminal(job.status));
   const busy = state.startPending || active;
   /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("[data-start]")).forEach((button) => {
     button.disabled = busy;

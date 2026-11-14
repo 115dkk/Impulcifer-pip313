@@ -72,10 +72,7 @@ function scheduleMfileInspection(purpose, delay = 250) {
     return;
   }
   file.timer = window.setTimeout(async () => {
-    /** @type {Envelope<RoomFileInspection>} */
-    let response;
-    try { response = await api().inspect_room_measurements({ path, purpose }); }
-    catch (error) { response = { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } }; }
+    const response = await callApi(() => api().inspect_room_measurements({ path, purpose }));
     if (revision !== file.revision) return;
     file.data = response.ok ? response.data : null;
     file.error = response.ok ? null : response.error;

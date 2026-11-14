@@ -37,10 +37,7 @@ function scheduleEqInspection(delay = 250) {
     return;
   }
   state.eqTimer = window.setTimeout(async () => {
-    /** @type {Envelope<EqInspection>} */
-    let response;
-    try { response = await api().inspect_eq({ dir_path: dir, ...eqRequestFields() }); }
-    catch (error) { response = { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } }; }
+    const response = await callApi(() => api().inspect_eq({ dir_path: dir, ...eqRequestFields() }));
     if (revision !== state.eqRevision) return;
     state.eqInspection = response.ok ? response.data : null;
     state.eqError = response.ok ? null : response.error;

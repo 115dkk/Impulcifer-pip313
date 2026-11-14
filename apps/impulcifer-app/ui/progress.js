@@ -294,7 +294,7 @@ function renderRecoveryJob(job) {
   setRecoveryFiles(null, null);
   openButton.hidden = true;
 
-  if (!["succeeded", "failed", "cancelled"].includes(job.status)) {
+  if (!isTerminal(job.status)) {
     detail.textContent = t("recovery_running_detail");
     return;
   }
@@ -355,10 +355,7 @@ function scheduleRecoveryPlan() {
   updateStartControls(state.lastJob);
   const request = recoveryRequest();
   state.recoveryTimer = window.setTimeout(async () => {
-    /** @type {Envelope<RecoveryPlan>} */
-    let response;
-    try { response = await api().plan_output_recovery(request); }
-    catch (error) { response = { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } }; }
+    const response = await callApi(() => api().plan_output_recovery(request));
     if (revision !== state.recoveryRevision || state.skin !== "studio") return;
     if (response.ok) {
       state.recoveryPlan = response.data;

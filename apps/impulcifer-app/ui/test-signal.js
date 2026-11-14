@@ -76,16 +76,12 @@ function scheduleTestSignalCheck(delay = 250) {
     return;
   }
   state.testSignalTimer = window.setTimeout(async () => {
-    /** @type {TestSignalReport | undefined} */
-    let report;
-    try {
-      const response = await api().detect_sweep(dir, {
-        test_signal: file,
-        speakers: val("bf-brir-source") === "folder",
-        headphone_file: isOpen("dis-headphone") && !mfileMode("headphones") ? val("bf-headphone-file") : null,
-      });
-      report = response.ok ? response.data.test_signal : undefined;
-    } catch { report = undefined; }
+    const response = await callApi(() => api().detect_sweep(dir, {
+      test_signal: file,
+      speakers: val("bf-brir-source") === "folder",
+      headphone_file: isOpen("dis-headphone") && !mfileMode("headphones") ? val("bf-headphone-file") : null,
+    }));
+    const report = response.ok ? response.data.test_signal : undefined;
     if (revision !== state.testSignalRevision) return;
     const mismatches = report?.mismatches ?? [];
     note.hidden = mismatches.length === 0;

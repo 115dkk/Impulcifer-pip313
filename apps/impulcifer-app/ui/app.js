@@ -278,25 +278,16 @@ async function boot() {
   $("runtime-status").textContent = `v${data.version} · ${data.platform} · ${backendLabel}`;
   appendLog(t("webview_bridge_connected"));
 
+  // A job still running from before a reload is followed again.
   const activeJob = data.active_job;
   if (activeJob && activeJob.kind === "update") {
-    if (!["succeeded", "failed", "cancelled"].includes(activeJob.status)) {
-      updateState.jobId = activeJob.job_id;
-      updateState.nextSeq = 0;
+    if (!isTerminal(activeJob.status)) {
       showUpdateProgressOnly();
-      pollUpdateJob();
+      followJob(updateState, activeJob, UPDATE_JOB);
     }
   } else {
     renderJobState(activeJob);
-    if (activeJob && !["succeeded", "failed", "cancelled"].includes(activeJob.status)) {
-      state.jobId = activeJob.job_id;
-      state.jobKind = activeJob.kind;
-      state.nextSeq = 0;
-      resetSteps(activeJob.kind === "brir");
-      if (activeJob.kind === "brir") renderAlignment(null);
-      resetRecorderStatus();
-      schedulePoll(0);
-    }
+    if (activeJob && !isTerminal(activeJob.status)) followMainJob(activeJob);
   }
 
   await Promise.all([loadDevices(), loadSystemInfo()]);
