@@ -875,6 +875,62 @@ def layout_checks(browser):
     print("Gallery layout checks: recorder channel map, layout speakers, use-all, layout_files auto/none/forced OK", flush=True)
 
 
+def sofa_checks(browser):
+    """ADR 0019: the SOFA file and the headphone EQ split. The split needs the
+    SOFA file and headphone compensation; a locked box keeps its tick and is
+    not sent; Studio sends both only with the Output tab on."""
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "processing")
+    request = brir_request(page)
+    assert "sofa" not in request and "sofa_split_headphone_eq" not in request, request
+    adv_switch(page, "output", True)
+    disclosure(page, "headphone", True)
+    request = brir_request(page)
+    assert request["sofa"] is False and request["sofa_split_headphone_eq"] is False, request
+    assert disabled(page, "#ba-sofa-split")
+    assert page.locator("#ba-sofa-split-row").get_attribute("title") == page.evaluate("t('tooltip_sofa_split_locked')")
+    assert page.locator("#ba-sofa-row").get_attribute("title") == page.evaluate("t('tooltip_sofa')")
+    page.locator("#ba-sofa").check()
+    assert not disabled(page, "#ba-sofa-split")
+    page.locator("#ba-sofa-split").check()
+    request = brir_request(page)
+    assert request["sofa"] is True and request["sofa_split_headphone_eq"] is True, request
+    # Without headphone compensation the split locks, keeps its tick, and is not sent.
+    disclosure(page, "headphone", False)
+    assert disabled(page, "#ba-sofa-split") and page.locator("#ba-sofa-split").is_checked()
+    request = brir_request(page)
+    assert request["sofa"] is True and request["sofa_split_headphone_eq"] is False, request
+    disclosure(page, "headphone", True)
+    assert not disabled(page, "#ba-sofa-split")
+    assert brir_request(page)["sofa_split_headphone_eq"] is True
+    page.locator("#ba-sofa").uncheck()
+    assert disabled(page, "#ba-sofa-split")
+    request = brir_request(page)
+    assert request["sofa"] is False and request["sofa_split_headphone_eq"] is False, request
+    page.locator("#adv-reset-output").click()
+    assert not page.locator("#ba-sofa").is_checked() and not page.locator("#ba-sofa-split").is_checked()
+    assert not errors, errors
+    context.close()
+
+    context, page, errors = open_page(browser, "stable", "dark", "ko", "idle")
+    navigate(page, "processing")
+    disclosure(page, "advanced", True)
+    disclosure(page, "headphone", True)
+    payload = page.evaluate("gatherBrirPayload()")
+    assert payload["sofa"] is False and payload["sofa_split_headphone_eq"] is False, payload
+    assert disabled(page, "#bf-sofa-split")
+    page.locator("#bf-sofa").check()
+    assert not disabled(page, "#bf-sofa-split")
+    page.locator("#bf-sofa-split").check()
+    payload = page.evaluate("gatherBrirPayload()")
+    assert payload["sofa"] is True and payload["sofa_split_headphone_eq"] is True, payload
+    disclosure(page, "headphone", False)
+    assert disabled(page, "#bf-sofa-split")
+    assert page.evaluate("gatherBrirPayload()")["sofa_split_headphone_eq"] is False
+    assert not errors, errors
+    context.close()
+
+
 def fill_lfe_checks(browser):
     """ADR 0013: what the output files carry for unmeasured speakers and the LFE
     channel. Studio sends both only with the Output tab on, Stable always; each
@@ -2226,6 +2282,7 @@ def render_gallery(output):
         short_output_checks(browser)
         recording_cancel_checks(browser)
         fill_lfe_checks(browser)
+        sofa_checks(browser)
         itd_checks(browser)
         advanced_checks(browser)
         layout_checks(browser)
