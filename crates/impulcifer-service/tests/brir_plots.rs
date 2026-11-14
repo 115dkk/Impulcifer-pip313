@@ -465,7 +465,16 @@ struct Product {
     wavs: BTreeMap<String, Vec<u8>>,
     readme: String,
     events: Vec<Value>,
-    directory: std::path::PathBuf,
+    interactive_summary: Option<String>,
+}
+/// The test outputs live in temp folders that statics never drop, so they are
+/// deleted here unless IMPULCIFER_KEEP_TEST_OUTPUT asks to keep them for visual
+/// inspection (the path is then printed after `label`).
+fn keep_for_inspection(t: Temp, label: &str) {
+    if std::env::var_os("IMPULCIFER_KEEP_TEST_OUTPUT").is_some() {
+        println!("{label} {}", t.0.display());
+        std::mem::forget(t);
+    }
 }
 fn product(plot: bool) -> &'static Product {
     static DEFAULT: OnceLock<Product> = OnceLock::new();
@@ -508,11 +517,12 @@ fn run_product(t: Temp, c: ProcessingConfig) -> Product {
         wavs: wav_digests(&t.0),
         readme: std::fs::read_to_string(t.0.join("README.md")).unwrap(),
         events: p.events.iter().map(|e| e.payload.clone()).collect(),
-        directory: t.0.clone(),
+        interactive_summary: std::fs::read_to_string(
+            t.0.join("interactive_plots/interactive_summary.html"),
+        )
+        .ok(),
     };
-    println!("P19_SERVICE_DIRECTORY {}", t.0.display());
-    // Preserve temp-only evidence for visual inspection, never data/ outputs.
-    std::mem::forget(t);
+    keep_for_inspection(t, "P19_SERVICE_DIRECTORY");
     out
 }
 fn compare_files(plot: bool) {
@@ -588,8 +598,7 @@ fn generic_only_room_plot_matches_python_canvas() {
         std::fs::read_dir(t.0.join("plots/room")).unwrap().count(),
         1
     );
-    println!("P19_GENERIC_ROOM_DIRECTORY {}", t.0.display());
-    std::mem::forget(t);
+    keep_for_inspection(t, "P19_GENERIC_ROOM_DIRECTORY");
 }
 #[test]
 fn plots_do_not_change_wavs() {
@@ -625,12 +634,10 @@ fn interactive_report_leaves_wavs_and_pngs_unchanged() {
         println!("{name}: {size} bytes");
     }
 
-    let summary = std::fs::read_to_string(
-        interactive
-            .directory
-            .join("interactive_plots/interactive_summary.html"),
-    )
-    .unwrap();
+    let summary = interactive
+        .interactive_summary
+        .as_deref()
+        .expect("interactive_summary.html was saved");
     assert!(summary.contains("<title>Interactive Plot Summary</title>"));
     assert!(!summary.contains("http://") && !summary.contains("https://"));
     for id in [
