@@ -130,7 +130,20 @@ fn macos_bundle_asks_for_the_microphone_and_is_signed() {
 #[test]
 fn screen_never_calls_the_browser_dialogs() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    for file in ["ui/app.js", "src/bridge.js"] {
+    // Every script of the page (ordered classic scripts in ui/) and the bridge.
+    let mut files: Vec<String> = std::fs::read_dir(manifest.join("ui"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_file() && path.extension().is_some_and(|e| e == "js"))
+        .map(|path| format!("ui/{}", path.file_name().unwrap().to_string_lossy()))
+        .collect();
+    files.sort();
+    assert!(
+        files.iter().any(|file| file == "ui/app.js"),
+        "ui/app.js is missing: {files:?}"
+    );
+    files.push("src/bridge.js".to_owned());
+    for file in &files {
         let source = std::fs::read_to_string(manifest.join(file)).unwrap();
         for (number, line) in source.lines().enumerate() {
             let code = line.split("//").next().unwrap_or_default();

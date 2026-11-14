@@ -43,10 +43,9 @@ Global attributes (all character strings):
 | `Version` | `2.1` |
 | `SOFAConventions` | `SimpleFreeFieldHRIR` |
 | `SOFAConventionsVersion` | `1.0` |
-| `APIName` | `Impulcifer` |
-| `APIVersion` | the workspace version (e.g. `3.21.0`) |
+| `APIName` | `Impulcifer SOFA writer` |
+| `APIVersion` | `SOFA_WRITER_VERSION` in `crates/impulcifer-io/src/sofa.rs` (`1.0`), bumped only when the writer's bytes change |
 | `ApplicationName` | `Impulcifer` |
-| `ApplicationVersion` | the workspace version |
 | `AuthorContact` | `unknown` |
 | `Organization` | `unknown` |
 | `License` | `No license provided, ask the author for permission` |

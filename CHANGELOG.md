@@ -4,6 +4,16 @@ first number changes, something has broken and you need to check your commands a
 changes there are only new features available and nothing old has broken and when the last number changes, old bugs have
 been fixed and old features improved.
 
+## 3.21.1 - 2026-11-14
+### 화면 스크립트를 여러 파일로 나누고 고급 옵션 규칙을 하나로
+
+#### ⭐ 새로운 기능 / 개선
+- **app.js를 열네 파일로 나눔**: 3.x 화면 스크립트 `apps/impulcifer-app/ui/app.js`가 4,483줄로 커져서, 기능마다 한 파일씩 순서대로 읽는 고전 스크립트 열네 개(`core.js`부터 `app.js`까지)로 나눴습니다. 첫 커밋은 줄을 그대로 옮기기만 해서, 새 파일들을 읽는 순서대로 이어 붙이고 머리줄을 빼면 원래 파일과 바이트 단위로 같습니다. 갤러리 검사가 화면을 `file://`로 열고 이 출처에서는 브라우저가 모듈 스크립트를 막으므로 ES 모듈은 쓰지 않았고, 갤러리가 부르는 전역 이름도 그대로입니다. `app.js`를 경로로 읽던 Rust 시험 둘(문자열 키, 브라우저 대화상자 검사)은 이제 `ui/*.js` 전부를 읽고, `index.html`이 모든 스크립트를 한 번씩 읽으며 `app.js`가 마지막이라는 것도 확인합니다.
+- **두 스킨의 고급 옵션을 규칙 표 하나로**: Stable과 Studio가 고급 옵션의 켜기·끄기 규칙(리샘플링과 샘플레이트, 채널 밸런스 값, 채널별 감쇠, 마이크 편차 보정 등)과 감쇠 격자, 이벤트 연결을 따로 한 벌씩 가지고 있던 것을 규칙 표 하나와 두 폼에 같이 쓰는 함수(`refreshAdvanced`, `wireAdvanced`, `buildDecayGrid`)로 합쳤습니다. 새 고급 옵션은 이제 표 한 줄로 두 스킨에 함께 들어갑니다. 바꾸기 전과 후에 두 스킨에서 66단계의 옵션 조합으로 BRIR 요청 내용, 입력칸의 켜짐·숨김·툴팁, 감쇠 격자를 기록해 비교했고 차이는 없었습니다. 쓰이지 않던 상태 값 둘(`theme`, `resolvedRecordPath`)도 지웠습니다.
+
+#### 🐛 버그 수정
+- **SOFA 파일에 앱 버전을 넣지 않음**: 3.21.0의 SOFA 파일은 `APIVersion`과 `ApplicationVersion`에 앱 버전을 적어서, 버전만 올려도 `.sofa`의 바이트가 바뀌었습니다. 그러면 BRIR 무결성 검사(brir-3x)가 버전을 올리는 PR마다 실패합니다. 이제 `APIName`은 `Impulcifer SOFA writer`, `APIVersion`은 작성기 형식 버전 `1.0`이고(작성기가 쓰는 바이트가 바뀔 때만 올림), 선택 속성인 `ApplicationVersion`은 쓰지 않습니다. 응답 데이터와 위치는 그대로이며, 원본 libmysofa와 pyfar `sofar`의 규약 검사도 그대로 통과합니다.
+
 ## 3.21.0 - 2026-11-14
 ### BRIR을 SOFA 파일로 내보내기
 

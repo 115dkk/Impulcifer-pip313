@@ -319,9 +319,9 @@ type IpcMethod = keyof IpcApi;
 type IpcResponse<M extends IpcMethod> = Awaited<ReturnType<IpcApi[M]>>;
 interface AppState {
   booted: boolean; version: string; platform: string; strings: Record<string, string>; brirDefaults: BrirDefaults;
-  sweepDefaults?: Partial<SweepDefaults>; language: string; theme: string; skin: string;
+  sweepDefaults?: Partial<SweepDefaults>; language: string; skin: string;
   jobId: string | null; jobKind: JobKind | null; lastJob: Job | null; lastRecoveryJob: JobOf<"output_recovery"> | null;
-  startPending: boolean; nextSeq: number; pollTimer: number | undefined; resolvedRecordPath: string;
+  startPending: boolean; nextSeq: number; pollTimer: number | undefined;
   /* Head-turn measurement: the step shown, each step's outcome by "setup|target|index",
      the step being recorded, and the countdown before it starts. */
   guided: { index: number; results: Record<string, { status: string; checks: RecordingCheck[] }>;

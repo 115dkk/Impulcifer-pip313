@@ -56,7 +56,7 @@ fn system_mode() -> dark_light::Mode {
 }
 
 /// Resolves the saved theme name to the theme the page will actually show:
-/// "system" follows the OS preference, exactly as ui/app.js resolves
+/// "system" follows the OS preference, exactly as ui/core.js resolves
 /// `prefers-color-scheme` (an unspecified OS answer is light, the browser default).
 fn effective_theme(setting: &str, system: dark_light::Mode) -> &'static str {
     match setting {
