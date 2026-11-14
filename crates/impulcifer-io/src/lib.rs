@@ -39,4 +39,4 @@ pub use sofa::{
     SofaMeasurement, SofaMetadata, encode_simple_free_field_hrir, sofa_date,
     write_simple_free_field_hrir,
 };
-pub use wav::{Wav, pcm32_round_trip, read_wav, write_wav};
+pub use wav::{Wav, pcm32_round_trip, read_wav, write_wav, write_wav_float32};

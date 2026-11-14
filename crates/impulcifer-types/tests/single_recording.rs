@@ -19,7 +19,7 @@ fn recording_speaker_list_parses_and_rejects() {
         let error = parse_recording_speakers(value).unwrap_err();
         assert!(error.contains(text), "{value}: {error}");
     }
-    assert_eq!(EXTENSION_FIELD_NAMES.len(), 43);
+    assert_eq!(EXTENSION_FIELD_NAMES.len(), 45);
     for field in [
         "brir_recording_file",
         "brir_recording_speakers",

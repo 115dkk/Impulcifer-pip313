@@ -18,7 +18,7 @@ The decision and its reasons are in `docs/adr/0019-sofa-export.md`. This file is
 - **Speakers:** exactly the speakers of `hrir.wav`: the HRIR that `fill_output` returns for the `hrir.wav` targets (measured speakers, plus the ones filled when `missing_speakers = "neighbor"`), every speaker that has both ears, in `SLOTS` order. `LFE` and `LFE2` are never included.
 - **Samples:** the same `f64` samples that `hrir.wav` is written from (after resampling, before WAV quantization), at the output sample rate. All measurements of one file have the same length N; when lengths differ the shorter ones are padded with zeros at the end.
 - **Positions:** `SourcePosition` row = `[azimuth, elevation, 2.0]` from the slot's `SLOTS` entry (degrees, ITU convention, positive azimuth to the left; this is SOFA's spherical convention).
-- **Split files:** `brir-no-headphone-eq.sofa` holds the BRIR without the headphone term, same speakers, positions, length and sample rate as `brir.sofa`. `headphone-eq.wav` holds two tracks (left ear, right ear), 32-bit like the other WAVs, at the output sample rate.
+- **Split files:** `brir-no-headphone-eq.sofa` holds the BRIR without the headphone term, same speakers, positions, length and sample rate as `brir.sofa`. `headphone-eq.wav` holds two tracks (left ear, right ear) as 32-bit IEEE float at the output sample rate (`write_wav_float32`). The other WAVs are 32-bit integer PCM, but a boosting headphone EQ FIR has samples above full scale (about 1.96 on the demo), and integer PCM clipped them: the split agreement below then missed by 14.8 dB. Float keeps the FIR exact without a gain change.
 
 ## Headphone split
 

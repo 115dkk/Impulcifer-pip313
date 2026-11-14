@@ -932,6 +932,34 @@ tests = ["impulcifer-audio-io::config_exact_channels_win_over_larger_float", "im
 note = "cpal (macOS, Linux) opens a device at its own channel count: CoreAudio reports only a device's current total, so a 12-channel 7.1.4 sweep on a 16-output interface, a stereo sweep on 8-channel HDMI or 2 microphone channels on a multi-input interface used to fail; playback now silences the extra device channels and capture keeps the first ones"
 
 [[feature]]
+id = "config.sofa"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::sofa_config_defaults_and_boolean_validation", "impulcifer-cli::sofa_flags_parse_appear_in_help_and_reach_config", "impulcifer-service::sofa_holds_the_speakers_of_hrir_wav"]
+note = "ADR 0019: opt-in SimpleFreeFieldHRIR export; false keeps every default output byte-identical"
+
+[[feature]]
+id = "config.sofa_split_headphone_eq"
+kind = "config"
+status = "implemented"
+tests = ["impulcifer-types::sofa_config_defaults_and_boolean_validation", "impulcifer-cli::sofa_flags_parse_appear_in_help_and_reach_config", "impulcifer-service::sofa_split_reassembles_the_final_brir"]
+note = "ADR 0019: opt-in BRIR without headphone compensation plus a two-track headphone FIR"
+
+[[feature]]
+id = "output.sofa"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-service::sofa_holds_the_speakers_of_hrir_wav", "impulcifer-service::sofa_files_are_reproducible_with_source_date_epoch", "impulcifer-service::sofa_off_writes_no_sofa_file"]
+note = "ADR 0019: brir.sofa contains hrir.wav speakers in SLOTS order at nominal directions and 2 m, excluding LFE"
+
+[[feature]]
+id = "output.sofa_split"
+kind = "output"
+status = "implemented"
+tests = ["impulcifer-service::sofa_split_reassembles_the_final_brir", "impulcifer-service::sofa_split_without_headphone_compensation_saves_only_brir_sofa"]
+note = "ADR 0019: brir-no-headphone-eq.sofa and headphone-eq.wav are written only when headphone compensation is used"
+
+[[feature]]
 id = "output.hrir_wav"
 kind = "output"
 status = "implemented"

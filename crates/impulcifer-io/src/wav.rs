@@ -483,3 +483,79 @@ pub fn write_wav(
     out.flush()?;
     Ok(())
 }
+
+/// Writes 32-bit IEEE float samples (`f64 as f32`, no clipping), for FIRs whose
+/// samples may exceed full scale, such as a boosting headphone EQ. One or two
+/// channels use `WAVE_FORMAT_IEEE_FLOAT` with a fact chunk; more channels use
+/// the extensible header with the IEEE float subtype and mask 0.
+pub fn write_wav_float32(
+    path: &Path,
+    sample_rate: u32,
+    tracks: &[Vec<f64>],
+) -> Result<(), IoError> {
+    if sample_rate == 0 || tracks.is_empty() {
+        return Err(IoError::InvalidArgument(
+            "expected nonzero rate/channels".into(),
+        ));
+    }
+    let frames = tracks[0].len();
+    if tracks
+        .iter()
+        .any(|t| t.len() != frames || t.iter().any(|&x| !x.is_finite() || !(x as f32).is_finite()))
+    {
+        return Err(IoError::InvalidArgument(
+            "tracks must be rectangular and finite in f32".into(),
+        ));
+    }
+    let channels = u16::try_from(tracks.len()).map_err(|_| format_error("too many channels"))?;
+    let align = channels
+        .checked_mul(4)
+        .ok_or_else(|| format_error("frame too large"))?;
+    let rate = sample_rate
+        .checked_mul(u32::from(align))
+        .ok_or_else(|| format_error("byte rate overflow"))?;
+    let size = (frames as u64)
+        .checked_mul(u64::from(align))
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or_else(|| format_error("data size overflow"))?;
+    let extensible = channels > 2;
+    let fmt_size: u32 = if extensible { 40 } else { 18 };
+    // "WAVE" + fmt chunk + fact chunk (12 bytes) + data chunk header.
+    let riff_size = (4 + 8 + fmt_size + 12 + 8)
+        .checked_add(size)
+        .ok_or_else(|| format_error("output exceeds RIFF size"))?;
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut out = BufWriter::new(File::create(path)?);
+    out.write_all(b"RIFF")?;
+    out.write_all(&riff_size.to_le_bytes())?;
+    out.write_all(b"WAVEfmt ")?;
+    out.write_all(&fmt_size.to_le_bytes())?;
+    out.write_all(&(if extensible { 0xfffeu16 } else { 3u16 }).to_le_bytes())?;
+    out.write_all(&channels.to_le_bytes())?;
+    out.write_all(&sample_rate.to_le_bytes())?;
+    out.write_all(&rate.to_le_bytes())?;
+    out.write_all(&align.to_le_bytes())?;
+    out.write_all(&32u16.to_le_bytes())?;
+    if extensible {
+        out.write_all(&22u16.to_le_bytes())?;
+        out.write_all(&32u16.to_le_bytes())?;
+        out.write_all(&0u32.to_le_bytes())?;
+        out.write_all(&[3, 0, 0, 0, 0, 0, 16, 0, 128, 0, 0, 170, 0, 56, 155, 113])?;
+    } else {
+        out.write_all(&0u16.to_le_bytes())?;
+    }
+    out.write_all(b"fact")?;
+    out.write_all(&4u32.to_le_bytes())?;
+    out.write_all(&(frames as u32).to_le_bytes())?;
+    out.write_all(b"data")?;
+    out.write_all(&size.to_le_bytes())?;
+    for frame in 0..frames {
+        for track in tracks {
+            out.write_all(&(track[frame] as f32).to_le_bytes())?;
+        }
+    }
+    out.flush()?;
+    Ok(())
+}
