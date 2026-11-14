@@ -1259,6 +1259,13 @@ tests = ["impulcifer-app::bridge_script_contract", "impulcifer-app::app_smoke_wi
 note = "bridge.js recreates window.pywebview.api over the single pywebview_api command and fires pywebviewready; the frozen 2.x frontend boots unchanged (M3 smoke 2026-09-08)"
 
 [[feature]]
+id = "io.sofa_writer"
+kind = "io"
+status = "implemented"
+tests = ["impulcifer-io::written_file_opens_in_sofar_with_the_right_shape", "impulcifer-io::written_file_is_deterministic"]
+note = "ADR 0019 and docs/rust/SOFA.md: a pure-Rust deterministic SimpleFreeFieldHRIR 1.0 (SOFA 2.1) writer emits netCDF-4/HDF5 with dense root links in a fractal heap and version-2 B-tree name index, dimension scales and global-heap DIMENSION_LIST references; no HDF5/netCDF runtime dependency"
+
+[[feature]]
 id = "io.wav_read"
 kind = "io"
 status = "implemented"
