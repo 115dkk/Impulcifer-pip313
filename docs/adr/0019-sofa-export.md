@@ -32,7 +32,7 @@
    - 곡선의 다듬기와 이득 한계는 비선형이고 감쇠는 응답에서 다시 재므로, 그 결과는 최종본과 근사로만 같다. 허용 오차는 `docs/rust/SOFA.md`에 둔다.
    - 헤드폰 보정을 쓰지 않는 작업이면 분리 파일을 저장하지 않고 작업 기록에 알린다.
 6. **작성기는 직접 만든다.** `impulcifer-io`에 SOFA 파일만 만드는 HDF5 작성기를 순수 Rust로 둔다. netCDF-C가 만드는 배치(조밀 링크 저장소, 차원 스케일, 전역 힙의 `DIMENSION_LIST`)를 따른다. 새 의존성은 없고, 테스트에만 libmysofa 이식판 `sofar`를 쓴다.
-7. **출력은 결정적이다.** 같은 입력이면 같은 바이트가 나온다. 날짜 속성은 환경 변수 `SOURCE_DATE_EPOCH`가 있으면 그 시각, 없으면 현재 UTC 시각이다.
+7. **출력은 결정적이다.** 같은 입력이면 같은 바이트가 나온다. 날짜 속성은 환경 변수 `SOURCE_DATE_EPOCH`가 있으면 그 시각, 없으면 현재 UTC 시각이다. 앱 버전은 넣지 않는다. 3.21.0은 `APIVersion`과 `ApplicationVersion`에 앱 버전을 넣었고, 그래서 버전만 올린 3.21.1 PR에서 brir-3x의 SOFA 해시가 달라졌다. 3.21.1부터 `APIName`은 `Impulcifer SOFA writer`, `APIVersion`은 작성기 형식 버전(`SOFA_WRITER_VERSION`, 저장하는 바이트가 바뀔 때만 올림)이고, 선택 속성 `ApplicationVersion`은 두지 않는다.
 8. **검증.** `cargo test`는 libmysofa 이식판으로 파일을 연다. CI(`brir-3x.yml`)는 pyfar `sofar`의 규약 검사와 원본 libmysofa로 데모 출력을 열고, `.sofa` 파일도 해시해 기준과 비교한다. 이식판은 원본보다 너그럽다. 첫 작성기가 낸 파일을 이식판과 pyfar는 열었지만 원본 libmysofa 1.3.2는 거부했다. 원인은 둘이었다. 64바이트가 넘는 전역 속성(`Comment`)을 객체 헤더에 바로 둔 것, 그리고 전역 힙을 64 KiB 너머에 둔 것이다(원본은 그 위치를 16비트로 다룬다). 그래서 전역 속성도 조밀 저장소에 두고 전역 힙을 데이터 앞에 둔다. 작성기를 고칠 때는 원본 libmysofa(`mysofa2json -c`)로 확인한다.
 
 ## 결과

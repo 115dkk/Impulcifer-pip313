@@ -12,7 +12,6 @@ fn metadata() -> SofaMetadata {
     SofaMetadata {
         title: "Impulcifer BRIR".into(),
         comment: "Binaural room impulse responses measured in a room with Impulcifer, stored as SimpleFreeFieldHRIR for player compatibility. Source distance is nominal. Headphone compensation is included.".into(),
-        version: "3.21.0".into(),
         date: "2025-11-14 00:00:00".into(),
     }
 }

@@ -880,7 +880,6 @@ pub(crate) fn write_outputs_checked(
             &SofaMetadata {
                 title: "Impulcifer BRIR".into(),
                 comment: BRIR_COMMENT.into(),
-                version: env!("CARGO_PKG_VERSION").into(),
                 date: date.clone(),
             },
         )?;
@@ -901,7 +900,6 @@ pub(crate) fn write_outputs_checked(
                 &SofaMetadata {
                     title: "Impulcifer BRIR without headphone compensation".into(),
                     comment: SPLIT_COMMENT.into(),
-                    version: env!("CARGO_PKG_VERSION").into(),
                     date,
                 },
             )?;

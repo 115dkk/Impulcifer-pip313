@@ -32,13 +32,17 @@ pub struct SofaMeasurement {
     pub right: Vec<f64>,
 }
 
+/// The format version of this writer, written as `APIVersion`. Bump it only
+/// when the bytes the writer produces change. The application's own version
+/// is deliberately not written: a release that only bumps it must keep the
+/// SOFA bytes (and the brir-3x hashes) unchanged.
+pub const SOFA_WRITER_VERSION: &str = "1.0";
+
 /// File-level values supplied by the application.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SofaMetadata {
     pub title: String,
     pub comment: String,
-    /// The application/API version string, e.g. "3.21.0".
-    pub version: String,
     /// "YYYY-MM-DD HH:MM:SS" (UTC); used for DateCreated and DateModified.
     pub date: String,
 }
@@ -316,10 +320,9 @@ fn global_attributes(meta: &SofaMetadata) -> Vec<Attribute> {
         ("Version", "2.1"),
         ("SOFAConventions", "SimpleFreeFieldHRIR"),
         ("SOFAConventionsVersion", "1.0"),
-        ("APIName", "Impulcifer"),
-        ("APIVersion", meta.version.as_str()),
+        ("APIName", "Impulcifer SOFA writer"),
+        ("APIVersion", SOFA_WRITER_VERSION),
         ("ApplicationName", "Impulcifer"),
-        ("ApplicationVersion", meta.version.as_str()),
         ("AuthorContact", "unknown"),
         ("Organization", "unknown"),
         (
