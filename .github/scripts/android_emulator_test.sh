@@ -27,13 +27,20 @@ adb shell appops set "$package" MANAGE_EXTERNAL_STORAGE allow
 adb shell rm -rf "$device_demo" "$device_evidence"
 adb push "$demo" "$device_demo" >/dev/null
 adb shell ls -la "$device_demo"
+# The screen stays on: a sleeping device stops the activity and the page with it.
+adb shell svc power stayon true
+adb shell input keyevent KEYCODE_WAKEUP
 adb logcat -c
+adb logcat -G 16M
 
 # The runner must not finish the activity when the tests end: the app ends its
 # process when its activity is destroyed (MainActivity.onDestroy), and that
 # process is the one reporting the result.
+# Bounded from outside as well: the longest the test's own waits add up to is
+# about 35 minutes, and a run that is cut here still hands over its log, its
+# screenshots and the steps it reached.
 status=0
-adb shell am instrument -w \
+timeout --signal=TERM 45m adb shell am instrument -w \
   -e class "$package.DemoProcessingTest" \
   -e waitForActivitiesToComplete false \
   -e demoFolder "$device_demo" -e evidenceFolder "$device_evidence" \
@@ -42,7 +49,10 @@ adb shell am instrument -w \
 # A moment for a crash report, if there was one, to reach the log.
 sleep 5
 adb logcat -d > "$out/logcat.txt" || true
+grep -E 'ImpulciferTest|RustStdoutStderr|FATAL|ANR in|am_anr|Fatal signal' "$out/logcat.txt" | tail -n 200 > "$out/logcat-app.txt" || true
+adb exec-out screencap -p > "$out/screen-at-the-end.png" || true
 adb pull "$device_evidence" "$out/evidence" || true
+cat "$out/evidence/result.json" 2>/dev/null || true
 ls -la "$out" "$out/evidence" 2>/dev/null || true
 
 # `am instrument` exits 0 whatever the tests did: its report decides.

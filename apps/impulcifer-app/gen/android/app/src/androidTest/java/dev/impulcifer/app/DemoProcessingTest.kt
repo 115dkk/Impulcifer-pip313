@@ -3,6 +3,7 @@ package dev.impulcifer.app
 import android.graphics.Bitmap
 import android.os.Environment
 import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -64,7 +65,19 @@ class DemoProcessingTest {
   // tells the runner not to finish activities either.
   @After
   fun record() {
+    save()
+  }
+
+  /** What has been learnt so far, kept on the device even if the test is cut short. */
+  private fun save() {
     File(evidence, "result.json").writeText(result.toString(2))
+  }
+
+  /** One line in the device log and in result.json for each step reached. */
+  private fun step(name: String) {
+    Log.i(TAG, name)
+    result.put("steps", (result.optJSONArray("steps") ?: JSONArray()).put(name))
+    save()
   }
 
   @Test
@@ -73,7 +86,9 @@ class DemoProcessingTest {
     for (name in OUTPUTS) File(demo, name).delete()
 
     // The page starts: bootstrap answered and every part is wired.
+    step("waiting for the page")
     waitUntil("the page to start", 180_000, "document.documentElement.dataset.booted === 'true'")
+    step("the page started")
     assertEquals("android", evaluate("document.documentElement.dataset.page"))
     shot("01-processing")
 
@@ -86,6 +101,7 @@ class DemoProcessingTest {
     assertEquals("android.yml grants all-files access before the test", "granted", access.getString("state"))
     val system = call("get_system_info").getJSONObject("data")
     result.put("system", system)
+    step("the service answered")
     assertTrue(system.getString("os"), system.getString("os").startsWith("Android "))
     assertTrue(system.optString("device"), system.optString("device").isNotBlank())
     val webview = system.getJSONObject("runtime").optString("webview")
@@ -108,6 +124,7 @@ class DemoProcessingTest {
     shot("02-chooser")
     click("#chooser-close")
     waitUntil("the chooser to close", 30_000, "!(${visible("chooser")})")
+    step("the chooser listed the storage")
 
     // Processing with the two corrections the demo folder has recordings for:
     // the folder, room correction on, headphone compensation on, the button.
@@ -122,9 +139,12 @@ class DemoProcessingTest {
     assertTrue(request.getBoolean("do_headphone_compensation"))
     waitUntil("the Generate button to be ready", 60_000, "!document.getElementById('btn-generate-brir').disabled")
     click("#btn-generate-brir")
+    step("Generate pressed")
     val started = SystemClock.elapsedRealtime()
-    val brir = waitForJob("brir", 30 * 60_000L, "03-processing-running")
+    val brir = waitForJob("brir", 20 * 60_000L, "03-processing-running")
     result.put("brir_seconds", (SystemClock.elapsedRealtime() - started) / 1000.0)
+    result.put("brir_log", log())
+    step("the BRIR job ended: $brir")
     shot("04-processing-done")
     assertEquals("the BRIR job: ${log()}", "succeeded", brir)
     val written = JSONObject()
@@ -148,7 +168,9 @@ class DemoProcessingTest {
     )
     shot("05-recovery-ready")
     click("#btn-start-recovery")
+    step("Restore pressed")
     val recovery = waitForJob("output_recovery", 10 * 60_000L, null)
+    step("the recovery job ended: $recovery")
     shot("06-recovery-done")
     assertEquals("the recovery job: ${log()}", "succeeded", recovery)
     assertTrue("$RESTORED is restored", missing.isFile && missing.length() > 0)
@@ -183,11 +205,22 @@ class DemoProcessingTest {
       SystemClock.sleep(3_000)
       shot(runningShot)
     }
-    waitUntil(
-      "the $kind job to end",
-      timeout,
-      "$root.jobKind === '$kind' && ['succeeded','failed','cancelled'].includes($root.jobStatus)"
-    )
+    val done = "$root.jobKind === '$kind' && ['succeeded','failed','cancelled'].includes($root.jobStatus)"
+    val deadline = SystemClock.elapsedRealtime() + timeout
+    var minute = 0
+    while (!answered(done)) {
+      if (SystemClock.elapsedRealtime() > deadline) {
+        shot("timeout")
+        throw AssertionError("timed out after ${timeout / 1000} s waiting for the $kind job to end: ${log()}")
+      }
+      // Once a minute: where the job is, in the device log and as a picture.
+      if ((SystemClock.elapsedRealtime() + timeout - deadline) / 60_000 > minute) {
+        minute += 1
+        Log.i(TAG, "$kind job, minute $minute: ${log().takeLast(300)}")
+        shot("$kind-latest")
+      }
+      SystemClock.sleep(1_000)
+    }
     return evaluate("$root.jobStatus") as String
   }
 
@@ -219,13 +252,18 @@ class DemoProcessingTest {
     val answer = AtomicReference<String?>()
     val script = "(function(){try{var v=($expression);return JSON.stringify({value:v===undefined?null:v});}" +
       "catch(error){return JSON.stringify({error:String(error)});}})()"
-    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+    // Posted, not run synchronously: if the app's main thread is stuck, this
+    // times out with a sentence instead of waiting on that thread for ever.
+    webView.post {
       webView.evaluateJavascript(script) { text ->
         answer.set(text)
         latch.countDown()
       }
     }
-    assertTrue("the page did not answer: $expression", latch.await(60, TimeUnit.SECONDS))
+    assertTrue(
+      "the page (or the app's main thread) did not answer within 60 s: $expression",
+      latch.await(60, TimeUnit.SECONDS)
+    )
     // evaluateJavascript hands the script's string back as a JSON string.
     val text = JSONTokener(answer.get() ?: "null").nextValue() as? String
     assertNotNull("the page returned nothing for: $expression", text)
@@ -278,11 +316,24 @@ class DemoProcessingTest {
     "(function(){var e=document.getElementById('$id');if(!e||e.hidden)return false;" +
       "var r=e.getBoundingClientRect();return r.width>0&&r.height>0;})()"
 
+  /** Whether a page expression is true; a page that does not answer counts as "no". */
+  private fun answered(expression: String): Boolean =
+    try {
+      evaluate(expression) == true
+    } catch (error: AssertionError) {
+      Log.i(TAG, "no answer: ${error.message}")
+      false
+    }
+
   /** The end of the page's job log, for a failure message. */
   private fun log(): String =
-    (evaluate("(function(){var e=document.querySelector('[data-log]');return e?e.textContent:'';})()") as? String)
-      .orEmpty()
-      .takeLast(4000)
+    try {
+      (evaluate("(function(){var e=document.querySelector('[data-log]');return e?e.textContent:'';})()") as? String)
+        .orEmpty()
+        .takeLast(4000)
+    } catch (error: AssertionError) {
+      "(the page did not answer: ${error.message})"
+    }
 
   /**
    * Waits for a page expression to be true. A page that cannot answer yet
@@ -340,6 +391,7 @@ class DemoProcessingTest {
   }
 
   private companion object {
+    const val TAG = "ImpulciferTest"
     /** What a default run writes beside the recordings. */
     val OUTPUTS = listOf("hrir.wav", "hesuvi.wav", "responses.wav")
     /** The output deleted and restored: recovery rebuilds it from hrir.wav. */
