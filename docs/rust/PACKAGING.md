@@ -181,6 +181,34 @@ The `/releases/latest/` endpoint resolves the newest stable release only, never 
 
 The in-app check (`check_for_updates`, `crates/impulcifer-service/src/update/check.rs`) follows the same channel rule. A stable install asks `/releases/latest`. A prerelease install reads the release list (`/releases?per_page=30`), skips drafts and unversioned tags such as `updater-3x-pre`, and takes the newest PEP 440 version, so an alpha is offered the next alpha and the following stable alike; `latest_version` keeps the pre segment (`3.0.0-alpha.1`) for display and for the `start_update` request. alpha.0 and alpha.1 installs still asked `/releases/latest` and therefore reported the 2.x stable as the latest version; they must be updated by hand once (Setup.exe, dmg or AppImage), after which the check works.
 
+## Android (ADR 0020)
+
+The Android app is the same crate built as a shared library: `apps/impulcifer-app/src/lib.rs` is the shell, and Android enters its `run()` through `tauri::mobile_entry_point`. The Gradle project is `apps/impulcifer-app/gen/android`. It was generated with `tauri android init` (CLI 2.11.4) and is committed with these changes: `MainActivity.kt` (the temporary folder, the system bars), `ImpulciferPlugin.kt` (what the shell asks the platform), the manifest (all-files access, no TV launcher), a vector launcher icon, `ndkVersion`, the instrumented test, and two changes to the Rust Gradle plugin in `buildSrc` (`-PskipRustBuild`, either Tauri CLI). Running `tauri android init` again would overwrite them.
+
+`tauri.android.conf.json` is merged over `tauri.conf.json` for Android builds. It removes the desktop's `bundle.resources` (an APK holds files as archive entries, not as files the service could open) and the updater plugin's configuration. The one data file processing reads by path, the default test signal, is compiled into the library and written to the app's data folder at start (`src/android.rs`, `src/bundled.rs`). Android's settings file is in the app's config folder.
+
+Build, from `apps/impulcifer-app`, on a machine with the Android SDK (platform 36, build-tools 36.0.0), NDK 28.2.13676358, Java 17 and the Rust target:
+
+```sh
+rustup target add aarch64-linux-android
+npm install -g @tauri-apps/cli@2.11.4
+tauri android build --apk --target aarch64 --ci
+# gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+```
+
+`.github/actions/android-setup` installs exactly these tools for `android.yml` and for `build-android` in `release-3x.yml`. The Gradle task that builds the Rust library runs the Tauri CLI's `android-studio-script`, which needs `tauri android build` as its parent process; Gradle started on its own cannot build the library. A task that needs only the Kotlin side passes `-PskipRustBuild=true` and uses the library the earlier build left in `jniLibs`:
+
+```sh
+tauri android build --debug --apk --target x86_64 --ci
+(cd gen/android && bash gradlew -PskipRustBuild=true :app:assembleUniversalDebugAndroidTest)
+```
+
+The release asset is `Impulcifer-<version>-aarch64.apk` (arm64-v8a only). An installed app's update check looks for the asset whose name ends in `-<arch>.apk` (`crates/impulcifer-service/src/update/check.rs`), so the name cannot change without it. The APK's `versionName` is the workspace version and its `versionCode` is `major * 1000000 + minor * 1000 + patch`.
+
+Signing is `.github/scripts/android_signing_key.sh`: `sign` aligns the APK (16 KiB for the library), signs it with the key in `apps/impulcifer-app/android-signing/` and checks that the result has that certificate as its only signer. Android installs an update only over an app signed with the same key, so the release job fails rather than publish an unsigned APK or one signed with another key.
+
+What the workflows check: `android.yml` lints the crates for `aarch64-linux-android`, fails if a recording or desktop-only crate is in the Android dependency tree, checks the APK's contents (one ABI, 16 KiB segments, no desktop bundle data, the manifest), and runs `DemoProcessingTest` on an API 36 x86_64 emulator, where the app's page processes `data/demo` with room correction and headphone compensation and then restores a deleted output. The test's screenshots and `result.json` are in the run's `android-emulator-evidence` artifact.
+
 ## Python wheel and sdist
 
 The 3.x wheel publishes to the **same PyPI project as 2.x, `impulcifer-py313`** (owner decision 2026-09-09: existing installs, updater feeds and PyPI dependents stay bound to one project, so users are not asked to migrate to a new package; `pip install --upgrade impulcifer-py313` carries them to 3.x once a stable 3.x is released, and `--pre` reaches the alphas). The project's Trusted Publisher list therefore needs a second entry for `release-3x.yml` (environment `PyPI`) next to the 2.x `publish.yml` one. The wheels carry no audio backend (alpha.2): the Python surface (`run`, `detect_sweep`, `generate_sweep_set`, `recover_brir_outputs`, `cli_main`) never records, so `crates/impulcifer-python/Cargo.toml` depends on `impulcifer-service` and `impulcifer-cli` with `default-features = false`, which leaves out the `native-audio` feature (`impulcifer-audio-io/native`: cpal on macOS and Linux, `impulcifer-sys-win` on Windows) and installs the `NullBackend` (no devices, `audio_backend = "none"`, recording refused). Until alpha.1 the Linux wheel linked ALSA (`libasound.so.2`, through cpal), which manylinux does not guarantee, so it was tagged `linux_x86_64` and kept off PyPI. Now the Linux wheel is built by `PyO3/maturin-action` inside the `manylinux_2_28` container with `--auditwheel check`, so any external library fails the build instead of being bundled, and every wheel goes to PyPI. Linux `pip install` from the sdist still needs only a Rust toolchain. Run these from `crates/impulcifer-python` so maturin uses its pyproject, not the root 2.x Hatch project:
