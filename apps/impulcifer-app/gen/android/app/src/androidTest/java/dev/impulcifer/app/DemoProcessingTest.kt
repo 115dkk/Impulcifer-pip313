@@ -162,6 +162,11 @@ class DemoProcessingTest {
     }
     result.put("outputs", written)
 
+    // The outcome is read, then the sheet is closed as a person closes it.
+    assertEquals(demo.absolutePath, evaluate("document.getElementById('job-sheet-output').textContent"))
+    click("#job-sheet-done")
+    waitUntil("the job sheet to close", 30_000, "!(${visible("job-sheet")})")
+
     // Output recovery: delete one output and bring it back from the others.
     val missing = File(demo, RESTORED)
     val original = written.getJSONObject(RESTORED)
