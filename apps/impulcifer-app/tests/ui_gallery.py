@@ -1637,6 +1637,77 @@ def room_tuning2_checks(browser):
           "tooltips, defaults, both skins OK", flush=True)
 
 
+def room_table_checks(browser):
+    """The room options table (room.js): every ROOM_FIELDS input and row and every ROOM_ROWS element exists in the
+    room correction card, every row of the card is in a table or always shows, and in every mode and every state
+    that changes rows (range, timing limit, tuning 2 filter, MIMO, upper band end), a setting is in the request
+    exactly when its row shows. Both skins."""
+    # The measurement source and the mode switch; the target and microphone calibration rows have no id.
+    always = {"bf-room-source-row", "bf-room-mode-row"}
+    # The page's own events: a select or checkbox changes, a number or range input is typed or dragged.
+    set_value = ("([id, value]) => { const node = document.getElementById(id); node.value = value;"
+                 " node.dispatchEvent(new Event(node instanceof HTMLSelectElement ? 'change' : 'input')); }")
+    tick = ("([id, on]) => { const node = document.getElementById(id); node.checked = on;"
+            " node.dispatchEvent(new Event('change')); }")
+    rows_and_request = """() => {
+      const request = gatherBrirPayload();
+      return {mode: request.room_mode, fields: ROOM_FIELDS.map(field => ({arg: field.arg,
+        shown: document.getElementById(`${field.id}-row`).closest('[hidden]') === null, sent: field.arg in request}))};
+    }"""
+    limits = (("off", 0), ("schroeder", 1), (2000, 4), ("full", 7))
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "en", "idle")
+        navigate(page, "processing")
+        disclosure(page, "room", True)
+        tables = page.evaluate("""() => {
+          const card = document.getElementById('dis-room');
+          const inCard = id => { const node = document.getElementById(id); return node !== null && card.contains(node); };
+          return {fields: ROOM_FIELDS.map(field => ({id: field.id, input: inCard(field.id), row: inCard(`${field.id}-row`)})),
+            rows: ROOM_ROWS.map(row => ({id: row.id, row: inCard(row.id)})),
+            cardRows: Array.from(card.querySelectorAll('[id$="-row"]'), node => node.id)};
+        }""")
+        missing = [f for f in tables["fields"] if not (f["input"] and f["row"])] + [r for r in tables["rows"] if not r["row"]]
+        assert not missing, (skin, missing)
+        listed = {f"{f['id']}-row" for f in tables["fields"]} | {r["id"] for r in tables["rows"]} | always
+        assert set(tables["cardRows"]) <= listed, (skin, sorted(set(tables["cardRows"]) - listed))
+        assert len(tables["fields"]) + len(tables["rows"]) == len(listed - always), (skin, "a row is listed twice")
+
+        sent_somewhere, absent_somewhere, states = set(), set(), []
+
+        def check(mode, state, page=page, skin=skin, sent=sent_somewhere, absent=absent_somewhere, states=states):
+            result = page.evaluate(rows_and_request)
+            assert result["mode"] == mode, (skin, mode, state, result["mode"])
+            wrong = [(f["arg"], f["shown"], f["sent"]) for f in result["fields"] if f["shown"] != f["sent"]]
+            assert not wrong, (skin, mode, state, wrong)
+            sent.update(f["arg"] for f in result["fields"] if f["sent"])
+            absent.update(f["arg"] for f in result["fields"] if not f["sent"])
+            states.append(state)
+
+        for range_ in ("schroeder", "legacy"):
+            page.locator("#bf-room-mode-eq").click()
+            page.evaluate(set_value, ["bf-room-range", range_])
+            check("eq", range_)
+            page.locator("#bf-room-mode-tuning").click()
+            for limit, stop in limits:
+                page.evaluate(set_value, ["bf-room-phase-limit", str(stop)])
+                check("tuning", (range_, limit))
+            page.locator("#bf-room-mode-tuning2").click()
+            for filter_ in ("zero", "mixed", "custom"):
+                page.evaluate(set_value, ["bf-room-tuning2-mode", filter_])
+                for mimo in (False, True):
+                    page.evaluate(tick, ["bf-room-tuning2-mimo", mimo])
+                    for high in ("", "300"):
+                        page.evaluate(set_value, ["bf-room-tuning2-high", high])
+                        check("tuning2", (range_, filter_, mimo, high))
+        args = page.evaluate("ROOM_FIELDS.map(field => field.arg)")
+        # Every setting was both sent and left out somewhere in the matrix, so each row rule was exercised.
+        assert set(args) == sent_somewhere == absent_somewhere, (skin, set(args) ^ sent_somewhere, set(args) ^ absent_somewhere)
+        assert not errors, errors
+        context.close()
+    print(f"Gallery room table checks: {len(args)} settings and {len(tables['rows'])} rows in the card, "
+          f"every card row listed, sent exactly when shown in {len(states)} states per skin, both skins OK", flush=True)
+
+
 def room_file_checks(browser):
     """Room measurements from a REW or Dirac Live file (ADR 0010): the file row
     shows only for the file source, Browse asks for the measurement kind, the
@@ -2350,6 +2421,7 @@ def render_gallery(output):
         polarity_checks(browser)
         room_phase_checks(browser)
         room_tuning2_checks(browser)
+        room_table_checks(browser)
         room_file_checks(browser)
         brir_file_checks(browser)
         brir_recording_checks(browser)

@@ -18,16 +18,7 @@ function gatherBrirPayload() {
     args.brir_recording_speakers = parseRecordingSpeakers(val("bf-brir-recording-speakers")).entries.join(",");
     if (val("bf-brir-recording-sweep-source") === "file") args.brir_recording_sweep = val("bf-brir-recording-sweep");
   }
-  if (isOpen("dis-room")) {
-    const mode = roomMode();
-    args.room_target = val("bf-room-target") || null;
-    args.room_mic_calibration = val("bf-mic-calibration") || null;
-    if (mfileMode("room")) addMfileArgs(args, "room");
-    args.room_mode = mode;
-    if (mode === "tuning") addRoomTuningArgs(args);
-    else if (mode === "tuning2") addRoomTuning2Args(args);
-    else addRoomEqArgs(args);
-  }
+  if (isOpen("dis-room")) addRoomArgs(args);
   if (isOpen("dis-headphone")) {
     const headphoneFile = val("bf-headphone-file");
     if (mfileMode("headphones")) addMfileArgs(args, "headphones");

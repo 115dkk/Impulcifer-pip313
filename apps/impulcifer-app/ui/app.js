@@ -93,36 +93,7 @@ function wireEvents() {
   for (const id of ["bf-test-signal", "bf-dir-path", "bf-headphone-file"]) {
     el(id, HTMLInputElement).addEventListener("input", () => scheduleTestSignalCheck());
   }
-  el("bf-room-range", HTMLSelectElement).addEventListener("change", updateRoomRows);
-  el("bf-vbass-mode", HTMLSelectElement).addEventListener("change", updateVbassRows);
-  ROOM_MODES.forEach((mode, index) => {
-    const button = $(`bf-room-mode-${mode}`);
-    button.addEventListener("click", () => setRoomMode(mode));
-    // Radio group: the arrows move the choice itself, wrapping at the ends.
-    button.addEventListener("keydown", (event) => {
-      const last = ROOM_MODES.length - 1;
-      const next = index === last ? 0 : index + 1;
-      const previous = index === 0 ? last : index - 1;
-      /** @type {Record<string, number>} */
-      const moves = { ArrowRight: next, ArrowDown: next, ArrowLeft: previous, ArrowUp: previous, Home: 0, End: last };
-      if (!Object.prototype.hasOwnProperty.call(moves, event.key)) return;
-      event.preventDefault();
-      setRoomMode(ROOM_MODES[moves[event.key]], true);
-    });
-  });
-  // The limit decides which rows below it show (the room facts, the delay).
-  el("bf-room-phase-limit", HTMLInputElement).addEventListener("input", updateRoomRows);
-  el("bf-room-phase-schroeder", HTMLInputElement).addEventListener("change", onRoomPhaseCheckbox);
-  el("bf-room-tuning-delay-auto", HTMLInputElement).addEventListener("change", updateRoomRows);
-  // Tuning 2: the filter shows the latency row, an empty upper end the room facts, MIMO its limits.
-  el("bf-room-tuning2-mode", HTMLSelectElement).addEventListener("change", updateRoomRows);
-  for (const id of ["bf-room-tuning2-high", "bf-room-volume", "bf-schroeder-freq"]) {
-    el(id, HTMLInputElement).addEventListener("input", updateRoomRows);
-  }
-  for (const id of ["bf-room-tuning2-high-basis", "bf-room-tuning2-high-transition"]) {
-    el(id, HTMLSelectElement).addEventListener("change", updateRoomRows);
-  }
-  el("bf-room-tuning2-mimo", HTMLInputElement).addEventListener("change", updateRoomRows);
+  wireRoom();
   // The source select also renders the file block (below); this one shows the sweep file row.
   el("bf-brir-recording-sweep-source", HTMLSelectElement).addEventListener("change", updateBrirRecordingRows);
   for (const id of ["bf-brir-recording-file", "bf-brir-recording-speakers", "bf-brir-recording-sweep"]) {
