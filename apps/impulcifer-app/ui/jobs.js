@@ -196,9 +196,10 @@ async function begin(start, payload, kindHint = null) {
       });
     }
     updateStartControls(state.lastJob);
-    // Stable hides the inline activity cards (jobs run in the modal), so a
-    // pre-start validation error would otherwise be invisible there.
-    if (state.skin === "stable" && kindHint !== "output_recovery") {
+    // Stable hides the inline activity cards (jobs run in the modal), and the
+    // Android page shows a job only in its sheet, which opens once a job runs,
+    // so a pre-start validation error would otherwise be invisible there.
+    if ((state.skin === "stable" || document.getElementById("job-sheet")) && kindHint !== "output_recovery") {
       void noticeDialog(errorText(response));
     }
     return;
@@ -318,7 +319,7 @@ function renderJobs() {
 }
 
 /* Generate (unless the single recording or a measurement file cannot be used
-   yet), cancel, the Stable job dialog, and opening the output folder. */
+   yet), cancel, and opening the output folder. */
 function wireJobs() {
   el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () => {
     if (brirRecordingProblem()) {
@@ -335,12 +336,16 @@ function wireJobs() {
     begin((request) => api().start_brir(request), gatherBrirPayload());
   });
   el("btn-cancel-brir", HTMLButtonElement).addEventListener("click", cancelActiveJob);
+  el("btn-open-output", HTMLButtonElement).addEventListener("click", () => {
+    if (state.lastOutputDir) void openFolder(state.lastOutputDir, "brir-open-failed");
+  });
+}
+
+/* Stable's job dialog: cancel, and close once the job has ended. */
+function wireJobModal() {
   el("job-modal-cancel", HTMLButtonElement).addEventListener("click", cancelActiveJob);
   el("job-modal-close", HTMLButtonElement).addEventListener("click", () => {
     state.modalDismissed = true;
     $("job-modal").hidden = true;
-  });
-  el("btn-open-output", HTMLButtonElement).addEventListener("click", () => {
-    if (state.lastOutputDir) api().open_path(state.lastOutputDir);
   });
 }

@@ -256,8 +256,11 @@ function renderMfileRewRow(purpose, measurement) {
     name.append(note);
   }
   const slot = document.createElement("td");
+  // The column names, for a layout that stacks each row (the Android page).
+  slot.dataset.label = t("room_file_col_speaker");
   slot.append(mfileSlotSelect(purpose, measurement.id, measurement.name, Boolean(measurement.skipped)));
   const ear = document.createElement("td");
+  ear.dataset.label = t("room_file_col_ear");
   const side = document.createElement("select");
   side.dataset.roomKey = measurement.id;
   side.dataset.roomField = "side";
@@ -291,6 +294,7 @@ function renderMfileDiracRow(purpose, speaker) {
     name.append(note);
   }
   const slot = document.createElement("td");
+  slot.dataset.label = t("room_file_col_speaker");
   slot.append(mfileSlotSelect(purpose, key, speaker.name, false));
   row.append(name, slot);
   return row;

@@ -528,6 +528,12 @@ function applyVbassDefaults() {
   updateVbassRows();
 }
 
+/* The room and virtual bass settings from bootstrap's defaults. */
+function bootRoom() {
+  applyRoomDefaults();
+  applyVbassDefaults();
+}
+
 /* The room and virtual bass rows again, after the language changes. */
 function renderRoom() {
   updateRoomRows();

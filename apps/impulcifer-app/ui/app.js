@@ -11,30 +11,64 @@
    table is read only at run time, after every script has loaded. Parts are
    wired in this order, so two parts that listen to the same element and
    event keep their order (the test signal check, then the EQ inspection, on
-   the folder input). */
-/** @typedef {{ name: string, wire?: () => void, render?: () => void,
- *   addArgs?: (args: ProcessingRequest) => void }} Feature */
+   the folder input).
+   Both pages (index.html and android.html) load every script and share this
+   table. A part with a `root` runs only on a page that has an element with
+   that id, so a part whose markup is not on the page does nothing at all.
+   boot() runs the start-up hooks in table order: `boot` with bootstrap's
+   answer before the page's words are drawn, `load` (awaited together) once
+   they are, then `ready`. `job` shows the main channel's job (renderJobState). */
+/** @typedef {{ name: string, root?: string, wire?: () => void, render?: () => void,
+ *   addArgs?: (args: ProcessingRequest) => void, boot?: (data: Bootstrap) => void,
+ *   load?: () => Promise<void>, ready?: (data: Bootstrap) => void,
+ *   job?: (job: Job | null) => void }} Feature */
 /** @type {readonly Feature[]} */
 const FEATURES = [
   { name: "shell", wire: wireShell },
-  { name: "recorder", wire: wireRecorder, render: renderRecorder },
-  { name: "dialogs", wire: wireDialogs },
-  { name: "guided", wire: wireGuided, render: renderGuided },
-  { name: "advanced", wire: wireAdvancedForms, render: renderAdvancedForms, addArgs: addAdvancedArgs },
-  { name: "test signal", wire: wireTestSignal, addArgs: addTestSignalArgs },
-  { name: "room", wire: wireRoom, render: renderRoom, addArgs: addRoomAndVbassArgs },
-  { name: "measurement files", wire: wireMfile, render: renderMfiles, addArgs: addMeasurementFileArgs },
-  { name: "eq", wire: wireEq, render: renderEq, addArgs: addEqArgs },
-  { name: "jobs", wire: wireJobs, render: renderJobs },
-  { name: "recovery", wire: wireRecovery, render: renderRecovery },
-  { name: "settings", wire: wireSettings, render: renderSettings },
-  { name: "update", wire: wireUpdate },
+  { name: "android shell", root: "app-bar", wire: wireAndroidShell, render: renderAndroidShell,
+    job: () => syncBackButton() },
+  // The Android page does not load recorder.js and guide.js, so these two parts name their
+  // functions inside arrows: the names are looked up only on a page that has the markup.
+  { name: "recorder", root: "view-recorder", wire: () => wireRecorder(), render: () => renderRecorder(),
+    boot: (data) => bootRecorder(data), load: () => loadDevices(), ready: () => { refreshResolvedPath(); },
+    job: (job) => showRecordingCancel(job) },
+  { name: "dialogs", root: "ask-modal", wire: wireDialogs },
+  { name: "guided", root: "guided-card", wire: () => wireGuided(), render: () => renderGuided(),
+    boot: () => populateGuidedTargets() },
+  { name: "advanced", root: "adv-studio", wire: wireAdvancedForms, render: renderAdvancedForms,
+    addArgs: addAdvancedArgs, boot: applyTimeDefaults },
+  { name: "test signal", root: "bf-test-signal-source", wire: wireTestSignal, addArgs: addTestSignalArgs,
+    boot: updateTestSignalVisibility },
+  { name: "room", root: "dis-room", wire: wireRoom, render: renderRoom, addArgs: addRoomAndVbassArgs, boot: bootRoom },
+  { name: "measurement files", root: "bf-brir-source", wire: wireMfile, render: renderMfiles,
+    addArgs: addMeasurementFileArgs },
+  { name: "eq", root: "dis-eq", wire: wireEq, render: renderEq, addArgs: addEqArgs, ready: () => scheduleEqInspection(0) },
+  { name: "jobs", root: "btn-generate-brir", wire: wireJobs, render: renderJobs },
+  { name: "job dialog", root: "job-modal", wire: wireJobModal, job: updateJobModal },
+  { name: "job sheet", root: "job-sheet", wire: wireJobSheet, render: renderJobSheetWords, job: showJobInSheet },
+  { name: "recovery", root: "view-recovery", wire: wireRecovery, render: renderRecovery, ready: scheduleRecoveryPlan },
+  { name: "storage", root: "storage-notice", wire: wireStorage, render: renderStorage, ready: refreshStorageAccess },
+  { name: "chooser", root: "chooser", wire: wireChooser, render: renderChooserWords },
+  { name: "tip sheet", root: "tip-sheet", render: fillTipSheet },
+  { name: "settings", root: "view-settings", wire: wireSettings, render: renderSettings, boot: bootSettings,
+    load: loadSystemInfo, ready: readySettings },
+  { name: "update", root: "update-modal", wire: wireUpdate, ready: () => window.setTimeout(() => checkForUpdates(false), 2000) },
 ];
+
+/** @param {Feature} feature */
+function featurePresent(feature) {
+  return !feature.root || document.getElementById(feature.root) !== null;
+}
+
+/* The parts whose markup is on this page, in table order. */
+function presentFeatures() {
+  return FEATURES.filter(featurePresent);
+}
 
 /* ---------------------------------------------------------------- wiring */
 
 function wireEvents() {
-  for (const feature of FEATURES) feature.wire?.();
+  for (const feature of presentFeatures()) feature.wire?.();
 }
 
 /* The navigation, the section switches, the browse buttons and the links. */
@@ -51,7 +85,7 @@ function wireShell() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-disclosure]")).forEach((head) => {
     const toggle = () => {
       head.parentElement?.classList.toggle("open");
-      for (const p of ADV_PREFIXES) refreshAdvanced(p);
+      for (const p of advPrefixes()) refreshAdvanced(p);
       scheduleTestSignalCheck(0);
     };
     head.addEventListener("click", toggle);
@@ -65,13 +99,10 @@ function wireShell() {
 
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-browse]")).forEach((button) => {
     button.addEventListener("click", async () => {
-      const kind = button.dataset.browse;
-      const response = kind === "dir"
-        ? await api().select_directory()
-        : await api().select_file(kind);
-      if (response.ok && response.data.path) {
-        const target = el(button.dataset.target || "", HTMLInputElement);
-        target.value = response.data.path;
+      const target = el(button.dataset.target || "", HTMLInputElement);
+      const path = await pickPath(button.dataset.browse || "dir", target.value);
+      if (path) {
+        target.value = path;
         target.dispatchEvent(new Event("input"));
       }
     });
@@ -80,6 +111,17 @@ function wireShell() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-open-url]")).forEach((button) => {
     button.addEventListener("click", () => api().open_url(button.dataset.openUrl || ""));
   });
+}
+
+/* A folder ("dir") or a file of a kind ("audio", "text", "wav", "measurement")
+   for a browse button or the EQ slots. A page with its own chooser (#chooser,
+   the Android page, where the system dialogs cannot hand over a path) opens
+   it at `start`; otherwise the native dialog asks. Null when nothing was chosen. */
+/** @param {string} kind @param {string} start @returns {Promise<string | null>} */
+async function pickPath(kind, start) {
+  if (document.getElementById("chooser")) return openChooser(kind, start);
+  const response = kind === "dir" ? await api().select_directory() : await api().select_file(kind);
+  return response.ok && response.data.path ? response.data.path : null;
 }
 
 /* -------------------------------------------------------------- language */
@@ -91,7 +133,7 @@ function applyStrings() {
   });
   // Every info button has the same name; its description is the bubble it opens.
   document.querySelectorAll(".info-tip").forEach((button) => button.setAttribute("aria-label", t("button_more_info")));
-  for (const feature of FEATURES) feature.render?.();
+  for (const feature of presentFeatures()) feature.render?.();
   if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
 }
 
@@ -106,7 +148,7 @@ function gatherBrirPayload() {
     do_headphone_compensation: isOpen("dis-headphone"),
     do_equalization: isOpen("dis-eq"),
   };
-  for (const feature of FEATURES) feature.addArgs?.(args);
+  for (const feature of presentFeatures()) feature.addArgs?.(args);
   return args;
 }
 
@@ -134,30 +176,18 @@ async function boot() {
   state.platform = data.platform;
   state.shareModes = data.capabilities.share_modes;
   state.brirDefaults = data.brir_defaults || {};
-  applyRoomDefaults();
-  applyVbassDefaults();
-  applyTimeDefaults();
   state.sweepDefaults = data.sweep || {};
-  populateSweepLayouts(
-    (data.sweep && data.sweep.layouts) || ["mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6"]
-  );
-  populateGuidedTargets();
-  updateSweepSourceVisibility();
-  updateTestSignalVisibility();
   if (data.ui) {
     state.strings = data.ui.strings || {};
     state.language = data.ui.language || "en";
-    populateLanguages(data.ui.languages || []);
-    el("sf-theme", HTMLSelectElement).value = data.ui.theme || "dark";
-    applyTheme(data.ui.theme || "dark");
-    el("sf-skin", HTMLSelectElement).value = data.ui.skin === "stable" ? "stable" : "studio";
-    applySkin(data.ui.skin);
   }
+  for (const feature of presentFeatures()) feature.boot?.(data);
   applyStrings();
   /** @type {Record<string, string>} */
   const backendLabels = { edgechromium: "WebView2", cocoa: "WKWebView", gtk: "WebKitGTK" };
   const backendLabel = backendLabels[data.webview_backend] || "WebView";
-  $("brand-version").textContent = `v${data.version}`;
+  const brand = document.getElementById("brand-version");
+  if (brand) brand.textContent = `v${data.version}`;
   $("runtime-status").textContent = `v${data.version} · ${data.platform} · ${backendLabel}`;
   appendLog(t("webview_bridge_connected"));
 
@@ -173,19 +203,12 @@ async function boot() {
     if (activeJob && !isTerminal(activeJob.status)) followMainJob(activeJob);
   }
 
-  await Promise.all([loadDevices(), loadSystemInfo()]);
-  refreshResolvedPath();
-  scheduleRecoveryPlan();
-  scheduleEqInspection(0);
-
-  // First run: ask for the language before anything else (CTk parity).
-  if (data.ui && data.ui.first_run) {
-    showFirstRunLanguageModal(data.ui.languages || []);
-  }
-
-  // Mirror the CTk root.after(2000) startup update check; failures stay
-  // silent and never block the UI.
-  window.setTimeout(() => checkForUpdates(false), 2000);
+  // The devices and the system information, then the checks that need them;
+  // the first-run language choice and, 2 s later as CTk's root.after(2000),
+  // the silent update check.
+  await Promise.all(presentFeatures().map((feature) => feature.load?.()));
+  for (const feature of presentFeatures()) feature.ready?.(data);
+  document.documentElement.dataset.booted = "true";
 }
 
 /** @param {Language[]} languages */
@@ -208,12 +231,13 @@ function showFirstRunLanguageModal(languages) {
   if (list.childElementCount > 0) $("language-modal").hidden = false;
 }
 
-for (const p of ADV_PREFIXES) buildDecayGrid(p);
+for (const p of advPrefixes()) buildDecayGrid(p);
 wireEvents();
-wireTips();
+// An info button opens a bubble beside it, or on a page with a tip sheet (Android) a sheet from the bottom.
+if (document.getElementById("tip-sheet")) wireTipSheet();
+else wireTips();
 // Studio's locks follow the page from the start; Stable's markup already matches its defaults.
 refreshAdvanced("ba");
-updateChannelGuidance();
 
 window.addEventListener("pywebviewready", boot);
 if (window.pywebview && window.pywebview.api) boot();

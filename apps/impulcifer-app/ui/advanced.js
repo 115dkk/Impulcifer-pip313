@@ -9,6 +9,13 @@
 /** @type {readonly AdvPrefix[]} */
 const ADV_PREFIXES = ["bf", "ba"];
 
+/* The forms this page has: the Android page has Studio's alone. A form is
+   there when its per-channel decay grid is. */
+/** @returns {AdvPrefix[]} */
+function advPrefixes() {
+  return ADV_PREFIXES.filter((p) => document.getElementById(`${p}-decay-grid`) !== null);
+}
+
 /** @param {ProcessingRequest} args @param {string} p @param {boolean} equalizing */
 function addToneArgs(args, p, equalizing) {
   // Bass boost and tilt shape the equalization target, so they only apply
@@ -49,7 +56,7 @@ function addTimeArgs(args, p) {
 }
 
 function applyTimeDefaults() {
-  for (const p of ADV_PREFIXES) {
+  for (const p of advPrefixes()) {
     const mode = el(`${p}-itd-mode`, HTMLSelectElement);
     mode.value = brirDefault("itd_mode", "off");
     for (const option of mode.options) option.defaultSelected = option.value === mode.value;
@@ -414,7 +421,7 @@ function refreshAdvanced(p) {
 
 /* Both forms again, after the language changes. */
 function renderAdvancedForms() {
-  for (const p of ADV_PREFIXES) refreshAdvanced(p);
+  for (const p of advPrefixes()) refreshAdvanced(p);
 }
 
 /* The field a rule reads runs the rules again (a number field as it is
@@ -434,7 +441,7 @@ function wireAdvanced(p) {
 /* The advanced listeners: both forms' rules and hints, then Studio's tabs
    (a tab is picked by a click or the arrow keys, and has a switch and a reset). */
 function wireAdvancedForms() {
-  for (const p of ADV_PREFIXES) wireAdvanced(p);
+  for (const p of advPrefixes()) wireAdvanced(p);
   ADV_TABS.forEach((tab, index) => {
     const button = $(`adv-tab-${tab}`);
     button.addEventListener("click", () => selectAdvTab(tab));

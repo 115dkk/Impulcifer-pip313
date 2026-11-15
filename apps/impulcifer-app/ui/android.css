@@ -1,0 +1,1077 @@
+/* The Android page (android.html, ADR 0020). styles.css brings Pulse Studio's
+   tokens, fonts and components; this sheet makes them a phone's: one column,
+   held in one hand, worked with a thumb. Every control is at least 48px in
+   both directions, text fields use 16px text, rows put the label above the
+   control, and an on/off row keeps its label left and its switch right with
+   the whole row taking the tap. Nothing depends on hover.
+
+   The bars use --bg-0 with a hairline: the native window paints the strips
+   behind the status and navigation bars with that colour
+   (MainActivity.applyPageTheme), so they meet without a seam. Wider screens
+   keep one column, centred, at --column. */
+
+:root[data-page="android"] {
+  --column: 640px;
+  --gutter: 16px;
+  --radius: 12px;
+  --radius-inner: 8px;
+  --hit: 48px;
+  --bar-pad: max(var(--gutter), calc((100% - var(--column)) / 2));
+  --range-thumb: 28px;
+  --content-top: 20px;
+  --icon-stroke: 1.75;
+  /* Group surfaces: one step lighter than the page in the light theme (bg-2
+     there sits too close to the page to read as a surface), bg-2 in the dark. */
+  --surface: var(--bg-0);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+:root[data-page="android"][data-theme="dark"] { --surface: var(--bg-2); }
+
+:root[data-page="android"] body {
+  height: 100dvh;
+  overflow: hidden;
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+[data-page="android"] .icon {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---------------------------------------------------------------- frame */
+
+.phone {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  height: 100%;
+}
+
+.app-bar {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 var(--bar-pad);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-0);
+}
+
+.app-bar-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+[data-page="android"] .content {
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--content-top) var(--gutter) 32px;
+  overscroll-behavior-y: contain;
+}
+
+[data-page="android"] .view { max-width: var(--column); margin: 0 auto; }
+
+/* The view's one primary action, above the navigation. Settings and
+   information have none. */
+.action-bar {
+  padding: 8px var(--bar-pad);
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg-0);
+}
+
+[data-view="settings"] .action-bar,
+[data-view="info"] .action-bar,
+[data-view="processing"] #btn-start-recovery,
+[data-view="recovery"] #btn-generate-brir { display: none; }
+
+.bottom-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 0 calc(var(--bar-pad) - 8px);
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg-0);
+}
+
+[data-page="android"] .nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: auto;
+  min-height: 64px;
+  padding: 6px 2px 8px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+[data-page="android"] .nav-item:hover { background: transparent; }
+[data-page="android"] .nav-item.active { background: transparent; color: var(--fg-0); }
+
+/* The icon sits in a pill that fills for the view on screen. */
+.nav-item .icon {
+  box-sizing: content-box;
+  width: 24px;
+  height: 24px;
+  padding: 4px 18px;
+  border-radius: 999px;
+  transition-property: background-color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.nav-item.active .icon { background: var(--accent-soft); color: var(--fg-0); }
+:root[data-theme="dark"] .nav-item.active .icon { color: #cfe1ff; }
+
+.nav-label {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------- groups
+   A view is a column of groups: a small heading over a surface. */
+
+.group { margin: 0 0 28px; }
+.group:last-child { margin-bottom: 8px; }
+
+.group-title {
+  margin: 0 4px 10px;
+  color: var(--fg-2);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+
+.group-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.group-meta { margin: 0 4px 10px; color: var(--fg-2); font-size: 13px; }
+
+.group-body {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.group-stack { display: grid; gap: 10px; min-width: 0; }
+
+/* -------------------------------------------------------- rows and fields */
+
+:root[data-page="android"] .view .field-row,
+:root[data-page="android"] .sheet .field-row {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+:root[data-page="android"] .view .field-row > :is(label, .field-label, span:first-child) {
+  margin: 0;
+  padding: 0;
+  color: var(--fg-1);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* A path field and its browse button share a line; the label stays above both. */
+:root[data-page="android"] .view .field-row:has(> .browse-btn) {
+  grid-template-columns: minmax(0, 1fr) var(--hit);
+}
+:root[data-page="android"] .view .field-row:has(> .browse-btn) > :first-child { grid-column: 1 / -1; }
+
+.field-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+[data-page="android"] :is(input[type="text"], input:not([type]), input[type="number"], select) {
+  height: var(--hit);
+  padding: 0 14px;
+  border-radius: var(--radius-inner);
+  font-size: 16px;
+}
+
+[data-page="android"] select { padding-right: 38px; background-position: right 15px center; }
+[data-page="android"] input.mono { font-size: 16px; }
+[data-page="android"] :is(input.num, select.num, #bf-room-tuning2-bands) { width: 100%; }
+[data-page="android"] .inline-group select { min-width: 0; flex: 1 1 160px; }
+
+.hint, [data-page="android"] .hint { font-size: 14px; line-height: 1.45; }
+[data-page="android"] .hint.mono { font-size: 13px; overflow-wrap: anywhere; }
+[data-page="android"] .disclosure-desc { font-size: 14px; line-height: 1.4; }
+
+[data-page="android"] .warning-note,
+[data-page="android"] .silent-warning { margin: 0; font-size: 14px; }
+[data-page="android"] .silent-warning { margin-left: 0; }
+
+/* -------------------------------------------------------------- buttons */
+
+[data-page="android"] .btn {
+  min-height: var(--hit);
+  height: auto;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 16px;
+  line-height: 1.3;
+  transition-property: scale, background-color;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+[data-page="android"] .btn:active:not(:disabled),
+[data-page="android"] .icon-btn:active:not(:disabled) { scale: 0.96; }
+
+.btn-block { display: block; width: 100%; }
+
+[data-page="android"] .btn-link {
+  min-height: var(--hit);
+  height: auto;
+  padding: 8px 12px;
+  border-radius: var(--radius-inner);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--fg-1);
+  cursor: pointer;
+  transition-property: scale, background-color;
+  transition-duration: 120ms;
+  transition-timing-function: ease-out;
+}
+
+.icon-btn:disabled { color: var(--fg-3); opacity: 0.5; cursor: default; }
+
+.browse-btn {
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+  color: var(--accent);
+}
+:root[data-theme="dark"] .browse-btn { color: #9ec3ff; }
+
+/* --------------------------------------------------------------- switches
+   A checkbox is drawn as a switch at the row's end; the input itself is the
+   48px box. The disclosure and panel switches (.switch) share the drawing. */
+
+[data-page="android"] input[type="checkbox"],
+[data-page="android"] .switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 52px;
+  height: var(--hit);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: none;
+}
+
+[data-page="android"] input[type="checkbox"]::before,
+[data-page="android"] .switch::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 52px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--bg-4);
+  transition-property: background-color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+:root[data-theme="dark"][data-page="android"] input[type="checkbox"]::before,
+:root[data-theme="dark"][data-page="android"] .switch::before { background: #454a52; }
+
+[data-page="android"] input[type="checkbox"]::after,
+[data-page="android"] .switch::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px oklch(0 0 0 / 0.3);
+  transition-property: translate;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-page="android"] input[type="checkbox"]:checked::before,
+[data-page="android"] .open > .disclosure-head .switch::before,
+[data-page="android"] .switch[aria-checked="true"]::before { background: var(--accent-strong); }
+:root[data-theme="dark"][data-page="android"] input[type="checkbox"]:checked::before,
+:root[data-theme="dark"][data-page="android"] .open > .disclosure-head .switch::before,
+:root[data-theme="dark"][data-page="android"] .switch[aria-checked="true"]::before { background: var(--accent); }
+
+[data-page="android"] input[type="checkbox"]:checked::after,
+[data-page="android"] .open > .disclosure-head .switch::after,
+[data-page="android"] .switch[aria-checked="true"]::after { left: 4px; translate: 24px 0; }
+
+[data-page="android"] input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 1; }
+[data-page="android"] input[type="checkbox"]:disabled::before { opacity: 0.4; }
+[data-page="android"] input[type="checkbox"]:disabled::after { opacity: 0.7; }
+[data-page="android"] input[type="checkbox"]:focus-visible,
+[data-page="android"] .switch:focus-visible { outline: none; }
+[data-page="android"] input[type="checkbox"]:focus-visible::before,
+[data-page="android"] .switch:focus-visible::before { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-page="android"] :is(input[type="checkbox"], .switch)::before,
+  [data-page="android"] :is(input[type="checkbox"], .switch)::after,
+  .nav-item .icon { transition: none; }
+}
+
+/* An on/off row: label left, info button, switch right; the label's overlay
+   makes the whole row the tap target (the info button stays above it). */
+[data-page="android"] .view .check-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: var(--hit);
+}
+
+[data-page="android"] .view .check-row > label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--fg-0);
+  font-size: 15px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+[data-page="android"] .view .check-row > label::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+[data-page="android"] .view .check-row > input[type="checkbox"] { order: 3; z-index: 1; }
+[data-page="android"] .view .check-row > .tip { order: 2; position: relative; z-index: 1; margin: -4px -8px; }
+[data-page="android"] .view .check-row:has(> input:disabled) > label { color: var(--fg-3); cursor: not-allowed; }
+:root:lang(ko)[data-page="android"] .view .check-row > label { word-break: keep-all; }
+
+/* A switch beside a field (per-channel decay, automatic delay, resampling). */
+[data-page="android"] .view .inline-group { gap: 8px 12px; }
+[data-page="android"] .view .inline-group > .check-row { flex: 1 1 auto; }
+
+/* Groups of toggles (virtual room tuning 2) are plain switch rows here. */
+[data-page="android"] .t2-toggles { display: grid; gap: 4px; }
+[data-page="android"] .t2-toggles:not(:has(> .check-row:not([hidden]))) { display: none; }
+[data-page="android"] .t2-head { margin: 4px 0 0; padding-top: 16px; font-size: 14px; color: var(--fg-1); }
+[data-page="android"] .t2-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 12px; row-gap: 16px; }
+[data-page="android"] .t2-pair:not(:has(> .field-row:not([hidden]) + .field-row:not([hidden]))) { grid-template-columns: minmax(0, 1fr); }
+[data-page="android"] .t2-nested { gap: 16px; margin-left: 4px; padding-left: 14px; }
+[data-page="android"] .t2-facts-hint { margin: -8px 0 0; font-size: 13px; }
+
+/* The Stable-only timing checkbox and its line follow the mode but never show here. */
+[data-page="android"] :is(#bf-room-phase-schroeder-row, #bf-room-phase-current) { display: none !important; }
+
+/* --------------------------------------------------------- info buttons
+   The visible circle stays 20px beside the label; the button is 48px and
+   negative margins keep it from growing the line. Its text opens in the tip
+   sheet (tipsheet.js), so the desktop bubble never shows. */
+[data-page="android"] .tip { margin: -14px -12px -14px -6px; }
+[data-page="android"] .field-label:has(> .tip) > :first-child { padding-right: 30px; }
+[data-page="android"] .field-label > .tip { margin-left: -36px; }
+[data-page="android"] .info-tip { width: var(--hit); height: var(--hit); }
+[data-page="android"] .info-tip svg { width: 20px; height: 20px; }
+[data-page="android"] .info-tip::before { content: none; }
+[data-page="android"] .tip-bubble { display: none !important; }
+
+/* ----------------------------------------------------------- disclosures
+   A switch row that opens in place. An open group's head sticks to the top
+   while its body scrolls under it, so it can be closed from anywhere in it
+   (chrome.js keeps the head under the thumb when it closes). */
+
+[data-page="android"] .disclosure {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+[data-page="android"] .disclosure.open { border-color: var(--line); }
+
+[data-page="android"] .disclosure-head {
+  gap: 12px;
+  min-height: 72px;
+  padding: 10px 16px;
+  border-radius: calc(var(--radius) - 1px);
+  background: var(--surface);
+}
+
+[data-page="android"] .disclosure.open > .disclosure-head {
+  position: sticky;
+  /* The scroller's top padding counts against a sticky offset: this is its top edge. */
+  top: calc(-1 * var(--content-top));
+  z-index: 3;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
+
+[data-page="android"] .disclosure-text { flex: 1 1 auto; order: 0; }
+[data-page="android"] .disclosure-title { font-size: 16px; line-height: 1.3; }
+[data-page="android"] .disclosure-head > .switch { order: 2; }
+[data-page="android"] .disclosure-head > .caret { display: none; }
+
+[data-page="android"] .disclosure-body,
+[data-page="android"] .disclosure.open .disclosure-body {
+  gap: 16px;
+  padding: 16px;
+}
+
+[data-page="android"] .disclosure.open .disclosure-body { display: grid; }
+
+/* ------------------------------------------------------ segmented choices */
+
+[data-page="android"] .seg {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  width: 100%;
+  padding: 4px;
+  border-radius: 12px;
+}
+
+[data-page="android"] .seg-btn {
+  /* Holds its .sr-only state words, which would otherwise hang off the scroller and widen the page. */
+  position: relative;
+  flex: 1 0 auto;
+  justify-content: center;
+  min-height: var(--hit);
+  height: auto;
+  padding: 6px 14px;
+  border-radius: var(--radius-inner);
+  font-size: 15px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+/* Three room modes share the row and wrap their words; the four advanced
+   panels scroll sideways instead. */
+#bf-room-mode-row .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#bf-room-mode-row .seg-btn { white-space: normal; text-align: center; padding: 6px 8px; }
+:root:lang(ko) #bf-room-mode-row .seg-btn { word-break: keep-all; }
+
+.scroll-seg, [data-page="android"] .adv-tabs > .seg,
+[data-page="android"] .chooser-roots {
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+[data-page="android"] .adv-tabs > .seg::-webkit-scrollbar,
+[data-page="android"] .chooser-roots::-webkit-scrollbar { display: none; }
+
+/* ------------------------------------------------------ advanced panels */
+
+[data-page="android"] .adv-tabs { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+
+[data-page="android"] .adv-panel {
+  gap: 16px;
+  padding: 4px 16px 8px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+:root[data-theme="dark"][data-page="android"] .adv-panel {
+  --field-bg: #2c3036;
+  --field-border: #454a52;
+}
+
+[data-page="android"] .adv-panel-head {
+  min-height: 64px;
+  padding: 8px 0;
+  gap: 12px;
+}
+
+[data-page="android"] .adv-panel-head > .disclosure-title { flex: 1 1 auto; order: 0; font-size: 16px; }
+[data-page="android"] .adv-panel-head > .switch { order: 2; }
+[data-page="android"] .adv-reset { justify-self: start; margin: -4px 0 0 -12px; }
+[data-page="android"] .adv-sub-head { font-size: 14px; color: var(--fg-1); }
+[data-page="android"] .adv-nested { gap: 16px; margin-left: 4px; padding-left: 14px; border-left: 1px solid var(--line); }
+
+/* Bass boost: the gain on its own line, Fc and Q beside each other under it. */
+[data-page="android"] .unit-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+[data-page="android"] .unit-row > .unit-field { min-width: 0; }
+[data-page="android"] .unit-row > .unit-field:first-child { grid-column: 1 / -1; }
+
+[data-page="android"] .unit-field {
+  height: 50px;
+  max-width: 100%;
+  border-radius: var(--radius-inner);
+  font-size: 14px;
+}
+
+[data-page="android"] .unit-field > input[type="number"] {
+  flex: 1 1 auto;
+  width: 0;
+  min-width: 56px;
+  height: var(--hit);
+  font-size: 16px;
+}
+
+[data-page="android"] .field-row > div:has(> .unit-field:only-child) > .unit-field { width: min(100%, 200px); }
+
+[data-page="android"] .file-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+
+/* A file option: its name and file over each other, the switch at the end;
+   the whole tile takes the tap (it is a label). */
+[data-page="android"] .file-opt {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  min-height: 64px;
+  padding: 6px 8px 6px 14px;
+  border-radius: 10px;
+}
+
+[data-page="android"] .file-opt > input { grid-column: 2; grid-row: 1 / span 2; }
+[data-page="android"] .file-opt > .file-name { grid-column: 1; grid-row: 1; align-self: end; }
+[data-page="android"] .file-opt > .file-path { grid-column: 1; grid-row: 2; align-self: start; font-size: 13px; }
+
+/* Per-channel decay: each channel's code above its field. */
+[data-page="android"] .ch-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 12px; }
+[data-page="android"] .ch-cell { display: grid; gap: 4px; }
+[data-page="android"] .ch-code { width: auto; font-size: 13px; }
+[data-page="android"] .ch-cell .unit-field { width: 100%; }
+[data-page="android"] .ch-cell .unit-field > input[type="number"] { width: 0; }
+
+/* -------------------------------------------- measurement file tables
+   Each REW measurement or Dirac speaker is a small block: its name above
+   the speaker and ear choices, each with its column's name above it. */
+
+[data-page="android"] .room-map,
+[data-page="android"] .room-map tbody { display: block; border: 0; background: transparent; }
+[data-page="android"] .room-map thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+[data-page="android"] .room-map tbody { display: grid; gap: 8px; }
+
+[data-page="android"] .room-map tr {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  padding: 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+  background: var(--field-bg);
+}
+
+[data-page="android"] .room-map td { display: grid; gap: 4px; padding: 0; border: 0; }
+[data-page="android"] .room-map td:first-child { grid-column: 1 / -1; width: auto; }
+[data-page="android"] .room-map td[data-label]::before { content: attr(data-label); color: var(--fg-2); font-size: 13px; font-weight: 600; }
+[data-page="android"] .room-map select { width: 100%; min-width: 0; height: var(--hit); }
+[data-page="android"] .room-map-name { font-size: 15px; font-weight: 600; }
+[data-page="android"] .room-map tr[data-state="error"] { border-color: var(--err); }
+
+[data-page="android"] .room-file-positions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+[data-page="android"] .room-file-positions label,
+[data-page="android"] .room-file-picks label { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+[data-page="android"] .room-file-positions select,
+[data-page="android"] .room-file-picks select { width: 100%; min-width: 0; }
+[data-page="android"] .room-file-picks label > span { flex: none; }
+[data-page="android"] .room-file-picks { gap: 12px; }
+[data-page="android"] .room-file-details summary { min-height: var(--hit); display: flex; align-items: center; }
+
+/* ------------------------------------------------------------ custom EQ */
+
+[data-page="android"] .eq-slot { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px 12px 4px; border-radius: 10px; }
+[data-page="android"] .eq-slot-actions { justify-content: flex-start; margin-left: -12px; }
+[data-page="android"] .eq-file-name { font-size: 14px; }
+[data-page="android"] .eq-result { padding: 12px; border-radius: 10px; }
+[data-page="android"] .eq-ears { font-size: 14px; }
+
+/* Room timing limit: the stop's name above a slider a thumb can hold. */
+[data-page="android"] .range-field { display: grid; gap: 0; }
+[data-page="android"] .range-value { order: -1; min-width: 0; color: var(--fg-0); font-size: 15px; font-weight: 600; }
+[data-page="android"] .range-stops { flex: none; width: 100%; }
+[data-page="android"] input[type="range"] { height: var(--hit); }
+
+/* ----------------------------------------------------------- the notice */
+
+.notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px 14px;
+  margin: 0 0 28px;
+  padding: 16px;
+  border: 1px solid color-mix(in oklch, var(--warn) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--warn) 12%, var(--bg-2));
+}
+
+.notice-icon { color: var(--warn); margin-top: 2px; }
+.notice-text { display: grid; gap: 4px; }
+.notice-title { font-size: 16px; font-weight: 700; line-height: 1.35; text-wrap: balance; }
+.notice-body { color: var(--fg-1); font-size: 14px; line-height: 1.5; text-wrap: pretty; }
+.notice-action { grid-column: 1 / -1; width: 100%; }
+
+/* ------------------------------------------------------ paths and status */
+
+.path-row { display: grid; gap: 6px; min-width: 0; }
+.path-label { color: var(--fg-2); font-size: 13px; font-weight: 600; }
+
+.path-scroll {
+  display: block;
+  min-width: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-inner);
+  background: var(--bg-1);
+  color: var(--fg-0);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+.path-scroll::-webkit-scrollbar { display: none; }
+.path-scroll:empty { display: none; }
+
+.status-row { display: flex; align-items: flex-start; gap: 12px; }
+.status-text { font-size: 15px; font-weight: 600; line-height: 1.4; }
+.status-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--fg-3);
+}
+.status-dot[data-state="granted"] { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in oklch, var(--ok) 22%, transparent); }
+.status-dot[data-state="denied"] { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in oklch, var(--warn) 22%, transparent); }
+
+.open-failed { color: var(--fg-1); overflow-wrap: anywhere; }
+
+/* ------------------------------------------------------------- recovery */
+
+[data-page="android"] #recovery-inventory { padding: 14px; border-radius: 10px; }
+[data-page="android"] .recovery-ledger-row { min-height: 32px; font-size: 14px; }
+[data-page="android"] .recovery-file-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+[data-page="android"] .recovery-file-row > span:last-child { font-size: 13px; }
+[data-page="android"] .recovery-result .recovery-status { font-size: 17px; }
+.recovery-result[data-status="running"] .group-meta { color: var(--accent); }
+.recovery-result[data-status="succeeded"] .group-meta { color: var(--ok); }
+.recovery-result[data-status="failed"] .group-meta { color: var(--err); }
+[data-page="android"] .recovery-result .actions-row:not(:has(> :not([hidden]))) { display: none; }
+[data-page="android"] .recovery-result .actions-row > .btn { width: 100%; }
+
+/* ----------------------------------------------------------------- info */
+
+.about-head { display: flex; align-items: center; gap: 14px; }
+[data-page="android"] .about-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  outline: 1px solid oklch(0 0 0 / 0.1);
+  outline-offset: -1px;
+}
+:root[data-theme="dark"][data-page="android"] .about-logo { outline-color: oklch(1 0 0 / 0.1); }
+.about-name { display: grid; gap: 2px; min-width: 0; }
+.about-title { font-size: 20px; font-weight: 700; }
+[data-page="android"] .version-pill { justify-self: start; margin: 0; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+
+.kv-list {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 12px 16px;
+  font-size: 14px;
+}
+.kv-list .kv-key { color: var(--fg-1); font-weight: 600; }
+.kv-list .kv-val { color: var(--fg-0); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.kv-list .kv-val.mono { font-size: 13px; }
+
+.link-list {
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-0);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.link-row + .link-row { border-top: 1px solid var(--line-soft); }
+.link-row:active { background: var(--bg-3); }
+.link-row .icon { color: var(--fg-2); }
+
+[data-page="android"] .runtime { margin: 4px 0 8px; color: var(--fg-3); font-size: 12px; text-align: center; }
+
+/* ------------------------------------------------------------ job bar
+   A put-away BRIR job: a dot, the stage in flight and its status, a chevron
+   to bring the sheet back, and the progress along the bottom edge. */
+
+.job-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px var(--bar-pad);
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg-0);
+  color: var(--fg-0);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.job-bar-mark { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.job-bar[data-status="succeeded"] .job-bar-mark { background: var(--ok); }
+.job-bar[data-status="failed"] .job-bar-mark { background: var(--err); }
+.job-bar[data-status="cancelled"] .job-bar-mark { background: var(--warn); }
+.job-bar-text { display: grid; flex: 1 1 auto; min-width: 0; }
+.job-bar-title { overflow: hidden; font-size: 15px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+.job-bar-status { color: var(--fg-2); font-size: 13px; }
+.job-bar .icon { color: var(--fg-2); }
+.job-bar-progress { position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: transparent; }
+.job-bar-progress > i { display: block; width: 0; height: 100%; background: var(--accent); transition: width 0.2s ease; }
+.job-bar:not([data-status="running"]):not([data-status="cancel_requested"]) .job-bar-progress { display: none; }
+
+/* --------------------------------------------------------------- sheets
+   Full-height sheets over the frame: a head with the title and the way out,
+   a scrolling body, and the actions at the bottom where the thumb is. */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  transition-property: translate, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@starting-style {
+  .sheet { translate: 0 24px; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet { transition: none; }
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  padding: 8px calc(var(--bar-pad) - 8px) 8px var(--bar-pad);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-0);
+}
+
+.sheet-heading { display: grid; flex: 1 1 auto; min-width: 0; gap: 2px; }
+.sheet-title { margin: 0; overflow: hidden; font-size: 18px; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
+.sheet-status { color: var(--fg-2); font-size: 14px; font-weight: 600; }
+.sheet-status:empty { display: none; }
+
+.sheet-body {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px var(--bar-pad) 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sheet-actions {
+  display: grid;
+  gap: 8px;
+  padding: 8px var(--bar-pad);
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg-0);
+}
+.sheet-actions:not(:has(> :not([hidden]))) { display: none; }
+
+/* ------------------------------------------------------------ job sheet */
+
+.job-sheet[data-status="running"] .sheet-status,
+.job-sheet[data-status="cancel_requested"] .sheet-status { color: var(--accent); }
+.job-sheet[data-status="succeeded"] .sheet-status { color: var(--ok); }
+.job-sheet[data-status="failed"] .sheet-status { color: var(--err); }
+.job-sheet[data-status="cancelled"] .sheet-status { color: var(--warn); }
+.job-sheet[data-status="succeeded"] .progress,
+.job-sheet[data-status="failed"] .progress,
+.job-sheet[data-status="cancelled"] .progress { display: none; }
+
+.job-error {
+  padding: 12px 14px;
+  border-left: 3px solid var(--err);
+  border-radius: var(--radius-inner);
+  background: color-mix(in oklch, var(--err) 12%, var(--bg-2));
+  color: var(--fg-0);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+[data-page="android"] .steps { gap: 0; padding: 4px 0; }
+[data-page="android"] .steps li { min-height: 40px; gap: 12px; font-size: 15px; line-height: 1.35; }
+[data-page="android"] .step-glyph { width: 24px; height: 24px; font-size: 12px; }
+
+/* The alignment report: the summary stacked, the numbers scrolling sideways
+   inside the card with the speaker column fixed. */
+[data-page="android"] .align-report { padding: 14px; border-radius: var(--radius); }
+[data-page="android"] .align-head { flex-wrap: wrap; }
+[data-page="android"] .align-summary { grid-template-columns: minmax(0, 1fr); gap: 2px 0; font-size: 14px; }
+[data-page="android"] .align-summary .kv-val { margin-bottom: 8px; }
+[data-page="android"] .align-table-wrap { margin: 0 -14px; padding: 0 14px; scrollbar-width: thin; }
+[data-page="android"] .align-table { font-size: 14px; }
+[data-page="android"] .align-table th, [data-page="android"] .align-table td { padding: 8px 10px; }
+[data-page="android"] .align-table :is(th, td):first-child {
+  position: sticky;
+  left: -14px;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: 1px 0 0 var(--line);
+}
+
+.job-log { border: 1px solid var(--line-soft); border-radius: var(--radius-inner); background: var(--surface); }
+.job-log > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--hit);
+  padding: 0 14px;
+  color: var(--fg-1);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+.job-log > summary::-webkit-details-marker { display: none; }
+.job-log > summary::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-right: 1.75px solid var(--fg-2);
+  border-bottom: 1.75px solid var(--fg-2);
+  rotate: 45deg;
+  translate: 0 -2px;
+}
+.job-log[open] > summary::after { rotate: -135deg; translate: 0 2px; }
+[data-page="android"] .job-log .log {
+  min-height: 0;
+  max-height: 50dvh;
+  margin: 0 8px 8px;
+  font-size: 12.5px;
+}
+
+/* ------------------------------------------------------------- chooser */
+
+.chooser-nav {
+  display: grid;
+  gap: 8px;
+  padding: 8px var(--bar-pad) 10px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-0);
+}
+
+[data-page="android"] .chooser-roots { justify-self: stretch; }
+[data-page="android"] .chooser-roots .seg-btn { flex: 1 0 auto; }
+
+.chooser-where { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.chooser-path { flex: 1 1 auto; min-height: var(--hit); padding: 13px 12px; font-size: 14px; }
+.chooser-where .icon-btn { border: 1px solid var(--line-soft); background: var(--surface); }
+
+.chooser-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 8px var(--bar-pad) 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.chooser-message { padding: 20px 4px; color: var(--fg-2); font-size: 15px; text-align: center; text-wrap: pretty; }
+.chooser[data-state="loading"] .chooser-message { padding: 10px 4px; font-size: 14px; }
+.chooser[data-state="unreadable"] .chooser-message,
+.chooser[data-state="error"] .chooser-message { color: var(--fg-0); }
+
+.chooser-access { display: grid; gap: 8px; margin: 8px 0; padding: 16px; border-radius: var(--radius);
+  background: color-mix(in oklch, var(--warn) 12%, var(--bg-2)); }
+.chooser-access .btn { margin-top: 8px; }
+
+.chooser-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.chooser[data-state="loading"] .chooser-list { opacity: 0.45; pointer-events: none; }
+
+.chooser-entry,
+.chooser-file {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 4px 8px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--fg-0);
+  font: inherit;
+  font-size: 16px;
+  text-align: left;
+}
+
+.chooser-entry { cursor: pointer; border-radius: 0; }
+.chooser-entry:active { background: var(--surface); }
+.chooser-file { min-height: 48px; color: var(--fg-3); font-size: 15px; }
+.entry-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
+.entry-meta { flex: none; color: var(--fg-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.chooser-file .entry-meta { color: var(--fg-3); }
+.entry-icon-folder { color: var(--accent); }
+:root[data-theme="dark"] .entry-icon-folder { color: #9ec3ff; }
+.entry-icon-file { color: var(--fg-2); }
+.chooser-file .entry-icon-file { color: var(--fg-3); }
+.entry-icon-go { color: var(--fg-3); }
+.chooser-truncated { padding: 12px 4px 0; text-align: center; }
+
+/* ----------------------------------------------------------- tip sheet */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+  background: rgba(8, 10, 12, 0.5);
+}
+
+.tip-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: grid;
+  gap: 12px;
+  max-width: var(--column);
+  max-height: 75dvh;
+  margin: 0 auto;
+  padding: 20px var(--gutter) 12px;
+  border-radius: 16px 16px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -8px 32px oklch(0 0 0 / 0.3);
+  transition-property: translate;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@starting-style {
+  .tip-sheet { translate: 0 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip-sheet { transition: none; }
+}
+
+.tip-sheet-title { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; text-wrap: balance; }
+.tip-sheet-body { overflow-y: auto; color: var(--fg-1); font-size: 15px; line-height: 1.55; text-wrap: pretty; }
+.tip-sheet-body .tip-para { display: block; }
+.tip-sheet-body .tip-para + .tip-para { margin-top: 8px; }
+
+/* -------------------------------------------------------------- dialogs
+   The ask dialog, the update dialog and the first-run language choice rise
+   from the bottom, their buttons stacked with the confirming one last, under
+   the thumb. */
+
+[data-page="android"] .modal-backdrop { place-items: end center; z-index: 70; }
+[data-page="android"] #ask-modal { z-index: 71; }
+
+[data-page="android"] .modal {
+  gap: 14px;
+  width: min(100%, var(--column));
+  max-height: 90dvh;
+  overflow-y: auto;
+  padding: 22px var(--gutter) 12px;
+  border: 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 32px oklch(0 0 0 / 0.3);
+}
+
+[data-page="android"] #update-modal .modal { width: min(100%, var(--column)); }
+[data-page="android"] .modal-head { flex-wrap: wrap; align-items: baseline; }
+[data-page="android"] .modal-head h3 { font-size: 18px; }
+[data-page="android"] .modal-head .card-meta { margin-left: 0; font-size: 13px; overflow-wrap: anywhere; }
+[data-page="android"] .modal-actions { flex-direction: column; flex-wrap: nowrap; gap: 8px; }
+[data-page="android"] .modal-actions > .btn { width: 100%; }
+[data-page="android"] .ask-message { font-size: 16px; line-height: 1.5; max-height: 60dvh; }
+[data-page="android"] .update-notes { max-height: 40dvh; padding: 12px 14px; font-size: 14px; }
+[data-page="android"] .lang-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* --------------------------------------------------------- wider screens */
+
+@media (min-width: 600px) {
+  :root[data-page="android"] { --content-top: 28px; }
+  .action-bar .btn-block { max-width: 420px; margin-inline: auto; }
+}
+
+/* Late overrides of desktop rules that are more specific than the ones above. */
+:root[data-page="android"] .adv-panel-head .switch,
+:root[data-page="android"] .adv-panel-head .switch[aria-checked="true"] { background: transparent; }
+/* Without access there is nowhere to go yet: the sheet shows only its notice. */
+.chooser[data-state="noaccess"] .chooser-nav,
+.chooser[data-state="noaccess"] .sheet-actions { display: none; }
+/* Korean wraps between words, never inside one ('더합니 / 다'). */
+:root:lang(ko)[data-page="android"] :is(.hint, .disclosure-desc, .disclosure-title, .notice-body, .status-text,
+  .tip-sheet-body, .job-error, .chooser-message, .group-title, .field-row > label) { word-break: keep-all; }
