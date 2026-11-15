@@ -140,7 +140,7 @@ updater/
 이식 전의 코드 상태는 이렇다(2026-11-15, 3.21.1에서 확인).
 
 - **녹음을 빼면 지금도 안드로이드에서 빌드되고 돈다.** `cargo check -p impulcifer-cli -p impulcifer-service --no-default-features --target aarch64-linux-android --all-targets`가 경고 없이 통과하고, 이렇게 빌드한 `impulcifer` CLI가 안드로이드 기기(Termux)에서 실행된다. `impulcifer-types`와 `impulcifer-io`의 시험도 기기에서 모두 통과했다. 링커는 NDK나 Termux의 clang을 준다(`CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`, C 코드를 위한 `CC_aarch64_linux_android`·`AR_aarch64_linux_android`·`CFLAGS_aarch64_linux_android=--target=aarch64-linux-android24`).
-- **안드로이드의 `target_os`는 `"android"`다.** 그래서 `cfg(target_os = "linux")`와 `std::env::consts::OS == "linux"` 분기는 안드로이드에 해당하지 않고, `cfg(unix)`와 `cfg(not(windows))`는 해당한다. 이식할 때 안드로이드 몫을 정해야 하는 곳은 넷이다. 업데이트는 `update/check.rs`의 `download_url`이 `linux`에서만 AppImage·deb·rpm 자산을 고르고, `update/install_kind.rs`와 `update/legacy.rs`도 `linux`만 안다. 시스템 정보는 `impulcifer-service/src/lib.rs`의 `os_version`이 빈 문자열을, `os_platform_name`이 `android`를 그대로 낸다. FFmpeg 탐색(`impulcifer-io/src/ffmpeg.rs`)은 PATH 다음에 데스크톱 리눅스의 경로를 본다. 앱 셸(`apps/impulcifer-app/src/main.rs`)은 Windows·macOS가 아니면 웹뷰 엔진을 WebKitGTK로 적는다.
+- **안드로이드의 `target_os`는 `"android"`다.** 그래서 `cfg(target_os = "linux")`와 `std::env::consts::OS == "linux"` 분기는 안드로이드에 해당하지 않고, `cfg(unix)`와 `cfg(not(windows))`는 해당한다. 이식할 때 안드로이드 몫을 정해야 하는 곳은 넷이다. 업데이트는 `update/check.rs`의 `download_url`이 `linux`에서만 AppImage·deb·rpm 자산을 고르고, `update/install_kind.rs`와 `update/legacy.rs`에도 안드로이드 몫이 없다. 시스템 정보는 `impulcifer-service/src/lib.rs`의 `os_version`이 빈 문자열을, `os_platform_name`이 `android`를 그대로 낸다. FFmpeg 탐색(`impulcifer-io/src/ffmpeg.rs`)은 PATH 다음에 데스크톱 리눅스의 경로를 본다. 앱 셸(`apps/impulcifer-app/src/main.rs`)은 Windows·macOS가 아니면 웹뷰 엔진을 WebKitGTK로 적는다.
 
 ### 안드로이드 작업의 검증
 
@@ -149,7 +149,7 @@ updater/
 1. `cargo fmt --all -- --check`
 2. 고친 크레이트의 Clippy를 호스트 대상과 안드로이드 대상에서 한 번씩 돌린다. 안드로이드 쪽은 `cargo clippy -p <크레이트> --no-default-features --target aarch64-linux-android --all-targets -- --no-deps -D warnings`다.
 3. `cargo test -p impulcifer-policy`(unsafe 금지, unsafe 허용치, 기능 등록부)
-4. 고친 크레이트의 테스트. 안드로이드 기기의 Termux 위에 올린 리눅스 컨테이너(proot-distro)에서는 `cargo test -p <크레이트> --no-default-features --target aarch64-linux-android`가 안드로이드용 시험 실행 파일을 그 자리에서 돌린다. 빌드한 실행 파일은 Termux에서 직접 돌려도 된다.
+4. 고친 크레이트의 테스트. 안드로이드 기기의 Termux 위에 올린 리눅스 컨테이너(proot-distro)에서는 `cargo test -p <크레이트> --no-default-features --target aarch64-linux-android`가 안드로이드용 시험 실행 파일을 그 자리에서 돌린다. 빌드한 실행 파일은 Termux에서 직접 돌려도 된다. 3.21.1에서는 `impulcifer-types`·`impulcifer-io`로 확인했고, `impulcifer-service`·`impulcifer-cli`의 시험은 이 구성으로 돌려 보지 않았다.
 5. 화면 스크립트를 고쳤으면 `apps/impulcifer-app`에서 `npm run typecheck`와 `npm run test:contracts`. Termux에서는 `npm run typecheck`가 `tsc`를 찾지 못하므로 `node node_modules/typescript/bin/tsc -p tsconfig.json`으로 돌린다.
 
 아래는 안드로이드 작업에서 돌리지 않는다.
