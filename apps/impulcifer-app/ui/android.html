@@ -1,0 +1,1042 @@
+<!doctype html>
+<!-- The Android page (ADR 0020). It loads the same feature scripts as index.html; a part runs only
+     where its markup is (app.js FEATURES), so ids here are Studio's ids and the request is Studio's.
+     Phone frame: an app bar, one scrolling column, the view's action bar and a bottom navigation;
+     the full-height sheets (chooser, job, tip) sit above them. Recording and Stable do not exist here. -->
+<html lang="en" data-theme="dark" data-page="android" data-view="processing">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Impulcifer</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="android.css">
+  </head>
+  <body>
+    <div class="phone">
+      <header class="app-bar" id="app-bar">
+        <h1 class="app-bar-title" id="app-bar-title">Processing</h1>
+      </header>
+
+      <main class="content" id="content">
+
+        <!-- ============================ PROCESSING ============================ -->
+        <section class="view active" id="view-processing" aria-labelledby="app-bar-title">
+
+          <!-- No all-files access: the folders cannot be read. The button opens the system screen
+               (request_storage_access); the state is asked again when the page becomes visible. -->
+          <div class="notice" id="storage-notice" role="status" hidden>
+            <svg class="icon notice-icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <div class="notice-text">
+              <p class="notice-title" data-i18n="storage_notice_title">Allow access to your files</p>
+              <p class="notice-body" data-i18n="storage_notice_body">Impulcifer reads the measurement folders on this phone and writes the results next to them. Turn on access to all files for Impulcifer.</p>
+            </div>
+            <button type="button" class="btn btn-primary notice-action" id="btn-storage-access" data-i18n="button_storage_access">Open settings</button>
+          </div>
+
+          <section class="group" aria-labelledby="group-inputs">
+            <h2 class="group-title" id="group-inputs" data-i18n="section_input_files">Input Files</h2>
+            <div class="group-body">
+          <div class="field-row">
+            <label for="bf-dir-path" data-i18n="label_your_recordings">Your Recordings:</label>
+            <input id="bf-dir-path" class="mono" value="" spellcheck="false" placeholder="/storage/emulated/0/…" autocomplete="off">
+            <button type="button" class="icon-btn browse-btn" data-browse="dir" data-target="bf-dir-path" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
+          </div>
+          <!-- BRIR measurements come from the folder's speaker recordings or from one REW (.mdat) or
+               Dirac Live (.liveproject) file (ADR 0011). With a file the folder still receives the results
+               and holds the other inputs; the table works like the room measurement one. -->
+          <div class="field-row" id="bf-brir-source-row">
+            <label for="bf-brir-source" data-i18n="label_brir_measurements">BRIR measurements:</label>
+            <select id="bf-brir-source">
+              <option value="folder" selected data-i18n="option_brir_measurements_folder">Speaker recordings in the recording folder</option>
+              <option value="file" data-i18n="option_room_measurements_file">A REW or Dirac Live file</option>
+              <option value="recording" data-i18n="option_brir_measurements_recording">One recording file</option>
+            </select>
+          </div>
+          <!-- ADR 0016: one recording of the ear microphones while a program played a sweep per
+               speaker. The speaker order names the sweeps in playing order; the status line under
+               it is filled by the list check (data-state empty, ok or error). The sweep that was
+               played is the job's test signal unless another program's sweep file is chosen. -->
+          <div class="room-file" id="bf-brir-recording-block" hidden>
+            <div class="field-row">
+              <label for="bf-brir-recording-file" data-i18n="label_brir_recording_file">Recording file:</label>
+              <input id="bf-brir-recording-file" class="mono" spellcheck="false" placeholder="recording.wav">
+              <button type="button" class="icon-btn browse-btn" data-browse="audio" data-target="bf-brir-recording-file" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+            </div>
+            <div class="field-row recording-speakers-row">
+              <span class="field-label"><label for="bf-brir-recording-speakers" data-i18n="label_brir_recording_speakers">Speaker order:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-brir-recording-speakers-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-brir-recording-speakers-tip" class="tip-bubble" data-i18n="tooltip_brir_recording_speakers">The sweeps in the recording in the order they played, separated by commas. Subwoofers are LFE and LFE2, and a sweep to leave out is X. Dirac Live plays the first speaker once more at the end.</span></span></span>
+              <div class="adv-stack">
+                <input id="bf-brir-recording-speakers" class="mono" spellcheck="false" autocomplete="off" placeholder="FL,FC,FR,SR,BR,BL,SL,LFE,X" aria-describedby="bf-brir-recording-speakers-tip bf-brir-recording-status">
+                <p class="recording-status" id="bf-brir-recording-status" aria-live="polite" data-state="empty"></p>
+              </div>
+            </div>
+            <div class="field-row">
+              <span class="field-label"><label for="bf-brir-recording-sweep-source" data-i18n="label_brir_recording_sweep">Sweep of this recording:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-brir-recording-sweep-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-brir-recording-sweep-tip" class="tip-bubble" data-i18n="tooltip_brir_recording_sweep">Leave this as it is if you recorded with Impulcifer's sweep. If another program such as Dirac Live or REW played its own sweep, choose that sweep's WAV. It has to be a logarithmic sweep; silence before and after it is trimmed.</span></span></span>
+              <select id="bf-brir-recording-sweep-source" aria-describedby="bf-brir-recording-sweep-tip">
+                <option value="test-signal" selected data-i18n="option_brir_recording_sweep_test_signal">Impulcifer's sweep (the test signal setting below)</option>
+                <option value="file" data-i18n="option_brir_recording_sweep_file">Another program's sweep file</option>
+              </select>
+            </div>
+            <div class="field-row" id="bf-brir-recording-sweep-row" hidden>
+              <label for="bf-brir-recording-sweep" data-i18n="label_brir_recording_sweep_file">Sweep file:</label>
+              <input id="bf-brir-recording-sweep" class="mono" spellcheck="false" placeholder="sweep.wav">
+              <button type="button" class="icon-btn browse-btn" data-browse="audio" data-target="bf-brir-recording-sweep" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+            </div>
+          </div>
+          <div class="room-file" id="bf-brir-file-block" hidden>
+            <div class="field-row">
+              <label for="bf-brir-file" data-i18n="label_room_measurement_file">Measurement file:</label>
+              <input id="bf-brir-file" class="mono" spellcheck="false" placeholder="measurements.mdat">
+              <button type="button" class="icon-btn browse-btn" data-browse="measurement" data-target="bf-brir-file" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+            </div>
+            <div class="room-file-result" id="bf-brir-file-result" aria-live="polite"></div>
+          </div>
+          <div class="field-row">
+            <label for="bf-test-signal-source" data-i18n="label_test_signal_source">Test signal source:</label>
+            <select id="bf-test-signal-source">
+              <option value="auto" data-i18n="option_test_signal_auto">Auto-detect from recordings</option>
+              <option value="default" data-i18n="option_test_signal_default">Bundled default sweep</option>
+              <option value="manual" data-i18n="option_test_signal_manual">Specify parameters</option>
+              <option value="file" data-i18n="option_test_signal_file">Custom file</option>
+            </select>
+          </div>
+          <!-- The two sweep parameters side by side; each keeps its label above its field. -->
+          <div class="field-pair" id="bf-ts-manual" hidden>
+            <div class="field-row">
+              <label for="bf-ts-duration" data-i18n="label_sweep_duration">Sweep length (s):</label>
+              <input id="bf-ts-duration" class="num mono" type="number" inputmode="decimal" value="6.15" min="0.1" max="200" step="0.01">
+            </div>
+            <div class="field-row">
+              <label for="bf-ts-fs" data-i18n="label_sweep_fs">Sample rate (Hz):</label>
+              <input id="bf-ts-fs" class="num mono" type="number" inputmode="numeric" value="48000" min="8000" max="384000">
+            </div>
+          </div>
+          <div class="field-row" id="bf-ts-file" hidden>
+            <label for="bf-test-signal" data-i18n="label_test_signal">Test Signal:</label>
+            <input id="bf-test-signal" class="mono" value="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" spellcheck="false">
+            <button type="button" class="icon-btn browse-btn" data-browse="audio" data-target="bf-test-signal" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+          </div>
+          <p class="warning-note" id="bf-ts-warning" role="status" hidden></p>
+          <!-- Folder analysis: what the recordings say about the sweep they were made with. -->
+          <button type="button" class="btn btn-secondary btn-block" id="btn-detect-sweep" data-i18n="button_detect_sweep">Analyze folder</button>
+          <p class="hint detect-result" id="bf-detect-result" role="status" hidden></p>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="group-processing">
+            <h2 class="group-title" id="group-processing" data-i18n="section_processing_options">Processing Options</h2>
+            <div class="group-stack">
+        <div class="disclosure" id="dis-room">
+          <div class="disclosure-head" data-disclosure>
+            <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+            <div class="disclosure-text">
+              <span class="disclosure-title" data-i18n="section_room_correction">Room Correction</span>
+              <span class="disclosure-desc" data-i18n="studio_disclosure_room_correction_desc">Compensate the room's frequency response.</span>
+            </div>
+            <span class="caret" aria-hidden="true"></span>
+          </div>
+          <div class="disclosure-body">
+            <!-- Room measurements come from the recording folder's room-*.wav files or from
+                 one REW (.mdat) or Dirac Live (.liveproject) file (ADR 0010). The file's
+                 measurements are assigned to speakers and ear positions in the table that
+                 inspect_room_measurements fills; the job receives that assignment as is. -->
+            <div class="field-row" id="bf-room-source-row">
+              <label for="bf-room-source" data-i18n="label_room_measurements">Room measurements:</label>
+              <select id="bf-room-source">
+                <option value="folder" selected data-i18n="option_room_measurements_folder">room-*.wav in the recording folder</option>
+                <option value="file" data-i18n="option_room_measurements_file">A REW or Dirac Live file</option>
+              </select>
+            </div>
+            <div class="room-file" id="bf-room-file-block" hidden>
+              <div class="field-row">
+                <label for="bf-room-file" data-i18n="label_room_measurement_file">Measurement file:</label>
+                <input id="bf-room-file" class="mono" spellcheck="false" placeholder="measurements.mdat">
+                <button type="button" class="icon-btn browse-btn" data-browse="measurement" data-target="bf-room-file" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+              </div>
+              <div class="room-file-result" id="bf-room-file-result" aria-live="polite"></div>
+            </div>
+            <div class="field-row" id="bf-room-mode-row">
+              <span class="field-label"><span id="bf-room-mode-label" data-i18n="label_room_mode">Correction mode:</span><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-mode-tip" class="tip-bubble">Corrects the frequency response at each ear position; the timing of the bass stays as recorded.</span></span></span>
+              <div class="seg" role="radiogroup" aria-labelledby="bf-room-mode-label" aria-describedby="bf-room-mode-tip">
+                <button type="button" class="seg-btn" role="radio" id="bf-room-mode-eq" aria-checked="true" tabindex="0" data-i18n="option_room_mode_eq">Room EQ</button>
+                <button type="button" class="seg-btn" role="radio" id="bf-room-mode-tuning" aria-checked="false" tabindex="-1" data-i18n="option_room_mode_tuning">Virtual room tuning</button>
+                <button type="button" class="seg-btn" role="radio" id="bf-room-mode-tuning2" aria-checked="false" tabindex="-1" data-i18n="option_room_mode_tuning2">Virtual room tuning 2</button>
+              </div>
+            </div>
+            <!-- Virtual room tuning 2 (ADR 0008) shows its rows in five headed groups: filter,
+                 correction band, protection, time and phase, between speakers. The headings are
+                 siblings of the rows (no wrappers), because the last group starts with the level
+                 match row the first tuning shares; app.js updateRoomRows shows them in tuning 2
+                 only and moves the room volume and Schroeder rows into the band group there.
+                 The filter decides whether the latency row shows, so that row sits right under it.
+                 The on/off options of a group sit in a .t2-toggles wrapper: Stable lays it out as
+                 if it were not there (display: contents), Studio makes its rows toggle tiles. -->
+            <h4 class="t2-head" id="bf-room-tuning2-head-filter" data-i18n="section_room_tuning2_filter" hidden>Filter</h4>
+            <div class="field-row" id="bf-room-tuning2-mode-row" hidden>
+              <span class="field-label"><label for="bf-room-tuning2-mode" data-i18n="label_room_tuning2_mode">Filter:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mode-tip" class="tip-bubble">PEQ and an FIR with 8 ms latency. The FIR corrects part of the room's bass timing within that latency.</span></span></span>
+              <select id="bf-room-tuning2-mode" aria-describedby="bf-room-tuning2-mode-tip">
+                <option value="zero" data-i18n="option_room_tuning2_mode_zero">PEQ only (no latency)</option>
+                <option value="mixed" selected data-i18n="option_room_tuning2_mode_mixed">Low latency (8 ms)</option>
+                <option value="linear" data-i18n="option_room_tuning2_mode_linear">Standard (28 ms)</option>
+                <option value="long" data-i18n="option_room_tuning2_mode_long">Long filter (200 ms)</option>
+                <option value="custom" data-i18n="option_room_tuning2_mode_custom">Custom latency</option>
+              </select>
+            </div>
+            <div class="field-row" id="bf-room-tuning2-latency-row" hidden>
+              <label for="bf-room-tuning2-latency" data-i18n="label_room_tuning2_latency">Latency (ms):</label>
+              <input type="number" inputmode="decimal" id="bf-room-tuning2-latency" class="num mono" value="200" min="30" max="200" step="1">
+            </div>
+            <div class="field-row" id="bf-room-tuning2-max-boost-row" hidden>
+              <label for="bf-room-tuning2-max-boost" data-i18n="label_room_max_boost">Max boost (dB):</label>
+              <input type="number" inputmode="decimal" id="bf-room-tuning2-max-boost" class="num mono" value="10" min="0" max="10" step="0.5">
+            </div>
+            <h4 class="t2-head" id="bf-room-tuning2-head-band" data-i18n="section_room_tuning2_band" hidden>Correction band</h4>
+            <!-- The two ends of the band share a line where the card is wide enough. -->
+            <div class="t2-pair" id="bf-room-tuning2-band-pair" hidden>
+            <div class="field-row" id="bf-room-tuning2-low-row" hidden>
+              <label for="bf-room-tuning2-low" data-i18n="label_room_tuning2_low">Correct from (Hz):</label>
+              <input type="number" inputmode="decimal" id="bf-room-tuning2-low" class="num mono" value="20" min="10" max="200" step="1">
+            </div>
+            <div class="field-row" id="bf-room-tuning2-high-row" hidden>
+              <span class="field-label"><label for="bf-room-tuning2-high" data-i18n="label_room_tuning2_high">Correct up to (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-high-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-high-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_high">Auto multiplies the Schroeder frequency of the chosen basis by the reach, with a minimum of 100 Hz and a maximum of 500 Hz times the reach. Without a room volume or a Schroeder frequency it is 500 Hz.</span></span></span>
+              <input type="number" inputmode="decimal" id="bf-room-tuning2-high" class="num mono" min="100" max="20000" step="any" placeholder="auto" aria-describedby="bf-room-tuning2-high-tip">
+            </div>
+            </div>
+            <!-- The basis and the reach act only on an automatic upper end; a typed end disables them. -->
+            <div class="field-row" id="bf-room-tuning2-high-basis-row" hidden>
+              <span class="field-label"><label for="bf-room-tuning2-high-basis" data-i18n="label_room_tuning2_high_basis">Upper limit from:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-high-basis-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-high-basis-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_high_basis">Strict uses the room decay at 500 Hz and 1 kHz. Lenient also measures the decay in third-octave bands from 100 to 500 Hz and takes the highest band whose own Schroeder estimate reaches it; it is never below the strict value. Treated rooms usually ring longer in the bass, so lenient goes higher there.</span></span></span>
+              <select id="bf-room-tuning2-high-basis" aria-describedby="bf-room-tuning2-high-basis-tip">
+                <option value="strict" selected data-i18n="option_room_tuning2_high_basis_strict">Strict Schroeder</option>
+                <option value="lenient" data-i18n="option_room_tuning2_high_basis_lenient">Lenient Schroeder</option>
+              </select>
+            </div>
+            <div class="field-row" id="bf-room-tuning2-high-transition-row" hidden>
+              <span class="field-label"><label for="bf-room-tuning2-high-transition" data-i18n="label_room_tuning2_high_transition">Reach above Schroeder:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-high-transition-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-high-transition-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_high_transition">Multiplies the Schroeder frequency to correct further into the transition region above it. ×2 allows up to 1 kHz and ×4 up to 2 kHz.</span></span></span>
+              <select id="bf-room-tuning2-high-transition" class="mono" aria-describedby="bf-room-tuning2-high-transition-tip">
+                <option value="1" selected>×1</option>
+                <option value="2">×2</option>
+                <option value="4">×4</option>
+              </select>
+            </div>
+            <!-- In tuning 2 the room volume and Schroeder rows are moved here, above this line. -->
+            <p class="hint t2-facts-hint" id="bf-room-tuning2-high-volume-hint" data-i18n="hint_room_tuning2_high_needs_facts" hidden>The basis and the reach need the room volume or the Schroeder frequency. Without either the upper limit stays at 500 Hz.</p>
+            <div class="field-row" id="bf-room-tuning2-bands-row" hidden>
+              <span class="field-label"><label for="bf-room-tuning2-bands" data-i18n="label_room_tuning2_bands">Extra bands (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-bands-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-bands-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_bands">Corrects up to four more ranges above the main band, written as low-high pairs in Hz and separated by commas, for example 1000-3000. Each range fades in over half an octave below its low edge and out over half an octave above its high edge. Leave empty for none.</span></span></span>
+              <input type="text" id="bf-room-tuning2-bands" class="mono" value="" placeholder="1000-3000, 6000-9000" spellcheck="false" aria-describedby="bf-room-tuning2-bands-tip">
+            </div>
+            <h4 class="t2-head" id="bf-room-tuning2-head-protect" data-i18n="section_room_tuning2_protect" hidden>Protection</h4>
+            <div class="t2-toggles">
+            <div class="check-row" id="bf-room-tuning2-dip-limit-row" hidden>
+              <input type="checkbox" id="bf-room-tuning2-dip-limit" aria-describedby="bf-room-tuning2-dip-limit-tip">
+              <label for="bf-room-tuning2-dip-limit" data-i18n="checkbox_room_tuning2_dip_limit">Fill narrow dips only partly</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-dip-limit-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-dip-limit-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_dip_limit">A dip that falls below the response's one-octave envelope is filled by 2 dB plus half of the rest, 6 dB at most, instead of up to the boost limit. Narrow cancellations then take less boost; broad losses are still corrected in full. The limited dips are listed in the README.</span></span>
+            </div>
+            <div class="check-row" id="bf-room-tuning2-low-protect-row" hidden>
+              <input type="checkbox" id="bf-room-tuning2-low-protect" aria-describedby="bf-room-tuning2-low-protect-tip">
+              <label for="bf-room-tuning2-low-protect" data-i18n="checkbox_room_tuning2_low_protect">Protect the speaker's bass rolloff</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-low-protect-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-low-protect-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_low_protect">Finds where the speaker's own response rolls off (10 dB below its 200 to 1000 Hz level) and allows no boost below that frequency, with the boost limit ramping up over the octave above it. The PEQ bands and the FIR are checked afterwards so no boost leaks below the rolloff. Without a rolloff above 20 Hz nothing changes.</span></span>
+            </div>
+            </div>
+            <div class="field-row" id="bf-room-tuning2-input-hp-row" hidden>
+              <span class="field-label"><label for="bf-room-tuning2-input-hp" data-i18n="label_room_tuning2_input_hp">Cut all speakers below (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-input-hp-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-input-hp-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_input_hp">An 8th-order high-pass at this frequency on every speaker, 10 to 50 Hz, applied after the correction is designed. All speakers pass the same filter, so their phase relation above the cut stays the same while the deepest bass is not driven. Leave empty for none.</span></span></span>
+              <input type="number" inputmode="decimal" id="bf-room-tuning2-input-hp" class="num mono" min="10" max="50" step="any" placeholder="off" aria-describedby="bf-room-tuning2-input-hp-tip">
+            </div>
+            <h4 class="t2-head" id="bf-room-tuning2-head-timing" data-i18n="section_room_tuning2_timing" hidden>Time and phase</h4>
+            <div class="t2-toggles">
+            <div class="check-row" id="bf-room-tuning2-mode-decay-row" hidden>
+              <input type="checkbox" id="bf-room-tuning2-mode-decay" aria-describedby="bf-room-tuning2-mode-decay-tip">
+              <label for="bf-room-tuning2-mode-decay" data-i18n="checkbox_room_tuning2_mode_decay">Shorten long room modes</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mode-decay-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mode-decay-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mode_decay">Finds room modes below 160 Hz that ring well past the room's 200 to 500 Hz decay and adds a cut at each, at most four, so the mode dies away sooner instead of only getting less boost. Works with every filter. The cuts are listed in the README.</span></span>
+            </div>
+            <div class="check-row fir-only" id="bf-room-tuning2-lf-align-row" hidden>
+              <input type="checkbox" id="bf-room-tuning2-lf-align" aria-describedby="bf-room-tuning2-lf-align-tip">
+              <label for="bf-room-tuning2-lf-align" data-i18n="checkbox_room_tuning2_lf_align">Align the bass arrival with the treble</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-lf-align-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-lf-align-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_lf_align">Below about 200 Hz the FIR moves each speaker's bass so it arrives with its treble; below the speaker's own rolloff the bass keeps that rolloff's delay. The bass is pulled forward by at most one and a half periods, which keeps the pre-ringing in check. The 8 ms filter usually cannot pull the full amount.</span></span>
+            </div>
+            <div class="check-row fir-only" id="bf-room-tuning2-hf-phase-row" hidden>
+              <input type="checkbox" id="bf-room-tuning2-hf-phase" aria-describedby="bf-room-tuning2-hf-phase-tip">
+              <label for="bf-room-tuning2-hf-phase" data-i18n="checkbox_room_tuning2_hf_phase">Match the treble phase above the band</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-hf-phase-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-hf-phase-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_hf_phase">Above the correction band the FIR leaves a fixed phase turn that differs from speaker to speaker. This undoes it over the three octaves above the band, only by adding delay there, so every speaker's treble keeps the same phase.</span></span>
+            </div>
+            </div>
+            <p class="hint" id="bf-room-tuning2-fir-hint" data-i18n="hint_room_tuning2_fir_only" hidden>PEQ only has no FIR, so the bass arrival and the treble phase stay as recorded.</p>
+            <!-- app.js updateRoomRows shows the rows of the chosen mode. A row that the timing
+                 limit shows or hides sits below it, so changing the limit never moves the slider. -->
+            <div class="field-row" id="bf-room-range-row">
+              <span class="field-label"><label for="bf-room-range" data-i18n="label_room_range">Correction range:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-range-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-range-tip" class="tip-bubble">Makes the response flat up to the Schroeder frequency, including dips a real room EQ cannot fill.</span></span></span>
+              <select id="bf-room-range" aria-describedby="bf-room-range-tip">
+                <option value="modes" data-i18n="option_room_range_modes">Room modes only</option>
+                <option value="schroeder" selected data-i18n="option_room_range_schroeder">Up to the Schroeder frequency</option>
+                <option value="extreme" data-i18n="option_room_range_extreme">Up to 10 kHz</option>
+                <option value="legacy" data-i18n="option_room_range_legacy">Legacy (2.x)</option>
+              </select>
+            </div>
+            <div class="field-row" id="bf-room-tuning-max-boost-row" hidden>
+              <label for="bf-room-tuning-max-boost" data-i18n="label_room_max_boost">Max boost (dB):</label>
+              <input type="number" inputmode="decimal" id="bf-room-tuning-max-boost" class="num mono" value="6" min="0" max="12" step="0.5">
+            </div>
+            <div class="field-row" id="bf-room-tuning-curtain-row" hidden>
+              <span class="field-label"><label for="bf-room-tuning-curtain" data-i18n="label_room_tuning_curtain">Detailed correction up to (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning-curtain-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning-curtain-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_curtain">Above this frequency only a broad tone correction is applied; the detailed correction fades out over the next octave.</span></span></span>
+              <input type="number" inputmode="decimal" id="bf-room-tuning-curtain" class="num mono" value="300" min="100" max="5000" step="10" aria-describedby="bf-room-tuning-curtain-tip">
+            </div>
+            <h4 class="t2-head" id="bf-room-tuning2-head-speakers" data-i18n="section_room_tuning2_speakers" hidden>Between speakers</h4>
+            <div class="t2-toggles">
+            <div class="check-row" id="bf-room-tuning-level-match-row" hidden>
+              <input type="checkbox" id="bf-room-tuning-level-match" checked aria-describedby="bf-room-tuning-level-match-tip">
+              <label for="bf-room-tuning-level-match" data-i18n="checkbox_room_tuning_level_match">Match speaker levels</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning-level-match-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning-level-match-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_level_match">Matches the speakers' levels at the listening position within ±6 dB, as a room-correction processor does. Turn it off to keep the levels as recorded.</span></span>
+            </div>
+            <div class="check-row" id="bf-room-tuning2-mimo-row" hidden>
+              <input type="checkbox" id="bf-room-tuning2-mimo" aria-describedby="bf-room-tuning2-mimo-tip">
+              <label for="bf-room-tuning2-mimo" data-i18n="checkbox_room_tuning2_mimo">Cancel late bass with the other speakers (MIMO)</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo">Adds to each speaker low-frequency copies played by the other speakers, designed to cancel the bass that lingers at the ears after the first 60 ms (adjustable below). Works only below the upper limit, and a check keeps every band from getting worse.</span></span>
+            </div>
+            </div>
+            <!-- MIMO's own settings open under its checkbox, indented. -->
+            <div class="t2-nested" id="bf-room-tuning2-mimo-detail" hidden>
+            <div class="t2-pair" id="bf-room-tuning2-mimo-pair">
+            <div class="field-row" id="bf-room-tuning2-fsiso-row" hidden>
+              <label for="bf-room-tuning2-fsiso" data-i18n="label_room_tuning2_fsiso">MIMO up to (Hz):</label>
+              <input type="number" inputmode="decimal" id="bf-room-tuning2-fsiso" class="num mono" value="150" min="50" max="150" step="1">
+            </div>
+            <div class="field-row" id="bf-room-tuning2-mimo-low-row" hidden>
+              <label for="bf-room-tuning2-mimo-low" data-i18n="label_room_tuning2_mimo_low">MIMO from (Hz):</label>
+              <input type="number" inputmode="decimal" id="bf-room-tuning2-mimo-low" class="num mono" min="15" max="150" step="any" placeholder="auto">
+            </div>
+            </div>
+            <div class="field-row" id="bf-room-tuning2-mimo-early-row" hidden>
+              <span class="field-label"><label for="bf-room-tuning2-mimo-early" data-i18n="label_room_tuning2_mimo_early">MIMO starts after (ms):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-early-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-early-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo_early">How long after the direct sound the MIMO copies may start to act. A shorter time lets them also shorten the early bass decay, but drives them harder, so the check turns them down more often. 60 ms is the earlier behaviour.</span></span></span>
+              <input type="number" inputmode="decimal" id="bf-room-tuning2-mimo-early" class="num mono" value="60" min="5" max="60" step="any" aria-describedby="bf-room-tuning2-mimo-early-tip">
+            </div>
+            <div class="t2-toggles">
+            <div class="check-row" id="bf-room-tuning2-mimo-ear-guard-row" hidden>
+              <input type="checkbox" id="bf-room-tuning2-mimo-ear-guard" aria-describedby="bf-room-tuning2-mimo-ear-guard-tip">
+              <label for="bf-room-tuning2-mimo-ear-guard" data-i18n="checkbox_room_tuning2_mimo_ear_guard">Check each ear separately</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-tuning2-mimo-ear-guard-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-tuning2-mimo-ear-guard-tip" class="tip-bubble" data-i18n="tooltip_room_tuning2_mimo_ear_guard">The check that turns the MIMO copies down looks at both ears together, so a copy that helps one ear more than it hurts the other gets through. With this on, the copies are turned down whenever either ear gets worse. The README names the ear that set the limit.</span></span>
+            </div>
+            </div>
+            </div>
+            <div class="field-row" id="bf-room-phase-limit-row" hidden>
+              <span class="field-label"><label for="bf-room-phase-limit" data-i18n="label_room_tuning_phase_limit">Timing correction up to:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-phase-limit-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-phase-limit-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_phase_limit">Up to the Schroeder frequency, the room's bass timing is corrected. Higher limits also correct the speaker's own timing, for example around its crossover, where the room measurements at both ear positions agree. Off corrects the frequency response only and adds no delay.</span></span></span>
+              <div class="range-field">
+                <span class="range-stops">
+                  <input type="range" id="bf-room-phase-limit" min="0" max="7" step="1" value="7" aria-valuetext="Full band" aria-describedby="bf-room-phase-limit-tip">
+                </span>
+                <output class="range-value" id="bf-room-phase-limit-value" for="bf-room-phase-limit">Full band</output>
+              </div>
+            </div>
+            <div class="check-row" id="bf-room-phase-schroeder-row" hidden>
+              <input type="checkbox" id="bf-room-phase-schroeder" aria-describedby="bf-room-phase-schroeder-tip bf-room-phase-current">
+              <label for="bf-room-phase-schroeder" data-i18n="checkbox_room_tuning_phase_schroeder">Correct timing only up to the Schroeder frequency</label>
+              <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-room-phase-schroeder-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-room-phase-schroeder-tip" class="tip-bubble" data-i18n="tooltip_room_tuning_phase_schroeder">Checked: only the room's bass timing up to the Schroeder frequency is corrected. Unchecked: timing is corrected over the full band, where the room measurements at both ear positions agree.</span></span>
+            </div>
+            <p class="hint" id="bf-room-phase-current" hidden></p>
+            <div class="field-row" id="bf-room-volume-row">
+              <label for="bf-room-volume" data-i18n="label_room_volume">Room volume (m³):</label>
+              <input type="number" inputmode="decimal" id="bf-room-volume" class="num mono" min="1" max="10000" step="any" placeholder="50">
+            </div>
+            <div class="field-row" id="bf-schroeder-freq-row">
+              <label for="bf-schroeder-freq" data-i18n="label_schroeder_freq">Schroeder frequency (Hz):</label>
+              <input type="number" inputmode="decimal" id="bf-schroeder-freq" class="num mono" min="50" max="1000" step="any" placeholder="auto">
+            </div>
+            <div class="field-row" id="bf-room-tuning-delay-row" hidden>
+              <label for="bf-room-tuning-delay" data-i18n="label_room_tuning_delay">Tuning delay (ms):</label>
+              <div class="inline-group">
+                <input type="number" inputmode="decimal" id="bf-room-tuning-delay" class="num mono" value="10" min="2" max="20" step="1">
+                <span class="check-row"><input type="checkbox" id="bf-room-tuning-delay-auto"><label for="bf-room-tuning-delay-auto" data-i18n="checkbox_room_tuning_delay_auto">Choose automatically</label></span>
+              </div>
+            </div>
+            <div class="field-row" id="bf-room-max-boost-row">
+              <label for="bf-room-max-boost" data-i18n="label_room_max_boost">Max boost (dB):</label>
+              <input type="number" inputmode="decimal" id="bf-room-max-boost" class="num mono" value="12" min="0" max="24" step="0.5">
+            </div>
+            <div class="field-row" id="bf-specific-limit-row" hidden>
+              <label for="bf-specific-limit" data-i18n="label_specific_limit">Specific Limit (Hz):</label>
+              <input type="number" inputmode="decimal" id="bf-specific-limit" class="num mono" value="400" min="0">
+            </div>
+            <div class="field-row" id="bf-generic-limit-row" hidden>
+              <label for="bf-generic-limit" data-i18n="label_generic_limit">Generic Limit (Hz):</label>
+              <input type="number" inputmode="decimal" id="bf-generic-limit" class="num mono" value="300" min="0">
+            </div>
+            <div class="field-row" id="bf-fr-combination-row">
+              <label for="bf-fr-combination" data-i18n="label_fr_combination">FR Combination Method:</label>
+              <select id="bf-fr-combination">
+                <option value="average" selected>average</option>
+                <option value="conservative">conservative</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="bf-mic-calibration" data-i18n="label_mic_calibration">Mic Calibration:</label>
+              <input id="bf-mic-calibration" class="mono" spellcheck="false">
+              <button type="button" class="icon-btn browse-btn" data-browse="text" data-target="bf-mic-calibration" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+            </div>
+            <div class="field-row">
+              <label for="bf-room-target" data-i18n="label_target_curve">Target Curve:</label>
+              <input id="bf-room-target" class="mono" spellcheck="false">
+              <button type="button" class="icon-btn browse-btn" data-browse="text" data-target="bf-room-target" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="disclosure" id="dis-headphone">
+          <div class="disclosure-head" data-disclosure>
+            <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+            <div class="disclosure-text">
+              <span class="disclosure-title" data-i18n="section_headphone_compensation">Headphone Compensation</span>
+              <span class="disclosure-desc" data-i18n="studio_disclosure_headphone_comp_desc">Flatten the headphone's own response.</span>
+            </div>
+            <span class="caret" aria-hidden="true"></span>
+          </div>
+          <div class="disclosure-body">
+            <!-- The headphone measurement is a recording (headphones.wav or the file named here) or two
+                 measurements of one REW or Dirac Live file (ADR 0011): the left earcup at the left ear
+                 and the right earcup at the right ear. -->
+            <div class="field-row" id="bf-hp-source-row">
+              <label for="bf-hp-source" data-i18n="label_headphone_measurements">Headphone measurement:</label>
+              <select id="bf-hp-source">
+                <option value="folder" selected data-i18n="option_headphone_measurements_folder">A recording (headphones.wav)</option>
+                <option value="file" data-i18n="option_room_measurements_file">A REW or Dirac Live file</option>
+              </select>
+            </div>
+            <div class="field-row" id="bf-hp-folder-row">
+              <label for="bf-headphone-file" data-i18n="label_headphone_file">Headphone File:</label>
+              <input id="bf-headphone-file" class="mono" spellcheck="false" placeholder="headphones.wav">
+              <button type="button" class="icon-btn browse-btn" data-browse="wav" data-target="bf-headphone-file" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+            </div>
+            <div class="room-file" id="bf-hp-file-block" hidden>
+              <div class="field-row">
+                <label for="bf-hp-file" data-i18n="label_room_measurement_file">Measurement file:</label>
+                <input id="bf-hp-file" class="mono" spellcheck="false" placeholder="headphones.mdat">
+                <button type="button" class="icon-btn browse-btn" data-browse="measurement" data-target="bf-hp-file" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button>
+              </div>
+              <div class="room-file-result" id="bf-hp-file-result" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="disclosure" id="dis-eq">
+          <div class="disclosure-head" data-disclosure>
+            <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+            <div class="disclosure-text">
+              <span class="disclosure-title" data-i18n="checkbox_custom_eq">Custom EQ</span>
+              <span class="disclosure-desc" data-i18n="studio_disclosure_custom_eq_desc">Apply eq.csv / eq-left.csv / eq-right.csv from the recording folder.</span>
+            </div>
+            <span class="caret" aria-hidden="true"></span>
+          </div>
+          <div class="disclosure-body eq-body">
+            <p class="hint" data-i18n="eq_formats_hint">Files named eq, eq-left and eq-right in the recording folder are used automatically (.csv first, then .txt).</p>
+            <div class="eq-slots" id="bf-eq-slots" role="list"></div>
+            <div class="eq-result" id="bf-eq-result">
+              <div class="eq-result-head">
+                <span class="eq-result-title" data-i18n="eq_preview_title">Resulting EQ</span>
+                <div class="eq-ears" id="bf-eq-ears"></div>
+              </div>
+              <svg class="eq-preview" id="bf-eq-preview" viewBox="0 0 640 180" preserveAspectRatio="none" role="img" aria-labelledby="bf-eq-preview-label"></svg>
+              <p class="hint" id="bf-eq-preview-label"></p>
+            </div>
+          </div>
+        </div>
+              <div class="group-body">
+          <div class="check-row">
+            <input type="checkbox" id="bf-plot">
+            <label for="bf-plot" data-i18n="checkbox_plot_results">Plot results (slow)</label>
+          </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="group-vbass">
+            <h2 class="group-title" id="group-vbass" data-i18n="vbass_group_title">Virtual Bass</h2>
+            <div class="group-stack">
+        <div class="disclosure" id="dis-vbass">
+          <div class="disclosure-head" data-disclosure>
+            <span class="switch" role="switch" aria-checked="false" tabindex="0"></span>
+            <div class="disclosure-text">
+              <span class="disclosure-title" data-i18n="vbass_enable">Enable virtual bass</span>
+              <span class="disclosure-desc" data-i18n="studio_disclosure_virtual_bass_desc">Extend low-end response below the crossover.</span>
+            </div>
+            <span class="caret" aria-hidden="true"></span>
+          </div>
+          <div class="disclosure-body">
+            <div class="field-row" id="bf-vbass-mode-row">
+              <span class="field-label"><label for="bf-vbass-mode" data-i18n="label_vbass_mode">Crossover:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-vbass-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-vbass-mode-tip" class="tip-bubble">Finds where the speakers lose bass and puts the crossover one octave above it.</span></span></span>
+              <select id="bf-vbass-mode" aria-describedby="bf-vbass-mode-tip">
+                <option value="auto" selected data-i18n="option_vbass_mode_auto">Automatic</option>
+                <option value="manual" data-i18n="option_vbass_mode_manual">Manual</option>
+                <option value="legacy" data-i18n="option_vbass_mode_legacy">Legacy (2.x)</option>
+              </select>
+            </div>
+            <div class="field-row" id="bf-vbass-freq-row" hidden>
+              <span class="field-label"><label for="bf-vbass-freq" data-i18n="vbass_crossover_freq">Crossover frequency (Hz):</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-vbass-freq-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-vbass-freq-tip" class="tip-bubble" data-i18n="tooltip_vbass_room_handoff">Room correction leaves everything below the crossover to virtual bass, except with the Legacy (2.x) range.</span></span></span>
+              <input type="number" inputmode="decimal" id="bf-vbass-freq" class="num mono" value="250" min="30" max="500" aria-describedby="bf-vbass-freq-tip">
+            </div>
+            <div class="field-row">
+              <label for="bf-vbass-hp" data-i18n="vbass_hp_freq">Sub-bass high-pass (Hz):</label>
+              <input type="number" inputmode="decimal" id="bf-vbass-hp" class="num mono" value="15.0" step="0.5" min="0">
+            </div>
+            <div class="field-row">
+              <label for="bf-vbass-polarity" data-i18n="vbass_polarity">Polarity:</label>
+              <select id="bf-vbass-polarity">
+                <option value="auto" selected data-i18n="vbass_polarity_auto">Auto</option>
+                <option value="normal" data-i18n="vbass_polarity_normal">Normal</option>
+                <option value="invert" data-i18n="vbass_polarity_invert">Invert</option>
+              </select>
+            </div>
+          </div>
+        </div>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="adv-card-title">
+            <h2 class="group-title" id="adv-card-title" data-i18n="section_advanced_options">Advanced Options</h2>
+        <div class="adv-tabs" id="adv-studio">
+        <div class="seg" role="tablist" aria-labelledby="adv-card-title">
+          <button type="button" class="seg-btn is-off" role="tab" id="adv-tab-tone" aria-controls="adv-panel-tone" aria-selected="true" tabindex="0">
+            <span class="tab-mark" aria-hidden="true"></span><span data-i18n="studio_adv_tab_tone">Tone &amp; Level</span>
+            <span class="sr-only"><span class="adv-state-on" data-i18n="studio_adv_state_on">on</span><span class="adv-state-off" data-i18n="studio_adv_state_off">off</span></span>
+          </button>
+          <button type="button" class="seg-btn is-off" role="tab" id="adv-tab-time" aria-controls="adv-panel-time" aria-selected="false" tabindex="-1">
+            <span class="tab-mark" aria-hidden="true"></span><span data-i18n="studio_adv_tab_time">Timing</span>
+            <span class="sr-only"><span class="adv-state-on" data-i18n="studio_adv_state_on">on</span><span class="adv-state-off" data-i18n="studio_adv_state_off">off</span></span>
+          </button>
+          <button type="button" class="seg-btn is-off" role="tab" id="adv-tab-output" aria-controls="adv-panel-output" aria-selected="false" tabindex="-1">
+            <span class="tab-mark" aria-hidden="true"></span><span data-i18n="studio_adv_tab_output">Output Files</span>
+            <span class="sr-only"><span class="adv-state-on" data-i18n="studio_adv_state_on">on</span><span class="adv-state-off" data-i18n="studio_adv_state_off">off</span></span>
+          </button>
+          <button type="button" class="seg-btn is-off" role="tab" id="adv-tab-correction" aria-controls="adv-panel-correction" aria-selected="false" tabindex="-1">
+            <span class="tab-mark" aria-hidden="true"></span><span data-i18n="studio_adv_tab_correction">Correction &amp; Graphs</span>
+            <span class="sr-only"><span class="adv-state-on" data-i18n="studio_adv_state_on">on</span><span class="adv-state-off" data-i18n="studio_adv_state_off">off</span></span>
+          </button>
+        </div>
+        <section class="adv-panel" role="tabpanel" id="adv-panel-tone" aria-labelledby="adv-tab-tone">
+          <div class="adv-panel-head">
+            <button type="button" class="switch" role="switch" aria-checked="false" id="adv-on-tone" aria-labelledby="adv-on-tone-label"></button>
+            <span class="disclosure-title" id="adv-on-tone-label" data-i18n="studio_adv_apply_tone">Apply tone &amp; level</span>
+          </div>
+          <fieldset class="adv-fields" id="adv-fields-tone" disabled>
+            <fieldset class="adv-sub" id="ba-tone-eq" aria-labelledby="ba-tone-eq-title">
+              <h4 class="adv-sub-head" id="ba-tone-eq-title" data-i18n="studio_adv_group_tone">Tone</h4>
+              <div class="field-row">
+                <span data-i18n="label_bass_boost">Bass Boost:</span>
+                <div class="unit-row">
+                  <label class="unit-field"><span class="pre" data-i18n="studio_adv_gain">Gain</span><input type="number" inputmode="decimal" id="ba-bass-gain" value="0" step="0.1"><span class="unit" data-i18n="studio_adv_unit_db">dB</span></label>
+                  <label class="unit-field"><span class="pre">Fc</span><input type="number" inputmode="decimal" id="ba-bass-fc" value="105" min="1" disabled><span class="unit" data-i18n="studio_adv_unit_hz">Hz</span></label>
+                  <label class="unit-field"><span class="pre">Q</span><input type="number" inputmode="decimal" id="ba-bass-q" value="0.76" step="0.01" min="0.1" disabled></label>
+                </div>
+              </div>
+              <div class="field-row">
+                <label for="ba-tilt" data-i18n="studio_adv_label_tilt">Tilt:</label>
+                <div><span class="unit-field"><input type="number" inputmode="decimal" id="ba-tilt" value="0" step="0.1"><span class="unit" data-i18n="studio_adv_unit_db_per_octave">dB/oct</span></span></div>
+              </div>
+            </fieldset>
+            <div class="adv-sep"></div>
+            <h4 class="adv-sub-head" data-i18n="studio_adv_group_level">Level</h4>
+            <div class="field-row">
+              <label for="ba-target-level" data-i18n="studio_adv_label_target_level">Target level:</label>
+              <div><span class="unit-field"><input type="number" inputmode="decimal" id="ba-target-level" step="0.1" placeholder="—"><span class="unit" data-i18n="studio_adv_unit_db">dB</span></span></div>
+            </div>
+            <div class="field-row">
+              <label for="ba-balance" data-i18n="label_balance">Channel Balance:</label>
+              <div class="inline-group">
+                <select id="ba-balance"><option value="none" selected data-i18n="option_balance_none">No correction</option><option value="trend" data-i18n="option_balance_trend">Trend</option><option value="mids" data-i18n="option_balance_mids">Mid level</option><option value="avg" data-i18n="option_balance_avg">Average</option><option value="min" data-i18n="option_balance_min">Lower side</option><option value="left" data-i18n="option_balance_left">Match left</option><option value="right" data-i18n="option_balance_right">Match right</option><option value="number" data-i18n="option_balance_number">Manual</option></select>
+                <label class="unit-field"><span class="sr-only" data-i18n="label_balance">Channel Balance:</span><input type="number" inputmode="decimal" id="ba-balance-db" value="0" step="1" disabled><span class="unit" data-i18n="studio_adv_unit_db">dB</span></label>
+              </div>
+            </div>
+          </fieldset>
+          <button type="button" class="btn-link adv-reset" id="adv-reset-tone" data-i18n="studio_adv_reset">Reset to defaults</button>
+        </section>
+        <section class="adv-panel" role="tabpanel" id="adv-panel-time" aria-labelledby="adv-tab-time" hidden>
+          <div class="adv-panel-head">
+            <button type="button" class="switch" role="switch" aria-checked="false" id="adv-on-time" aria-labelledby="adv-on-time-label"></button>
+            <span class="disclosure-title" id="adv-on-time-label" data-i18n="studio_adv_apply_time">Apply timing</span>
+          </div>
+          <fieldset class="adv-fields" id="adv-fields-time" disabled>
+            <div class="field-row">
+              <label for="ba-head-ms" data-i18n="studio_adv_label_pre_response">Pre-response:</label>
+              <div><span class="unit-field"><input type="number" inputmode="decimal" id="ba-head-ms" value="1.0" step="0.1" min="0"><span class="unit" data-i18n="studio_adv_unit_ms">ms</span></span></div>
+            </div>
+            <div class="field-row" id="ba-itd-mode-row">
+              <label for="ba-itd-mode" data-i18n="label_itd_mode">Ear timing (ITD):</label>
+              <div class="adv-stack">
+                <select id="ba-itd-mode">
+                  <option value="off" selected data-i18n="option_itd_mode_off">As recorded</option>
+                  <option value="symmetric" data-i18n="option_itd_mode_symmetric">Symmetric pairs</option>
+                  <option value="model" data-i18n="option_itd_mode_model">Spherical head model</option>
+                </select>
+                <p class="hint" data-itd-mode="off" data-i18n="hint_itd_mode_off">The time differences between the ears stay as recorded. The report after processing shows them for every speaker.</p>
+                <p class="hint" data-itd-mode="symmetric" data-i18n="hint_itd_mode_symmetric" hidden>Mirror pairs (FL/FR, SL/SR…) get the same time difference and the center speakers none, which removes a head turned during the recording and a microphone sitting deeper in one ear.</p>
+                <p class="hint" data-itd-mode="model" data-i18n="hint_itd_mode_model" hidden>Every speaker gets the time difference of a spherical head at its nominal direction. Front speakers of real heads usually measure smaller than the model.</p>
+              </div>
+            </div>
+            <div class="field-row" id="ba-head-radius-row">
+              <label for="ba-head-radius" data-i18n="label_head_radius">Head radius (cm):</label>
+              <div><span class="unit-field"><input type="number" inputmode="decimal" id="ba-head-radius" min="5" max="15" step="0.1" placeholder="auto"><span class="unit">cm</span></span></div>
+              <span class="hint" data-i18n="hint_head_radius">Empty: estimated from the side pair of the recording.</span>
+            </div>
+            <div class="field-row">
+              <label for="ba-decay" data-i18n="studio_adv_label_decay">Decay:</label>
+              <div class="inline-group">
+                <span class="unit-field"><input type="number" inputmode="decimal" id="ba-decay" min="0" placeholder="—"><span class="unit" data-i18n="studio_adv_unit_ms">ms</span></span>
+                <span class="check-row"><input type="checkbox" id="ba-decay-per-channel"><label for="ba-decay-per-channel" data-i18n="checkbox_per_channel">Per-channel</label></span>
+              </div>
+            </div>
+            <div class="field-row top" id="ba-decay-channels" hidden>
+              <span data-i18n="studio_adv_label_decay_channels">Decay per channel:</span>
+              <div class="ch-grid" id="ba-decay-grid"></div>
+            </div>
+          </fieldset>
+          <button type="button" class="btn-link adv-reset" id="adv-reset-time" data-i18n="studio_adv_reset">Reset to defaults</button>
+        </section>
+        <section class="adv-panel" role="tabpanel" id="adv-panel-output" aria-labelledby="adv-tab-output" hidden>
+          <div class="adv-panel-head">
+            <button type="button" class="switch" role="switch" aria-checked="false" id="adv-on-output" aria-labelledby="adv-on-output-label"></button>
+            <span class="disclosure-title" id="adv-on-output-label" data-i18n="studio_adv_apply_output">Apply output files</span>
+          </div>
+          <fieldset class="adv-fields" id="adv-fields-output" disabled>
+            <div class="field-row top">
+              <span data-i18n="studio_adv_label_extra_files">Extra files:</span>
+              <div class="file-grid">
+                <label class="file-opt"><input type="checkbox" id="ba-jamesdsp"><span class="file-name">JamesDSP</span><span class="file-path mono">jamesdsp.wav</span></label>
+                <label class="file-opt"><input type="checkbox" id="ba-hangloose"><span class="file-name">Hangloose</span><span class="file-path mono">Hangloose/</span></label>
+                <label class="file-opt"><input type="checkbox" id="ba-truehd"><span class="file-name" data-i18n="studio_adv_truehd">TrueHD layouts</span><span class="file-path mono">truehd_11ch · truehd_13ch</span></label>
+                <label class="file-opt" id="ba-sofa-row"><input type="checkbox" id="ba-sofa"><span class="file-name">SOFA</span><span class="file-path mono">brir.sofa</span></label>
+                <label class="file-opt" id="ba-sofa-split-row"><input type="checkbox" id="ba-sofa-split" disabled><span class="file-name" data-i18n="studio_adv_sofa_split">SOFA + headphone EQ</span><span class="file-path mono">brir-no-headphone-eq.sofa · headphone-eq.wav</span></label>
+              </div>
+            </div>
+            <!-- The tooltips of the channel-order files and the LFE channel follow the chosen
+                 mode (app.js updateLayoutForce, updateLfeHint), so they carry no data-i18n. -->
+            <div class="field-row top layout-files-row" id="ba-layout-files-row">
+              <span class="field-label"><label for="ba-layout-files" data-i18n="label_layout_files">Channel-order files:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="ba-layout-files-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="ba-layout-files-tip" class="tip-bubble">When the measured speakers cover every channel of a format, the BRIR is saved again in that format's channel order (for example atmos_9.1.6.wav). Of 9.1, 9.1.4 and 9.1.6 only the largest is saved.</span></span></span>
+              <div class="adv-stack">
+                <select id="ba-layout-files" aria-describedby="ba-layout-files-tip">
+                  <option value="auto" selected data-i18n="option_layout_files_auto">Formats with every speaker measured</option>
+                  <option value="listed" data-i18n="option_layout_files_listed">Also the formats I pick, with speakers missing</option>
+                  <option value="none" data-i18n="option_layout_files_none">Off</option>
+                </select>
+                <div class="layout-force-pick" data-layout-mode="listed" hidden>
+                  <p class="layout-force-caption" data-i18n="label_layout_files_force">Formats to save even with speakers missing:</p>
+                  <div class="file-grid layout-grid">
+                    <label class="file-opt"><input type="checkbox" id="ba-layout-force-0" data-layout="9.1"><span class="file-name">Dolby Atmos 9.1</span><span class="file-path mono">atmos_9.1.wav</span></label>
+                    <label class="file-opt"><input type="checkbox" id="ba-layout-force-1" data-layout="9.1.4"><span class="file-name">Dolby Atmos 9.1.4</span><span class="file-path mono">atmos_9.1.4.wav</span></label>
+                    <label class="file-opt"><input type="checkbox" id="ba-layout-force-2" data-layout="9.1.6"><span class="file-name">Dolby Atmos 9.1.6</span><span class="file-path mono">atmos_9.1.6.wav</span></label>
+                    <label class="file-opt"><input type="checkbox" id="ba-layout-force-3" data-layout="13.1"><span class="file-name">Auro-3D 13.1</span><span class="file-path mono">auro_13.1.wav</span></label>
+                    <label class="file-opt"><input type="checkbox" id="ba-layout-force-4" data-layout="22.2"><span class="file-name">NHK 22.2</span><span class="file-path mono">nhk_22.2.wav</span></label>
+                    <label class="file-opt"><input type="checkbox" id="ba-layout-force-5" data-layout="24.1.10"><span class="file-name">Dolby Atmos 24.1.10</span><span class="file-path mono">atmos_24.1.10.wav</span></label>
+                    <label class="file-opt"><input type="checkbox" id="ba-layout-force-6" data-layout="30.2"><span class="file-name">DTS:X Pro 30.2</span><span class="file-path mono">dtsx_30.2.wav</span></label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- ADR 0013: what the output files carry for speakers that were not
+                 measured and for the LFE channel. The defaults keep today's files. -->
+            <div class="field-row" id="ba-missing-speakers-row">
+              <span class="field-label"><label for="ba-missing-speakers" data-i18n="label_missing_speakers">Unmeasured speakers:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="ba-missing-speakers-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="ba-missing-speakers-tip" class="tip-bubble" data-i18n="hint_missing_speakers">For hesuvi.wav, hrir.wav and the channel-order files. The nearest measured speaker on the same side and at the same height is copied, and a missing center speaker is made from the pair beside it. Height channels are never filled from ear-level speakers.</span></span></span>
+              <select id="ba-missing-speakers" aria-describedby="ba-missing-speakers-tip">
+                <option value="silent" selected data-i18n="option_missing_speakers_silent">Silent tracks</option>
+                <option value="neighbor" data-i18n="option_missing_speakers_neighbor">Copy the nearest measured speaker</option>
+              </select>
+            </div>
+            <div class="field-row" id="ba-lfe-mode-row">
+              <span class="field-label"><label for="ba-lfe-mode" data-i18n="label_lfe_mode">LFE channel:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="ba-lfe-mode-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="ba-lfe-mode-tip" class="tip-bubble">The LFE tracks of the channel-order files stay silent. hesuvi.wav and hrir.wav have no LFE track.</span></span></span>
+              <select id="ba-lfe-mode" aria-describedby="ba-lfe-mode-tip">
+                <option value="none" selected data-i18n="option_lfe_mode_none">Silent</option>
+                <option value="center" data-i18n="option_lfe_mode_center">Copy the center speaker</option>
+                <option value="all" data-i18n="option_lfe_mode_all">Bass from every direction</option>
+              </select>
+            </div>
+            <div class="field-row">
+              <label for="ba-resample" id="ba-resample-label" data-i18n="studio_adv_label_resample">Resample:</label>
+              <div class="inline-group">
+                <input type="checkbox" id="ba-resample">
+                <select id="ba-fs" class="num" aria-labelledby="ba-resample-label ba-fs-unit" disabled><option>44100</option><option selected>48000</option><option>88200</option><option>96000</option><option>176400</option><option>192000</option><option>352000</option><option>384000</option></select>
+                <span class="mini-label" id="ba-fs-unit" data-i18n="studio_adv_unit_hz">Hz</span>
+              </div>
+            </div>
+            <div class="field-row top">
+              <span data-i18n="studio_adv_label_channel_layout">Channel layout:</span>
+              <div class="adv-stack">
+                <div class="check-row"><input type="checkbox" id="ba-remove-silent-channels" aria-describedby="ba-remove-silent-channels-tip"><label for="ba-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="ba-remove-silent-channels-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="ba-remove-silent-channels-tip" class="tip-bubble" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</span></span></div>
+                <!-- Shows only while the box is ticked (styles.css .silent-warning). -->
+                <p class="silent-warning" id="ba-remove-silent-channels-warning" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
+              </div>
+            </div>
+          </fieldset>
+          <button type="button" class="btn-link adv-reset" id="adv-reset-output" data-i18n="studio_adv_reset">Reset to defaults</button>
+        </section>
+        <section class="adv-panel" role="tabpanel" id="adv-panel-correction" aria-labelledby="adv-tab-correction" hidden>
+          <div class="adv-panel-head">
+            <button type="button" class="switch" role="switch" aria-checked="false" id="adv-on-correction" aria-labelledby="adv-on-correction-label"></button>
+            <span class="disclosure-title" id="adv-on-correction-label" data-i18n="studio_adv_apply_correction">Apply correction &amp; graphs</span>
+          </div>
+          <fieldset class="adv-fields" id="adv-fields-correction" disabled>
+            <h4 class="adv-sub-head" data-i18n="studio_adv_group_correction">Correction</h4>
+            <div class="check-row" id="ba-mic-row"><input type="checkbox" id="ba-mic-deviation"><label for="ba-mic-deviation" data-i18n="checkbox_enable_mic_deviation">Microphone deviation correction</label></div>
+            <div class="adv-nested">
+              <div class="field-row">
+                <label for="ba-mic-strength" data-i18n="label_strength">Strength:</label>
+                <div><span class="unit-field"><input type="number" inputmode="decimal" id="ba-mic-strength" value="0.7" step="0.05" min="0" max="1" disabled></span></div>
+              </div>
+              <div class="check-row"><input type="checkbox" id="ba-mic-debug" disabled><label for="ba-mic-debug" data-i18n="checkbox_mic_deviation_debug_plots">Mic deviation debug plots</label></div>
+            </div>
+            <div class="adv-sep"></div>
+            <h4 class="adv-sub-head" data-i18n="studio_adv_group_graphs">Graphs</h4>
+            <div class="check-row"><input type="checkbox" id="ba-interactive-plots"><label for="ba-interactive-plots" data-i18n="checkbox_interactive_plots">Interactive plots</label></div>
+          </fieldset>
+          <button type="button" class="btn-link adv-reset" id="adv-reset-correction" data-i18n="studio_adv_reset">Reset to defaults</button>
+        </section>
+        </div>
+          </section>
+        </section>
+
+        <!-- ======================== OUTPUT RECOVERY ======================== -->
+        <section class="view" id="view-recovery" aria-labelledby="app-bar-title">
+          <section class="group" aria-labelledby="group-recovery-source">
+            <h2 class="group-title" id="group-recovery-source" data-i18n="recovery_card_source">Recovery source</h2>
+            <div class="group-body">
+          <div class="field-row">
+            <label for="recovery-dir-path" data-i18n="recovery_source_label">Output folder:</label>
+            <input id="recovery-dir-path" class="mono" value="" spellcheck="false" placeholder="/storage/emulated/0/…" autocomplete="off">
+            <button type="button" class="icon-btn browse-btn" data-browse="dir" data-target="recovery-dir-path" data-i18n-label="button_browse" aria-label="Browse"><svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></button>
+          </div>
+          <div id="recovery-inventory" data-state="empty" aria-live="polite">
+            <p class="hint" id="recovery-inventory-message" data-i18n="recovery_inventory_empty"></p>
+            <div class="inline-group" id="recovery-inventory-source" hidden>
+              <span class="chip" id="recovery-source-badge"></span>
+              <span class="hint mono" id="recovery-source-audio"></span>
+            </div>
+            <div class="chips" id="recovery-speakers" hidden></div>
+            <div id="recovery-ledger" role="list" hidden></div>
+          </div>
+          <p class="hint" data-i18n="recovery_source_hint">Select the output folder, its Hangloose folder, or a folder containing split speaker WAVs.</p>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="group-recovery-options">
+            <h2 class="group-title" id="group-recovery-options" data-i18n="recovery_card_options">Outputs</h2>
+            <div class="group-body">
+          <div class="check-row">
+            <input type="checkbox" id="recovery-include-hangloose" aria-describedby="recovery-include-hangloose-tip">
+            <label for="recovery-include-hangloose" data-i18n="recovery_include_hangloose">Also create Hangloose files</label>
+            <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="recovery-include-hangloose-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="recovery-include-hangloose-tip" class="tip-bubble" data-i18n="recovery_include_hangloose_hint">When hrir.wav or hesuvi.wav is the source, also restore one stereo WAV per speaker.</span></span>
+          </div>
+          <div class="check-row">
+            <input type="checkbox" id="recovery-remove-silent-channels" aria-describedby="recovery-remove-silent-channels-tip">
+            <label for="recovery-remove-silent-channels" data-i18n="checkbox_remove_silent_channels">Remove silent channels, including gaps</label>
+            <span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="recovery-remove-silent-channels-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="recovery-remove-silent-channels-tip" class="tip-bubble" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</span></span>
+          </div>
+          <p class="silent-warning" data-i18n="tooltip_remove_silent_channels">Warning: this changes channel positions and can break compatibility with HeSuVi and other fixed-layout convolvers. Keep it off for compatible outputs. Restore with it off to recover channel positions.</p>
+          <p class="hint" data-i18n="recovery_preserve_hint">Files you already have are kept as they are — only the missing ones are added.</p>
+            </div>
+          </section>
+
+          <section class="group recovery-result" aria-labelledby="group-recovery-result" aria-live="polite">
+            <div class="group-title-row">
+              <h2 class="group-title" id="group-recovery-result" data-i18n="recovery_card_result">Result</h2>
+              <span class="group-meta mono" id="recovery-status-meta" data-i18n="webview_job_idle">Idle</span>
+            </div>
+            <div class="group-body">
+          <p class="recovery-status" id="recovery-status-title" data-i18n="webview_job_idle">Idle</p>
+          <p id="recovery-status-detail" data-i18n="recovery_idle_detail">Choose a folder to bring back its missing output files.</p>
+          <div class="recovery-file-row" id="recovery-created-row" hidden>
+            <span data-i18n="recovery_created_label">Created</span>
+            <span class="mono" id="recovery-created-files"></span>
+          </div>
+          <div class="recovery-file-row" id="recovery-existing-row" hidden>
+            <span data-i18n="recovery_existing_label">Preserved</span>
+            <span class="mono" id="recovery-existing-files"></span>
+          </div>
+          <div class="actions-row">
+            <button class="btn btn-secondary" id="btn-open-recovery-output" data-i18n="webview_open_output_folder" hidden>Open output folder</button>
+          </div>
+              <p class="hint open-failed" id="recovery-open-failed" role="status" hidden></p>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============================ SETTINGS ============================ -->
+        <section class="view" id="view-settings" aria-labelledby="app-bar-title">
+          <section class="group" aria-labelledby="group-appearance">
+            <h2 class="group-title" id="group-appearance" data-i18n="section_ui_appearance">UI Appearance</h2>
+            <div class="group-body">
+              <div class="field-row">
+                <label for="sf-language" data-i18n="label_select_language">Select Language:</label>
+                <select id="sf-language"></select>
+              </div>
+              <div class="field-row">
+                <label for="sf-theme" data-i18n="label_select_theme">Select Theme:</label>
+                <select id="sf-theme">
+                  <option value="dark" data-i18n="option_theme_dark">Dark</option>
+                  <option value="light" data-i18n="option_theme_light">Light</option>
+                  <option value="system" data-i18n="option_theme_system">System</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="group-storage">
+            <h2 class="group-title" id="group-storage" data-i18n="label_storage_access">File access</h2>
+            <div class="group-body">
+              <div class="status-row">
+                <span class="status-dot" id="sf-storage-dot" aria-hidden="true"></span>
+                <p class="status-text" id="sf-storage-state" role="status"></p>
+              </div>
+              <!-- Only while access is missing: with access there is nothing to do here. -->
+              <p class="hint" id="sf-storage-hint" data-i18n="hint_storage_access" hidden>Impulcifer needs access to all files to read measurement folders and save the results next to them.</p>
+              <button type="button" class="btn btn-secondary btn-block" id="btn-sf-storage-access" data-i18n="button_storage_access" hidden>Open settings</button>
+            </div>
+          </section>
+        </section>
+
+        <!-- ============================ INFO ============================ -->
+        <section class="view" id="view-info" aria-labelledby="app-bar-title">
+          <section class="group" aria-labelledby="group-about">
+            <h2 class="group-title" id="group-about" data-i18n="section_about">About</h2>
+            <div class="group-body about">
+              <div class="about-head">
+                <img class="about-logo" src="logo/pulse-128.png" alt="" width="56" height="56">
+                <p class="about-title">Impulcifer</p>
+              </div>
+              <p class="hint" data-i18n="app_subtitle_android"></p>
+              <button type="button" class="btn btn-secondary btn-block" id="btn-check-updates" data-i18n="button_check_updates">Check for Updates</button>
+              <p class="hint" id="update-check-status" role="status" hidden></p>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="group-system">
+            <h2 class="group-title" id="group-system" data-i18n="section_system_info">System Info</h2>
+            <div class="group-body">
+              <div class="kv-list" id="info-system" data-rows="version install device os cpu runtime shell webview channel"></div>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="group-contributors">
+            <h2 class="group-title" id="group-contributors" data-i18n="section_contributors">Contributors</h2>
+            <div class="group-body">
+              <div class="kv-list">
+                <span class="kv-key">Jaakko Pasanen</span><span class="kv-val" data-i18n="contributor_role_original">Original author</span>
+                <span class="kv-key">115dkk</span><span class="kv-val" data-i18n="contributor_role_py313">2.x Python port and 3.x Rust rewrite</span>
+                <span class="kv-key">LionLion123</span><span class="kv-val" data-i18n="contributor_role_contributor">Contributor</span>
+                <span class="kv-key">SDC (DCinside)</span><span class="kv-val" data-i18n="contributor_role_contributor">Contributor</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="group" aria-labelledby="group-links">
+            <h2 class="group-title" id="group-links" data-i18n="section_project_links">Project Links</h2>
+            <div class="link-list">
+              <button type="button" class="link-row" data-open-url="fork_repo"><span data-i18n="button_fork_repo">This fork</span><svg class="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></button>
+              <button type="button" class="link-row" data-open-url="original_repo"><span data-i18n="button_original_repo">Original Repository</span><svg class="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></button>
+              <button type="button" class="link-row" data-open-url="report_bug"><span data-i18n="button_report_bug">Report Bug</span><svg class="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></button>
+              <button type="button" class="link-row" data-open-url="license"><span data-i18n="button_view_license">View License</span><svg class="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></button>
+            </div>
+          </section>
+          <p class="runtime mono" id="runtime-status" data-i18n="webview_bridge_connecting">Connecting to service…</p>
+        </section>
+
+      </main>
+
+      <!-- A BRIR job whose sheet is put away: what it is doing, and a tap brings the sheet back. -->
+      <button type="button" class="job-bar" id="job-bar" hidden>
+        <span class="job-bar-mark" aria-hidden="true"></span>
+        <span class="job-bar-text">
+          <span class="job-bar-title" id="job-bar-title"></span>
+          <span class="job-bar-status" id="job-bar-status"></span>
+        </span>
+        <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="m18 15-6-6-6 6"/></svg>
+        <span class="job-bar-progress"><i data-progress></i></span>
+      </button>
+
+      <!-- The view's one primary action. -->
+      <div class="action-bar" id="action-bar">
+        <button class="btn btn-primary btn-block" id="btn-generate-brir" data-start data-i18n="action_generate_brir">Generate BRIR</button>
+        <button class="btn btn-primary btn-block" id="btn-start-recovery" data-start data-i18n="recovery_action" disabled>Restore outputs</button>
+      </div>
+
+      <nav class="bottom-nav" id="nav">
+        <button type="button" class="nav-item active" id="nav-processing" data-view="processing" aria-current="page">
+          <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/></svg>
+          <span class="nav-label" data-i18n="sidebar_processing">Processing</span>
+        </button>
+        <button type="button" class="nav-item" id="nav-recovery" data-view="recovery">
+          <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 1 0 2.64-6.36L3 8.3"/><path d="M3 3v5.3h5.3"/><path d="M12 7.5V12l3 2"/></svg>
+          <span class="nav-label" data-i18n="nav_recovery">Recovery</span>
+        </button>
+        <button type="button" class="nav-item" id="nav-settings" data-view="settings">
+          <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span class="nav-label" data-i18n="sidebar_settings">Settings</span>
+        </button>
+        <button type="button" class="nav-item" id="nav-info" data-view="info">
+          <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6h.01"/></svg>
+          <span class="nav-label" data-i18n="sidebar_info">Info</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- ============================ JOB SHEET ============================ -->
+    <!-- A BRIR job runs in this sheet. The chevron puts it away (the job goes on, #job-bar shows it);
+         once the job has ended it holds the outcome: the output folder, the alignment report or the
+         failure sentence. The log stays folded until asked for. -->
+    <section class="sheet job-sheet" id="job-sheet" role="dialog" aria-modal="true" aria-labelledby="job-sheet-title" data-status="idle" hidden>
+      <header class="sheet-head">
+        <div class="sheet-heading">
+          <h2 class="sheet-title" id="job-sheet-title" data-i18n="studio_processing_title">HRIR Processing</h2>
+          <p class="sheet-status" id="job-sheet-status"></p>
+        </div>
+        <button type="button" class="icon-btn" id="job-sheet-close" data-i18n-label="job_sheet_hide" aria-label="Hide">
+          <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </header>
+      <div class="sheet-body">
+        <div class="progress"><i data-progress></i></div>
+        <p class="job-error" id="job-sheet-error" role="alert" hidden></p>
+        <div class="path-row job-output" id="job-sheet-output-row" hidden>
+          <span class="path-label" data-i18n="job_sheet_output">Output folder</span>
+          <span class="path-scroll mono" id="job-sheet-output"></span>
+        </div>
+        <p class="hint open-failed" id="brir-open-failed" role="status" hidden></p>
+        <ol class="steps" id="brir-steps" hidden></ol>
+        <section class="align-report" id="brir-alignment" hidden aria-labelledby="brir-alignment-title">
+          <div class="align-head">
+            <h4 class="align-title" id="brir-alignment-title" data-i18n="label_itd_report">Interaural time differences</h4>
+            <span class="align-mode mono" id="brir-alignment-mode"></span>
+          </div>
+          <dl class="kv-grid align-summary" id="brir-alignment-summary"></dl>
+          <div class="align-table-wrap">
+            <table class="align-table">
+              <thead>
+                <tr>
+                  <th scope="col" data-i18n="th_itd_speaker">Speaker</th>
+                  <th scope="col" class="num" data-i18n="th_itd_measured">Measured (µs)</th>
+                  <th scope="col" class="num" data-i18n="th_itd_model">Spherical head (µs)</th>
+                  <th scope="col" class="num" data-i18n="th_itd_after">Final (µs)</th>
+                  <th scope="col" class="num" data-i18n="th_itd_lf_ild">Bass L−R (dB)</th>
+                </tr>
+              </thead>
+              <tbody id="brir-alignment-rows"></tbody>
+            </table>
+          </div>
+          <p class="hint" data-i18n="hint_itd_report">Positive values: the sound reaches the left ear first. Bass L−R below 120 Hz should be the same in both ears; what differs is the recording chain.</p>
+        </section>
+        <details class="job-log">
+          <summary><span data-i18n="job_sheet_log">Log</span></summary>
+          <pre class="log" data-log aria-live="polite"></pre>
+        </details>
+      </div>
+      <footer class="sheet-actions">
+        <button class="btn btn-secondary btn-block" id="btn-cancel-brir" data-i18n="button_cancel" disabled>Cancel</button>
+        <button class="btn btn-secondary btn-block" id="btn-open-output" data-i18n="webview_open_output_folder" hidden>Open output folder</button>
+        <button type="button" class="btn btn-primary btn-block" id="job-sheet-done" data-i18n="button_close" hidden>Close</button>
+      </footer>
+    </section>
+
+    <!-- ============================ CHOOSER ============================ -->
+    <!-- Every browse button opens this sheet (list_directory). data-mode is "dir" or "file";
+         data-state is loading, ready, empty, unreadable, noaccess or error. -->
+    <section class="sheet chooser" id="chooser" role="dialog" aria-modal="true" aria-labelledby="chooser-title" data-mode="dir" data-state="loading" hidden>
+      <header class="sheet-head">
+        <div class="sheet-heading">
+          <h2 class="sheet-title" id="chooser-title">Choose a folder</h2>
+        </div>
+        <button type="button" class="icon-btn" id="chooser-close" data-i18n-label="button_close" aria-label="Close">
+          <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </header>
+      <div class="chooser-nav">
+        <div class="seg chooser-roots" id="chooser-roots" role="radiogroup" data-i18n-label="chooser_roots" aria-label="Storage" hidden></div>
+        <div class="chooser-where">
+          <button type="button" class="icon-btn" id="chooser-up" data-i18n-label="chooser_up" aria-label="Up one folder" disabled>
+            <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+          </button>
+          <div class="chooser-here">
+            <p class="chooser-name" id="chooser-name"></p>
+            <p class="chooser-path"><bdi id="chooser-path"></bdi></p>
+          </div>
+        </div>
+      </div>
+      <div class="chooser-body" id="chooser-body">
+        <p class="chooser-message" id="chooser-message" role="status"></p>
+        <div class="chooser-access" id="chooser-access" hidden>
+          <p class="notice-title" data-i18n="storage_notice_title">Allow access to your files</p>
+          <p class="notice-body" data-i18n="storage_notice_body">Impulcifer reads the measurement folders on this phone and writes the results next to them. Turn on access to all files for Impulcifer.</p>
+          <button type="button" class="btn btn-primary btn-block" id="chooser-storage-access" data-i18n="button_storage_access">Open settings</button>
+        </div>
+        <ul class="chooser-list" id="chooser-list"></ul>
+        <p class="hint chooser-truncated" id="chooser-truncated" hidden></p>
+      </div>
+      <footer class="sheet-actions" id="chooser-actions">
+        <button type="button" class="btn btn-primary btn-block" id="chooser-select" data-i18n="chooser_select">Use this folder</button>
+      </footer>
+    </section>
+
+    <!-- ============================ TIP SHEET ============================ -->
+    <!-- An info button's text, titled with its field's label, from the bottom. -->
+    <div class="scrim" id="tip-scrim" hidden></div>
+    <section class="tip-sheet" id="tip-sheet" role="dialog" aria-modal="true" aria-labelledby="tip-sheet-title" hidden>
+      <h2 class="tip-sheet-title" id="tip-sheet-title"></h2>
+      <div class="tip-sheet-body" id="tip-sheet-body"></div>
+      <button type="button" class="btn btn-secondary btn-block" id="tip-sheet-close" data-i18n="button_close">Close</button>
+    </section>
+
+    <div class="modal-backdrop" id="language-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="language-modal-title">
+        <div class="modal-head">
+          <h3 id="language-modal-title" data-i18n="dialog_select_language_title">Select Language</h3>
+        </div>
+        <p class="hint" data-i18n="dialog_select_language_message">Please select your language.</p>
+        <div class="lang-list" id="language-modal-list"></div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="update-modal" hidden>
+      <div class="modal update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
+        <div class="modal-head">
+          <h3 id="update-modal-title" data-i18n="update_available_title">Update Available</h3>
+          <span class="card-meta mono" id="update-version-line"></span>
+        </div>
+        <p class="hint" data-i18n="update_new_version">A new version is available.</p>
+        <p class="hint" data-i18n="update_release_notes">Release Notes:</p>
+        <div class="update-notes" id="update-notes"></div>
+        <div id="update-progress-row" hidden>
+          <div class="progress"><i id="update-progress"></i></div>
+          <!-- Android opens the release's APK in the browser; nothing downloads in the app. -->
+          <p class="hint" id="update-status" data-pending-key="update_apk_status"></p>
+        </div>
+        <p class="hint" id="update-result" hidden></p>
+        <div class="actions-row modal-actions">
+          <button class="btn btn-secondary" id="update-skip" data-i18n="update_button_skip_version">Skip this version</button>
+          <button class="btn btn-secondary" id="update-remind" data-i18n="update_button_later">Later</button>
+          <button class="btn btn-primary" id="update-now" data-i18n="update_button_download">Download</button>
+          <button class="btn btn-primary" id="update-restart" data-i18n="button_ok" hidden>OK</button>
+          <button class="btn btn-secondary" id="update-close" data-i18n="button_close" hidden>Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="ask-modal" hidden>
+      <div class="modal ask-modal" role="alertdialog" aria-modal="true" aria-labelledby="ask-modal-message">
+        <p class="ask-message" id="ask-modal-message"></p>
+        <div class="actions-row modal-actions">
+          <button class="btn btn-secondary" id="ask-modal-cancel" data-i18n="button_cancel">Cancel</button>
+          <button class="btn btn-primary" id="ask-modal-ok" data-i18n="button_ok">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="core.js"></script>
+    <script src="progress.js"></script>
+    <script src="jobs.js"></script>
+    <script src="update.js"></script>
+    <script src="test-signal.js"></script>
+    <script src="tips.js"></script>
+    <script src="room.js"></script>
+    <script src="advanced.js"></script>
+    <script src="eq.js"></script>
+    <script src="mfile.js"></script>
+    <script src="settings.js"></script>
+    <script src="chrome.js"></script>
+    <script src="storage.js"></script>
+    <script src="chooser.js"></script>
+    <script src="sheet.js"></script>
+    <script src="tipsheet.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -368,6 +368,23 @@ async function generateSweepSet() {
 
 /* ---------------------------------------------------------------- wiring */
 
+/* Studio cancels a recording from the page header; Stable from its job dialog. */
+/** @param {Job | null} job */
+function showRecordingCancel(job) {
+  const active = Boolean(job && !isTerminal(job.status));
+  el("btn-cancel-recording", HTMLButtonElement).hidden =
+    !(active && state.skin === "studio" && job?.kind === "recording" && job.cancellable);
+}
+
+/* Bootstrap's sweep layouts and the sweep source's rows, before the strings arrive. */
+/** @param {Bootstrap} data */
+function bootRecorder(data) {
+  populateSweepLayouts(
+    (data.sweep && data.sweep.layouts) || ["mono", "stereo", "5.1", "7.1", "7.1.4", "7.1.6"]
+  );
+  updateSweepSourceVisibility();
+}
+
 /* The channel guidance, the resolved path and the share modes again, after the language changes. */
 function renderRecorder() {
   updateChannelGuidance();
@@ -413,4 +430,6 @@ function wireRecorder() {
   el("btn-start-recording", HTMLButtonElement).addEventListener("click", startSpeakersRecording);
   el("btn-record-headphones", HTMLButtonElement).addEventListener("click", startHeadphonesRecording);
   el("btn-sweep-set", HTMLButtonElement).addEventListener("click", generateSweepSet);
+  // The forced channel count follows its checkbox from the start.
+  updateChannelGuidance();
 }

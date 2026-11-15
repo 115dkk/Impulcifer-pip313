@@ -164,8 +164,6 @@ function applySkin(code) {
   const previous = state.skin;
   state.skin = code === "stable" ? "stable" : "studio";
   document.documentElement.dataset.skin = state.skin;
-  const desc = $("sf-skin-desc");
-  if (desc) desc.textContent = t(state.skin === "stable" ? "tooltip_skin_stable" : "tooltip_skin_studio");
   // Re-evaluate the job dialog: switching skins mid-job moves the running
   // display between the inline activity card and the Stable modal.
   renderJobState(state.lastJob);
@@ -304,6 +302,11 @@ function isTerminal(status) {
   return status === "succeeded" || status === "failed" || status === "cancelled";
 }
 
+/* The main channel's job on every display that shows it. The root element
+   carries its kind and status (data-job-kind, data-job-status) for the styles
+   and for tests; each part of the page that shows a job in its own way (the
+   recorder's cancel button, Stable's job dialog, the Android job sheet) does
+   so in its `job` hook. */
 /** @param {Job | null} job */
 function renderJobState(job) {
   state.lastJob = job;
@@ -315,8 +318,11 @@ function renderJobState(job) {
     node.textContent = label;
   });
   if (job?.kind === "output_recovery") renderRecoveryJob(job);
-  const active = Boolean(job && !isTerminal(job.status));
-  updateJobModal(job, active);
+  const root = document.documentElement;
+  if (job) root.dataset.jobKind = job.kind;
+  else delete root.dataset.jobKind;
+  root.dataset.jobStatus = job ? job.status : "idle";
+  for (const feature of presentFeatures()) feature.job?.(job);
 }
 
 /** @param {Job | null} job */
@@ -331,9 +337,6 @@ function updateStartControls(job) {
   generate.disabled = busy || recordingProblem !== null;
   generate.title = recordingProblem || "";
   el("btn-cancel-brir", HTMLButtonElement).disabled = !active || !job?.cancellable;
-  // Studio cancels a recording from the page header; Stable from its job dialog.
-  el("btn-cancel-recording", HTMLButtonElement).hidden =
-    !(active && state.skin === "studio" && job?.kind === "recording" && job.cancellable);
   el("btn-start-recovery", HTMLButtonElement).disabled = busy || (state.skin === "studio" && state.recoveryState !== "ready");
 }
 
@@ -350,8 +353,9 @@ function jobKindLabel(kind) {
 
 /* Stable skin shows running jobs in a separate dialog, mirroring the CTk
    RecordingProgressDialog / ProcessingDialog convention. */
-/** @param {Job | null} job @param {boolean} busy */
-function updateJobModal(job, busy) {
+/** @param {Job | null} job */
+function updateJobModal(job) {
+  const busy = Boolean(job && !isTerminal(job.status));
   const modal = $("job-modal");
   if (state.skin !== "stable" || !job || state.modalDismissed) {
     modal.hidden = true;
@@ -366,4 +370,16 @@ function updateJobModal(job, busy) {
   cancel.disabled = !job.cancellable;
   el("job-modal-close", HTMLButtonElement).hidden = busy;
   modal.hidden = false;
+}
+
+/* Opens a folder in the system's file manager. A page that has a note for the
+   case where nothing opens it (an Android phone may have no file manager that
+   answers) shows the note, which names the folder, instead of an error. */
+/** @param {string} path @param {string} noteId */
+async function openFolder(path, noteId) {
+  const response = await callApi(() => api().open_path(path));
+  const note = document.getElementById(noteId);
+  if (!note) return;
+  note.hidden = response.ok;
+  note.textContent = response.ok ? "" : fmt(t("open_folder_failed"), { path });
 }

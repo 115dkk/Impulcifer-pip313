@@ -3,8 +3,12 @@
 # webview-gallery.yml(2.x webview_ui)과 같은 방식으로 3.x 화면
 # (apps/impulcifer-app/ui)을 그린다. apps/impulcifer-app/tests/ui_gallery.py가
 # mock IPC 위에서 스킨 x 테마 x 언어 x 시나리오 조합을 렌더링하고 동작을
-# 검사한 뒤(샷 수 자가검증), PNG를 webview-gallery 브랜치의
-# runs-3x/<run>-pr<PR>에 올리고 리뷰 이슈를 연다. 브랜치와 이슈에는 최신
+# 검사한 뒤(샷 수 자가검증), PNG를 webview-gallery 브랜치에 올리고 리뷰 이슈를
+# 연다. 갤러리는 둘로 나뉜다. 데스크톱 화면은 runs-3x/<run>-pr<PR>과 '데스크톱
+# 화면 갤러리 리뷰 (3.x)' 이슈, 안드로이드 화면(android-*.png)은
+# runs-3x-android/<run>-pr<PR>과 '안드로이드 화면 갤러리 리뷰 (3.x)' 이슈다.
+# 한 이슈에 모두 넣으면 본문 길이 한도를 넘어 스크린샷이 링크 목록으로 바뀌는데,
+# 링크를 하나씩 열어서는 화면을 검토하기 어렵다. 브랜치와 이슈에는 최신
 # 갤러리만 남는다(이 실행과 아직 열린 다른 PR의 최신 실행,
 # .github/scripts/gallery_publish.py). fork PR은 브랜치 push/이슈 생성 권한이
 # 없으므로 제외한다.
@@ -58,11 +62,25 @@ jobs:
           name: ui-gallery-3x
           path: ui-gallery-3x/*.png
 
+      # The Android page's shots get a review issue of their own. The artifact
+      # above still holds every PNG in one folder.
+      - name: Split the gallery by page
+        run: |
+          mkdir ui-gallery-3x-android
+          mv ui-gallery-3x/android-*.png ui-gallery-3x-android/
+          echo "desktop: $(ls ui-gallery-3x | wc -l) PNGs, Android: $(ls ui-gallery-3x-android | wc -l) PNGs"
+
       # Keeps only the latest galleries: the branch is rewritten as one commit
       # holding this run and the newest run of every other open PR, and review
       # issues of closed PRs are closed (.github/scripts/gallery_publish.py).
-      - name: Publish the gallery and its review issue
+      - name: Publish the desktop gallery and its review issue
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: python .github/scripts/gallery_publish.py --kind 3x --images ui-gallery-3x
+
+      - name: Publish the Android gallery and its review issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python .github/scripts/gallery_publish.py --kind 3x-android --images ui-gallery-3x-android

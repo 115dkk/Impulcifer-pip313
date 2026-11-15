@@ -38,8 +38,9 @@ interface Bootstrap {
   capabilities: { recording: boolean; brir: boolean; output_recovery: boolean;
     recording_cancel: boolean; brir_cancel: boolean; output_recovery_cancel: boolean; share_modes: SharePreference[] };
 }
+/* device is the machine's name where the shell reports one (Android: "Samsung SM-S948N"). */
 interface SystemInfo {
-  version: string; install_kind: string; os: string; cpu_count: number | null;
+  version: string; install_kind: string; os: string; device?: string; cpu_count: number | null;
   runtime: { language: string; toolchain: string; audio_backend: string; shell?: string; webview?: string };
   paths: { data_dir: string; settings_path: string }; update_channel: "prerelease" | "stable";
 }
@@ -250,6 +251,27 @@ interface RecoveryPlan extends RecoveryMetadata {
   hangloose_dir: string | null;
 }
 interface RecoveryResult extends RecoveryMetadata { created_files: string[] }
+/* ADR 0020: one folder, for the Android page's own folder and file chooser. `kind` is what the
+   chooser is for: "dir" lists the folders and every file (the files only tell folders apart), and
+   the others list the folders and the files a field of that kind takes (the extensions of the
+   desktop's file dialogs). Entries are sorted folders first, then by name; names starting with a
+   dot are left out. `parent` is null at a storage root. `roots` are the volumes the shell reports
+   (Android's shared storage, the device's own first); empty on the desktop, where a request without
+   a path starts in the home folder. `truncated` says the folder holds more than the 2000 entries
+   listed. */
+type BrowseKind = "dir" | "audio" | "text" | "wav" | "measurement";
+interface DirectoryRequest { path?: string | null; kind?: BrowseKind | null }
+interface StorageRoot { path: string; label: string; removable: boolean }
+interface DirectoryEntry { name: string; path: string; dir: boolean; size: number | null; modified_ms: number | null }
+interface DirectoryListing {
+  path: string; parent: string | null; roots: StorageRoot[]; entries: DirectoryEntry[]; truncated: boolean;
+}
+/* Whether the app may read and write the folders measurements are kept in. The desktop needs no
+   grant ("not_required"); Android's all-files access is "granted" or "denied", and the person
+   grants it on the system screen request_storage_access opens (`opened` is false where there is
+   no such screen). The state can change while the app is in the background, so ask again when the
+   page becomes visible. */
+interface StorageAccess { state: "granted" | "denied" | "not_required" }
 interface UpdateInfo {
   update_available: boolean; current_version: string; latest_version: string | null;
   download_url: string | null; release_notes: string | null; release_url: string | null;
@@ -313,6 +335,9 @@ interface IpcApi {
   apply_pending_update(): Promise<Envelope<{ restarting: boolean }>>;
   select_file(kind?: string | null): Promise<Envelope<{ path: string | null }>>;
   select_directory(): Promise<Envelope<{ path: string | null }>>;
+  list_directory(request?: DirectoryRequest | null): Promise<Envelope<DirectoryListing>>;
+  get_storage_access(): Promise<Envelope<StorageAccess>>;
+  request_storage_access(): Promise<Envelope<{ opened: boolean }>>;
   open_url(name: string): Promise<Envelope<{ url: string }>>;
 }
 type IpcMethod = keyof IpcApi;
@@ -343,7 +368,12 @@ interface AppState {
 }
 interface Window {
   pywebview?: { api: IpcApi };
-  __TAURI__?: { core: { invoke<T = unknown>(command: string, payload?: Record<string, unknown>, options?: unknown): Promise<T> } };
+  /* app.onBackButtonPress exists on Android: while a handler is registered the system's own
+     back action (leave the app) does not run; unregister gives it back. */
+  __TAURI__?: {
+    core: { invoke<T = unknown>(command: string, payload?: Record<string, unknown>, options?: unknown): Promise<T> };
+    app?: { onBackButtonPress?(handler: (payload: { canGoBack: boolean }) => void): Promise<{ unregister(): Promise<void> }> };
+  };
   __impulciferSmoke?: SmokeObserver;
   __impulciferSmokeParams?: SmokeParams;
 }

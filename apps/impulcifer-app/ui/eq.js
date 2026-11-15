@@ -54,8 +54,12 @@ function setEqChoice(slot, choice) {
 
 /** @param {EqSlotName} slot */
 async function chooseEqFile(slot) {
-  const response = await api().select_file("text");
-  if (response.ok && response.data.path) setEqChoice(slot, { mode: "file", path: response.data.path });
+  const choice = state.eqChoices[slot];
+  // A chooser starts at the folder of the file it is given: the slot's file, else the recording
+  // folder itself (the trailing slash makes the folder the "file's" folder).
+  const dir = val("bf-dir-path");
+  const path = await pickPath("text", choice.mode === "file" ? choice.path : dir && `${dir.replace(/[\\/]+$/, "")}/`);
+  if (path) setEqChoice(slot, { mode: "file", path });
 }
 
 /** @param {string} text @param {string} [className] */
@@ -218,7 +222,7 @@ function renderEqPreview() {
   }
   note.textContent = t("eq_preview_note");
   // Drawn in CSS pixels of the current width so text never scales.
-  const width = Math.max(320, Math.round(svg.getBoundingClientRect().width) || 640);
+  const width = Math.max(240, Math.round(svg.getBoundingClientRect().width) || 640);
   const [height, left, right, top, bottom] = [180, 40, 12, 10, 22];
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   const fMin = Math.log10(20);
@@ -240,7 +244,8 @@ function renderEqPreview() {
   };
   for (const f of [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
     add("line", { class: "eq-grid", x1: x(f), x2: x(f), y1: top, y2: height - bottom });
-    if ([20, 100, 1000, 10000, 20000].includes(f)) {
+    // Below 400 px (a phone) 10k would run into 20k, so only the outer and decade labels are kept.
+    if ([20, 100, 1000, 10000, 20000].includes(f) && (f !== 10000 || width >= 400)) {
       add("text", { class: "eq-axis", x: x(f), y: height - 6, "text-anchor": f === 20 ? "start" : f === 20000 ? "end" : "middle" },
         f >= 1000 ? `${f / 1000}k` : String(f));
     }

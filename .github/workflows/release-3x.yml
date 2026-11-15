@@ -17,6 +17,9 @@ name: Release 3.x
 #                      existing install)
 #   build-macos        tauri build --bundles app,dmg + signed updater archive
 #   build-linux        tauri build --bundles appimage + signature
+#   build-android      tauri android build --apk for arm64-v8a, signed with the
+#                      project's key (ADR 0020); android.yml builds, installs and
+#                      runs the same app on an emulator for every pull request
 #   wheels             maturin wheels on three OSes + sdist (PyPI project impulcifer-py313,
 #                      the same project as 2.x so pip upgrades carry users over;
 #                      the wheels carry no audio backend, so the Linux wheel is a
@@ -35,7 +38,8 @@ name: Release 3.x
 #                      GitHub API through Velopack's GithubSource instead.
 #
 # Secrets: TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD) for the macOS/Linux updater
-# signatures (public key in apps/impulcifer-app/tauri.conf.json).
+# signatures (public key in apps/impulcifer-app/tauri.conf.json). The passwords of
+# the macOS signing identity and of the Android signing key are derived from them.
 
 on:
   push:
@@ -425,6 +429,69 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  build-android:
+    name: Android (Tauri APK)
+    needs: gate
+    if: needs.gate.outputs.should_release == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+
+      - uses: ./.github/actions/android-setup
+        with:
+          rust-targets: aarch64-linux-android
+
+      - name: Cache cargo registry, target and Gradle
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: release3x-android-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml', 'apps/impulcifer-app/gen/android/**/*.kts') }}
+          restore-keys: release3x-android-
+
+      - name: Build the release APK
+        working-directory: apps/impulcifer-app
+        run: tauri android build --apk --target aarch64 --ci
+
+      # Android installs an update only over an app signed with the same key,
+      # so a release is never published unsigned or with another key: the
+      # script fails when the key cannot be opened, and checks the result
+      # against the certificate in the repository.
+      - name: Sign with the project key and name the asset
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          unsigned=apps/impulcifer-app/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+          mkdir -p dist
+          # Not captured: its stdout registers the mask (see the script's header).
+          bash .github/scripts/android_signing_key.sh sign apps/impulcifer-app/android-signing "$unsigned" "dist/Impulcifer-${VERSION}-aarch64.apk"
+          badging=$("$ANDROID_BUILD_TOOLS/aapt2" dump badging "dist/Impulcifer-${VERSION}-aarch64.apk")
+          echo "$badging" | grep -E "^(package|sdkVersion|minSdkVersion|targetSdkVersion|native-code)"
+          # The update check of an installed app looks for this name
+          # (crates/impulcifer-service/src/update/check.rs), and the package must
+          # carry the released version.
+          echo "$badging" | grep -q "^package: name='dev.impulcifer.app' .*versionName='${VERSION}'"
+          echo "$badging" | grep -q "^native-code: 'arm64-v8a'$"
+          ls -la dist
+
+      - name: Upload the Android artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-apk
+          path: dist/*
+          if-no-files-found: error
+
   wheels:
     name: Python wheels (${{ matrix.os }})
     needs: gate
@@ -534,7 +601,7 @@ jobs:
 
   create-release:
     name: Create the GitHub Release
-    needs: [gate, build-windows, upgrade-windows, build-macos, build-linux, wheels]
+    needs: [gate, build-windows, upgrade-windows, build-macos, build-linux, build-android, wheels]
     if: needs.gate.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -572,7 +639,7 @@ jobs:
           version = os.environ["VERSION"]; tag = os.environ["TAG"]
           repo = os.environ["GITHUB_REPOSITORY"]
           out = pathlib.Path("release"); out.mkdir()
-          for name in ["windows-velopack", "macos-bundle", "linux-appimage", "wheels-ubuntu-latest", "wheels-windows-latest", "wheels-macos-latest"]:
+          for name in ["windows-velopack", "macos-bundle", "linux-appimage", "android-apk", "wheels-ubuntu-latest", "wheels-windows-latest", "wheels-macos-latest"]:
               d = pathlib.Path("artifacts") / name
               for f in sorted(d.glob("*")):
                   if f.is_file():

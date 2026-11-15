@@ -6,6 +6,7 @@
 
 mod args;
 pub mod brir;
+mod browse;
 mod paths;
 pub mod recording;
 pub mod recovery;
@@ -27,6 +28,16 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+/// A place the folder browser of `list_directory` can start from. Android's
+/// shared storage volumes are the only ones a shell reports so far (ADR 0020).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StorageRoot {
+    pub path: String,
+    /// The name the platform shows for the volume, in the system language.
+    pub label: String,
+    pub removable: bool,
+}
+
 pub trait HostAdapter: Send + Sync {
     fn select_file(&self, kind: &str) -> Option<String>;
     fn select_directory(&self) -> Option<String>;
@@ -35,6 +46,28 @@ pub trait HostAdapter: Send + Sync {
     fn apply_title_theme(&self, theme: &str);
     fn shell_info(&self) -> serde_json::Map<String, Value> {
         serde_json::Map::new()
+    }
+    /// What only the shell can read about the platform. `os` (a string)
+    /// replaces the service's own OS description and `device` (a string) names
+    /// the machine; a shell that knows neither returns nothing.
+    fn platform_info(&self) -> serde_json::Map<String, Value> {
+        serde_json::Map::new()
+    }
+    /// Whether the app may read and write the folders people keep their
+    /// measurements in. `None` where the platform asks for no such grant
+    /// (every desktop); Android answers with its all-files access state.
+    fn storage_access(&self) -> Option<bool> {
+        None
+    }
+    /// Opens the system screen where the person grants storage access.
+    /// `Ok(false)` where there is no such screen.
+    fn request_storage_access(&self) -> Result<bool, String> {
+        Ok(false)
+    }
+    /// The volumes `list_directory` offers as roots. Empty means the service
+    /// uses the home directory.
+    fn storage_roots(&self) -> Vec<StorageRoot> {
+        Vec::new()
     }
     fn download_update(
         &self,
@@ -207,12 +240,12 @@ impl ImpulciferService {
                                 "label": channel.label, "slot": channel.slot
                             })).collect::<Vec<_>>()
                         })).collect::<Vec<_>>()},
-                    "capabilities": {"recording":true,"brir":true,"output_recovery":true,
-                        "recording_cancel":true,"brir_cancel":true,"output_recovery_cancel":false,
+                    "capabilities": {"recording":self.backend.can_record(),"brir":true,"output_recovery":true,
+                        "recording_cancel":self.backend.can_record(),"brir_cancel":true,"output_recovery_cancel":false,
                         "share_modes":share_modes},
                     "active_job": self.jobs.active().as_ref().map(snapshot),
                     "ui": self.settings().payload(),
-                    "webview_backend": match platform() { "windows" => "edgechromium", "darwin" => "cocoa", _ => "gtk" },
+                    "webview_backend": match platform() { "windows" => "edgechromium", "darwin" => "cocoa", "android" => "android", _ => "gtk" },
                 }))
             }
             IpcMethod::GetUiSettings => {
@@ -278,15 +311,29 @@ impl ImpulciferService {
                 ]);
                 runtime.extend(self.host.shell_info());
                 let settings_path = path_text(self.settings().path());
-                Ok(json!({
+                let platform_info = self.host.platform_info();
+                let platform_text = |key: &str| {
+                    platform_info
+                        .get(key)
+                        .and_then(Value::as_str)
+                        .filter(|text| !text.is_empty())
+                };
+                let os = platform_text("os")
+                    .map(str::to_owned)
+                    .unwrap_or_else(os_description);
+                let mut info = json!({
                     "version":env!("CARGO_PKG_VERSION"),
                     "install_kind":self.update_options.install_kind.as_str(),
-                    "os":os_description(),
+                    "os":os,
                     "cpu_count":cpus,
                     "runtime":runtime,
                     "paths":{"data_dir":path_text(&self.data_dir),"settings_path":settings_path},
                     "update_channel":if update::check::is_prerelease(env!("CARGO_PKG_VERSION")) { "prerelease" } else { "stable" },
-                }))
+                });
+                if let Some(device) = platform_text("device") {
+                    info["device"] = json!(device);
+                }
+                Ok(info)
             }
             IpcMethod::ListAudioDevices => {
                 args.count(0, 1)?;
@@ -578,6 +625,22 @@ impl ImpulciferService {
                 args.count(0, 0)?;
                 Ok(json!({"path":self.host.select_directory()}))
             }
+            IpcMethod::ListDirectory => {
+                args.count(0, 1)?;
+                browse::list(args.get(0), &self.host.storage_roots())
+            }
+            IpcMethod::GetStorageAccess => {
+                args.count(0, 0)?;
+                Ok(json!({"state":match self.host.storage_access() {
+                    None => "not_required",
+                    Some(true) => "granted",
+                    Some(false) => "denied",
+                }}))
+            }
+            IpcMethod::RequestStorageAccess => {
+                args.count(0, 0)?;
+                Ok(json!({"opened":self.host.request_storage_access().map_err(internal)?}))
+            }
             IpcMethod::CheckForUpdates => {
                 args.count(0, 0)?;
                 update::check::check(&self.update_options).map_err(|message| {
@@ -735,7 +798,19 @@ fn os_version() -> String {
         .map(|s| s.trim().to_owned())
         .unwrap_or_default()
 }
-#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+#[cfg(target_os = "android")]
+fn os_version() -> String {
+    format!(
+        "Linux {}",
+        rustix::system::uname().release().to_string_lossy()
+    )
+}
+#[cfg(not(any(
+    windows,
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android"
+)))]
 fn os_version() -> String {
     String::new()
 }
@@ -745,6 +820,7 @@ fn os_platform_name() -> &'static str {
         "windows" => "Windows",
         "linux" => "Linux",
         "macos" => "macOS",
+        "android" => "Android",
         other => other,
     }
 }
@@ -794,6 +870,7 @@ mod os_description_tests {
             "windows" => "Windows",
             "linux" => "Linux",
             "macos" => "macOS",
+            "android" => "Android",
             other => other,
         };
         assert!(description.contains(platform), "{description}");

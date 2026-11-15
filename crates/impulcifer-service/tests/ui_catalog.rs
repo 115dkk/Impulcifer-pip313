@@ -12,8 +12,12 @@ fn ui_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/impulcifer-app/ui")
 }
 
-/// The page's scripts: every `ui/*.js` (sorted, so the order is deterministic)
-/// with its contents. index.html loads them as ordered classic scripts.
+/// The two pages: the desktop's and the Android page's (ADR 0020). Each loads
+/// its scripts as ordered classic scripts from `ui/`.
+const PAGES: [&str; 2] = ["index.html", "android.html"];
+
+/// The scripts: every `ui/*.js` (sorted, so the order is deterministic) with
+/// its contents.
 fn ui_scripts() -> Vec<(String, String)> {
     let mut scripts: Vec<(String, String)> = std::fs::read_dir(ui_dir())
         .unwrap()
@@ -41,14 +45,24 @@ fn page_script_sources(html: &str) -> Vec<String> {
         .collect()
 }
 
-/// `data-i18n="key"` in the markup and literal `t("key")` / `tOr("key", …)` calls
+/// The keys both pages use: `data-i18n="key"` in their markup, the Android page's
+/// `data-i18n-label="key"` (an icon button's name) and `data-pending-key="key"`
+/// (the update dialog's wait text), and literal `t("key")` / `tOr("key", …)` calls
 /// in the scripts. Template keys such as `webview_status_${status}` are dynamic and
 /// are covered by the explicit status list below.
 fn literal_keys() -> BTreeSet<String> {
-    let html = std::fs::read_to_string(ui_dir().join("index.html")).unwrap();
+    let pages: Vec<String> = PAGES
+        .iter()
+        .map(|page| std::fs::read_to_string(ui_dir().join(page)).unwrap())
+        .collect();
     let scripts = ui_scripts();
     let mut keys = BTreeSet::new();
-    let mut searches = vec![(&html, "data-i18n=\"")];
+    let mut searches = Vec::new();
+    for html in &pages {
+        for attribute in ["data-i18n=\"", "data-i18n-label=\"", "data-pending-key=\""] {
+            searches.push((html, attribute));
+        }
+    }
     for (_, js) in &scripts {
         searches.push((js, "t(\""));
         searches.push((js, "tOr(\""));
@@ -113,6 +127,8 @@ fn ui_keys_resolve_in_every_language() {
 fn ui_scripts_and_markup_are_present_in_the_app_crate() {
     for name in [
         "index.html",
+        "android.html",
+        "android.css",
         "app.js",
         "styles.css",
         "logo/pulse-32.png",
@@ -131,35 +147,44 @@ fn ui_scripts_and_markup_are_present_in_the_app_crate() {
     )
     .unwrap();
     assert_eq!(config["build"]["frontendDist"], "ui");
-    let html = std::fs::read_to_string(ui_dir().join("index.html")).unwrap();
-    assert!(
-        !html.contains("../logo/"),
-        "the 3.x page must not reach outside frontendDist"
-    );
-    // The page loads its scripts in order; app.js wires the page and boots it,
-    // so it comes last. Every script exists, and every ui/*.js is loaded (a
-    // file the page never loads would still be type-checked and key-scanned).
-    let sources = page_script_sources(&html);
-    for source in &sources {
+    // Each page loads its scripts in order; app.js wires the page and boots it,
+    // so it comes last. Every script a page loads exists, and every ui/*.js is
+    // loaded by at least one page (a file no page loads would still be
+    // type-checked and key-scanned).
+    let mut loaded: BTreeSet<String> = BTreeSet::new();
+    for page in PAGES {
+        let html = std::fs::read_to_string(ui_dir().join(page)).unwrap();
         assert!(
-            !source.contains('/') && ui_dir().join(source).is_file(),
-            "index.html loads {source}, which is not a file in apps/impulcifer-app/ui"
+            !html.contains("../logo/"),
+            "{page}: the 3.x page must not reach outside frontendDist"
         );
+        let sources = page_script_sources(&html);
+        for source in &sources {
+            assert!(
+                !source.contains('/') && ui_dir().join(source).is_file(),
+                "{page} loads {source}, which is not a file in apps/impulcifer-app/ui"
+            );
+        }
+        assert_eq!(
+            sources.last().map(String::as_str),
+            Some("app.js"),
+            "{page} must load app.js, last: {sources:?}"
+        );
+        let unique: BTreeSet<&str> = sources.iter().map(String::as_str).collect();
+        assert_eq!(
+            unique.len(),
+            sources.len(),
+            "{page} loads a script twice: {sources:?}"
+        );
+        loaded.extend(sources);
     }
-    assert_eq!(
-        sources.last().map(String::as_str),
-        Some("app.js"),
-        "index.html must load app.js, last: {sources:?}"
-    );
-    let loaded: BTreeSet<&str> = sources.iter().map(String::as_str).collect();
-    assert_eq!(
-        loaded.len(),
-        sources.len(),
-        "a script is loaded twice: {sources:?}"
-    );
     let scripts = ui_scripts();
-    let on_disk: BTreeSet<&str> = scripts.iter().map(|(name, _)| name.as_str()).collect();
-    assert_eq!(loaded, on_disk, "index.html must load every ui/*.js");
+    let on_disk: BTreeSet<String> = scripts.into_iter().map(|(name, _)| name).collect();
+    let unloaded: Vec<_> = on_disk.difference(&loaded).collect();
+    assert!(
+        unloaded.is_empty(),
+        "ui/*.js files no page loads: {unloaded:?}"
+    );
 }
 
 /// `errorSentence` in the page's scripts turns a service error into a catalogue

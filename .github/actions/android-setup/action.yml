@@ -1,0 +1,48 @@
+name: Android build setup
+description: >-
+  Java, the pinned Android SDK packages and NDK, the Rust targets and the Tauri
+  CLI that the Android app is built with (ADR 0020). Used by android.yml and by
+  the build-android job of release-3x.yml, so both build with the same tools.
+
+inputs:
+  rust-targets:
+    description: Rust target triples to install, separated by spaces.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Java 17
+      uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      with:
+        distribution: temurin
+        java-version: "17"
+
+    # compileSdk 36 and ndkVersion in gen/android/app/build.gradle.kts name the
+    # same packages. NDK r28 links shared libraries for 16 KiB pages by default.
+    - name: Install the pinned Android SDK packages
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+        test -n "$sdk"
+        "$sdk/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$sdk" --install \
+          'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' --channel=0 </dev/null
+        {
+          echo "ANDROID_HOME=$sdk"
+          echo "NDK_HOME=$sdk/ndk/28.2.13676358"
+          echo "ANDROID_BUILD_TOOLS=$sdk/build-tools/36.0.0"
+        } >> "$GITHUB_ENV"
+
+    - name: Install toolchain (rust-toolchain.toml) and the Android targets
+      shell: bash
+      run: |
+        set -euo pipefail
+        rustup show
+        rustup target add ${{ inputs.rust-targets }}
+
+    # The version gen/android was generated with (tauri android init). The npm
+    # package provides `tauri`, which the Gradle Rust task starts (BuildTask.kt).
+    - name: Install the Tauri CLI
+      shell: bash
+      run: npm install -g @tauri-apps/cli@2.11.4

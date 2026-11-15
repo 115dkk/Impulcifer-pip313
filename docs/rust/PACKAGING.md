@@ -177,9 +177,37 @@ Example only, using the literal dummy signature `P21-DUMMY-SIGNATURE-NOT-VALID`:
 
 Generate the real JSON using a JSON serializer and the **contents** of each corresponding `.sig` file, not its path, URL, or another encoding of that content. `version` must match the selected release; `pub_date` is RFC 3339. Add `darwin-x86_64` only when its payload was built and signed. Do not add Windows here: installed Windows apps use Velopack. Dummy signatures are intentionally invalid and must never enter the production feed.
 
-The `/releases/latest/` endpoint resolves the newest stable release only, never a GitHub prerelease. Channel policy (Codex #197): a **stable** install reads the stable feed only (`releases/latest/download/latest.json` for the Tauri updater, `GithubSource` without prereleases for Velopack). A **prerelease** install (the running version has a PEP 440 pre segment such as `3.0.0-alpha.0`) reads the rolling `updater-3x-pre` release's `latest.json` first and the stable feed second (`apps/impulcifer-app/src/main.rs::updater_endpoints`), and on Windows asks the GitHub API with prereleases included (`crates/impulcifer-service/src/update/velopack.rs::source_kind`). `release-3x.yml` refreshes `updater-3x-pre/latest.json` on every 3.x release, stable ones included, so an alpha install is offered the following stable. The `latest.json` URLs point at the versioned release assets; the rolling release holds the manifest only.
+The `/releases/latest/` endpoint resolves the newest stable release only, never a GitHub prerelease. Channel policy (Codex #197): a **stable** install reads the stable feed only (`releases/latest/download/latest.json` for the Tauri updater, `GithubSource` without prereleases for Velopack). A **prerelease** install (the running version has a PEP 440 pre segment such as `3.0.0-alpha.0`) reads the rolling `updater-3x-pre` release's `latest.json` first and the stable feed second (`apps/impulcifer-app/src/lib.rs::updater_endpoints`), and on Windows asks the GitHub API with prereleases included (`crates/impulcifer-service/src/update/velopack.rs::source_kind`). `release-3x.yml` refreshes `updater-3x-pre/latest.json` on every 3.x release, stable ones included, so an alpha install is offered the following stable. The `latest.json` URLs point at the versioned release assets; the rolling release holds the manifest only.
 
 The in-app check (`check_for_updates`, `crates/impulcifer-service/src/update/check.rs`) follows the same channel rule. A stable install asks `/releases/latest`. A prerelease install reads the release list (`/releases?per_page=30`), skips drafts and unversioned tags such as `updater-3x-pre`, and takes the newest PEP 440 version, so an alpha is offered the next alpha and the following stable alike; `latest_version` keeps the pre segment (`3.0.0-alpha.1`) for display and for the `start_update` request. alpha.0 and alpha.1 installs still asked `/releases/latest` and therefore reported the 2.x stable as the latest version; they must be updated by hand once (Setup.exe, dmg or AppImage), after which the check works.
+
+## Android (ADR 0020)
+
+The Android app is the same crate built as a shared library: `apps/impulcifer-app/src/lib.rs` is the shell, and Android enters its `run()` through `tauri::mobile_entry_point`. The Gradle project is `apps/impulcifer-app/gen/android`. It was generated with `tauri android init` (CLI 2.11.4) and is committed with these changes: `MainActivity.kt` (the temporary folder, the system bars), `ImpulciferPlugin.kt` (what the shell asks the platform), the manifest (all-files access, no TV launcher), a vector launcher icon, `ndkVersion`, the instrumented test, and two changes to the Rust Gradle plugin in `buildSrc` (`-PskipRustBuild`, either Tauri CLI). Running `tauri android init` again would overwrite them.
+
+`tauri.android.conf.json` is merged over `tauri.conf.json` for Android builds. It removes the desktop's `bundle.resources` (an APK holds files as archive entries, not as files the service could open) and the updater plugin's configuration. The one data file processing reads by path, the default test signal, is compiled into the library and written to the app's data folder at start (`src/android.rs`, `src/bundled.rs`). Android's settings file is in the app's config folder.
+
+Build, from `apps/impulcifer-app`, on a machine with the Android SDK (platform 36, build-tools 36.0.0), NDK 28.2.13676358, Java 17 and the Rust target:
+
+```sh
+rustup target add aarch64-linux-android
+npm install -g @tauri-apps/cli@2.11.4
+tauri android build --apk --target aarch64 --ci
+# gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+```
+
+`.github/actions/android-setup` installs exactly these tools for `android.yml` and for `build-android` in `release-3x.yml`. The Gradle task that builds the Rust library runs the Tauri CLI's `android-studio-script`, which needs `tauri android build` as its parent process; Gradle started on its own cannot build the library. A task that needs only the Kotlin side passes `-PskipRustBuild=true` and uses the library the earlier build left in `jniLibs`:
+
+```sh
+tauri android build --debug --apk --target x86_64 --ci
+(cd gen/android && bash gradlew -PskipRustBuild=true :app:assembleUniversalDebugAndroidTest)
+```
+
+The release asset is `Impulcifer-<version>-aarch64.apk` (arm64-v8a only). An installed app's update check looks for the asset whose name ends in `-<arch>.apk` (`crates/impulcifer-service/src/update/check.rs`), so the name cannot change without it. The APK's `versionName` is the workspace version and its `versionCode` is `major * 1000000 + minor * 1000 + patch`.
+
+Signing is `.github/scripts/android_signing_key.sh`: `sign` aligns the APK (16 KiB for the library), signs it with the key in `apps/impulcifer-app/android-signing/` and checks that the result has that certificate as its only signer. Android installs an update only over an app signed with the same key, so the release job fails rather than publish an unsigned APK or one signed with another key. The key is an RSA 3072 key made once inside a CI job (`generate`, 2026-11-15); `release.p12` is locked with a password derived from the updater signing secrets and `certificate.pem` is its public certificate, valid until 2056. Its SHA-256 fingerprint, as `apksigner verify --print-certs` prints it, is `b3e4e946980a4deaa878bbbc61c12cf19a9bd5cfd1a4737985ceb967bf760976`. Replacing the updater secrets without first re-encrypting the store loses the key, and no later release installs over an app signed with it.
+
+What the workflows check: `android.yml` lints the crates for `aarch64-linux-android`, fails if a recording or desktop-only crate is in the Android dependency tree, checks the APK's contents (one ABI, 16 KiB segments, no desktop bundle data, the manifest), and runs `DemoProcessingTest` on an API 36 x86_64 emulator, where the app's page processes `data/demo` with room correction and headphone compensation and then restores a deleted output. The test's screenshots and `result.json` are in the run's `android-emulator-evidence` artifact.
 
 ## Python wheel and sdist
 

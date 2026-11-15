@@ -15,6 +15,7 @@ PyPI 패키지 `impulcifer-py313`도 3.x로 계속 올라갑니다. 3.x 패키�
 | 앱 | Windows 10/11 x64 | Microsoft Edge WebView2 런타임이 있어야 합니다(Windows 11에는 기본으로 들어 있습니다). |
 | 앱 | macOS (Apple Silicon) | Intel Mac에서는 앱을 쓸 수 없습니다. |
 | 앱 | Linux x86_64 (AppImage) | FUSE 2(`libfuse2`)가 있어야 합니다. Ubuntu 22.04에서 빌드하므로 그보다 오래된 배포판에서는 실행되지 않을 수 있습니다. |
+| 앱 | Android 11 이상 (arm64) | 녹음 기능은 없고, 처리와 출력 복원을 합니다. 측정 폴더를 읽고 결과를 저장하려면 '모든 파일 접근'을 허용해야 합니다. |
 | PyPI 패키지 | Python 3.9 이상 | Windows x64, macOS(Apple Silicon), Linux x86_64(glibc 2.28 이상)에서는 미리 빌드한 휠을 받습니다. |
 
 PyPI 휠이 없는 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 배포본을 받아 직접 빌드하므로 Rust 1.99 이상이 있어야 합니다([rustup](https://rustup.rs)으로 설치). Rust가 아예 없으면 빌드 도구(maturin)가 임시로 설치해 씁니다.
@@ -30,6 +31,7 @@ PyPI 휠이 없는 플랫폼(Intel Mac, Linux ARM 등)에서는 pip가 소스 �
 | Windows | `Impulcifer-win-Setup.exe`(설치) 또는 `Impulcifer-win-Portable.zip`(압축을 풀어 바로 실행) |
 | macOS | `Impulcifer-<버전>-macOS.dmg` |
 | Linux | `Impulcifer-<버전>-x86_64.AppImage` |
+| Android | `Impulcifer-<버전>-aarch64.apk` |
 
 Linux에서는 받은 AppImage에 실행 권한을 줘야 실행할 수 있습니다.
 
@@ -37,6 +39,8 @@ Linux에서는 받은 AppImage에 실행 권한을 줘야 실행할 수 있습�
 chmod +x Impulcifer-*-x86_64.AppImage
 ./Impulcifer-*-x86_64.AppImage
 ```
+
+Android에서는 받은 APK를 열어 설치합니다. Play 스토어에 올린 앱이 아니므로, 처음 설치할 때 파일을 연 앱(브라우저나 파일 관리자)에 '출처를 알 수 없는 앱 설치'를 허용해야 합니다. 앱을 처음 열면 측정 폴더를 고르는 자리에서 '모든 파일 접근'을 켜 달라고 안내합니다. '설정 열기'를 누르면 나오는 시스템 화면에서 Impulcifer를 허용하고 앱으로 돌아오면 됩니다.
 
 ### PyPI 패키지 (CLI와 Python API)
 
@@ -71,6 +75,8 @@ Arch 계열 배포판의 AUR 패키지 [`impulcifer-py313-bin`](https://aur.arch
 
 앱은 실행 중에 새 버전을 확인하고, 사용자가 허락하면 내려받아 설치합니다. Windows는 Velopack으로, macOS와 Linux는 서명을 확인한 업데이트 파일로 설치합니다. 2.x 앱에서 업데이트를 확인해도 3.x가 새 버전으로 표시됩니다.
 
+Android 앱은 새 버전을 알려 주는 데까지만 합니다. '다운로드'를 누르면 브라우저에서 새 APK를 받을 수 있고, 다 받은 파일을 열면 기존 앱 위에 설치됩니다. 설정과 측정 폴더는 그대로 남습니다.
+
 PyPI 패키지는 다음 명령으로 갱신할 수 있습니다.
 
 ```bash
@@ -92,6 +98,8 @@ pip로 설치한 2.x를 이 명령으로 갱신하면 3.x로 올라갑니다. �
 * **정보:** 버전, 시스템 정보, 프로젝트 링크를 보여 줍니다.
 
 옵션 위에 마우스를 올리면 짧은 설명이 나옵니다.
+
+Android 앱에는 녹음을 뺀 네 메뉴(처리, 출력 복원, 설정, 정보)가 화면 아래에 있습니다. 측정은 다른 기기에서 하고, 그 폴더를 휴대폰에 옮겨 와서 처리합니다. 처리 옵션은 데스크톱의 Studio와 같습니다. 폴더와 파일은 앱 안의 탐색기로 고르며, 결과는 고른 측정 폴더에 저장됩니다. 처리를 시작하면 진행 화면이 올라오고, 끝나면 출력 폴더의 경로와 양 귀 시차 보고를 보여 줍니다. 옵션 옆의 ⓘ를 누르면 설명이 아래에서 올라옵니다.
 
 ### CLI
 
@@ -378,13 +386,15 @@ impulcifer --dir_path "measurements" --decay "FL:500,FC:100,FR:500"
 
 3.x를 쓰기 전에 다음을 알아 두어야 합니다.
 
-* **Intel Mac과 Linux ARM에서는 앱을 쓸 수 없습니다:** 앱은 Windows x64, macOS(Apple Silicon), Linux x86_64용만 있으므로, 그 밖의 플랫폼에서는 `impulcifer_gui`도 쓸 수 없고 PyPI 패키지의 CLI와 Python API만 쓸 수 있습니다.
+* **Intel Mac과 Linux ARM에서는 앱을 쓸 수 없습니다:** 데스크톱 앱은 Windows x64, macOS(Apple Silicon), Linux x86_64용만 있으므로, 그 밖의 플랫폼에서는 `impulcifer_gui`도 쓸 수 없고 PyPI 패키지의 CLI와 Python API만 쓸 수 있습니다.
 * **`impulcifer_gui`를 처음 실행할 때는 인터넷에 연결돼 있어야 합니다:** pip 패키지에는 앱이 들어 있지 않고, 처음 실행할 때 GitHub Releases에서 받습니다. 연결할 수 없는 환경에서는 앱을 직접 받아 설치해야 합니다.
 * **CustomTkinter 화면을 쓰려면 2.x를 설치해야 합니다:** 3.x 앱에서는 Stable 프리셋이 그 화면의 배치를 따릅니다.
 * **처음 실행할 때 보안 경고가 뜰 수 있습니다:** Windows 설치 파일에는 코드 서명이 없고, macOS 앱은 프로젝트의 자체 서명 인증서로만 서명했고 공증을 받지 않았습니다. 그래서 Windows SmartScreen이나 macOS Gatekeeper가 실행을 막을 수 있습니다. Windows에서는 '추가 정보'를 누른 뒤 '실행'을 누르십시오. macOS에서는 앱을 한 번 연 뒤 시스템 설정 > 개인정보 보호 및 보안에서 '그래도 열기'를 누르십시오.
 * **macOS에서는 처음 녹음할 때 마이크 권한을 묻습니다:** 허용하지 않으면 앱에 무음만 들어오고, 녹음 검사가 무음만 녹음됐다고 알립니다. 시스템 설정 > 개인정보 보호 및 보안 > 마이크에서 Impulcifer를 허용한 뒤 앱을 다시 여십시오. 3.9.2부터는 업데이트한 뒤에도 권한이 남습니다(3.9.1에서 올릴 때만 한 번 더 묻습니다).
 * **HDMI로 연결한 AV 리시버에는 7.1까지만 sweep을 보낼 수 있습니다:** 컴퓨터의 HDMI 출력은 PCM 오디오를 8채널까지만 보내므로, 7.1.4나 9.1.6처럼 높이 채널이 든 레이아웃은 그 장치로 녹음할 수 없습니다. 고르면 녹음 화면이 9번부터의 스피커는 나오지 않는다고 알려 줍니다. Windows와 macOS가 같습니다. macOS는 장치를 Audio MIDI 설정에 고른 출력 형식의 채널 수로만 보여 주므로, HDMI 출력이 2채널로 설정돼 있으면 거기서 8채널 형식으로 바꿔야 7.1 sweep을 보낼 수 있습니다. 높이 채널까지 한 번에 재려면 출력이 그 레이아웃의 채널 수 이상인 오디오 인터페이스를 앰프나 파워드 스피커에 연결해야 합니다. macOS에서는 Audio MIDI 설정에서 HDMI 출력과 다른 오디오 인터페이스를 묶어 통합 기기(Aggregate Device)를 만드는 방법도 있습니다. 이때 HDMI가 1~8번, 다른 장치가 9번부터이므로 7.1.4 레이아웃의 TFL·TFR·TBL·TBR이 9~12번으로 나가며, 두 장치의 클럭이 다르면 통합 기기 설정에서 드리프트 보정을 켜야 합니다. 통합 기기는 HDMI로 인식되지 않으므로 녹음 화면의 '채널 순서'를 'HDMI'로 고르십시오. 이런 장치가 없다면 높이 스피커를 손닿는 출력에 잠시 연결하고 stereo 레이아웃에서 스피커 이름을 TFL 등으로 바꿔 따로 녹음하십시오.
 * **TrueHD(`.mlp`, `.thd`, `.truehd`)를 입력하려면 FFmpeg 4.0 이상이 있어야 합니다:** 3.x는 FFmpeg를 자동으로 설치하지 않으므로 미리 설치해야 합니다(Windows는 `winget install Gyan.FFmpeg`, macOS는 `brew install ffmpeg`, Linux는 `sudo apt install ffmpeg`).
+
+* **Android 앱에는 녹음이 없고, 처리하는 동안 앱을 화면에 두어야 합니다:** 휴대폰으로는 측정하지 않으므로 녹음 메뉴를 넣지 않았습니다. 처리 중에는 뒤로 가기로 앱을 닫을 수 없게 해 두었지만, 최근 앱 목록에서 앱을 밀어 닫거나 시스템이 앱을 정리하면 하던 작업은 사라집니다. TrueHD(`.mlp`, `.thd`, `.truehd`) 입력도 쓸 수 없습니다. Android 앱은 FFmpeg를 실행할 수 없으므로 WAV로 바꿔서 넣어야 합니다. 32비트 기기와 Android 10 이하에는 설치되지 않습니다.
 
 같은 측정을 2.x와 3.x로 처리하면 결과 파일이 비트 단위로 같지 않습니다. 그 차이는 처리 단계마다 2.x 출력과 대조하는 테스트의 허용 오차 안에 있습니다. 원본 Impulcifer와 비교해도 수치 라이브러리와 보정 옵션 차이로 결과가 조금 다를 수 있습니다.
 

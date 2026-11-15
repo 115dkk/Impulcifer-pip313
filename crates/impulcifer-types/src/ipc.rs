@@ -34,11 +34,14 @@ pub enum IpcMethod {
     ApplyPendingUpdate,
     SelectFile,
     SelectDirectory,
+    ListDirectory,
+    GetStorageAccess,
+    RequestStorageAccess,
     OpenUrl,
 }
 
 impl IpcMethod {
-    pub const ALL: [IpcMethod; 26] = [
+    pub const ALL: [IpcMethod; 29] = [
         IpcMethod::Bootstrap,
         IpcMethod::ListAudioDevices,
         IpcMethod::StartRecording,
@@ -64,6 +67,9 @@ impl IpcMethod {
         IpcMethod::ApplyPendingUpdate,
         IpcMethod::SelectFile,
         IpcMethod::SelectDirectory,
+        IpcMethod::ListDirectory,
+        IpcMethod::GetStorageAccess,
+        IpcMethod::RequestStorageAccess,
         IpcMethod::OpenUrl,
     ];
 
@@ -95,6 +101,9 @@ impl IpcMethod {
             IpcMethod::ApplyPendingUpdate => "apply_pending_update",
             IpcMethod::SelectFile => "select_file",
             IpcMethod::SelectDirectory => "select_directory",
+            IpcMethod::ListDirectory => "list_directory",
+            IpcMethod::GetStorageAccess => "get_storage_access",
+            IpcMethod::RequestStorageAccess => "request_storage_access",
             IpcMethod::OpenUrl => "open_url",
         }
     }
@@ -157,7 +166,7 @@ mod tests {
         for method in IpcMethod::ALL {
             assert_eq!(IpcMethod::from_wire_name(method.wire_name()), Some(method));
         }
-        assert_eq!(IpcMethod::ALL.len(), 26);
+        assert_eq!(IpcMethod::ALL.len(), 29);
     }
 
     #[test]

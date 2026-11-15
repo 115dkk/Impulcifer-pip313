@@ -65,9 +65,10 @@ fn smoke_report_contract() {
         return_none < read_driver,
         "production must not read a driver or sink"
     );
-    let main = include_str!("../src/main.rs");
-    assert_eq!(main.matches("#[tauri::command]").count(), 1);
-    assert!(main.contains("smoke::dispatch(smoke.as_deref()"));
+    // The shell is the library; main.rs only calls its `run` (ADR 0020).
+    let shell = include_str!("../src/lib.rs");
+    assert_eq!(shell.matches("#[tauri::command]").count(), 1);
+    assert!(shell.contains("smoke::dispatch(smoke.as_deref()"));
     // Behavioral forwarding, concurrent NDJSON, invalid args and sink failure
     // checks live beside the actual helper in smoke::tests::smoke_report_contract.
 }
@@ -81,11 +82,14 @@ fn release_builds_hide_the_console_window() {
     let position = source
         .find(attribute)
         .expect("main.rs declares the GUI subsystem");
-    let first_item = source.find("mod ").expect("main.rs has modules");
+    // The attribute belongs to the executable's crate root: on the library
+    // (lib.rs) it would do nothing.
+    let first_item = source.find("fn main()").expect("main.rs has main");
     assert!(
         position < first_item,
         "the subsystem attribute must be a crate-level inner attribute"
     );
+    assert!(source.contains("impulcifer_app_lib::run()"));
     let config: serde_json::Value =
         serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
     assert_eq!(config["build"]["frontendDist"], "ui");
@@ -105,22 +109,37 @@ fn updater_plugin_registered_with_public_key() {
             "https://github.com/115dkk/Impulcifer-pip313/releases/latest/download/latest.json"
         ])
     );
-    let source = include_str!("../src/main.rs").replace("\r\n", "\n");
+    // Windows updates through Velopack and Android through its package
+    // installer; only macOS and Linux register the Tauri updater.
+    let source = include_str!("../src/lib.rs").replace("\r\n", "\n");
     assert!(source.contains(
-        "#[cfg(not(windows))]\n    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build())"
+        "#[cfg(not(any(windows, target_os = \"android\")))]\n    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build())"
     ));
     let updater_source = include_str!("../src/updater.rs").replace("\r\n", "\n");
     assert!(updater_source.contains(".updater_builder()"));
     assert!(updater_source.contains(".endpoints(endpoints)"));
     assert!(source.contains("#[cfg(windows)]\n    velopack::VelopackApp::build().run()"));
     let permissions: serde_json::Value =
-        serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        serde_json::from_str(include_str!("../capabilities/desktop.json")).unwrap();
     assert!(
         permissions["permissions"]
             .as_array()
             .unwrap()
             .contains(&serde_json::json!("updater:default"))
     );
+    // The desktop-only permissions must not reach Android, whose build has
+    // neither the dialog nor the updater plugin.
+    assert_eq!(
+        permissions["platforms"],
+        serde_json::json!(["linux", "macOS", "windows"])
+    );
+    let shared: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+    assert_eq!(
+        shared["permissions"],
+        serde_json::json!(["core:default", "opener:default"])
+    );
+    assert!(shared.get("platforms").is_none());
 }
 
 /// Local M3 integration check, like recording.hardware: requires Windows,

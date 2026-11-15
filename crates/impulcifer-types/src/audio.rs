@@ -136,6 +136,9 @@ impl CancelToken {
 
 pub trait AudioBackend: Send + Sync {
     fn name(&self) -> &'static str;
+    fn can_record(&self) -> bool {
+        true
+    }
     fn selectable_share_modes(&self) -> &'static [ShareMode] {
         &[]
     }

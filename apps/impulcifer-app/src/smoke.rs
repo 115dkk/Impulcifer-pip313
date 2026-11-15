@@ -13,6 +13,8 @@ pub struct SmokeConfig {
     sink: Mutex<Result<File, String>>,
     ack_directory: Option<PathBuf>,
     pub driver: Option<String>,
+    /// The WebView2 profile folder; Android's web view has no such setting.
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     pub data_directory: Option<PathBuf>,
     /// Only the Windows shell passes the port to WebView2 (CDP is Windows-only).
     #[cfg_attr(not(windows), allow(dead_code))]

@@ -19,6 +19,10 @@ impl AudioBackend for NullBackend {
         "none"
     }
 
+    fn can_record(&self) -> bool {
+        false
+    }
+
     fn enumerate(&self) -> Result<Vec<Endpoint>, AudioError> {
         Ok(Vec::new())
     }

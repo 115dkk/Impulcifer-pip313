@@ -127,6 +127,10 @@ pub fn select_release(releases: &[Value]) -> Option<&Value> {
 }
 
 pub fn download_url(release: &Value, platform: &str) -> Value {
+    download_url_for_arch(release, platform, std::env::consts::ARCH)
+}
+
+fn download_url_for_arch(release: &Value, platform: &str, arch: &str) -> Value {
     let Some(assets) = release["assets"].as_array() else {
         return Value::Null;
     };
@@ -148,6 +152,7 @@ pub fn download_url(release: &Value, platform: &str) -> Value {
             let name = asset["name"].as_str().unwrap_or("").to_lowercase();
             if (platform == "windows" && name.ends_with(".exe") && name.contains("setup"))
                 || (platform == "darwin" && (name.ends_with(".dmg") || name.ends_with(".pkg")))
+                || (platform == "android" && name.ends_with(&format!("-{arch}.apk")))
             {
                 return asset["browser_download_url"].clone();
             }
@@ -217,4 +222,39 @@ pub fn check(options: &UpdateOptions) -> Result<Value, String> {
         &options.current_version,
         &options.platform,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn android_download_matches_the_architecture() {
+        let release = json!({"assets":[
+            {"name":"Impulcifer-3.22.0-x86_64.apk","browser_download_url":"x86"},
+            {"name":"Impulcifer-3.22.0-AARCH64.APK","browser_download_url":"arm"},
+            {"name":"Impulcifer-3.22.0-arm.apk.sig","browser_download_url":"signature"}
+        ]});
+        for (arch, expected) in [
+            ("aarch64", json!("arm")),
+            ("x86_64", json!("x86")),
+            ("arm", Value::Null),
+        ] {
+            assert_eq!(download_url_for_arch(&release, "android", arch), expected);
+        }
+        for release in [
+            json!({}),
+            json!({"assets":[]}),
+            json!({"assets":[{"name":"Setup.exe"}]}),
+        ] {
+            assert_eq!(
+                download_url_for_arch(&release, "android", "aarch64"),
+                Value::Null
+            );
+        }
+        assert_eq!(
+            download_url(&release, "android"),
+            download_url_for_arch(&release, "android", std::env::consts::ARCH)
+        );
+    }
 }

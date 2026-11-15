@@ -42,8 +42,14 @@ impl HostAdapter for Host {
     fn select_directory(&self) -> Option<String> {
         None
     }
-    fn open_url(&self, _: &str) -> Result<(), String> {
-        Ok(())
+    fn open_url(&self, url: &str) -> Result<(), String> {
+        let mut state = self.0.lock().unwrap();
+        state.calls.push(("open_url".into(), url.into()));
+        if state.fail_open {
+            Err("open failed".into())
+        } else {
+            Ok(())
+        }
     }
     fn apply_title_theme(&self, _: &str) {}
     fn open_path(&self, path: &str) -> Result<(), String> {
@@ -318,6 +324,98 @@ fn prerelease_ordering_compares_equal_normalized_bases() {
             expected,
             "{current} -> {latest}"
         );
+    }
+}
+
+#[test]
+fn android_install_kind_distinguishes_the_app_from_the_cli() {
+    for executable in ["/system/bin/app_process64", "/system/bin/app_process32"] {
+        assert_eq!(
+            install_kind::detect("android", Path::new(executable), None),
+            InstallKind::Apk
+        );
+        assert_eq!(
+            install_kind::detect("linux", Path::new(executable), None),
+            InstallKind::Dev
+        );
+    }
+    assert_eq!(
+        install_kind::detect(
+            "android",
+            Path::new("/data/data/com.termux/files/usr/bin/impulcifer"),
+            None
+        ),
+        InstallKind::Dev
+    );
+    assert_eq!(InstallKind::Apk.as_str(), "apk");
+}
+
+#[test]
+fn apk_update_opens_the_release_link_without_downloading_or_staging() {
+    let root = tempfile::tempdir().unwrap();
+    let state = Arc::new(Mutex::new(HostState::default()));
+    let mut opts = options(root.path(), InstallKind::Apk);
+    opts.platform = "android".into();
+    opts.releases_url = "http://127.0.0.1:0/releases/latest/download".into();
+    let svc = service(root.path(), opts, state.clone());
+    assert_eq!(svc.call("bootstrap", vec![])["data"]["install_kind"], "apk");
+    assert_eq!(
+        svc.call("get_system_info", vec![])["data"]["install_kind"],
+        "apk"
+    );
+    let url = "http://127.0.0.1:0/releases/download/v3.22.0/Impulcifer-3.22.0-aarch64.apk";
+    let result = finish(&svc, json!({"latest_version":"3.22.0", "download_url":url}));
+    assert_eq!(result["job"]["status"], "succeeded", "{result}");
+    assert_eq!(
+        result["job"]["result"],
+        json!({
+            "status_key":"update_apk_status", "status_default":"Opening download link…",
+            "title_key":"update_apk_title", "title_default":"Download link opened",
+            "message_key":"update_apk_message",
+            "message_default":"Download the new APK in your browser, then open it to install the update.",
+            "progress":1.0, "requires_restart":false,
+        })
+    );
+    assert_eq!(
+        state.lock().unwrap().calls,
+        [("open_url".into(), url.into())]
+    );
+    assert!(!root.path().join("downloads").exists());
+    assert_eq!(
+        svc.call("apply_pending_update", vec![]),
+        json!({"ok":false,"error":{
+            "code":"INVALID_REQUEST","message":"No staged update to apply.","details":{},"retryable":false,
+        }})
+    );
+    state.lock().unwrap().fail_open = true;
+    assert_eq!(
+        finish(&svc, json!({"latest_version":"3.22.0", "download_url":url}))["job"]["error"]["message"],
+        "open failed"
+    );
+}
+
+#[test]
+fn apk_update_rejects_links_outside_the_release_and_non_apk_assets() {
+    let root = tempfile::tempdir().unwrap();
+    let state = Arc::new(Mutex::new(HostState::default()));
+    let mut opts = options(root.path(), InstallKind::Apk);
+    opts.releases_url = "http://127.0.0.1:0/releases/latest/download".into();
+    let svc = service(root.path(), opts, state.clone());
+    for url in [
+        "https://example.invalid/releases/download/app.apk",
+        "http://127.0.0.1:0/releases-other/app.apk",
+        "http://127.0.0.1:0/releases/download/app.exe",
+        "",
+    ] {
+        let result = finish(&svc, json!({"latest_version":"3.22.0","download_url":url}));
+        assert_eq!(result["job"]["status"], "failed");
+        assert_eq!(result["job"]["error"]["code"], "UPDATE_FAILED");
+        assert_eq!(
+            result["job"]["error"]["message"],
+            "The update link is not a release of this app."
+        );
+        assert!(state.lock().unwrap().calls.is_empty());
+        assert!(!root.path().join("downloads").exists());
     }
 }
 

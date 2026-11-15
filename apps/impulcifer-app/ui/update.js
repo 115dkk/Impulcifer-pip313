@@ -190,7 +190,9 @@ async function beginUpdate() {
   el("update-remind", HTMLButtonElement).hidden = true;
   el("update-skip", HTMLButtonElement).hidden = true;
   $("update-progress-row").hidden = false;
-  $("update-status").textContent = t("update_downloading");
+  // A page whose update is a link to open (Android, ADR 0020) names its own wait.
+  const status = $("update-status");
+  status.textContent = t(status.dataset.pendingKey || "update_downloading");
   const response = await callApi(() => api().start_update({
     download_url: info.download_url,
     latest_version: info.latest_version,

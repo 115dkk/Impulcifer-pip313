@@ -41,6 +41,9 @@ struct HostState {
     fail: bool,
     panic: bool,
     cancelled: bool,
+    roots: Vec<impulcifer_service::StorageRoot>,
+    access: Option<bool>,
+    platform_info: serde_json::Map<String, Value>,
 }
 struct FakeHost(Arc<Mutex<HostState>>);
 impl FakeHost {
@@ -84,6 +87,22 @@ impl HostAdapter for FakeHost {
     }
     fn apply_title_theme(&self, theme: &str) {
         self.call("theme", theme);
+    }
+    fn storage_roots(&self) -> Vec<impulcifer_service::StorageRoot> {
+        self.0.lock().unwrap().roots.clone()
+    }
+    fn storage_access(&self) -> Option<bool> {
+        self.0.lock().unwrap().access
+    }
+    fn request_storage_access(&self) -> Result<bool, String> {
+        if self.call("request_storage_access", "") {
+            Err("host failed".into())
+        } else {
+            Ok(!self.0.lock().unwrap().cancelled)
+        }
+    }
+    fn platform_info(&self) -> serde_json::Map<String, Value> {
+        self.0.lock().unwrap().platform_info.clone()
     }
 }
 struct FakeBackend {
@@ -355,6 +374,16 @@ fn ipc_bootstrap_shape() {
         ],
     );
     assert_eq!(boot["version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        boot["webview_backend"],
+        match std::env::consts::OS {
+            "windows" => "edgechromium",
+            "macos" => "cocoa",
+            "android" => "android",
+            _ => "gtk",
+        }
+    );
+    // This fixture explicitly injects a recording-capable fake on every target.
     assert!(boot["active_job"].is_null());
     assert_eq!(
         boot["capabilities"],
@@ -854,6 +883,310 @@ fn ipc_select_file_shape() {
     assert_eq!(data(f.call("select_file", vec![])), json!({"path":null}));
 }
 #[test]
+fn ipc_list_directory_shape() {
+    let f = Fixture::new();
+    let root = f.root.0.join("browse");
+    std::fs::create_dir(&root).unwrap();
+    f.host.lock().unwrap().roots = vec![
+        impulcifer_service::StorageRoot {
+            path: root.to_str().unwrap().into(),
+            label: "Internal storage".into(),
+            removable: false,
+        },
+        impulcifer_service::StorageRoot {
+            path: f.root.0.to_str().unwrap().into(),
+            label: "SD card".into(),
+            removable: true,
+        },
+    ];
+    for name in ["z-folder", "A-folder", ".hidden-folder"] {
+        std::fs::create_dir(root.join(name)).unwrap();
+    }
+    for name in [
+        "a.WaV",
+        "b.MLP",
+        "c.ThD",
+        "d.TrueHD",
+        "e.CsV",
+        "f.TxT",
+        "g.MdAt",
+        "h.LiveProject",
+        "other.bin",
+        ".hidden.wav",
+    ] {
+        std::fs::write(root.join(name), b"abc").unwrap();
+    }
+    let listing = data(f.call("list_directory", vec![]));
+    keys(
+        &listing,
+        &["path", "parent", "roots", "entries", "truncated"],
+    );
+    assert_eq!(listing["path"], json!(root));
+    assert!(listing["parent"].is_null());
+    assert_eq!(listing["truncated"], false);
+    assert_eq!(
+        listing["roots"],
+        json!([
+            {"path":root,"label":"Internal storage","removable":false},
+            {"path":f.root.0,"label":"SD card","removable":true},
+        ])
+    );
+    for args in [
+        vec![Value::Null],
+        vec![json!({})],
+        vec![json!({"path":"  "})],
+        vec![json!({"path":null,"kind":null})],
+        vec![json!({"path":format!("  {}{}  ", root.display(), std::path::MAIN_SEPARATOR)})],
+    ] {
+        assert_eq!(data(f.call("list_directory", args)), listing);
+    }
+    for (kind, files) in [
+        (
+            "dir",
+            vec![
+                "a.WaV",
+                "b.MLP",
+                "c.ThD",
+                "d.TrueHD",
+                "e.CsV",
+                "f.TxT",
+                "g.MdAt",
+                "h.LiveProject",
+                "other.bin",
+            ],
+        ),
+        ("audio", vec!["a.WaV", "b.MLP", "c.ThD", "d.TrueHD"]),
+        ("text", vec!["e.CsV", "f.TxT"]),
+        ("wav", vec!["a.WaV"]),
+        ("measurement", vec!["g.MdAt", "h.LiveProject"]),
+    ] {
+        let out = data(f.call("list_directory", vec![json!({"kind":kind})]));
+        let entries = out["entries"].as_array().unwrap();
+        let expected: Vec<_> = ["A-folder", "z-folder"].into_iter().chain(files).collect();
+        assert_eq!(
+            entries
+                .iter()
+                .map(|entry| entry["name"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        for entry in entries {
+            keys(entry, &["name", "path", "dir", "size", "modified_ms"]);
+            let path = root.join(entry["name"].as_str().unwrap());
+            assert_eq!(entry["path"], json!(path));
+            let metadata = std::fs::metadata(path).unwrap();
+            assert_eq!(entry["dir"], metadata.is_dir());
+            assert_eq!(
+                entry["size"],
+                if metadata.is_dir() {
+                    Value::Null
+                } else {
+                    json!(3)
+                }
+            );
+            let modified = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|time| time.as_millis() as u64);
+            assert_eq!(entry["modified_ms"], json!(modified));
+        }
+    }
+    assert_eq!(
+        data(f.call(
+            "list_directory",
+            vec![json!({"path":root.join("z-folder")})]
+        ))["parent"],
+        json!(root)
+    );
+}
+
+#[test]
+fn list_directory_home_validation_and_limit() {
+    let f = Fixture::new();
+    if let Some(home) = std::env::home_dir() {
+        let expected = f.call("list_directory", vec![json!({"path":home})]);
+        assert_eq!(f.call("list_directory", vec![]), expected);
+        assert_eq!(data(expected)["roots"], json!([]));
+    }
+    for request in [
+        json!(false),
+        json!(3),
+        json!([]),
+        json!("/"),
+        json!({"kind":"bad"}),
+        json!({"kind":3}),
+        json!({"path":false}),
+    ] {
+        failure(f.call("list_directory", vec![request]), "INVALID_REQUEST");
+    }
+    failure(
+        f.call("list_directory", vec![Value::Null, Value::Null]),
+        "INVALID_REQUEST",
+    );
+    for path in [
+        json!("relative"),
+        json!(f.root.0.join("missing")),
+        json!(f.root.0.join("settings.json")),
+    ] {
+        let error = failure(
+            f.call("list_directory", vec![json!({"path":path})]),
+            "FILE_NOT_FOUND",
+        );
+        assert_eq!(error["message"], "Folder does not exist.");
+        assert_eq!(error["details"], json!({"path":path}));
+    }
+    let root = f.root.0.join("many");
+    std::fs::create_dir(&root).unwrap();
+    for index in (0..2000).rev() {
+        std::fs::write(root.join(format!("{index:04}")), []).unwrap();
+    }
+    let request = vec![json!({"path":root})];
+    let exact = data(f.call("list_directory", request.clone()));
+    assert_eq!(exact["entries"].as_array().unwrap().len(), 2000);
+    assert_eq!(exact["truncated"], false);
+    std::fs::create_dir(root.join("z-folder")).unwrap();
+    let more = data(f.call("list_directory", request));
+    assert_eq!(more["entries"].as_array().unwrap().len(), 2000);
+    assert_eq!(more["truncated"], true);
+    assert_eq!(more["entries"][0]["name"], "z-folder");
+    assert_eq!(more["entries"][1999]["name"], "1998");
+}
+
+#[cfg(unix)]
+#[test]
+fn list_directory_unix_names_links_roots_and_permissions() {
+    use std::os::unix::{
+        ffi::OsStrExt,
+        fs::{PermissionsExt, symlink},
+    };
+    let f = Fixture::new();
+    let root = f.root.0.join("browse");
+    std::fs::create_dir(&root).unwrap();
+    for name in ["a.wav", "b.wav"] {
+        std::fs::write(root.join(name), []).unwrap();
+    }
+    // macOS's default file system folds case and refuses names that are not
+    // UTF-8: the names that differ only in case exist only where the file
+    // system keeps them apart, and the unreadable name only where it can be made.
+    let case_sensitive = !root.join("A.wav").exists();
+    if case_sensitive {
+        for name in ["A.wav", "B.wav"] {
+            std::fs::write(root.join(name), []).unwrap();
+        }
+    }
+    let _ = std::fs::write(root.join(std::ffi::OsStr::from_bytes(b"bad-\xff.wav")), []);
+    symlink(root.join("missing"), root.join("broken.wav")).unwrap();
+    symlink(&root, f.root.0.join("alias")).unwrap();
+    symlink(&root, root.join("z-dir")).unwrap();
+    symlink(root.join("a.wav"), root.join("link.wav")).unwrap();
+    let path = format!("{}/alias/./", f.root.0.display());
+    let out = data(f.call("list_directory", vec![json!({"path":path})]));
+    assert_eq!(out["path"], path.trim_end_matches('/'));
+    assert_eq!(
+        out["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["name"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        if case_sensitive {
+            vec!["z-dir", "A.wav", "a.wav", "B.wav", "b.wav", "link.wav"]
+        } else {
+            vec!["z-dir", "a.wav", "b.wav", "link.wav"]
+        }
+    );
+    let entries = out["entries"].as_array().unwrap();
+    assert_eq!(entries[0]["dir"], true);
+    assert_eq!(entries[entries.len() - 1]["dir"], false);
+    // Android apps may not be allowed to enumerate /; this test runs as a CLI.
+    assert!(data(f.call("list_directory", vec![json!({"path":"/"})]))["parent"].is_null());
+    let permissions = std::fs::metadata(&root).unwrap().permissions();
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let readable = std::fs::read_dir(&root).is_ok();
+    let response = f.call("list_directory", vec![json!({"path":root})]);
+    std::fs::set_permissions(&root, permissions).unwrap();
+    if readable {
+        eprintln!("Skipping unreadable-folder assertion: this process can still read the folder.");
+    } else {
+        let error = failure(response, "INVALID_REQUEST");
+        assert_eq!(error["message"], "The folder cannot be read.");
+        assert_eq!(
+            error["details"],
+            json!({"kind":"access_denied","path":root})
+        );
+        assert_eq!(error["retryable"], true);
+    }
+}
+
+#[test]
+fn ipc_get_storage_access_shape() {
+    let f = Fixture::new();
+    for (access, state) in [
+        (None, "not_required"),
+        (Some(true), "granted"),
+        (Some(false), "denied"),
+    ] {
+        f.host.lock().unwrap().access = access;
+        assert_eq!(
+            data(f.call("get_storage_access", vec![])),
+            json!({"state":state})
+        );
+    }
+    failure(
+        f.call("get_storage_access", vec![Value::Null]),
+        "INVALID_REQUEST",
+    );
+}
+
+#[test]
+fn ipc_request_storage_access_shape() {
+    let f = Fixture::new();
+    for cancelled in [false, true] {
+        f.host.lock().unwrap().cancelled = cancelled;
+        assert_eq!(
+            data(f.call("request_storage_access", vec![])),
+            json!({"opened":!cancelled})
+        );
+    }
+    f.host.lock().unwrap().fail = true;
+    assert_eq!(
+        failure(f.call("request_storage_access", vec![]), "INTERNAL_ERROR")["message"],
+        "host failed"
+    );
+    assert_eq!(f.host.lock().unwrap().calls.len(), 3);
+    failure(
+        f.call("request_storage_access", vec![Value::Null]),
+        "INVALID_REQUEST",
+    );
+}
+
+#[test]
+fn system_info_prefers_the_shell_and_omits_an_unknown_device() {
+    let f = Fixture::new();
+    let fallback = data(f.call("get_system_info", vec![]));
+    assert!(fallback.get("device").is_none());
+    for value in [
+        json!({"os":"", "device":""}),
+        json!({"os":false,"device":42}),
+        json!({}),
+    ] {
+        f.host.lock().unwrap().platform_info = value.as_object().unwrap().clone();
+        let info = data(f.call("get_system_info", vec![]));
+        assert_eq!(info["os"], fallback["os"]);
+        assert!(info.get("device").is_none());
+    }
+    f.host.lock().unwrap().platform_info =
+        json!({"os":"Android 17 (API 37) aarch64", "device":"Test phone"})
+            .as_object()
+            .unwrap()
+            .clone();
+    let info = data(f.call("get_system_info", vec![]));
+    assert_eq!(info["os"], "Android 17 (API 37) aarch64");
+    assert_eq!(info["device"], "Test phone");
+}
+
+#[test]
 fn ipc_select_directory_shape() {
     let f = Fixture::new();
     assert_eq!(
@@ -1137,8 +1470,8 @@ fn audio_free_service_answers_devices_and_recording_honestly() {
     // No fixed choice, only the automatic policy: the same shape the cpal
     // backend reports, so the recorder screen keeps its disabled select.
     assert_eq!(
-        data(service.call("bootstrap", vec![]))["capabilities"]["share_modes"],
-        json!(["auto"])
+        data(service.call("bootstrap", vec![]))["capabilities"],
+        json!({"recording":false,"brir":true,"output_recovery":true,"recording_cancel":false,"brir_cancel":true,"output_recovery_cancel":false,"share_modes":["auto"]})
     );
     assert_eq!(
         data(service.call("get_system_info", vec![]))["runtime"]["audio_backend"],

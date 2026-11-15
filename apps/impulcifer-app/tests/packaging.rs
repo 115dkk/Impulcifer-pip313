@@ -83,6 +83,32 @@ fn bundle_config_contract() {
     }
 }
 
+/// Windows loads version 6 of the common controls only into a program whose
+/// manifest asks for it. The shell links dialogs that exist in no other
+/// version, so a program without the manifest ends before `main`
+/// (STATUS_ENTRYPOINT_NOT_FOUND). The build script embeds the manifest; this
+/// reads it back from the executable the release packs.
+#[test]
+fn windows_programs_ask_for_common_controls_v6() {
+    let manifest = include_str!("../windows-app-manifest.xml");
+    assert!(manifest.contains(r#"name="Microsoft.Windows.Common-Controls""#));
+    assert!(manifest.contains(r#"version="6.0.0.0""#));
+    let build_script = include_str!("../build.rs");
+    assert!(build_script.contains("/MANIFEST:EMBED"));
+    assert!(build_script.contains("new_without_app_manifest"));
+    #[cfg(all(windows, target_env = "msvc"))]
+    {
+        let program = std::fs::read(env!("CARGO_BIN_EXE_impulcifer-app")).unwrap();
+        // The linker rewrites the manifest it embeds, so only the assembly's
+        // name is searched for, not the file's bytes.
+        let name = b"Microsoft.Windows.Common-Controls";
+        assert!(
+            program.windows(name.len()).any(|bytes| bytes == name),
+            "impulcifer-app.exe carries no manifest that asks for the common controls"
+        );
+    }
+}
+
 /// The plist value that follows `<key>name</key>`, as raw XML up to the next tag end.
 fn plist_value<'a>(plist: &'a str, name: &str) -> Option<&'a str> {
     let key = format!("<key>{name}</key>");

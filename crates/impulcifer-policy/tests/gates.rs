@@ -430,7 +430,7 @@ fn subprocess_scanner_checks_code_raw_text_and_exact_allowlist() {
     }
 }
 
-const CANONICAL_IPC: [&str; 26] = [
+const CANONICAL_IPC: [&str; 29] = [
     "inspect_room_measurements",
     "bootstrap",
     "list_audio_devices",
@@ -456,6 +456,9 @@ const CANONICAL_IPC: [&str; 26] = [
     "apply_pending_update",
     "select_file",
     "select_directory",
+    "list_directory",
+    "get_storage_access",
+    "request_storage_access",
     "open_url",
 ];
 const CANONICAL_CONFIG: [&str; 66] = [

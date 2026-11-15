@@ -77,7 +77,9 @@ NOT_SHIPPED_3X = (
     "apps/impulcifer-app/package.json", "apps/impulcifer-app/package-lock.json",
     "apps/impulcifer-app/tsconfig.json",
 )
-NOT_SHIPPED_3X_DIRS = ("tests", "benches")
+# androidTest is the Gradle source set of the Android app's instrumented test
+# (apps/impulcifer-app/gen/android/app/src/androidTest); it is not in the APK.
+NOT_SHIPPED_3X_DIRS = ("tests", "benches", "androidTest")
 
 PRODUCTS = ("2x", "3x")
 

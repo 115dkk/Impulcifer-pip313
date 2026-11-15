@@ -434,7 +434,7 @@ function wireRecovery() {
     ),
   );
   el("btn-open-recovery-output", HTMLButtonElement).addEventListener("click", () => {
-    if (state.lastRecoveryOutputDir) api().open_path(state.lastRecoveryOutputDir);
+    if (state.lastRecoveryOutputDir) void openFolder(state.lastRecoveryOutputDir, "recovery-open-failed");
   });
   for (const id of ["recovery-dir-path", "recovery-include-hangloose", "recovery-remove-silent-channels"]) {
     $(id).addEventListener("input", scheduleRecoveryPlan);

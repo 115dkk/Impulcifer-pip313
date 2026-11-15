@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2/capabilities",
+  "identifier": "desktop",
+  "description": "Main window on the desktop: the title-bar theme, native dialogs and the updater. Android has none of the three (ADR 0020).",
+  "platforms": ["linux", "macOS", "windows"],
+  "windows": ["main"],
+  "permissions": [
+    "core:window:allow-set-theme",
+    "dialog:default",
+    "updater:default"
+  ]
+}

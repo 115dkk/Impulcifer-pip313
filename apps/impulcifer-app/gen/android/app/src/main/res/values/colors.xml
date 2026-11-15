@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The body of logo/pulse.svg. -->
+    <color name="ic_launcher_background">#111418</color>
+    <!-- The page's bg-0 (ui/styles.css), shown before the page loads and
+         behind the system bars. MainActivity repaints it when the theme
+         setting differs from the system's. -->
+    <color name="page_background">#F3F5F7</color>
+</resources>

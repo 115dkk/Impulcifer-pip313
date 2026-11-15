@@ -156,7 +156,9 @@ issue-body.md
 
 # Rust workspace
 /target/
-/apps/impulcifer-app/gen/
+# tauri-build writes the ACL schemas here; gen/android is the committed Gradle
+# project of the Android app (ADR 0020), with its own .gitignore.
+/apps/impulcifer-app/gen/schemas/
 # Wheel package data staged by crates/impulcifer-python/sync_data.py (copies of data/)
 /crates/impulcifer-python/python/impulcifer/data/
 # ...and the i18n/locales catalogs it stages for the sdist
