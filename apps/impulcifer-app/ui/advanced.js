@@ -1,48 +1,6 @@
 // @ts-check
-// The BRIR request payload and the advanced options of both skins.
+// The advanced options of both skins: their rules, Studio's tabs, the carry-over and the request fields.
 "use strict";
-
-function gatherBrirPayload() {
-  /** @type {ProcessingRequest} */
-  const args = {
-    dir_path: val("bf-dir-path"),
-    test_signal: resolveTestSignalValue(),
-    plot: checked("bf-plot"),
-    do_room_correction: isOpen("dis-room"),
-    do_headphone_compensation: isOpen("dis-headphone"),
-    do_equalization: isOpen("dis-eq"),
-  };
-  if (mfileMode("brir")) addMfileArgs(args, "brir");
-  if (val("bf-brir-source") === "recording") {
-    args.brir_recording_file = val("bf-brir-recording-file");
-    args.brir_recording_speakers = parseRecordingSpeakers(val("bf-brir-recording-speakers")).entries.join(",");
-    if (val("bf-brir-recording-sweep-source") === "file") args.brir_recording_sweep = val("bf-brir-recording-sweep");
-  }
-  if (isOpen("dis-room")) addRoomArgs(args);
-  if (isOpen("dis-headphone")) {
-    const headphoneFile = val("bf-headphone-file");
-    if (mfileMode("headphones")) addMfileArgs(args, "headphones");
-    else if (headphoneFile) args.headphone_compensation_file = headphoneFile;
-  }
-  if (isOpen("dis-eq")) Object.assign(args, eqRequestFields());
-  if (state.skin === "studio") addStudioAdvancedArgs(args);
-  else if (isOpen("dis-advanced")) {
-    addToneArgs(args, "bf", true);
-    addTimeArgs(args, "bf");
-    addOutputArgs(args, "bf");
-    addCorrectionArgs(args, "bf");
-  }
-  if (isOpen("dis-vbass")) {
-    const mode = vbassMode();
-    args.vbass = true;
-    args.vbass_mode = mode;
-    // Automatic finds its own crossover, so there is no frequency to send.
-    if (mode !== "auto") args.vbass_freq = Math.max(30, Math.min(500, Math.trunc(numOr("bf-vbass-freq", brirDefault("vbass_freq", 250)))));
-    args.vbass_hp = numOr("bf-vbass-hp", brirDefault("vbass_hp", 15.0));
-    args.vbass_polarity = val("bf-vbass-polarity");
-  }
-  return args;
-}
 
 /* Advanced options are read from one of two forms with the same field
    suffixes: Stable's single list ("bf-") and Studio's four tabs ("ba-").
@@ -297,6 +255,19 @@ function addStudioAdvancedArgs(args) {
   if (advOn("correction")) addCorrectionArgs(args, "ba");
 }
 
+/* The advanced block of the request: Studio's tabs that are on, or Stable's
+   list while its section is open. */
+/** @param {ProcessingRequest} args */
+function addAdvancedArgs(args) {
+  if (state.skin === "studio") addStudioAdvancedArgs(args);
+  else if (isOpen("dis-advanced")) {
+    addToneArgs(args, "bf", true);
+    addTimeArgs(args, "bf");
+    addOutputArgs(args, "bf");
+    addCorrectionArgs(args, "bf");
+  }
+}
+
 /* --------------------------------------------------- Studio advanced tabs */
 
 const ADV_TABS = ["tone", "time", "output", "correction"];
@@ -441,6 +412,11 @@ function refreshAdvanced(p) {
   for (const hint of ADV_HINTS) hint.update(p);
 }
 
+/* Both forms again, after the language changes. */
+function renderAdvancedForms() {
+  for (const p of ADV_PREFIXES) refreshAdvanced(p);
+}
+
 /* The field a rule reads runs the rules again (a number field as it is
    typed, anything else when it changes); the choice a hint follows runs that
    hint. Locks follow the page, which runs the rules of both forms itself. */
@@ -453,6 +429,26 @@ function wireAdvanced(p) {
     field.addEventListener(typed ? "input" : "change", () => refreshAdvanced(p));
   }
   for (const hint of ADV_HINTS) advField(`${p}-${hint.on}`).addEventListener("change", () => hint.update(p));
+}
+
+/* The advanced listeners: both forms' rules and hints, then Studio's tabs
+   (a tab is picked by a click or the arrow keys, and has a switch and a reset). */
+function wireAdvancedForms() {
+  for (const p of ADV_PREFIXES) wireAdvanced(p);
+  ADV_TABS.forEach((tab, index) => {
+    const button = $(`adv-tab-${tab}`);
+    button.addEventListener("click", () => selectAdvTab(tab));
+    button.addEventListener("keydown", (event) => {
+      const last = ADV_TABS.length - 1;
+      /** @type {Record<string, number>} */
+      const moves = { ArrowRight: index === last ? 0 : index + 1, ArrowLeft: index === 0 ? last : index - 1, Home: 0, End: last };
+      if (!Object.prototype.hasOwnProperty.call(moves, event.key)) return;
+      event.preventDefault();
+      selectAdvTab(ADV_TABS[moves[event.key]], true);
+    });
+    $(`adv-on-${tab}`).addEventListener("click", () => setAdvOn(tab, !advOn(tab)));
+    $(`adv-reset-${tab}`).addEventListener("click", () => resetAdvTab(tab));
+  });
 }
 
 /* Each form lays out a channel's decay field its own way: Stable puts "FL:"

@@ -260,3 +260,24 @@ function renderEq() {
   $("bf-eq-ears").replaceChildren(renderEqEar("left"), renderEqEar("right"));
   renderEqPreview();
 }
+
+/* The EQ block of the request, while its section is on. */
+/** @param {ProcessingRequest} args */
+function addEqArgs(args) {
+  if (isOpen("dis-eq")) Object.assign(args, eqRequestFields());
+}
+
+/* The folder input inspects the EQ again, and the preview follows its width. */
+function wireEq() {
+  el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
+  // The preview is drawn at its rendered width; redraw when that changes
+  // (window resize, or the disclosure opening from display: none).
+  let eqPreviewWidth = 0;
+  new ResizeObserver((entries) => {
+    const width = Math.round(entries[0].contentRect.width);
+    if (width && width !== eqPreviewWidth) {
+      eqPreviewWidth = width;
+      renderEqPreview();
+    }
+  }).observe($("bf-eq-result"));
+}

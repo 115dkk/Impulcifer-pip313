@@ -137,32 +137,6 @@ function fmt(text, vars) {
   );
 }
 
-function applyStrings() {
-  document.documentElement.lang = state.language;
-  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-i18n]")).forEach((node) => {
-    node.textContent = t(node.dataset.i18n || "");
-  });
-  // Every info button has the same name; its description is the bubble it opens.
-  document.querySelectorAll(".info-tip").forEach((button) => button.setAttribute("aria-label", t("button_more_info")));
-  updateChannelGuidance();
-  updateRoomRows();
-  updateVbassRows();
-  refreshResolvedPath();
-  renderGuided();
-  renderSteps();
-  renderJobState(state.lastJob);
-  renderRecoveryJob(state.lastRecoveryJob);
-  applySkin(state.skin);
-  populateShareModes();
-  renderSystemInfo();
-  renderRecoveryInventory();
-  renderEq();
-  for (const purpose of MFILE_PURPOSES) renderMfile(purpose);
-  for (const p of ADV_PREFIXES) refreshAdvanced(p);
-  if (state.lastJob?.kind === "brir" && state.lastJob.status === "succeeded") renderAlignment(state.lastJob.result?.alignment ?? null);
-  if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
-}
-
 /* ----------------------------------------------------------------- theme */
 
 /** @param {string} code */

@@ -556,3 +556,47 @@ function onMfileChange(purpose, event) {
   }
   updateMfileRows(purpose);
 }
+
+/* ------------------------------------------------ wiring and the request */
+
+/* The three blocks again, after the language changes. */
+function renderMfiles() {
+  for (const purpose of MFILE_PURPOSES) renderMfile(purpose);
+}
+
+/* The BRIR source (a measurement file or the single recording) and the
+   headphone block while its section is on (a measurement file, or the
+   folder's headphone recording when one is named). */
+/** @param {ProcessingRequest} args */
+function addMeasurementFileArgs(args) {
+  if (mfileMode("brir")) addMfileArgs(args, "brir");
+  if (val("bf-brir-source") === "recording") {
+    args.brir_recording_file = val("bf-brir-recording-file");
+    args.brir_recording_speakers = parseRecordingSpeakers(val("bf-brir-recording-speakers")).entries.join(",");
+    if (val("bf-brir-recording-sweep-source") === "file") args.brir_recording_sweep = val("bf-brir-recording-sweep");
+  }
+  if (isOpen("dis-headphone")) {
+    const headphoneFile = val("bf-headphone-file");
+    if (mfileMode("headphones")) addMfileArgs(args, "headphones");
+    else if (headphoneFile) args.headphone_compensation_file = headphoneFile;
+  }
+}
+
+/* The single recording's rows and status, and the three measurement file blocks. */
+function wireMfile() {
+  // The source select also renders the file block (below); this one shows the sweep file row.
+  el("bf-brir-recording-sweep-source", HTMLSelectElement).addEventListener("change", updateBrirRecordingRows);
+  for (const id of ["bf-brir-recording-file", "bf-brir-recording-speakers", "bf-brir-recording-sweep"]) {
+    el(id, HTMLInputElement).addEventListener("input", updateBrirRecordingStatus);
+  }
+  for (const purpose of MFILE_PURPOSES) {
+    const ids = MFILE[purpose];
+    el(ids.source, HTMLSelectElement).addEventListener("change", () => {
+      renderMfile(purpose);
+      scheduleMfileInspection(purpose, 0);
+      scheduleTestSignalCheck(0);
+    });
+    el(ids.prefix, HTMLInputElement).addEventListener("input", () => scheduleMfileInspection(purpose));
+    $(`${ids.prefix}-result`).addEventListener("change", (event) => onMfileChange(purpose, event));
+  }
+}

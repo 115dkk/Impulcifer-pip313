@@ -94,3 +94,21 @@ function scheduleTestSignalCheck(delay = 250) {
     });
   }, delay);
 }
+
+/* The test signal block of the request. */
+/** @param {ProcessingRequest} args */
+function addTestSignalArgs(args) {
+  args.test_signal = resolveTestSignalValue();
+}
+
+/* The test signal listeners: the source, the inputs the length check reads, and sweep detection. */
+function wireTestSignal() {
+  el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", () => {
+    updateTestSignalVisibility();
+    scheduleTestSignalCheck(0);
+  });
+  for (const id of ["bf-test-signal", "bf-dir-path", "bf-headphone-file"]) {
+    el(id, HTMLInputElement).addEventListener("input", () => scheduleTestSignalCheck());
+  }
+  el("btn-detect-sweep", HTMLButtonElement).addEventListener("click", detectSweep);
+}

@@ -255,3 +255,13 @@ async function applyStagedUpdate() {
   $("update-result").hidden = false;
   $("update-result").textContent = t("update_restart_message");
 }
+
+/* The check button and the update dialog's buttons. */
+function wireUpdate() {
+  el("btn-check-updates", HTMLButtonElement).addEventListener("click", () => checkForUpdates(true));
+  el("update-now", HTMLButtonElement).addEventListener("click", beginUpdate);
+  el("update-remind", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-skip", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-close", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-restart", HTMLButtonElement).addEventListener("click", applyStagedUpdate);
+}

@@ -528,6 +528,12 @@ function applyVbassDefaults() {
   updateVbassRows();
 }
 
+/* The room and virtual bass rows again, after the language changes. */
+function renderRoom() {
+  updateRoomRows();
+  updateVbassRows();
+}
+
 /* The room block of the request: the target, the microphone calibration,
    the measurement file, the mode, then every table setting whose row shows. */
 /** @param {ProcessingRequest} args */
@@ -541,6 +547,25 @@ function addRoomArgs(args) {
   for (const field of ROOM_FIELDS) {
     if (roomShown(field, context)) fields[field.arg] = roomFieldValue(field, context);
   }
+}
+
+/* The virtual bass block of the request. */
+/** @param {ProcessingRequest} args */
+function addVbassArgs(args) {
+  const mode = vbassMode();
+  args.vbass = true;
+  args.vbass_mode = mode;
+  // Automatic finds its own crossover, so there is no frequency to send.
+  if (mode !== "auto") args.vbass_freq = Math.max(30, Math.min(500, Math.trunc(numOr("bf-vbass-freq", brirDefault("vbass_freq", 250)))));
+  args.vbass_hp = numOr("bf-vbass-hp", brirDefault("vbass_hp", 15.0));
+  args.vbass_polarity = val("bf-vbass-polarity");
+}
+
+/* The room and virtual bass blocks, each while its section is on. */
+/** @param {ProcessingRequest} args */
+function addRoomAndVbassArgs(args) {
+  if (isOpen("dis-room")) addRoomArgs(args);
+  if (isOpen("dis-vbass")) addVbassArgs(args);
 }
 
 /* The room and virtual bass listeners. A table input with `refresh`

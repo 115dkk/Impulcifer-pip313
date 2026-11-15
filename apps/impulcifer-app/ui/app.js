@@ -1,10 +1,44 @@
 // @ts-check
-// Event wiring, boot and the calls that start the page; loads last.
+// The parts of the screen (wiring, language, BRIR request), the shell's listeners, boot and the calls that start
+// the page; loads last.
 "use strict";
+
+/* ----------------------------------------------------------------- parts */
+
+/* Each part of the screen, in its own file, wires its controls (`wire`),
+   draws again what follows the language or the skin (`render`) and adds its
+   fields to the BRIR request behind its own section switch (`addArgs`). The
+   table is read only at run time, after every script has loaded. Parts are
+   wired in this order, so two parts that listen to the same element and
+   event keep their order (the test signal check, then the EQ inspection, on
+   the folder input). */
+/** @typedef {{ name: string, wire?: () => void, render?: () => void,
+ *   addArgs?: (args: ProcessingRequest) => void }} Feature */
+/** @type {readonly Feature[]} */
+const FEATURES = [
+  { name: "shell", wire: wireShell },
+  { name: "recorder", wire: wireRecorder, render: renderRecorder },
+  { name: "dialogs", wire: wireDialogs },
+  { name: "guided", wire: wireGuided, render: renderGuided },
+  { name: "advanced", wire: wireAdvancedForms, render: renderAdvancedForms, addArgs: addAdvancedArgs },
+  { name: "test signal", wire: wireTestSignal, addArgs: addTestSignalArgs },
+  { name: "room", wire: wireRoom, render: renderRoom, addArgs: addRoomAndVbassArgs },
+  { name: "measurement files", wire: wireMfile, render: renderMfiles, addArgs: addMeasurementFileArgs },
+  { name: "eq", wire: wireEq, render: renderEq, addArgs: addEqArgs },
+  { name: "jobs", wire: wireJobs, render: renderJobs },
+  { name: "recovery", wire: wireRecovery, render: renderRecovery },
+  { name: "settings", wire: wireSettings, render: renderSettings },
+  { name: "update", wire: wireUpdate },
+];
 
 /* ---------------------------------------------------------------- wiring */
 
 function wireEvents() {
+  for (const feature of FEATURES) feature.wire?.();
+}
+
+/* The navigation, the section switches, the browse buttons and the links. */
+function wireShell() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".nav-item")).forEach((item) => {
     item.addEventListener("click", () => {
       /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".nav-item")).forEach((node) => node.classList.remove("active"));
@@ -46,156 +80,34 @@ function wireEvents() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-open-url]")).forEach((button) => {
     button.addEventListener("click", () => api().open_url(button.dataset.openUrl || ""));
   });
+}
 
-  el("btn-refresh-devices", HTMLButtonElement).addEventListener("click", () => loadDevices(val("rf-host-api")));
-  el("rf-host-api", HTMLSelectElement).addEventListener("change", () => loadDevices(val("rf-host-api")));
+/* -------------------------------------------------------------- language */
 
-  el("rf-play", HTMLInputElement).addEventListener("input", () => {
-    refreshResolvedPath();
-    updateChannelOrder();
+function applyStrings() {
+  document.documentElement.lang = state.language;
+  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-i18n]")).forEach((node) => {
+    node.textContent = t(node.dataset.i18n || "");
   });
-  el("rf-output-device", HTMLSelectElement).addEventListener("change", updateChannelOrder);
-  el("rf-channel-order", HTMLSelectElement).addEventListener("change", updateChannelOrder);
-  el("ask-modal-ok", HTMLButtonElement).addEventListener("click", () => closeAsk(true));
-  el("ask-modal-cancel", HTMLButtonElement).addEventListener("click", () => closeAsk(false));
-  document.addEventListener("keydown", onAskKey);
-  el("rf-record-dir", HTMLInputElement).addEventListener("input", () => {
-    refreshResolvedPath();
-    renderGuided();
-  });
-  el("rf-append", HTMLInputElement).addEventListener("change", refreshResolvedPath);
-  el("rf-sweep-source", HTMLSelectElement).addEventListener("change", () => {
-    updateSweepSourceVisibility();
-    refreshResolvedPath();
-    updateChannelOrder();
-  });
-  el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", () => {
-    refreshResolvedPath();
-    updateChannelOrder();
-  });
-  el("btn-cancel-recording", HTMLButtonElement).addEventListener("click", cancelActiveJob);
-  el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", () => {
-    updateChannelOrder();
-    useLayoutSpeakers();
-  });
-  el("rf-layout-use-all", HTMLButtonElement).addEventListener("click", useLayoutSpeakers);
-  el("gd-setup", HTMLSelectElement).addEventListener("change", populateGuidedTargets);
-  el("gd-target", HTMLSelectElement).addEventListener("change", () => showGuidedStep(0));
-  el("btn-gd-record", HTMLButtonElement).addEventListener("click", recordGuidedStep);
-  el("btn-gd-cancel", HTMLButtonElement).addEventListener("click", stopGuidedCountdown);
-  el("btn-gd-prev", HTMLButtonElement).addEventListener("click", () => showGuidedStep(state.guided.index - 1));
-  el("btn-gd-next", HTMLButtonElement).addEventListener("click", () => showGuidedStep(state.guided.index + 1));
-  for (const p of ADV_PREFIXES) wireAdvanced(p);
-  el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", () => {
-    updateTestSignalVisibility();
-    scheduleTestSignalCheck(0);
-  });
-  for (const id of ["bf-test-signal", "bf-dir-path", "bf-headphone-file"]) {
-    el(id, HTMLInputElement).addEventListener("input", () => scheduleTestSignalCheck());
-  }
-  wireRoom();
-  // The source select also renders the file block (below); this one shows the sweep file row.
-  el("bf-brir-recording-sweep-source", HTMLSelectElement).addEventListener("change", updateBrirRecordingRows);
-  for (const id of ["bf-brir-recording-file", "bf-brir-recording-speakers", "bf-brir-recording-sweep"]) {
-    el(id, HTMLInputElement).addEventListener("input", updateBrirRecordingStatus);
-  }
-  el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
-  for (const purpose of MFILE_PURPOSES) {
-    const ids = MFILE[purpose];
-    el(ids.source, HTMLSelectElement).addEventListener("change", () => {
-      renderMfile(purpose);
-      scheduleMfileInspection(purpose, 0);
-      scheduleTestSignalCheck(0);
-    });
-    el(ids.prefix, HTMLInputElement).addEventListener("input", () => scheduleMfileInspection(purpose));
-    $(`${ids.prefix}-result`).addEventListener("change", (event) => onMfileChange(purpose, event));
-  }
-  // The preview is drawn at its rendered width; redraw when that changes
-  // (window resize, or the disclosure opening from display: none).
-  let eqPreviewWidth = 0;
-  new ResizeObserver((entries) => {
-    const width = Math.round(entries[0].contentRect.width);
-    if (width && width !== eqPreviewWidth) {
-      eqPreviewWidth = width;
-      renderEqPreview();
-    }
-  }).observe($("bf-eq-result"));
-  el("btn-detect-sweep", HTMLButtonElement).addEventListener("click", detectSweep);
-  el("rf-force-channels", HTMLInputElement).addEventListener("change", updateChannelGuidance);
-  el("rf-channels", HTMLInputElement).addEventListener("input", updateChannelGuidance);
+  // Every info button has the same name; its description is the bubble it opens.
+  document.querySelectorAll(".info-tip").forEach((button) => button.setAttribute("aria-label", t("button_more_info")));
+  for (const feature of FEATURES) feature.render?.();
+  if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
+}
 
-  el("btn-start-recording", HTMLButtonElement).addEventListener("click", startSpeakersRecording);
-  el("btn-record-headphones", HTMLButtonElement).addEventListener("click", startHeadphonesRecording);
-  el("btn-sweep-set", HTMLButtonElement).addEventListener("click", generateSweepSet);
+/* ---------------------------------------------------------- BRIR request */
 
-  ADV_TABS.forEach((tab, index) => {
-    const button = $(`adv-tab-${tab}`);
-    button.addEventListener("click", () => selectAdvTab(tab));
-    button.addEventListener("keydown", (event) => {
-      const last = ADV_TABS.length - 1;
-      /** @type {Record<string, number>} */
-      const moves = { ArrowRight: index === last ? 0 : index + 1, ArrowLeft: index === 0 ? last : index - 1, Home: 0, End: last };
-      if (!Object.prototype.hasOwnProperty.call(moves, event.key)) return;
-      event.preventDefault();
-      selectAdvTab(ADV_TABS[moves[event.key]], true);
-    });
-    $(`adv-on-${tab}`).addEventListener("click", () => setAdvOn(tab, !advOn(tab)));
-    $(`adv-reset-${tab}`).addEventListener("click", () => resetAdvTab(tab));
-  });
-
-  el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () => {
-    if (brirRecordingProblem()) {
-      updateBrirRecordingStatus();
-      $("bf-brir-recording-block").scrollIntoView({ block: "center" });
-      return;
-    }
-    const blocked = MFILE_PURPOSES.find((purpose) => mfileActive(purpose) && mfileBlocked(purpose));
-    if (blocked) {
-      renderMfile(blocked);
-      $(`${MFILE[blocked].prefix}-block`).scrollIntoView({ block: "center" });
-      return;
-    }
-    begin((request) => api().start_brir(request), gatherBrirPayload());
-  });
-  el("btn-start-recovery", HTMLButtonElement).addEventListener("click", () =>
-    begin(
-      (request) => api().start_output_recovery(request),
-      recoveryRequest(),
-      "output_recovery",
-    ),
-  );
-  el("btn-cancel-brir", HTMLButtonElement).addEventListener("click", cancelActiveJob);
-  el("job-modal-cancel", HTMLButtonElement).addEventListener("click", cancelActiveJob);
-  el("job-modal-close", HTMLButtonElement).addEventListener("click", () => {
-    state.modalDismissed = true;
-    $("job-modal").hidden = true;
-  });
-  el("btn-open-output", HTMLButtonElement).addEventListener("click", () => {
-    if (state.lastOutputDir) api().open_path(state.lastOutputDir);
-  });
-  el("btn-open-recovery-output", HTMLButtonElement).addEventListener("click", () => {
-    if (state.lastRecoveryOutputDir) api().open_path(state.lastRecoveryOutputDir);
-  });
-
-  el("btn-open-data", HTMLButtonElement).addEventListener("click", () => api().open_path(state.systemInfo?.paths.data_dir));
-  el("btn-open-settings", HTMLButtonElement).addEventListener("click", () => {
-    const path = state.systemInfo?.paths.settings_path;
-    if (path) api().open_path(parentFolder(path));
-  });
-  for (const id of ["recovery-dir-path", "recovery-include-hangloose", "recovery-remove-silent-channels"]) {
-    $(id).addEventListener("input", scheduleRecoveryPlan);
-    $(id).addEventListener("change", scheduleRecoveryPlan);
-  }
-  el("sf-skin", HTMLSelectElement).addEventListener("change", () => changeSkin(val("sf-skin")));
-  el("sf-theme", HTMLSelectElement).addEventListener("change", () => changeTheme(val("sf-theme")));
-  el("sf-language", HTMLSelectElement).addEventListener("change", () => changeLanguage(val("sf-language")));
-
-  el("btn-check-updates", HTMLButtonElement).addEventListener("click", () => checkForUpdates(true));
-  el("update-now", HTMLButtonElement).addEventListener("click", beginUpdate);
-  el("update-remind", HTMLButtonElement).addEventListener("click", hideUpdateModal);
-  el("update-skip", HTMLButtonElement).addEventListener("click", hideUpdateModal);
-  el("update-close", HTMLButtonElement).addEventListener("click", hideUpdateModal);
-  el("update-restart", HTMLButtonElement).addEventListener("click", applyStagedUpdate);
+function gatherBrirPayload() {
+  /** @type {ProcessingRequest} */
+  const args = {
+    dir_path: val("bf-dir-path"),
+    plot: checked("bf-plot"),
+    do_room_correction: isOpen("dis-room"),
+    do_headphone_compensation: isOpen("dis-headphone"),
+    do_equalization: isOpen("dis-eq"),
+  };
+  for (const feature of FEATURES) feature.addArgs?.(args);
+  return args;
 }
 
 /* ------------------------------------------------------------------ boot */

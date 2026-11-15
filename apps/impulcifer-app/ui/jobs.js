@@ -94,6 +94,13 @@ function onAskKey(event) {
   }
 }
 
+/* The dialog's buttons, and its keys on the whole page. */
+function wireDialogs() {
+  el("ask-modal-ok", HTMLButtonElement).addEventListener("click", () => closeAsk(true));
+  el("ask-modal-cancel", HTMLButtonElement).addEventListener("click", () => closeAsk(false));
+  document.addEventListener("keydown", onAskKey);
+}
+
 /* ------------------------------------------------------------------ jobs */
 
 /* Every job (a recording, a BRIR, an output recovery, an update) runs the
@@ -302,3 +309,38 @@ const MAIN_JOB = {
     renderJobState(null);
   },
 };
+
+/* The stage checklist, the job state and a finished BRIR's alignment report again, after the language changes. */
+function renderJobs() {
+  renderSteps();
+  renderJobState(state.lastJob);
+  if (state.lastJob?.kind === "brir" && state.lastJob.status === "succeeded") renderAlignment(state.lastJob.result?.alignment ?? null);
+}
+
+/* Generate (unless the single recording or a measurement file cannot be used
+   yet), cancel, the Stable job dialog, and opening the output folder. */
+function wireJobs() {
+  el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () => {
+    if (brirRecordingProblem()) {
+      updateBrirRecordingStatus();
+      $("bf-brir-recording-block").scrollIntoView({ block: "center" });
+      return;
+    }
+    const blocked = MFILE_PURPOSES.find((purpose) => mfileActive(purpose) && mfileBlocked(purpose));
+    if (blocked) {
+      renderMfile(blocked);
+      $(`${MFILE[blocked].prefix}-block`).scrollIntoView({ block: "center" });
+      return;
+    }
+    begin((request) => api().start_brir(request), gatherBrirPayload());
+  });
+  el("btn-cancel-brir", HTMLButtonElement).addEventListener("click", cancelActiveJob);
+  el("job-modal-cancel", HTMLButtonElement).addEventListener("click", cancelActiveJob);
+  el("job-modal-close", HTMLButtonElement).addEventListener("click", () => {
+    state.modalDismissed = true;
+    $("job-modal").hidden = true;
+  });
+  el("btn-open-output", HTMLButtonElement).addEventListener("click", () => {
+    if (state.lastOutputDir) api().open_path(state.lastOutputDir);
+  });
+}
