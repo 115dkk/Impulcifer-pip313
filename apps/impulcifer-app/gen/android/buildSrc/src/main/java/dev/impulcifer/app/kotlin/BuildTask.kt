@@ -14,41 +14,46 @@ open class BuildTask : DefaultTask() {
     @Input
     var release: Boolean? = null
 
+    // The Tauri CLI is either cargo's subcommand (`cargo install tauri-cli`,
+    // which puts `cargo-tauri` on PATH) or the npm package's own executable
+    // (`npm install -g @tauri-apps/cli`, which the workflows use). Which one is
+    // there is read from PATH, so a build that fails is not run a second time
+    // under the other name.
     @TaskAction
     fun assemble() {
-        val executable = """cargo""";
-        try {
-            runTauriCli(executable)
-        } catch (e: Exception) {
-            if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-                // Try different Windows-specific extensions
-                val fallbacks = listOf(
-                    "$executable.exe",
-                    "$executable.cmd",
-                    "$executable.bat",
-                )
-                
-                var lastException: Exception = e
-                for (fallback in fallbacks) {
-                    try {
-                        runTauriCli(fallback)
-                        return
-                    } catch (fallbackException: Exception) {
-                        lastException = fallbackException
-                    }
-                }
-                throw lastException
-            } else {
-                throw e;
+        val windows = Os.isFamily(Os.FAMILY_WINDOWS)
+        val extensions = if (windows) listOf(".exe", ".cmd", ".bat", "") else listOf("")
+        val onPath = { name: String ->
+            (System.getenv("PATH") ?: "").split(File.pathSeparator).any { directory ->
+                extensions.any { File(directory, "$name$it").isFile }
             }
         }
+        val (executable, prefix) =
+            if (onPath("cargo-tauri")) "cargo" to listOf("tauri") else "tauri" to emptyList()
+        // Windows starts a program only under its full file name; the other
+        // platforms have one name, so a failed build is reported as it is.
+        val names = if (windows) {
+            listOf(executable, "$executable.exe", "$executable.cmd", "$executable.bat")
+        } else {
+            listOf(executable)
+        }
+        var lastException: Exception? = null
+        for (name in names) {
+            try {
+                runTauriCli(name, prefix)
+                return
+            } catch (e: Exception) {
+                lastException = e
+            }
+        }
+        throw lastException ?: GradleException("the Tauri CLI could not be started")
     }
 
-    fun runTauriCli(executable: String) {
+    fun runTauriCli(executable: String, prefix: List<String>) {
         val rootDirRel = rootDirRel ?: throw GradleException("rootDirRel cannot be null")
         val target = target ?: throw GradleException("target cannot be null")
         val release = release ?: throw GradleException("release cannot be null")
-        val args = listOf("tauri", "android", "android-studio-script");
+        val args = prefix + listOf("android", "android-studio-script");
 
         project.exec {
             workingDir(File(project.projectDir, rootDirRel))

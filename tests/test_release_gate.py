@@ -154,6 +154,13 @@ def test_3x_build_inputs_are_shippable():
         "crates/impulcifer-python/python/impulcifer/__init__.py", "crates/impulcifer-python/Cargo.toml",
         "apps/impulcifer-app/src/main.rs", "apps/impulcifer-app/ui/app.js",
         "apps/impulcifer-app/tauri.conf.json", "apps/impulcifer-app/icons/icon.ico",
+        # The Android app (ADR 0020): its page, shell, Gradle project and signing key.
+        "apps/impulcifer-app/src/lib.rs", "apps/impulcifer-app/ui/android.html",
+        "apps/impulcifer-app/tauri.android.conf.json",
+        "apps/impulcifer-app/gen/android/app/build.gradle.kts",
+        "apps/impulcifer-app/gen/android/app/src/main/AndroidManifest.xml",
+        "apps/impulcifer-app/gen/android/app/src/main/java/dev/impulcifer/app/MainActivity.kt",
+        "apps/impulcifer-app/android-signing/release.p12",
         "Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
         "i18n/locales/ko.json", "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav",
         "data/harman-in-room-headphone-target.csv", "build_scripts/pack_velopack.ps1",
@@ -164,6 +171,8 @@ def test_3x_build_inputs_are_shippable():
 def test_3x_tests_docs_tooling_and_2x_code_are_not_shippable():
     assert release_gate.classify_shippable([
         "crates/impulcifer-service/tests/ui_catalog.rs", "crates/impulcifer-dsp/benches/perf.rs",
+        # The Android app's instrumented test is not packed into the APK.
+        "apps/impulcifer-app/gen/android/app/src/androidTest/java/dev/impulcifer/app/DemoProcessingTest.kt",
         "apps/impulcifer-app/tests/ui_gallery.py", "crates/impulcifer-cli/README.md",
         "apps/impulcifer-app/ui/ipc.d.ts", "apps/impulcifer-app/package.json",
         "apps/impulcifer-app/package-lock.json", "apps/impulcifer-app/tsconfig.json",
@@ -263,9 +272,12 @@ def test_release_jobs_build_the_gated_commit():
     text = (_GATE_PATH.parents[1] / "workflows" / "release-3x.yml").read_text(encoding="utf-8")
     gate, after_gate = text.split("\njobs:\n", 1)[1].split("\n  build-windows:\n", 1)
     assert "release_gate.py --product 3x" in gate
-    assert after_gate.count("uses: actions/checkout@v5") == 6
-    assert after_gate.count("ref: ${{ needs.gate.outputs.release_sha }}") == 6
-    assert after_gate.count("if: needs.gate.outputs.should_release == 'true'") == 7
+    # Eight jobs follow the gate (build-android since ADR 0020); every one is
+    # skipped unless the gate releases, and the seven that read the tree check
+    # out the gated commit (publish-pypi only downloads artifacts).
+    assert after_gate.count("uses: actions/checkout@v5") == 7
+    assert after_gate.count("ref: ${{ needs.gate.outputs.release_sha }}") == 7
+    assert after_gate.count("if: needs.gate.outputs.should_release == 'true'") == 8
     assert "GITHUB_SHA" not in after_gate
 
 

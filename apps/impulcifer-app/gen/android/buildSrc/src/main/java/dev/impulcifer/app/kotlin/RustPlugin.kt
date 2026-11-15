@@ -25,6 +25,13 @@ open class RustPlugin : Plugin<Project> {
 
         val targetsList = (findProperty("targetList") as? String)?.split(',') ?: listOf("aarch64", "armv7", "i686", "x86_64")
 
+        // The Rust library is built by `tauri android build`, whose script
+        // (BuildTask) needs that command as its parent process and fails in a
+        // Gradle run started on its own. A task that only needs the Kotlin side
+        // (the instrumented test's APK in android.yml) passes -PskipRustBuild=true
+        // and uses the library the earlier build left in jniLibs.
+        val skipRustBuild = (findProperty("skipRustBuild") as? String) == "true"
+
         extensions.configure<ApplicationExtension> {
             @Suppress("UnstableApiUsage")
             flavorDimensions.add("abi")
@@ -57,7 +64,9 @@ open class RustPlugin : Plugin<Project> {
                     description = "Build dynamic library in $profile mode for all targets"
                 }
 
-                tasks["mergeUniversal${profileCapitalized}JniLibFolders"].dependsOn(buildTask)
+                if (!skipRustBuild) {
+                    tasks["mergeUniversal${profileCapitalized}JniLibFolders"].dependsOn(buildTask)
+                }
 
                 for (targetPair in targetsList.withIndex()) {
                     val targetName = targetPair.value
@@ -75,9 +84,11 @@ open class RustPlugin : Plugin<Project> {
                     }
 
                     buildTask.dependsOn(targetBuildTask)
-                    tasks["merge$targetArchCapitalized${profileCapitalized}JniLibFolders"].dependsOn(
-                        targetBuildTask
-                    )
+                    if (!skipRustBuild) {
+                        tasks["merge$targetArchCapitalized${profileCapitalized}JniLibFolders"].dependsOn(
+                            targetBuildTask
+                        )
+                    }
                 }
             }
         }

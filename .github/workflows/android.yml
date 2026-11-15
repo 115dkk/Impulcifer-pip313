@@ -1,0 +1,274 @@
+name: Android
+
+# The Android app (ADR 0020): the 3.x crates built for Android without the
+# recording backend, the release APK, and the app itself on an emulator, where
+# its page processes the demo measurement folder and restores an output.
+# release-3x.yml builds and signs the released APK with the same setup
+# (.github/actions/android-setup).
+
+on:
+  push:
+    # TEMPORARY: claude/android-port runs on its own pushes until its pull request is open.
+    branches: [ master, claude/android-port ]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "features.toml"
+      - "crates/**"
+      - "apps/**"
+      - "data/demo/**"
+      - "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
+      - ".github/workflows/android.yml"
+      - ".github/actions/android-setup/**"
+      - ".github/scripts/android_signing_key.sh"
+      - ".github/scripts/android_emulator_test.sh"
+  pull_request:
+    branches: [ master ]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "features.toml"
+      - "crates/**"
+      - "apps/**"
+      - "data/demo/**"
+      - "data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav"
+      - ".github/workflows/android.yml"
+      - ".github/actions/android-setup/**"
+      - ".github/scripts/android_signing_key.sh"
+      - ".github/scripts/android_emulator_test.sh"
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CI: "true"
+
+jobs:
+  check:
+    name: clippy + dependency tree (aarch64-linux-android)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/android-setup
+        with:
+          rust-targets: aarch64-linux-android
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: android-check-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: android-check-
+
+      # The NDK's compiler links and builds the C parts. The WRY_* and TAURI_*
+      # values are what `tauri android build` sets before it runs cargo.
+      - name: Point cargo at the NDK
+        run: |
+          set -euo pipefail
+          bin="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          mkdir -p "$RUNNER_TEMP/wry-kotlin"
+          {
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$bin/aarch64-linux-android30-clang"
+            echo "CC_aarch64_linux_android=$bin/aarch64-linux-android30-clang"
+            echo "AR_aarch64_linux_android=$bin/llvm-ar"
+            echo "WRY_ANDROID_PACKAGE=dev.impulcifer.app"
+            echo "WRY_ANDROID_LIBRARY=impulcifer_app_lib"
+            echo "WRY_ANDROID_KOTLIN_FILES_OUT_DIR=$RUNNER_TEMP/wry-kotlin"
+            echo "TAURI_ANDROID_PACKAGE_NAME_APP_NAME=app"
+            echo "TAURI_ANDROID_PACKAGE_NAME_PREFIX=dev_impulcifer"
+          } >> "$GITHUB_ENV"
+
+      # Android has no recording (ADR 0020, item 3). cpal would pull in oboe
+      # and its C++ there, and the Windows and macOS backends do not build.
+      - name: No recording backend in the Android dependency tree
+        run: |
+          set -euo pipefail
+          tree=$(cargo tree -p impulcifer-app --target aarch64-linux-android -e normal,build --prefix none --format '{p}' | sort -u)
+          echo "$tree" | grep -E '^(tauri|wry|impulcifer-[a-z-]+) ' || true
+          found=$(echo "$tree" | grep -E '^(cpal|impulcifer-sys-win|coreaudio-rs|coreaudio-sys|wasapi|alsa|alsa-sys|oboe|oboe-sys|dark-light|tauri-plugin-dialog|tauri-plugin-updater|velopack) ' || true)
+          if [ -n "$found" ]; then
+            echo "::error::desktop-only crates reached the Android build:"
+            echo "$found"
+            exit 1
+          fi
+
+      - name: clippy for Android (the crates the app is built from)
+        run: >
+          cargo clippy
+          -p impulcifer-types -p impulcifer-io -p impulcifer-analysis -p impulcifer-dsp
+          -p impulcifer-plots -p impulcifer-jobs -p impulcifer-audio-io
+          -p impulcifer-service -p impulcifer-cli
+          --no-default-features --target aarch64-linux-android --all-targets
+          -- --no-deps -D warnings
+
+      - name: clippy for Android (the shell)
+        run: cargo clippy -p impulcifer-app --lib --target aarch64-linux-android -- --no-deps -D warnings
+
+  apk:
+    name: release APK (arm64-v8a)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/android-setup
+        with:
+          rust-targets: aarch64-linux-android
+
+      - name: Cache cargo registry, target and Gradle
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-apk-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml', 'apps/impulcifer-app/gen/android/**/*.kts') }}
+          restore-keys: android-apk-
+
+      - name: Build the release APK
+        working-directory: apps/impulcifer-app
+        run: tauri android build --apk --target aarch64 --ci
+
+      # The same script signs the release. A pull request from a fork has no
+      # secrets: its APK stays unsigned and only its contents are checked.
+      - name: Sign with the project key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          unsigned=apps/impulcifer-app/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+          ls -la "$(dirname "$unsigned")"
+          mkdir -p dist
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY}" ] && [ -f apps/impulcifer-app/android-signing/release.p12 ]; then
+            # Not captured: its stdout registers the mask (see the script's header).
+            bash .github/scripts/android_signing_key.sh sign apps/impulcifer-app/android-signing "$unsigned" "dist/Impulcifer-${version}-aarch64.apk"
+          else
+            echo "::warning::no signing key or secret here: the APK is left unsigned and cannot be installed"
+            cp "$unsigned" "dist/Impulcifer-${version}-aarch64-unsigned.apk"
+          fi
+          ls -la dist
+
+      # One ABI, the shell's library, the page, no desktop bundle resources,
+      # and the manifest the ADR describes.
+      - name: Check what the APK holds
+        run: |
+          set -euo pipefail
+          apk=$(ls dist/*.apk | head -n 1)
+          unzip -l "$apk" > apk-files.txt
+          grep -E ' lib/' apk-files.txt
+          grep -q ' lib/arm64-v8a/libimpulcifer_app_lib.so$' apk-files.txt
+          if grep -E ' lib/(armeabi-v7a|x86|x86_64)/' apk-files.txt; then
+            echo "::error::the release APK must hold arm64-v8a only"; exit 1
+          fi
+          if grep -E 'sweep-seg|harman' apk-files.txt; then
+            echo "::error::the desktop's bundled data must not be packed into the APK"; exit 1
+          fi
+          badging=$("$ANDROID_BUILD_TOOLS/aapt2" dump badging "$apk")
+          echo "$badging" | grep -E "^(package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code)"
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+          echo "$badging" | grep -q "^package: name='dev.impulcifer.app' .*versionName='${version}'"
+          echo "$badging" | grep -q "^sdkVersion:'30'"
+          echo "$badging" | grep -q "^uses-permission: name='android.permission.MANAGE_EXTERNAL_STORAGE'"
+          echo "$badging" | grep -q "^native-code: 'arm64-v8a'$"
+          # 16 KiB pages (Android 15 and later devices): every loadable segment
+          # of the library is aligned to 0x4000.
+          unzip -o -q "$apk" lib/arm64-v8a/libimpulcifer_app_lib.so -d apk-unpacked
+          "$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -lW apk-unpacked/lib/arm64-v8a/libimpulcifer_app_lib.so \
+            | awk '$1 == "LOAD" { print; if ($NF != "0x4000") bad = 1 } END { exit bad }'
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-apk
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  emulator:
+    name: the app on an emulator (API 36, x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/android-setup
+        with:
+          rust-targets: x86_64-linux-android
+
+      - name: Cache cargo registry, target and Gradle
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-emulator-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml', 'apps/impulcifer-app/gen/android/**/*.kts') }}
+          restore-keys: android-emulator-
+
+      # The debug variant, because Gradle builds an instrumented test against
+      # it, with the Rust code optimized: at opt-level 0 the pipeline takes many
+      # times longer (the workspace's test profile is optimized for the same
+      # reason).
+      - name: Build the app for the emulator
+        working-directory: apps/impulcifer-app
+        env:
+          CARGO_PROFILE_DEV_OPT_LEVEL: "2"
+          CARGO_PROFILE_DEV_DEBUG: "0"
+        run: tauri android build --debug --apk --target x86_64 --ci
+
+      # `tauri android build` built the library; Gradle alone cannot (see
+      # RustPlugin.kt), so the test APK is built without that step.
+      - name: Build the instrumented test
+        working-directory: apps/impulcifer-app/gen/android
+        run: bash gradlew -PskipRustBuild=true :app:assembleUniversalDebugAndroidTest --no-daemon
+
+      - name: Allow the emulator to use KVM
+        run: sudo chmod 0666 /dev/kvm
+
+      - name: Process the demo folder and restore an output on the emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 3
+          ram-size: 4096M
+          disk-size: 6000M
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: >-
+            bash .github/scripts/android_emulator_test.sh
+            apps/impulcifer-app/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk
+            apps/impulcifer-app/gen/android/app/build/outputs/apk/androidTest/universal/debug/app-universal-debug-androidTest.apk
+            data/demo
+            android-emulator
+
+      - name: Upload the screenshots, the result and the logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-emulator-evidence
+          path: android-emulator/
+          if-no-files-found: warn
+          retention-days: 14
