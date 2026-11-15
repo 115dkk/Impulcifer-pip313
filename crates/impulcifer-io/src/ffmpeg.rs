@@ -110,19 +110,21 @@ fn usable(paths: &FfmpegPaths) -> bool {
     run(cmd).is_ok_and(|output| version_supported(&output.stdout))
 }
 fn discover_in(
-    bundled: &Path,
+    bundled: Option<&Path>,
     path_dirs: &[PathBuf],
     common: &[PathBuf],
     validate: impl Fn(&FfmpegPaths) -> bool,
 ) -> Option<FfmpegPaths> {
     // App-local binaries first; then PATH (the two programs may live in different dirs).
-    for dir in [
-        bundled.to_path_buf(),
-        bundled.join("ffmpeg/bin"),
-        bundled.join("bin"),
-    ] {
-        if let Some(paths) = pair(&dir).filter(&validate) {
-            return Some(paths);
+    if let Some(bundled) = bundled {
+        for dir in [
+            bundled.to_path_buf(),
+            bundled.join("ffmpeg/bin"),
+            bundled.join("bin"),
+        ] {
+            if let Some(paths) = pair(&dir).filter(&validate) {
+                return Some(paths);
+            }
         }
     }
     let on_path = |name: &str| {
@@ -141,28 +143,33 @@ fn discover_in(
     common.iter().filter_map(|dir| pair(dir)).find(validate)
 }
 
+fn common_dirs_for(platform: &str, home: Option<&Path>) -> Vec<PathBuf> {
+    let locations: &[&str] = match platform {
+        "android" => return Vec::new(),
+        "windows" => &[
+            "C:/ProgramData/chocolatey/bin",
+            "C:/Program Files/ffmpeg/bin",
+            "C:/Program Files (x86)/ffmpeg/bin",
+            "C:/ffmpeg/bin",
+            "C:/tools/ffmpeg/bin",
+        ],
+        "macos" => &["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin"],
+        _ => &["/usr/bin", "/usr/local/bin", "/snap/bin", "/opt/ffmpeg/bin"],
+    };
+    let mut dirs: Vec<_> = locations.iter().map(PathBuf::from).collect();
+    if platform != "windows"
+        && let Some(home) = home
+    {
+        dirs.push(home.join(".local/bin"));
+    }
+    dirs
+}
+
 fn common_dirs() -> Vec<PathBuf> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let dirs = common_dirs_for(std::env::consts::OS, home.as_deref());
     #[cfg(windows)]
-    let mut dirs: Vec<PathBuf> = [
-        "C:/ProgramData/chocolatey/bin",
-        "C:/Program Files/ffmpeg/bin",
-        "C:/Program Files (x86)/ffmpeg/bin",
-        "C:/ffmpeg/bin",
-        "C:/tools/ffmpeg/bin",
-    ]
-    .into_iter()
-    .map(PathBuf::from)
-    .collect();
-    #[cfg(target_os = "macos")]
-    let mut dirs: Vec<PathBuf> = ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin"]
-        .into_iter()
-        .map(PathBuf::from)
-        .collect();
-    #[cfg(not(any(windows, target_os = "macos")))]
-    let mut dirs: Vec<PathBuf> = ["/usr/bin", "/usr/local/bin", "/snap/bin", "/opt/ffmpeg/bin"]
-        .into_iter()
-        .map(PathBuf::from)
-        .collect();
+    let mut dirs = dirs;
     #[cfg(windows)]
     if let Some(home) = std::env::var_os("USERPROFILE") {
         let packages = PathBuf::from(home).join("AppData/Local/Microsoft/WinGet/Packages");
@@ -184,14 +191,22 @@ fn common_dirs() -> Vec<PathBuf> {
             }
         }
     }
-    #[cfg(not(windows))]
-    if let Some(home) = std::env::var_os("HOME") {
-        dirs.push(PathBuf::from(home).join(".local/bin"));
-    }
     dirs
 }
 
-/// App-local/bundled, PATH, then platform common locations; requires FFmpeg
+fn not_found_hint(platform: &str) -> String {
+    if platform == "android" {
+        return "FFmpeg >=4.0 was not found. An Android app cannot run FFmpeg. Convert TrueHD and MLP files to WAV first.".into();
+    }
+    let hint = match platform {
+        "windows" => "winget install Gyan.FFmpeg",
+        "macos" => "brew install ffmpeg",
+        _ => "sudo apt install ffmpeg or sudo dnf install ffmpeg",
+    };
+    format!("FFmpeg >=4.0 was not found. Install manually: {hint}")
+}
+
+/// App-local/bundled, PATH, then platform common locations (only PATH on Android); requires FFmpeg
 /// version 4.0 or later as in the oracle. `auto_install` prints a hint only, never installs.
 /// Unlike the current Python discovery, P07 explicitly adds app-local priority.
 pub fn discover(auto_install: bool) -> Result<Option<FfmpegPaths>, IoError> {
@@ -202,16 +217,10 @@ pub fn discover(auto_install: bool) -> Result<Option<FfmpegPaths>, IoError> {
     let path_dirs: Vec<_> = std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
+    let bundled = (!cfg!(target_os = "android")).then_some(bundled);
     let paths = discover_in(bundled, &path_dirs, &common_dirs(), usable);
     if paths.is_none() && auto_install {
-        let hint = if cfg!(windows) {
-            "winget install Gyan.FFmpeg"
-        } else if cfg!(target_os = "macos") {
-            "brew install ffmpeg"
-        } else {
-            "sudo apt install ffmpeg or sudo dnf install ffmpeg"
-        };
-        eprintln!("FFmpeg >=4.0 was not found. Install manually: {hint}");
+        eprintln!("{}", not_found_hint(std::env::consts::OS));
     }
     Ok(paths)
 }
@@ -317,7 +326,7 @@ mod tests {
             }
         }
         let found = discover_in(
-            &bundled,
+            Some(&bundled),
             std::slice::from_ref(&path),
             std::slice::from_ref(&common),
             |_| true,
@@ -325,7 +334,7 @@ mod tests {
         .unwrap();
         assert_eq!(found, pair(&bundled).unwrap());
         let found = discover_in(
-            &bundled,
+            Some(&bundled),
             std::slice::from_ref(&path),
             std::slice::from_ref(&common),
             |p| !p.ffmpeg.starts_with(bundled.canonicalize().unwrap()),
@@ -334,7 +343,7 @@ mod tests {
         assert_eq!(found, pair(&path).unwrap());
         assert_eq!(
             discover_in(
-                &tmp.0.join("absent"),
+                Some(&tmp.0.join("absent")),
                 &[],
                 std::slice::from_ref(&common),
                 |_| true
@@ -342,6 +351,54 @@ mod tests {
             pair(&common)
         );
     }
+    #[test]
+    fn ffmpeg_android_searches_only_path_and_explains_conversion() {
+        let tmp = TempDir::new();
+        let common = common_dirs_for("android", Some(&tmp.0));
+        assert!(common.is_empty());
+        for name in ["ffmpeg", "ffprobe"] {
+            std::fs::write(tmp.0.join(binary_name(name)), []).unwrap();
+        }
+        assert!(discover_in(None, &[], &common, |_| true).is_none());
+        assert_eq!(
+            discover_in(None, std::slice::from_ref(&tmp.0), &common, |_| true),
+            pair(&tmp.0)
+        );
+        assert_eq!(
+            not_found_hint("android"),
+            "FFmpeg >=4.0 was not found. An Android app cannot run FFmpeg. Convert TrueHD and MLP files to WAV first."
+        );
+        for (platform, command) in [
+            ("windows", "winget install Gyan.FFmpeg"),
+            ("macos", "brew install ffmpeg"),
+            (
+                "linux",
+                "sudo apt install ffmpeg or sudo dnf install ffmpeg",
+            ),
+        ] {
+            assert_eq!(
+                not_found_hint(platform),
+                format!("FFmpeg >=4.0 was not found. Install manually: {command}")
+            );
+        }
+        assert_eq!(
+            common_dirs_for("linux", Some(Path::new("/home/test"))),
+            [
+                "/usr/bin",
+                "/usr/local/bin",
+                "/snap/bin",
+                "/opt/ffmpeg/bin",
+                "/home/test/.local/bin"
+            ]
+            .map(PathBuf::from)
+        );
+        assert_eq!(
+            common_dirs_for("macos", None),
+            ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin"].map(PathBuf::from)
+        );
+        assert_eq!(common_dirs_for("windows", None).len(), 5);
+    }
+
     #[test]
     fn ffmpeg_version_and_absolute_executable_policy() {
         for version in ["4.0", "6.1.2-static", "N-80000-g123", "N-110000-g123"] {

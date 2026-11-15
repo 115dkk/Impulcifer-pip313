@@ -273,6 +273,24 @@ status = "implemented"
 tests = ["impulcifer-service::ipc_select_directory_shape"]
 
 [[feature]]
+id = "ipc.list_directory"
+kind = "ipc"
+status = "implemented"
+tests = ["impulcifer-service::ipc_list_directory_shape"]
+
+[[feature]]
+id = "ipc.get_storage_access"
+kind = "ipc"
+status = "implemented"
+tests = ["impulcifer-service::ipc_get_storage_access_shape"]
+
+[[feature]]
+id = "ipc.request_storage_access"
+kind = "ipc"
+status = "implemented"
+tests = ["impulcifer-service::ipc_request_storage_access_shape"]
+
+[[feature]]
 id = "ipc.open_url"
 kind = "ipc"
 status = "implemented"

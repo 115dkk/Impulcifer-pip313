@@ -121,6 +121,25 @@ impl UpdateState {
                         Some(Box::new(move || host.apply_staged_update())),
                     ))
                 }
+                InstallKind::Apk => {
+                    let prefix = options.releases_url
+                        .strip_suffix("latest/download")
+                        .unwrap_or(&options.releases_url);
+                    if prefix.is_empty()
+                        || !request.download_url.starts_with(prefix)
+                        || !request.download_url.ends_with(".apk")
+                    {
+                        return Err("The update link is not a release of this app.".into());
+                    }
+                    host.open_url(&request.download_url)?;
+                    Ok((json!({
+                        "status_key":"update_apk_status", "status_default":"Opening the download...",
+                        "title_key":"update_apk_title", "title_default":"Download opened",
+                        "message_key":"update_apk_message",
+                        "message_default":"The new version is downloading in your browser. Open the file when it finishes to install it.",
+                        "progress":1.0, "requires_restart":false,
+                    }), None))
+                }
                 #[cfg(windows)]
                 InstallKind::Velopack => {
                     let apply = velopack::download(options, &progress)?;

@@ -6,6 +6,7 @@ use std::path::Path;
 pub enum InstallKind {
     Velopack,
     Tauri,
+    Apk,
     Dev,
 }
 
@@ -14,6 +15,7 @@ impl InstallKind {
         match self {
             Self::Velopack => "velopack",
             Self::Tauri => "tauri",
+            Self::Apk => "apk",
             Self::Dev => "dev",
         }
     }
@@ -28,6 +30,14 @@ pub fn detect(platform: &str, executable: &Path, appimage: Option<&Path>) -> Ins
             .is_some_and(|root| root.join("Update.exe").exists())
     {
         return InstallKind::Velopack;
+    }
+    if platform == "android"
+        && executable
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("app_process"))
+    {
+        return InstallKind::Apk;
     }
     if platform == "linux" && appimage.is_some() {
         return InstallKind::Tauri;
