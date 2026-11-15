@@ -143,6 +143,7 @@ updater/
 - **프로세스는 액티비티와 함께 끝난다.** 그래서 작업이 도는 동안 화면은 뒤로 가기로 앱을 떠나지 않는다(`chrome.js`의 `handleBack`, 갤러리가 검사한다). 이 규칙을 풀면 뒤로 가기 한 번에 처리 중인 작업이 사라진다.
 - **번들 데이터는 라이브러리 안에 있다.** APK 안의 파일은 경로로 열 수 없으므로, 처리에 쓰는 기본 테스트 신호를 `include_bytes!`로 넣고 시작할 때 앱 데이터 폴더에 쓴다(`src/android.rs`의 `BUNDLED_DATA`, `src/bundled.rs`). `tauri.android.conf.json`이 데스크톱의 `bundle.resources`를 뺀다. 서비스가 경로로 읽는 번들 파일이 늘면 `BUNDLED_DATA`에도 넣는다.
 - **업데이트는 링크를 여는 데까지다.** 설치 종류 `apk`는 릴리스의 `-<arch>.apk` 자산을 골라 브라우저로 연다. 자산 이름 `Impulcifer-<버전>-aarch64.apk`를 바꾸면 `update/check.rs`도 함께 바꾼다. 앱이 APK를 받아 설치하게 하지 않는다.
+- **APK 서명 키는 하나이고 다시 만들지 않는다.** `apps/impulcifer-app/android-signing/`의 `release.p12`는 업데이터 서명 비밀값에서 유도한 암호로 잠긴 키 저장소이고 `certificate.pem`은 그 공개 인증서다(macOS 인증서와 같은 방식, ADR 0012). 안드로이드는 같은 키로 서명한 APK만 설치된 앱 위에 깔기 때문에, 키를 새로 만들면 설치본이 업데이트를 받지 못한다. `.github/scripts/android_signing_key.sh generate`는 파일이 있으면 거부한다. 업데이터 비밀값을 바꿔야 하면 먼저 옛 비밀값으로 저장소를 풀어 새 암호로 다시 잠근다. 이 스크립트의 `generate`와 `sign`의 출력은 `$(...)`로 받지 않는다(암호를 가리는 명령이 러너에 닿지 않아 로그에 남는다). 릴리스 잡은 서명 인증서가 저장소의 것과 다르면 실패한다.
 - **FFmpeg가 필요한 입력(TrueHD·MLP)은 앱에서 지원하지 않는다.** 안드로이드 앱은 내려받은 실행 파일을 돌릴 수 없다. 탐색은 PATH만 본다(Termux에서 도는 CLI용).
 - **화면은 한 벌의 동작 코드를 두 페이지가 쓴다.** `ui/android.html`은 Studio의 id를 그대로 쓰는 새 마크업이고 기능 스크립트는 데스크톱과 같은 파일이다. 기능은 `app.js`의 `FEATURES`에서 `root` 요소가 페이지에 있을 때만 돈다. 처리 옵션을 더할 때는 기능 스크립트 한 곳과 두 페이지의 마크업을 고친다. 안드로이드 페이지에 같은 id의 요소가 없으면 갤러리의 요청 비교가 실패한다.
 
