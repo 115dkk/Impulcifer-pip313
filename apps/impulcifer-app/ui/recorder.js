@@ -365,3 +365,52 @@ async function generateSweepSet() {
     button.disabled = false;
   }
 }
+
+/* ---------------------------------------------------------------- wiring */
+
+/* The channel guidance, the resolved path and the share modes again, after the language changes. */
+function renderRecorder() {
+  updateChannelGuidance();
+  refreshResolvedPath();
+  populateShareModes();
+}
+
+/* The recorder listeners: devices, the play file and output, the record
+   folder, the sweep, the layout, forced channels and the recording buttons. */
+function wireRecorder() {
+  el("btn-refresh-devices", HTMLButtonElement).addEventListener("click", () => loadDevices(val("rf-host-api")));
+  el("rf-host-api", HTMLSelectElement).addEventListener("change", () => loadDevices(val("rf-host-api")));
+
+  el("rf-play", HTMLInputElement).addEventListener("input", () => {
+    refreshResolvedPath();
+    updateChannelOrder();
+  });
+  el("rf-output-device", HTMLSelectElement).addEventListener("change", updateChannelOrder);
+  el("rf-channel-order", HTMLSelectElement).addEventListener("change", updateChannelOrder);
+  el("rf-record-dir", HTMLInputElement).addEventListener("input", () => {
+    refreshResolvedPath();
+    renderGuided();
+  });
+  el("rf-append", HTMLInputElement).addEventListener("change", refreshResolvedPath);
+  el("rf-sweep-source", HTMLSelectElement).addEventListener("change", () => {
+    updateSweepSourceVisibility();
+    refreshResolvedPath();
+    updateChannelOrder();
+  });
+  el("rf-sweep-speakers", HTMLInputElement).addEventListener("input", () => {
+    refreshResolvedPath();
+    updateChannelOrder();
+  });
+  el("btn-cancel-recording", HTMLButtonElement).addEventListener("click", cancelActiveJob);
+  el("rf-sweep-layout", HTMLSelectElement).addEventListener("change", () => {
+    updateChannelOrder();
+    useLayoutSpeakers();
+  });
+  el("rf-layout-use-all", HTMLButtonElement).addEventListener("click", useLayoutSpeakers);
+  el("rf-force-channels", HTMLInputElement).addEventListener("change", updateChannelGuidance);
+  el("rf-channels", HTMLInputElement).addEventListener("input", updateChannelGuidance);
+
+  el("btn-start-recording", HTMLButtonElement).addEventListener("click", startSpeakersRecording);
+  el("btn-record-headphones", HTMLButtonElement).addEventListener("click", startHeadphonesRecording);
+  el("btn-sweep-set", HTMLButtonElement).addEventListener("click", generateSweepSet);
+}

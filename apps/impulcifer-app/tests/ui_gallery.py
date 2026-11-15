@@ -131,7 +131,10 @@ def mock_script(skin, theme, language, scenario):
   const meta = {source_kind: "hesuvi", source_path: `${directory}/hesuvi.wav`, output_dir: directory,
     sample_rate: 48000, sample_count: 24000, speakers: ["FL", "FR"], existing_files: [`${directory}/hesuvi.wav`]};
   let written = false;
-  let kind = "output_recovery";
+  // "resume-brir" and "resume-update": the page loads while that job still runs.
+  const resumed = {"resume-brir": "brir", "resume-update": "update"}[scenario] || null;
+  let kind = resumed || "output_recovery";
+  let updatePolls = 0;
   let lastRequest = {};
   const plan = request => {
     const planned = [{path: `${directory}/hrir.wav`, kind: "hrir", channels: 16, speaker: null}];
@@ -155,7 +158,7 @@ def mock_script(skin, theme, language, scenario):
         guided: fixture.guided, track_orders: fixture.trackOrders, hdmi_orders: fixture.hdmiOrders},
       capabilities: {recording: true, brir: true, output_recovery: true, recording_cancel: false,
         brir_cancel: true, output_recovery_cancel: false, share_modes: scenario === "disabled" ? ["auto"] : ["auto", "exclusive", "shared"]},
-      active_job: null, ui: settings}),
+      active_job: resumed ? job("running") : null, ui: settings}),
     list_audio_devices: () => ok(mac
       ? {host_apis: ["CoreAudio"], default_input_index: 1, default_output_index: 0,
         devices: [{index: 0, name: "DENON-AVR", host_api: "CoreAudio", max_input_channels: 0, max_output_channels: 8, hdmi: true},
@@ -199,6 +202,16 @@ def mock_script(skin, theme, language, scenario):
     },
     start_brir: () => {kind = "brir"; return ok({job: job("running")});},
     poll_job: () => {
+      // The bridge itself fails (the call throws instead of answering).
+      if (window.galleryPollThrows) return Promise.reject(new Error("bridge lost"));
+      if (kind === "update") {
+        updatePolls += 1;
+        if (updatePolls === 1) return ok({job: job("running"), next_seq: 1,
+          events: [{seq: 1, timestamp_ms: 0, type: "progress", payload: {progress: 0.5, message: "Downloading: 50%"}}]});
+        return ok({job: {...job("succeeded"), result: {progress: 1, status_key: "", status_default: "Downloaded",
+          title_key: "", title_default: "", message_key: "", message_default: "Ready to restart.", requires_restart: true}},
+          events: [], next_seq: 2});
+      }
       if (kind === "recording" && scenario === "recording-running") {
         return ok({job: job(cancelRequested ? "cancelled" : "running"), events: [], next_seq: 1});
       }
@@ -666,6 +679,52 @@ def dialog_checks(browser):
     assert not errors, errors
     context.close()
     print("Gallery dialog checks: own dialog, focus, Escape, Cancel, OK OK", flush=True)
+
+
+def job_run_checks(browser):
+    """Every job follows one poll loop (jobs.js followJob): the update download,
+    a job still running when the page loads, and a poll the bridge drops."""
+    polls = "galleryCalls.filter(c => c.method === 'poll_job').length"
+    context, page, errors = open_page(browser, "studio", "dark", "en", "update")
+    navigate(page, "info")
+    page.locator("#btn-check-updates").click()
+    page.locator("#update-modal:not([hidden])").wait_for()
+    page.locator("#update-now").click()
+    page.locator("#update-restart:not([hidden])").wait_for()
+    assert page.locator("#update-close").is_hidden() and page.locator("#update-now").is_hidden()
+    assert page.locator("#update-result").inner_text() == "Ready to restart."
+    assert page.locator("#update-status").inner_text() == "Downloaded"
+    assert page.evaluate("updateState.jobId") is None and page.evaluate(polls) == 2
+    assert not errors, errors
+    context.close()
+
+    context, page, errors = open_page(browser, "studio", "dark", "en", "resume-update")
+    page.locator("#update-restart:not([hidden])").wait_for()
+    assert page.locator("#update-now").is_hidden() and page.locator("#update-notes").inner_text() == ""
+    assert page.locator("#update-result").inner_text() == "Ready to restart."
+    assert not errors, errors
+    context.close()
+
+    context, page, errors = open_page(browser, "studio", "dark", "en", "resume-brir")
+    page.wait_for_function("state.lastJob?.status === 'succeeded' && state.jobId === null")
+    assert page.evaluate("document.querySelector('#brir-alignment').hidden") is False
+    # Resumed, so the screen does not know the output folder to open.
+    assert page.locator("#btn-open-output").get_attribute("hidden") is not None
+    assert page.locator("#btn-generate-brir").is_enabled()
+    assert not errors, errors
+    context.close()
+
+    context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+    navigate(page, "processing")
+    page.evaluate("window.galleryPollThrows = true")
+    page.locator("#btn-generate-brir").click()
+    page.wait_for_function("galleryCalls.some(c => c.method === 'poll_job') && state.jobId === null")
+    # The job is no longer followed and the screen is free again, not stuck busy.
+    assert page.evaluate("state.lastJob") is None and page.locator("#btn-generate-brir").is_enabled()
+    assert "bridge lost" in page.locator("[data-log]").first.text_content()
+    assert not errors, errors
+    context.close()
+    print("Gallery job run checks: update download, resumed update and BRIR, dropped poll OK", flush=True)
 
 
 def channel_order_checks(browser):
@@ -1578,6 +1637,77 @@ def room_tuning2_checks(browser):
           "tooltips, defaults, both skins OK", flush=True)
 
 
+def room_table_checks(browser):
+    """The room options table (room.js): every ROOM_FIELDS input and row and every ROOM_ROWS element exists in the
+    room correction card, every row of the card is in a table or always shows, and in every mode and every state
+    that changes rows (range, timing limit, tuning 2 filter, MIMO, upper band end), a setting is in the request
+    exactly when its row shows. Both skins."""
+    # The measurement source and the mode switch; the target and microphone calibration rows have no id.
+    always = {"bf-room-source-row", "bf-room-mode-row"}
+    # The page's own events: a select or checkbox changes, a number or range input is typed or dragged.
+    set_value = ("([id, value]) => { const node = document.getElementById(id); node.value = value;"
+                 " node.dispatchEvent(new Event(node instanceof HTMLSelectElement ? 'change' : 'input')); }")
+    tick = ("([id, on]) => { const node = document.getElementById(id); node.checked = on;"
+            " node.dispatchEvent(new Event('change')); }")
+    rows_and_request = """() => {
+      const request = gatherBrirPayload();
+      return {mode: request.room_mode, fields: ROOM_FIELDS.map(field => ({arg: field.arg,
+        shown: document.getElementById(`${field.id}-row`).closest('[hidden]') === null, sent: field.arg in request}))};
+    }"""
+    limits = (("off", 0), ("schroeder", 1), (2000, 4), ("full", 7))
+    for skin in SKINS:
+        context, page, errors = open_page(browser, skin, "dark", "en", "idle")
+        navigate(page, "processing")
+        disclosure(page, "room", True)
+        tables = page.evaluate("""() => {
+          const card = document.getElementById('dis-room');
+          const inCard = id => { const node = document.getElementById(id); return node !== null && card.contains(node); };
+          return {fields: ROOM_FIELDS.map(field => ({id: field.id, input: inCard(field.id), row: inCard(`${field.id}-row`)})),
+            rows: ROOM_ROWS.map(row => ({id: row.id, row: inCard(row.id)})),
+            cardRows: Array.from(card.querySelectorAll('[id$="-row"]'), node => node.id)};
+        }""")
+        missing = [f for f in tables["fields"] if not (f["input"] and f["row"])] + [r for r in tables["rows"] if not r["row"]]
+        assert not missing, (skin, missing)
+        listed = {f"{f['id']}-row" for f in tables["fields"]} | {r["id"] for r in tables["rows"]} | always
+        assert set(tables["cardRows"]) <= listed, (skin, sorted(set(tables["cardRows"]) - listed))
+        assert len(tables["fields"]) + len(tables["rows"]) == len(listed - always), (skin, "a row is listed twice")
+
+        sent_somewhere, absent_somewhere, states = set(), set(), []
+
+        def check(mode, state, page=page, skin=skin, sent=sent_somewhere, absent=absent_somewhere, states=states):
+            result = page.evaluate(rows_and_request)
+            assert result["mode"] == mode, (skin, mode, state, result["mode"])
+            wrong = [(f["arg"], f["shown"], f["sent"]) for f in result["fields"] if f["shown"] != f["sent"]]
+            assert not wrong, (skin, mode, state, wrong)
+            sent.update(f["arg"] for f in result["fields"] if f["sent"])
+            absent.update(f["arg"] for f in result["fields"] if not f["sent"])
+            states.append(state)
+
+        for range_ in ("schroeder", "legacy"):
+            page.locator("#bf-room-mode-eq").click()
+            page.evaluate(set_value, ["bf-room-range", range_])
+            check("eq", range_)
+            page.locator("#bf-room-mode-tuning").click()
+            for limit, stop in limits:
+                page.evaluate(set_value, ["bf-room-phase-limit", str(stop)])
+                check("tuning", (range_, limit))
+            page.locator("#bf-room-mode-tuning2").click()
+            for filter_ in ("zero", "mixed", "custom"):
+                page.evaluate(set_value, ["bf-room-tuning2-mode", filter_])
+                for mimo in (False, True):
+                    page.evaluate(tick, ["bf-room-tuning2-mimo", mimo])
+                    for high in ("", "300"):
+                        page.evaluate(set_value, ["bf-room-tuning2-high", high])
+                        check("tuning2", (range_, filter_, mimo, high))
+        args = page.evaluate("ROOM_FIELDS.map(field => field.arg)")
+        # Every setting was both sent and left out somewhere in the matrix, so each row rule was exercised.
+        assert set(args) == sent_somewhere == absent_somewhere, (skin, set(args) ^ sent_somewhere, set(args) ^ absent_somewhere)
+        assert not errors, errors
+        context.close()
+    print(f"Gallery room table checks: {len(args)} settings and {len(tables['rows'])} rows in the card, "
+          f"every card row listed, sent exactly when shown in {len(states)} states per skin, both skins OK", flush=True)
+
+
 def room_file_checks(browser):
     """Room measurements from a REW or Dirac Live file (ADR 0010): the file row
     shows only for the file source, Browse asks for the measurement kind, the
@@ -2278,6 +2408,7 @@ def render_gallery(output):
         browser = playwright.chromium.launch()
         behavior_checks(browser)
         dialog_checks(browser)
+        job_run_checks(browser)
         channel_order_checks(browser)
         short_output_checks(browser)
         recording_cancel_checks(browser)
@@ -2290,6 +2421,7 @@ def render_gallery(output):
         polarity_checks(browser)
         room_phase_checks(browser)
         room_tuning2_checks(browser)
+        room_table_checks(browser)
         room_file_checks(browser)
         brir_file_checks(browser)
         brir_recording_checks(browser)

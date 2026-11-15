@@ -87,6 +87,17 @@ function api() {
   return window.pywebview.api;
 }
 
+/* A call that throws (the bridge itself failed, or no service) answers like a
+   refused one, so the caller has one failure path to handle. */
+/** @template T @param {() => Promise<Envelope<T>>} call @returns {Promise<Envelope<T>>} */
+async function callApi(call) {
+  try {
+    return await call();
+  } catch (error) {
+    return { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } };
+  }
+}
+
 /* ------------------------------------------------------------------ i18n */
 
 /** @param {string} key */
@@ -124,32 +135,6 @@ function fmt(text, vars) {
   return text.replace(/\{(\w+)\}/g, (match, name) =>
     Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match,
   );
-}
-
-function applyStrings() {
-  document.documentElement.lang = state.language;
-  /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-i18n]")).forEach((node) => {
-    node.textContent = t(node.dataset.i18n || "");
-  });
-  // Every info button has the same name; its description is the bubble it opens.
-  document.querySelectorAll(".info-tip").forEach((button) => button.setAttribute("aria-label", t("button_more_info")));
-  updateChannelGuidance();
-  updateRoomRows();
-  updateVbassRows();
-  refreshResolvedPath();
-  renderGuided();
-  renderSteps();
-  renderJobState(state.lastJob);
-  renderRecoveryJob(state.lastRecoveryJob);
-  applySkin(state.skin);
-  populateShareModes();
-  renderSystemInfo();
-  renderRecoveryInventory();
-  renderEq();
-  for (const purpose of MFILE_PURPOSES) renderMfile(purpose);
-  for (const p of ADV_PREFIXES) refreshAdvanced(p);
-  if (state.lastJob?.kind === "brir" && state.lastJob.status === "succeeded") renderAlignment(state.lastJob.result?.alignment ?? null);
-  if (state.version) $("runtime-status").textContent = `v${state.version} · ${state.platform} · ${t("webview_bridge_connected")}`;
 }
 
 /* ----------------------------------------------------------------- theme */
@@ -314,6 +299,11 @@ function setProgress(value) {
   });
 }
 
+/** @param {JobStatus} status */
+function isTerminal(status) {
+  return status === "succeeded" || status === "failed" || status === "cancelled";
+}
+
 /** @param {Job | null} job */
 function renderJobState(job) {
   state.lastJob = job;
@@ -325,13 +315,13 @@ function renderJobState(job) {
     node.textContent = label;
   });
   if (job?.kind === "output_recovery") renderRecoveryJob(job);
-  const active = Boolean(job && !["succeeded", "failed", "cancelled"].includes(job.status));
+  const active = Boolean(job && !isTerminal(job.status));
   updateJobModal(job, active);
 }
 
 /** @param {Job | null} job */
 function updateStartControls(job) {
-  const active = Boolean(job && !["succeeded", "failed", "cancelled"].includes(job.status));
+  const active = Boolean(job && !isTerminal(job.status));
   const busy = state.startPending || active;
   /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll("[data-start]")).forEach((button) => {
     button.disabled = busy;

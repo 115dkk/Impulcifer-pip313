@@ -99,3 +99,23 @@ function renderSystemInfo() {
 function bareLabel(text) {
   return text.replace(/\s*[:：]\s*$/, "");
 }
+
+/* ---------------------------------------------------------------- wiring */
+
+/* The skin's description and the system info again, after the language changes. */
+function renderSettings() {
+  applySkin(state.skin);
+  renderSystemInfo();
+}
+
+/* The data and settings folders, skin, theme and language. */
+function wireSettings() {
+  el("btn-open-data", HTMLButtonElement).addEventListener("click", () => api().open_path(state.systemInfo?.paths.data_dir));
+  el("btn-open-settings", HTMLButtonElement).addEventListener("click", () => {
+    const path = state.systemInfo?.paths.settings_path;
+    if (path) api().open_path(parentFolder(path));
+  });
+  el("sf-skin", HTMLSelectElement).addEventListener("change", () => changeSkin(val("sf-skin")));
+  el("sf-theme", HTMLSelectElement).addEventListener("change", () => changeTheme(val("sf-theme")));
+  el("sf-language", HTMLSelectElement).addEventListener("change", () => changeLanguage(val("sf-language")));
+}

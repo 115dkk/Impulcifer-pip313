@@ -76,16 +76,12 @@ function scheduleTestSignalCheck(delay = 250) {
     return;
   }
   state.testSignalTimer = window.setTimeout(async () => {
-    /** @type {TestSignalReport | undefined} */
-    let report;
-    try {
-      const response = await api().detect_sweep(dir, {
-        test_signal: file,
-        speakers: val("bf-brir-source") === "folder",
-        headphone_file: isOpen("dis-headphone") && !mfileMode("headphones") ? val("bf-headphone-file") : null,
-      });
-      report = response.ok ? response.data.test_signal : undefined;
-    } catch { report = undefined; }
+    const response = await callApi(() => api().detect_sweep(dir, {
+      test_signal: file,
+      speakers: val("bf-brir-source") === "folder",
+      headphone_file: isOpen("dis-headphone") && !mfileMode("headphones") ? val("bf-headphone-file") : null,
+    }));
+    const report = response.ok ? response.data.test_signal : undefined;
     if (revision !== state.testSignalRevision) return;
     const mismatches = report?.mismatches ?? [];
     note.hidden = mismatches.length === 0;
@@ -97,4 +93,22 @@ function scheduleTestSignalCheck(delay = 250) {
         .join(", "),
     });
   }, delay);
+}
+
+/* The test signal block of the request. */
+/** @param {ProcessingRequest} args */
+function addTestSignalArgs(args) {
+  args.test_signal = resolveTestSignalValue();
+}
+
+/* The test signal listeners: the source, the inputs the length check reads, and sweep detection. */
+function wireTestSignal() {
+  el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", () => {
+    updateTestSignalVisibility();
+    scheduleTestSignalCheck(0);
+  });
+  for (const id of ["bf-test-signal", "bf-dir-path", "bf-headphone-file"]) {
+    el(id, HTMLInputElement).addEventListener("input", () => scheduleTestSignalCheck());
+  }
+  el("btn-detect-sweep", HTMLButtonElement).addEventListener("click", detectSweep);
 }

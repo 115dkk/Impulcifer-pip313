@@ -294,7 +294,7 @@ function renderRecoveryJob(job) {
   setRecoveryFiles(null, null);
   openButton.hidden = true;
 
-  if (!["succeeded", "failed", "cancelled"].includes(job.status)) {
+  if (!isTerminal(job.status)) {
     detail.textContent = t("recovery_running_detail");
     return;
   }
@@ -355,10 +355,7 @@ function scheduleRecoveryPlan() {
   updateStartControls(state.lastJob);
   const request = recoveryRequest();
   state.recoveryTimer = window.setTimeout(async () => {
-    /** @type {Envelope<RecoveryPlan>} */
-    let response;
-    try { response = await api().plan_output_recovery(request); }
-    catch (error) { response = { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } }; }
+    const response = await callApi(() => api().plan_output_recovery(request));
     if (revision !== state.recoveryRevision || state.skin !== "studio") return;
     if (response.ok) {
       state.recoveryPlan = response.data;
@@ -419,4 +416,28 @@ function parentFolder(path) {
   const end = normalized.lastIndexOf("/");
   return end === 0 ? "/" : /^[A-Za-z]:$/.test(normalized.slice(0, end))
     ? normalized.slice(0, end + 1) : normalized.slice(0, end);
+}
+
+/* The recovery job and inventory again, after the language changes. */
+function renderRecovery() {
+  renderRecoveryJob(state.lastRecoveryJob);
+  renderRecoveryInventory();
+}
+
+/* Start, open the output, and the three inputs that plan again. */
+function wireRecovery() {
+  el("btn-start-recovery", HTMLButtonElement).addEventListener("click", () =>
+    begin(
+      (request) => api().start_output_recovery(request),
+      recoveryRequest(),
+      "output_recovery",
+    ),
+  );
+  el("btn-open-recovery-output", HTMLButtonElement).addEventListener("click", () => {
+    if (state.lastRecoveryOutputDir) api().open_path(state.lastRecoveryOutputDir);
+  });
+  for (const id of ["recovery-dir-path", "recovery-include-hangloose", "recovery-remove-silent-channels"]) {
+    $(id).addEventListener("input", scheduleRecoveryPlan);
+    $(id).addEventListener("change", scheduleRecoveryPlan);
+  }
 }

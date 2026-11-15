@@ -333,3 +333,13 @@ function finishGuidedStep(job) {
   }
   renderGuided();
 }
+
+/* The setup and target, the record and cancel buttons, and moving between steps. */
+function wireGuided() {
+  el("gd-setup", HTMLSelectElement).addEventListener("change", populateGuidedTargets);
+  el("gd-target", HTMLSelectElement).addEventListener("change", () => showGuidedStep(0));
+  el("btn-gd-record", HTMLButtonElement).addEventListener("click", recordGuidedStep);
+  el("btn-gd-cancel", HTMLButtonElement).addEventListener("click", stopGuidedCountdown);
+  el("btn-gd-prev", HTMLButtonElement).addEventListener("click", () => showGuidedStep(state.guided.index - 1));
+  el("btn-gd-next", HTMLButtonElement).addEventListener("click", () => showGuidedStep(state.guided.index + 1));
+}

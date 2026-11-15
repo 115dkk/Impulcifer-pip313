@@ -94,7 +94,81 @@ function onAskKey(event) {
   }
 }
 
+/* The dialog's buttons, and its keys on the whole page. */
+function wireDialogs() {
+  el("ask-modal-ok", HTMLButtonElement).addEventListener("click", () => closeAsk(true));
+  el("ask-modal-cancel", HTMLButtonElement).addEventListener("click", () => closeAsk(false));
+  document.addEventListener("keydown", onAskKey);
+}
+
 /* ------------------------------------------------------------------ jobs */
+
+/* Every job (a recording, a BRIR, an output recovery, an update) runs the
+   same way: the service starts it, the screen polls it in sequence until its
+   status is final, and each poll hands over the events since the last one.
+   A slot holds the job one channel follows: `state` is the main channel
+   (recording, BRIR and recovery, one at a time) and `updateState` the update
+   dialog's. A follower is what one channel does with what a poll returns. */
+
+/**
+ * @typedef {{jobId: string | null, nextSeq: number, pollTimer: number | undefined}} JobSlot
+ * @typedef {object} JobFollower
+ * @property {(event: JobEvent) => void} [event] each event, in order
+ * @property {(job: Job) => void} [update] the job after each poll's events
+ * @property {(job: Job) => void} finish the job once its status is final
+ * @property {(response: {ok: false, error: IpcError}) => void} lost a poll failed; the job is no longer followed
+ */
+
+/** @param {JobSlot} slot @param {Job} job @param {JobFollower} follower */
+function followJob(slot, job, follower) {
+  window.clearTimeout(slot.pollTimer);
+  slot.jobId = job.job_id;
+  slot.nextSeq = 0;
+  slot.pollTimer = window.setTimeout(() => pollSlot(slot, follower), 0);
+}
+
+/** @param {JobSlot} slot */
+function stopFollowing(slot) {
+  window.clearTimeout(slot.pollTimer);
+  slot.jobId = null;
+}
+
+/** @param {JobSlot} slot @param {JobFollower} follower */
+async function pollSlot(slot, follower) {
+  const jobId = slot.jobId;
+  if (!jobId) return;
+  const response = await callApi(() => api().poll_job(jobId, slot.nextSeq));
+  // Stopped, or another job took the slot, while the poll was out.
+  if (slot.jobId !== jobId) return;
+  if (!response.ok) {
+    slot.jobId = null;
+    follower.lost(response);
+    return;
+  }
+  const { job, events, next_seq: nextSeq } = response.data;
+  slot.nextSeq = nextSeq;
+  for (const event of events) follower.event?.(event);
+  follower.update?.(job);
+  if (isTerminal(job.status)) {
+    slot.jobId = null;
+    follower.finish(job);
+    return;
+  }
+  slot.pollTimer = window.setTimeout(() => pollSlot(slot, follower), 250);
+}
+
+/* Starts a job, asking first when the service wants a confirmation (a mono
+   headphone recording, too few output channels). Null when the person said no. */
+/** @template {{confirm_warnings?: boolean}} P @param {(payload: P) => Promise<Envelope<{job: Job}>>} start @param {P} payload @returns {Promise<Envelope<{job: Job}> | null>} */
+async function requestJob(start, payload) {
+  let response = await callApi(() => start(payload));
+  if (!response.ok && response.error.code === "CONFIRMATION_REQUIRED") {
+    if (!(await confirmDialog(confirmationText(response)))) return null;
+    payload.confirm_warnings = true;
+    response = await callApi(() => start(payload));
+  }
+  return response;
+}
 
 /** @template {{confirm_warnings?: boolean}} P @param {(payload: P) => Promise<Envelope<{job: Job}>>} start @param {P} payload @param {JobKind | null} kindHint */
 async function begin(start, payload, kindHint = null) {
@@ -103,25 +177,7 @@ async function begin(start, payload, kindHint = null) {
   if (kindHint === "output_recovery") state.recoveryRunRevision = state.recoveryRevision;
   updateStartControls(state.lastJob);
 
-  /** @type {Envelope<{job: Job}>} */
-  let response;
-  try {
-    response = await start(payload);
-    if (response && !response.ok && response.error.code === "CONFIRMATION_REQUIRED") {
-      if (!(await confirmDialog(confirmationText(response)))) {
-        state.startPending = false;
-        updateStartControls(state.lastJob);
-        return;
-      }
-      payload.confirm_warnings = true;
-      response = await start(payload);
-    }
-  } catch (error) {
-    response = {
-      ok: false,
-      error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false },
-    };
-  }
+  const response = await requestJob(start, payload);
   state.startPending = false;
   if (!response) {
     updateStartControls(state.lastJob);
@@ -148,21 +204,26 @@ async function begin(start, payload, kindHint = null) {
     return;
   }
   const job = response.data.job;
-  state.jobId = job.job_id;
-  state.jobKind = job.kind;
-  state.nextSeq = 0;
   if (job.kind === "brir") state.lastOutputDir = val("bf-dir-path");
   if (job.kind === "output_recovery") {
     state.lastRecoveryOutputDir = val("recovery-dir-path");
   }
   state.modalDismissed = false;
+  el("btn-open-output", HTMLButtonElement).hidden = true;
+  setProgress(0);
+  followMainJob(job);
+  renderJobState(job);
+}
+
+/* The main channel's displays start over for a job it begins following: one
+   it started, or one still running when the page loaded. */
+/** @param {Job} job */
+function followMainJob(job) {
+  state.jobKind = job.kind;
   resetSteps(job.kind === "brir");
   if (job.kind === "brir") renderAlignment(null);
   resetRecorderStatus();
-  el("btn-open-output", HTMLButtonElement).hidden = true;
-  setProgress(0);
-  renderJobState(job);
-  schedulePoll(0);
+  followJob(state, job, MAIN_JOB);
 }
 
 /** @param {{ok: false, error: IpcError}} response */
@@ -184,73 +245,102 @@ function confirmationText(response) {
 }
 
 async function cancelActiveJob() {
-  if (!state.jobId) return;
-  const response = await api().cancel_job(state.jobId);
+  const jobId = state.jobId;
+  if (!jobId) return;
+  const response = await callApi(() => api().cancel_job(jobId));
   if (!response.ok) appendLog(errorText(response));
 }
 
-function schedulePoll(delay = 250) {
-  window.clearTimeout(state.pollTimer);
-  state.pollTimer = window.setTimeout(pollJob, delay);
+/** @param {JobEvent} event */
+function showJobEvent(event) {
+  if (event.type === "progress") {
+    const payload = event.payload;
+    if (typeof payload.progress === "number") setProgress(payload.progress);
+    if (payload.phase) {
+      updateRecorderStatus(payload);
+    } else if (payload.message) {
+      appendLog(payload.message);
+      updateSteps(payload.message, payload.key);
+    }
+  }
+  if (event.type === "log") {
+    const payload = event.payload;
+    const key = payload.key || "";
+    // A recording check is shown from the job result (checkMessage).
+    if (key.startsWith("record_check_")) return;
+    const fields = LOG_FIELDS[key];
+    const values = /** @type {Record<string, unknown>} */ (payload);
+    const message = key === "recording_share_mode_opened" && state.strings[key] && payload.share
+      ? shareDescription(payload.share)
+      : fields && state.strings[key] && fields.every((name) => values[name] !== undefined)
+        ? fmt(t(key), Object.fromEntries(fields.map((name) => [name, values[name]]))) : payload.message;
+    appendLog(`[${payload.level}] ${message}`);
+    updateSteps(payload.message, payload.key);
+  }
+  if (event.type === "status") appendLog(`· ${t(`webview_status_${event.payload.status}`)}`);
 }
 
-async function pollJob() {
-  if (!state.jobId) return;
-  const response = await api().poll_job(state.jobId, state.nextSeq);
-  if (!response.ok) {
+/** @param {Job} job */
+function finishMainJob(job) {
+  if (job.status === "succeeded") setProgress(1);
+  if (job.error) appendLog(errorSentence(job.error));
+  if (job.kind === "brir") {
+    if (job.status === "succeeded") {
+      completeSteps();
+      renderAlignment(job.result?.alignment ?? null);
+      if (state.lastOutputDir) el("btn-open-output", HTMLButtonElement).hidden = false;
+    } else {
+      renderAlignment(null);
+      abortSteps(job.status);
+    }
+  }
+  if (job.kind === "recording") finishRecorderStatus(job);
+  if (job.kind === "output_recovery") renderRecoveryJob(job);
+}
+
+/** @type {JobFollower} */
+const MAIN_JOB = {
+  event: showJobEvent,
+  update: renderJobState,
+  finish: finishMainJob,
+  lost(response) {
     appendLog(errorText(response));
     if (state.jobKind === "brir") renderAlignment(null);
     renderJobState(null);
-    state.jobId = null;
-    return;
-  }
-  const { job, events, next_seq: nextSeq } = response.data;
-  state.nextSeq = nextSeq;
-  for (const event of events) {
-    if (event.type === "progress") {
-      const payload = event.payload;
-      if (typeof payload.progress === "number") setProgress(payload.progress);
-      if (payload.phase) {
-        updateRecorderStatus(payload);
-      } else if (payload.message) {
-        appendLog(payload.message);
-        updateSteps(payload.message, payload.key);
-      }
+  },
+};
+
+/* The stage checklist, the job state and a finished BRIR's alignment report again, after the language changes. */
+function renderJobs() {
+  renderSteps();
+  renderJobState(state.lastJob);
+  if (state.lastJob?.kind === "brir" && state.lastJob.status === "succeeded") renderAlignment(state.lastJob.result?.alignment ?? null);
+}
+
+/* Generate (unless the single recording or a measurement file cannot be used
+   yet), cancel, the Stable job dialog, and opening the output folder. */
+function wireJobs() {
+  el("btn-generate-brir", HTMLButtonElement).addEventListener("click", () => {
+    if (brirRecordingProblem()) {
+      updateBrirRecordingStatus();
+      $("bf-brir-recording-block").scrollIntoView({ block: "center" });
+      return;
     }
-    if (event.type === "log") {
-      const payload = event.payload;
-      const key = payload.key || "";
-      // A recording check is shown from the job result (checkMessage).
-      if (key.startsWith("record_check_")) continue;
-      const fields = LOG_FIELDS[key];
-      const values = /** @type {Record<string, unknown>} */ (payload);
-      const message = key === "recording_share_mode_opened" && state.strings[key] && payload.share
-        ? shareDescription(payload.share)
-        : fields && state.strings[key] && fields.every((name) => values[name] !== undefined)
-          ? fmt(t(key), Object.fromEntries(fields.map((name) => [name, values[name]]))) : payload.message;
-      appendLog(`[${payload.level}] ${message}`);
-      updateSteps(payload.message, payload.key);
+    const blocked = MFILE_PURPOSES.find((purpose) => mfileActive(purpose) && mfileBlocked(purpose));
+    if (blocked) {
+      renderMfile(blocked);
+      $(`${MFILE[blocked].prefix}-block`).scrollIntoView({ block: "center" });
+      return;
     }
-    if (event.type === "status") appendLog(`· ${t(`webview_status_${event.payload.status}`)}`);
-  }
-  renderJobState(job);
-  if (["succeeded", "failed", "cancelled"].includes(job.status)) {
-    if (job.status === "succeeded") setProgress(1);
-    if (job.error) appendLog(errorSentence(job.error));
-    if (job.kind === "brir") {
-      if (job.status === "succeeded") {
-        completeSteps();
-        renderAlignment(job.result?.alignment ?? null);
-        if (state.lastOutputDir) el("btn-open-output", HTMLButtonElement).hidden = false;
-      } else {
-        renderAlignment(null);
-        abortSteps(job.status);
-      }
-    }
-    if (job.kind === "recording") finishRecorderStatus(job);
-    if (job.kind === "output_recovery") renderRecoveryJob(job);
-    state.jobId = null;
-    return;
-  }
-  schedulePoll();
+    begin((request) => api().start_brir(request), gatherBrirPayload());
+  });
+  el("btn-cancel-brir", HTMLButtonElement).addEventListener("click", cancelActiveJob);
+  el("job-modal-cancel", HTMLButtonElement).addEventListener("click", cancelActiveJob);
+  el("job-modal-close", HTMLButtonElement).addEventListener("click", () => {
+    state.modalDismissed = true;
+    $("job-modal").hidden = true;
+  });
+  el("btn-open-output", HTMLButtonElement).addEventListener("click", () => {
+    if (state.lastOutputDir) api().open_path(state.lastOutputDir);
+  });
 }

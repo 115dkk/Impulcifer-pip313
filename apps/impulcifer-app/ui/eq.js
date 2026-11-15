@@ -37,10 +37,7 @@ function scheduleEqInspection(delay = 250) {
     return;
   }
   state.eqTimer = window.setTimeout(async () => {
-    /** @type {Envelope<EqInspection>} */
-    let response;
-    try { response = await api().inspect_eq({ dir_path: dir, ...eqRequestFields() }); }
-    catch (error) { response = { ok: false, error: { code: "BRIDGE_ERROR", message: String(error), details: {}, retryable: false } }; }
+    const response = await callApi(() => api().inspect_eq({ dir_path: dir, ...eqRequestFields() }));
     if (revision !== state.eqRevision) return;
     state.eqInspection = response.ok ? response.data : null;
     state.eqError = response.ok ? null : response.error;
@@ -262,4 +259,25 @@ function renderEq() {
   $("bf-eq-slots").replaceChildren(...EQ_SLOTS.map(renderEqSlot));
   $("bf-eq-ears").replaceChildren(renderEqEar("left"), renderEqEar("right"));
   renderEqPreview();
+}
+
+/* The EQ block of the request, while its section is on. */
+/** @param {ProcessingRequest} args */
+function addEqArgs(args) {
+  if (isOpen("dis-eq")) Object.assign(args, eqRequestFields());
+}
+
+/* The folder input inspects the EQ again, and the preview follows its width. */
+function wireEq() {
+  el("bf-dir-path", HTMLInputElement).addEventListener("input", () => scheduleEqInspection());
+  // The preview is drawn at its rendered width; redraw when that changes
+  // (window resize, or the disclosure opening from display: none).
+  let eqPreviewWidth = 0;
+  new ResizeObserver((entries) => {
+    const width = Math.round(entries[0].contentRect.width);
+    if (width && width !== eqPreviewWidth) {
+      eqPreviewWidth = width;
+      renderEqPreview();
+    }
+  }).observe($("bf-eq-result"));
 }

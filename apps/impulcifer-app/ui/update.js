@@ -8,7 +8,9 @@
    UpdateDialog (notes + Update Now / Remind / Skip) → UpdateExecutor with
    progress → completion message → optional apply-and-restart (Velopack). */
 
-/** @type {{info: UpdateInfo | null, jobId: string | null, nextSeq: number, pollTimer: number | undefined}} */
+/* The update dialog follows its download job in its own slot (jobs.js), so
+   an update never waits on, or blocks, the main channel. */
+/** @type {{info: UpdateInfo | null} & JobSlot} */
 const updateState = {
   info: null,
   jobId: null,
@@ -148,7 +150,7 @@ function showUpdateProgressOnly() {
 }
 
 function hideUpdateModal() {
-  window.clearTimeout(updateState.pollTimer);
+  stopFollowing(updateState);
   $("update-modal").hidden = true;
 }
 
@@ -189,39 +191,28 @@ async function beginUpdate() {
   el("update-skip", HTMLButtonElement).hidden = true;
   $("update-progress-row").hidden = false;
   $("update-status").textContent = t("update_downloading");
-  const response = await api().start_update({
+  const response = await callApi(() => api().start_update({
     download_url: info.download_url,
     latest_version: info.latest_version,
-  });
+  }));
   if (!response.ok) {
     finishUpdate(errorText(response), false);
     return;
   }
-  updateState.jobId = response.data.job.job_id;
-  updateState.nextSeq = 0;
-  pollUpdateJob();
+  followJob(updateState, response.data.job, UPDATE_JOB);
 }
 
-async function pollUpdateJob() {
-  if (!updateState.jobId) return;
-  const response = await api().poll_job(updateState.jobId, updateState.nextSeq);
-  if (!response.ok) {
-    finishUpdate(errorText(response), false);
-    return;
-  }
-  const { job, events, next_seq: nextSeq } = response.data;
-  updateState.nextSeq = nextSeq;
-  for (const event of events) {
-    if (event.type === "progress") {
-      const payload = event.payload;
-      if (typeof payload.progress === "number") setUpdateProgress(payload.progress);
-      // The executor sends either an i18n key ("update_downloading") or
-      // preformatted text ("Downloading: 42%").
-      if (payload.message) $("update-status").textContent = tOr(payload.message, payload.message);
-    }
-  }
-  if (["succeeded", "failed", "cancelled"].includes(job.status)) {
-    updateState.jobId = null;
+/** @type {JobFollower} */
+const UPDATE_JOB = {
+  event(event) {
+    if (event.type !== "progress") return;
+    const payload = event.payload;
+    if (typeof payload.progress === "number") setUpdateProgress(payload.progress);
+    // The executor sends either an i18n key ("update_downloading") or
+    // preformatted text ("Downloading: 42%").
+    if (payload.message) $("update-status").textContent = tOr(payload.message, payload.message);
+  },
+  finish(job) {
     if (job.status === "succeeded" && job.kind === "update" && job.result) {
       const result = job.result;
       setUpdateProgress(typeof result.progress === "number" ? result.progress : 1);
@@ -234,10 +225,11 @@ async function pollUpdateJob() {
     } else {
       finishUpdate(job.error ? errorSentence(job.error) : t("update_error_apply"), false);
     }
-    return;
-  }
-  updateState.pollTimer = window.setTimeout(pollUpdateJob, 250);
-}
+  },
+  lost(response) {
+    finishUpdate(errorText(response), false);
+  },
+};
 
 /** @param {string} message @param {boolean} success @param {boolean} requiresRestart */
 function finishUpdate(message, success, requiresRestart = false) {
@@ -262,4 +254,14 @@ async function applyStagedUpdate() {
   }
   $("update-result").hidden = false;
   $("update-result").textContent = t("update_restart_message");
+}
+
+/* The check button and the update dialog's buttons. */
+function wireUpdate() {
+  el("btn-check-updates", HTMLButtonElement).addEventListener("click", () => checkForUpdates(true));
+  el("update-now", HTMLButtonElement).addEventListener("click", beginUpdate);
+  el("update-remind", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-skip", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-close", HTMLButtonElement).addEventListener("click", hideUpdateModal);
+  el("update-restart", HTMLButtonElement).addEventListener("click", applyStagedUpdate);
 }
