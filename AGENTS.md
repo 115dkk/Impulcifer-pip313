@@ -19,3 +19,6 @@ making changes. This file is a pointer only — do not duplicate rules here.
   "2. 런타임 변경 시 버전 bump", "빌드 / 릴리스 파이프라인" 섹션 참조.
 - **i18n / CHANGELOG / PR 검증(Tier 1~3) / BRIR 해시(SHA-256) 무결성**: 각각 `CLAUDE.md`의
   해당 섹션을 따른다.
+- **안드로이드 이식**: 3.x를 바탕으로 하고 녹음만 뺀다. 안드로이드 작업에서는 2.x
+  검증(Tier 1~3)과 데스크톱 전용 검사를 돌리지 않는다. 돌릴 검사와 돌리지 않을 검사는
+  `CLAUDE.md`의 "안드로이드 이식 (3.x)" 섹션을 따른다.
