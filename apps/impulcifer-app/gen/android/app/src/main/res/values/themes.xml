@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.impulcifer_app" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/page_background</item>
+    </style>
+</resources>

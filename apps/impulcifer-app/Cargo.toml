@@ -8,20 +8,38 @@ license.workspace = true
 [lints]
 workspace = true
 
+# The shell is a library: the desktop executable (src/main.rs) links the rlib,
+# and Android loads the cdylib (ADR 0020). No iOS static archive is built.
+[lib]
+name = "impulcifer_app_lib"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "impulcifer-app"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
 impulcifer-types = { path = "../../crates/impulcifer-types" }
-impulcifer-service = { path = "../../crates/impulcifer-service" }
-impulcifer-audio-io = { path = "../../crates/impulcifer-audio-io" }
+# Without the recording backend here; the desktop targets add it below. Android
+# has no recording (ADR 0020), so cpal, impulcifer-sys-win and coreaudio-rs must
+# stay out of its dependency tree (rust.yml checks `cargo tree`).
+impulcifer-service = { path = "../../crates/impulcifer-service", default-features = false }
+impulcifer-audio-io = { path = "../../crates/impulcifer-audio-io", default-features = false }
 impulcifer-jobs = { path = "../../crates/impulcifer-jobs" }
-tauri = { version = "2", features = ["devtools"] }
-tauri-plugin-dialog = "2"
+tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
-tauri-plugin-updater = { version = "2.11.0", default-features = false, features = ["rustls-tls", "zip"] }
 serde.workspace = true
 serde_json.workspace = true
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+impulcifer-service = { path = "../../crates/impulcifer-service", features = ["native-audio"] }
+impulcifer-audio-io = { path = "../../crates/impulcifer-audio-io", features = ["native"] }
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = { version = "2.11.0", default-features = false, features = ["rustls-tls", "zip"] }
 dark-light = "2"
 
 [target.'cfg(windows)'.dependencies]

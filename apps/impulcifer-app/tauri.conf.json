@@ -32,6 +32,9 @@
       "infoPlist": "Info.plist",
       "entitlements": "Entitlements.plist",
       "signingIdentity": "-"
+    },
+    "android": {
+      "minSdkVersion": 30
     }
   }
 }

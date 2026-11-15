@@ -27,6 +27,16 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+/// A place the folder browser of `list_directory` can start from. Android's
+/// shared storage volumes are the only ones a shell reports so far (ADR 0020).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StorageRoot {
+    pub path: String,
+    /// The name the platform shows for the volume, in the system language.
+    pub label: String,
+    pub removable: bool,
+}
+
 pub trait HostAdapter: Send + Sync {
     fn select_file(&self, kind: &str) -> Option<String>;
     fn select_directory(&self) -> Option<String>;
@@ -35,6 +45,28 @@ pub trait HostAdapter: Send + Sync {
     fn apply_title_theme(&self, theme: &str);
     fn shell_info(&self) -> serde_json::Map<String, Value> {
         serde_json::Map::new()
+    }
+    /// What only the shell can read about the platform. `os` (a string)
+    /// replaces the service's own OS description and `device` (a string) names
+    /// the machine; a shell that knows neither returns nothing.
+    fn platform_info(&self) -> serde_json::Map<String, Value> {
+        serde_json::Map::new()
+    }
+    /// Whether the app may read and write the folders people keep their
+    /// measurements in. `None` where the platform asks for no such grant
+    /// (every desktop); Android answers with its all-files access state.
+    fn storage_access(&self) -> Option<bool> {
+        None
+    }
+    /// Opens the system screen where the person grants storage access.
+    /// `Ok(false)` where there is no such screen.
+    fn request_storage_access(&self) -> Result<bool, String> {
+        Ok(false)
+    }
+    /// The volumes `list_directory` offers as roots. Empty means the service
+    /// uses the home directory.
+    fn storage_roots(&self) -> Vec<StorageRoot> {
+        Vec::new()
     }
     fn download_update(
         &self,
