@@ -553,5 +553,8 @@
   "update_apk_status": "Opening the download...",
   "update_apk_title": "Download opened",
   "update_apk_message": "The new version is downloading in your browser. Open the file when it finishes to install it.",
-  "action_generate_brir": "Generate BRIR"
+  "action_generate_brir": "Generate BRIR",
+  "update_new_version": "A new version is available.",
+  "update_button_skip_version": "Skip this version",
+  "update_button_later": "Later"
 }

@@ -12,9 +12,9 @@
    wired in this order, so two parts that listen to the same element and
    event keep their order (the test signal check, then the EQ inspection, on
    the folder input).
-   Both pages (index.html and android.html) load every script and share this
-   table. A part with a `root` runs only on a page that has an element with
-   that id, so a part whose markup is not on the page does nothing at all.
+   Both pages (index.html and android.html) share this table. A part with a
+   `root` runs only on a page that has an element with that id, so a part
+   whose markup is not on the page does nothing at all.
    boot() runs the start-up hooks in table order: `boot` with bootstrap's
    answer before the page's words are drawn, `load` (awaited together) once
    they are, then `ready`. `job` shows the main channel's job (renderJobState). */
@@ -25,10 +25,12 @@
 /** @type {readonly Feature[]} */
 const FEATURES = [
   { name: "shell", wire: wireShell },
-  { name: "android shell", root: "app-bar", wire: wireAndroidShell, render: renderAndroidShell,
+  // A page loads only the scripts of the parts it has: the desktop page has no chrome.js,
+  // storage.js, chooser.js, sheet.js and tipsheet.js, and the Android page no recorder.js and
+  // guide.js. Those parts name their functions inside arrows, so a name is looked up only on
+  // a page that has the markup (and so the script).
+  { name: "android shell", root: "app-bar", wire: () => wireAndroidShell(), render: () => renderAndroidShell(),
     job: () => syncBackButton() },
-  // The Android page does not load recorder.js and guide.js, so these two parts name their
-  // functions inside arrows: the names are looked up only on a page that has the markup.
   { name: "recorder", root: "view-recorder", wire: () => wireRecorder(), render: () => renderRecorder(),
     boot: (data) => bootRecorder(data), load: () => loadDevices(), ready: () => { refreshResolvedPath(); },
     job: (job) => showRecordingCancel(job) },
@@ -45,11 +47,13 @@ const FEATURES = [
   { name: "eq", root: "dis-eq", wire: wireEq, render: renderEq, addArgs: addEqArgs, ready: () => scheduleEqInspection(0) },
   { name: "jobs", root: "btn-generate-brir", wire: wireJobs, render: renderJobs },
   { name: "job dialog", root: "job-modal", wire: wireJobModal, job: updateJobModal },
-  { name: "job sheet", root: "job-sheet", wire: wireJobSheet, render: renderJobSheetWords, job: showJobInSheet },
+  { name: "job sheet", root: "job-sheet", wire: () => wireJobSheet(), render: () => renderJobSheetWords(),
+    job: (job) => showJobInSheet(job) },
   { name: "recovery", root: "view-recovery", wire: wireRecovery, render: renderRecovery, ready: scheduleRecoveryPlan },
-  { name: "storage", root: "storage-notice", wire: wireStorage, render: renderStorage, ready: refreshStorageAccess },
-  { name: "chooser", root: "chooser", wire: wireChooser, render: renderChooserWords },
-  { name: "tip sheet", root: "tip-sheet", render: fillTipSheet },
+  { name: "storage", root: "storage-notice", wire: () => wireStorage(), render: () => renderStorage(),
+    ready: () => { refreshStorageAccess(); } },
+  { name: "chooser", root: "chooser", wire: () => wireChooser(), render: () => renderChooserWords() },
+  { name: "tip sheet", root: "tip-sheet", render: () => fillTipSheet() },
   { name: "settings", root: "view-settings", wire: wireSettings, render: renderSettings, boot: bootSettings,
     load: loadSystemInfo, ready: readySettings },
   { name: "update", root: "update-modal", wire: wireUpdate, ready: () => window.setTimeout(() => checkForUpdates(false), 2000) },

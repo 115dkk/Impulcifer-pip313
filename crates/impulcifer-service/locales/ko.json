@@ -553,5 +553,8 @@
   "update_apk_status": "내려받기를 여는 중...",
   "update_apk_title": "내려받기를 열었습니다",
   "update_apk_message": "브라우저에서 새 버전을 내려받고 있습니다. 다 받은 뒤 파일을 열어 설치하세요.",
-  "action_generate_brir": "BRIR 만들기"
+  "action_generate_brir": "BRIR 만들기",
+  "update_new_version": "새 버전이 나왔습니다.",
+  "update_button_skip_version": "이 버전 건너뛰기",
+  "update_button_later": "나중에"
 }

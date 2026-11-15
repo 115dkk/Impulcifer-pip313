@@ -20,13 +20,20 @@ RECOVERY_STATES = ("empty", "planning", "ready", "nothing", "error", "succeeded"
 EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
-EXPECTED_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
+# The Android page (android_shots): its four views and the processing view with every group open in
+# both themes and English/Korean, and twelve states once each in dark, English and Korean.
+ANDROID_VIEWS = ("processing", "recovery", "settings", "info")
+ANDROID_ONCE = ("storage-notice", "chooser-folder", "chooser-file", "chooser-no-access", "job-running", "job-succeeded",
+                "job-failed", "job-bar", "tip", "update", "ask", "first-run")
+ANDROID_SHOTS = 2 * 2 * (len(ANDROID_VIEWS) + 1) + 2 * len(ANDROID_ONCE)
+DESKTOP_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
                   + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 3 * (2 * 2 * 2) + 2 * 2 + 2 * 2
                   + 2 * 2 * 2  # bundle 2: mixed and zero, English/Korean, dark/light
                   + 2 * 2  # bundle 3: lenient, ×2 and input high-pass, English/Korean, dark/light
                   + 2 * 2  # bundle 4: MIMO early interval and ear guard, English/Korean, dark/light
                   + 2  # bundle 5: speaker polarity warnings, English/Korean, dark
                   + 2)  # test signal file the recordings were not made with, English/Korean, dark
+EXPECTED_SHOTS = DESKTOP_SHOTS + ANDROID_SHOTS
 # NHK 22.2 as bootstrap describes it (ADR 0007): SMPTE order, each channel's
 # speaker code. 22.2's FL is the ±60° pair, Impulcifer's WL.
 NHK_22_2 = [("FL", "WL"), ("FR", "WR"), ("FC", "FC"), ("LFE1", "LFE"), ("BL", "BL"), ("BR", "BR"),
@@ -2399,6 +2406,677 @@ def open_eq(page):
     page.locator("#bf-eq-slots .eq-slot").first.wait_for()
 
 
+# ------------------------------------------------------------------ Android page (ADR 0020)
+# android.html loads the desktop's feature scripts and its own (chrome, storage, chooser, sheet,
+# tipsheet). Its scenarios open it as a phone (412×915 at 2x, touch) with the desktop mock plus a
+# second init script: the Android bootstrap and system information, a small shared storage for
+# list_directory, the storage access state, a BRIR job with stages, the APK update result and a
+# counting stand-in for Tauri's back-button API.
+
+ANDROID_DIR = "/storage/emulated/0/Impulcifer/measurements"
+ANDROID_LONG_DIR = ("/storage/emulated/0/Impulcifer/2026-11-14 Living room 7.1.4 Atmos session with the new"
+                    " binaural microphones")
+ANDROID_MOCK = r"""
+(() => {
+  const original = window.pywebview.api;
+  const calls = window.galleryCalls;
+  const ok = data => Promise.resolve({ok: true, data});
+  const fail = (code, message, details = {}) => Promise.resolve({ok: false, error: {code, message, details, retryable: false}});
+  window.galleryStorage = window.galleryStorage || "granted";
+  window.galleryStorageAsks = 0;
+  window.galleryListDelay = 0;
+  window.galleryBackRegistered = 0;
+  window.galleryBackUnregistered = 0;
+  window.galleryBackActive = 0;
+  window.galleryOpenPathFails = false;
+  const back = [];
+  window.__TAURI__ = {core: {invoke: () => Promise.reject(new Error("no invoke in the gallery"))}, app: {
+    onBackButtonPress(handler) {
+      window.galleryBackRegistered += 1; window.galleryBackActive += 1; back.push(handler);
+      return Promise.resolve({unregister() { window.galleryBackUnregistered += 1; window.galleryBackActive -= 1;
+        back.splice(back.indexOf(handler), 1); return Promise.resolve(); }});
+    }}};
+  window.galleryPressBack = () => { const handler = back[back.length - 1]; if (handler) handler({canGoBack: false}); return Boolean(handler); };
+  const ROOTS = [{path: "/storage/emulated/0", label: "Internal storage", removable: false},
+                 {path: "/storage/1A2B-3C4D", label: "SD card", removable: true}];
+  const LONG = "2026-11-14 Living room 7.1.4 Atmos session with the new binaural microphones";
+  const tree = {
+    "/storage/emulated/0": ["Android/", "Download/", "Empty/", "Impulcifer/", "Music/", "Documents/", "notes.txt:2048", "voice memo.m4a:1830000"],
+    "/storage/emulated/0/Download": ["dirac-sweep.wav:2621440", "living room.mdat:880000", "HD800S left.csv:4100", "Impulcifer-3.22.0-aarch64.apk:41000000"],
+    "/storage/emulated/0/Empty": [],
+    "/storage/emulated/0/Impulcifer": ["measurements/", LONG + "/", "presets/"],
+    "/storage/emulated/0/Impulcifer/measurements": ["FL,FR.wav:6340000", "FC.wav:3170000", "headphones.wav:3170000", "room-FL.wav:3170000", "eq.csv:5200", "README.txt:900"],
+    ["/storage/emulated/0/Impulcifer/" + LONG]: ["Hangloose/", "FL,FR.wav:6340000", "SL,SR.wav:6340000", "hesuvi.wav:1600000", "hrir.wav:1700000"],
+    "/storage/emulated/0/Impulcifer/presets": ["harman.csv:3000", "flat.txt:200"],
+    "/storage/emulated/0/Documents": ["calibration.txt:12000"],
+    "/storage/1A2B-3C4D": ["Measurements/", "backup.liveproject:5400000"],
+    "/storage/1A2B-3C4D/Measurements": ["kitchen/"],
+    "/storage/1A2B-3C4D/Measurements/kitchen": ["FL,FR.wav:6340000"],
+  };
+  // More entries than the service lists: the answer says it was cut short.
+  tree["/storage/emulated/0/Music"] = Array.from({length: 60}, (_, i) => `Track ${String(i + 1).padStart(2, "0")}.wav:${4000000 + i * 1000}`);
+  const EXT = {audio: /\.(wav|flac|w64|rf64|mlp|thd)$/i, wav: /\.wav$/i, text: /\.(csv|txt)$/i, measurement: /\.(mdat|liveproject)$/i};
+  const parentOf = path => ROOTS.some(root => root.path === path) ? null : path.slice(0, path.lastIndexOf("/")) || null;
+  const list = async request => {
+    request = request || {};
+    if (window.galleryListDelay) await new Promise(resolve => setTimeout(resolve, window.galleryListDelay));
+    const path = (request.path || ROOTS[0].path).replace(/\/$/, "");
+    const kind = request.kind || "dir";
+    if (window.galleryStorage === "denied" || path === "/storage/emulated/0/Android")
+      return fail("INVALID_REQUEST", "The folder cannot be read.", {kind: "access_denied", path});
+    if (!(path in tree)) return fail("FILE_NOT_FOUND", "Folder does not exist.", {path});
+    const entries = tree[path].map(item => item.endsWith("/")
+      ? {name: item.slice(0, -1), path: `${path}/${item.slice(0, -1)}`, dir: true, size: null, modified_ms: 0}
+      : {name: item.split(":")[0], path: `${path}/${item.split(":")[0]}`, dir: false, size: Number(item.split(":")[1]), modified_ms: 0})
+      .filter(entry => entry.dir || kind === "dir" || EXT[kind].test(entry.name))
+      .sort((a, b) => (b.dir - a.dir) || a.name.localeCompare(b.name));
+    const truncated = path.endsWith("/Music");
+    return ok({path, parent: parentOf(path), roots: window.galleryOneRoot ? ROOTS.slice(0, 1) : ROOTS,
+      entries: truncated ? entries.slice(0, 40) : entries, truncated});
+  };
+  // A BRIR job with stages when galleryBrirSteps is set: one stage per poll, held running while
+  // galleryBrirHold is true, then the desktop mock's outcome (galleryBrirStatus, galleryBrirError).
+  let brir = null;
+  let apk = false;
+  const STAGES = ["cli_opening_measurements", "cli_cropping_responses", "cli_running_room_correction",
+    "cli_running_headphone_compensation", "cli_equalizing", "cli_correcting_deviation"];
+  const extra = {
+    bootstrap: async () => {
+      const response = await original.bootstrap();
+      const data = response.data;
+      data.platform = "android"; data.install_kind = "apk"; data.webview_backend = "android";
+      data.capabilities = {...data.capabilities, recording: false, recording_cancel: false, share_modes: ["auto"]};
+      if (window.galleryFirstRun) data.ui = {...data.ui, first_run: true};
+      return response;
+    },
+    get_system_info: () => ok({version: "3.22.0", install_kind: "apk", os: "Android 17 (API 37)", device: "Samsung SM-S948N",
+      cpu_count: 8, runtime: {language: "Rust", toolchain: "rustc 1.99.0", audio_backend: "none", shell: "Tauri 2.11.5",
+        webview: "Android System WebView 152.0.7012.40"},
+      paths: {data_dir: "/data/user/0/dev.impulcifer.app/files/data",
+        settings_path: "/data/user/0/dev.impulcifer.app/files/.impulcifer/settings.json"}, update_channel: "stable"}),
+    list_directory: list,
+    get_storage_access: () => ok({state: window.galleryStorage}),
+    request_storage_access: () => { window.galleryStorageAsks += 1; return ok({opened: true}); },
+    open_path: path => window.galleryOpenPathFails ? fail("INVALID_REQUEST", "No app can open the folder.", {path}) : ok({path}),
+    set_language: code => window.galleryCatalogs?.[code] ? ok({language: code, strings: window.galleryCatalogs[code],
+      skin: "studio", theme: "dark", frontend: "webview", first_run: false, languages: []}) : original.set_language(code),
+    check_for_updates: async () => {
+      const response = await original.check_for_updates();
+      if (response.data.update_available) response.data.download_url =
+        "https://github.com/115dkk/Impulcifer-pip313/releases/download/v3.22.0/Impulcifer-3.22.0-aarch64.apk";
+      return response;
+    },
+    start_update: () => { apk = true; return ok({job: {job_id: "update", kind: "update", status: "running", cancellable: false, result: null, error: null}}); },
+    start_brir: async request => {
+      const started = await original.start_brir(request);
+      if (window.galleryBrirSteps === undefined) return started;
+      brir = {step: 0};
+      return ok({job: {job_id: `brir-${Date.now()}`, kind: "brir", status: "running", cancellable: true, result: null, error: null}});
+    },
+    poll_job: async (id, seq) => {
+      if (apk) {
+        apk = false;
+        return ok({job: {job_id: "update", kind: "update", status: "succeeded", cancellable: false, error: null,
+          result: {progress: 1, status_key: "update_apk_status", status_default: "Opening the download...",
+            title_key: "update_apk_title", title_default: "Download opened", message_key: "update_apk_message",
+            message_default: "The new version is downloading in your browser. Open the file when it finishes to install it.",
+            requires_restart: false}}, events: [], next_seq: seq + 1});
+      }
+      if (brir && id.startsWith("brir-")) {
+        if (brir.step < window.galleryBrirSteps) {
+          const key = STAGES[brir.step];
+          brir.step += 1;
+          return ok({job: {job_id: id, kind: "brir", status: "running", cancellable: true, result: null, error: null},
+            events: [{seq: seq + 1, timestamp_ms: 0, type: "progress", payload: {progress: brir.step / 10, message: key, key}},
+                     {seq: seq + 2, timestamp_ms: 0, type: "log", payload: {level: "info", message: `stage ${key}`}}], next_seq: seq + 2});
+        }
+        if (window.galleryBrirHold) return ok({job: {job_id: id, kind: "brir", status: "running", cancellable: true, result: null, error: null}, events: [], next_seq: seq});
+        brir = null;
+        const response = await original.poll_job("gallery", seq);
+        response.data.job.job_id = id;
+        return response;
+      }
+      return original.poll_job(id, seq);
+    },
+  };
+  window.pywebview = {api: new Proxy({}, {get(_, method) {
+    if (method in extra) return (...args) => { calls.push({method, args}); return extra[method](...args); };
+    return original[method];
+  }})};
+})();
+"""
+
+# Studio's form, driven the same way on both pages (same-request check).
+ANDROID_HELPERS = r"""
+window.h = {
+  set(id, v) { const n = document.getElementById(id); n.value = v; n.dispatchEvent(new Event('input', {bubbles: true})); n.dispatchEvent(new Event('change', {bubbles: true})); },
+  check(id, on) { const n = document.getElementById(id); if (n.checked !== on) { n.checked = on; n.dispatchEvent(new Event('input', {bubbles: true})); n.dispatchEvent(new Event('change', {bubbles: true})); } },
+  open(id, on = true) { if (document.getElementById(id).classList.contains('open') !== on) document.querySelector(`#${id} .disclosure-head`).click(); },
+  adv(tab) { document.getElementById(`adv-tab-${tab}`).click(); if (document.getElementById(`adv-on-${tab}`).getAttribute('aria-checked') !== 'true') document.getElementById(`adv-on-${tab}`).click(); },
+  payload() { const sort = v => Array.isArray(v) ? v.map(sort) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sort(v[k])])) : v; return JSON.stringify(sort(gatherBrirPayload())); },
+};
+"""
+
+ANDROID_REQUEST_STATES = {
+    "defaults": "",
+    "room EQ": "h.open('dis-room'); h.set('bf-room-range','modes'); h.set('bf-room-max-boost','9'); h.set('bf-room-volume','80'); h.set('bf-schroeder-freq','150'); h.set('bf-fr-combination','conservative'); h.set('bf-room-target','/t/target.csv'); h.set('bf-mic-calibration','/t/mic.txt');",
+    "room EQ legacy": "h.open('dis-room'); h.set('bf-room-range','legacy'); h.set('bf-specific-limit','500'); h.set('bf-generic-limit','250');",
+    "room tuning": "h.open('dis-room'); setRoomMode('tuning'); h.set('bf-room-phase-limit','1'); h.set('bf-room-volume','60'); h.check('bf-room-tuning-delay-auto', true); h.set('bf-room-tuning-max-boost','4'); h.set('bf-room-tuning-curtain','500'); h.check('bf-room-tuning-level-match', false);",
+    "room tuning 2": "h.open('dis-room'); setRoomMode('tuning2'); h.set('bf-room-tuning2-mode','custom'); h.set('bf-room-tuning2-latency','90'); h.set('bf-room-tuning2-max-boost','8'); h.set('bf-room-tuning2-low','25'); h.set('bf-room-tuning2-high-basis','lenient'); h.set('bf-room-tuning2-high-transition','2'); h.set('bf-room-volume','95'); h.set('bf-room-tuning2-input-hp','20'); h.set('bf-room-tuning2-bands','1000-3000'); ['dip-limit','low-protect','mode-decay','lf-align','hf-phase','mimo'].forEach(x => h.check('bf-room-tuning2-'+x, true)); h.set('bf-room-tuning2-fsiso','120'); h.set('bf-room-tuning2-mimo-low','30'); h.set('bf-room-tuning2-mimo-early','30'); h.check('bf-room-tuning2-mimo-ear-guard', true);",
+    "room measurement file": "h.open('dis-room'); h.set('bf-room-source','file'); h.set('bf-room-file','D:/Measurements/living room.mdat');",
+    "headphone measurement file": "h.open('dis-headphone'); h.set('bf-hp-source','file'); h.set('bf-hp-file','D:/Measurements/headphones.mdat');",
+    "headphone file": "h.open('dis-headphone'); h.set('bf-headphone-file','/x/headphones-2.wav');",
+    "custom EQ": "h.open('dis-eq'); setEqChoice('both', {mode: 'off'}); setEqChoice('left', {mode: 'file', path: '/x/HD800S left.csv'});",
+    "virtual bass manual": "h.open('dis-vbass'); h.set('bf-vbass-mode','manual'); h.set('bf-vbass-freq','120'); h.set('bf-vbass-hp','20'); h.set('bf-vbass-polarity','invert');",
+    "advanced tone": "h.open('dis-headphone'); h.adv('tone'); h.set('ba-bass-gain','3'); h.set('ba-bass-fc','90'); h.set('ba-bass-q','0.9'); h.set('ba-tilt','-0.5'); h.set('ba-target-level','-3'); h.set('ba-balance','number'); h.set('ba-balance-db','2');",
+    "advanced timing per channel": "h.adv('time'); h.set('ba-head-ms','2'); h.set('ba-itd-mode','model'); h.set('ba-head-radius','9'); h.set('ba-decay','200'); h.check('ba-decay-per-channel', true); h.set('ba-decay-FL','300'); h.set('ba-decay-TBR','250');",
+    "advanced timing one decay": "h.adv('time'); h.set('ba-head-ms','0.5'); h.set('ba-itd-mode','symmetric'); h.set('ba-decay','180');",
+    "advanced output": "h.open('dis-headphone'); h.adv('output'); h.check('ba-resample', true); h.set('ba-fs','96000'); ['jamesdsp','hangloose','truehd','sofa','remove-silent-channels'].forEach(x => h.check('ba-'+x, true)); h.check('ba-sofa-split', true); h.set('ba-layout-files','listed'); h.check('ba-layout-force-1', true); h.check('ba-layout-force-4', true); h.set('ba-missing-speakers','neighbor'); h.set('ba-lfe-mode','all');",
+    "advanced correction": "h.adv('correction'); h.check('ba-mic-deviation', true); h.set('ba-mic-strength','0.5'); h.check('ba-mic-debug', true); h.check('ba-interactive-plots', true);",
+    "BRIR measurement file": "h.set('bf-brir-source','file'); h.set('bf-brir-file','/storage/1A2B-3C4D/backup.liveproject');",
+    "BRIR from one recording": "h.set('bf-brir-source','recording'); h.set('bf-brir-recording-file','/x/recording.wav'); h.set('bf-brir-recording-speakers','FL,FC,FR,SR,BR,BL,SL,LFE,X'); h.set('bf-brir-recording-sweep-source','file'); h.set('bf-brir-recording-sweep','/x/dirac.wav');",
+    "test signal parameters": "h.set('bf-test-signal-source','manual'); h.set('bf-ts-duration','13.04'); h.set('bf-ts-fs','44100');",
+    "test signal file": "h.set('bf-test-signal-source','file'); h.set('bf-test-signal','/x/sweep.wav'); h.check('bf-plot', true);",
+}
+
+ANDROID_UNDERSIZED = """() => { const out = [];
+  document.querySelectorAll('button, input, select, summary, .switch, .nav-item, [role=radio], [role=tab]').forEach(e => {
+    if (e.closest('[hidden]') || e.classList.contains('sr-only')) return;
+    const r = e.getBoundingClientRect(); const cs = getComputedStyle(e);
+    if (!r.width || !r.height || cs.visibility === 'hidden' || cs.display === 'none') return;
+    if (r.width < 47.5 || r.height < 47.5) out.push(`${e.tagName.toLowerCase()}${e.id ? '#' + e.id : ''}.${[...e.classList].join('.')} ${Math.round(r.width)}x${Math.round(r.height)} "${(e.textContent || '').trim().slice(0, 30)}"`);
+  }); return out; }"""
+ANDROID_OVERFLOW = """() => { const c = document.querySelector('#content'); const bad = [];
+  if (document.documentElement.scrollWidth > innerWidth) bad.push('the page is ' + document.documentElement.scrollWidth + ' px wide');
+  if (c.scrollWidth > c.clientWidth) bad.push('the content is ' + c.scrollWidth + ' px wide in ' + c.clientWidth);
+  document.querySelectorAll('.sheet-body, .chooser-body').forEach(s => { if (s.offsetParent && s.scrollWidth > s.clientWidth) bad.push(s.className + ' is ' + s.scrollWidth + ' px wide'); });
+  return bad; }"""
+ANDROID_RAW_KEYS = """keys => { const set = new Set(keys); const bad = [];
+  const raw = s => set.has(s) || /^[a-z]+(_[a-z0-9]+)+$/.test(s);
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) { const s = n.textContent.trim(); if (raw(s) && !n.parentElement.closest('script')) bad.push(s); }
+  document.querySelectorAll('[aria-label],[placeholder],[title]').forEach(e => ['aria-label', 'placeholder', 'title'].forEach(a => {
+    const v = e.getAttribute(a); if (v && raw(v)) bad.push(`${a}="${v}"`); }));
+  return [...new Set(bad)]; }"""
+
+
+def open_android(browser, theme="dark", language="en", scenario="idle", width=412, height=915, before=""):
+    context = browser.new_context(viewport={"width": width, "height": height}, device_scale_factor=2,
+                                  has_touch=True, is_mobile=True)
+    page = context.new_page()
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
+    page.on("requestfailed", lambda request: errors.append(f"{request.url}: {request.failure}"))
+    page.add_init_script(script=mock_script("studio", theme, language, scenario))
+    page.add_init_script(script=before + ANDROID_MOCK)
+    page.goto((ROOT / "apps/impulcifer-app/ui/android.html").as_uri())
+    page.wait_for_function("document.documentElement.dataset.booted === 'true'")
+    page.evaluate("document.fonts.ready")
+    assert page.evaluate("document.documentElement.dataset.page") == "android", "android.html lost data-page=\"android\""
+    assert not errors, f"the Android page reported errors while starting: {errors}"
+    return context, page, errors
+
+
+def shoot_android(page, output, name, errors, full=False):
+    size = page.viewport_size
+    if full:
+        height = page.evaluate("document.querySelector('#content').scrollHeight + 200")
+        page.set_viewport_size({"width": size["width"], "height": max(size["height"], min(6000, height))})
+    page.wait_for_timeout(250)
+    path = output / f"{name}.png"
+    page.screenshot(path=str(path))
+    if full:
+        page.set_viewport_size(size)
+    assert not errors, f"{name}: the Android page reported errors: {errors}"
+    print(path.as_posix(), flush=True)
+    return path
+
+
+def android_fill(page, selector, value):
+    page.evaluate("([s, v]) => { const n = document.querySelector(s); n.value = v;"
+                  " n.dispatchEvent(new Event('input')); n.dispatchEvent(new Event('change')); }", [selector, value])
+
+
+def android_browse(page, target, kind="dir"):
+    page.locator(f'[data-browse="{kind}"][data-target="{target}"]').click()
+    page.wait_for_function("document.querySelector('#chooser').dataset.state !== 'loading'")
+
+
+def android_request_checks(browser):
+    recorded = set()
+    for state, script in ANDROID_REQUEST_STATES.items():
+        payloads = {}
+        for which in ("desktop", "android"):
+            if which == "desktop":
+                context, page, errors = open_page(browser, "studio", "dark", "en", "idle")
+            else:
+                context, page, errors = open_android(browser)
+            page.evaluate(ANDROID_HELPERS)
+            page.evaluate(f"h.set('bf-dir-path', {json.dumps(ANDROID_DIR)}); {script}")
+            page.wait_for_timeout(900)  # measurement file inspections answer after 250 ms
+            if which == "desktop":
+                recorded.update(page.evaluate("""() => { const seen = new Set(); const get = document.getElementById.bind(document);
+                  document.getElementById = id => { seen.add(id); return get(id); }; gatherBrirPayload();
+                  document.getElementById = get; return [...seen]; }"""))
+            try:
+                payloads[which] = page.evaluate("h.payload()")
+            except Exception as error:  # a missing field throws inside gatherBrirPayload
+                raise AssertionError(f"same request, {state}: {which} page could not build the BRIR request: "
+                                     f"{str(error).splitlines()[0]}") from None
+            assert not errors, f"same request, {state}: {which} page errors {errors}"
+            context.close()
+        assert payloads["desktop"] == payloads["android"], (
+            f"same request, {state}: android.html sends a different BRIR request than Studio\n"
+            f"  Studio:  {payloads['desktop']}\n  Android: {payloads['android']}")
+    context, page, errors = open_android(browser)
+    # The FEATURES roots are presence checks of a part, not fields of the request.
+    recorded -= set(page.evaluate("FEATURES.map(f => f.root).filter(Boolean)"))
+    missing = page.evaluate("ids => ids.filter(id => !document.getElementById(id))", sorted(recorded))
+    assert not missing, f"android.html lacks elements Studio's request building reads: {missing}"
+    context.close()
+    return len(recorded)
+
+
+def android_storage_chooser_checks(browser):
+    context, page, errors = open_android(browser, before="window.galleryStorage = 'denied';")
+    assert page.locator("#storage-notice").is_visible(), "the storage notice does not show while access is denied"
+    page.locator("#btn-storage-access").click()
+    page.wait_for_function("galleryStorageAsks === 1")
+    android_browse(page, "bf-dir-path")
+    assert page.evaluate("document.querySelector('#chooser').dataset.state") == "noaccess", \
+        "the chooser does not say that access is missing"
+    page.evaluate("galleryStorage = 'granted'; document.dispatchEvent(new Event('visibilitychange'))")
+    page.locator("#storage-notice").wait_for(state="hidden")
+    page.wait_for_function("document.querySelector('#chooser').dataset.state === 'ready'")
+    page.locator("#chooser-close").click()
+    path = lambda: page.locator("#chooser-path").inner_text()
+    page.evaluate("window.inputs = 0; document.getElementById('bf-dir-path').addEventListener('input', () => window.inputs++)")
+    android_browse(page, "bf-dir-path")
+    assert path() == "/storage/emulated/0", f"an empty field opens the chooser at {path()!r}, not at the first volume"
+    assert page.locator("#chooser-roots .seg-btn").count() == 2, "two volumes do not show as two chips"
+    assert page.locator("#chooser-up").is_disabled(), "'up' is not disabled at a volume's root"
+    folders = page.locator(".chooser-entry .entry-name").all_inner_texts()
+    files = page.locator(".chooser-file .entry-name").all_inner_texts()
+    assert folders[:2] == ["Android", "Documents"] and "notes.txt" in files, \
+        f"the chooser does not list folders first with files dimmed: {folders} / {files}"
+    page.locator('.chooser-entry[data-path="/storage/emulated/0/Impulcifer"]').click()
+    page.wait_for_function("document.querySelector('#chooser-path').textContent === '/storage/emulated/0/Impulcifer'")
+    page.locator("#chooser-up").click()
+    page.wait_for_function("document.querySelector('#chooser-path').textContent === '/storage/emulated/0'")
+    page.locator("#chooser-roots .seg-btn").nth(1).click()
+    page.wait_for_function("document.querySelector('#chooser-path').textContent === '/storage/1A2B-3C4D'")
+    page.locator("#chooser-roots .seg-btn").nth(0).click()
+    page.locator('.chooser-entry[data-path="/storage/emulated/0/Impulcifer"]').click()
+    page.locator(f'.chooser-entry[data-path="{ANDROID_DIR}"]').click()
+    page.wait_for_function(f"document.querySelector('#chooser-path').textContent === {json.dumps(ANDROID_DIR)}")
+    page.locator("#chooser-select").click()
+    page.locator("#chooser").wait_for(state="hidden")
+    assert page.input_value("#bf-dir-path") == ANDROID_DIR and page.evaluate("inputs") >= 1, \
+        "'use this folder' does not put the folder into the field that opened the chooser with an input event"
+    android_browse(page, "bf-dir-path")
+    assert path() == ANDROID_DIR, f"the chooser does not open at the folder already in the field ({path()!r})"
+    page.locator("#chooser-close").click()
+    page.evaluate("document.getElementById('bf-dir-path').value = '/storage/emulated/0/nowhere'")
+    android_browse(page, "bf-dir-path")
+    assert path() == "/storage/emulated/0", "a field naming a folder that is not there does not open at the first volume"
+    page.locator("#chooser-close").click()
+    page.locator("#bf-test-signal-source").select_option("file")
+    page.evaluate("document.getElementById('bf-test-signal').value = '/storage/emulated/0/Download/x.wav'")
+    android_browse(page, "bf-test-signal", "audio")
+    assert page.evaluate("document.querySelector('#chooser').dataset.mode") == "file", "an audio browse button opens the chooser in folder mode"
+    assert path() == "/storage/emulated/0/Download", "file mode does not open at the file's folder"
+    assert page.locator("#chooser-actions").is_hidden(), "file mode offers 'use this folder'"
+    files = page.locator(".chooser-entry .entry-name").all_inner_texts()
+    assert files == ["dirac-sweep.wav"], f"file mode does not list only the matching files: {files}"
+    page.locator(".chooser-entry[data-kind=file]").click()
+    page.locator("#chooser").wait_for(state="hidden")
+    assert page.input_value("#bf-test-signal") == "/storage/emulated/0/Download/dirac-sweep.wav", "a tap on a file does not choose it"
+    for name, start, state in (("empty", "/storage/emulated/0/Empty", "empty"),
+                               ("unreadable", "/storage/emulated/0/Android", "unreadable"),
+                               ("truncated", "/storage/emulated/0/Music", "ready")):
+        page.evaluate(f"document.getElementById('bf-dir-path').value = {json.dumps(start)}")
+        android_browse(page, "bf-dir-path")
+        shown = page.evaluate("document.querySelector('#chooser').dataset.state")
+        assert shown == state, f"the chooser shows {shown!r} for the {name} folder, not {state!r}"
+        if name == "truncated":
+            assert page.locator("#chooser-truncated").is_visible(), "a cut-short listing does not say so"
+        if name == "unreadable":
+            assert page.locator("#chooser-up").is_enabled() and page.locator("#chooser-select").is_disabled(), \
+                "an unreadable folder must offer 'up' and must not be choosable"
+        page.locator("#chooser-close").click()
+    page.evaluate("galleryListDelay = 3000")
+    page.locator('[data-browse="dir"][data-target="bf-dir-path"]').click()
+    assert page.evaluate("document.querySelector('#chooser').dataset.state") == "loading", "the chooser shows no loading state"
+    page.locator("#chooser-close").click()
+    page.evaluate("galleryListDelay = 0")
+    page.evaluate(f"document.getElementById('bf-dir-path').value = '/storage/emulated/0/Download'")
+    page.locator("#dis-eq .disclosure-head").click()
+    page.locator("#bf-eq-slots .eq-slot").first.locator("button").first.click()
+    page.wait_for_function("document.querySelector('#chooser').dataset.state === 'ready'")
+    page.locator('.chooser-entry[data-kind=file]').first.click()
+    page.wait_for_function("state.eqChoices.both.path === '/storage/emulated/0/Download/HD800S left.csv'")
+    assert not errors, f"storage and chooser checks: page errors {errors}"
+    context.close()
+
+
+def android_back_checks(browser):
+    context, page, errors = open_android(browser, before="window.galleryBrirSteps = 1;")
+    active = lambda: page.evaluate("galleryBackActive")
+    page.wait_for_timeout(200)
+    assert active() == 0, "a back handler is registered with nothing to go back from (back would not leave the app)"
+    assert page.evaluate("handleBack()") is False, "handleBack() reports doing something with nothing open"
+    page.evaluate(f"document.getElementById('bf-dir-path').value = {json.dumps(ANDROID_DIR)}")
+    page.locator("#btn-generate-brir").click()
+    page.locator('#job-sheet[data-status="succeeded"]').wait_for()
+    page.evaluate("document.getElementById('nav-settings').click()")
+    page.evaluate("showUpdateModal({update_available: true, current_version: '3.21.0', latest_version: '3.22.0',"
+                  " download_url: 'x.apk', release_notes: '- a', release_url: null})")
+    page.evaluate("window.chosen = 'pending'; void openChooser('dir', '').then(p => window.chosen = p)")
+    page.wait_for_function("document.querySelector('#chooser').dataset.state !== 'loading'")
+    page.evaluate("window.asked = 'pending'; void confirmDialog('Sure?').then(ok => window.asked = ok)")
+    page.evaluate("openTipSheet(document.querySelector('#bf-room-mode-row .info-tip'))")
+    page.wait_for_function("galleryBackActive === 1")
+    for name, probe in (("the tip", "#tip-sheet"), ("the ask dialog", "#ask-modal"), ("the chooser", "#chooser"),
+                        ("the update dialog", "#update-modal"), ("the job sheet", "#job-sheet")):
+        assert page.evaluate("galleryPressBack()"), f"no back handler while {name} is open"
+        page.wait_for_timeout(100)
+        assert page.locator(probe).is_hidden(), f"back did not close {name} next (order: tip, ask, chooser, update, job sheet)"
+    assert page.evaluate("asked") is False, "back did not answer the ask dialog as its cancel"
+    assert page.evaluate("chosen") is None, "back did not close the chooser without a choice"
+    assert page.evaluate("document.documentElement.dataset.view") == "settings", "back left the view before the sheets were closed"
+    page.evaluate("galleryPressBack()")
+    page.wait_for_function("document.documentElement.dataset.view === 'processing'")
+    page.wait_for_function("galleryBackActive === 0")
+    assert page.evaluate("handleBack()") is False, "handleBack() reports doing something once everything is closed"
+    assert page.evaluate("galleryBackRegistered === galleryBackUnregistered"), "a back handler was registered and never given back"
+    context.close()
+    # A running job: back never leaves the app (Android ends the process with the activity).
+    context, page, errors2 = open_android(browser, before="window.galleryBrirSteps = 2; window.galleryBrirHold = true;")
+    page.evaluate(f"document.getElementById('bf-dir-path').value = {json.dumps(ANDROID_DIR)}")
+    page.locator("#btn-generate-brir").click()
+    page.wait_for_function("document.querySelectorAll('#brir-steps li.done').length === 1")
+    assert page.evaluate("handleBack()") is True and page.locator("#job-sheet").is_visible(), \
+        "while a job runs, back put the job sheet away (it must stay)"
+    page.locator("#job-sheet-close").click()
+    page.wait_for_function("galleryBackActive === 1")
+    assert page.evaluate("handleBack()") is True and page.locator("#job-sheet").is_visible(), \
+        "while a job runs with nothing open on the processing view, back did not bring the sheet back (it would leave the app)"
+    page.locator("#job-sheet-close").click()
+    page.evaluate("document.getElementById('nav-info').click()")
+    page.evaluate("openTipSheet(document.querySelector('#bf-room-mode-row .info-tip'))")
+    page.evaluate("handleBack()")
+    assert page.locator("#tip-sheet").is_hidden() and page.locator("#job-sheet").is_hidden(), \
+        "while a job runs, back must still close an open tip first"
+    page.evaluate("handleBack()")
+    assert page.locator("#job-sheet").is_visible(), "while a job runs, back on another view did not show the job sheet"
+    page.evaluate("galleryBrirHold = false")
+    page.wait_for_function("document.documentElement.dataset.jobStatus === 'succeeded'")
+    page.evaluate("handleBack()")
+    assert page.locator("#job-sheet").is_hidden(), "after the job ended, back did not put the sheet away"
+    page.evaluate("handleBack()")
+    page.wait_for_function("document.documentElement.dataset.view === 'processing' && galleryBackActive === 0")
+    assert not errors and not errors2, f"back checks: page errors {errors} {errors2}"
+    context.close()
+
+
+def android_job_checks(browser):
+    context, page, errors = open_android(browser, before="window.galleryBrirSteps = 3; window.galleryBrirHold = true;")
+    root = lambda key: page.evaluate(f"document.documentElement.dataset.{key}")
+    assert root("jobStatus") == "idle" and root("jobKind") is None, "the root does not report an idle job (data-job-status)"
+    page.evaluate(f"document.getElementById('bf-dir-path').value = {json.dumps(ANDROID_DIR)}")
+    page.locator("#btn-generate-brir").click()
+    page.wait_for_function("document.querySelectorAll('#brir-steps li.done').length === 2")
+    assert page.locator("#job-sheet").is_visible(), "starting a BRIR job did not open the job sheet"
+    assert root("jobKind") == "brir" and root("jobStatus") == "running", "the root does not report the running BRIR job"
+    assert page.locator("#brir-steps li.current").count() == 1, "the job sheet does not mark the stage in flight"
+    assert page.locator(".job-log").get_attribute("open") is None, "the job log is not folded by default"
+    page.locator("#job-sheet-close").click()
+    assert page.locator("#job-bar").is_visible(), "a put-away job shows no bar"
+    assert page.locator("#job-bar-title").inner_text() == page.evaluate("t('cli_running_room_correction')"), \
+        "the bar does not name the stage in flight"
+    page.locator("#job-bar").click()
+    assert page.locator("#job-sheet").is_visible(), "the bar does not bring the job sheet back"
+    page.evaluate("galleryBrirHold = false")
+    page.locator('#job-sheet[data-status="succeeded"]').wait_for()
+    assert page.locator("#job-sheet-output").inner_text() == ANDROID_DIR, "the finished job does not show the output folder"
+    assert page.locator("#brir-alignment").is_visible(), "the finished job does not show the alignment report"
+    page.evaluate("galleryOpenPathFails = true")
+    page.locator("#btn-open-output").click()
+    page.locator("#brir-open-failed").wait_for()
+    assert ANDROID_DIR in page.locator("#brir-open-failed").inner_text(), \
+        "a failed 'open output folder' does not show the folder's path"
+    page.locator("#job-sheet-done").click()
+    assert page.locator("#job-bar").is_hidden(), "the bar stays after the outcome was seen"
+    assert not errors, f"BRIR job: page errors {errors}"
+    context.close()
+    context, page, errors = open_android(browser, before="window.galleryBrirStatus = 'failed'; window.galleryBrirError = "
+        "{code: 'INVALID_REQUEST', message: 'No HRIR recordings found in the directory.', details: {}, retryable: false};"
+        " window.galleryBrirSteps = 1;")
+    page.evaluate(f"document.getElementById('bf-dir-path').value = {json.dumps(ANDROID_DIR)}")
+    page.locator("#btn-generate-brir").click()
+    page.locator('#job-sheet[data-status="failed"]').wait_for()
+    assert page.locator("#job-sheet-error").inner_text() == page.evaluate("t('error_no_hrir_recordings')"), \
+        "a failed job does not show the failure sentence"
+    assert not errors, f"failed BRIR job: page errors {errors}"
+    context.close()
+    for scenario, expected in (("idle", "empty"), ("planning", "planning"), ("idle", "ready"), ("nothing", "nothing"),
+                               ("error", "error")):
+        context, page, errors = open_android(browser, scenario=scenario)
+        page.locator("#nav-recovery").click()
+        if expected != "empty":
+            android_fill(page, "#recovery-dir-path", ANDROID_DIR)
+        page.locator(f'#recovery-inventory[data-state="{expected}"]').wait_for()
+        assert page.locator("#btn-start-recovery").is_enabled() == (expected == "ready"), \
+            f"the restore button is {'off' if expected == 'ready' else 'on'} in the {expected} state"
+        if expected == "ready":
+            page.locator("#btn-start-recovery").click()
+            page.locator('.recovery-result[data-status="succeeded"]').wait_for()
+            assert page.locator('.recovery-ledger-row[data-status="created"]').count() == 1, \
+                "the recovery run does not mark the created file"
+            assert page.evaluate("document.documentElement.dataset.jobKind") == "output_recovery", \
+                "the root does not report the recovery job"
+        assert not errors, f"recovery {expected}: page errors {errors}"
+        context.close()
+    context, page, errors = open_android(browser, scenario="update")
+    page.locator("#update-modal:not([hidden])").wait_for()
+    assert page.locator("#update-now").inner_text() == page.evaluate("t('update_button_download')"), \
+        "the Android update dialog does not offer a download"
+    page.locator("#update-now").click()
+    page.locator("#update-result:not([hidden])").wait_for()
+    assert page.locator("#update-result").inner_text() == page.evaluate("t('update_apk_message')") \
+        and page.locator("#update-close").is_visible() and page.locator("#update-restart").is_hidden(), \
+        "the APK update does not end with the browser sentence and a Close button"
+    assert not errors, f"APK update: page errors {errors}"
+    context.close()
+
+
+def android_language_checks(browser):
+    catalogs = {code: catalog(code) for code in ALL_LANGUAGES}
+    keys = sorted(catalogs["en"])
+    context, page, errors = open_android(browser, before="window.galleryCatalogs = "
+                                         + json.dumps(catalogs, ensure_ascii=False) + ";")
+    for code in ALL_LANGUAGES:
+        page.evaluate(f"changeLanguage('{code}')")
+        page.wait_for_function(f"document.documentElement.lang === '{code}'")
+        # Every view once, the sheets and dialogs with their words in place.
+        for view in ("recovery", "settings", "info", "processing"):
+            page.locator(f"#nav-{view}").click()
+        page.evaluate("void openChooser('dir', '')")
+        page.wait_for_function("document.querySelector('#chooser').dataset.state !== 'loading'")
+        page.evaluate("closeChooser(null); openTipSheet(document.querySelector('#bf-room-mode-row .info-tip'))")
+        found = page.evaluate(ANDROID_RAW_KEYS, keys)
+        page.evaluate("closeTipSheet()")
+        assert not found, f"{code}: raw catalog keys on the Android page: {found[:8]}"
+    page.evaluate("changeTheme('light')")
+    assert page.evaluate("document.documentElement.dataset.theme") == "light", "the theme change did not apply"
+    assert not errors, f"languages: page errors {errors}"
+    context.close()
+
+
+def android_size_checks(browser):
+    for language in ("en", "ko", "de"):
+        before = "window.galleryBrirSteps = 2; window.galleryBrirHold = true;"
+        if language == "de":
+            before += "window.galleryCatalogs = " + json.dumps({"de": catalog("de")}, ensure_ascii=False) + ";"
+        context, page, errors = open_android(browser, language="ko" if language == "ko" else "en", width=360, height=740,
+                                             before=before)
+        page.evaluate(ANDROID_HELPERS)
+        if language == "de":
+            page.evaluate("changeLanguage('de')")
+            page.wait_for_function("document.documentElement.lang === 'de'")
+        page.evaluate(f"h.set('bf-dir-path', {json.dumps(ANDROID_DIR)})")
+
+        def measure(where):
+            page.wait_for_timeout(150)
+            small = page.evaluate(ANDROID_UNDERSIZED)
+            assert not small, f"{language}, {where}: controls smaller than 48 px: {small}"
+            wide = page.evaluate(ANDROID_OVERFLOW)
+            assert not wide, f"{language}, {where}: horizontal scroll at 360 px: {wide}"
+
+        measure("processing")
+        for group in ("dis-room", "dis-headphone", "dis-eq", "dis-vbass"):
+            page.evaluate(f"h.open('{group}')")
+        measure("processing with every group open")
+        for mode in ("tuning", "tuning2"):
+            page.evaluate(f"setRoomMode('{mode}'); h.check('bf-room-tuning2-mimo', true)")
+            measure(f"room correction, {mode}")
+        page.evaluate("h.set('bf-room-source','file'); h.set('bf-room-file','D:/m/living room.mdat');"
+                      " h.set('bf-hp-source','file'); h.set('bf-hp-file','D:/m/hp.mdat');"
+                      " h.set('bf-brir-source','file'); h.set('bf-brir-file','/s/backup.liveproject')")
+        page.wait_for_timeout(700)
+        measure("measurement file tables")
+        page.evaluate("h.set('bf-brir-source','recording'); h.set('bf-brir-recording-sweep-source','file');"
+                      " h.set('bf-test-signal-source','manual')")
+        measure("one recording file and test signal parameters")
+        for tab in ADV_TABS:
+            page.evaluate(f"h.adv('{tab}')")
+            if tab == "time":
+                page.evaluate("h.check('ba-decay-per-channel', true)")
+            if tab == "output":
+                page.evaluate("h.set('ba-layout-files','listed')")
+            measure(f"advanced options, {tab}")
+        for view in ("recovery", "settings", "info"):
+            page.locator(f"#nav-{view}").click()
+            if view == "recovery":
+                android_fill(page, "#recovery-dir-path", ANDROID_DIR)
+                page.locator('#recovery-inventory[data-state="ready"]').wait_for()
+            measure(view)
+        page.locator("#nav-processing").click()
+        page.evaluate("h.set('bf-brir-source','folder')")
+        page.locator("#btn-generate-brir").click()
+        page.wait_for_function("document.querySelectorAll('#brir-steps li.done').length === 1")
+        page.locator(".job-log summary").click()
+        measure("the job sheet")
+        page.locator("#job-sheet-close").click()
+        measure("the job bar")
+        page.evaluate("void openChooser('dir', '')")
+        page.wait_for_function("document.querySelector('#chooser').dataset.state !== 'loading'")
+        measure("the chooser")
+        page.evaluate("closeChooser(null); openTipSheet(document.querySelector('#bf-room-mode-row .info-tip'))")
+        measure("a tip sheet")
+        page.evaluate("closeTipSheet(); void confirmDialog('x')")
+        measure("the ask dialog")
+        page.evaluate("closeAsk(false); showUpdateModal({update_available: true, current_version: '3.21.0',"
+                      " latest_version: '3.22.0', download_url: 'x.apk', release_notes: '- a', release_url: null})")
+        measure("the update dialog")
+        assert not errors, f"sizes, {language}: page errors {errors}"
+        context.close()
+
+
+def android_checks(browser):
+    ids = android_request_checks(browser)
+    android_storage_chooser_checks(browser)
+    android_back_checks(browser)
+    android_job_checks(browser)
+    android_language_checks(browser)
+    android_size_checks(browser)
+    print(f"Gallery Android checks: same request in {len(ANDROID_REQUEST_STATES)} states and {ids} request ids,"
+          " storage access, chooser, back with a running job, job sheet, recovery, APK update, nine languages,"
+          " 360 px and 48 px OK")
+
+
+
+
+def android_shots(browser, output):
+    shots = []
+    for theme, language in itertools.product(THEMES, LANGUAGES):
+        context, page, errors = open_android(browser, theme, language)
+        android_fill(page, "#bf-dir-path", ANDROID_DIR)
+        page.wait_for_timeout(300)
+        shots.append(shoot_android(page, output, f"android-processing-{language}-{theme}", errors))
+        for group in ("room", "headphone", "eq", "vbass"):
+            page.locator(f"#dis-{group} .disclosure-head").click()
+        page.locator("#bf-eq-preview polyline").first.wait_for()
+        shots.append(shoot_android(page, output, f"android-processing-open-{language}-{theme}", errors, full=True))
+        page.locator("#nav-recovery").click()
+        android_fill(page, "#recovery-dir-path", ANDROID_LONG_DIR)
+        page.locator('#recovery-inventory[data-state="ready"]').wait_for()
+        shots.append(shoot_android(page, output, f"android-recovery-{language}-{theme}", errors, full=True))
+        for view in ("settings", "info"):
+            page.locator(f"#nav-{view}").click()
+            shots.append(shoot_android(page, output, f"android-{view}-{language}-{theme}", errors, full=True))
+        context.close()
+    for language in LANGUAGES:
+        tag = f"{language}-dark"
+        context, page, errors = open_android(browser, "dark", language, before="window.galleryStorage = 'denied';")
+        shots.append(shoot_android(page, output, f"android-storage-notice-{tag}", errors))
+        android_browse(page, "bf-dir-path")
+        shots.append(shoot_android(page, output, f"android-chooser-no-access-{tag}", errors))
+        context.close()
+        context, page, errors = open_android(browser, "dark", language,
+                                             before="window.galleryBrirSteps = 3; window.galleryBrirHold = true;")
+        android_fill(page, "#bf-dir-path", ANDROID_LONG_DIR)
+        android_browse(page, "bf-dir-path")
+        shots.append(shoot_android(page, output, f"android-chooser-folder-{tag}", errors))
+        page.locator("#chooser-close").click()
+        page.locator("#bf-test-signal-source").select_option("file")
+        page.evaluate("document.getElementById('bf-test-signal').value = '/storage/emulated/0/Download/x.wav'")
+        android_browse(page, "bf-test-signal", "audio")
+        shots.append(shoot_android(page, output, f"android-chooser-file-{tag}", errors))
+        page.locator("#chooser-close").click()
+        page.locator("#bf-test-signal-source").select_option("auto")
+        page.locator("#dis-room .disclosure-head").click()
+        page.locator("#bf-room-mode-row .info-tip").click()
+        page.locator("#tip-sheet:not([hidden])").wait_for()
+        shots.append(shoot_android(page, output, f"android-tip-{tag}", errors))
+        page.locator("#tip-sheet-close").click()
+        page.locator("#dis-room .disclosure-head").click()
+        page.evaluate("void confirmDialog(t('message_headphones_mono_warning'))")
+        page.locator("#ask-modal:not([hidden])").wait_for()
+        shots.append(shoot_android(page, output, f"android-ask-{tag}", errors))
+        page.locator("#ask-modal-cancel").click()
+        page.locator("#btn-generate-brir").click()
+        page.wait_for_function("document.querySelectorAll('#brir-steps li.done').length === 2")
+        shots.append(shoot_android(page, output, f"android-job-running-{tag}", errors))
+        page.locator("#job-sheet-close").click()
+        shots.append(shoot_android(page, output, f"android-job-bar-{tag}", errors))
+        page.evaluate("galleryBrirHold = false")
+        page.locator('#job-bar[data-status="succeeded"]').wait_for()
+        page.locator("#job-bar").click()
+        shots.append(shoot_android(page, output, f"android-job-succeeded-{tag}", errors))
+        context.close()
+        context, page, errors = open_android(browser, "dark", language, before=(
+            "window.galleryBrirStatus = 'failed'; window.galleryBrirError = {code: 'INVALID_REQUEST',"
+            " message: 'No HRIR recordings found in the directory.', details: {}, retryable: false};"
+            " window.galleryBrirSteps = 2;"))
+        android_fill(page, "#bf-dir-path", ANDROID_DIR)
+        page.locator("#btn-generate-brir").click()
+        page.locator('#job-sheet[data-status="failed"]').wait_for()
+        shots.append(shoot_android(page, output, f"android-job-failed-{tag}", errors))
+        context.close()
+        context, page, errors = open_android(browser, "dark", language, scenario="update")
+        page.locator("#update-modal:not([hidden])").wait_for()
+        shots.append(shoot_android(page, output, f"android-update-{tag}", errors))
+        context.close()
+        context, page, errors = open_android(browser, "dark", language, before="window.galleryFirstRun = true;")
+        page.locator("#language-modal:not([hidden])").wait_for()
+        shots.append(shoot_android(page, output, f"android-first-run-{tag}", errors))
+        context.close()
+    assert len(shots) == ANDROID_SHOTS, f"expected {ANDROID_SHOTS} Android PNGs, got {len(shots)}"
+    return shots
+
+
 def render_gallery(output):
     from playwright.sync_api import sync_playwright
 
@@ -2406,6 +3084,8 @@ def render_gallery(output):
     shots = []
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
+        # The Android page first: it is the newest, and a break there fails within minutes.
+        android_checks(browser)
         behavior_checks(browser)
         dialog_checks(browser)
         job_run_checks(browser)
@@ -2649,11 +3329,13 @@ def render_gallery(output):
             test_signal_take(page)
             shots.append(shoot(page, output, f"processing-test-signal-studio-{language}-dark", errors))
             context.close()
+        assert len(shots) == DESKTOP_SHOTS, f"expected {DESKTOP_SHOTS} desktop PNGs, got {len(shots)}"
+        shots.extend(android_shots(browser, output))
         browser.close()
     assert len(shots) == EXPECTED_SHOTS, f"expected {EXPECTED_SHOTS}, got {len(shots)}"
     assert len(set(shots)) == EXPECTED_SHOTS
     assert all(path.is_file() and path.stat().st_size for path in shots)
-    print(f"Gallery wrote {len(shots)} PNGs to {output.as_posix()}")
+    print(f"Gallery wrote {len(shots)} PNGs ({DESKTOP_SHOTS} desktop, {ANDROID_SHOTS} Android) to {output.as_posix()}")
     return shots
 
 
