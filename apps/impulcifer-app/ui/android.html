@@ -779,23 +779,9 @@
                 <span class="status-dot" id="sf-storage-dot" aria-hidden="true"></span>
                 <p class="status-text" id="sf-storage-state" role="status"></p>
               </div>
-              <p class="hint" data-i18n="hint_storage_access">Impulcifer needs access to all files to read measurement folders and save the results next to them.</p>
-              <button type="button" class="btn btn-secondary btn-block" id="btn-sf-storage-access" data-i18n="button_storage_access">Open settings</button>
-            </div>
-          </section>
-
-          <section class="group" aria-labelledby="group-folders">
-            <h2 class="group-title" id="group-folders" data-i18n="section_folders">Folders</h2>
-            <div class="group-body">
-              <p class="hint" data-i18n="hint_folders_private">These folders are in the app's own storage, which other apps cannot open.</p>
-              <div class="path-row" id="sf-data-row" hidden>
-                <span class="path-label" data-i18n="label_data_directory">Data folder</span>
-                <span class="path-scroll mono" id="sf-data-path"></span>
-              </div>
-              <div class="path-row" id="sf-settings-row" hidden>
-                <span class="path-label" data-i18n="label_settings_file">Settings file</span>
-                <span class="path-scroll mono" id="sf-settings-path"></span>
-              </div>
+              <!-- Only while access is missing: with access there is nothing to do here. -->
+              <p class="hint" id="sf-storage-hint" data-i18n="hint_storage_access" hidden>Impulcifer needs access to all files to read measurement folders and save the results next to them.</p>
+              <button type="button" class="btn btn-secondary btn-block" id="btn-sf-storage-access" data-i18n="button_storage_access" hidden>Open settings</button>
             </div>
           </section>
         </section>
@@ -807,12 +793,9 @@
             <div class="group-body about">
               <div class="about-head">
                 <img class="about-logo" src="logo/pulse-128.png" alt="" width="56" height="56">
-                <div class="about-name">
-                  <p class="about-title">Impulcifer</p>
-                  <p class="version-pill mono" id="info-version-pill">VERSION —</p>
-                </div>
+                <p class="about-title">Impulcifer</p>
               </div>
-              <p class="hint" data-i18n="app_subtitle"></p>
+              <p class="hint" data-i18n="app_subtitle_android"></p>
               <button type="button" class="btn btn-secondary btn-block" id="btn-check-updates" data-i18n="button_check_updates">Check for Updates</button>
               <p class="hint" id="update-check-status" role="status" hidden></p>
             </div>
@@ -963,7 +946,10 @@
           <button type="button" class="icon-btn" id="chooser-up" data-i18n-label="chooser_up" aria-label="Up one folder" disabled>
             <svg class="icon" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
           </button>
-          <div class="path-scroll mono chooser-path" id="chooser-path"></div>
+          <div class="chooser-here">
+            <p class="chooser-name" id="chooser-name"></p>
+            <p class="chooser-path"><bdi id="chooser-path"></bdi></p>
+          </div>
         </div>
       </div>
       <div class="chooser-body" id="chooser-body">

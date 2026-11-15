@@ -2681,6 +2681,12 @@ def android_request_checks(browser):
 def android_storage_chooser_checks(browser):
     context, page, errors = open_android(browser, before="window.galleryStorage = 'denied';")
     assert page.locator("#storage-notice").is_visible(), "the storage notice does not show while access is denied"
+    # Settings explains the permission and offers the system screen only while access is missing.
+    settings_asks = "['sf-storage-hint', 'btn-sf-storage-access'].map((id) => !document.getElementById(id).hidden)"
+    assert page.evaluate(settings_asks) == [True, True], \
+        "settings does not explain the permission and offer the system screen while access is denied"
+    assert page.locator("#sf-data-row, #sf-settings-row").count() == 0, \
+        "the Android settings show the app's private folders, which nobody can open"
     page.locator("#btn-storage-access").click()
     page.wait_for_function("galleryStorageAsks === 1")
     android_browse(page, "bf-dir-path")
@@ -2689,11 +2695,15 @@ def android_storage_chooser_checks(browser):
     page.evaluate("galleryStorage = 'granted'; document.dispatchEvent(new Event('visibilitychange'))")
     page.locator("#storage-notice").wait_for(state="hidden")
     page.wait_for_function("document.querySelector('#chooser').dataset.state === 'ready'")
+    assert page.evaluate(settings_asks) == [False, False], \
+        "settings still offers the system screen although access is granted"
     page.locator("#chooser-close").click()
     path = lambda: page.locator("#chooser-path").inner_text()
+    name = lambda: page.locator("#chooser-name").inner_text()
     page.evaluate("window.inputs = 0; document.getElementById('bf-dir-path').addEventListener('input', () => window.inputs++)")
     android_browse(page, "bf-dir-path")
     assert path() == "/storage/emulated/0", f"an empty field opens the chooser at {path()!r}, not at the first volume"
+    assert name() == "Internal storage", f"a volume's root is named {name()!r}, not by the volume's label"
     assert page.locator("#chooser-roots .seg-btn").count() == 2, "two volumes do not show as two chips"
     assert page.locator("#chooser-up").is_disabled(), "'up' is not disabled at a volume's root"
     folders = page.locator(".chooser-entry .entry-name").all_inner_texts()
@@ -2702,14 +2712,32 @@ def android_storage_chooser_checks(browser):
         f"the chooser does not list folders first with files dimmed: {folders} / {files}"
     page.locator('.chooser-entry[data-path="/storage/emulated/0/Impulcifer"]').click()
     page.wait_for_function("document.querySelector('#chooser-path').textContent === '/storage/emulated/0/Impulcifer'")
+    assert name() == "Impulcifer", f"the chooser names the folder it shows {name()!r}"
     page.locator("#chooser-up").click()
     page.wait_for_function("document.querySelector('#chooser-path').textContent === '/storage/emulated/0'")
     page.locator("#chooser-roots .seg-btn").nth(1).click()
     page.wait_for_function("document.querySelector('#chooser-path').textContent === '/storage/1A2B-3C4D'")
     page.locator("#chooser-roots .seg-btn").nth(0).click()
     page.locator('.chooser-entry[data-path="/storage/emulated/0/Impulcifer"]').click()
+    page.locator(f'.chooser-entry[data-path="{ANDROID_LONG_DIR}"]').click()
+    page.wait_for_function(f"document.querySelector('#chooser-path').textContent === {json.dumps(ANDROID_LONG_DIR)}")
+    # A path longer than the line loses its start, not its end, and the name loses its end.
+    cut = page.evaluate("""() => {
+      const text = document.getElementById('chooser-path');
+      const box = text.parentElement.getBoundingClientRect();
+      const rect = text.getBoundingClientRect();
+      const title = document.getElementById('chooser-name');
+      return {start: rect.left < box.left - 1, end: rect.right <= box.right + 1,
+              name: title.scrollWidth > title.clientWidth,
+              page: document.documentElement.scrollWidth > document.documentElement.clientWidth};
+    }""")
+    assert cut == {"start": True, "end": True, "name": True, "page": False}, \
+        f"a long folder is not shown with its path cut at the start and its name at the end: {cut}"
+    page.locator("#chooser-up").click()
+    page.wait_for_function("document.querySelector('#chooser-path').textContent === '/storage/emulated/0/Impulcifer'")
     page.locator(f'.chooser-entry[data-path="{ANDROID_DIR}"]').click()
     page.wait_for_function(f"document.querySelector('#chooser-path').textContent === {json.dumps(ANDROID_DIR)}")
+    assert name() == ANDROID_DIR.rsplit("/", 1)[1], f"the chooser names the folder it shows {name()!r}"
     page.locator("#chooser-select").click()
     page.locator("#chooser").wait_for(state="hidden")
     assert page.input_value("#bf-dir-path") == ANDROID_DIR and page.evaluate("inputs") >= 1, \
@@ -2817,6 +2845,69 @@ def android_back_checks(browser):
     page.evaluate("handleBack()")
     page.wait_for_function("document.documentElement.dataset.view === 'processing' && galleryBackActive === 0")
     assert not errors and not errors2, f"back checks: page errors {errors} {errors2}"
+    context.close()
+
+
+def android_outside_tap_checks(browser):
+    """Android closes a sheet or dialog when the dimmed area around it is tapped, not only by its button."""
+    context, page, errors = open_android(browser)
+    outside = (206, 140)  # on the page, far above anything that rises from the bottom
+
+    page.locator("#dis-room .disclosure-head").click()
+    page.locator("#bf-room-mode-row .info-tip").click()
+    page.locator("#tip-sheet:not([hidden])").wait_for()
+    box = page.locator("#tip-sheet").bounding_box()
+    assert box["y"] > outside[1] + 100, f"the tip sheet reaches the spot the check taps: {box}"
+    page.touchscreen.tap(box["x"] + 40, box["y"] + 30)
+    assert page.locator("#tip-sheet").is_visible(), "a tap on the tip sheet itself closed it"
+    page.touchscreen.tap(*outside)
+    page.locator("#tip-sheet").wait_for(state="hidden")
+    page.locator("#bf-room-mode-row .info-tip").click()
+    page.locator("#tip-sheet:not([hidden])").wait_for()
+    page.touchscreen.tap(206, 28)  # the app bar is under the dimmed area too
+    page.locator("#tip-sheet").wait_for(state="hidden")
+
+    for call, cancelled in (("confirmDialog('Sure?')", False), ("noticeDialog('Done.')", None)):
+        page.evaluate(f"window.asked = 'pending'; void {call}.then(answer => window.asked = answer)")
+        page.locator("#ask-modal:not([hidden])").wait_for()
+        page.touchscreen.tap(*page.evaluate("""() => {
+          const rect = document.getElementById('ask-modal-message').getBoundingClientRect();
+          return [rect.left + 8, rect.top + 8];
+        }"""))
+        assert page.evaluate("asked") == "pending", f"a tap on the text of {call} answered it"
+        page.touchscreen.tap(*outside)
+        page.locator("#ask-modal").wait_for(state="hidden")
+        page.wait_for_function("window.asked !== 'pending'")
+        assert page.evaluate("asked") == cancelled, f"a tap outside {call} answered {page.evaluate('asked')!r}"
+
+    # A press that starts inside the dialog and is let go outside is not a tap outside.
+    page.evaluate("window.asked = 'pending'; void confirmDialog('Sure?').then(answer => window.asked = answer)")
+    page.locator("#ask-modal:not([hidden])").wait_for()
+    inside = page.evaluate("""() => {
+      const rect = document.getElementById('ask-modal-message').getBoundingClientRect();
+      return [rect.left + 8, rect.top + 8];
+    }""")
+    page.mouse.move(*inside)
+    page.mouse.down()
+    page.mouse.move(*outside)
+    page.mouse.up()
+    assert page.evaluate("asked") == "pending", "a press that began inside the ask dialog and ended outside answered it"
+    page.locator("#ask-modal-cancel").click()
+
+    page.evaluate("showUpdateModal({update_available: true, current_version: '3.21.0', latest_version: '3.22.0',"
+                  " download_url: 'x.apk', release_notes: '- a', release_url: null})")
+    page.locator("#update-modal:not([hidden])").wait_for()
+    page.touchscreen.tap(*outside)
+    page.locator("#update-modal").wait_for(state="hidden")
+
+    assert not errors, f"the Android page reported errors during the outside-tap checks: {errors}"
+    context.close()
+    # The first-run language choice has no way out but a choice.
+    context, page, errors = open_android(browser, before="window.galleryFirstRun = true;")
+    page.locator("#language-modal:not([hidden])").wait_for()
+    page.touchscreen.tap(*outside)
+    page.wait_for_timeout(150)
+    assert page.locator("#language-modal").is_visible(), "a tap outside closed the first-run language choice"
     context.close()
 
 
@@ -2997,11 +3088,12 @@ def android_checks(browser):
     ids = android_request_checks(browser)
     android_storage_chooser_checks(browser)
     android_back_checks(browser)
+    android_outside_tap_checks(browser)
     android_job_checks(browser)
     android_language_checks(browser)
     android_size_checks(browser)
     print(f"Gallery Android checks: same request in {len(ANDROID_REQUEST_STATES)} states and {ids} request ids,"
-          " storage access, chooser, back with a running job, job sheet, recovery, APK update, nine languages,"
+          " storage access, chooser, back with a running job, taps outside sheets and dialogs, job sheet, recovery, APK update, nine languages,"
           " 360 px and 48 px OK")
 
 

@@ -27,7 +27,8 @@ async function requestStorageAccess() {
   if (!response.ok) appendLog(errorText(response));
 }
 
-/* The notice shows only while access is missing; settings says the state in words. */
+/* The notice shows only while access is missing. Settings says the state in
+   words, and explains and offers the system screen only while it is missing. */
 function renderStorage() {
   $("storage-notice").hidden = storageState !== "denied";
   const words = storageState === "granted" ? t("storage_state_granted")
@@ -35,7 +36,8 @@ function renderStorage() {
       : storageState === "not_required" ? t("storage_state_not_required") : "";
   $("sf-storage-state").textContent = words;
   $("sf-storage-dot").dataset.state = storageState || "unknown";
-  el("btn-sf-storage-access", HTMLButtonElement).hidden = storageState === "not_required";
+  $("sf-storage-hint").hidden = storageState !== "denied";
+  el("btn-sf-storage-access", HTMLButtonElement).hidden = storageState !== "denied";
 }
 
 /* The three buttons that open the system screen, and the check on return. */

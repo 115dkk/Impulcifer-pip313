@@ -56,10 +56,12 @@ IPC 메서드를 추가할 때는 다음 항목을 함께 수정합니다.
 - 페이지 표시: `<html data-page="android">`, 데스크톱은 `data-page="desktop"`. `boot()`가 끝나면 두 페이지 모두 `data-booted="true"`를 답니다.
 - 작업 상태: `renderJobState`가 뿌리 요소에 `data-job-kind`(`brir`, `output_recovery`, 없음)와 `data-job-status`(`running`, `cancel_requested`, `succeeded`, `failed`, `cancelled`, `idle`)를 적습니다.
 - 탐색: `.nav-item`과 `data-view`, `nav-processing`, `nav-recovery`, `nav-settings`, `nav-info`. 화면은 `view-processing`, `view-recovery`, `view-settings`, `view-info`입니다.
-- 고르기 시트: `#chooser`, `#chooser-path`, `#chooser-roots`, `#chooser-list`, `#chooser-up`, `#chooser-select`, `#chooser-close`. 저장소 안내는 `#storage-notice`와 `#btn-storage-access`, 작업 시트는 `#job-sheet`와 `#job-sheet-close`입니다.
+- 고르기 시트: `#chooser`, `#chooser-name`(지금 폴더의 이름, 볼륨의 뿌리에서는 볼륨 이름), `#chooser-path`(그 폴더의 전체 경로, 길면 앞쪽이 잘립니다), `#chooser-roots`, `#chooser-list`, `#chooser-up`, `#chooser-select`, `#chooser-close`. 저장소 안내는 `#storage-notice`와 `#btn-storage-access`, 작업 시트는 `#job-sheet`와 `#job-sheet-close`입니다.
 - `bf-dir-path`와 `recovery-dir-path`는 사람이나 시험이 경로를 직접 입력할 수 있는 입력란입니다.
 
-폴더와 파일은 `list_directory`로 앱 안에서 고릅니다. 시트는 필드에 적힌 폴더가 있으면 그 폴더에서, 없으면 첫 저장소 볼륨에서 열립니다. 볼륨이 둘 이상이면 칩으로 보이고, 긴 경로는 옆으로 밀려 끝부분이 보입니다. 폴더 모드에서는 폴더만 고를 수 있고 파일은 흐리게 보이며, 파일 모드에서는 그 필드가 받는 종류의 파일을 눌러 고릅니다. 불러오는 중, 빈 폴더, 목록이 잘린 폴더, 읽을 수 없는 폴더, 접근 권한 없음이 각각 따로 표시됩니다. 모든 파일 접근은 `get_storage_access`로 묻고, 권한이 없으면 처리 화면 맨 위와 고르기 시트에 같은 안내와 설정 열기 버튼(`request_storage_access`)을 보여 줍니다. 사람이 앱 밖에서 권한을 켜므로 페이지가 다시 보일 때(`visibilitychange`)마다 상태를 다시 묻습니다.
+폴더와 파일은 `list_directory`로 앱 안에서 고릅니다. 시트는 필드에 적힌 폴더가 있으면 그 폴더에서, 없으면 첫 저장소 볼륨에서 열립니다. 볼륨이 둘 이상이면 칩으로 보입니다. 목록 위에는 지금 폴더의 이름(볼륨의 최상위에서는 볼륨 이름)과 그 아래 전체 경로가 있고, 경로가 길면 앞쪽이 잘려 끝부분이 보입니다. 폴더 모드와 파일 모드가 같은 모양입니다. 폴더 모드에서는 폴더만 고를 수 있고 파일은 흐리게 보이며, 파일 모드에서는 그 필드가 받는 종류의 파일을 눌러 고릅니다. 불러오는 중, 빈 폴더, 목록이 잘린 폴더, 읽을 수 없는 폴더, 접근 권한 없음이 각각 따로 표시됩니다. 모든 파일 접근은 `get_storage_access`로 묻고, 권한이 없으면 처리 화면 맨 위와 고르기 시트에 같은 안내와 설정 열기 버튼(`request_storage_access`)을 보여 줍니다. 사람이 앱 밖에서 권한을 켜므로 페이지가 다시 보일 때(`visibilitychange`)마다 상태를 다시 묻습니다. 설정 화면은 권한 상태를 한 줄로 알리고, 권한이 없을 때만 설명과 설정 열기 버튼을 보입니다. 권한이 있으면 거기서 할 일이 없기 때문입니다.
+
+휴대폰 화면에는 보기만 하고 아무것도 할 수 없는 항목을 두지 않습니다. 그래서 설정 화면에는 데스크톱의 폴더 묶음(데이터 폴더와 설정 파일 경로)이 없습니다. 둘 다 앱 전용 저장 공간이라 사람이 열 수도 바꿀 수도 없습니다. 정보 화면의 소개에는 이름만 크게 두고, 버전은 시스템 정보 목록의 첫 줄에 있습니다. 부제는 `app_subtitle_android`입니다(앱은 측정하지 않으므로 데스크톱 부제의 '측정'을 뺐습니다).
 
 BRIR 작업을 시작하면 작업 시트가 화면 전체로 열려 진행 막대, 단계 목록, 접힌 작업 기록, 취소 버튼을 보여 줍니다. 시트를 내려도 작업은 계속되고, 동작 버튼 위의 가는 막대가 진행 중인 단계를 보여 주며 누르면 시트가 다시 열립니다. 작업이 끝나면 시트에 출력 폴더 경로, 정렬 보고서, 실패 문장이 남습니다. 출력 폴더 열기가 실패하면 오류 대신 폴더 경로를 알려 줍니다. 출력 복원은 시트 없이 자기 화면의 결과 카드에서 보여 줍니다.
 

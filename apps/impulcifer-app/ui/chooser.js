@@ -212,17 +212,18 @@ function renderChooser() {
   sheet.dataset.state = state;
   const fileMode = session.kind !== "dir";
 
-  const pathNode = $("chooser-path");
-  pathNode.textContent = session.path || "";
-  pathNode.scrollLeft = pathNode.scrollWidth;
-  el("chooser-up", HTMLButtonElement).disabled = !session.parent || session.loading;
-
-  const roots = $("chooser-roots");
-  roots.hidden = session.roots.length < 2;
   const current = session.path || "";
   const active = session.roots
     .filter((root) => current === root.path || current.startsWith(`${root.path.replace(/\/$/, "")}/`))
     .sort((a, b) => b.path.length - a.path.length)[0];
+  // Where the sheet is: the folder's name (a volume by its label) over its path.
+  $("chooser-name").textContent = active && active.path === current ? active.label
+    : current.replace(/\/+$/, "").split("/").pop() || current;
+  $("chooser-path").textContent = current;
+  el("chooser-up", HTMLButtonElement).disabled = !session.parent || session.loading;
+
+  const roots = $("chooser-roots");
+  roots.hidden = session.roots.length < 2;
   roots.replaceChildren(...session.roots.map((root) => {
     const button = document.createElement("button");
     button.type = "button";

@@ -117,13 +117,22 @@ const DESKTOP_SYSTEM_ROWS = "runtime shell webview os cpu data settings";
 function renderSystemInfo() {
   const info = state.systemInfo;
   if (!info) return;
-  $("info-version-pill").textContent = fmt(t("info_version_rust"), {
-    version: info.version, toolchain: info.runtime.toolchain, install: installLabel(info),
-  });
-  $("sf-data-path").textContent = info.paths.data_dir;
-  $("sf-settings-path").textContent = info.paths.settings_path;
-  $("sf-data-row").hidden = !info.paths.data_dir;
-  $("sf-settings-row").hidden = !info.paths.settings_path;
+  // The line under the name is the desktop page's. The Android page shows the
+  // version among its system rows.
+  const pill = document.getElementById("info-version-pill");
+  if (pill) {
+    pill.textContent = fmt(t("info_version_rust"), {
+      version: info.version, toolchain: info.runtime.toolchain, install: installLabel(info),
+    });
+  }
+  // The folder rows are the desktop page's too. On Android both are in the
+  // app's own storage, where the person can neither look nor change anything.
+  if (document.getElementById("sf-data-row")) {
+    $("sf-data-path").textContent = info.paths.data_dir;
+    $("sf-settings-path").textContent = info.paths.settings_path;
+    $("sf-data-row").hidden = !info.paths.data_dir;
+    $("sf-settings-row").hidden = !info.paths.settings_path;
+  }
   const grid = $("info-system");
   grid.replaceChildren();
   for (const name of (grid.dataset.rows || DESKTOP_SYSTEM_ROWS).split(" ")) {

@@ -720,9 +720,8 @@
   outline-offset: -1px;
 }
 :root[data-theme="dark"][data-page="android"] .about-logo { outline-color: oklch(1 0 0 / 0.1); }
-.about-name { display: grid; gap: 2px; min-width: 0; }
-.about-title { font-size: 20px; font-weight: 700; }
-[data-page="android"] .version-pill { justify-self: start; margin: 0; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+/* The name stands alone beside the logo. The version is a row of the system list. */
+[data-page="android"] .about-title { margin: 0; font-size: 32px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; }
 
 .kv-list {
   display: grid;
@@ -762,6 +761,10 @@
 .link-row .icon { color: var(--fg-2); }
 
 [data-page="android"] .runtime { margin: 4px 0 8px; color: var(--fg-3); font-size: 12px; text-align: center; }
+/* Once the service has answered, the line only repeats the version, platform
+   and web view of the system rows above it. It stays for the two states that
+   nothing else shows: still connecting, and a bridge that failed. */
+:root[data-page="android"][data-booted="true"] .runtime { display: none; }
 
 /* ------------------------------------------------------------ job bar
    A put-away BRIR job: a dot, the stage in flight and its status, a chevron
@@ -942,7 +945,32 @@
 [data-page="android"] .chooser-roots .seg-btn { flex: 1 0 auto; }
 
 .chooser-where { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.chooser-path { flex: 1 1 auto; min-height: var(--hit); padding: 13px 12px; font-size: 14px; }
+.chooser-here { display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
+.chooser-name {
+  margin: 0;
+  overflow: hidden;
+  color: var(--fg-0);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A long path is cut at its start: its end is what tells one folder from the
+   next. The box runs right to left so the cut and its ellipsis fall on the
+   left, and the path inside keeps its own direction. */
+.chooser-path {
+  margin: 0;
+  overflow: hidden;
+  direction: rtl;
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chooser-path bdi { direction: ltr; unicode-bidi: isolate; }
 .chooser-where .icon-btn { border: 1px solid var(--line-soft); background: var(--surface); }
 
 .chooser-body {

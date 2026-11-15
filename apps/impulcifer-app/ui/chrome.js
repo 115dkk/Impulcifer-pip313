@@ -167,14 +167,32 @@ function showPathEnds() {
   });
 }
 
+/* Android closes a dialog when the dimmed area around it is tapped, as back
+   does. The tap counts only when it starts and ends on the dimmed area itself:
+   a drag that began inside the dialog and ended outside closes nothing. */
+/** @param {string} id @param {() => void} dismiss */
+function dismissOnOutsideTap(id, dismiss) {
+  const backdrop = $(id);
+  let pressed = false;
+  backdrop.addEventListener("pointerdown", (event) => { pressed = event.target === backdrop; });
+  backdrop.addEventListener("click", (event) => {
+    if (pressed && event.target === backdrop) dismiss();
+    pressed = false;
+  });
+}
+
 /* The navigation (after the shell's own handler), the group heads, the path
-   fields, and the back button following what is open. */
+   fields, the dialogs' dimmed areas, and the back button following what is
+   open. The tip sheet's own scrim closes it (tipsheet.js); the first-run
+   language choice stays until a language is chosen. */
 function wireAndroidShell() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".nav-item")).forEach((item) => {
     item.addEventListener("click", () => showView(item.dataset.view || "processing"));
   });
   keepDisclosureHeads();
   showPathEnds();
+  dismissOnOutsideTap("ask-modal", () => { if (pendingAsk) closeAsk(!pendingAsk.cancel); });
+  dismissOnOutsideTap("update-modal", hideUpdateModal);
   const observer = new MutationObserver(syncBackButton);
   for (const id of ["tip-sheet", "ask-modal", "chooser", "update-modal", "job-sheet"]) {
     observer.observe($(id), { attributes: true, attributeFilter: ["hidden"] });
