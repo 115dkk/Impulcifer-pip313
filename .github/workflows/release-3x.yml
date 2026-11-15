@@ -477,7 +477,7 @@ jobs:
           # Not captured: its stdout registers the mask (see the script's header).
           bash .github/scripts/android_signing_key.sh sign apps/impulcifer-app/android-signing "$unsigned" "dist/Impulcifer-${VERSION}-aarch64.apk"
           badging=$("$ANDROID_BUILD_TOOLS/aapt2" dump badging "dist/Impulcifer-${VERSION}-aarch64.apk")
-          echo "$badging" | grep -E "^(package|sdkVersion|targetSdkVersion|native-code)"
+          echo "$badging" | grep -E "^(package|sdkVersion|minSdkVersion|targetSdkVersion|native-code)"
           # The update check of an installed app looks for this name
           # (crates/impulcifer-service/src/update/check.rs), and the package must
           # carry the released version.

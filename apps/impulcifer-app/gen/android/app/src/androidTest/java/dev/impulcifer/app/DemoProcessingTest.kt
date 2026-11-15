@@ -59,10 +59,12 @@ class DemoProcessingTest {
     webView = waitFor("the web view", 120_000) { findWebView() }
   }
 
+  // The activity is left open: MainActivity ends the process when it is
+  // destroyed, and the process is this test's own. android_emulator_test.sh
+  // tells the runner not to finish activities either.
   @After
-  fun close() {
+  fun record() {
     File(evidence, "result.json").writeText(result.toString(2))
-    scenario.close()
   }
 
   @Test
@@ -282,8 +284,25 @@ class DemoProcessingTest {
       .orEmpty()
       .takeLast(4000)
 
+  /**
+   * Waits for a page expression to be true. A page that cannot answer yet
+   * (no document, a script that is not loaded) counts as "not yet"; what it
+   * last said goes into the timeout message.
+   */
   private fun waitUntil(what: String, timeout: Long, expression: String) {
-    waitFor(what, timeout) { if (evaluate(expression) == true) true else null }
+    var last = "the expression stayed false"
+    try {
+      waitFor(what, timeout) {
+        try {
+          if (evaluate(expression) == true) true else null
+        } catch (error: AssertionError) {
+          last = error.message ?: error.toString()
+          null
+        }
+      }
+    } catch (error: AssertionError) {
+      throw AssertionError("${error.message} ($last)")
+    }
   }
 
   private fun <T : Any> waitFor(what: String, timeout: Long, probe: () -> T?): T {

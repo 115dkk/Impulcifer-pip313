@@ -29,12 +29,18 @@ adb push "$demo" "$device_demo" >/dev/null
 adb shell ls -la "$device_demo"
 adb logcat -c
 
+# The runner must not finish the activity when the tests end: the app ends its
+# process when its activity is destroyed (MainActivity.onDestroy), and that
+# process is the one reporting the result.
 status=0
 adb shell am instrument -w \
   -e class "$package.DemoProcessingTest" \
+  -e waitForActivitiesToComplete false \
   -e demoFolder "$device_demo" -e evidenceFolder "$device_evidence" \
   "$package.test/androidx.test.runner.AndroidJUnitRunner" | tee "$out/instrument.txt" || status=$?
 
+# A moment for a crash report, if there was one, to reach the log.
+sleep 5
 adb logcat -d > "$out/logcat.txt" || true
 adb pull "$device_evidence" "$out/evidence" || true
 ls -la "$out" "$out/evidence" 2>/dev/null || true

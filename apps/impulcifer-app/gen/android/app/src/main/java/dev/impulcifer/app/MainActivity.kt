@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.os.Process
 import android.system.Os
 import android.view.View
 import androidx.activity.SystemBarStyle
@@ -48,6 +49,19 @@ class MainActivity : TauriActivity() {
     super.onConfigurationChanged(newConfig)
     // The system switched between light and dark while the app was open.
     applyPageTheme(themeSetting)
+  }
+
+  override fun onDestroy() {
+    // Tauri ends the app when its activity is destroyed, and ends it with
+    // exit(): the C library then destroys static objects while the web view's
+    // threads still use them, and the process aborts ("FORTIFY:
+    // pthread_mutex_lock called on a destroyed mutex", android.yml run
+    // 43670857652 on API 36). The process goes away either way, so it is ended
+    // here, at once, before the Rust side hears of the destruction. A job that
+    // is still running is lost in both cases; the page keeps the back button
+    // from leaving the app while one runs.
+    Process.killProcess(Process.myPid())
+    super.onDestroy()
   }
 
   /** Whether the system is in its dark theme right now. */

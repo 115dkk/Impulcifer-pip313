@@ -182,10 +182,10 @@ jobs:
             echo "::error::the desktop's bundled data must not be packed into the APK"; exit 1
           fi
           badging=$("$ANDROID_BUILD_TOOLS/aapt2" dump badging "$apk")
-          echo "$badging" | grep -E "^(package|sdkVersion|targetSdkVersion|uses-permission|application-label:|native-code)"
+          echo "$badging" | grep -E "^(package|sdkVersion|minSdkVersion|targetSdkVersion|uses-permission|application-label:|native-code)"
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
           echo "$badging" | grep -q "^package: name='dev.impulcifer.app' .*versionName='${version}'"
-          echo "$badging" | grep -q "^sdkVersion:'30'"
+          echo "$badging" | grep -Eq "^(sdkVersion|minSdkVersion):'30'"
           echo "$badging" | grep -q "^uses-permission: name='android.permission.MANAGE_EXTERNAL_STORAGE'"
           echo "$badging" | grep -q "^native-code: 'arm64-v8a'$"
           # 16 KiB pages (Android 15 and later devices): every loadable segment
