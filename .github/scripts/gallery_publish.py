@@ -3,14 +3,19 @@
 
 Both gallery workflows call this after rendering their PNGs:
 webview-gallery.yml (2.x ``webview_ui``, ``--kind 2x``) and ui-gallery-3x.yml
-(3.x ``apps/impulcifer-app/ui``, ``--kind 3x``).
+(3.x ``apps/impulcifer-app/ui``). The 3.x workflow publishes two galleries
+from one render, each with a review issue of its own: the desktop page
+(``--kind 3x``) and the Android page (``--kind 3x-android``, the
+``android-*.png`` shots). One issue for both did not hold the screenshots in
+its body any more, and a list of links is no way to review screens.
 
 The ``webview-gallery`` branch holds one directory per kept run, named
 ``<run number>-pr<PR number>`` (or ``<run number>-manual``) under ``runs/``
-(2.x) or ``runs-3x/`` (3.x). Each publish rewrites the branch as a single
-commit without a parent, so PNGs of dropped runs leave the branch history too,
-and pushes it with ``--force-with-lease`` (retrying when the other gallery
-pushed in between). A publish keeps
+(2.x), ``runs-3x/`` (3.x desktop) or ``runs-3x-android/`` (3.x Android). Each
+publish rewrites the branch as a single commit without a parent, so PNGs of
+dropped runs leave the branch history too, and pushes it with
+``--force-with-lease`` (retrying when another gallery pushed in between). A
+publish keeps
 
 * the run it is publishing, and
 * the newest run of every other pull request that is still open,
@@ -28,6 +33,10 @@ Review issues follow the same rule. A run of a pull request that already has
 an open review issue replaces that issue's body instead of adding a comment.
 Open review issues of the same kind whose pull request is closed or merged
 are closed with a pointer to the new issue.
+
+The issue body shows every screenshot in place, each under its name. When
+that does not fit GitHub's limit the same blocks are written more compactly,
+and only when that does not fit either do the screenshots become links.
 """
 
 from __future__ import annotations
@@ -59,8 +68,16 @@ KINDS = {
     "3x": {
         "root": "runs-3x",
         "workflow": "ui-gallery-3x.yml",
-        "title": "WebView UI 갤러리 리뷰 (3.x)",
-        "heading": "3.x 화면(`apps/impulcifer-app/ui`) 갤러리",
+        "title": "데스크톱 화면 갤러리 리뷰 (3.x)",
+        "heading": "3.x 데스크톱 화면(`apps/impulcifer-app/ui/index.html`) 갤러리",
+    },
+    "3x-android": {
+        "root": "runs-3x-android",
+        "workflow": "ui-gallery-3x.yml",
+        "title": "안드로이드 화면 갤러리 리뷰 (3.x)",
+        "heading": "3.x 안드로이드 화면(`apps/impulcifer-app/ui/android.html`) 갤러리",
+        # The page is drawn 412 CSS pixels wide at two device pixels each.
+        "image_width": 412,
     },
 }
 
@@ -165,8 +182,14 @@ def issue_body(
     sha: str,
     source_ref: str,
     images: Sequence[str],
+    image_width: Optional[int] = None,
 ) -> str:
-    """Review issue body; images become a link list past GitHub's size limit."""
+    """Review issue body with every screenshot in place under its name.
+
+    ``image_width`` shows the screenshots that many pixels wide (phone shots
+    are drawn at two device pixels per pixel). Past GitHub's size limit the
+    blocks are written compactly, then as a link list, then not at all.
+    """
     tree_url = f"https://github.com/{repository}/tree/{BRANCH}/{run_path}"
     raw_base = f"https://raw.githubusercontent.com/{repository}/{BRANCH}/{run_path}"
     head = [
@@ -178,16 +201,19 @@ def issue_body(
         "더 새 갤러리가 생기고 이 PR이 닫혀 있으면 이슈를 닫고 PNG를 브랜치에서 지웁니다.",
         "",
     ]
+    size = f' width="{image_width}"' if image_width else ""
     blocks = []
     for name in images:
-        blocks += [
-            f"<details><summary><b>{name}</b></summary>",
-            "",
-            f"![{name}]({raw_base}/{name}.png)",
-            "",
-            "</details>",
-        ]
+        url = f"{raw_base}/{name}.png"
+        picture = f'<img src="{url}" alt="{name}"{size}>' if image_width else f"![{name}]({url})"
+        blocks += [f"<details><summary><b>{name}</b></summary>", "", picture, "", "</details>"]
     body = "\n".join(head + blocks) + "\n"
+    if len(body) <= BODY_LIMIT:
+        return body
+    compact = [
+        f'<details><summary>{name}</summary><img src="{raw_base}/{name}.png"{size}></details>' for name in images
+    ]
+    body = "\n".join(head + compact) + "\n"
     if len(body) <= BODY_LIMIT:
         return body
     links = [f"- [{name}]({raw_base}/{name}.png)" for name in images]
@@ -454,6 +480,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         sha,
         source_ref,
         [image.stem for image in images],
+        kind.get("image_width"),
     )
     sync_issues(repository, kind["title"], title, body, open_prs, run_number)
     return 0

@@ -92,8 +92,21 @@ def test_retained_dirs_reject_a_bad_current_name():
         gallery_publish.retained_dirs([], set(), "latest")
 
 
-TITLE_3X = "WebView UI 갤러리 리뷰 (3.x)"
+TITLE_3X = "데스크톱 화면 갤러리 리뷰 (3.x)"
+TITLE_ANDROID = "안드로이드 화면 갤러리 리뷰 (3.x)"
 TITLE_2X = "WebView UI 갤러리 리뷰"
+
+
+def test_every_kind_has_its_own_directory_and_a_title_no_other_kind_matches():
+    kinds = gallery_publish.KINDS
+    assert kinds["3x"]["title"] == TITLE_3X and kinds["3x-android"]["title"] == TITLE_ANDROID
+    assert kinds["2x"]["title"] == TITLE_2X
+    roots = [kind["root"] for kind in kinds.values()]
+    assert len(set(roots)) == len(roots)
+    # issue_actions tells kinds apart by "<title>: ".
+    prefixes = [f"{kind['title']}: " for kind in kinds.values()]
+    for prefix in prefixes:
+        assert [other for other in prefixes if other.startswith(prefix)] == [prefix]
 
 
 def test_issue_actions_update_current_close_closed_prs_and_keep_open_ones():
@@ -117,9 +130,11 @@ def test_issue_actions_kinds_do_not_touch_each_other():
     issues = [
         {"number": 1, "title": f"{TITLE_3X}: PR #5"},
         {"number": 2, "title": f"{TITLE_2X}: PR #5"},
+        {"number": 3, "title": f"{TITLE_ANDROID}: PR #5"},
     ]
     assert gallery_publish.issue_actions(issues, TITLE_2X, set(), f"{TITLE_2X}: PR #9") == (None, [2])
     assert gallery_publish.issue_actions(issues, TITLE_3X, set(), f"{TITLE_3X}: PR #9") == (None, [1])
+    assert gallery_publish.issue_actions(issues, TITLE_ANDROID, {5}, f"{TITLE_ANDROID}: PR #5") == (3, [])
 
 
 def test_issue_actions_close_duplicates_of_the_current_title():
@@ -135,9 +150,9 @@ def test_issue_title():
     assert gallery_publish.issue_title(TITLE_3X, None, "master") == f"{TITLE_3X}: manual (master)"
 
 
-def _body(images):
+def _body(images, image_width=None):
     return gallery_publish.issue_body(
-        "3.x 화면 갤러리", "owner/repo", "runs-3x/58-pr299", 58, "abc", "branch", images
+        "3.x 화면 갤러리", "owner/repo", "runs-3x/58-pr299", 58, "abc", "branch", images, image_width
     )
 
 
@@ -150,12 +165,31 @@ def test_issue_body_embeds_every_image_from_the_run_directory():
     assert "—" not in body
 
 
-def test_issue_body_falls_back_to_links_past_the_issue_size_limit():
+def test_issue_body_shows_phone_screenshots_at_the_width_they_were_drawn_for():
+    body = _body(["android-info-ko-dark"], image_width=412)
+    raw = "https://raw.githubusercontent.com/owner/repo/webview-gallery/runs-3x/58-pr299"
+    assert f'<img src="{raw}/android-info-ko-dark.png" alt="android-info-ko-dark" width="412">' in body
+    assert "![" not in body
+
+
+def test_issue_body_keeps_the_screenshots_in_place_by_writing_them_compactly():
+    # The 3.x desktop gallery is 224 shots today; this is what it grows into.
     images = [f"scenario-{index:04d}-with-a-long-name" for index in range(320)]
     body = _body(images)
     assert len(body) <= 65536
+    assert body.count("<details>") == 320
+    assert body.count('<img src="https://raw.githubusercontent.com/') == 320
+    assert "링크로 적습니다" not in body
+    assert body.count(' width="412">') == 0
+    assert _body(images[:300], image_width=412).count(' width="412"></details>') == 300
+
+
+def test_issue_body_falls_back_to_links_past_the_issue_size_limit():
+    images = [f"scenario-{index:04d}-with-a-long-name" for index in range(400)]
+    body = _body(images)
+    assert len(body) <= 65536
     assert "<details>" not in body
-    assert body.count("](https://raw.githubusercontent.com/") == 320
+    assert body.count("](https://raw.githubusercontent.com/") == 400
 
 
 def test_issue_body_points_at_the_branch_when_even_links_do_not_fit():
