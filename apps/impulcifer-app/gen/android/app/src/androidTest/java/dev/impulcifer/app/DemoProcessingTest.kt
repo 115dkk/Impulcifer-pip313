@@ -90,6 +90,13 @@ class DemoProcessingTest {
     waitUntil("the page to start", 180_000, "document.documentElement.dataset.booted === 'true'")
     step("the page started")
     assertEquals("android", evaluate("document.documentElement.dataset.page"))
+
+    // A fresh install asks for the language first; the test answers as a person would.
+    waitUntil("the first-run language choice", 30_000, visible("language-modal"))
+    shot("00-first-run")
+    click("#language-modal-list button")
+    waitUntil("the language choice to close", 30_000, "!(${visible("language-modal")})")
+    step("language chosen: ${evaluate("document.documentElement.lang")}")
     shot("01-processing")
 
     // What the service says about this device.
@@ -370,6 +377,8 @@ class DemoProcessingTest {
 
   /** The screen as the device shows it, system bars included. */
   private fun shot(name: String) {
+    // Time for the web view to draw what the last step changed.
+    SystemClock.sleep(700)
     val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: return
     FileOutputStream(File(evidence, "$name.png")).use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
   }

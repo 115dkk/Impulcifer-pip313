@@ -245,7 +245,10 @@ jobs:
       - name: Allow the emulator to use KVM
         run: sudo chmod 0666 /dev/kvm
 
+      # The step's own limit: the script bounds the test at 45 minutes, and an
+      # emulator that does not shut down must not hold the job for the rest.
       - name: Process the demo folder and restore an output on the emulator
+        timeout-minutes: 60
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 36

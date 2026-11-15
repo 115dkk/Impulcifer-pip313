@@ -18,6 +18,16 @@ package=dev.impulcifer.app
 device_demo=/sdcard/Download/impulcifer-demo
 device_evidence=/sdcard/Download/impulcifer-test
 
+# The emulator's crash reporter can keep the emulator from exiting when the
+# action shuts it down: run 43677207306 passed its test in 25 seconds and then
+# sat in "Terminate Emulator" for an hour. Stop the app and the reporter on the
+# way out, whatever the outcome.
+leave() {
+  adb shell am force-stop "$package" >/dev/null 2>&1 || true
+  killall -INT crashpad_handler >/dev/null 2>&1 || true
+}
+trap leave EXIT
+
 mkdir -p "$out"
 adb wait-for-device
 adb install -r "$app"
