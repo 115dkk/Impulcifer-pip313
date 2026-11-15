@@ -127,8 +127,40 @@ updater/
 - **작업 분배.** unsafe 단인 `impulcifer-sys-win`은 Daybreak 워커, 나머지 크레이트(`impulcifer-audio-io` 포함)는 ASTRA 워커가 작업서 단위로 구현한다. 작업서는 `docs/rust/packets/`에 둔다.
 - **CI.** `.github/workflows/rust.yml`이 fmt·clippy·게이트·3 OS 테스트를 돈다. 릴리스는 `release-3x.yml`이 master push마다 자동으로 낸다(아래 "빌드 / 릴리스 파이프라인"). Rust 경로는 2.x 게이트의 `EXCLUDE`에 있어 2.x 발행을 건드리지 않는다.
 - **3.x BRIR 무결성(SHA-256).** `brir-3x.yml`이 PR의 기준 커밋과 PR에서 릴리스 CLI를 같은 러너에 빌드해 `data/demo`를 48개 시나리오(룸 EQ v2 범위 넷, 가상 룸 튜닝 넷, 가상 룸 튜닝 2 열여섯, 가상 베이스 다섯, 몰입형 포맷 파일, 재지 않은 스피커와 LFE 채우기 둘, REW 측정 파일을 룸·BRIR·헤드폰 측정으로 쓰는 셋, ITD 보정 둘, 녹음 파일 하나를 BRIR 측정으로 쓰는 둘, 룸 측정의 서브우퍼로 LFE를 만들고 보정하는 둘, 서브우퍼 둘을 LFE 하나로 합치는 하나, SOFA 내보내기 하나 등)로 돌리고, 나온 WAV와 SOFA 파일 전부의 SHA-256이 같아야 통과시킨다. PR 쪽은 `RAYON_NUM_THREADS=1`로 한 번 더 돌려 스레드 수와도 무관해야 한다. 바이트는 플랫폼 수학 라이브러리에 따라 달라지므로 저장해 둔 해시는 없다. 출력을 일부러 바꾸는 PR은 `brir-change` 라벨을 달고(기준 비교만 경고로 바뀌고 스레드 검사는 그대로) 차이의 근거를 PR 설명에 남긴다. 시나리오마다 그것을 돌릴 수 있는 첫 3.x 버전을 적는다. 기준 CLI가 그보다 오래됐을 때만 기준 실행 실패가 '기준 없음' 경고이고, 그 밖의 기준 실행 실패는 라벨과 무관하게 검사 실패다. 시나리오를 더하거나 기존 시나리오에 새 옵션을 넣으면 그 옵션을 내는 버전을 적는다. 시나리오 목록과 로컬 실행법은 `.github/scripts/brir_3x_integrity.py`에 있다. DSP를 병렬화할 때는 map만 쓰고, 부동소수점 누적은 원래 순서대로 순차 실행한다.
-- **로컬 검증.** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- --no-deps -D warnings`, `cargo test --workspace`.
+- **로컬 검증.** `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- --no-deps -D warnings`, `cargo test --workspace`. 안드로이드 작업은 이것 대신 아래 '안드로이드 작업의 검증'을 따른다.
 - **성능 감사.** 크레이트가 착륙하면 ASTRA에게 `docs/rust/packets/PA-astra-perf-audit.md` 기반의 `PAnn-astra-perf-<crate>.md`를 맡겨 같은 머신에서 2.x와 비교 측정한다(`benches/perf.rs` 대 `tests/migration/bench_oracle_<crate>.py`). 상대는 최신 CPython(`py -3.14`, 필요하면 free-threaded 3.14t)에서 도는 2.x다. M2·M5의 전체 감사에서는 최대 상주 메모리도 같이 잰다. 모든 연산에서 파이썬 이상이어야 하고 골든은 그대로 통과해야 하며, 보고서는 `docs/rust/perf/<crate>.md`, 등록부 항목은 `perf.<crate>`다. 파이프라인 전체(M2)와 출시 전(M5)에 한 번씩 더 돈다. 기능의 `implemented` 등록은 패리티(골든) 게이트이고 성능 감사는 별도의 `perf.<crate>` 항목으로 추적한다. 크레이트는 그 항목이 `implemented`가 되기 전까지 '감사 전' 상태이며, M2(`perf.pipeline-demo`)와 M5(`perf.release`)의 종료 조건에 들어간다. 파이썬보다 느리면 완료가 아니다.
+
+## 안드로이드 이식 (3.x)
+
+유지보수자가 2026-11-15에 정한 것은 아래 두 가지다. 화면을 띄우는 방식, 패키징, 배포와 업데이트는 아직 정하지 않았고 이식을 시작할 때 ADR로 정한다.
+
+- **3.x를 바탕으로 한다.** 2.x Python 트리는 이식하지 않고 지금처럼 오라클로만 쓴다.
+- **녹음만 뺀다.** 안드로이드에서 녹음할 일은 사실상 없으므로 녹음을 뺀 나머지 기능은 모두 이식한다. 안드로이드 빌드는 Python 휠처럼 `impulcifer-service`·`impulcifer-cli`를 `default-features = false`로 쓴다(`native-audio` 제외, `NullBackend`). cpal·`impulcifer-sys-win`·coreaudio-rs가 안드로이드 의존성 트리에 들어오면 안 된다.
+
+이식 전의 코드 상태는 이렇다(2026-11-15, 3.21.1에서 확인).
+
+- **녹음을 빼면 지금도 안드로이드에서 빌드되고 돈다.** `cargo check -p impulcifer-cli -p impulcifer-service --no-default-features --target aarch64-linux-android --all-targets`가 경고 없이 통과하고, 이렇게 빌드한 `impulcifer` CLI가 안드로이드 기기(Termux)에서 실행된다. `impulcifer-types`와 `impulcifer-io`의 시험도 기기에서 모두 통과했다. 링커는 NDK나 Termux의 clang을 준다(`CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER`, C 코드를 위한 `CC_aarch64_linux_android`·`AR_aarch64_linux_android`·`CFLAGS_aarch64_linux_android=--target=aarch64-linux-android24`).
+- **안드로이드의 `target_os`는 `"android"`다.** 그래서 `cfg(target_os = "linux")`와 `std::env::consts::OS == "linux"` 분기는 안드로이드에 해당하지 않고, `cfg(unix)`와 `cfg(not(windows))`는 해당한다. 이식할 때 안드로이드 몫을 정해야 하는 곳은 넷이다. 업데이트는 `update/check.rs`의 `download_url`이 `linux`에서만 AppImage·deb·rpm 자산을 고르고, `update/install_kind.rs`와 `update/legacy.rs`도 `linux`만 안다. 시스템 정보는 `impulcifer-service/src/lib.rs`의 `os_version`이 빈 문자열을, `os_platform_name`이 `android`를 그대로 낸다. FFmpeg 탐색(`impulcifer-io/src/ffmpeg.rs`)은 PATH 다음에 데스크톱 리눅스의 경로를 본다. 앱 셸(`apps/impulcifer-app/src/main.rs`)은 Windows·macOS가 아니면 웹뷰 엔진을 WebKitGTK로 적는다.
+
+### 안드로이드 작업의 검증
+
+안드로이드 이식 작업(안드로이드 대상 코드와 빌드 설정, 이식을 위해 3.x 크레이트를 고친 변경)에는 아래 'PR 전 검증 절차'(2.x의 Tier 1~3)를 적용하지 않는다. 2.x 트리를 고치지 않으므로 Python 문법 검사, ruff, pytest, 2.x BRIR 해시 비교로 확인할 것이 없다. 2.x를 함께 고친 PR만 그 부분에 Tier 1~3을 돌린다. 안드로이드 작업에서 돌리는 것은 다섯 가지다.
+
+1. `cargo fmt --all -- --check`
+2. 고친 크레이트의 Clippy를 호스트 대상과 안드로이드 대상에서 한 번씩 돌린다. 안드로이드 쪽은 `cargo clippy -p <크레이트> --no-default-features --target aarch64-linux-android --all-targets -- --no-deps -D warnings`다.
+3. `cargo test -p impulcifer-policy`(unsafe 금지, unsafe 허용치, 기능 등록부)
+4. 고친 크레이트의 테스트. 안드로이드 기기의 Termux 위에 올린 리눅스 컨테이너(proot-distro)에서는 `cargo test -p <크레이트> --no-default-features --target aarch64-linux-android`가 안드로이드용 시험 실행 파일을 그 자리에서 돌린다. 빌드한 실행 파일은 Termux에서 직접 돌려도 된다.
+5. 화면 스크립트를 고쳤으면 `apps/impulcifer-app`에서 `npm run typecheck`와 `npm run test:contracts`. Termux에서는 `npm run typecheck`가 `tsc`를 찾지 못하므로 `node node_modules/typescript/bin/tsc -p tsconfig.json`으로 돌린다.
+
+아래는 안드로이드 작업에서 돌리지 않는다.
+
+- **`cargo test --workspace` 전체와 워크스페이스 전체 Clippy.** 데스크톱 앱 크레이트와 녹음 백엔드까지 빌드한다. `rust.yml`이 PR마다 세 OS에서 돌리므로 로컬에서는 고친 크레이트만 본다.
+- **Windows·macOS 전용 시험과 검사.** `impulcifer-sys-win`과 WASAPI의 시험은 `cfg(windows)`로 묶여 안드로이드에서 돌 것이 없고, PE 서브시스템·Velopack 패킹·macOS 서명은 릴리스 워크플로가 데스크톱 산출물에만 하는 검사다.
+- **녹음 경로의 시험.** `impulcifer-audio-io`의 `native` 기능과 장치를 쓰는 하드웨어 시험은 이식 범위 밖이다.
+- **Python 휠과 sdist**(`crates/impulcifer-python/tests`). 안드로이드 출하물이 아니다.
+- **2.x 대비 성능 감사**(`docs/rust/perf/`). 같은 기기에서 2.x를 돌려 비교하는 감사인데 안드로이드에는 2.x를 올리지 않는다. 안드로이드에서 속도를 재야 하면 같은 기기에서 변경 전후의 3.x를 비교한다.
+- **brir-3x를 로컬에서 돌리는 일과 그 해시를 안드로이드 출력에 맞대 보는 일.** 해시는 플랫폼 수학 라이브러리에 따라 달라지므로 CI(x86-64 리눅스)의 결과로는 안드로이드 출력을 판정할 수 없다. DSP를 건드리지 않은 이식 변경은 brir-3x를 CI에 맡기고(데스크톱 출력이 그대로인지 본다), 안드로이드 출력이 그대로인지 봐야 하면 같은 기기에서 변경 전후의 출력 해시를 비교한다.
+- **갤러리**(`ui-gallery-3x.yml`). 화면을 고치지 않았으면 볼 것이 없고, 고쳤으면 CI가 올린 그림을 본다. Termux에서는 Playwright가 돌지 않는다.
 
 ## 수정 시 주의사항
 
@@ -246,7 +278,7 @@ README에 해당 사항이 없으면 갱신하지 않는다. 불필요한 변경
 
 ## PR 전 검증 절차
 
-아래 3개 Tier를 순서대로 수행한다. Tier 1은 모든 커밋 전에, Tier 2는 PR 생성 전에, Tier 3는 런타임 코드 변경이 포함된 PR에서 수행한다. GitHub CI(`test.yml`)가 Python 3.9~3.14에서 동일한 검증을 수행하지만, Claude Code 단계에서 먼저 잡는 것이 안전하다.
+아래 3개 Tier를 순서대로 수행한다. Tier 1은 모든 커밋 전에, Tier 2는 PR 생성 전에, Tier 3는 런타임 코드 변경이 포함된 PR에서 수행한다. 안드로이드 이식 작업은 이 절차 대신 위의 '안드로이드 작업의 검증'을 따른다. GitHub CI(`test.yml`)가 Python 3.9~3.14에서 동일한 검증을 수행하지만, Claude Code 단계에서 먼저 잡는 것이 안전하다.
 
 ### Tier 1: 빠른 검증 (매 커밋 전)
 
