@@ -2891,10 +2891,17 @@ def android_job_checks(browser):
     context.close()
 
 
+# Navigation labels and buttons whose text is wider than their box (cut off with an ellipsis).
+ANDROID_CUT_LABELS = """() => [...document.querySelectorAll('.nav-label, .btn, .seg-btn')]
+  .filter(node => node.getClientRects().length && node.scrollWidth > node.clientWidth + 1)
+  .map(node => `"${(node.textContent || '').trim().slice(0, 40)}" ${node.scrollWidth} > ${node.clientWidth}`)"""
+
+
 def android_language_checks(browser):
     catalogs = {code: catalog(code) for code in ALL_LANGUAGES}
     keys = sorted(catalogs["en"])
-    context, page, errors = open_android(browser, before="window.galleryCatalogs = "
+    # The narrowest phone: a label that fits here fits everywhere.
+    context, page, errors = open_android(browser, width=360, height=740, before="window.galleryCatalogs = "
                                          + json.dumps(catalogs, ensure_ascii=False) + ";")
     for code in ALL_LANGUAGES:
         page.evaluate(f"changeLanguage('{code}')")
@@ -2902,6 +2909,8 @@ def android_language_checks(browser):
         # Every view once, the sheets and dialogs with their words in place.
         for view in ("recovery", "settings", "info", "processing"):
             page.locator(f"#nav-{view}").click()
+            cut = page.evaluate(ANDROID_CUT_LABELS)
+            assert not cut, f"{code}, {view}: labels cut off at 360 px: {cut}"
         page.evaluate("void openChooser('dir', '')")
         page.wait_for_function("document.querySelector('#chooser').dataset.state !== 'loading'")
         page.evaluate("closeChooser(null); openTipSheet(document.querySelector('#bf-room-mode-row .info-tip'))")

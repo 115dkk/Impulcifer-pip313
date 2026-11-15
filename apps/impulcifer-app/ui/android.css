@@ -147,6 +147,13 @@
   text-overflow: ellipsis;
 }
 
+/* On the narrowest phones the longest labels (Spanish "Procesamiento", Russian
+   "Восстановить") need the whole quarter of the bar to be read in full. */
+@media (max-width: 379px) {
+  .bottom-nav { padding: 0; }
+  [data-page="android"] .nav-item { padding-left: 0; padding-right: 0; font-size: 11px; }
+}
+
 /* --------------------------------------------------------------- groups
    A view is a column of groups: a small heading over a surface. */
 

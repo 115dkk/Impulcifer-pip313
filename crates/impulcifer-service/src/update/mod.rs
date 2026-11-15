@@ -133,10 +133,10 @@ impl UpdateState {
                     }
                     host.open_url(&request.download_url)?;
                     Ok((json!({
-                        "status_key":"update_apk_status", "status_default":"Opening the download...",
-                        "title_key":"update_apk_title", "title_default":"Download opened",
+                        "status_key":"update_apk_status", "status_default":"Opening download link…",
+                        "title_key":"update_apk_title", "title_default":"Download link opened",
                         "message_key":"update_apk_message",
-                        "message_default":"The new version is downloading in your browser. Open the file when it finishes to install it.",
+                        "message_default":"Download the new APK in your browser, then open it to install the update.",
                         "progress":1.0, "requires_restart":false,
                     }), None))
                 }
