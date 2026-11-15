@@ -8,8 +8,7 @@ name: Android
 
 on:
   push:
-    # TEMPORARY: claude/android-port runs on its own pushes until its pull request is open.
-    branches: [ master, claude/android-port ]
+    branches: [ master ]   # PR branches run through pull_request only (no double runs)
     paths:
       - "Cargo.toml"
       - "Cargo.lock"
