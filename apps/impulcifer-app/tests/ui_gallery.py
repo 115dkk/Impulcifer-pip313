@@ -2929,6 +2929,9 @@ ANDROID_SELECT_EVENTS = """() => { window.selectEvents = []; window.selectNative
     const select = e.target instanceof Element ? e.target.closest('select') : null;
     if (select && select.matches(':open')) selectNative.push(`${select.id || select.dataset.roomField}:${type}`); }, true); }"""
 ANDROID_OPTION_ROWS = "() => [...document.querySelectorAll('#option-sheet-list .option-row')].map(r => r.textContent)"
+# The focused element and whether it wears the keyboard's ring.
+ANDROID_FOCUS_RING = """() => { const e = document.activeElement; const style = getComputedStyle(e);
+  return {id: e.id, row: e.classList.contains('option-row'), ring: style.outlineStyle !== 'none', offset: style.outlineOffset}; }"""
 ANDROID_OPTION_CHOSEN = ("() => [...document.querySelectorAll('#option-sheet-list .option-row[aria-selected=true]')]"
                          ".map(r => r.textContent)")
 # Every select of the page, shown or not: its options open as rows under a title, and nothing is wider than the sheet.
@@ -2978,11 +2981,15 @@ def android_option_sheet_checks(browser):
     outside = (206, 60)
     assert page.evaluate("CSS.supports('selector(:open)')"), "this browser cannot tell whether a select's own list is open"
 
-    # The language list: a finger's tap opens the sheet and not the web view's list.
-    page.locator("#nav-settings").click()
+    # The language list: a finger's tap opens the sheet and not the web view's list. The view
+    # changes by script, so the browser has seen no focus by pointer before the tap: that is when it
+    # would draw the keyboard's ring on focus the page moves (the emulator's first screenshot had it).
+    page.evaluate("document.getElementById('nav-settings').click()")
     android_tap(page, "#sf-language")
     sheet.wait_for()
     page.wait_for_timeout(300)
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["row"] and not focus["ring"], f"after a tap the focused row wears the keyboard's ring: {focus}"
     assert not native("#sf-language"), "a tap on a select opened the web view's own list as well"
     assert page.locator("#option-scrim").is_visible(), "the option sheet has no scrim"
     assert page.locator("#option-sheet-title").inner_text() == "Select Language", \
@@ -3001,7 +3008,9 @@ def android_option_sheet_checks(browser):
     sheet.wait_for(state="hidden")
     assert page.evaluate("selectEvents") == [] and page.evaluate("document.getElementById('sf-language').value") == "en", \
         "closing the sheet without a choice changed the select"
-    assert page.evaluate("document.activeElement.id") == "sf-language", "focus did not return to the select"
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["id"] == "sf-language", f"focus did not return to the select: {focus}"
+    assert not focus["ring"], "the select wears the keyboard's ring after a sheet closed by a tap"
 
     # A choice: the select's value, one input and one change event, and what listens to them.
     android_tap(page, "#sf-language")
@@ -3012,6 +3021,9 @@ def android_option_sheet_checks(browser):
     assert page.evaluate("selectEvents") == ["sf-language:input", "sf-language:change"], \
         f"a choice sent {page.evaluate('selectEvents')}"
     assert page.evaluate("document.getElementById('sf-language').value") == "ko"
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["id"] == "sf-language" and not focus["ring"], \
+        f"after a choice by a tap the select wears the keyboard's ring: {focus}"
     # The same option again closes the sheet and reports nothing.
     page.evaluate("selectEvents.length = 0")
     android_tap(page, "#sf-language")
@@ -3039,9 +3051,14 @@ def android_option_sheet_checks(browser):
     page.keyboard.press("Enter")
     sheet.wait_for()
     assert not native("#sf-theme"), "Enter on a select opened the web view's own list"
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["row"] and focus["ring"] and focus["offset"] == "-2px", \
+        f"opened by a key, the focused row has no ring inside the row (the list cuts one outside): {focus}"
     page.keyboard.press("ArrowDown" if before == 0 else "ArrowUp")
     page.keyboard.press("Enter")
     sheet.wait_for(state="hidden")
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["id"] == "sf-theme" and focus["ring"], f"after a choice by the keyboard the select has no ring: {focus}"
     after = page.evaluate("document.getElementById('sf-theme').selectedIndex")
     assert after == (1 if before == 0 else before - 1), f"the arrow keys chose option {after} from {before}"
     assert page.evaluate("selectEvents") == ["sf-theme:input", "sf-theme:change"]

@@ -13,7 +13,15 @@
    system's list would send; the same option again changes nothing. The
    scrim, Escape and Android's back close the sheet without a choice.
    The listeners sit on the document, so the selects made later (the
-   measurement tables) open the sheet as well. */
+   measurement tables) open the sheet as well.
+
+   Focus moves into the sheet and back to the select by script. The browser
+   draws the keyboard's ring on such focus unless it has just seen a focus by
+   pointer, and the press on a select never focuses it (its default action is
+   cancelled). So the sheet notes how it was opened (data-by: "press" or
+   "key") and the select it returns to after a press carries
+   data-quiet-focus until it loses the focus or a key is pressed on it; the
+   styles draw the ring only for the keyboard. */
 
 /** The select whose options the sheet shows. @type {HTMLSelectElement | null} */
 let optionSheetSelect = null;
@@ -77,11 +85,12 @@ function fillOptionSheet() {
   }));
 }
 
-/** @param {HTMLSelectElement} select */
-function openOptionSheet(select) {
+/** @param {HTMLSelectElement} select @param {boolean} [byKey] a key opened it, not a press */
+function openOptionSheet(select, byKey = false) {
   if (select.disabled || select.options.length === 0) return;
   optionSheetSelect = select;
   fillOptionSheet();
+  $("option-sheet").dataset.by = byKey ? "key" : "press";
   $("option-scrim").hidden = false;
   $("option-sheet").hidden = false;
   // The chosen option in the middle of the list, however long the list is.
@@ -100,7 +109,12 @@ function closeOptionSheet() {
   $("option-sheet").hidden = true;
   $("option-scrim").hidden = true;
   $("option-sheet-list").replaceChildren();
-  if (select.isConnected) select.focus({ preventScroll: true });
+  if (!select.isConnected) return;
+  if ($("option-sheet").dataset.by === "press") {
+    select.dataset.quietFocus = "";
+    select.addEventListener("blur", () => { delete select.dataset.quietFocus; }, { once: true });
+  }
+  select.focus({ preventScroll: true });
 }
 
 /* The page may have drawn the select again while the sheet was open (a
@@ -122,6 +136,7 @@ function walkOptions(event) {
   const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
   if (!step) return;
   event.preventDefault();
+  $("option-sheet").dataset.by = "key";
   const rows = Array.from($("option-sheet-list").querySelectorAll("button:not(:disabled)"));
   const at = rows.findIndex((row) => row === document.activeElement);
   const next = rows[Math.max(0, Math.min(rows.length - 1, at + step))];
@@ -139,9 +154,10 @@ function wireOptionSheet() {
   });
   document.addEventListener("keydown", (event) => {
     const select = pressedSelect(event.target);
+    if (select) delete select.dataset.quietFocus;
     if (select && OPTION_SHEET_KEYS.has(event.key)) {
       event.preventDefault();
-      openOptionSheet(select);
+      openOptionSheet(select, true);
     } else if (event.key === "Escape" && optionSheetSelect) {
       closeOptionSheet();
     }

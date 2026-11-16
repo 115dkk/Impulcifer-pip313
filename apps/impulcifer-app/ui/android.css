@@ -1106,6 +1106,11 @@
 .option-check { visibility: hidden; color: var(--accent-strong); }
 :root[data-theme="dark"] .option-check { color: #9ec3ff; }
 .option-row[aria-selected="true"] .option-check { visibility: visible; }
+/* The keyboard's ring sits inside the row, where the list does not cut it. Focus that the page
+   moves by script after a press wears none (optionsheet.js says why). */
+.option-row:focus-visible { outline-offset: -2px; }
+.option-sheet[data-by="press"] .option-row:focus-visible,
+[data-page="android"] select[data-quiet-focus]:focus-visible { outline: none; }
 
 /* -------------------------------------------------------------- dialogs
    The ask dialog, the update dialog and the first-run language choice rise

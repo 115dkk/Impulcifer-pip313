@@ -226,13 +226,18 @@ class DemoProcessingTest {
     val seen = evaluate("window.__impulciferNative") as JSONArray
     val rows = evaluate("document.querySelectorAll('#option-sheet-list .option-row').length") as Number
     val languages = evaluate("document.getElementById('sf-language').options.length") as Number
-    result.put(
-      "options",
-      JSONObject()
-        .put("native_list_open_during_the_tap", seen)
-        .put("rows", rows)
-        .put("languages", languages)
-    )
+    // The page moves the focus into the sheet by script. After a finger that
+    // must not draw the keyboard's ring (the first run of this step had one,
+    // cut off by the list's edges).
+    val rowRing = evaluate(
+      "document.activeElement.className + ' ' + getComputedStyle(document.activeElement).outlineStyle"
+    ) as String
+    val options = JSONObject()
+      .put("native_list_open_during_the_tap", seen)
+      .put("rows", rows)
+      .put("languages", languages)
+      .put("focus_in_the_sheet", rowRing)
+    result.put("options", options)
     save()
     assertTrue("the tap reached the select (mouseup and click): $seen", seen.length() >= 2)
     for (index in 0 until seen.length()) {
@@ -240,12 +245,19 @@ class DemoProcessingTest {
     }
     assertEquals("one row for each language", languages.toInt(), rows.toInt())
     assertTrue("more than one language to choose from", rows.toInt() > 1)
+    assertEquals("the focused row, without the keyboard's ring", "option-row none", rowRing)
     // A finger on another language: the select reports the choice and the page follows it.
     val before = evaluate("document.documentElement.lang") as String
     tap("#option-sheet-list .option-row[aria-selected='false']")
     waitUntil("the option sheet to close", 30_000, "!(${visible("option-sheet")})")
     waitUntil("the page to change language", 30_000, "document.documentElement.lang !== '$before'")
     step("language chosen in the option sheet: ${evaluate("document.documentElement.lang")}")
+    val selectRing = evaluate(
+      "document.activeElement.id + ' ' + getComputedStyle(document.activeElement).outlineStyle"
+    ) as String
+    options.put("focus_after_the_choice", selectRing)
+    save()
+    assertEquals("the focus back on the select, without the keyboard's ring", "sf-language none", selectRing)
     shot("09-settings-language")
 
     click("#nav-info")
