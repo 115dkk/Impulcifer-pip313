@@ -54,17 +54,19 @@ function renderAndroidShell() {
 }
 
 /* ------------------------------------------------------------ back
-   Android's back button closes the topmost thing: an open tip, the ask
-   dialog (as its cancel), the chooser, the update dialog, the job sheet (put
-   away, the job goes on), then another view returns to processing. While a
+   Android's back button closes the topmost thing: a select's options, an
+   open tip, the ask dialog (as its cancel), the chooser, the update dialog,
+   the job sheet (put away, the job goes on), then another view returns to
+   processing. While a
    handler is registered the system's own back (leave the app) does not run,
    so the handler is registered only while there is something to go back
    from. handleBack is global so it can be driven without Tauri.
    While a job runs, back never leaves the app: Android ends the process
    with the activity, and the job with it. The handler stays registered, and
-   once the tip, the ask dialog, the chooser and the update dialog are closed,
-   back shows the running job and keeps it on screen: a BRIR job in its sheet
-   (opened again if it was put away), an output recovery on its view. */
+   once the options, the tip, the ask dialog, the chooser and the update dialog
+   are closed, back shows the running job and keeps it on screen: a BRIR job
+   in its sheet (opened again if it was put away), an output recovery on its
+   view. */
 
 /** @type {{ unregister(): Promise<void> } | null} */
 let backListener = null;
@@ -77,13 +79,17 @@ function jobRunning() {
 }
 
 function canGoBack() {
-  return jobRunning() || !$("tip-sheet").hidden || !$("ask-modal").hidden || !$("chooser").hidden || !$("update-modal").hidden
-    || !$("job-sheet").hidden || currentView() !== "processing";
+  return jobRunning() || !$("option-sheet").hidden || !$("tip-sheet").hidden || !$("ask-modal").hidden
+    || !$("chooser").hidden || !$("update-modal").hidden || !$("job-sheet").hidden || currentView() !== "processing";
 }
 
 /** @returns {boolean} whether it closed or left anything */
 function handleBack() {
   if (!document.getElementById("app-bar")) return false;
+  if (!$("option-sheet").hidden) {
+    closeOptionSheet();
+    return true;
+  }
   if (!$("tip-sheet").hidden) {
     closeTipSheet();
     return true;
@@ -183,8 +189,9 @@ function dismissOnOutsideTap(id, dismiss) {
 
 /* The navigation (after the shell's own handler), the group heads, the path
    fields, the dialogs' dimmed areas, and the back button following what is
-   open. The tip sheet's own scrim closes it (tipsheet.js); the first-run
-   language choice stays until a language is chosen. */
+   open. The tip sheet's and the option sheet's own scrims close them
+   (tipsheet.js, optionsheet.js); the first-run language choice stays until a
+   language is chosen. */
 function wireAndroidShell() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(".nav-item")).forEach((item) => {
     item.addEventListener("click", () => showView(item.dataset.view || "processing"));
@@ -194,7 +201,7 @@ function wireAndroidShell() {
   dismissOnOutsideTap("ask-modal", () => { if (pendingAsk) closeAsk(!pendingAsk.cancel); });
   dismissOnOutsideTap("update-modal", hideUpdateModal);
   const observer = new MutationObserver(syncBackButton);
-  for (const id of ["tip-sheet", "ask-modal", "chooser", "update-modal", "job-sheet"]) {
+  for (const id of ["option-sheet", "tip-sheet", "ask-modal", "chooser", "update-modal", "job-sheet"]) {
     observer.observe($(id), { attributes: true, attributeFilter: ["hidden"] });
   }
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-view"] });

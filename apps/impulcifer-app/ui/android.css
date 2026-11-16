@@ -1023,7 +1023,9 @@
 .entry-icon-go { color: var(--fg-3); }
 .chooser-truncated { padding: 12px 4px 0; text-align: center; }
 
-/* ----------------------------------------------------------- tip sheet */
+/* ------------------------------------------------- tip and option sheets
+   Both rise from the bottom over a scrim: an info button's text, and a
+   select's options. */
 
 .scrim {
   position: fixed;
@@ -1032,7 +1034,8 @@
   background: rgba(8, 10, 12, 0.5);
 }
 
-.tip-sheet {
+.tip-sheet,
+.option-sheet {
   position: fixed;
   left: 0;
   right: 0;
@@ -1053,17 +1056,56 @@
 }
 
 @starting-style {
-  .tip-sheet { translate: 0 32px; }
+  .tip-sheet, .option-sheet { translate: 0 32px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tip-sheet { transition: none; }
+  .tip-sheet, .option-sheet { transition: none; }
 }
 
-.tip-sheet-title { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; text-wrap: balance; }
+.tip-sheet-title, .option-sheet-title { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.35; text-wrap: balance; }
 .tip-sheet-body { overflow-y: auto; color: var(--fg-1); font-size: 15px; line-height: 1.55; text-wrap: pretty; }
 .tip-sheet-body .tip-para { display: block; }
 .tip-sheet-body .tip-para + .tip-para { margin-top: 8px; }
+
+/* A select's options (optionsheet.js). The rows' words start under the title;
+   the chosen row's tint and a pressed row's shade reach 8px past them on both
+   sides. The chosen row wears the colour of the navigation's current view. */
+.option-sheet { grid-template-rows: auto minmax(0, 1fr); padding-bottom: 8px; }
+
+.option-list {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  margin: 0 -8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--radius-inner);
+  background: transparent;
+  color: var(--fg-0);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.option-row:active { background: color-mix(in oklch, var(--fg-0) 8%, transparent); }
+.option-row[aria-selected="true"] { background: var(--accent-soft); font-weight: 600; }
+.option-row:disabled { color: var(--fg-3); }
+.option-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.option-check { visibility: hidden; color: var(--accent-strong); }
+:root[data-theme="dark"] .option-check { color: #9ec3ff; }
+.option-row[aria-selected="true"] .option-check { visibility: visible; }
 
 /* -------------------------------------------------------------- dialogs
    The ask dialog, the update dialog and the first-run language choice rise
@@ -1109,4 +1151,4 @@
 .chooser[data-state="noaccess"] .sheet-actions { display: none; }
 /* Korean wraps between words, never inside one ('더합니 / 다'). */
 :root:lang(ko)[data-page="android"] :is(.hint, .disclosure-desc, .disclosure-title, .notice-body, .status-text,
-  .tip-sheet-body, .job-error, .chooser-message, .group-title, .field-row > label) { word-break: keep-all; }
+  .tip-sheet-body, .option-label, .job-error, .chooser-message, .group-title, .field-row > label) { word-break: keep-all; }
