@@ -2,7 +2,7 @@
 <!-- The Android page (ADR 0020). It loads the same feature scripts as index.html; a part runs only
      where its markup is (app.js FEATURES), so ids here are Studio's ids and the request is Studio's.
      Phone frame: an app bar, one scrolling column, the view's action bar and a bottom navigation;
-     the full-height sheets (chooser, job, tip) sit above them. Recording and Stable do not exist here. -->
+     the sheets (chooser, job, tip, options) sit above them. Recording and Stable do not exist here. -->
 <html lang="en" data-theme="dark" data-page="android" data-view="processing">
   <head>
     <meta charset="utf-8">
@@ -976,6 +976,15 @@
       <button type="button" class="btn btn-secondary btn-block" id="tip-sheet-close" data-i18n="button_close">Close</button>
     </section>
 
+    <!-- =========================== OPTION SHEET =========================== -->
+    <!-- A select's options, titled with its label, from the bottom (optionsheet.js): the page's own
+         list where the web view would open the system's dialog. A tap on an option chooses it. -->
+    <div class="scrim" id="option-scrim" hidden></div>
+    <section class="option-sheet" id="option-sheet" role="dialog" aria-modal="true" aria-labelledby="option-sheet-title" hidden>
+      <h2 class="option-sheet-title" id="option-sheet-title"></h2>
+      <div class="option-list" id="option-sheet-list" role="listbox" aria-labelledby="option-sheet-title"></div>
+    </section>
+
     <div class="modal-backdrop" id="language-modal" hidden>
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="language-modal-title">
         <div class="modal-head">
@@ -1037,6 +1046,7 @@
     <script src="chooser.js"></script>
     <script src="sheet.js"></script>
     <script src="tipsheet.js"></script>
+    <script src="optionsheet.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

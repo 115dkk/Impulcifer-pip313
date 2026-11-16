@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.os.Environment
 import android.os.SystemClock
 import android.util.Log
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
@@ -35,10 +37,12 @@ import org.junit.runner.RunWith
  * on, and then restores an output that was deleted.
  *
  * The page is driven through its own elements (a value typed into the folder
- * field, a click on the button), by script, because a test cannot touch inside
- * a web view any other way. What it proves is everything behind those
- * elements: the shell, the Kotlin plugin, storage access, the bundled test
- * signal, the temporary folder, the pipeline and the files it writes.
+ * field, a click on the button), by script. What that proves is everything
+ * behind those elements: the shell, the Kotlin plugin, storage access, the
+ * bundled test signal, the temporary folder, the pipeline and the files it
+ * writes. One step touches the screen as a finger does ([tap]): a select must
+ * open the page's own list and not the web view's dialog, and the web view
+ * opens that dialog from the press itself, which a scripted click never sends.
  *
  * android.yml pushes `data/demo` to [demo], grants all-files access with
  * `appops`, and pulls [evidence] (screenshots and result.json) afterwards.
@@ -201,9 +205,64 @@ class DemoProcessingTest {
     click("#nav-settings")
     waitUntil("the settings view", 30_000, "document.getElementById('view-settings').classList.contains('active')")
     shot("07-settings")
+
+    // A finger on a select: the page's own list of options, and never the web
+    // view's dialog. The web view's list closes by itself once the page moves
+    // the focus into its sheet, so the page notes whether it was open while
+    // the finger was still on the select.
+    step("tapping the language select")
+    evaluate(
+      "(window.__impulciferNative = [], ['mouseup', 'click'].forEach(function(type){" +
+        "window.addEventListener(type, function(event){" +
+        "var select = event.target instanceof Element ? event.target.closest('select') : null;" +
+        "if (!select) return;" +
+        "try { window.__impulciferNative.push(select.matches(':open')); }" +
+        "catch (error) { window.__impulciferNative.push('unsupported'); }" +
+        "}, true);}), true)"
+    )
+    tap("#sf-language")
+    waitUntil("the option sheet", 30_000, visible("option-sheet"))
+    shot("08-options")
+    val seen = evaluate("window.__impulciferNative") as JSONArray
+    val rows = evaluate("document.querySelectorAll('#option-sheet-list .option-row').length") as Number
+    val languages = evaluate("document.getElementById('sf-language').options.length") as Number
+    // The page moves the focus into the sheet by script. After a finger that
+    // must not draw the keyboard's ring (the first run of this step had one,
+    // cut off by the list's edges).
+    val rowRing = evaluate(
+      "document.activeElement.className + ' ' + getComputedStyle(document.activeElement).outlineStyle"
+    ) as String
+    val options = JSONObject()
+      .put("native_list_open_during_the_tap", seen)
+      .put("rows", rows)
+      .put("languages", languages)
+      .put("focus_in_the_sheet", rowRing)
+    result.put("options", options)
+    save()
+    assertTrue("the tap reached the select (mouseup and click): $seen", seen.length() >= 2)
+    for (index in 0 until seen.length()) {
+      assertFalse("the web view opened its own list for the select: $seen", seen.opt(index) == true)
+    }
+    assertEquals("one row for each language", languages.toInt(), rows.toInt())
+    assertTrue("more than one language to choose from", rows.toInt() > 1)
+    assertEquals("the focused row, without the keyboard's ring", "option-row none", rowRing)
+    // A finger on another language: the select reports the choice and the page follows it.
+    val before = evaluate("document.documentElement.lang") as String
+    tap("#option-sheet-list .option-row[aria-selected='false']")
+    waitUntil("the option sheet to close", 30_000, "!(${visible("option-sheet")})")
+    waitUntil("the page to change language", 30_000, "document.documentElement.lang !== '$before'")
+    step("language chosen in the option sheet: ${evaluate("document.documentElement.lang")}")
+    val selectRing = evaluate(
+      "document.activeElement.id + ' ' + getComputedStyle(document.activeElement).outlineStyle"
+    ) as String
+    options.put("focus_after_the_choice", selectRing)
+    save()
+    assertEquals("the focus back on the select, without the keyboard's ring", "sf-language none", selectRing)
+    shot("09-settings-language")
+
     click("#nav-info")
     waitUntil("the information view", 30_000, "document.getElementById('view-info').classList.contains('active')")
-    shot("08-info")
+    shot("10-info")
   }
 
   /** Waits for the job the page follows to end and returns its last status. */
@@ -311,6 +370,41 @@ class DemoProcessingTest {
       true,
       evaluate("(function(){var e=document.querySelector($quoted);if(!e)return false;e.click();return true;})()")
     )
+  }
+
+  /**
+   * A finger's tap on the middle of an element: a real touch, injected at the
+   * element's place on the screen.
+   */
+  private fun tap(selector: String) {
+    val quoted = JSONObject.quote(selector)
+    val box = evaluate(
+      "(function(){var e=document.querySelector($quoted);if(!e)return null;e.scrollIntoView({block:'center'});" +
+        "var r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,width:window.innerWidth};})()"
+    ) as? JSONObject ?: throw AssertionError("an element to tap: $selector")
+    // Time for the page to settle where scrollIntoView left it.
+    SystemClock.sleep(300)
+    val origin = IntArray(2)
+    val viewWidth = AtomicReference<Int>()
+    scenario.onActivity {
+      webView.getLocationOnScreen(origin)
+      viewWidth.set(webView.width)
+    }
+    // The page is as wide as the view, so their ratio turns CSS pixels into the screen's.
+    val scale = viewWidth.get().toDouble() / box.getDouble("width")
+    val x = (origin[0] + box.getDouble("x") * scale).toFloat()
+    val y = (origin[1] + box.getDouble("y") * scale).toFloat()
+    val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    val down = SystemClock.uptimeMillis()
+    val press = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0)
+    press.source = InputDevice.SOURCE_TOUCHSCREEN
+    assertTrue("the press on $selector was injected", automation.injectInputEvent(press, true))
+    press.recycle()
+    SystemClock.sleep(60)
+    val release = MotionEvent.obtain(down, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, x, y, 0)
+    release.source = InputDevice.SOURCE_TOUCHSCREEN
+    assertTrue("the release on $selector was injected", automation.injectInputEvent(release, true))
+    release.recycle()
   }
 
   /** Puts text in a field the way typing does: the value, then `input`. */

@@ -21,10 +21,10 @@ EQ_SCENARIOS = ("eq-folder", "eq-mixed")
 ADV_TABS = ("tone", "time", "output", "correction")
 ALL_LANGUAGES = ("en", "ko", "ja", "de", "es", "fr", "ru", "zh_CN", "zh_TW")
 # The Android page (android_shots): its four views and the processing view with every group open in
-# both themes and English/Korean, and twelve states once each in dark, English and Korean.
+# both themes and English/Korean, and thirteen states once each in dark, English and Korean.
 ANDROID_VIEWS = ("processing", "recovery", "settings", "info")
 ANDROID_ONCE = ("storage-notice", "chooser-folder", "chooser-file", "chooser-no-access", "job-running", "job-succeeded",
-                "job-failed", "job-bar", "tip", "update", "ask", "first-run")
+                "job-failed", "job-bar", "tip", "options", "update", "ask", "first-run")
 ANDROID_SHOTS = 2 * 2 * (len(ANDROID_VIEWS) + 1) + 2 * len(ANDROID_ONCE)
 DESKTOP_SHOTS = (2 * 2 * 2 * 3 + 2 * 2 * 6 + 2 * 2 * 2 * 2 + 2 * 2 * 2 * 2 + 2 * 2 + 2 * 2 * (len(ADV_TABS) + 1)
                   + 2 * 2 * 2 + 2 * 2 * 2 + 2 * 2 + 2 * 2 * 2 * 2 + 2 * (2 * 2 * 2 * 2) + 3 * (2 * 2 * 2) + 2 * 2 + 2 * 2
@@ -2416,6 +2416,11 @@ def open_eq(page):
 ANDROID_DIR = "/storage/emulated/0/Impulcifer/measurements"
 ANDROID_LONG_DIR = ("/storage/emulated/0/Impulcifer/2026-11-14 Living room 7.1.4 Atmos session with the new"
                     " binaural microphones")
+# The language list as the service gives it (the desktop mock offers two).
+ANDROID_LANGUAGES = "window.galleryLanguages = " + json.dumps([
+    {"code": code, "name": name} for code, name in (
+        ("en", "English"), ("ko", "한국어"), ("fr", "Français"), ("de", "Deutsch"), ("es", "Español"),
+        ("ja", "日本語"), ("zh_CN", "简体中文"), ("zh_TW", "繁體中文"), ("ru", "Русский"))], ensure_ascii=False) + ";"
 ANDROID_MOCK = r"""
 (() => {
   const original = window.pywebview.api;
@@ -2487,6 +2492,7 @@ ANDROID_MOCK = r"""
       data.platform = "android"; data.install_kind = "apk"; data.webview_backend = "android";
       data.capabilities = {...data.capabilities, recording: false, recording_cancel: false, share_modes: ["auto"]};
       if (window.galleryFirstRun) data.ui = {...data.ui, first_run: true};
+      if (window.galleryLanguages) data.ui = {...data.ui, languages: window.galleryLanguages};
       return response;
     },
     get_system_info: () => ok({version: "3.22.0", install_kind: "apk", os: "Android 17 (API 37)", device: "Samsung SM-S948N",
@@ -2804,12 +2810,14 @@ def android_back_checks(browser):
     page.wait_for_function("document.querySelector('#chooser').dataset.state !== 'loading'")
     page.evaluate("window.asked = 'pending'; void confirmDialog('Sure?').then(ok => window.asked = ok)")
     page.evaluate("openTipSheet(document.querySelector('#bf-room-mode-row .info-tip'))")
+    page.evaluate("openOptionSheet(document.getElementById('sf-theme'))")
     page.wait_for_function("galleryBackActive === 1")
-    for name, probe in (("the tip", "#tip-sheet"), ("the ask dialog", "#ask-modal"), ("the chooser", "#chooser"),
-                        ("the update dialog", "#update-modal"), ("the job sheet", "#job-sheet")):
+    for name, probe in (("the options", "#option-sheet"), ("the tip", "#tip-sheet"), ("the ask dialog", "#ask-modal"),
+                        ("the chooser", "#chooser"), ("the update dialog", "#update-modal"), ("the job sheet", "#job-sheet")):
         assert page.evaluate("galleryPressBack()"), f"no back handler while {name} is open"
         page.wait_for_timeout(100)
-        assert page.locator(probe).is_hidden(), f"back did not close {name} next (order: tip, ask, chooser, update, job sheet)"
+        assert page.locator(probe).is_hidden(), \
+            f"back did not close {name} next (order: options, tip, ask, chooser, update, job sheet)"
     assert page.evaluate("asked") is False, "back did not answer the ask dialog as its cancel"
     assert page.evaluate("chosen") is None, "back did not close the chooser without a choice"
     assert page.evaluate("document.documentElement.dataset.view") == "settings", "back left the view before the sheets were closed"
@@ -2911,6 +2919,230 @@ def android_outside_tap_checks(browser):
     context.close()
 
 
+# What a select reports (input, change), and whether the web view's own list was ever open. The list opens
+# from the press, and it closes again by itself once focus moves into the sheet, so a look after the tap
+# would miss it: the listeners look while the finger is still on the select.
+ANDROID_SELECT_EVENTS = """() => { window.selectEvents = []; window.selectNative = [];
+  for (const type of ['input', 'change']) document.addEventListener(type, e => {
+    if (e.target instanceof HTMLSelectElement) selectEvents.push(`${e.target.id || e.target.dataset.roomField}:${type}`); }, true);
+  for (const type of ['mouseup', 'click', 'keyup']) window.addEventListener(type, e => {
+    const select = e.target instanceof Element ? e.target.closest('select') : null;
+    if (select && select.matches(':open')) selectNative.push(`${select.id || select.dataset.roomField}:${type}`); }, true); }"""
+ANDROID_OPTION_ROWS = "() => [...document.querySelectorAll('#option-sheet-list .option-row')].map(r => r.textContent)"
+# The focused element and whether it wears the keyboard's ring.
+ANDROID_FOCUS_RING = """() => { const e = document.activeElement; const style = getComputedStyle(e);
+  return {id: e.id, row: e.classList.contains('option-row'), ring: style.outlineStyle !== 'none', offset: style.outlineOffset}; }"""
+ANDROID_OPTION_CHOSEN = ("() => [...document.querySelectorAll('#option-sheet-list .option-row[aria-selected=true]')]"
+                         ".map(r => r.textContent)")
+# Every select of the page, shown or not: its options open as rows under a title, and nothing is wider than the sheet.
+ANDROID_OPTION_SHEETS = """() => { const bad = []; let count = 0;
+  for (const select of document.querySelectorAll('select')) {
+    const name = select.id || select.getAttribute('aria-label') || select.dataset.roomField;
+    const was = select.disabled; select.disabled = false;
+    openOptionSheet(select);
+    const sheet = document.getElementById('option-sheet'); const list = document.getElementById('option-sheet-list');
+    const title = document.getElementById('option-sheet-title');
+    if (sheet.hidden) bad.push(`${name}: the sheet did not open`);
+    else {
+      count += 1;
+      if (!title.textContent.trim() || title.hidden) bad.push(`${name}: no title`);
+      if (/[:：] *$/.test(title.textContent)) bad.push(`${name}: the title ends with a colon: ${title.textContent}`);
+      const rows = [...list.querySelectorAll('.option-row')].map(r => r.textContent);
+      const options = [...select.options].map(o => o.label);
+      if (JSON.stringify(rows) !== JSON.stringify(options)) bad.push(`${name}: rows ${rows} for options ${options}`);
+      if (rows.some(r => !r.trim())) bad.push(`${name}: an empty row`);
+      if (list.scrollWidth > list.clientWidth || sheet.scrollWidth > sheet.clientWidth) bad.push(`${name}: wider than the sheet`);
+      if ([...list.querySelectorAll('.option-row')].some(r => r.getBoundingClientRect().height < 47.5)) bad.push(`${name}: a row under 48 px`);
+      if (sheet.getBoundingClientRect().top < innerHeight * 0.2) bad.push(`${name}: the sheet covers the whole screen`);
+    }
+    closeOptionSheet(); select.disabled = was;
+  }
+  return {bad, count}; }"""
+
+
+def android_tap(page, selector):
+    """A finger's tap on the middle of an element, as the web view receives one."""
+    target = page.locator(selector).first
+    target.scroll_into_view_if_needed()
+    box = target.bounding_box()
+    page.touchscreen.tap(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+
+def android_option_sheet_checks(browser):
+    """A select opens its options in the page's own sheet, never in the web view's dialog, and a choice
+    there is the choice the select reports."""
+    catalogs = {code: catalog(code) for code in ("en", "ko")}
+    context, page, errors = open_android(browser, before=ANDROID_LANGUAGES + "window.galleryCatalogs = "
+                                         + json.dumps(catalogs, ensure_ascii=False) + ";")
+    page.evaluate(ANDROID_SELECT_EVENTS)
+    sheet = page.locator("#option-sheet")
+    native = lambda selector: page.evaluate(
+        "s => selectNative.length > 0 || document.querySelector(s).matches(':open')", selector)
+    outside = (206, 60)
+    assert page.evaluate("CSS.supports('selector(:open)')"), "this browser cannot tell whether a select's own list is open"
+
+    # The language list: a finger's tap opens the sheet and not the web view's list. The view
+    # changes by script, so the browser has seen no focus by pointer before the tap: that is when it
+    # would draw the keyboard's ring on focus the page moves (the emulator's first screenshot had it).
+    page.evaluate("document.getElementById('nav-settings').click()")
+    android_tap(page, "#sf-language")
+    sheet.wait_for()
+    page.wait_for_timeout(300)
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["row"] and not focus["ring"], f"after a tap the focused row wears the keyboard's ring: {focus}"
+    assert not native("#sf-language"), "a tap on a select opened the web view's own list as well"
+    assert page.locator("#option-scrim").is_visible(), "the option sheet has no scrim"
+    assert page.locator("#option-sheet-title").inner_text() == "Select Language", \
+        f"the option sheet is titled {page.locator('#option-sheet-title').inner_text()!r}"
+    assert page.evaluate(ANDROID_OPTION_ROWS) == ["English", "한국어", "Français", "Deutsch", "Español", "日本語",
+                                                  "简体中文", "繁體中文", "Русский"], "the rows are not the select's options"
+    assert page.evaluate(ANDROID_OPTION_CHOSEN) == ["English"], "the chosen option is not the one marked"
+    assert page.evaluate("document.activeElement.closest('#option-sheet') !== null"), "focus did not move into the sheet"
+    assert page.evaluate("galleryBackActive") == 1, "no back handler while the option sheet is open"
+    box = sheet.bounding_box()
+    assert box["y"] + box["height"] == 915 and box["y"] > 200, f"the option sheet is not a sheet from the bottom: {box}"
+    title = page.locator("#option-sheet-title").bounding_box()
+    page.touchscreen.tap(title["x"] + 200, title["y"] + 8)
+    assert sheet.is_visible(), "a tap on the sheet's title closed it"
+    page.touchscreen.tap(*outside)
+    sheet.wait_for(state="hidden")
+    assert page.evaluate("selectEvents") == [] and page.evaluate("document.getElementById('sf-language').value") == "en", \
+        "closing the sheet without a choice changed the select"
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["id"] == "sf-language", f"focus did not return to the select: {focus}"
+    assert not focus["ring"], "the select wears the keyboard's ring after a sheet closed by a tap"
+
+    # A choice: the select's value, one input and one change event, and what listens to them.
+    android_tap(page, "#sf-language")
+    sheet.wait_for()
+    android_tap(page, '#option-sheet-list .option-row:has-text("한국어")')
+    sheet.wait_for(state="hidden")
+    page.wait_for_function("document.documentElement.lang === 'ko'")
+    assert page.evaluate("selectEvents") == ["sf-language:input", "sf-language:change"], \
+        f"a choice sent {page.evaluate('selectEvents')}"
+    assert page.evaluate("document.getElementById('sf-language').value") == "ko"
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["id"] == "sf-language" and not focus["ring"], \
+        f"after a choice by a tap the select wears the keyboard's ring: {focus}"
+    # The same option again closes the sheet and reports nothing.
+    page.evaluate("selectEvents.length = 0")
+    android_tap(page, "#sf-language")
+    sheet.wait_for()
+    assert page.locator("#option-sheet-title").inner_text() == "언어 선택", "the title did not follow the language"
+    assert page.evaluate(ANDROID_OPTION_CHOSEN) == ["한국어"]
+    android_tap(page, '#option-sheet-list .option-row[aria-selected="true"]')
+    sheet.wait_for(state="hidden")
+    assert page.evaluate("selectEvents") == [], "choosing the chosen option again reported a change"
+
+    # Back and Escape close it without a choice.
+    android_tap(page, "#sf-theme")
+    sheet.wait_for()
+    assert page.evaluate("handleBack()") is True and sheet.is_hidden(), "back did not close the option sheet"
+    assert page.evaluate("document.documentElement.dataset.view") == "settings", "back left the view with the option sheet"
+    android_tap(page, "#sf-theme")
+    sheet.wait_for()
+    page.keyboard.press("Escape")
+    sheet.wait_for(state="hidden")
+    assert page.evaluate("selectEvents") == []
+
+    # The keyboard: Enter on the select opens the sheet, the arrows walk the rows, Enter chooses.
+    page.locator("#sf-theme").focus()
+    before = page.evaluate("document.getElementById('sf-theme').selectedIndex")
+    page.keyboard.press("Enter")
+    sheet.wait_for()
+    assert not native("#sf-theme"), "Enter on a select opened the web view's own list"
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["row"] and focus["ring"] and focus["offset"] == "-2px", \
+        f"opened by a key, the focused row has no ring inside the row (the list cuts one outside): {focus}"
+    page.keyboard.press("ArrowDown" if before == 0 else "ArrowUp")
+    page.keyboard.press("Enter")
+    sheet.wait_for(state="hidden")
+    focus = page.evaluate(ANDROID_FOCUS_RING)
+    assert focus["id"] == "sf-theme" and focus["ring"], f"after a choice by the keyboard the select has no ring: {focus}"
+    after = page.evaluate("document.getElementById('sf-theme').selectedIndex")
+    assert after == (1 if before == 0 else before - 1), f"the arrow keys chose option {after} from {before}"
+    assert page.evaluate("selectEvents") == ["sf-theme:input", "sf-theme:change"]
+    page.locator("#sf-theme").focus()
+    for key in ("Space", "ArrowDown", "ArrowUp"):
+        page.keyboard.press(key)
+        sheet.wait_for()
+        assert not native("#sf-theme"), f"{key} on a select opened the web view's own list"
+        page.keyboard.press("Escape")
+        sheet.wait_for(state="hidden")
+
+    # An option that cannot be chosen is a row that cannot be tapped.
+    page.evaluate("document.getElementById('sf-theme').options[0].disabled = true; selectEvents.length = 0")
+    chosen = page.evaluate("document.getElementById('sf-theme').selectedIndex")
+    android_tap(page, "#sf-theme")
+    sheet.wait_for()
+    assert page.locator("#option-sheet-list .option-row").first.is_disabled(), "a disabled option's row can be chosen"
+    android_tap(page, "#option-sheet-list .option-row")
+    page.wait_for_timeout(150)
+    assert page.evaluate("document.getElementById('sf-theme').selectedIndex") == chosen and page.evaluate("selectEvents") == [], \
+        "a tap on a disabled option chose it"
+    page.evaluate("closeOptionSheet(); document.getElementById('sf-theme').options[0].disabled = false")
+
+    # The processing view: a choice in the sheet does what the select's listeners do, and a
+    # select that is off opens nothing.
+    page.locator("#nav-processing").click()
+    page.locator("#dis-room .disclosure-head").click()
+    assert page.locator("#bf-specific-limit-row").is_hidden()
+    android_tap(page, "#bf-room-range")
+    sheet.wait_for()
+    assert not native("#bf-room-range")
+    android_tap(page, "#option-sheet-list .option-row >> nth=-1")
+    sheet.wait_for(state="hidden")
+    assert page.evaluate("document.getElementById('bf-room-range').value") == "legacy"
+    assert page.locator("#bf-specific-limit-row").is_visible(), "the room range chosen in the sheet did not show its rows"
+    assert page.evaluate("gatherBrirPayload().room_range") == "legacy", "the request does not carry the sheet's choice"
+    page.evaluate("document.getElementById('adv-tab-output').click()")
+    assert page.locator("#ba-fs").is_disabled()
+    android_tap(page, "#ba-fs")
+    page.wait_for_timeout(200)
+    assert sheet.is_hidden() and not native("#ba-fs"), "a disabled select opened a list"
+
+    # A select made after the page was wired (the measurement table) opens the sheet too, titled
+    # with the words it gives a screen reader.
+    page.evaluate(ANDROID_HELPERS)
+    page.evaluate("h.set('bf-room-source','file'); h.set('bf-room-file','D:/Measurements/living room.mdat'); selectEvents.length = 0")
+    slot = '#bf-room-file-result select[data-room-field="slot"]'
+    page.locator(slot).first.wait_for()
+    label = page.locator(slot).first.get_attribute("aria-label")
+    was = page.locator(slot).first.input_value()
+    android_tap(page, slot)
+    sheet.wait_for()
+    assert not native(slot), "a tap on a measurement table's select opened the web view's own list"
+    assert page.locator("#option-sheet-title").inner_text() == label, \
+        f"the table select's sheet is titled {page.locator('#option-sheet-title').inner_text()!r}, not {label!r}"
+    row = page.locator('#option-sheet-list .option-row[aria-selected="false"]').first
+    picked = row.inner_text()
+    row.scroll_into_view_if_needed()
+    android_tap(page, f'#option-sheet-list .option-row[aria-selected="false"]')
+    sheet.wait_for(state="hidden")
+    assert page.evaluate("selectEvents") == ["slot:input", "slot:change"], f"the table select sent {page.evaluate('selectEvents')}"
+    assert page.locator(f'{slot} option:checked').first.inner_text() == picked != was
+
+    # A long list scrolls inside the sheet with the chosen option in sight.
+    page.evaluate("""() => { const select = document.querySelector('#bf-room-file-result select[data-room-field="slot"]');
+      select.selectedIndex = select.options.length - 3; openOptionSheet(select); }""")
+    fits = page.evaluate("""() => { const list = document.getElementById('option-sheet-list');
+      const row = list.querySelector('[aria-selected=true]').getBoundingClientRect(); const box = list.getBoundingClientRect();
+      return {scrolls: list.scrollHeight > list.clientHeight, inside: row.top >= box.top && row.bottom <= box.bottom,
+              sheet: document.getElementById('option-sheet').getBoundingClientRect().top}; }""")
+    assert fits["scrolls"] and fits["inside"] and fits["sheet"] > 200, f"a long option list: {fits}"
+    page.evaluate("closeOptionSheet()")
+
+    assert page.evaluate("selectNative") == [], f"the web view's own list opened: {page.evaluate('selectNative')}"
+    # Every select of the page, in both languages the screenshots use.
+    for code in ("en", "ko"):
+        page.evaluate(f"changeLanguage('{code}')")
+        page.wait_for_function(f"document.documentElement.lang === '{code}'")
+        result = page.evaluate(ANDROID_OPTION_SHEETS)
+        assert not result["bad"] and result["count"] >= 20, f"{code}: option sheets: {result}"
+    assert not errors, f"the Android page reported errors during the option sheet checks: {errors}"
+    context.close()
+
+
 def android_job_checks(browser):
     context, page, errors = open_android(browser, before="window.galleryBrirSteps = 3; window.galleryBrirHold = true;")
     root = lambda key: page.evaluate(f"document.documentElement.dataset.{key}")
@@ -3008,6 +3240,12 @@ def android_language_checks(browser):
         found = page.evaluate(ANDROID_RAW_KEYS, keys)
         page.evaluate("closeTipSheet()")
         assert not found, f"{code}: raw catalog keys on the Android page: {found[:8]}"
+        sheets = page.evaluate(ANDROID_OPTION_SHEETS)
+        assert not sheets["bad"], f"{code}: option sheets at 360 px: {sheets['bad']}"
+        page.evaluate("openOptionSheet(document.getElementById('bf-room-range'))")
+        found = page.evaluate(ANDROID_RAW_KEYS, keys)
+        page.evaluate("closeOptionSheet()")
+        assert not found, f"{code}: raw catalog keys in the option sheet: {found[:8]}"
     page.evaluate("changeTheme('light')")
     assert page.evaluate("document.documentElement.dataset.theme") == "light", "the theme change did not apply"
     assert not errors, f"languages: page errors {errors}"
@@ -3089,11 +3327,13 @@ def android_checks(browser):
     android_storage_chooser_checks(browser)
     android_back_checks(browser)
     android_outside_tap_checks(browser)
+    android_option_sheet_checks(browser)
     android_job_checks(browser)
     android_language_checks(browser)
     android_size_checks(browser)
     print(f"Gallery Android checks: same request in {len(ANDROID_REQUEST_STATES)} states and {ids} request ids,"
-          " storage access, chooser, back with a running job, taps outside sheets and dialogs, job sheet, recovery, APK update, nine languages,"
+          " storage access, chooser, back with a running job, taps outside sheets and dialogs, option sheets for every select,"
+          " job sheet, recovery, APK update, nine languages,"
           " 360 px and 48 px OK")
 
 
@@ -3165,6 +3405,12 @@ def android_shots(browser, output):
         page.locator("#btn-generate-brir").click()
         page.locator('#job-sheet[data-status="failed"]').wait_for()
         shots.append(shoot_android(page, output, f"android-job-failed-{tag}", errors))
+        context.close()
+        context, page, errors = open_android(browser, "dark", language, before=ANDROID_LANGUAGES)
+        page.locator("#nav-settings").click()
+        android_tap(page, "#sf-language")
+        page.locator("#option-sheet:not([hidden])").wait_for()
+        shots.append(shoot_android(page, output, f"android-options-{tag}", errors))
         context.close()
         context, page, errors = open_android(browser, "dark", language, scenario="update")
         page.locator("#update-modal:not([hidden])").wait_for()

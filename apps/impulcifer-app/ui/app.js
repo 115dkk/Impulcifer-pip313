@@ -26,9 +26,9 @@
 const FEATURES = [
   { name: "shell", wire: wireShell },
   // A page loads only the scripts of the parts it has: the desktop page has no chrome.js,
-  // storage.js, chooser.js, sheet.js and tipsheet.js, and the Android page no recorder.js and
-  // guide.js. Those parts name their functions inside arrows, so a name is looked up only on
-  // a page that has the markup (and so the script).
+  // storage.js, chooser.js, sheet.js, tipsheet.js and optionsheet.js, and the Android page no
+  // recorder.js and guide.js. Those parts name their functions inside arrows, so a name is
+  // looked up only on a page that has the markup (and so the script).
   { name: "android shell", root: "app-bar", wire: () => wireAndroidShell(), render: () => renderAndroidShell(),
     job: () => syncBackButton() },
   { name: "recorder", root: "view-recorder", wire: () => wireRecorder(), render: () => renderRecorder(),
@@ -54,6 +54,7 @@ const FEATURES = [
     ready: () => { refreshStorageAccess(); } },
   { name: "chooser", root: "chooser", wire: () => wireChooser(), render: () => renderChooserWords() },
   { name: "tip sheet", root: "tip-sheet", render: () => fillTipSheet() },
+  { name: "option sheet", root: "option-sheet", wire: () => wireOptionSheet() },
   { name: "settings", root: "view-settings", wire: wireSettings, render: renderSettings, boot: bootSettings,
     load: loadSystemInfo, ready: readySettings },
   { name: "update", root: "update-modal", wire: wireUpdate, ready: () => window.setTimeout(() => checkForUpdates(false), 2000) },
