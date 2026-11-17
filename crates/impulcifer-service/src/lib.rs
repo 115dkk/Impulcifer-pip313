@@ -492,6 +492,10 @@ impl ImpulciferService {
                 args.count(1, 1)?;
                 brir::measurement_file::inspect(args.get(0))
             }
+            IpcMethod::InspectBrirRecording => {
+                args.count(1, 1)?;
+                brir::recording_inspect::inspect(args.get(0), &self.data_dir)
+            }
             IpcMethod::InspectEq => {
                 args.count(1, 1)?;
                 brir::eq_select::inspect(args.get(0))

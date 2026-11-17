@@ -64,6 +64,13 @@ status = "implemented"
 tests = ["impulcifer-service::inspect_room_measurements_reports_the_rew_fixture_with_its_automatic_map", "impulcifer-service::inspect_room_measurements_applies_a_map_and_rejects_bad_requests", "impulcifer-service::inspect_room_measurements_reports_a_dirac_project", "impulcifer-service::inspect_measurements_supports_all_purposes_and_rejects_invalid_purpose", "impulcifer-service::ipc_select_file_shape"]
 
 [[feature]]
+id = "ipc.inspect_brir_recording"
+kind = "ipc"
+status = "implemented"
+tests = ["impulcifer-service::inspect_brir_recording_counts_the_sweeps_of_a_sweep_file", "impulcifer-service::inspect_brir_recording_uses_the_test_signal_without_a_sweep_file", "impulcifer-service::inspect_brir_recording_reports_zero_and_errors", "impulcifer-dsp::locate_sweeps_matches_import_picks"]
+note = "Read-only inspection of a two-ear BRIR recording: reports every logarithmic sweep start before the speaker list is assigned, using either brir_recording_sweep or the job's test signal."
+
+[[feature]]
 id = "config.room_measurement_file"
 kind = "config"
 status = "implemented"

@@ -948,6 +948,25 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .recording-status { margin: 0; font-size: 13px; color: var(--fg-2); line-height: 1.45; }
 .recording-status[data-state="empty"], .recording-status:empty { display: none; }
 .recording-status[data-state="error"] { color: var(--err); }
+/* The sweeps found in the recording, in playing order: a number, the start time and the
+   speaker it belongs to. */
+.recording-sweeps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5em, 1fr));
+  gap: 6px 10px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.recording-sweeps[hidden] { display: none; }
+/* Fixed columns for the number and the time, so every select starts at the same place. */
+.recording-sweeps li { display: grid; grid-template-columns: 1.6em 4.6em minmax(4.5em, 1fr); align-items: center; gap: 6px; }
+.recording-sweep-num { color: var(--fg-3); text-align: right; font-size: 12px; }
+.recording-sweep-time { color: var(--fg-2); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
+.recording-sweeps select { min-width: 0; }
+/* The test signal rows stay children of the card body's grid; the wrapper only hides them together. */
+.ts-block { display: contents; }
+.ts-block[hidden] { display: none; }
 .room-file-result { display: grid; gap: 8px; }
 .room-file-result:empty { display: none; }
 .room-file-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }

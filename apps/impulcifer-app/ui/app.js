@@ -40,7 +40,7 @@ const FEATURES = [
   { name: "advanced", root: "adv-studio", wire: wireAdvancedForms, render: renderAdvancedForms,
     addArgs: addAdvancedArgs, boot: applyTimeDefaults },
   { name: "test signal", root: "bf-test-signal-source", wire: wireTestSignal, addArgs: addTestSignalArgs,
-    boot: updateTestSignalVisibility },
+    boot: () => { updateTestSignalVisibility(); updateTestSignalScope(); } },
   { name: "room", root: "dis-room", wire: wireRoom, render: renderRoom, addArgs: addRoomAndVbassArgs, boot: bootRoom },
   { name: "measurement files", root: "bf-brir-source", wire: wireMfile, render: renderMfiles,
     addArgs: addMeasurementFileArgs },
@@ -90,6 +90,7 @@ function wireShell() {
   /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll("[data-disclosure]")).forEach((head) => {
     const toggle = () => {
       head.parentElement?.classList.toggle("open");
+      head.parentElement?.dispatchEvent(new Event("disclosure-toggle", { bubbles: true }));
       for (const p of advPrefixes()) refreshAdvanced(p);
       scheduleTestSignalCheck(0);
     };

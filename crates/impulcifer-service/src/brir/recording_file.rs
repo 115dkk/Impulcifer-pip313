@@ -16,7 +16,7 @@ use std::path::Path;
 
 const SILENCE: f64 = 2.0;
 
-fn read_recording(path: &Path) -> Result<Wav, BrirError> {
+pub(super) fn read_recording(path: &Path) -> Result<Wav, BrirError> {
     if let Err(error) = std::fs::metadata(path) {
         if error.kind() == std::io::ErrorKind::NotFound {
             return Err(BrirError::Missing(format!(
@@ -116,6 +116,27 @@ fn imported_pair(name: String, samples: [Vec<f64>; 2], fs: u32) -> SpeakerIrs {
     }
 }
 
+pub(super) fn read_sweep_reference(
+    sweep_path: &Path,
+    recording_fs: u32,
+) -> Result<impulcifer_dsp::sweep_import::ReferenceSweep, BrirError> {
+    let sweep = read_recording(sweep_path)?;
+    if sweep.sample_rate != recording_fs {
+        return Err(BrirError::RecordingSweepRate {
+            path: sweep_path.to_owned(),
+            sweep_fs: sweep.sample_rate,
+            recording_fs,
+        });
+    }
+    let samples = sweep
+        .tracks
+        .first()
+        .ok_or_else(|| BrirError::Unsupported("brir_recording_sweep has no tracks".into()))?;
+    trim_reference(samples, sweep.sample_rate).map_err(|_| BrirError::RecordingSweepFile {
+        path: sweep_path.to_owned(),
+    })
+}
+
 fn located_method(
     recording: &Wav,
     entries: &[String],
@@ -124,22 +145,7 @@ fn located_method(
     events: &mut dyn BrirEvents,
     recording_path: &Path,
 ) -> Result<(Hrir, Vec<SpeakerIrs>), BrirError> {
-    let sweep = read_recording(sweep_path)?;
-    if sweep.sample_rate != recording.sample_rate {
-        return Err(BrirError::RecordingSweepRate {
-            path: sweep_path.to_owned(),
-            sweep_fs: sweep.sample_rate,
-            recording_fs: recording.sample_rate,
-        });
-    }
-    let samples = sweep
-        .tracks
-        .first()
-        .ok_or_else(|| BrirError::Unsupported("brir_recording_sweep has no tracks".into()))?;
-    let reference =
-        trim_reference(samples, sweep.sample_rate).map_err(|_| BrirError::RecordingSweepFile {
-            path: sweep_path.to_owned(),
-        })?;
+    let reference = read_sweep_reference(sweep_path, recording.sample_rate)?;
     let imported =
         import_sweeps(&recording.tracks[0], &recording.tracks[1], &reference).map_err(|error| {
             match &error {

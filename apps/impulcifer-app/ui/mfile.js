@@ -395,10 +395,21 @@ function brirRecordingProblem() {
   const { problem } = parseRecordingSpeakers(text);
   if (text && problem) return problem;
   if (!val("bf-brir-recording-file") || !text) return t("brir_recording_choose");
-  if (val("bf-brir-recording-sweep-source") === "file" && !val("bf-brir-recording-sweep")) {
-    return t("brir_recording_choose_sweep");
-  }
+  if (!recordingSweepFileOn()) return null;
+  if (!val("bf-brir-recording-sweep")) return t("brir_recording_choose_sweep");
+  // With another program's sweep the job needs exactly one entry per sweep found; the
+  // inspection reads the file the same way, so the count is known before the job starts.
+  const inspection = state.recordingInspection;
+  if (inspection.error) return errorText(inspection.error);
+  const found = inspection.result?.found ?? 0;
+  const listed = parseRecordingSpeakers(text).entries.length;
+  if (found > 0 && found !== listed) return fmt(t("brir_recording_count_mismatch"), { found, listed });
   return null;
+}
+
+/* Whether the recording was made with another program's sweep (its switch is on). */
+function recordingSweepFileOn() {
+  return isOpen("dis-recording-sweep");
 }
 
 /* List errors take priority over missing files. Missing input is a neutral
@@ -408,23 +419,147 @@ function updateBrirRecordingStatus() {
   const text = val("bf-brir-recording-speakers");
   const parsed = parseRecordingSpeakers(text);
   const status = $("bf-brir-recording-status");
-  status.dataset.state = !active ? "empty" : text && parsed.problem ? "error" : "ok";
-  status.textContent = !active ? "" : brirRecordingProblem() || fmt(t("brir_recording_status"), parsed);
+  const problem = active ? brirRecordingProblem() : null;
+  const neutral = problem === t("brir_recording_choose") || problem === t("brir_recording_choose_sweep");
+  status.dataset.state = !active ? "empty" : problem && !neutral ? "error" : "ok";
+  let line = problem || fmt(t("brir_recording_status"), parsed);
+  // With Impulcifer's sweep the job reads the recording its own way, so the count found
+  // is a guide: told next to the summary, not enforced.
+  const found = state.recordingInspection.result?.found ?? 0;
+  if (!problem && found > 0 && found !== parsed.entries.length) {
+    line += " " + fmt(t("brir_recording_count_mismatch"), { found, listed: parsed.entries.length });
+  }
+  status.textContent = !active ? "" : line;
+  renderRecordingSweeps();
   updateStartControls(state.lastJob);
 }
 
+/* ------------------------------------------- the sweeps in the recording */
+
+/** The request the inspection is asked with. @returns {BrirRecordingInspectionRequest} */
+function recordingInspectionRequest() {
+  const sweepOn = recordingSweepFileOn();
+  return {
+    recording_file: val("bf-brir-recording-file"),
+    recording_sweep: sweepOn ? val("bf-brir-recording-sweep") : null,
+    test_signal: sweepOn ? null : resolveTestSignalValue(),
+    dir_path: val("bf-dir-path"),
+  };
+}
+
+/* Asks the service how many sweeps the chosen recording holds and where they start
+   (inspect_brir_recording), shortly after the file, the sweep or the test signal
+   changes. The same request twice is asked once. */
+function scheduleRecordingInspection(delay = 300) {
+  const inspection = state.recordingInspection;
+  const request = recordingInspectionRequest();
+  const key = JSON.stringify(request);
+  const ready = val("bf-brir-source") === "recording" && Boolean(request.recording_file)
+    && (!recordingSweepFileOn() || Boolean(request.recording_sweep)) && Boolean(window.pywebview);
+  if (!ready) {
+    window.clearTimeout(inspection.timer);
+    inspection.revision += 1;
+    inspection.key = "";
+    if (inspection.result || inspection.error) {
+      inspection.result = null;
+      inspection.error = null;
+      updateBrirRecordingStatus();
+    }
+    return;
+  }
+  if (key === inspection.key) return;
+  window.clearTimeout(inspection.timer);
+  const revision = ++inspection.revision;
+  inspection.key = key;
+  if (inspection.result || inspection.error) {
+    inspection.result = null;
+    inspection.error = null;
+    updateBrirRecordingStatus();
+  }
+  inspection.timer = window.setTimeout(async () => {
+    const response = await callApi(() => api().inspect_brir_recording(request));
+    if (revision !== inspection.revision) return;
+    inspection.result = response.ok ? response.data : null;
+    inspection.error = response.ok ? null : response;
+    updateBrirRecordingStatus();
+  }, delay);
+}
+
+/* One select per sweep found, in playing order, with its start time. A select shows
+   the entry at its place in the typed order; choosing one rewrites the order. */
+function renderRecordingSweeps() {
+  const list = $("bf-brir-recording-sweeps");
+  const found = state.recordingInspection.result;
+  const count = val("bf-brir-source") === "recording" ? found?.found ?? 0 : 0;
+  list.hidden = count === 0;
+  if (!found || count === 0) {
+    list.replaceChildren();
+    return;
+  }
+  list.setAttribute("aria-label", t("label_brir_recording_sweeps"));
+  const codes = ["X", ...mfileSlotCodes(), "LFE", "LFE2"];
+  if (list.children.length !== count) {
+    list.replaceChildren();
+    for (let index = 0; index < count; index += 1) {
+      const item = document.createElement("li");
+      const number = document.createElement("span");
+      number.className = "recording-sweep-num mono";
+      number.textContent = String(index + 1);
+      const time = document.createElement("span");
+      time.className = "recording-sweep-time mono";
+      const select = document.createElement("select");
+      select.className = "mono";
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = "—";
+      select.append(blank, ...codes.map((code) => {
+        const option = document.createElement("option");
+        option.value = code;
+        option.textContent = code;
+        return option;
+      }));
+      select.addEventListener("change", writeRecordingOrderFromSweeps);
+      item.append(number, time, select);
+      list.append(item);
+    }
+  }
+  const entries = val("bf-brir-recording-speakers").split(",").map((entry) => entry.trim());
+  [...list.children].forEach((item, index) => {
+    const time = /** @type {HTMLElement} */ (item.querySelector(".recording-sweep-time"));
+    time.textContent = fmt(t("brir_recording_sweep_time"), { seconds: Number(found.starts_seconds[index] ?? 0).toFixed(2) });
+    const select = /** @type {HTMLSelectElement} */ (item.querySelector("select"));
+    const entry = entries[index] ?? "";
+    select.value = codes.includes(entry) ? entry : "";
+    const label = fmt(t("brir_recording_sweep_label"), { index: index + 1 });
+    select.setAttribute("aria-label", label);
+  });
+}
+
+/* The selects back into the order field: an empty place stays empty (the list check
+   names it), trailing empty places are dropped. */
+function writeRecordingOrderFromSweeps() {
+  const values = [...$("bf-brir-recording-sweeps").querySelectorAll("select")]
+    .map((select) => /** @type {HTMLSelectElement} */ (select).value);
+  while (values.length && !values[values.length - 1]) values.pop();
+  const input = el("bf-brir-recording-speakers", HTMLInputElement);
+  input.value = values.join(",");
+  input.dispatchEvent(new Event("input"));
+}
+
 /* ADR 0016: the BRIR measurements' third source, one recording with a sweep
-   per speaker. Its block shows for that source only, and the sweep file row
-   only when the recording's sweep is another program's file. */
+   per speaker. Its block shows for that source only; the sweep file sits in
+   the switch group for another program's sweep. */
 function updateBrirRecordingRows() {
   $("bf-brir-recording-block").hidden = val("bf-brir-source") !== "recording";
-  $("bf-brir-recording-sweep-row").hidden = val("bf-brir-recording-sweep-source") !== "file";
+  updateTestSignalScope();
   updateBrirRecordingStatus();
+  scheduleRecordingInspection();
 }
 
 /** @param {MeasurementPurpose} purpose */
 function renderMfile(purpose) {
   if (purpose === "brir") updateBrirRecordingRows();
+  else updateTestSignalScope();
   const ids = MFILE[purpose];
   const fileMode = mfileMode(purpose);
   $(`${ids.prefix}-block`).hidden = !fileMode;
@@ -577,7 +712,7 @@ function addMeasurementFileArgs(args) {
   if (val("bf-brir-source") === "recording") {
     args.brir_recording_file = val("bf-brir-recording-file");
     args.brir_recording_speakers = parseRecordingSpeakers(val("bf-brir-recording-speakers")).entries.join(",");
-    if (val("bf-brir-recording-sweep-source") === "file") args.brir_recording_sweep = val("bf-brir-recording-sweep");
+    if (recordingSweepFileOn()) args.brir_recording_sweep = val("bf-brir-recording-sweep");
   }
   if (isOpen("dis-headphone")) {
     const headphoneFile = val("bf-headphone-file");
@@ -588,11 +723,17 @@ function addMeasurementFileArgs(args) {
 
 /* The single recording's rows and status, and the three measurement file blocks. */
 function wireMfile() {
-  // The source select also renders the file block (below); this one shows the sweep file row.
-  el("bf-brir-recording-sweep-source", HTMLSelectElement).addEventListener("change", updateBrirRecordingRows);
-  for (const id of ["bf-brir-recording-file", "bf-brir-recording-speakers", "bf-brir-recording-sweep"]) {
-    el(id, HTMLInputElement).addEventListener("input", updateBrirRecordingStatus);
+  // The source select also renders the file block (below). The switch for another
+  // program's sweep and the inputs below change what the recording is read with.
+  $("dis-recording-sweep").addEventListener("disclosure-toggle", updateBrirRecordingRows);
+  el("bf-brir-recording-speakers", HTMLInputElement).addEventListener("input", updateBrirRecordingStatus);
+  for (const id of ["bf-brir-recording-file", "bf-brir-recording-sweep", "bf-dir-path", "bf-test-signal", "bf-ts-duration", "bf-ts-fs"]) {
+    el(id, HTMLInputElement).addEventListener("input", () => {
+      updateBrirRecordingStatus();
+      scheduleRecordingInspection();
+    });
   }
+  el("bf-test-signal-source", HTMLSelectElement).addEventListener("change", () => scheduleRecordingInspection());
   for (const purpose of MFILE_PURPOSES) {
     const ids = MFILE[purpose];
     el(ids.source, HTMLSelectElement).addEventListener("change", () => {

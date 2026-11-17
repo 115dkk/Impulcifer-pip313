@@ -95,10 +95,28 @@ function scheduleTestSignalCheck(delay = 250) {
   }, delay);
 }
 
-/* The test signal block of the request. */
+/* Which recordings the job reads with the test signal: all of them; only the folder's
+   headphone and room recordings (one recording file made with another program's sweep,
+   which that sweep file reads); or none. */
+function testSignalScope() {
+  if (val("bf-brir-source") !== "recording" || !isOpen("dis-recording-sweep")) return "all";
+  const folderHeadphones = isOpen("dis-headphone") && !mfileMode("headphones");
+  const folderRoom = isOpen("dis-room") && !mfileMode("room");
+  return folderHeadphones || folderRoom ? "folder" : "none";
+}
+
+/* The test signal rows show only while the job reads a recording with them; the note
+   says which recordings those are when the recording file has its own sweep. */
+function updateTestSignalScope() {
+  const scope = testSignalScope();
+  $("bf-ts-block").hidden = scope === "none";
+  $("bf-ts-scope").hidden = scope !== "folder";
+}
+
+/* The test signal block of the request; hidden rows send auto, like a group that is off. */
 /** @param {ProcessingRequest} args */
 function addTestSignalArgs(args) {
-  args.test_signal = resolveTestSignalValue();
+  args.test_signal = testSignalScope() === "none" ? "auto" : resolveTestSignalValue();
 }
 
 /* The test signal listeners: the source, the inputs the length check reads, and sweep detection. */
@@ -111,4 +129,6 @@ function wireTestSignal() {
     el(id, HTMLInputElement).addEventListener("input", () => scheduleTestSignalCheck());
   }
   el("btn-detect-sweep", HTMLButtonElement).addEventListener("click", detectSweep);
+  // The headphone and room groups decide whether the test signal still reads anything.
+  document.addEventListener("disclosure-toggle", updateTestSignalScope);
 }

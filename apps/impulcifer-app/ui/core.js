@@ -42,6 +42,7 @@ const state = {
   eqChoices: { both: { mode: "folder" }, left: { mode: "folder" }, right: { mode: "folder" } },
   eqInspection: null, eqError: null, eqRevision: 0, eqTimer: undefined,
   testSignalRevision: 0, testSignalTimer: undefined,
+  recordingInspection: { result: null, error: null, key: "", revision: 0, timer: undefined },
   mfiles: {
     room: { data: null, error: null, choices: null, input: "", revision: 0, timer: undefined },
     brir: { data: null, error: null, choices: null, input: "", revision: 0, timer: undefined },

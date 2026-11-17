@@ -227,6 +227,14 @@ interface RoomFileInspection {
   measurements: RoomFileMeasurement[]; mapping: RoomFileAssignment[]; map: string; auto: boolean;
   purpose?: MeasurementPurpose;
 }
+/* inspect_brir_recording: sweep starts in one two-ear recording before the playback-order
+   speaker list is assigned. Empty optional strings are treated as absent. */
+interface BrirRecordingInspectionRequest {
+  recording_file: string; recording_sweep?: string | null; test_signal?: string | null; dir_path?: string | null;
+}
+interface BrirRecordingInspection {
+  found: number; starts_seconds: number[]; sweep_seconds: number; fs: number; reference: "file" | "test_signal";
+}
 /* The screen's choice per REW measurement id or Dirac speaker index (as a string): a slot code or "",
    and for REW the ear position; Dirac's two ear positions apply to every speaker. Headphones use only
    hpLeft and hpRight, the measurement ids of the two earcups ("" while none is chosen). */
@@ -318,6 +326,7 @@ interface IpcApi {
   plan_output_recovery(request: RecoveryRequest): Promise<Envelope<RecoveryPlan>>;
   inspect_eq(request: EqRequest): Promise<Envelope<EqInspection>>;
   inspect_room_measurements(request: RoomFileRequest): Promise<Envelope<RoomFileInspection>>;
+  inspect_brir_recording(request: BrirRecordingInspectionRequest): Promise<Envelope<BrirRecordingInspection>>;
   poll_job(job_id: string, after_seq?: number): Promise<Envelope<JobPoll>>;
   cancel_job(job_id: string): Promise<Envelope<{ job: Job }>>;
   get_ui_settings(): Promise<Envelope<UiSettings>>;
@@ -364,6 +373,8 @@ interface AppState {
   eqChoices: Record<EqSlotName, EqChoice>; eqInspection: EqInspection | null; eqError: IpcError | null;
   eqRevision: number; eqTimer: number | undefined;
   testSignalRevision: number; testSignalTimer: number | undefined;
+  recordingInspection: { result: BrirRecordingInspection | null; error: Envelope<unknown> | null; key: string; revision: number;
+    timer: number | undefined };
   mfiles: Record<MeasurementPurpose, MeasurementFileState>;
 }
 interface Window {

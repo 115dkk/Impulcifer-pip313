@@ -138,48 +138,45 @@ fn deconvolve(
     irfft(&spectrum, n)
 }
 
-/// Locate every sweep in a two-ear recording and deconvolve the whole tracks.
-pub fn import_sweeps(
-    left: &[f64],
-    right: &[f64],
+struct ReferenceAnalysis {
+    n: usize,
+    spectrum: Vec<Complex64>,
+    bin_hz: f64,
+    q_ref: f64,
+    band: (f64, f64),
+}
+
+fn analyze_reference(
+    recording_length: usize,
     reference: &ReferenceSweep,
-) -> Result<SweepImport, DspError> {
-    if left.len() != right.len() {
-        return Err(invalid(
-            "left and right recording tracks must have equal lengths",
-        ));
-    }
-    if left.len() < reference.samples.len() {
+) -> Result<ReferenceAnalysis, DspError> {
+    if recording_length < reference.samples.len() {
         return Err(invalid("recording is shorter than the sweep"));
     }
-    let n = left
-        .len()
+    let n = recording_length
         .checked_add(reference.samples.len())
         .and_then(usize::checked_next_power_of_two)
         .ok_or_else(|| invalid("recording and sweep are too long"))?;
-    let reference_spectrum = padded_spectrum(&reference.samples, n);
+    let spectrum = padded_spectrum(&reference.samples, n);
     let bin_hz = f64::from(reference.fs) / n as f64;
 
     // Prefix sums of P[k] * f[k] make every logarithmic analysis band O(1).
-    let mut q_prefix = Vec::with_capacity(reference_spectrum.len() + 1);
+    let mut q_prefix = Vec::with_capacity(spectrum.len() + 1);
     q_prefix.push(0.0);
-    for (index, value) in reference_spectrum.iter().enumerate() {
+    for (index, value) in spectrum.iter().enumerate() {
         let q = value.norm_sqr() * index as f64 * bin_hz;
         q_prefix.push(q_prefix.last().copied().unwrap_or_default() + q);
     }
     let bin_range = |low: f64, high: f64| {
         let start = (low / bin_hz).ceil() as usize;
         let end = (high / bin_hz).ceil() as usize;
-        (
-            start.min(reference_spectrum.len()),
-            end.min(reference_spectrum.len()),
-        )
+        (start.min(spectrum.len()), end.min(spectrum.len()))
     };
     let middle_start = (200.0 / bin_hz).ceil() as usize;
-    let middle_end = ((2000.0 / bin_hz).floor() as usize + 1).min(reference_spectrum.len());
+    let middle_end = ((2000.0 / bin_hz).floor() as usize + 1).min(spectrum.len());
     let q_ref = median(
         (middle_start..middle_end)
-            .map(|index| reference_spectrum[index].norm_sqr() * index as f64 * bin_hz)
+            .map(|index| spectrum[index].norm_sqr() * index as f64 * bin_hz)
             .collect(),
     )
     .filter(|value| value.is_finite() && *value > 0.0)
@@ -230,28 +227,57 @@ pub fn import_sweeps(
         high += 1;
     }
     let band = (grid[low].0, grid[high].0);
-    drop(q_prefix);
-    drop(grid);
+    Ok(ReferenceAnalysis {
+        n,
+        spectrum,
+        bin_hz,
+        q_ref,
+        band,
+    })
+}
 
-    let mut band_window = Vec::with_capacity(reference_spectrum.len());
+fn band_window(length: usize, bin_hz: f64, band: (f64, f64)) -> Vec<f64> {
+    let mut window = Vec::with_capacity(length);
     let lower_outer = band.0 * 2.0_f64.powf(-1.0 / 3.0);
     let upper_outer = band.1 * 2.0_f64.powf(1.0 / 3.0);
-    for index in 0..reference_spectrum.len() {
+    for index in 0..length {
         let frequency = index as f64 * bin_hz;
         if frequency == 0.0 {
-            band_window.push(0.0);
+            window.push(0.0);
             continue;
         }
         let low_taper = (3.0 * (frequency / lower_outer).log2()).clamp(0.0, 1.0);
         let high_taper = (3.0 * (upper_outer / frequency).log2()).clamp(0.0, 1.0);
         let low_value = 0.5 * (1.0 - (std::f64::consts::PI * low_taper).cos());
         let high_value = 0.5 * (1.0 - (std::f64::consts::PI * high_taper).cos());
-        band_window.push(low_value * high_value);
+        window.push(low_value * high_value);
     }
+    window
+}
 
+/// Located sweep starts and the frequency band used to find them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SweepLocations {
+    pub picks: Vec<usize>,
+    pub band: (f64, f64),
+}
+
+/// Starts (in samples) of every sweep in a two-ear recording, sorted,
+/// with the reference's analysis band.
+pub fn locate_sweeps(
+    left: &[f64],
+    right: &[f64],
+    reference: &ReferenceSweep,
+) -> Result<SweepLocations, DspError> {
+    if left.len() != right.len() {
+        return Err(invalid(
+            "left and right recording tracks must have equal lengths",
+        ));
+    }
+    let analysis = analyze_reference(left.len(), reference)?;
     let mut energy = vec![0.0; left.len()];
-    correlation_energy(left, &reference_spectrum, n, &mut energy);
-    correlation_energy(right, &reference_spectrum, n, &mut energy);
+    correlation_energy(left, &analysis.spectrum, analysis.n, &mut energy);
+    correlation_energy(right, &analysis.spectrum, analysis.n, &mut energy);
     let (first_pick, top) = first_max(&energy).ok_or_else(|| invalid(NO_SWEEP_FOUND))?;
     if !top.is_finite() || top <= 0.0 {
         return Err(invalid(NO_SWEEP_FOUND));
@@ -272,7 +298,6 @@ pub fn import_sweeps(
         energy[start..end].fill(0.0);
         candidate = first_max(&energy);
     }
-    drop(energy);
     if picks.is_empty() {
         return Err(invalid(NO_SWEEP_FOUND));
     }
@@ -283,6 +308,25 @@ pub fn import_sweeps(
     {
         return Err(invalid("overlapping sweeps"));
     }
+    Ok(SweepLocations {
+        picks,
+        band: analysis.band,
+    })
+}
+
+/// Locate every sweep in a two-ear recording and deconvolve the whole tracks.
+pub fn import_sweeps(
+    left: &[f64],
+    right: &[f64],
+    reference: &ReferenceSweep,
+) -> Result<SweepImport, DspError> {
+    let SweepLocations { picks, band } = locate_sweeps(left, right, reference)?;
+    let analysis = analyze_reference(left.len(), reference)?;
+    debug_assert_eq!(band, analysis.band);
+    let band_window = band_window(analysis.spectrum.len(), analysis.bin_hz, band);
+    let n = analysis.n;
+    let q_ref = analysis.q_ref;
+    let reference_spectrum = analysis.spectrum;
 
     let harmonic_guard = (0.25 * reference.samples.len() as f64).floor() as usize;
     let mut response_length = n - picks[picks.len() - 1];
@@ -472,6 +516,20 @@ mod tests {
         assert!(start.abs_diff(3 * fs as usize) <= tolerance);
         assert!(end.abs_diff(3 * fs as usize + sweep.len()) <= tolerance);
         assert!(trim_reference(&vec![0.0; fs as usize], fs).is_err());
+    }
+
+    #[test]
+    fn locate_sweeps_matches_import_picks() {
+        let Synthetic {
+            reference,
+            left,
+            right,
+            ..
+        } = synthetic();
+        let located = locate_sweeps(&left, &right, &reference).unwrap();
+        let imported = import_sweeps(&left, &right, &reference).unwrap();
+        assert_eq!(located.picks, imported.picks);
+        assert_eq!(located.band, imported.band);
     }
 
     #[test]
