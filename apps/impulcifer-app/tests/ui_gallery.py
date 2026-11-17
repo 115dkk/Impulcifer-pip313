@@ -282,6 +282,18 @@ def mock_script(skin, theme, language, scenario):
     // frequency-response-only measurement) and a Dirac Live 4.2 project, each assigned for the
     // request's purpose the way the io crate's automatic rules do. A Dirac path with "single"
     // has only position 1.
+    // inspect_brir_recording: a recording named "...-N.wav" holds N sweeps 8 s apart (six
+    // otherwise, the length of the single-recording checks' list), "silent" none, and a sweep
+    // path with "44k" has another sampling rate than the recording.
+    inspect_brir_recording: request => {
+      const file = request.recording_file || "";
+      if ((request.recording_sweep || "").includes("44k")) return error("INVALID_REQUEST",
+        "The sweep file and the recording have different sampling rates.", {path: request.recording_sweep, sweep_fs: 44100, recording_fs: 48000});
+      const named = file.match(/-(\d+)\.wav$/);
+      const found = file.includes("silent") ? 0 : named ? Number(named[1]) : 6;
+      return ok({found, starts_seconds: Array.from({length: found}, (_, i) => Math.round((1.5 + 8 * i) * 100) / 100),
+        sweep_seconds: 6.15, fs: 48000, reference: request.recording_sweep ? "file" : "test_signal"});
+    },
     inspect_room_measurements: request => {
       const path = request.path;
       const purpose = request.purpose || "room";
@@ -1945,9 +1957,9 @@ def brir_file_checks(browser):
         assert page.locator("#bf-brir-recording-status").is_visible()
         assert page.locator("#bf-brir-recording-status").inner_text() == catalog("en")["brir_recording_choose"]
         assert not page.locator("#bf-brir-recording-sweep-row").is_visible()
-        page.locator("#bf-brir-recording-sweep-source").select_option("file")
+        page.locator("#dis-recording-sweep .disclosure-head").click()
         assert page.locator("#bf-brir-recording-sweep-row").is_visible()
-        page.locator("#bf-brir-recording-sweep-source").select_option("test-signal")
+        page.locator("#dis-recording-sweep .disclosure-head").click()
         assert not page.locator("#bf-brir-recording-sweep-row").is_visible()
         page.locator("#bf-brir-source").select_option("file")
         assert not page.locator("#bf-brir-recording-block").is_visible() and page.locator("#bf-brir-file-block").is_visible()
@@ -1970,10 +1982,14 @@ def brir_recording_checks(browser):
     for skin, language in itertools.product(SKINS, LANGUAGES):
         context, page, errors = open_page(browser, skin, "dark", language, "idle")
         navigate(page, "processing")
+        page.evaluate(ANDROID_HELPERS)
         source = page.locator("#bf-brir-source")
         path = page.locator("#bf-brir-recording-file")
         speakers = page.locator("#bf-brir-recording-speakers")
-        sweep_source = page.locator("#bf-brir-recording-sweep-source")
+        sweep_switch = page.locator("#dis-recording-sweep .disclosure-head")
+        sweeps = page.locator("#bf-brir-recording-sweeps")
+        ts_block = page.locator("#bf-ts-block")
+        ts_scope = page.locator("#bf-ts-scope")
         sweep = page.locator("#bf-brir-recording-sweep")
         status = page.locator("#bf-brir-recording-status")
         generate = page.locator("#btn-generate-brir")
@@ -2019,13 +2035,44 @@ def brir_recording_checks(browser):
         assert status.inner_text() == catalog(language)["brir_recording_error_duplicate"].format(entry="FL")
         speakers.fill(valid)
         path.fill("D:/Measurements/ears.wav")
-        sweep_source.select_option("file")
+        # Impulcifer's sweep: the inspection reads the recording with the test signal, and the
+        # count it finds is a guide next to the summary, not a block.
+        page.wait_for_function("galleryCalls.some(c => c.method === 'inspect_brir_recording' && c.args[0].recording_sweep === null)")
+        sweeps.locator("select").nth(5).wait_for()
+        assert sweeps.locator("select").count() == 6 and ts_block.is_visible() and not ts_scope.is_visible()
+        assert sweeps.locator("select").evaluate_all("nodes => nodes.map(n => n.value)") == ["FL", "FR", "LFE", "LFE2", "X", "X"]
+        sweep_switch.click()
         assert page.locator("#bf-brir-recording-sweep-row").is_visible() and generate.is_disabled()
         assert generate.get_attribute("title") == catalog(language)["brir_recording_choose_sweep"]
         assert status.get_attribute("data-state") == "ok"
         assert status.inner_text() == catalog(language)["brir_recording_choose_sweep"]
         sweep.fill("  D:/Sweeps/reference.wav  ")
+        page.wait_for_function("galleryCalls.some(c => c.method === 'inspect_brir_recording' && c.args[0].recording_sweep)")
         assert generate.is_enabled() and generate.get_attribute("title") == ""
+        # The headphone group reads the folder's headphones.wav with the test signal, so its rows
+        # stay with a note; with no folder recording to read they go, and the job gets auto.
+        page.evaluate("h.open('dis-headphone'); h.set('bf-hp-source','folder')")
+        assert ts_block.is_visible() and ts_scope.is_visible()
+        page.evaluate("h.open('dis-headphone', false); h.open('dis-room', false)")
+        assert not ts_block.is_visible()
+        page.evaluate("h.set('bf-test-signal-source','manual')")
+        assert brir_request(page)["test_signal"] == "auto"
+        page.wait_for_function("state.jobId === null")
+        if page.locator("#job-modal").is_visible():
+            page.locator("#job-modal-close").click()
+        page.evaluate("h.set('bf-test-signal-source','auto'); h.open('dis-headphone')")
+        assert ts_block.is_visible()
+        # A sweep picked in the list rewrites the order; a count that differs from the one
+        # found blocks the job while the recording has its own sweep.
+        sweeps.locator("select").nth(5).select_option("SL")
+        assert speakers.input_value() == "FL,FR,LFE,LFE2,X,SL" and generate.is_enabled()
+        sweeps.locator("select").nth(5).select_option("")
+        sweeps.locator("select").nth(4).select_option("")
+        assert speakers.input_value() == "FL,FR,LFE,LFE2"
+        mismatch = catalog(language)["brir_recording_count_mismatch"].format(found=6, listed=4)
+        assert status.inner_text() == mismatch and status.get_attribute("data-state") == "error" and generate.is_disabled()
+        speakers.fill(valid)
+        assert generate.is_enabled()
 
         def request():
             sent = brir_request(page)
@@ -2039,7 +2086,7 @@ def brir_recording_checks(browser):
             "brir_recording_file": "D:/Measurements/ears.wav", "brir_recording_speakers": "FL,FR,LFE,LFE2,X,X",
             "brir_recording_sweep": "D:/Sweeps/reference.wav"}, sent
         assert not {"brir_measurement_file", "brir_measurement_map"} & sent.keys(), sent
-        sweep_source.select_option("test-signal")
+        sweep_switch.click()
         assert "brir_recording_sweep" not in request()
         # Source changes retain the fields but never send an inactive source's settings.
         for mode in ("folder", "file"):
@@ -2112,7 +2159,7 @@ def brir_recording_error_checks(browser):
                 page.locator("#job-modal-close").click()
         assert not errors, errors
         context.close()
-    assert "'" + catalog("ko")["label_brir_recording_sweep"].rstrip(":") + "'" in catalog("ko")["error_brir_recording_test_signal"]
+    assert "'" + catalog("ko")["option_brir_recording_sweep_file"] + "'" in catalog("ko")["error_brir_recording_test_signal"]
     print("Gallery single-recording error checks: fixed messages, counts and decimal times, zero sweeps, test signal, "
           "invalid sweep and sample rates, failed-job logs, nine languages, both skins OK", flush=True)
 
@@ -2580,7 +2627,7 @@ ANDROID_REQUEST_STATES = {
     "advanced output": "h.open('dis-headphone'); h.adv('output'); h.check('ba-resample', true); h.set('ba-fs','96000'); ['jamesdsp','hangloose','truehd','sofa','remove-silent-channels'].forEach(x => h.check('ba-'+x, true)); h.check('ba-sofa-split', true); h.set('ba-layout-files','listed'); h.check('ba-layout-force-1', true); h.check('ba-layout-force-4', true); h.set('ba-missing-speakers','neighbor'); h.set('ba-lfe-mode','all');",
     "advanced correction": "h.adv('correction'); h.check('ba-mic-deviation', true); h.set('ba-mic-strength','0.5'); h.check('ba-mic-debug', true); h.check('ba-interactive-plots', true);",
     "BRIR measurement file": "h.set('bf-brir-source','file'); h.set('bf-brir-file','/storage/1A2B-3C4D/backup.liveproject');",
-    "BRIR from one recording": "h.set('bf-brir-source','recording'); h.set('bf-brir-recording-file','/x/recording.wav'); h.set('bf-brir-recording-speakers','FL,FC,FR,SR,BR,BL,SL,LFE,X'); h.set('bf-brir-recording-sweep-source','file'); h.set('bf-brir-recording-sweep','/x/dirac.wav');",
+    "BRIR from one recording": "h.set('bf-brir-source','recording'); h.set('bf-brir-recording-file','/x/recording.wav'); h.set('bf-brir-recording-speakers','FL,FC,FR,SR,BR,BL,SL,LFE,X'); h.open('dis-recording-sweep'); h.set('bf-brir-recording-sweep','/x/dirac.wav');",
     "test signal parameters": "h.set('bf-test-signal-source','manual'); h.set('bf-ts-duration','13.04'); h.set('bf-ts-fs','44100');",
     "test signal file": "h.set('bf-test-signal-source','file'); h.set('bf-test-signal','/x/sweep.wav'); h.check('bf-plot', true);",
 }
@@ -3284,7 +3331,7 @@ def android_size_checks(browser):
                       " h.set('bf-brir-source','file'); h.set('bf-brir-file','/s/backup.liveproject')")
         page.wait_for_timeout(700)
         measure("measurement file tables")
-        page.evaluate("h.set('bf-brir-source','recording'); h.set('bf-brir-recording-sweep-source','file');"
+        page.evaluate("h.set('bf-brir-source','recording'); h.open('dis-recording-sweep');"
                       " h.set('bf-test-signal-source','manual')")
         measure("one recording file and test signal parameters")
         for tab in ADV_TABS:

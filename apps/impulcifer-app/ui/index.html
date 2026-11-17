@@ -293,19 +293,29 @@
                   <div class="adv-stack">
                     <input id="bf-brir-recording-speakers" class="mono" spellcheck="false" autocomplete="off" placeholder="FL,FC,FR,SR,BR,BL,SL,LFE,X" aria-describedby="bf-brir-recording-speakers-tip bf-brir-recording-status">
                     <p class="recording-status" id="bf-brir-recording-status" aria-live="polite" data-state="empty"></p>
+                    <!-- One select per sweep found in the recording, in playing order (inspect_brir_recording);
+                         picking a speaker rewrites the order above, and typing in it refills the selects. -->
+                    <ol class="recording-sweeps" id="bf-brir-recording-sweeps" aria-label="Sweeps in the recording" data-i18n-label="label_brir_recording_sweeps" hidden></ol>
                   </div>
                 </div>
-                <div class="field-row">
-                  <span class="field-label"><label for="bf-brir-recording-sweep-source" data-i18n="label_brir_recording_sweep">Sweep of this recording:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-brir-recording-sweep-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-brir-recording-sweep-tip" class="tip-bubble" data-i18n="tooltip_brir_recording_sweep">Leave this as it is if you recorded with Impulcifer's sweep. If another program such as Dirac Live or REW played its own sweep, choose that sweep's WAV. It has to be a logarithmic sweep; silence before and after it is trimmed.</span></span></span>
-                  <select id="bf-brir-recording-sweep-source" aria-describedby="bf-brir-recording-sweep-tip">
-                    <option value="test-signal" selected data-i18n="option_brir_recording_sweep_test_signal">Impulcifer's sweep (the test signal setting below)</option>
-                    <option value="file" data-i18n="option_brir_recording_sweep_file">Another program's sweep file</option>
-                  </select>
-                </div>
-                <div class="field-row" id="bf-brir-recording-sweep-row" hidden>
-                  <label for="bf-brir-recording-sweep" data-i18n="label_brir_recording_sweep_file">Sweep file:</label>
-                  <input id="bf-brir-recording-sweep" class="mono" spellcheck="false" placeholder="sweep.wav">
-                  <button class="btn-link" data-browse="audio" data-target="bf-brir-recording-sweep" data-i18n="button_browse">Browse</button>
+                <!-- Off: the recording was made with Impulcifer's sweep, the test signal below. On: another
+                     program played its own sweep; that file replaces the test signal for this recording. -->
+                <div class="disclosure" id="dis-recording-sweep">
+                  <div class="disclosure-head" data-disclosure>
+                    <span class="switch" role="switch" aria-checked="false" tabindex="0" aria-labelledby="dis-recording-sweep-title"></span>
+                    <div class="disclosure-text">
+                      <span class="disclosure-title" id="dis-recording-sweep-title" data-i18n="option_brir_recording_sweep_file">Another program's sweep file</span>
+                      <span class="disclosure-desc" data-i18n="studio_disclosure_recording_sweep_desc">Turn this on if another program such as Dirac Live or REW played its own sweep, and choose that sweep's WAV.</span>
+                    </div>
+                    <span class="caret" aria-hidden="true"></span>
+                  </div>
+                  <div class="disclosure-body">
+                    <div class="field-row" id="bf-brir-recording-sweep-row">
+                      <span class="field-label"><label for="bf-brir-recording-sweep" data-i18n="label_brir_recording_sweep_file">Sweep file:</label><span class="tip"><button type="button" class="info-tip" aria-label="More information" aria-describedby="bf-brir-recording-sweep-tip"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="7.75" r="1.1" fill="currentColor"/></svg></button><span role="tooltip" id="bf-brir-recording-sweep-tip" class="tip-bubble" data-i18n="tooltip_brir_recording_sweep">It has to be a logarithmic sweep. Silence before and after the sweep is trimmed.</span></span></span>
+                      <input id="bf-brir-recording-sweep" class="mono" spellcheck="false" placeholder="sweep.wav" aria-describedby="bf-brir-recording-sweep-tip">
+                      <button class="btn-link" data-browse="audio" data-target="bf-brir-recording-sweep" data-i18n="button_browse">Browse</button>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div class="room-file" id="bf-brir-file-block" hidden>
@@ -316,29 +326,34 @@
                 </div>
                 <div class="room-file-result" id="bf-brir-file-result" aria-live="polite"></div>
               </div>
-              <div class="field-row">
-                <label for="bf-test-signal-source" data-i18n="label_test_signal_source">Test signal source:</label>
-                <select id="bf-test-signal-source">
-                  <option value="auto" data-i18n="option_test_signal_auto">Auto-detect from recordings</option>
-                  <option value="default" data-i18n="option_test_signal_default">Bundled default sweep</option>
-                  <option value="manual" data-i18n="option_test_signal_manual">Specify parameters</option>
-                  <option value="file" data-i18n="option_test_signal_file">Custom file</option>
-                </select>
-                <button class="btn-link" id="btn-detect-sweep" data-i18n="button_detect_sweep">Analyze folder</button>
+              <!-- The test signal. With another program's sweep for the recording file it only reads the
+                   folder's headphone and room recordings, and is hidden (and sent as auto) when the job reads neither. -->
+              <div class="ts-block" id="bf-ts-block">
+                <div class="field-row">
+                  <label for="bf-test-signal-source" data-i18n="label_test_signal_source">Test signal source:</label>
+                  <select id="bf-test-signal-source">
+                    <option value="auto" data-i18n="option_test_signal_auto">Auto-detect from recordings</option>
+                    <option value="default" data-i18n="option_test_signal_default">Bundled default sweep</option>
+                    <option value="manual" data-i18n="option_test_signal_manual">Specify parameters</option>
+                    <option value="file" data-i18n="option_test_signal_file">Custom file</option>
+                  </select>
+                  <button class="btn-link" id="btn-detect-sweep" data-i18n="button_detect_sweep">Analyze folder</button>
+                </div>
+                <p class="hint" id="bf-ts-scope" data-i18n="hint_test_signal_other_recordings" hidden>The sweep file above is used for the recording file. The test signal is used for the headphone and room recordings in the folder.</p>
+                <div class="field-row" id="bf-ts-manual" hidden>
+                  <label for="bf-ts-duration" data-i18n="label_sweep_duration">Sweep length (s):</label>
+                  <input id="bf-ts-duration" class="num mono" type="number" value="6.15" min="0.1" max="200" step="0.01">
+                  <label for="bf-ts-fs" data-i18n="label_sweep_fs">Sample rate (Hz):</label>
+                  <input id="bf-ts-fs" class="num mono" type="number" value="48000" min="8000" max="384000">
+                </div>
+                <div class="field-row" id="bf-ts-file" hidden>
+                  <label for="bf-test-signal" data-i18n="label_test_signal">Test Signal:</label>
+                  <input id="bf-test-signal" class="mono" value="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" spellcheck="false">
+                  <button class="btn-link" data-browse="audio" data-target="bf-test-signal" data-i18n="button_browse">Browse</button>
+                </div>
+                <p class="warning-note" id="bf-ts-warning" role="status" hidden></p>
+                <p class="hint" id="bf-detect-result" hidden></p>
               </div>
-              <div class="field-row" id="bf-ts-manual" hidden>
-                <label for="bf-ts-duration" data-i18n="label_sweep_duration">Sweep length (s):</label>
-                <input id="bf-ts-duration" class="num mono" type="number" value="6.15" min="0.1" max="200" step="0.01">
-                <label for="bf-ts-fs" data-i18n="label_sweep_fs">Sample rate (Hz):</label>
-                <input id="bf-ts-fs" class="num mono" type="number" value="48000" min="8000" max="384000">
-              </div>
-              <div class="field-row" id="bf-ts-file" hidden>
-                <label for="bf-test-signal" data-i18n="label_test_signal">Test Signal:</label>
-                <input id="bf-test-signal" class="mono" value="data/sweep-6.15s-48000Hz-32bit-2.93Hz-24000Hz.wav" spellcheck="false">
-                <button class="btn-link" data-browse="audio" data-target="bf-test-signal" data-i18n="button_browse">Browse</button>
-              </div>
-              <p class="warning-note" id="bf-ts-warning" role="status" hidden></p>
-              <p class="hint" id="bf-detect-result" hidden></p>
             </div>
           </div>
 

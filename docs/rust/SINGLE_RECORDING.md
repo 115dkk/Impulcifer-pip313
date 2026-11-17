@@ -140,6 +140,24 @@ say it in the page language; the CLI prints the English sentence with the number
 | The sweep file has no active part, is too short, or is not a logarithmic sweep over 200–2000 Hz | `The sweep file is not a logarithmic sweep.` | `path` |
 | The sweep file and the recording have different sampling rates | `The sweep file and the recording have different sampling rates.` | `path`, `sweep_fs`, `recording_fs` |
 
+## Before the job: `inspect_brir_recording`
+
+The list has to name every sweep in playing order, so the screen asks how many sweeps the recording holds as
+soon as the file is chosen. `inspect_brir_recording({recording_file, recording_sweep?, test_signal?, dir_path?})`
+reads the two ear tracks and runs `sweep_import::locate_sweeps`, the start-finding part that `import_sweeps`
+itself calls, so with a sweep file the count and starts are the job's. Without one, the reference is the test
+signal the job would open (`open_with_events` with detection skipped: the sidecar, the given signal, a
+generated one or the bundled default); the job then reads the recording with the folder method, so the answer
+is a guide.
+
+Answer: `found`, `starts_seconds` (hundredths), `sweep_seconds` (trimmed reference, hundredths), `fs`, and
+`reference` (`file` or `test_signal`). No sweep is `found: 0`, not an error. The other errors are the job's:
+a missing recording, fewer than two tracks, the sweep file errors of the table above.
+
+The screen lists one speaker select per sweep found with its start time; picking one rewrites the list field.
+With a sweep file a list of another length blocks the job before it starts; without one the difference is only
+told.
+
 ## Measured LFE
 
 `LFE` and `LFE2` are not slots (`layouts::SLOTS` stays at 40). They are accepted where measurements are assigned:

@@ -7,6 +7,7 @@ pub mod measurement_file;
 pub mod outputs;
 pub mod plots;
 pub(crate) mod recording_file;
+pub(crate) mod recording_inspect;
 pub mod run;
 pub mod sweep_grid;
 pub(crate) mod validation;

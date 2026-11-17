@@ -1157,3 +1157,9 @@
 /* Korean wraps between words, never inside one ('더합니 / 다'). */
 :root:lang(ko)[data-page="android"] :is(.hint, .disclosure-desc, .disclosure-title, .notice-body, .status-text,
   .tip-sheet-body, .option-label, .job-error, .chooser-message, .group-title, .field-row > label) { word-break: keep-all; }
+
+/* The sweeps of a single recording: two per row, the number and start time above each select. */
+[data-page="android"] .recording-sweeps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+[data-page="android"] .recording-sweeps li { grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; }
+[data-page="android"] .recording-sweeps select { grid-column: 1 / -1; }
+[data-page="android"] .recording-sweep-time { text-align: left; }
